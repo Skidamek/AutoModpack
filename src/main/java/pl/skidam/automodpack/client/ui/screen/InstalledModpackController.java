@@ -234,7 +234,7 @@ final class InstalledModpackController {
 			UpdatePlan plan = new UpdatePlan(pack.modpackId(), PackTarget.from(record), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of(),
 					ChangeSet.catalogue(record.manifest(), ChangeSet.Kind.REMOVED));
 			UpdatePreview preview = UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(record.manifest());
-			boolean shown = ScreenManager.preview(new PreviewPayload(preview, pack.name(), false, null, List.of(), null,
+			boolean shown = ScreenManager.preview(new PreviewPayload(preview, pack.name(), originFor(pack.modpackId()), false, null, List.of(), null, null,
 					(Runnable) () -> ScreenManager.background(() -> {
 						try {
 							new ClientGenerationStore(storage).forgetModpack(pack.modpackId());
@@ -355,7 +355,7 @@ final class InstalledModpackController {
 		try {
 			UpdatePlan plan = new UpdatePlan(pack.modpackId(), PackTarget.from(pack.record()), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
 			UpdatePreview preview = UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(pack.record().manifest());
-			boolean shown = ScreenManager.preview(new PreviewPayload(preview, pack.name(), false, null, List.of(), null,
+			boolean shown = ScreenManager.preview(new PreviewPayload(preview, pack.name(), originFor(pack.modpackId()), false, null, List.of(), null, null,
 					(Runnable) () -> ScreenManager.background(() -> forget(pack, released, removed)), released));
 			if (!shown) released.run();
 		} catch (Exception e) {
@@ -452,6 +452,12 @@ final class InstalledModpackController {
 			discoveryFailure = e;
 			return null;
 		}
+	}
+
+	/** The display origin recorded for this pack, or "" when the pack has none (for example a locally imported record). */
+	public String originFor(String modpackId) {
+		String origin = connectionOrigin(connection(modpackId));
+		return origin == null ? "" : origin;
 	}
 
 	private static String connectionOrigin(ConnectionJsons.ConnectionInfo connection) {

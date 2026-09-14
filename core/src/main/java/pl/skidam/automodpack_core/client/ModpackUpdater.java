@@ -135,6 +135,11 @@ public class ModpackUpdater implements AutoCloseable {
 		return review.unverifiedSelectedJarPaths();
 	}
 
+	/** Minecraft join target as `host:port`, or "" when this engine has no live connection. */
+	public String joinOrigin() {
+		return review.joinOrigin();
+	}
+
 	/** True when the plan would write a gated jar that has no first-party hit. */
 	boolean planWritesUnverifiedJar(UpdatePlan plan) {
 		return review.planWritesUnverifiedJar(plan);
@@ -431,7 +436,7 @@ public class ModpackUpdater implements AutoCloseable {
 		executor().execute(() -> {
 			try {
 				UpdatePreview preview = deactivation ? previewDeactivation() : previewRemoval();
-				boolean shown = ScreenManager.preview(new PreviewPayload(preview, modpackName, false, null, List.of(), reviewActions(),
+				boolean shown = ScreenManager.preview(new PreviewPayload(preview, modpackName, review.joinOrigin(), false, null, List.of(), null, reviewActions(),
 						(Runnable) () -> executor().execute(() -> executeRemoval(deactivation, released, removed)), released));
 				if (!shown) {
 					close();
@@ -621,7 +626,7 @@ public class ModpackUpdater implements AutoCloseable {
 	/** Wraps a reviewable plan with this engine's review backing; the unverified-jar gate is precomputed, mode-gated. */
 	PreviewPayload previewPayload(UpdatePreview preview, Runnable continueAction, Runnable cancelAction) {
 		boolean writesUnverifiedJar = (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && review.planWritesUnverifiedJar(preview.plan());
-		return new PreviewPayload(preview, getModpackName(), writesUnverifiedJar, getSelectedTarget(), review.unverifiedSelectedJarPaths(), review.reviewActions(), continueAction, cancelAction);
+		return new PreviewPayload(preview, getModpackName(), review.joinOrigin(), writesUnverifiedJar, getSelectedTarget(), review.unverifiedSelectedJarPaths(), review.reviewActions(), continueAction, cancelAction);
 	}
 
 	boolean downloadCancelled() {
