@@ -5,36 +5,24 @@ import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LOG_FILE;
 
 import java.io.IOException;
 import java.nio.file.*;
-import java.util.*;
+import java.util.Locale;
 
-import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.client.ClientLaunch;
 import pl.skidam.automodpack_core.client.ClientOfflineRepair;
 import pl.skidam.automodpack_core.client.DetachedUpdateHelper;
-import pl.skidam.automodpack_core.client.ManifestFetcher;
-import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.ReLauncher;
 import pl.skidam.automodpack_core.client.SelfUpdater;
-import pl.skidam.automodpack_core.client.StoredModpackConnection;
 import pl.skidam.automodpack_core.client.UpdateAttempt;
 import pl.skidam.automodpack_core.client.UpdateTransactionSupport;
 import pl.skidam.automodpack_core.client.UpdateType;
 import pl.skidam.automodpack_core.config.BootstrapInstaller;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConfigUtils;
-import pl.skidam.automodpack_core.config.ConnectionJsons;
-import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
-import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
-import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
-import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
-import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.SelfUpdateSwap;
@@ -92,14 +80,6 @@ public class Preload {
 		if (!Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) return;
 		new ClientOfflineRepair(storage, MODPACK_LOADER).recover()
 				.ifPresent(receipt -> LOGGER.info("Recovered offline repair for {} (complete: {})", receipt.before().modpackId(), receipt.complete()));
-	}
-
-	private static void writeConfig(Path path, Object value) {
-		try {
-			ConfigTools.writeAtomic(path, value);
-		} catch (IOException e) {
-			throw new ConfigTools.ConfigException("Failed to save configuration " + path.toAbsolutePath().normalize(), e);
-		}
 	}
 
 	private void recoverPendingTransaction() throws IOException {
@@ -226,154 +206,7 @@ public class Preload {
 			SelfUpdater.update();
 			return;
 		}
-
-		// A stuck update was just rolled back; this launch only boots the restored pack and the next one syncs normally again.
-		if (rolledBackStuckUpdate) {
-			LOGGER.info("Booting the restored modpack without contacting the server");
-			if (hasActiveProjection()) loadLocalModpack(null, null);
-			return;
-		}
-
-		StoredModpackConnection.Seeded seeded = null;
-		if (clientConfig.hasSelectedModpack()) {
-			if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
-				LOGGER.error("Ignoring invalid selected modpack ID: {}", clientConfig.selectedModpackId);
-				clientConfig = clientConfig.withSelectedModpackId("");
-				writeConfig(storage.clientConfigFile(), clientConfig);
-			} else {
-				try {
-					seeded = StoredModpackConnection.seed(storage, clientConfig.selectedModpackId);
-				} catch (IOException e) {
-					LOGGER.error("Failed to load selected modpack connection state", e);
-				}
-			}
-		}
-
-		if (seeded == null || !seeded.connection().isComplete()) {
-			if (hasActiveProjection()) loadLocalModpack(null, null);
-			else SelfUpdater.update();
-			return;
-		}
-
-		ConnectionJsons.ConnectionInfo connectionInfo = seeded.connection();
-		Secrets.Secret secret = seeded.secret();
-		if (seeded.anonymousSecret()) LOGGER.info("No saved secret for seeded/selected origin {}; using an anonymous preload secret", AddressHelpers.formatAddress(connectionInfo.origin));
-
-		// updateSelectedModpackOnLaunch=false loads the current projection and does not contact the
-		// server, so extra jars in mods/ stay put (binary search, pinning experiments). A trusted
-		// bootstrap file is an explicit install request and still applies.
-		if (!clientConfig.updateSelectedModpackOnLaunch && !trustedBootstrapApply) {
-			if (hasActiveProjection()) {
-				loadLocalModpack(connectionInfo, secret);
-			} else {
-				SelfUpdater.update();
-			}
-			return;
-		}
-
-		// A detached pack holds local sovereignty: launch boots it as-is, fetching nothing, applying nothing, protecting nothing.
-		if (!trustedBootstrapApply && isDetachedFromServer()) {
-			LOGGER.info("Selected modpack is detached; booting the local pack without server sync");
-			if (hasActiveProjection()) {
-				loadLocalModpack(connectionInfo, secret);
-			} else {
-				SelfUpdater.update();
-			}
-			return;
-		}
-
-		var manifestResult = ManifestFetcher.requestServerModpackContent(storage, connectionInfo, secret, false);
-		SelectedModpackTarget selectedTarget = loadStoredTarget();
-		DownloadClient downloadClient = null;
-		if (manifestResult.successful()) {
-			downloadClient = manifestResult.client();
-			try {
-				selectedTarget = SelectedModpackTarget.prepare(manifestResult.content(), new ClientSelectionStore(storage.selectionFile()), ClientPlatform.current());
-			} catch (RuntimeException e) {
-				LOGGER.error("Failed to resolve the downloaded modpack catalogue and group selection", e);
-				downloadClient.close();
-				loadLocalModpack(connectionInfo, secret);
-				return;
-			}
-			ModpackJsons.ModpackContentFields latestModpackContent = selectedTarget.flatTarget();
-			if (!Objects.equals(clientConfig.selectedModpackId, latestModpackContent.modpackId)) {
-				LOGGER.error("Selected modpack catalogue changed ID from {} to {}", clientConfig.selectedModpackId, latestModpackContent.modpackId);
-				downloadClient.close();
-				loadLocalModpack(connectionInfo, secret);
-				return;
-			}
-			if (SelfUpdater.update(latestModpackContent)) {
-				downloadClient.close();
-				return;
-			}
-		}
-		if (selectedTarget == null) {
-			loadLocalModpack(connectionInfo, secret);
-			return;
-		}
-
-		ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, downloadClient);
-		if (trustedBootstrapApply) updater.applyTrustedInstall();
-		else updater.processModpackUpdate(true);
-	}
-
-	private void loadLocalModpack(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
-		if (!hasActiveProjection()) return;
-		try {
-			new ModpackUpdater(connectionInfo, secret, storage).loadModpack();
-		} catch (Exception e) {
-			LOGGER.error("Failed to load local modpack", e);
-		}
-	}
-
-	private boolean hasActiveProjection() {
-		try {
-			// An unset selection is the fresh install: nothing selected, nothing to load, nothing worth saying.
-			if (!clientConfig.hasSelectedModpack()) return false;
-			if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
-				LOGGER.warn("Skipping active modpack load because the configured selected modpack ID is invalid: {}", clientConfig.selectedModpackId);
-				return false;
-			}
-			if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return false;
-			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-			if (state == null) {
-				LOGGER.warn("Skipping active modpack load because the active projection has no active state");
-				return false;
-			}
-			if (!clientConfig.selectedModpackId.equals(state.modpackId)) {
-				LOGGER.warn("Skipping active modpack load because active state belongs to {}, but the selected modpack is {}", state.modpackId,
-						clientConfig.selectedModpackId);
-				return false;
-			}
-			return true;
-		} catch (IOException e) {
-			LOGGER.warn("Cannot read active client projection state", e);
-			return false;
-		}
-	}
-
-	/** An unreadable state is not detachment; the normal launch path then hits its own loud failure for the corrupt state. */
-	private boolean isDetachedFromServer() {
-		try {
-			return new ClientGenerationStore(storage).isDetached(clientConfig.selectedModpackId);
-		} catch (IOException | RuntimeException e) {
-			LOGGER.warn("Cannot read the detached flag of the selected modpack", e);
-			return false;
-		}
-	}
-
-	private SelectedModpackTarget loadStoredTarget() {
-		try {
-			SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
-			if (target != null && !Objects.equals(clientConfig.selectedModpackId, target.manifest().modpackId())) {
-				LOGGER.warn("Ignoring stored modpack target {} because the selected modpack is {}", target.manifest().modpackId(), clientConfig.selectedModpackId);
-				return null;
-			}
-			return target;
-		} catch (IOException | RuntimeException e) {
-			LOGGER.error("Failed to resolve the stored modpack catalogue and group selection", e);
-			return null;
-		}
+		new ClientLaunch(storage, trustedBootstrapApply, rolledBackStuckUpdate).run();
 	}
 
 	private void initializeConstants(LoaderManagerService loaderManager, ModpackLoaderService modpackLoader) {
