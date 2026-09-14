@@ -10,6 +10,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
 import pl.skidam.automodpack_core.client.Changelogs;
+import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.SessionUpdateState;
 import pl.skidam.automodpack_core.screen.PreviewPayload;
 import pl.skidam.automodpack_core.screen.ReviewPayload;
@@ -111,6 +112,11 @@ public class ScreenImpl implements ScreenService {
 	@Override
 	public void clientThread(Runnable task) {
 		executeOnClient(task);
+	}
+
+	@Override
+	public java.util.concurrent.Future<?> background(Runnable task) {
+		return ModpackUpdater.executor().submit(task);
 	}
 
 	@Override

@@ -53,6 +53,7 @@ import pl.skidam.mcholepunch.HolepunchRoute;
 
 public class DownloadClient implements AutoCloseable {
 
+	/** The transport's own async callbacks (connection IO, manifest and platform fetches); app work belongs to the app's executor. */
 	public static final ExecutorService NET_EXECUTOR = Executors.newCachedThreadPool(r -> {
 		Thread t = new Thread(r, "automodpack-net");
 		t.setDaemon(true);

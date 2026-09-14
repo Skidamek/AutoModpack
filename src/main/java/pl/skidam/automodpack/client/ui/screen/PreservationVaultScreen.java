@@ -22,7 +22,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.VaultListWidget;
 import pl.skidam.automodpack_core.change.PlatformReferences;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
@@ -114,7 +113,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 
 	private void load() {
 		loading = true;
-		work = DownloadClient.NET_EXECUTOR.submit(() -> {
+		work = ScreenManager.background(() -> {
 			try {
 				List<PreservationVault.Snapshot> loaded = controller.preservedFiles();
 				this.minecraft.execute(() -> loaded(loaded));
@@ -164,7 +163,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	/** Cache-only Modrinth/CurseForge page lookup for the selected claim; no buttons when nothing was cached. */
 	private void resolvePlatformPages(PreservationVault.Claim claim) {
 		if (claim == null || platformPagesByClaimId.containsKey(claim.claimId())) return;
-		DownloadClient.NET_EXECUTOR.execute(() -> {
+		ScreenManager.background(() -> {
 			List<PlatformReferences.Page> pages = cachedPlatformPages(claim.objectHash());
 			this.minecraft.execute(() -> {
 				if (closed) return;
@@ -217,7 +216,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	private void run(VaultOperation operation, boolean restoreAttempt) {
 		busy = true;
 		rebuild();
-		work = DownloadClient.NET_EXECUTOR.submit(() -> {
+		work = ScreenManager.background(() -> {
 			try {
 				Path destination = operation.run();
 				List<PreservationVault.Snapshot> refreshed = controller.preservedFiles();

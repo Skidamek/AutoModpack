@@ -31,7 +31,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.loader.PinnedMods;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
@@ -136,7 +136,7 @@ public final class PinnedModsScreen extends VersionedScreen {
 	/** Cache-only Modrinth/CurseForge page lookup for the selected live mod file; no buttons when nothing was cached. */
 	private void resolvePlatformPages(Row row) {
 		if (row.path == null || platformPagesByRowKey.containsKey(key(row))) return;
-		DownloadClient.NET_EXECUTOR.execute(() -> {
+		ScreenManager.background(() -> {
 			List<PlatformReferences.Page> pages = cachedPlatformPages(row.path);
 			this.minecraft.execute(() -> {
 				if (closed) return;

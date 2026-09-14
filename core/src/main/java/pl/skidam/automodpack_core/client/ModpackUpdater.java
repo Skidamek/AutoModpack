@@ -8,6 +8,8 @@ import java.nio.file.LinkOption;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -42,6 +44,18 @@ import pl.skidam.automodpack_core.utils.cache.PlatformCache;
  * apply machinery and every restart decision stay here.
  */
 public class ModpackUpdater implements AutoCloseable {
+	/** The update engine's background pool: one daemon-thread pool for flow, review, and controller dispatch on the client; the transport keeps its own. */
+	private static final ExecutorService APP_EXECUTOR = Executors.newCachedThreadPool(r -> {
+		Thread t = new Thread(r, "automodpack-update");
+		t.setDaemon(true);
+		return t;
+	});
+
+	/** The app's client-side background pool. */
+	public static ExecutorService executor() {
+		return APP_EXECUTOR;
+	}
+
 	private Changelogs changelogs = new Changelogs();
 	boolean fullDownload = false;
 	private SelectedModpackTarget selectedTarget;
@@ -414,11 +428,11 @@ public class ModpackUpdater implements AutoCloseable {
 	 * the client thread.
 	 */
 	public void removeOrDeactivate(boolean deactivation, String modpackName, Runnable released, Runnable removed) {
-		DownloadClient.NET_EXECUTOR.execute(() -> {
+		executor().execute(() -> {
 			try {
 				UpdatePreview preview = deactivation ? previewDeactivation() : previewRemoval();
 				boolean shown = ScreenManager.preview(new PreviewPayload(preview, modpackName, false, null, List.of(), reviewActions(),
-						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeRemoval(deactivation, released, removed)), released));
+						(Runnable) () -> executor().execute(() -> executeRemoval(deactivation, released, removed)), released));
 				if (!shown) {
 					close();
 					ScreenManager.clientThread(released);
@@ -525,7 +539,7 @@ public class ModpackUpdater implements AutoCloseable {
 					if (!review.abortedByPlayer(e)) showUpdateFailure(e);
 				}
 			};
-			if (!ScreenManager.preview(previewPayload(preview, (Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), this::close))) {
+			if (!ScreenManager.preview(previewPayload(preview, (Runnable) () -> executor().execute(continueAction), this::close))) {
 				LOGGER.warn("Installed modpack switch preview could not be shown; leaving the client without an active modpack");
 				close();
 				return UpdateOutcome.INCOMPLETE;

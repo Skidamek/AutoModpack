@@ -12,7 +12,6 @@ import net.minecraft.client.Minecraft;
 import pl.skidam.automodpack_core.client.SwitchFlow;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
@@ -34,7 +33,7 @@ final class GenerationHistoryController {
 		Objects.requireNonNull(storage, "storage");
 		Objects.requireNonNull(modpackId, "modpack id");
 		Objects.requireNonNull(closed, "closed callback");
-		DownloadClient.NET_EXECUTOR.execute(() -> {
+		ScreenManager.background(() -> {
 			try {
 				JournalMirror mirror = new JournalMirror(storage);
 				if (!mirror.exists(modpackId)) throw new IOException("Installed modpack journal is missing: " + modpackId);

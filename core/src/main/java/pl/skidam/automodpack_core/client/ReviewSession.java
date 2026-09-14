@@ -23,7 +23,6 @@ import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.screen.ReviewActions;
 import pl.skidam.automodpack_core.screen.ReviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenManager;
@@ -198,7 +197,7 @@ final class ReviewSession {
 			LOGGER.info("Ignoring modpack download confirmation while another confirmation run is still active");
 			return;
 		}
-		DownloadClient.NET_EXECUTOR.execute(() -> startUpdate(true));
+		ModpackUpdater.executor().execute(() -> startUpdate(true));
 	}
 
 	public void cancelConfirmation() {
@@ -235,7 +234,7 @@ final class ReviewSession {
 			return;
 		}
 		ScreenManager.waiting(this::cancelFromPlayer);
-		DownloadClient.NET_EXECUTOR.execute(() -> startUpdate(true));
+		ModpackUpdater.executor().execute(() -> startUpdate(true));
 	}
 
 	/** Returns the review to the confirmation seam once drained work observes the player's cancellation. */
@@ -344,7 +343,7 @@ final class ReviewSession {
 	private boolean requestPreparedPlanPreview(UpdateSession session, ClientUpdatePlanBuilder.PreparedPlan prepared, Runnable continueAction, Runnable cancelAction) throws IOException {
 		UpdatePreview preview = session.preview(UpdateSession.InstalledTokenRule.ACTIVE_BOOKMARK)
 				.withReferences(sourceCatalogue.resolveMainPageReferences(prepared));
-		return ScreenManager.preview(updater.previewPayload(preview, (Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction));
+		return ScreenManager.preview(updater.previewPayload(preview, (Runnable) () -> ModpackUpdater.executor().execute(continueAction), cancelAction));
 	}
 
 	private void startUpdateAfterPreview(UpdateSession reviewed) {

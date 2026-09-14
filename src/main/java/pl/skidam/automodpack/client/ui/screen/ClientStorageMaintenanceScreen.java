@@ -15,7 +15,6 @@ import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
@@ -89,7 +88,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private void verify() {
 		if (busy || closed) return;
 		begin(Operation.VERIFY);
-		work = DownloadClient.NET_EXECUTOR.submit(() -> {
+		work = ScreenManager.background(() -> {
 			try {
 				ClientObjectStore.StorageReport report = controller.validateStorage();
 				this.minecraft.execute(() -> finishVerification(report));
@@ -102,7 +101,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private void compact() {
 		if (busy || closed) return;
 		begin(Operation.COMPACT);
-		work = DownloadClient.NET_EXECUTOR.submit(() -> {
+		work = ScreenManager.background(() -> {
 			try {
 				ClientGenerationStore.CompactionResult result = controller.compactStorage();
 				this.minecraft.execute(() -> finish(result.collection()));

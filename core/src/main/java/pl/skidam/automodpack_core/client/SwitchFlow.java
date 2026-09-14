@@ -9,7 +9,6 @@ import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
@@ -29,7 +28,7 @@ public final class SwitchFlow {
 
 	/** Switches an installed generation, reusing local objects and connecting only when the selected target needs more. */
 	public static void start(ClientStorage storage, PackDocument record, SelectionIntent expectedSelection, SelectionIntent targetSelection, String modpackName, Runnable release) {
-		DownloadClient.NET_EXECUTOR.execute(() -> {
+		ModpackUpdater.executor().execute(() -> {
 			ModpackUpdater updater = null;
 			try {
 				SelectedModpackTarget target = SelectedModpackTarget.prepare(record, expectedSelection, targetSelection, ClientPlatform.effective(targetSelection));
@@ -50,7 +49,7 @@ public final class SwitchFlow {
 	 * loudly instead of syncing.
 	 */
 	public static void rollback(ClientStorage storage, String modpackId, JournalEntry entry, String modpackName, Runnable release) {
-		DownloadClient.NET_EXECUTOR.execute(() -> {
+		ModpackUpdater.executor().execute(() -> {
 			ModpackUpdater updater = null;
 			try {
 				PackDocument record = new ClientGenerationStore(storage).document(modpackId, entry);
@@ -74,7 +73,7 @@ public final class SwitchFlow {
 		if (forcedMode != null) preview = preview.withMode(forcedMode);
 		boolean writesUnverifiedJar = (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && updater.planWritesUnverifiedJar(preview.plan());
 		boolean shown = ScreenManager.preview(new PreviewPayload(preview, modpackName, writesUnverifiedJar, updater.getSelectedTarget(), updater.unverifiedSelectedJarPaths(), updater.reviewActions(),
-				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> apply(updater, release, rollback)),
+				(Runnable) () -> ModpackUpdater.executor().execute(() -> apply(updater, release, rollback)),
 				(Runnable) () -> {
 					updater.close();
 					ScreenManager.clientThread(release);
