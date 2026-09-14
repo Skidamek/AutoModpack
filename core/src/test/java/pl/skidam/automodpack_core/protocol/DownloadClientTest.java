@@ -64,8 +64,7 @@ class DownloadClientTest {
 
 	@Test
 	void fileFrameCopyDoesNotOverflowForSizesAbove2GiB() {
-		long remaining = 2230765895L;
-		assertEquals(-2064201401, (int) remaining);
+		long remaining = 2230765895L; // Above 2 GiB, so any int-cast remainder would silently wrap negative.
 		assertEquals(1024, ProtocolFrameCodec.writableFrameBytes(1024, remaining));
 		assertEquals(MAX_CHUNK_SIZE, ProtocolFrameCodec.writableFrameBytes(MAX_CHUNK_SIZE, remaining));
 		assertEquals(100, ProtocolFrameCodec.writableFrameBytes(1024, 100L));
