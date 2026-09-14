@@ -50,7 +50,7 @@ public class Preload {
 	// Two deferred restarts for the same transaction id; the third failed recover rolls back to the last finalized generation. The id is the episode; the count does not expire.
 	private static final int MAX_DEFERRED_RESTARTS = 2;
 	// AWT preload dialog; Minecraft locale files are not loaded yet.
-	private static final String DEFERRED_POPUP_MESSAGE = "The modpack update paused on a busy file. Restart again; if this window keeps appearing, please send your latest log file.";
+	private static final String DEFERRED_POPUP_MESSAGE = "The modpack update paused on a busy file. Close programs using the modpack folder, including File Explorer windows, then restart again; if this keeps appearing, please send your latest log file.";
 
 	private ClientStorage storage;
 	private boolean trustedBootstrapApply;

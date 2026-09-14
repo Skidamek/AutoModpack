@@ -41,7 +41,7 @@ public class Gui {
 		frame.setUndecorated(true);
 		frame.setLayout(null);
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		frame.setSize(400, 150);
+		frame.setSize(400, 160);
 		frame.setResizable(false);
 		Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
 		frame.setLocation(dim.width / 2 - frame.getSize().width / 2, dim.height / 2 - frame.getSize().height / 2);
@@ -53,14 +53,16 @@ public class Gui {
 		RestartText.setForeground(Color.green);
 		RestartText.setHorizontalAlignment(JLabel.CENTER);
 
-		JLabel CustomText = new JLabel(text);
-		CustomText.setBounds(0, 48, 400, 36);
-		CustomText.setFont(new Font("Segoe UI", Font.PLAIN, 18));
+		// The deferred-update guidance runs longer than one line; Swing wraps a label only through the HTML renderer.
+		JLabel CustomText = new JLabel("<html><div style='text-align:center;width:380px'>" + text + "</div></html>");
+		CustomText.setBounds(0, 44, 400, 64);
+		CustomText.setVerticalAlignment(JLabel.TOP);
+		CustomText.setFont(new Font("Segoe UI", Font.PLAIN, 14));
 		CustomText.setForeground(Color.white);
 		CustomText.setHorizontalAlignment(JLabel.CENTER);
 
 		JButton OKButton = new JButton("OK");
-		OKButton.setBounds(160, 100, 60, 25);
+		OKButton.setBounds(170, 116, 60, 25);
 		OKButton.setBackground(new Color(0, 153, 51));
 		OKButton.setForeground(Color.white);
 		OKButton.setFont(new Font("Segoe UI", Font.BOLD, 14));
