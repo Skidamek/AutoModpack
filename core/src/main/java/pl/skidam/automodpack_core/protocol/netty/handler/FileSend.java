@@ -39,11 +39,6 @@ final class FileSend {
 	}
 
 	void send(ChannelHandlerContext ctx, byte[] bsha1, byte protocolVersion, int chunkSize) throws IOException {
-		if (inFlightTransfers.get() >= MAX_CONCURRENT_TRANSFERS_PER_CONNECTION) {
-			sendError(ctx, protocolVersion, "Too many concurrent transfers");
-			return;
-		}
-
 		final String sha1 = new String(bsha1, StandardCharsets.UTF_8);
 		final Optional<Path> optionalPath = server.getPath(sha1);
 
@@ -55,20 +50,20 @@ final class FileSend {
 		final Path path = optionalPath.get();
 		final long fileSize = Files.size(path);
 
-		ByteBuf responseHeader = ctx.alloc().buffer(1 + 1 + 8);
-		responseHeader.writeByte(protocolVersion);
-		responseHeader.writeByte(FILE_RESPONSE_TYPE);
-		responseHeader.writeLong(fileSize);
-		ChannelFuture headerFuture = writeControlAndFlush(ctx, responseHeader);
-
 		if (fileSize == 0) {
+			writeControlAndFlush(ctx, fileResponseHeader(ctx, protocolVersion, 0));
 			sendEOT(ctx, protocolVersion);
 			return;
 		}
 
+		if (!tryAcquire()) {
+			sendError(ctx, protocolVersion, "Too many concurrent transfers");
+			return;
+		}
+
 		FileChannel file = null;
-		inFlightTransfers.incrementAndGet();
 		try {
+			ChannelFuture headerFuture = writeControlAndFlush(ctx, fileResponseHeader(ctx, protocolVersion, fileSize));
 			final CompressionCodec codec = NettyServer.compressionCodec(ctx.channel());
 			final ChannelHandlerContext encoderContext = encoderContext(ctx);
 			final FileChannel opened = FileChannel.open(path, StandardOpenOption.READ);
@@ -78,6 +73,15 @@ final class FileSend {
 			inFlightTransfers.decrementAndGet();
 			closeQuietly(file);
 			sendError(ctx, protocolVersion, "File transfer error: " + e.getMessage());
+		}
+	}
+
+	/** Occupies one in-flight slot or fails; two requests cannot both pass a stale get()-then-increment. */
+	private boolean tryAcquire() {
+		while (true) {
+			int inFlight = inFlightTransfers.get();
+			if (inFlight >= MAX_CONCURRENT_TRANSFERS_PER_CONNECTION) return false;
+			if (inFlightTransfers.compareAndSet(inFlight, inFlight + 1)) return true;
 		}
 	}
 
@@ -201,6 +205,14 @@ final class FileSend {
 		errorBuf.writeInt(errMsgBytes.length);
 		errorBuf.writeBytes(errMsgBytes);
 		writeControlAndFlush(ctx, errorBuf).addListener(ChannelFutureListener.CLOSE);
+	}
+
+	private static ByteBuf fileResponseHeader(ChannelHandlerContext ctx, byte protocolVersion, long fileSize) {
+		ByteBuf responseHeader = ctx.alloc().buffer(1 + 1 + 8);
+		responseHeader.writeByte(protocolVersion);
+		responseHeader.writeByte(FILE_RESPONSE_TYPE);
+		responseHeader.writeLong(fileSize);
+		return responseHeader;
 	}
 
 	private static void sendEOT(ChannelHandlerContext ctx, byte protocolVersion) {
