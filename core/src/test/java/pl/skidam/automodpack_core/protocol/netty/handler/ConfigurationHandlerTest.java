@@ -22,7 +22,7 @@ class ConfigurationHandlerTest {
 		for (CompressionType compressionType : CompressionType.values()) {
 			EmbeddedChannel channel = new EmbeddedChannel(new ConfigurationHandler(new PreConfigurationLifetimeHandler()));
 			channel.writeInbound(Unpooled.buffer(3).writeByte(LATEST_SUPPORTED_PROTOCOL_VERSION).writeByte(CONFIGURATION_COMPRESSION_TYPE).writeByte(compressionType.wireId()));
-			assertEquals(compressionType, channel.attr(NettyServer.COMPRESSION_TYPE).get());
+			assertEquals(compressionType, NettyServer.compressionCodec(channel).getCompressionType());
 
 			ByteBuf response = channel.readOutbound();
 			try {
