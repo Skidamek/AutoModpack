@@ -13,7 +13,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicReference;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -62,6 +61,7 @@ final class UpdateSession implements UpdateAttempt {
 	private final boolean attaching;
 	private ClientUpdatePlanBuilder.PreparedPlan prepared;
 	private ReviewedUpdatePlan review;
+	private UpdatePlan appliedPlan;
 
 	UpdateSession(ClientStorage storage, ClientUpdatePlanBuilder planBuilder, ModpackObjectAcquisition objectAcquisition, SourceCatalogue sourceCatalogue,
 			Changelogs changelogs, ConnectionJsons.ConnectionInfo connectionInfo, SelectedModpackTarget target, boolean firstConnection,
@@ -210,6 +210,7 @@ final class UpdateSession implements UpdateAttempt {
 		}
 		review().complete();
 		UpdatePlan plan = applied.get().plan();
+		this.appliedPlan = plan;
 		try {
 			cleanupOverlayState(plan, target.manifest().modpackId());
 		} catch (IOException e) {
@@ -231,8 +232,12 @@ final class UpdateSession implements UpdateAttempt {
 				throw new IOException("Modpack generation committed but detachment could not be cleared", e);
 			}
 		}
-		Constants.clientConfig = plan.plannedClientConfig();
 		return RestartDecision.applyResult(plan);
+	}
+
+	/** The plan the commit actually applied, after any replan; the flow applies its config snapshot at completion. */
+	UpdatePlan appliedPlan() {
+		return Objects.requireNonNull(appliedPlan, "The session has not committed");
 	}
 
 	private void recordChangelogs(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {

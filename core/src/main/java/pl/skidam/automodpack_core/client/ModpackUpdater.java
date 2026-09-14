@@ -355,6 +355,7 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 		launch.approve();
 		ApplyResult applyResult = launch.commit();
+		clientConfig = launch.appliedPlan().plannedClientConfig();
 		LOGGER.info("Launch apply completed; restart required: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
 		finishLaunchApply(applyResult);
 	}
@@ -466,6 +467,8 @@ public class ModpackUpdater implements AutoCloseable {
 		// The confirm click is the review's consent; commit itself refuses an unapproved plan.
 		removal.approve();
 		ApplyResult result = removal.commit();
+		// The flow completion applies the committed removal's config snapshot; the attempt never writes the global.
+		clientConfig = removal.plannedConfig();
 		afterRemovalApply(result);
 		return new LifecycleApply(true, result.requiresRestart());
 	}
@@ -548,6 +551,8 @@ public class ModpackUpdater implements AutoCloseable {
 			else showUpdateFailure(e);
 		}, this::close), () -> {
 			ApplyResult applyResult = reviewed.commit();
+			// The flow completion applies the committed plan's config snapshot; the deep transaction layer never writes the global.
+			clientConfig = reviewed.appliedPlan().plannedClientConfig();
 			LOGGER.info("Update completed! Required restart: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
 			restartAfterApply(applyResult);
 		});

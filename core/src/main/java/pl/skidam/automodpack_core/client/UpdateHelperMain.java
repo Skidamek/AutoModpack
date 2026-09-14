@@ -86,7 +86,7 @@ public final class UpdateHelperMain {
 				try {
 					if (!waitForGameExit(parentPid)) return 1;
 
-					UpdateTransactionExecutor executor = UpdateTransactionSupport.executor();
+					UpdateTransactionExecutor executor = UpdateTransactionSupport.executor(null, null);
 					long backoff = UpdateRecovery.INITIAL_BACKOFF_MILLIS;
 					for (int attempt = 1;; attempt++) {
 						recoverSelfUpdate(gameDirectory, dataLocation);
