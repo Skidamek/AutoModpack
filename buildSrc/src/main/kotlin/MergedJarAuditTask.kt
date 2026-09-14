@@ -64,13 +64,11 @@ abstract class MergedJarAuditTask : DefaultTask() {
 
     private fun auditNestedJar(jarName: String, nestedJar: ByteArray) {
         var musicSize: Int? = null
-        var soundsDefinition: String? = null
 
         ZipInputStream(ByteArrayInputStream(nestedJar)).use { input ->
             generateSequence { input.nextEntry }.filterNot { it.isDirectory }.forEach { entry ->
                 when (entry.name) {
                     WAITING_MUSIC_PATH -> musicSize = input.readBytes().size
-                    SOUNDS_DEFINITION_PATH -> soundsDefinition = input.readBytes().toString(Charsets.UTF_8)
                 }
                 if (entry.name == OLD_MUSIC_PATH || entry.name == OLD_MUSIC_LICENSE_PATH) {
                     throw GradleException("Old Bensound content remains in $jarName: ${entry.name}")
@@ -81,11 +79,6 @@ abstract class MergedJarAuditTask : DefaultTask() {
         val packagedMusicSize = musicSize ?: throw GradleException("$WAITING_MUSIC_PATH is missing from nested jar in $jarName")
         if (packagedMusicSize.toLong() > maxMusicBytes.get()) {
             throw GradleException("Waiting music in $jarName is $packagedMusicSize bytes, exceeding the ${maxMusicBytes.get()} byte budget")
-        }
-
-        val soundsJson = soundsDefinition ?: throw GradleException("$SOUNDS_DEFINITION_PATH is missing from nested jar in $jarName")
-        if (!soundsJson.contains("automodpack:music/waiting") || !soundsJson.contains("\"stream\": true")) {
-            throw GradleException("$SOUNDS_DEFINITION_PATH does not reference the streamed waiting loop in $jarName")
         }
     }
 
@@ -105,7 +98,6 @@ abstract class MergedJarAuditTask : DefaultTask() {
 
     companion object {
         private const val NESTED_JAR_PATH = "META-INF/jarjar/automodpack-mod.jar"
-        private const val SOUNDS_DEFINITION_PATH = "assets/automodpack/sounds.json"
         private const val WAITING_MUSIC_PATH = "assets/automodpack/sounds/music/waiting.ogg"
         private const val OLD_MUSIC_PATH = "assets/automodpack/sounds/music/theelevatorbossanova.ogg"
         private const val OLD_MUSIC_LICENSE_PATH = "assets/automodpack/sounds/music/music-license"

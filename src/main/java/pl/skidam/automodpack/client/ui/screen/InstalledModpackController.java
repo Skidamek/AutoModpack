@@ -98,8 +98,8 @@ final class InstalledModpackController {
 			GroupSelectionResolver.ConflictReplacement replacement = GroupSelectionResolver.replaceConflicts(manifest, next, preferredGroups, platform, exception.resolution()).orElse(null);
 			if (replacement != null) return new SelectionChange(next, null, replacement, null);
 			return new SelectionChange(next, null, null, preferredGroups.isEmpty()
-					? VersionedText.translatable("automodpack.selection.changeInvalid").getString()
-					: VersionedText.translatable("automodpack.selection.cannotSelect", preferredName).getString());
+					? VersionedText.text("automodpack.selection.changeInvalid").getString()
+					: VersionedText.text("automodpack.selection.cannotSelect", preferredName).getString());
 		}
 	}
 
@@ -373,8 +373,8 @@ final class InstalledModpackController {
 	}
 
 	void openFiles(Screen parent, Pack pack) {
-		ScreenImpl.setScreen(new ChangeBrowserScreen(parent, VersionedText.translatable("automodpack.files.title", pack.name()),
-				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), groupNames(pack.record().manifest()), null, List.of(), 0, ""));
+		ScreenImpl.setScreen(new ChangeBrowserScreen(parent, VersionedText.text("automodpack.files.title", pack.name()),
+				VersionedText.text("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), groupNames(pack.record().manifest()), null, List.of(), 0, ""));
 	}
 
 	/** Display names for the active pack's groups, for browsers that only see group ids, like the changelog. */
@@ -387,7 +387,7 @@ final class InstalledModpackController {
 	static Map<String, String> groupNames(GroupManifest manifest) {
 		Map<String, String> names = new TreeMap<>();
 		manifest.groups().forEach((groupId, group) -> names.put(groupId,
-				group.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : group.displayName()));
+				group.displayName().isBlank() ? VersionedText.text("automodpack.browser.unknownGroup").getString() : group.displayName()));
 		return Map.copyOf(names);
 	}
 

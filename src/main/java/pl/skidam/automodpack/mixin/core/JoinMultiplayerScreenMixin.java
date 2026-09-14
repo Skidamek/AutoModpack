@@ -44,7 +44,7 @@ public abstract class JoinMultiplayerScreenMixin extends Screen {
 		int buttonX = useRight ? width - buttonWidth - 4 : 4;
 		int buttonY = 8;
 		Button groupsButton = VersionedScreen.buttonWidget(buttonX, buttonY, buttonWidth, 20,
-				VersionedText.translatable(buttonWidth < 100 ? "automodpack.packManager.shortButton" : "automodpack.packManager.button"),
+				VersionedText.text(buttonWidth < 100 ? "automodpack.packManager.shortButton" : "automodpack.packManager.button"),
 				press -> ScreenImpl.setScreen(new InstalledModpacksScreen(this)));
 		addRenderableWidget(groupsButton);
 	}

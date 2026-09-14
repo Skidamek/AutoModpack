@@ -10,7 +10,6 @@ import pl.skidam.automodpack_core.screen.ScreenManager;
 
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 
 import static pl.skidam.automodpack_core.Constants.*;
@@ -18,7 +17,7 @@ import static pl.skidam.automodpack_core.Constants.*;
 @Mod(MOD_ID + "_mod")
 public class ForgeInit {
 
-	public ForgeInit(/^? if >=1.19.2 {^/FMLJavaModLoadingContext context/^?}^/) {
+	public ForgeInit() {
 		preload = false;
 
 		long start = System.currentTimeMillis();
@@ -31,13 +30,7 @@ public class ForgeInit {
 		} else {
 			ScreenManager.install(new ScreenImpl());
 			ModPackets.registerC2SPackets();
-			new AudioManager(
-				/^? if >=1.19.2 {^/
-				context.getModEventBus()
-				/^?} else {^/
-				/^FMLJavaModLoadingContext.get().getModEventBus()
-				^//^?}^/
-			);
+			new AudioManager();
 		}
 
 

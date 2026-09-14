@@ -30,7 +30,7 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	private static final int ROW_HEIGHT = 24;
 
 	private static Component filesLabel() {
-		return VersionedText.translatable("automodpack.selection.groupFiles");
+		return VersionedText.text("automodpack.selection.groupFiles");
 	}
 
 	/** Group rows span the whole list like the shared ChromelessList lists do; vanilla caps the row width, which squashed every row into the center. */

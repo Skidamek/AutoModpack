@@ -47,7 +47,7 @@ public class DownloadScreen extends VersionedScreen {
 	private static final long TEXT_UPDATE_INTERVAL = 100; // Update strings 10x per second
 
 	public DownloadScreen(DownloadView download, String header, Runnable onCancel) {
-		super(VersionedText.translatable("automodpack.download.title"));
+		super(VersionedText.text("automodpack.download.title"));
 		this.download = download;
 		this.header = header;
 		this.onCancel = onCancel;
@@ -61,7 +61,7 @@ public class DownloadScreen extends VersionedScreen {
 
 	private void initWidgets() {
 		cancelButton = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.cancel"), button -> {
+				secondaryAction(VersionedText.text("automodpack.cancel"), button -> {
 					cancelButton.active = false;
 					cancelDownload();
 					AudioManager.stopMusic();
@@ -107,17 +107,17 @@ public class DownloadScreen extends VersionedScreen {
 	}
 
 	private Component getTotalDownloadSpeed() {
-		return "-1".equals(cachedSpeed) ? VersionedText.translatable("automodpack.download.calculating") : VersionedText.literal(cachedSpeed);
+		return "-1".equals(cachedSpeed) ? VersionedText.text("automodpack.download.calculating") : VersionedText.literal(cachedSpeed);
 	}
 
 	private Component getTotalETA() {
 		return "-1".equals(cachedETA)
-				? VersionedText.translatable("automodpack.download.calculating")
-				: VersionedText.translatable("automodpack.download.eta", cachedETA);
+				? VersionedText.text("automodpack.download.calculating")
+				: VersionedText.text("automodpack.download.eta", cachedETA);
 	}
 
 	private Component getAcquisitionSummary() {
-		return VersionedText.translatable("automodpack.download.acquired", download.acquired(), download.failed());
+		return VersionedText.text("automodpack.download.acquired", download.acquired(), download.failed());
 	}
 
 	private float getDownloadScale() {
@@ -130,7 +130,7 @@ public class DownloadScreen extends VersionedScreen {
 
 	private void drawDownloadingFiles(VersionedMatrices matrices) {
 		int y = this.height / 2 - 94;
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.download.downloading").withStyle(ChatFormatting.BOLD), this.width / 2, y, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.download.downloading").withStyle(ChatFormatting.BOLD), this.width / 2, y, TextColors.WHITE);
 		int currentY = y + 14;
 		for (String fileName : download.downloadingFileNames()) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, fileName, Math.max(1, panelWidth(310) - 20))), this.width / 2, currentY, TextColors.GRAY);

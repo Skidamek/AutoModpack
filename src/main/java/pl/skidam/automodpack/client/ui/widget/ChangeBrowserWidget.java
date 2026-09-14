@@ -168,7 +168,7 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 			}
 			if (modrinth) badges.add(new Badge("MR", BADGE_MODRINTH_COLOR));
 			if (curseforge) badges.add(new Badge("CF", BADGE_CURSEFORGE_COLOR));
-			if (referencesResolved && badges.isEmpty() && file.path().toLowerCase(Locale.ROOT).endsWith(".jar")) badges.add(new Badge(VersionedText.translatable("automodpack.browser.custom").getString(), BADGE_CUSTOM_COLOR));
+			if (referencesResolved && badges.isEmpty() && file.path().toLowerCase(Locale.ROOT).endsWith(".jar")) badges.add(new Badge(VersionedText.text("automodpack.browser.custom").getString(), BADGE_CUSTOM_COLOR));
 			return badges;
 		}
 
@@ -205,10 +205,10 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 			if (row instanceof ChangeBrowserProjection.EffectRow effect) return kindName(effectKind(effect.effect()));
 			ChangeBrowserProjection.FileRow file = (ChangeBrowserProjection.FileRow) row;
 			List<String> parts = new ArrayList<>();
-			parts.add(file.kind() == ChangeSet.Kind.REMOVED ? VersionedText.translatable("automodpack.browser.kind.deleted").getString() : kindName(file.kind()));
+			parts.add(file.kind() == ChangeSet.Kind.REMOVED ? VersionedText.text("automodpack.browser.kind.deleted").getString() : kindName(file.kind()));
 			parts.add(UiFormat.formatSize(file.size()));
 			Long beforeSize = file.kind() != ChangeSet.Kind.MODIFIED && file.kind() != ChangeSet.Kind.METADATA_ONLY ? null : file.beforeSize();
-			if (beforeSize != null && beforeSize.longValue() != file.size()) parts.add(VersionedText.translatable("automodpack.browser.wasSize", UiFormat.formatSize(beforeSize)).getString());
+			if (beforeSize != null && beforeSize.longValue() != file.size()) parts.add(VersionedText.text("automodpack.browser.wasSize", UiFormat.formatSize(beforeSize)).getString());
 			if (!file.contentKinds().isEmpty()) parts.add(String.join(", ", file.contentKinds().stream().map(ChangeBrowserWidget::contentName).toList()));
 			List<String> visibleGroups = visibleGroups(file);
 			if (!visibleGroups.isEmpty()) parts.add(String.join(", ", visibleGroups));
@@ -217,7 +217,7 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 
 		/** The file's group display names, alphabetically; ids without a name fall back to "Unknown group". */
 		private List<String> visibleGroups(ChangeBrowserProjection.FileRow file) {
-			return file.features().stream().map(groupNames::get).map(name -> name == null || name.isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : name)
+			return file.features().stream().map(groupNames::get).map(name -> name == null || name.isBlank() ? VersionedText.text("automodpack.browser.unknownGroup").getString() : name)
 					.distinct().sorted(String.CASE_INSENSITIVE_ORDER).toList();
 		}
 
@@ -243,10 +243,10 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 		private String effectName(ChangeSet.Effect effect) {
 			if (effect.category().startsWith("group.")) {
 				String name = groupNames.get(effect.value());
-				return name == null || name.isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : name;
+				return name == null || name.isBlank() ? VersionedText.text("automodpack.browser.unknownGroup").getString() : name;
 			}
 			// Pack metadata effects carry the modpack id as their value, so the row names the pack it reshaped.
-			return VersionedText.translatable("automodpack.browser.packEffect", effect.value()).getString();
+			return VersionedText.text("automodpack.browser.packEffect", effect.value()).getString();
 		}
 
 		/*? if >= 1.21.9 {*/
@@ -323,7 +323,7 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 	}
 
 	private static String platformName(String platform) {
-		return VersionedText.translatable("automodpack.browser." + platform).getString();
+		return VersionedText.text("automodpack.browser." + platform).getString();
 	}
 
 	/** The project slug of a reference URL: the last non-empty segment of the URI path, ignoring trailing separators, else null. */
@@ -339,11 +339,11 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 	}
 
 	private static String kindName(ChangeSet.Kind kind) {
-		return VersionedText.translatable("automodpack.browser.kind." + kind.name().toLowerCase(Locale.ROOT)).getString();
+		return VersionedText.text("automodpack.browser.kind." + kind.name().toLowerCase(Locale.ROOT)).getString();
 	}
 
 	private static String contentName(String contentKind) {
-		return VersionedText.translatable("automodpack.browser.content." + contentKind).getString();
+		return VersionedText.text("automodpack.browser.content." + contentKind).getString();
 	}
 
 	private static String leafName(String path) {

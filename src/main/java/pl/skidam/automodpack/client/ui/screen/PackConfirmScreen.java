@@ -63,7 +63,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 
 	/** First-install confirm; every selected jar matched Modrinth or CurseForge unless unverified jars were picked. */
 	public PackConfirmScreen(ReviewPayload payload) {
-		super(VersionedText.translatable("automodpack.firstConnect.title"));
+		super(VersionedText.text("automodpack.firstConnect.title"));
 		this.welcome = Objects.requireNonNull(payload, "payload");
 		this.later = null;
 		this.actions = payload.actions();
@@ -77,7 +77,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 
 	/** Confirm before writing unverified jars on a later update or generation rollback. */
 	public PackConfirmScreen(Screen parent, PreviewPayload payload) {
-		super(VersionedText.translatable(UpdatePreviewScreen.titleKey(payload.preview().mode())));
+		super(VersionedText.text(UpdatePreviewScreen.titleKey(payload.preview().mode())));
 		this.welcome = null;
 		this.later = Objects.requireNonNull(payload, "payload");
 		this.actions = Objects.requireNonNull(payload.actions(), "actions");
@@ -118,12 +118,12 @@ public final class PackConfirmScreen extends VersionedScreen {
 				? Changelogs.hasNotes(welcome.patchNotes())
 				: laterPreview != null && Changelogs.hasNotes(laterPreview.journal());
 
-		ActionDefinition historyAction = notes ? optionalAction(VersionedText.translatable("automodpack.management.history"), button -> openHistory()) : null;
+		ActionDefinition historyAction = notes ? optionalAction(VersionedText.text("automodpack.management.history"), button -> openHistory()) : null;
 		ActionDefinition customizeAction = customize ? optionalAction(PackConfirmCopy.customizeLabel(), button -> customize()) : null;
 		Component cancelLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.cancel" : "automodpack.back");
 		Component primaryLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.download" : UpdatePreviewScreen.actionKey(laterPreview.mode()));
 		ActionDefinition cancelAction = secondaryAction(cancelLabel, button -> cancel());
-		ActionDefinition reviewAction = optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles());
+		ActionDefinition reviewAction = optionalAction(VersionedText.text("automodpack.browser.reviewFiles"), button -> openFiles());
 		ActionDefinition primaryDef = primaryAction(primaryLabel, button -> confirm());
 		List<ActionRow> rows = new ArrayList<>();
 		// History and Customize are both compact optional actions: one shared row instead of two full-width ones.
@@ -143,7 +143,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 				rebuild();
 			});
 			String joined = String.join("\n", wrapToWidth(this.font, String.join(", ", welcome.firstInstallLocalModPaths()), 240, 8));
-			VersionedScreen.setTooltip(leftoverCheckbox, VersionedText.translatable("automodpack.confirm.leftoverTooltip", joined));
+			VersionedScreen.setTooltip(leftoverCheckbox, VersionedText.text("automodpack.confirm.leftoverTooltip", joined));
 			this.addRenderableWidget(leftoverCheckbox);
 		}
 		ackCheckbox = null;
@@ -204,7 +204,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 		bottomLines.addAll(wrapParagraph(this.font, PackConfirmCopy.sharedCommands(), wrapWidth, ChatFormatting.YELLOW));
 		if (laterPreview != null && laterPreview.mode() == UpdatePreview.Mode.ROLLBACK) {
 			bottomLines.add(blankLine());
-			bottomLines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.update.rollbackDetaches").getString(), wrapWidth, ChatFormatting.YELLOW));
+			bottomLines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.update.rollbackDetaches").getString(), wrapWidth, ChatFormatting.YELLOW));
 		}
 
 		int topHeight = topLines.size() * LINE_HEIGHT;
@@ -292,7 +292,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 		if (firstInstall) {
 			if (welcome.uncachedTargetBytes().isPresent()) {
 				appendStat(lines, wrapWidth,
-						VersionedText.translatable("automodpack.firstConnect.downloadSummary", UiFormat.formatSize(welcome.uncachedTargetBytes().getAsLong()), UiFormat.formatSize(PackConfirmCopy.selectedBytes(target())))
+						VersionedText.text("automodpack.firstConnect.downloadSummary", UiFormat.formatSize(welcome.uncachedTargetBytes().getAsLong()), UiFormat.formatSize(PackConfirmCopy.selectedBytes(target())))
 								.getString(),
 						ChatFormatting.GRAY);
 			}
@@ -369,11 +369,11 @@ public final class PackConfirmScreen extends VersionedScreen {
 
 	private void openFiles() {
 		if (firstInstall) {
-			ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.firstConnect.description"),
+			ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.text("automodpack.browser.previewTitle"), VersionedText.text("automodpack.firstConnect.description"),
 					welcome.catalogue(), PackConfirmCopy.groupNames(target().manifest()), null, List.of(), PackConfirmCopy.selectedBytes(target()), ""));
 			return;
 		}
-		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable(UpdatePreviewScreen.reviewKey(laterPreview.mode())),
+		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.text("automodpack.browser.previewTitle"), VersionedText.text(UpdatePreviewScreen.reviewKey(laterPreview.mode())),
 				laterPreview.changeSet(), laterPreview.featureNames(), null, List.of(), laterPreview.uncachedAcquisitionBytes(), ""));
 	}
 
@@ -422,8 +422,8 @@ public final class PackConfirmScreen extends VersionedScreen {
 		if (!finished && !unverifiedPaths.isEmpty() && !acknowledged) {
 			// The reason travels with the risk box: under it in the centered assembly, above it when pinned.
 			int reasonY = ackReasonY >= 0 ? ackReasonY : this.height - 40;
-			if (countdown.running()) drawCountdown(matrices, VersionedText.translatable("automodpack.confirm.ackCountdown", countdown.secondsRemaining()), reasonY);
-			else drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.confirm.ackUnlock").withStyle(ChatFormatting.GRAY), this.width / 2, reasonY, TextColors.WHITE);
+			if (countdown.running()) drawCountdown(matrices, VersionedText.text("automodpack.confirm.ackCountdown", countdown.secondsRemaining()), reasonY);
+			else drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.confirm.ackUnlock").withStyle(ChatFormatting.GRAY), this.width / 2, reasonY, TextColors.WHITE);
 		}
 	}
 

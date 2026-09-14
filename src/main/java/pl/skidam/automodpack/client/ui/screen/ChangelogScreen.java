@@ -15,9 +15,9 @@ import pl.skidam.automodpack_core.screen.HistoryViewRequest;
 /** Shows the applied file changes through the same browser as previews and installed catalogues. */
 public final class ChangelogScreen extends ChangeBrowserScreen {
 	public ChangelogScreen(Screen parent, Changelogs changelogs) {
-		super(parent, VersionedText.translatable("automodpack.changelog.title"),
-				VersionedText.translatable("automodpack.changelog.latestNote", latestNote(changelogs)), changelogs.changeSet(), activeGroupNames(),
-				new BrowserAction(VersionedText.translatable("automodpack.management.history"),
+		super(parent, VersionedText.text("automodpack.changelog.title"),
+				VersionedText.text("automodpack.changelog.latestNote", latestNote(changelogs)), changelogs.changeSet(), activeGroupNames(),
+				new BrowserAction(VersionedText.text("automodpack.management.history"),
 						screen -> ScreenImpl.setScreen(new ContentHistoryScreen(screen, new HistoryViewRequest(changelogs.journal(), newestSeq(changelogs.journal()), "", () -> {}))),
 						!changelogs.journal().isEmpty()));
 		if (AudioManager.isMusicPlaying()) AudioManager.stopMusic();
@@ -35,7 +35,7 @@ public final class ChangelogScreen extends ChangeBrowserScreen {
 
 	private static String latestNote(Changelogs changelogs) {
 		String notes = changelogs.latestPatchNotes();
-		if (notes.isBlank()) return VersionedText.translatable("automodpack.patchNotes.none").getString();
+		if (notes.isBlank()) return VersionedText.text("automodpack.patchNotes.none").getString();
 		return notes.split("\\R", -1)[0];
 	}
 }

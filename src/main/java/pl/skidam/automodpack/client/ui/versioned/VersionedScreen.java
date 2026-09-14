@@ -15,11 +15,6 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 /*? if >=1.20.4 {*/
 /*?}*/
-/*? if >= 1.20.2 {*/
-import net.minecraft.client.gui.components.SpriteIconButton;
-/*?} else {*/
-/*import net.minecraft.client.gui.components.ImageButton;
-*//*?}*/
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
 import net.minecraft.client.gui.screens.Screen;
@@ -62,6 +57,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 *//*?}*/
 
 import pl.skidam.automodpack.init.Common;
+import pl.skidam.automodpack.client.ClientTextures;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
@@ -624,27 +620,14 @@ public class VersionedScreen extends Screen {
 		return keyCode == 257 || keyCode == 335;
 	}
 
-	/*? if >= 1.20.2 {*/
+	/** One icon button for every version: our texture through the TextureManager, never the pack-resolvable gui atlas. */
 	public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath) {
 		return iconButtonWidget(x, y, buttonWidth, spriteWidth, onPress, spritePath, VersionedText.literal(""));
 	}
 
 	public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath, Component message) {
-		Button button = SpriteIconButton.builder(message, onPress, true).sprite(Common.id(spritePath), spriteWidth, spriteWidth).size(buttonWidth, buttonWidth).build();
-		button.setPosition(x, y);
-		return button;
+		return new VersionedIconButton(x, y, buttonWidth, spriteWidth, onPress, Common.id("textures/gui/sprites/" + spritePath + ".png"), message);
 	}
-	/*?} else {*/
-	/*public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath) {
-		return iconButtonWidget(x, y, buttonWidth, spriteWidth, onPress, spritePath, VersionedText.literal(""));
-	}
-
-	public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath, Component message) {
-		ImageButton button = new ImageButton(x, y, buttonWidth, buttonWidth, 0, 0, 0, Common.id("textures/gui/sprites/" + spritePath + ".png"), buttonWidth, buttonWidth, onPress);
-		button.setMessage(message);
-		return button;
-	}
-	*//*?}*/
 
 	protected static final class ActionDefinition {
 		private final Component message;
@@ -704,6 +687,7 @@ public class VersionedScreen extends Screen {
 
 	/*? if <=1.20 {*/
 	/*public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
+		ClientTextures.ensureRegistered();
 		/^? if <=1.16.5 {^/
 		/^Minecraft.getInstance().getTextureManager().bindTexture(textureID);
 		^//^?} else {^/
@@ -713,6 +697,7 @@ public class VersionedScreen extends Screen {
 	}
 	*//*?} else {*/
 	public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
+		ClientTextures.ensureRegistered();
 		/*? if >=1.21.6 {*/
 		matrices.getContext().blit(RenderPipelines.GUI_TEXTURED, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
 		/*?} elif >=1.21.2 {*/

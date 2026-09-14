@@ -25,7 +25,7 @@ public final class ModpackOfferScreen extends VersionedScreen {
 	private int titleTop;
 
 	public ModpackOfferScreen(Screen parent, Runnable syncModpack, Runnable joinWithout, Runnable cancel) {
-		super(VersionedText.translatable("automodpack.offer.title"));
+		super(VersionedText.text("automodpack.offer.title"));
 		this.parent = parent;
 		this.syncModpack = syncModpack;
 		this.joinWithout = joinWithout;
@@ -37,12 +37,12 @@ public final class ModpackOfferScreen extends VersionedScreen {
 		super.init();
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
 		List<MutableComponent> lines = new ArrayList<>();
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.offer.serverModpack").getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.offer.serverModpack").getString(), wrapWidth));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.offer.syncAnytime").getString(), wrapWidth));
-		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.offer.joinWithout"), button -> joinWithoutIt()),
-				optionalAction(VersionedText.translatable("automodpack.back"), button -> cancelJoin()),
-				primaryAction(VersionedText.translatable("automodpack.offer.syncModpack"), button -> syncToServer()));
+		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.offer.syncAnytime").getString(), wrapWidth));
+		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.offer.joinWithout"), button -> joinWithoutIt()),
+				optionalAction(VersionedText.text("automodpack.back"), button -> cancelJoin()),
+				primaryAction(VersionedText.text("automodpack.offer.syncModpack"), button -> syncToServer()));
 		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, footer);
 		this.titleTop = layout.titleTop();
 		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
@@ -70,7 +70,7 @@ public final class ModpackOfferScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.offer.title").withStyle(ChatFormatting.BOLD), this.width / 2, titleTop, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.offer.title").withStyle(ChatFormatting.BOLD), this.width / 2, titleTop, TextColors.WHITE);
 	}
 
 	@Override

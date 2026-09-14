@@ -15,7 +15,6 @@ plugins {
 val fabric = the<FabricExtension>()
 val targetName = sc.current.project
 val minecraftVersion = property("deps.minecraft") as String
-val fabricApiVersion = property("deps.fabric-api") as String
 val fabricLoaderVersion = property("deps.fabric-loader") as String
 val mcholepunchVersion = versionProperty("versionMcholepunch")
 
@@ -46,27 +45,6 @@ dependencies {
 	}
 
 	modImplementation("net.fabricmc:fabric-loader:$fabricLoaderVersion")
-
-	setOf(
-		"api-base", // Required by modules below
-		"registry-sync-v0", // Required for custom sounds
-		"networking-api-v1", // Required by registry sync module
-		"resource-loader-v0", // Required for translatable texts
-	).forEach {
-		include(modImplementation(fabricApi.module("fabric-$it", fabricApiVersion))!!)
-	}
-
-	// Required for commands
-	if (sc.current.parsed < "1.19.2") {
-		include(modImplementation(fabricApi.module("fabric-command-api-v1", fabricApiVersion))!!)
-	} else {
-		include(modImplementation(fabricApi.module("fabric-command-api-v2", fabricApiVersion))!!)
-	}
-
-	// Required for translatable texts in 1.21.9+ for some reason i need both v0 and v1?
-	if (sc.current.parsed >= "1.21.9") {
-		include(modImplementation(fabricApi.module("fabric-resource-loader-v1", fabricApiVersion))!!)
-	}
 }
 
 java {

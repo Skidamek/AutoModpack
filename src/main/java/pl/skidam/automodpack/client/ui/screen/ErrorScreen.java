@@ -29,7 +29,7 @@ public class ErrorScreen extends VersionedScreen {
 	private int titleTop;
 
 	public ErrorScreen(Screen parent, FailureRequest request) {
-		super(VersionedText.translatable("automodpack.error.title"));
+		super(VersionedText.text("automodpack.error.title"));
 		this.parent = parent;
 		this.request = request;
 
@@ -47,27 +47,27 @@ public class ErrorScreen extends VersionedScreen {
 		if (request.retryAction() != null) {
 			rows = List.of(
 					actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-							primaryAction(VersionedText.translatable("automodpack.error.retry"), button -> retry()),
-							optionalAction(VersionedText.translatable("automodpack.error.openLogs"), button -> openLogs())),
+							primaryAction(VersionedText.text("automodpack.error.retry"), button -> retry()),
+							optionalAction(VersionedText.text("automodpack.error.openLogs"), button -> openLogs())),
 					actionRow(ActionAreaLayout.RowKind.FOOTER,
-							secondaryAction(VersionedText.translatable("automodpack.back"), button -> back()),
-							optionalAction(VersionedText.translatable("automodpack.error.copyDetails"), button -> copyDetails())));
+							secondaryAction(VersionedText.text("automodpack.back"), button -> back()),
+							optionalAction(VersionedText.text("automodpack.error.copyDetails"), button -> copyDetails())));
 		} else {
 			rows = List.of(
 					actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-							optionalAction(VersionedText.translatable("automodpack.error.openLogs"), button -> openLogs()),
-							optionalAction(VersionedText.translatable("automodpack.error.copyDetails"), button -> copyDetails())),
+							optionalAction(VersionedText.text("automodpack.error.openLogs"), button -> openLogs()),
+							optionalAction(VersionedText.text("automodpack.error.copyDetails"), button -> copyDetails())),
 					actionRow(ActionAreaLayout.RowKind.FOOTER,
-							secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
+							secondaryAction(VersionedText.text("automodpack.back"), button -> back())));
 		}
 		// The header is part of the centered block: title, the "copied" confirmation while it shows, then the category.
 		int headerLines = 2 + (copied ? 1 : 0);
 		int wrapWidth = Math.max(1, this.width - 30);
 		List<MutableComponent> lines = new ArrayList<>();
-		String summary = VersionedText.translatable(request.messageKey(), request.translationArguments()).getString();
+		String summary = VersionedText.text(request.messageKey(), request.translationArguments()).getString();
 		lines.addAll(wrapParagraph(this.font, summary, wrapWidth, ChatFormatting.GRAY));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.error.details").getString(), wrapWidth, ChatFormatting.GRAY));
+		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.error.details").getString(), wrapWidth, ChatFormatting.GRAY));
 		DialogLayout layout = layoutDialogWithActions(28, headerLines * LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, rows.toArray(ActionRow[]::new));
 		this.titleTop = layout.titleTop();
 		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new));
@@ -100,10 +100,10 @@ public class ErrorScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.translatable("automodpack.error.titleLine", VersionedText.translatable("automodpack.error").getString()).withStyle(ChatFormatting.RED),
+				VersionedText.text("automodpack.error.titleLine", VersionedText.text("automodpack.error").getString()).withStyle(ChatFormatting.RED),
 				this.width / 2, titleTop, TextColors.WHITE);
-		if (copied) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.error.copied").withStyle(ChatFormatting.GREEN), this.width / 2, titleTop + LINE_HEIGHT, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.error.category", VersionedText.translatable(request.category().translationKey())).withStyle(ChatFormatting.GRAY),
+		if (copied) drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.error.copied").withStyle(ChatFormatting.GREEN), this.width / 2, titleTop + LINE_HEIGHT, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.error.category", VersionedText.text(request.category().translationKey())).withStyle(ChatFormatting.GRAY),
 				this.width / 2, titleTop + (copied ? 2 : 1) * LINE_HEIGHT, TextColors.WHITE);
 	}
 

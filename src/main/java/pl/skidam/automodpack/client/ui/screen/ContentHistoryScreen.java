@@ -54,7 +54,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	private boolean closed;
 
 	public ContentHistoryScreen(Screen parent, HistoryViewRequest request) {
-		super(VersionedText.translatable("automodpack.history.title"));
+		super(VersionedText.text("automodpack.history.title"));
 		this.parent = parent;
 		List<JournalEntry> newestFirst = new ArrayList<>(request.journal());
 		Collections.reverse(newestFirst);
@@ -69,7 +69,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		ActionRow[] rowArray = {actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back()))};
+		ActionRow[] rowArray = {actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), button -> back()))};
 		int width = panelWidth(PANEL_WIDTH);
 		int currentIndex = -1;
 		List<RowListWidget.Row> rows = new ArrayList<>(entries.size());
@@ -91,21 +91,21 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	/** One journal entry as a self-contained row: date, first note lines, and the diff summary. */
 	private RowListWidget.Row row(JournalEntry entry, int width) {
 		List<MutableComponent> lines = new ArrayList<>();
-		String updated = VersionedText.translatable("automodpack.history.updated", UiFormat.formatInstant(entry.createdAt())).getString();
+		String updated = VersionedText.text("automodpack.history.updated", UiFormat.formatInstant(entry.createdAt())).getString();
 		MutableComponent header = VersionedText.literal(truncateToWidth(this.font, updated, width)).withStyle(ChatFormatting.GRAY);
 		if (isCurrent(entry)) {
-			MutableComponent badge = VersionedText.literal(VersionedText.translatable("automodpack.history.current").getString() + " · ").withStyle(ChatFormatting.GREEN);
+			MutableComponent badge = VersionedText.literal(VersionedText.text("automodpack.history.current").getString() + " · ").withStyle(ChatFormatting.GREEN);
 			badge.append(VersionedText.literal(truncateToWidth(this.font, updated, width - this.font.width(badge))).withStyle(ChatFormatting.GRAY));
 			header = badge;
 		} else if (restore != null && !restorableSeqs.contains(entry.seq())) {
-			String badge = " · " + VersionedText.translatable("automodpack.history.notRestorable").getString();
+			String badge = " · " + VersionedText.text("automodpack.history.notRestorable").getString();
 			MutableComponent marked = VersionedText.literal(truncateToWidth(this.font, updated, width - this.font.width(badge))).withStyle(ChatFormatting.GRAY);
 			marked.append(VersionedText.literal(badge).withStyle(ChatFormatting.DARK_GRAY));
 			header = marked;
 		}
 		lines.add(header);
 		if (entry.notes().isBlank()) {
-			lines.add(VersionedText.translatable("automodpack.history.noPatchNotes").withStyle(ChatFormatting.GRAY));
+			lines.add(VersionedText.text("automodpack.history.noPatchNotes").withStyle(ChatFormatting.GRAY));
 		} else {
 			for (String line : wrapToWidth(this.font, entry.notes(), width, ROW_NOTES_LINES)) lines.add(VersionedText.literal(line).withStyle(ChatFormatting.WHITE));
 		}
@@ -113,7 +113,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		String diff = ChangeSummary.diffLine(summary.added(), summary.changed(), summary.removed(), 0, 0);
 		lines.add(VersionedText.literal(truncateToWidth(this.font, diff, width)).withStyle(ChatFormatting.GRAY));
 		if (restore != null && !restorableSeqs.contains(entry.seq()) && !isCurrent(entry))
-			return new RowListWidget.Row(lines, VersionedText.translatable("automodpack.history.notRestorableTooltip"));
+			return new RowListWidget.Row(lines, VersionedText.text("automodpack.history.notRestorableTooltip"));
 		return new RowListWidget.Row(lines);
 	}
 
@@ -123,14 +123,14 @@ public final class ContentHistoryScreen extends VersionedScreen {
 
 	private void openEntry(int index) {
 		JournalEntry entry = entries.get(index);
-		Component heading = VersionedText.translatable("automodpack.history.detailsTitle", UiFormat.formatInstant(entry.createdAt()));
+		Component heading = VersionedText.text("automodpack.history.detailsTitle", UiFormat.formatInstant(entry.createdAt()));
 		List<MutableComponent> notes = new ArrayList<>();
 		for (String line : wrapToWidth(this.font, entry.notes(), panelWidth(PANEL_WIDTH) - TEXT_MARGIN * 2, DETAIL_NOTES_LINES))
 			notes.add(VersionedText.literal(line).withStyle(ChatFormatting.WHITE));
 		ChangeBrowserScreen.BrowserAction restoreAction = restorableSeqs.contains(entry.seq()) && restore != null
-				? new ChangeBrowserScreen.BrowserAction(VersionedText.translatable("automodpack.history.restore"), screen -> restore.accept(entry), true)
+				? new ChangeBrowserScreen.BrowserAction(VersionedText.text("automodpack.history.restore"), screen -> restore.accept(entry), true)
 				: null;
-		openBrowserScreen(heading, VersionedText.translatable("automodpack.history.detailsDescription"), notes, changeSet(entry), restoreAction);
+		openBrowserScreen(heading, VersionedText.text("automodpack.history.detailsDescription"), notes, changeSet(entry), restoreAction);
 	}
 
 	/** Turns one journal entry's recorded changes into the shared logical change model: a removal's size is the bytes it freed, a modification also carries its "was" size. */
@@ -175,11 +175,11 @@ public final class ContentHistoryScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		String title = VersionedText.translatable(modpackName.isBlank() ? "automodpack.history.title" : "automodpack.history.titleNamed", modpackName).getString();
+		String title = VersionedText.text(modpackName.isBlank() ? "automodpack.history.title" : "automodpack.history.titleNamed", modpackName).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.BOLD), this.width / 2, 10, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.description").withStyle(ChatFormatting.GRAY), this.width / 2, 25, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.history.description").withStyle(ChatFormatting.GRAY), this.width / 2, 25, TextColors.WHITE);
 		if (entries.isEmpty())
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.empty").withStyle(ChatFormatting.GRAY), this.width / 2, LIST_TOP + 24, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.history.empty").withStyle(ChatFormatting.GRAY), this.width / 2, LIST_TOP + 24, TextColors.WHITE);
 	}
 
 	@Override

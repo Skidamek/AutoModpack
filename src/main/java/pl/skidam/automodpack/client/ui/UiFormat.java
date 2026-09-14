@@ -33,7 +33,7 @@ public final class UiFormat {
 		Object[] args = new Object[extraArgs.length + 1];
 		args[0] = count;
 		System.arraycopy(extraArgs, 0, args, 1, extraArgs.length);
-		return VersionedText.translatable(key, args);
+		return VersionedText.text(key, args);
 	}
 
 	/** I18n lost its exists check in 26.2, where Language carries the same probe. */

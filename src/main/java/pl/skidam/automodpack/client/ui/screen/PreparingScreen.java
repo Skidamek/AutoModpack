@@ -11,7 +11,7 @@ public class PreparingScreen extends VersionedScreen {
 	private final Runnable onCancel;
 
 	public PreparingScreen(Runnable onCancel) {
-		super(VersionedText.translatable("automodpack.preparing.title"));
+		super(VersionedText.text("automodpack.preparing.title"));
 		this.onCancel = onCancel;
 	}
 
@@ -20,7 +20,7 @@ public class PreparingScreen extends VersionedScreen {
 		super.init();
 		if (onCancel == null) return;
 		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.cancel"), button -> onCancel.run())));
+				secondaryAction(VersionedText.text("automodpack.cancel"), button -> onCancel.run())));
 	}
 
 	@Override
