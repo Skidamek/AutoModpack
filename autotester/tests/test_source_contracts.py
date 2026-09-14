@@ -31,9 +31,7 @@ def test_autotest_screenshot_generated_26_2_branch_uses_gui_overlay_when_availab
 
     generated_source = generated.read_text(encoding="utf-8")
     capture = generated_source[
-        generated_source.index(
-            "private record RenderedFrameState"
-        ) : generated_source.index("private static void completeScreenshot")
+        generated_source.index("private static ScreenshotSettler.Frame captureFrame()") : generated_source.index("private static String describe")
     ]
     assert "minecraft.gui.overlay() != null" in capture
-    assert "return new RenderedFrameState(currentScreen(), false);" not in capture
+    assert "new ScreenshotSettler.Frame(currentScreen(), false)" not in capture
