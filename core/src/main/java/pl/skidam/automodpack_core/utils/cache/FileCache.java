@@ -147,10 +147,6 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		}
 	}
 
-	public String getOrComputeHashWithAttributes(Path file, BasicFileAttributes attrs) throws IOException {
-		return getOrComputeHashWithFingerprint(file.toAbsolutePath().normalize(), fingerprint(file, attrs));
-	}
-
 	private String getOrComputeHashWithFingerprint(Path file, FileFingerprint fingerprint) {
 		Path absPath = file.toAbsolutePath().normalize();
 		String pathKey = absPath.toString();
@@ -247,8 +243,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		return REGISTRY.release(recordsDirectory, this);
 	}
 
-	/** Identity fingerprint of {@code path}. {@code attrs} is ignored: one {@link #statSnapshot} answers the question. */
-	public static FileFingerprint fingerprint(Path path, BasicFileAttributes attrs) throws IOException {
+	public static FileFingerprint fingerprint(Path path) throws IOException {
 		return statSnapshot(path).fingerprint();
 	}
 
