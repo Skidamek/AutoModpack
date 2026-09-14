@@ -49,7 +49,7 @@ public class NettyServer {
 	public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
 	public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
 	private final Map<Channel, String> connections = new ConcurrentHashMap<>();
-	private TrafficShaper trafficShaper;
+	private volatile TrafficShaper trafficShaper;
 	private volatile Map<String, Path> paths = Map.of();
 	private MultithreadEventLoopGroup eventLoopGroup;
 	private ExecutorService senderExecutor;
@@ -74,8 +74,9 @@ public class NettyServer {
 	}
 
 	public GlobalTrafficShapingHandler trafficHandler() {
-		if (trafficShaper == null) throw new IllegalStateException("Traffic shaper is not running");
-		return trafficShaper.handler();
+		TrafficShaper shaper = trafficShaper;
+		if (shaper == null) throw new IllegalStateException("Traffic shaper is not running");
+		return shaper.handler();
 	}
 
 	public void startSharedTraffic() {
