@@ -125,3 +125,19 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 	FreeLibrary(module);
 	return result;
 }
+
+/* Whether this path is held against a rename: taking DELETE access is the same right the blocked
+ * ATOMIC_MOVE needs, without moving the file. JNI_TRUE means held; JNI_FALSE means free or unreadable. */
+JNIEXPORT jboolean JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProbe_held0(JNIEnv *env, jclass cls, jstring jpath) {
+	const jchar *chars;
+	HANDLE handle;
+	(void) cls;
+	if (jpath == NULL) return JNI_FALSE;
+	chars = (*env)->GetStringChars(env, jpath, NULL);
+	if (chars == NULL) return JNI_FALSE;
+	handle = CreateFileW((LPCWSTR) chars, DELETE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+	(*env)->ReleaseStringChars(env, jpath, chars);
+	if (handle == INVALID_HANDLE_VALUE) return JNI_TRUE;
+	CloseHandle(handle);
+	return JNI_FALSE;
+}
