@@ -300,6 +300,7 @@ public class ModpackUpdater implements AutoCloseable {
 			close();
 			if (review.isCancelledByPlayer()) return UpdateOutcome.INCOMPLETE;
 			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
+			deferToHelper();
 			new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
 			return UpdateOutcome.INCOMPLETE;
 		} catch (Exception e) {
@@ -569,6 +570,7 @@ public class ModpackUpdater implements AutoCloseable {
 			return ApplyStatus.APPLIED;
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("{} transaction {} is waiting for the detached helper to release {}", flow.name(), e.getTransactionId(), e.getBlockedPath());
+			deferToHelper();
 			flow.deferredRestart().run();
 			return ApplyStatus.DEFERRED;
 		} catch (Exception e) {
@@ -582,6 +584,19 @@ public class ModpackUpdater implements AutoCloseable {
 	/** The failure tail every flow shares: the player-facing update failure on the current screen. */
 	static void showUpdateFailure(Exception e) {
 		ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+	}
+
+	/**
+	 * Launches a fresh helper for the pending transaction before the flow's deferred restart hands recovery to it and
+	 * the next boot. A launch failure never cancels the restart: the transaction stays pending either way, and the next
+	 * launch's recovery is the designed fallback.
+	 */
+	private static void deferToHelper() {
+		try {
+			DetachedUpdateHelper.launch();
+		} catch (IOException launchFailure) {
+			LOGGER.error("Could not launch the detached update helper", launchFailure);
+		}
 	}
 
 	/** Wraps a reviewable plan with this engine's review backing; the unverified-jar gate is precomputed, mode-gated. */
