@@ -46,7 +46,7 @@ public class ReLauncher {
 	}
 
 	private void handleClientRestart(Runnable[] callbacks, boolean isHeadless) {
-		if (updateType != null && ScreenManager.getScreenString().isPresent()) {
+		if (updateType != null && ScreenManager.hasScreen()) {
 			ScreenManager.restart(updateType, changelogs);
 		} else if (preload) {
 			ProcessSignalIO.post("normal_stop"); // let crash assistant know

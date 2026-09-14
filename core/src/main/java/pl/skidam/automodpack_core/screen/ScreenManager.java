@@ -92,10 +92,6 @@ public final class ScreenManager {
 		instance.discardReturnTarget();
 	}
 
-	public static Optional<String> getScreenString() {
-		return instance.getScreenString();
-	}
-
 	public static boolean hasScreen() {
 		return instance.hasScreen();
 	}

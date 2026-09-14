@@ -22,7 +22,6 @@ import pl.skidam.automodpack_core.client.UpdateType;
 import pl.skidam.automodpack_core.utils.Throwables;
 
 import java.util.Optional;
-import java.util.Locale;
 import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
@@ -117,12 +116,6 @@ public class ScreenImpl implements ScreenService {
 	@Override
 	public void discardReturnTarget() {
 		executeOnClient(() -> Screens.interactiveParent = null);
-	}
-
-	@Override
-	public Optional<String> getScreenString() {
-		Screen screen = Screens.getScreen();
-		return Optional.ofNullable(screen).map(current -> current.getTitle().getString().toLowerCase(Locale.ROOT));
 	}
 
 	@Override

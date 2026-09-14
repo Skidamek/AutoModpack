@@ -64,10 +64,6 @@ public interface ScreenService {
 	 */
 	default void discardReturnTarget() {}
 
-	default Optional<String> getScreenString() {
-		return Optional.empty();
-	}
-
 	/** True when a Minecraft screen is showing; core does not hold the Screen type. */
 	default boolean hasScreen() {
 		return false;
