@@ -47,18 +47,22 @@ public final class UpdateLoopDetector {
 		this.window = window;
 	}
 
-	public Decision evaluateAndRecord(String fingerprint) {
-		if (fingerprint == null || fingerprint.isBlank()) return Decision.RESTART;
+	/**
+	 * One same-fingerprint event. {@code restarts} is the 1-based count the event recorded, or the reached cap
+	 * when the decision is SUPPRESS. A null or blank fingerprint counts as the first restart.
+	 */
+	public Outcome evaluateAndRecord(String fingerprint) {
+		if (fingerprint == null || fingerprint.isBlank()) return new Outcome(Decision.RESTART, 1, maxAllowedRestarts);
 
 		long now = currentTimeMillis.getAsLong();
 		State state = load();
 		boolean matches = state != null && state.fingerprint.equals(fingerprint) && isWithinWindow(state.lastAllowedRestartMillis, now);
 
-		if (matches && state.allowedRestarts >= maxAllowedRestarts) return Decision.SUPPRESS;
+		if (matches && state.allowedRestarts >= maxAllowedRestarts) return new Outcome(Decision.SUPPRESS, maxAllowedRestarts, maxAllowedRestarts);
 
 		int allowedRestarts = matches ? state.allowedRestarts + 1 : 1;
 		write(new State(fingerprint, allowedRestarts, now));
-		return Decision.RESTART;
+		return new Outcome(Decision.RESTART, allowedRestarts, maxAllowedRestarts);
 	}
 
 	public void clear() {
@@ -102,6 +106,8 @@ public final class UpdateLoopDetector {
 	public enum Decision {
 		RESTART, SUPPRESS
 	}
+
+	public record Outcome(Decision decision, int restarts, int maxRestarts) {}
 
 	private static final class State {
 		private final int version = STATE_VERSION;

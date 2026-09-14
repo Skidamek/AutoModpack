@@ -557,7 +557,7 @@ public class ModpackUpdater implements AutoCloseable {
 			return;
 		}
 		String fingerprint = RestartDecision.stateFingerprint(storage, applyResult);
-		if (updateLoopDetector.evaluateAndRecord(fingerprint) == UpdateLoopDetector.Decision.SUPPRESS) {
+		if (updateLoopDetector.evaluateAndRecord(fingerprint).decision() == UpdateLoopDetector.Decision.SUPPRESS) {
 			LOGGER.error("Automatic restart loop detected. AutoModpack already requested two rapid restarts for the same correction state.");
 			LOGGER.error("Corrections were applied but still require a restart: {}", String.join(", ", applyResult.reasonDescriptions()));
 			LOGGER.error("Another automatic restart was suppressed. The modpack may not be fully active; inspect the surrounding logs and report recurring issues at https://github.com/Skidamek/AutoModpack/issues");

@@ -30,6 +30,7 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
+import pl.skidam.automodpack_core.utils.WindowsLockProbe;
 
 public final class DetachedUpdateHelper {
 	private static final String HELPER_MAIN = UpdateHelperMain.class.getName();
@@ -95,7 +96,9 @@ public final class DetachedUpdateHelper {
 				probe.release();
 				return false;
 			}
-			LOGGER.info("Waiting for the detached update helper to finish");
+			String holder = WindowsLockProbe.describeHeld(leaseFile);
+			if (holder == null) LOGGER.info("Waiting for the detached update helper to finish");
+			else LOGGER.info("Waiting for the detached update helper to finish; the lease is held by: {}", holder);
 			long deadline = System.nanoTime() + HELPER_LEASE_WAIT.toNanos();
 			while (System.nanoTime() < deadline) {
 				try (FileLock acquired = channel.tryLock()) {
