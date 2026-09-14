@@ -5,7 +5,6 @@ import static pl.skidam.automodpack_core.Constants.MOD_ID;
 
 import java.io.IOException;
 import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
@@ -38,8 +37,10 @@ public final class StableSourceSnapshotter {
 			FileCache fileCache, ModFileCache modFileCache, Path objectStoreDirectory, boolean materializeMissing) throws CandidateBuildException {
 		Path staged = null;
 		try {
-			BasicFileAttributes before = attributes(source.sourcePath());
-			FileCache.FileFingerprint beforeFingerprint = FileCache.fingerprint(source.sourcePath());
+			FileCache.StatSnapshot before = FileCache.statSnapshot(source.sourcePath());
+			if (before.symbolicLink()) throw new IOException("Symbolic links are not allowed");
+			if (!before.regularFile()) throw new IOException("Source is not a regular file");
+			FileCache.FileFingerprint beforeFingerprint = before.fingerprint();
 			Exclusion exclusion = expectedPathExclusion(source, before, autoExcludeUnnecessary);
 			if (exclusion != null) return new Snapshot(null, exclusion, null);
 
@@ -96,14 +97,7 @@ public final class StableSourceSnapshotter {
 		return true;
 	}
 
-	private static BasicFileAttributes attributes(Path path) throws IOException {
-		if (Files.isSymbolicLink(path)) throw new IOException("Symbolic links are not allowed");
-		BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-		if (!attributes.isRegularFile()) throw new IOException("Source is not a regular file");
-		return attributes;
-	}
-
-	private static Exclusion expectedPathExclusion(CandidateSource source, BasicFileAttributes attributes, boolean autoExcludeUnnecessary) {
+	private static Exclusion expectedPathExclusion(CandidateSource source, FileCache.StatSnapshot attributes, boolean autoExcludeUnnecessary) {
 		String logicalPath = source.logicalPath();
 		// Correctness tier, always enforced: Windows clients cannot create these names, and the AutoModpack namespace belongs to the mod's own update flow.
 		if (logicalPath.equals("automodpack") || logicalPath.startsWith("automodpack/"))
