@@ -1,19 +1,22 @@
-/* CRT-free JNI: which processes hold a path open, via the Restart Manager API in rstrtmgr.dll.
+/* CRT-free JNI: which applications/services Restart Manager reports as using a registered path.
  *
  * Rebuild via core/src/main/c/rebuild-windows-natives.sh (needs mingw-w64 and JAVA_HOME); see
  * windows_file_stat.c for the byte-identical rebuild constraints this file shares. The output
  * format is name, 0x1F, decimal pid, 0x1F, ... for up to MAX_PROCESSES entries, built with
- * NewString so non-ASCII process names survive.
+ * NewString so non-ASCII process names survive. Restart Manager is an installer/update facility,
+ * not a kernel handle enumerator: an empty or missing list is inconclusive, and the caller keeps
+ * its path-only receipt.
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <jni.h>
 #include <restartmanager.h>
+#include "windows_jni_path.h"
 
 #define MAX_PROCESSES 4
-/* The receipt names MAX_PROCESSES holders; this cap only bounds how far a transiently growing list is
- * chased. Past it the probe returns nothing and the caller keeps its path-only receipt - the trade is
- * completeness of invisible data, not safety. */
+/* The receipt records at most MAX_PROCESSES holders. The transient Restart Manager
+ * query may grow up to MAX_KNOWN_PROCESSES entries; above that bound the probe
+ * returns nothing and the caller keeps its path-only receipt. */
 #define MAX_KNOWN_PROCESSES 64
 #define OUT_CHARS 2048
 #define NAME_CHARS 60
@@ -43,6 +46,10 @@ static jsize append_uint(jchar *out, jsize pos, jsize cap, DWORD value) {
 	return pos;
 }
 
+static void free_win32_path(WCHAR *wpath, int heap) {
+	if (heap) HeapFree(GetProcessHeap(), 0, wpath);
+}
+
 /* JNI encodes '_' in automodpack_core as _1. javac -h emits Java_pl_skidam_automodpack_1core_utils_WindowsLockProbe_describe0. */
 JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProbe_describe0(JNIEnv *env, jclass cls, jstring jpath) {
 	HMODULE module;
@@ -50,7 +57,9 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 	RmRegisterResourcesFn rm_register;
 	RmGetListFn rm_getlist;
 	RmEndSessionFn rm_end;
-	const jchar *chars;
+	WCHAR stack[WIN32_JNI_STACK_PATH_CHARS];
+	WCHAR *wpath;
+	int heap;
 	DWORD session = 0;
 	WCHAR sessionKey[CCH_RM_SESSION_KEY + 2];
 	LPCWSTR resource;
@@ -71,9 +80,11 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 	rm_register = (RmRegisterResourcesFn) (void *) GetProcAddress(module, "RmRegisterResources");
 	rm_getlist = (RmGetListFn) (void *) GetProcAddress(module, "RmGetList");
 	rm_end = (RmEndSessionFn) (void *) GetProcAddress(module, "RmEndSession");
-	chars = (*env)->GetStringChars(env, jpath, NULL);
-	if (chars == NULL || rm_start == NULL || rm_register == NULL || rm_getlist == NULL || rm_end == NULL) {
-		if (chars != NULL) (*env)->ReleaseStringChars(env, jpath, chars);
+	if (rm_start == NULL || rm_register == NULL || rm_getlist == NULL || rm_end == NULL) {
+		FreeLibrary(module);
+		return NULL;
+	}
+	if (win32_jni_path(env, jpath, stack, WIN32_JNI_STACK_PATH_CHARS, &wpath, &heap) != 0) {
 		FreeLibrary(module);
 		return NULL;
 	}
@@ -82,12 +93,12 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 	if (infos == NULL || out == NULL) {
 		if (infos != NULL) HeapFree(GetProcessHeap(), 0, infos);
 		if (out != NULL) HeapFree(GetProcessHeap(), 0, out);
-		(*env)->ReleaseStringChars(env, jpath, chars);
+		free_win32_path(wpath, heap);
 		FreeLibrary(module);
 		return NULL;
 	}
 	/* strSessionKey is an out parameter: the session generates its own key, so every session is unique by construction. */
-	resource = (LPCWSTR) chars;
+	resource = wpath;
 	if (rm_start(&session, 0, sessionKey) == ERROR_SUCCESS) {
 		if (rm_register(session, 1, &resource, 0, NULL, 0, NULL) == ERROR_SUCCESS) {
 			/* lpdwRebootReasons receives one operation-wide reason, not per-process entries. Restart Manager refreshes
@@ -121,23 +132,32 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 	}
 	HeapFree(GetProcessHeap(), 0, out);
 	HeapFree(GetProcessHeap(), 0, infos);
-	(*env)->ReleaseStringChars(env, jpath, chars);
+	free_win32_path(wpath, heap);
 	FreeLibrary(module);
 	return result;
 }
 
-/* Whether this path is held against a rename: taking DELETE access is the same right the blocked
- * ATOMIC_MOVE needs, without moving the file. JNI_TRUE means held; JNI_FALSE means free or unreadable. */
+/* Whether a DELETE-capable open is refused by an existing share mode. Success means this process can
+ * take DELETE now; ERROR_SHARING_VIOLATION means another opener did not share delete (the usual
+ * File Explorer case). Other failures (missing path, access denied, bad name) are not evidence of a
+ * holder. This is not equivalent to "ATOMIC_MOVE will fail": MoveFileEx can also succeed via
+ * DELETE_CHILD on the parent. */
 JNIEXPORT jboolean JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProbe_held0(JNIEnv *env, jclass cls, jstring jpath) {
-	const jchar *chars;
+	WCHAR stack[WIN32_JNI_STACK_PATH_CHARS];
+	WCHAR *wpath;
+	int heap;
 	HANDLE handle;
+	DWORD error;
 	(void) cls;
 	if (jpath == NULL) return JNI_FALSE;
-	chars = (*env)->GetStringChars(env, jpath, NULL);
-	if (chars == NULL) return JNI_FALSE;
-	handle = CreateFileW((LPCWSTR) chars, DELETE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
-	(*env)->ReleaseStringChars(env, jpath, chars);
-	if (handle == INVALID_HANDLE_VALUE) return JNI_TRUE;
+	if (win32_jni_path(env, jpath, stack, WIN32_JNI_STACK_PATH_CHARS, &wpath, &heap) != 0) return JNI_FALSE;
+	handle = CreateFileW(wpath, DELETE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+	if (handle == INVALID_HANDLE_VALUE) {
+		error = GetLastError();
+		free_win32_path(wpath, heap);
+		return error == ERROR_SHARING_VIOLATION ? JNI_TRUE : JNI_FALSE;
+	}
+	free_win32_path(wpath, heap);
 	CloseHandle(handle);
 	return JNI_FALSE;
 }
