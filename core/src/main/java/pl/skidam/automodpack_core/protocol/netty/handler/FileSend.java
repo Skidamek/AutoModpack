@@ -198,7 +198,7 @@ final class FileSend {
 		return encoderContext;
 	}
 
-	private static void sendError(ChannelHandlerContext ctx, byte version, String errorMessage) {
+	static void sendError(ChannelHandlerContext ctx, byte version, String errorMessage) {
 		byte[] errMsgBytes = errorMessage.getBytes(StandardCharsets.UTF_8);
 		ByteBuf errorBuf = ctx.alloc().buffer(1 + 1 + 4 + errMsgBytes.length);
 		errorBuf.writeByte(version);
@@ -223,7 +223,7 @@ final class FileSend {
 		writeControlAndFlush(ctx, eot);
 	}
 
-	private static ChannelFuture writeControlAndFlush(ChannelHandlerContext ctx, Object message) {
+	static ChannelFuture writeControlAndFlush(ChannelHandlerContext ctx, Object message) {
 		ChannelHandlerContext chunkedContext = ctx.pipeline().context(ChunkedWriteHandler.class);
 		if (chunkedContext == null) return ctx.writeAndFlush(message);
 		return chunkedContext.writeAndFlush(message);
