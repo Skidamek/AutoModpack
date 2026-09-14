@@ -51,7 +51,7 @@ final class WindowsFileStat {
 		if (!WindowsNatives.ensureLoaded() || path == null) return null;
 		try {
 			long[] raw = RAW.get();
-			if (!read0(path.toAbsolutePath().toString(), raw)) return null;
+			if (!read0(path.toAbsolutePath().normalize().toString(), raw)) return null;
 			return raw;
 		} catch (Throwable t) {
 			return null;
