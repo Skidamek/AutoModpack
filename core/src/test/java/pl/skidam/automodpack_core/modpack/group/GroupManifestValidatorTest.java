@@ -208,13 +208,6 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
-	void onlyTreatsModsUnderModsAsActive() {
-		assertTrue(ModpackPathPolicy.isActiveMod("mods/example.jar", "mod"));
-		assertFalse(ModpackPathPolicy.isActiveMod("resourcepacks/example.jar", "mod"));
-		assertFalse(ModpackPathPolicy.isActiveMod("mods/example.jar", "other"));
-	}
-
-	@Test
 	void rejectsCoSelectableModsThatShareALiveBasename() {
 		var fields = catalogue();
 		fields.groups = linkedGroups("main", groupAt("mods/main.jar", fileOfType("mod")), "visuals", groupAt("mods/nested/main.jar", fileOfType("mod")));

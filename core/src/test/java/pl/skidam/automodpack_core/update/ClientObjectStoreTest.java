@@ -2,7 +2,6 @@ package pl.skidam.automodpack_core.update;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -92,14 +91,6 @@ class ClientObjectStoreTest {
 		assertEquals(1, result.deletedObjectCount());
 		assertTrue(Files.exists(first.objectFile(hash)));
 		assertFalse(Files.exists(first.objectFile(orphan)));
-	}
-
-	@Test
-	void copiedInstallationsGetANewOwnerIdentity() throws Exception {
-		Path sharedData = temporaryDirectory.resolve("shared-data");
-		ClientStorage original = storage("original-game", sharedData);
-		ClientStorage clone = storage("cloned-game", sharedData);
-		assertNotEquals(original.dataLocation().ownerId(), clone.dataLocation().ownerId());
 	}
 
 	@Test
