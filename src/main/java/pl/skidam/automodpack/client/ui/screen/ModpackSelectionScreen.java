@@ -423,7 +423,11 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private MutableComponent rowTooltip(String groupId, GroupManifest.Group group) {
 		if (group == null) return null;
 		StringBuilder tooltip = new StringBuilder();
-		if (!group.description().isBlank()) tooltip.append(group.description());
+		if (!group.description().isBlank()) {
+			tooltip.append(group.description());
+			// The description is the server's words; the attribution keeps them from reading as client-authored copy.
+			appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.serverDescription").getString());
+		}
 		GroupResolution explanation = resolution.resolution(groupId);
 		if (explanation != null) appendTooltipLine(tooltip, resolutionText(explanation));
 		appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.category", categoryLabel(group)).getString());
