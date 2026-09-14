@@ -91,6 +91,7 @@ final class ReviewSession {
 	ReviewActions reviewActions() {
 		return new ReviewActions(this::setFirstInstallLocalModCleanup, this::startConfirmedUpdate, this::reselectAndPreview, this::cancelConfirmation, this::cancelFromPlayer,
 				() -> confirmationState.get() == ConfirmationState.WAITING, () -> confirmationState.get() == ConfirmationState.CANCELLED, this::isCancelledByPlayer,
+				() -> confirmationState.get() == ConfirmationState.PREVIEWING,
 				sourceCatalogue::sourceAvailability);
 	}
 
