@@ -23,7 +23,7 @@ public final class WindowsLockProbe {
 
 	/**
 	 * A compact receipt for a rename blocker: child paths whose DELETE open hit a sharing violation, each with the
-	 * applications Restart Manager reports, or the folder-itself hint when probing finds nothing. Null when this is
+	 * applications Restart Manager reports, or the generic close-programs hint when probing finds nothing. Null when this is
 	 * not Windows, the path is not a regular file or directory, or anything failed; never throws.
 	 */
 	public static String describeHeld(Path path) {
@@ -37,7 +37,7 @@ public final class WindowsLockProbe {
 			if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) return null;
 			List<Path> held = new ArrayList<>();
 			probeChildren(path, path, 0, new int[]{MAX_PROBE_OPERATIONS}, held);
-			if (held.isEmpty()) return "no specific file stays held; the folder itself was busy a moment ago (close File Explorer windows and programs using it)";
+			if (held.isEmpty()) return "could not identify a specific held file; close programs that may be using the modpack folder";
 			StringBuilder receipt = new StringBuilder();
 			for (Path heldPath : held) {
 				if (!receipt.isEmpty()) receipt.append("; ");
