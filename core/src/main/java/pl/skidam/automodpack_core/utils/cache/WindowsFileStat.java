@@ -6,8 +6,6 @@ import pl.skidam.automodpack_core.utils.WindowsNatives;
 
 /** Optional Windows NTFS ChangeTime and file index. Any load or read failure returns null. */
 final class WindowsFileStat {
-	private static volatile String loadError = "not loaded";
-
 	record Snapshot(long changeTimeNanos, String fileKey) {}
 
 	private WindowsFileStat() {}
@@ -21,7 +19,6 @@ final class WindowsFileStat {
 			if (changeTimeNanos == Long.MIN_VALUE) return null;
 			return new Snapshot(changeTimeNanos, raw[1] + ":" + raw[2]);
 		} catch (Throwable t) {
-			loadError = t.toString();
 			return null;
 		}
 	}
