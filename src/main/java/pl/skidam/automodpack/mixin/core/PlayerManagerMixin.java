@@ -41,7 +41,7 @@ original.call(netManager, player);
 		String playerName = GameHelpers.getPlayerName(profile);
 
 		if (!Common.players.containsKey(playerName)) {
-//            LOGGER.error("{} isn't in the players map.", playerName); it should not happen but if it does then doesn't matter that much. Its only a nag message. see #292
+			// Should not happen, but if it does it only skips the nag message, so it is not worth logging (see #292).
 			return;
 		}
 

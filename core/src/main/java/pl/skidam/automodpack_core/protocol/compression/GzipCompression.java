@@ -7,9 +7,6 @@ import java.util.Arrays;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
-/**
- * GZIP compression codec implementation.
- */
 public class GzipCompression implements CompressionCodec {
 
 	@Override

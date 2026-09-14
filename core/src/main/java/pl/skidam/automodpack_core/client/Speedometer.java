@@ -9,17 +9,13 @@ public class Speedometer {
 	private final AtomicLong totalBytesReceived = new AtomicLong(0);
 	private final AtomicLong totalBytesExpected = new AtomicLong(0);
 
-	// Sliding Window State
 	private final Deque<Snapshot> history = new ArrayDeque<>();
 
-	// Tuning
 	private static final long WINDOW_MS = 15000; // Look back few seconds for accuracy
 	private static final double SMOOTHING_FACTOR = 0.05; // 0.05 = Very smooth visual updates
 
-	// Smooth Speed (For Display)
 	private double visualSpeed = 0;
 
-	// Helper Class
 	private record Snapshot(long time, long bytes) {}
 
 	public void addBytes(long bytes) {
@@ -35,18 +31,14 @@ public class Speedometer {
 		long now = System.currentTimeMillis();
 		long currentBytes = totalBytesReceived.get();
 
-		// 1. Add Snapshot
 		history.addLast(new Snapshot(now, currentBytes));
 
-		// 2. Prune old history
 		while (!history.isEmpty() && (now - history.getFirst().time > WINDOW_MS)) {
 			history.removeFirst();
 		}
 
-		// 3. Calculate Real-Time Window Speed
 		double instantSpeed = calculateWindowSpeed(now, currentBytes);
 
-		// 4. Update Visual Speed (EMA)
 		if (visualSpeed == 0 || instantSpeed == 0) {
 			visualSpeed = instantSpeed;
 		} else {

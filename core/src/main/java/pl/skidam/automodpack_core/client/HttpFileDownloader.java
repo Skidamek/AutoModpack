@@ -32,10 +32,6 @@ public class HttpFileDownloader {
 	 * Downloads a file from a URL to a target path using HTTP/2 if available.
 	 * Blocks the calling thread (designed for use in Worker Threads).
 	 *
-	 * @param source
-	 *            The source URL and provider.
-	 * @param target
-	 *            The destination file path.
 	 * @param progressAction
 	 *            A callback to report bytes read (for bandwidth tracking).
 	 * @throws IOException

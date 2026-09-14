@@ -86,7 +86,6 @@ public class ModpackLoader16 implements ModpackLoaderService {
 			e.printStackTrace();
 		}
 
-		// Remove older versions of the same mods
 		modpackNestedMods = getOnlyNewestMods(modpackNestedMods);
 		standardNestedMods = getOnlyNewestMods(standardNestedMods);
 
@@ -100,12 +99,10 @@ public class ModpackLoader16 implements ModpackLoaderService {
 			}
 		}
 
-		// Remove older versions of the same mods
 		conflictingNestedModsImpl = getOnlyNewestMods(conflictingNestedModsImpl);
 
 		List<ModCandidateImpl> modsNestedDeps = new ArrayList<>();
 
-		// Add nested dependencies
 		for (ModCandidateImpl modCandidate : conflictingNestedModsImpl) {
 			List<ModCandidateImpl> nestedDeps = getNestedDeps(modCandidate);
 			for (ModCandidateImpl nestedDep : nestedDeps) {
@@ -193,7 +190,6 @@ public class ModpackLoader16 implements ModpackLoaderService {
 		List<ModCandidateImpl> latestMods = new ArrayList<>();
 
 		for (ModCandidateImpl standardNestedMod : allMods) {
-			// add mod to the standardLatestNestedMods if its id doesnt already exist or if it has a greater version then also delete the lower version
 			boolean alreadyExists = latestMods.stream().anyMatch(existingMod -> {
 				boolean hasSameId = existingMod.getId().equals(standardNestedMod.getId());
 				boolean hasGreaterOrEqualVersion = existingMod.getVersion().compareTo(standardNestedMod.getVersion()) >= 0;

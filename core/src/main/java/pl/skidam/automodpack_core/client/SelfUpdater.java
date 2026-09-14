@@ -56,7 +56,6 @@ public class SelfUpdater {
 			return false;
 		}
 
-		// Identify Current Version
 		SemanticVersion currentVersion;
 		try {
 			currentVersion = SemanticVersion.parse(AM_VERSION);
@@ -65,7 +64,6 @@ public class SelfUpdater {
 			return false;
 		}
 
-		// Fetch Remote Info
 		List<ModrinthAPI> modrinthAPIList = new ArrayList<>();
 
 		if (gettingServerVersion) {
@@ -91,7 +89,6 @@ public class SelfUpdater {
 			return false;
 		}
 
-		// Iterate & Validate
 		for (ModrinthAPI automodpack : modrinthAPIList) {
 			if (automodpack == null || automodpack.fileVersion() == null) continue;
 
@@ -110,7 +107,6 @@ public class SelfUpdater {
 				return false;
 			}
 
-			// Version Comparison
 			int comparison = remoteVersion.compareTo(currentVersion);
 
 			// If we are NOT forced to sync to server, and remote is older or equal
@@ -139,7 +135,6 @@ public class SelfUpdater {
 				continue;
 			}
 
-			// Install
 			LOGGER.info("Update found! Updating from {} to {}", AM_VERSION, rawRemoteVersion);
 			installModVersion(automodpack);
 			return true;

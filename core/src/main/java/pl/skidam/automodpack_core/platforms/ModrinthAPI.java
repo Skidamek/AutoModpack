@@ -76,7 +76,6 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 		requestUrl = requestUrl.replaceAll("\"", "%22"); // important!
 
 		try {
-			// get all versions
 			JsonArray JSONArray = Json.fromUrlAsArray(requestUrl);
 
 			if (JSONArray == null) {

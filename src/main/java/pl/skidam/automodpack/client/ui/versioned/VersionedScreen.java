@@ -224,7 +224,6 @@ public class VersionedScreen extends Screen {
 	}
 	/*?}*/
 
-	// This method is to be override by the child classes
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) { }
 
 	/** Re-runs init so every widget reflects the current fields; for when one change reshapes the whole screen. */
@@ -745,7 +744,7 @@ public class VersionedScreen extends Screen {
 		return onKeyPress(event.key(), event.scancode(), event.modifiers());
 	}
 
-	// use this method in code
+	// Subclasses override this instead of keyPressed, whose signature differs across versions
 	public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
 		KeyEvent event = new KeyEvent(keyCode, scanCode, modifiers);
 		return super.keyPressed(event);
@@ -756,7 +755,7 @@ public class VersionedScreen extends Screen {
 		return onKeyPress(keyCode, scanCode, modifiers);
 	}
 
-	// use this method in code
+	// Subclasses override this instead of keyPressed, whose signature differs across versions
 	public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
 		return super.keyPressed(keyCode, scanCode, modifiers);
 	}

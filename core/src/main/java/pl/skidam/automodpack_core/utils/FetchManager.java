@@ -17,11 +17,6 @@ import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
 public class FetchManager {
 
-	// Throw all the sha1 and murmurs
-	// Send request to Modrinth with sha1s
-	// Send request to CurseForge with murmurs
-	// Return the results i guess
-
 	public record FetchData(String file, String sha1, String murmur, String fileType) {}
 	private record FetchedData(List<DownloadSource> sources, List<String> mainPageUrls) {}
 	private record Datas(FetchData fetchData, FetchedData fetchedData) {}
@@ -29,7 +24,6 @@ public class FetchManager {
 	private final Map<String, Datas> fetchDatas = new HashMap<>();
 	private final PlatformCache platformCache;
 
-	// --- DEAD LINK INVALIDATION ---
 	private final Object metadataRefetchLock = new Object();
 	private final Map<String, DeadLink> pendingMetadataRefetch = new HashMap<>();
 	private final Map<String, List<DownloadSource>> resolvedMetadataRefetches = new HashMap<>();
@@ -43,7 +37,6 @@ public class FetchManager {
 		}
 	}
 
-	// Matrices for screen
 	public final AtomicInteger fetchesDone = new AtomicInteger(0);
 	private volatile CompletableFuture<Void> completableFuture;
 	private volatile boolean complete;
@@ -115,7 +108,6 @@ public class FetchManager {
 		for (Datas data : fetchDatas.values()) {
 			List<DownloadSource> sources = data.fetchedData().sources();
 
-			// Coin filp order
 			synchronized (sources) {
 				if (sources.size() == 2 && rng.nextBoolean()) {
 					DownloadSource first = sources.get(0);

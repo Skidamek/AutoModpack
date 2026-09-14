@@ -316,7 +316,6 @@ public class ModpackUpdater implements AutoCloseable {
 				// Handle an installed modpack without an active projection: reactivate it through the reviewed switch plan
 				return startInstalledSwitch(showWaitingScreen);
 			} else {
-				// Handle existing modpack
 				ModpackUtils.reprotectActiveFiles(serverModpackContent, storage);
 
 				return review.startUpdate(showWaitingScreen);
@@ -407,10 +406,6 @@ public class ModpackUpdater implements AutoCloseable {
 		new ReLauncher(RestartDecision.launchRestartType(review.firstConnection(), applyResult.restartReasons()), changelogs).restart(true);
 	}
 
-	// Load the already-installed modpack without contacting the server or
-	// reconciling local files against it. Used when update-on-launch is disabled
-	// so the user can freely add/remove mods (e.g. a binary search) without
-	// AutoModpack restoring or deleting them.
 	public void loadModpack() throws Exception {
 		projectionLoader.loadModpack();
 	}
