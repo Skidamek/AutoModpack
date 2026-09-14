@@ -89,7 +89,9 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	}
 
 	private boolean canCustomize() {
-		if (mode != UpdatePreview.Mode.UPDATE || actions == null) return false;
+		// Customize re-enters the review flow, so it only exists when a live review stands behind this preview; a switch
+		// or removal preview has an idle confirmation and reselecting there would dead-end on the missing connection.
+		if (mode != UpdatePreview.Mode.UPDATE || actions == null || !actions.reviewPreviewing().getAsBoolean()) return false;
 		try {
 			return PackConfirmCopy.canCustomize(target.manifest());
 		} catch (RuntimeException ignored) {
