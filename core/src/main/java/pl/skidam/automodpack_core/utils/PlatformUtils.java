@@ -4,10 +4,11 @@ import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Objects;
 
-/** Shared operating-system detection and per-user data-directory policy. */
+/** Shared operating-system and architecture detection and per-user data-directory policy. */
 public final class PlatformUtils {
 
 	private static final OperatingSystem OPERATING_SYSTEM = classify(System.getProperty("os.name", ""));
+	private static final boolean X86_64 = classifyArchitecture(System.getProperty("os.arch", ""));
 
 	public enum OperatingSystem {
 		WINDOWS,
@@ -20,6 +21,16 @@ public final class PlatformUtils {
 
 	public static OperatingSystem operatingSystem() {
 		return OPERATING_SYSTEM;
+	}
+
+	/** Whether the JVM targets x86-64, the only architecture the bundled Windows natives are built for. */
+	public static boolean isX8664() {
+		return X86_64;
+	}
+
+	static boolean classifyArchitecture(String arch) {
+		String value = Objects.requireNonNull(arch, "architecture").toLowerCase(Locale.ROOT);
+		return value.equals("amd64") || value.equals("x86_64");
 	}
 
 	/**
