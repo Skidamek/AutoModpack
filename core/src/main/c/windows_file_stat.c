@@ -1,11 +1,12 @@
 /* CRT-free JNI: a handle-based Windows metadata query for identity questions.
  *
- * Opens the requested path once (FILE_READ_ATTRIBUTES, OPEN_REPARSE_POINT) and answers from two
- * handle queries - FileBasicInfo for the timestamps and attributes, BY_HANDLE_FILE_INFORMATION
- * for size, volume serial, and the legacy 64-bit file index - so Java never re-opens the file.
- * The two queries are not an atomic snapshot; identity answers tolerate that the same way the
- * split reads always have. The legacy volume+index identity pair is NTFS-grade: filesystems with
- * weaker 64-bit id uniqueness (ReFS) are outside what this receipt is built for.
+ * Opens the requested path once with FILE_READ_ATTRIBUTES and FILE_FLAG_OPEN_REPARSE_POINT, then
+ * answers from handle-based metadata queries. FileBasicInfo supplies creation/last-write/change
+ * times and attributes; BY_HANDLE_FILE_INFORMATION supplies size, volume serial, and the legacy
+ * 64-bit file index; FileAttributeTagInfo supplies the reparse tag when present. Java never
+ * re-opens the pathname for these identity questions, and the metadata queries are not an atomic
+ * snapshot. The legacy volume+index identity pair is intended for NTFS; filesystems whose 64-bit
+ * file-ID semantics are weaker, such as ReFS, are outside this contract.
  *
  * Rebuild via core/src/main/c/rebuild-windows-natives.sh (needs mingw-w64 and JAVA_HOME).
  * The output must stay byte-identical on every rebuild: --no-insert-timestamp and the fixed
@@ -122,7 +123,7 @@ JNIEXPORT jboolean JNICALL Java_pl_skidam_automodpack_1core_utils_cache_WindowsF
 	}
 	wpath[dst] = 0;
 	(*env)->ReleaseStringChars(env, jpath, chars);
-	/* OPEN_REPARSE_POINT matches Java LinkOption.NOFOLLOW_LINKS: identity of the directory entry, not the target. */
+	/* OPEN_REPARSE_POINT makes a symbolic-link path open the link itself rather than its target. */
 	handle = CreateFileW(wpath, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
 	if (heap) HeapFree(GetProcessHeap(), 0, wpath);
 	if (handle == INVALID_HANDLE_VALUE) return JNI_FALSE;
@@ -132,16 +133,21 @@ JNIEXPORT jboolean JNICALL Java_pl_skidam_automodpack_1core_utils_cache_WindowsF
 	}
 	DWORD reparseTag = 0;
 	if ((basic.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
-		/* A reparse point is not a symlink: only the tag decides (symlink vs junction vs dedup vs cloud
-		 * placeholder), and only an open carrying OPEN_REPARSE_POINT can answer it. */
+		/* A reparse point is not a symlink - the tag identifies the kind (symlink, junction, dedup, cloud
+		 * placeholder). A failed tag query fails the whole stat: Java must not read a reparse file as an
+		 * ordinary one just because its tag was unavailable. */
 		FILE_ATTRIBUTE_TAG_INFO tag;
-		if (GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &tag, sizeof(tag))) reparseTag = tag.ReparseTag;
+		if (!GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &tag, sizeof(tag))) {
+			CloseHandle(handle);
+			return JNI_FALSE;
+		}
+		reparseTag = tag.ReparseTag;
 	}
 	CloseHandle(handle);
 	file_id = ((unsigned long long) info.nFileIndexHigh << 32) | (unsigned long long) info.nFileIndexLow;
-	/* Two handle queries, not an atomic snapshot - the same tolerance the split reads always had.
-	 * FileBasicInfo carries creation, last-write, change, and attributes; BY_HANDLE adds size,
-	 * volume serial, and index. raw[7] is the reparse tag, zero without a reparse point. */
+	/* Handle-based metadata queries, not an atomic snapshot - the same tolerance the split reads always
+	 * had. FileBasicInfo carries creation, last-write, change, and attributes; BY_HANDLE adds size,
+	 * volume serial, and index; the tag query adds raw[7], zero without a reparse point. */
 	values[0] = basic.ChangeTime.QuadPart;
 	values[1] = basic.LastWriteTime.QuadPart;
 	values[2] = basic.CreationTime.QuadPart;
