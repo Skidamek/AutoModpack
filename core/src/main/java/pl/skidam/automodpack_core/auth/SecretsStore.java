@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.auth;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -13,15 +14,17 @@ import pl.skidam.automodpack_core.storage.StoragePaths;
 public class SecretsStore {
 	static class SecretsCache {
 		private final ConcurrentMap<String, IssuedSecret> cache;
-		/** Reverse index behind {@link #bySecret}: secret string to the cache key a linear scan would answer with. */
-		private final ConcurrentMap<String, String> keysBySecret;
+		/**
+		 * Reverse index behind {@link #bySecret}: secret string to the cache key a linear scan would answer with. Rebuilt into a fresh map and swapped whole, so a concurrent reader sees the old index or the new one,
+		 * never a half-built one.
+		 */
+		private volatile Map<String, String> keysBySecret = new HashMap<>();
 		private AuthJsons.SecretsFields db;
 		private final Path configFile;
 
 		public SecretsCache(Path configFile) {
 			this.configFile = configFile;
 			this.cache = new ConcurrentHashMap<>();
-			this.keysBySecret = new ConcurrentHashMap<>();
 		}
 
 		public synchronized void load() {
@@ -67,12 +70,13 @@ public class SecretsStore {
 
 		/** Rebuilt from the whole cache on every mutation, so the index can only answer what a scan of the cache answers. */
 		private void reindex() {
-			keysBySecret.clear();
+			Map<String, String> rebuilt = new HashMap<>();
 			for (var entry : cache.entrySet()) {
 				IssuedSecret issued = entry.getValue();
 				if (issued == null || issued.secret() == null) continue;
-				keysBySecret.putIfAbsent(issued.secret(), entry.getKey());
+				rebuilt.putIfAbsent(issued.secret(), entry.getKey());
 			}
+			keysBySecret = rebuilt;
 		}
 	}
 
