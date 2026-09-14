@@ -44,7 +44,6 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 public class NettyServer {
 
 	public static final AttributeKey<SocketAddress> REAL_REMOTE_ADDR = AttributeKey.valueOf("REAL_REMOTE_ADDR");
-	public static final AttributeKey<CompressionType> COMPRESSION_TYPE = AttributeKey.valueOf("COMPRESSION_TYPE");
 	public static final AttributeKey<CompressionCodec> COMPRESSION_CODEC = AttributeKey.valueOf("COMPRESSION_CODEC");
 	public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
 	public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
@@ -63,7 +62,6 @@ public class NettyServer {
 	// lock adds anything - readers get the live map and see per-entry updates immediately.
 
 	public static void setCompression(Channel channel, CompressionType type) {
-		channel.attr(COMPRESSION_TYPE).set(type);
 		channel.attr(COMPRESSION_CODEC).set(CompressionFactory.createCodec(type));
 	}
 
