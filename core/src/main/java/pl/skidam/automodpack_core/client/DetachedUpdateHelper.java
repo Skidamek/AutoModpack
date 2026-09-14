@@ -37,7 +37,7 @@ import pl.skidam.automodpack_core.utils.WindowsLockProbe;
 public final class DetachedUpdateHelper {
 	private static final String HELPER_MAIN = UpdateHelperMain.class.getName();
 	// Receipt: the helper holds the lease for its parent-exit wait plus a retry budget of ~82.5s of sleeps
-	// (UpdateHelperMain) and per-attempt IO, so a helper that is converging frees the lease well inside it.
+	// (UpdateRecovery) and per-attempt IO, so a helper that is converging frees the lease well inside it.
 	// Past this wait the helper is stuck on a game process that will not exit, and hanging this boot behind
 	// it serves nobody - the deferred recovery path proceeds without it and the helper keeps working alone.
 	private static final Duration HELPER_LEASE_WAIT = Duration.ofMinutes(3);

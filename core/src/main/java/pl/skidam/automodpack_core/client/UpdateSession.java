@@ -206,7 +206,6 @@ final class UpdateSession implements UpdateAttempt {
 				});
 		if (!execution.success()) {
 			if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
-			DetachedUpdateHelper.launch();
 			throw new UpdateDeferredException(execution.transaction().transactionId, execution.blockedPath(), execution.message());
 		}
 		review().complete();

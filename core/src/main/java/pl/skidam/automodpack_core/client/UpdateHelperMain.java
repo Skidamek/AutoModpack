@@ -27,12 +27,6 @@ import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.JarUtils;
 
 public final class UpdateHelperMain {
-	// Receipts: in-repo, 11s of retries lost an on-access lock race. Microsoft Defender cloud block holds a file 10s by default,
-	// extendable to 60s (Configure extended cloud check). Geometric 500ms→5s over 20 attempts sleeps ~82.5s, past that 60s cap
-	// with slack for a local archive scan of one jar (Defender's "expensive file" log threshold is 3s; there is no documented RTP cap).
-	private static final int MAX_ATTEMPTS = 20;
-	private static final long INITIAL_BACKOFF_MILLIS = 500;
-	private static final long MAX_BACKOFF_MILLIS = 5_000;
 	// Receipt: the launcher exits within seconds of spawning the helper (popup OK click), and even a user who
 	// walks away comes back well inside 15 minutes. A parent still alive past that is not coming back - a
 	// reused PID of some immortal process or a hung game - and holding the lease for it would park every
@@ -93,7 +87,7 @@ public final class UpdateHelperMain {
 					if (!waitForGameExit(parentPid)) return 1;
 
 					UpdateTransactionExecutor executor = UpdateTransactionSupport.executor();
-					long backoff = INITIAL_BACKOFF_MILLIS;
+					long backoff = UpdateRecovery.INITIAL_BACKOFF_MILLIS;
 					for (int attempt = 1;; attempt++) {
 						recoverSelfUpdate(gameDirectory, dataLocation);
 						UpdateTransactionExecutor.Execution execution = executor.recoverLatest();
@@ -103,12 +97,12 @@ public final class UpdateHelperMain {
 						}
 						log("Update recovery attempt " + attempt + " failed: status " + execution.status() + ", operation " + execution.operation() + ", blocked path " + execution.blockedPath()
 								+ ", message " + execution.message());
-						if (execution.replanRequired() || attempt >= MAX_ATTEMPTS) {
+						if (execution.replanRequired() || attempt >= UpdateRecovery.MAX_ATTEMPTS) {
 							log("Update helper gave up; the transaction stays pending and the next game launch will retry it");
 							return 1;
 						}
 						Thread.sleep(backoff);
-						backoff = Math.min(MAX_BACKOFF_MILLIS, backoff * 2);
+						backoff = Math.min(UpdateRecovery.MAX_BACKOFF_MILLIS, backoff * 2);
 					}
 				} finally {
 					DetachedUpdateHelper.cleanupOldHelperJars();
