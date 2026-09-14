@@ -1,4 +1,5 @@
-/* CRT-free JNI: NTFS ChangeTime and volume+file index via KERNEL32.
+/* CRT-free JNI: the full Windows stat - four NTFS timestamps, size, volume serial and file index,
+ * attributes - in one KERNEL32 call chain, so Java never re-opens the file for identity questions.
  *
  * Rebuild via core/src/main/c/rebuild-windows-natives.sh (needs mingw-w64 and JAVA_HOME).
  * The output must stay byte-identical on every rebuild: --no-insert-timestamp and the fixed
@@ -60,9 +61,9 @@ JNIEXPORT jboolean JNICALL Java_pl_skidam_automodpack_1core_utils_cache_WindowsF
 	FILE_BASIC_INFO basic;
 	BY_HANDLE_FILE_INFORMATION info;
 	unsigned long long file_id;
-	jlong values[3];
+	jlong values[8];
 	(void) cls;
-	if (jpath == NULL || out == NULL || (*env)->GetArrayLength(env, out) < 3) return JNI_FALSE;
+	if (jpath == NULL || out == NULL || (*env)->GetArrayLength(env, out) < 8) return JNI_FALSE;
 	len = (*env)->GetStringLength(env, jpath);
 	if (len <= 0 || len > EXTENDED_PATH_CHARS) return JNI_FALSE;
 	chars = (*env)->GetStringChars(env, jpath, NULL);
@@ -125,10 +126,17 @@ JNIEXPORT jboolean JNICALL Java_pl_skidam_automodpack_1core_utils_cache_WindowsF
 	}
 	CloseHandle(handle);
 	file_id = ((unsigned long long) info.nFileIndexHigh << 32) | (unsigned long long) info.nFileIndexLow;
+	/* The full stat in one call: FileBasicInfo carries the four NTFS timestamps plus attributes, the
+	 * BY_HANDLE information adds size, volume serial, and file index, so Java never re-opens the file. */
 	values[0] = basic.ChangeTime.QuadPart;
-	values[1] = (jlong) info.dwVolumeSerialNumber;
-	values[2] = (jlong) file_id;
-	(*env)->SetLongArrayRegion(env, out, 0, 3, values);
+	values[1] = basic.LastWriteTime.QuadPart;
+	values[2] = basic.CreationTime.QuadPart;
+	values[3] = ((unsigned long long) info.nFileSizeHigh << 32) | (unsigned long long) info.nFileSizeLow;
+	values[4] = (jlong) info.dwVolumeSerialNumber;
+	values[5] = (jlong) file_id;
+	values[6] = basic.FileAttributes;
+	values[7] = 0;
+	(*env)->SetLongArrayRegion(env, out, 0, 8, values);
 	if ((*env)->ExceptionCheck(env)) return JNI_FALSE;
 	return JNI_TRUE;
 }

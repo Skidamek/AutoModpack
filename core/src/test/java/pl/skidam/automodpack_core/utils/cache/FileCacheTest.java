@@ -67,6 +67,14 @@ class FileCacheTest {
 	void windowsNativeStatIsAbsentOrComplete() throws Exception {
 		Path file = temporaryDirectory.resolve("file.bin");
 		Files.writeString(file, "native-stat", StandardCharsets.UTF_8);
+
+		// The one-stat seam works everywhere: fused unix read here, the native stat on Windows.
+		FileCache.StatSnapshot fused = FileCache.statSnapshot(file);
+		assertNotNull(fused);
+		assertTrue(fused.isTrackedRegularFile());
+		assertEquals(Files.size(file), fused.size());
+		assertEquals(Files.getLastModifiedTime(file).toMillis(), fused.lastModifiedTime().toMillis());
+
 		WindowsFileStat.Snapshot snapshot = WindowsFileStat.read(file);
 		if (PlatformUtils.operatingSystem() != PlatformUtils.OperatingSystem.WINDOWS) {
 			assertNull(snapshot);
