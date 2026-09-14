@@ -41,7 +41,7 @@ public class RestartScreen extends VersionedScreen {
 		boolean hasChangelogs = changelogs != null && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty() || !changelogs.latestPatchNotes().isBlank());
 		int preservedFiles = hasChangelogs ? changelogs.changeSet().summary().preservedFiles() : 0;
 		List<ActionRow> rows = new ArrayList<>();
-		if (hasChangelogs) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.changelog.view"), button -> ScreenManager.changelog(this, changelogs))));
+		if (hasChangelogs) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.changelog.view"), button -> ScreenManager.changelog(changelogs))));
 		if (preservedFiles > 0) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.management.preservedFilesCount", preservedFiles), button -> openVault())));
 		if (!new InstalledModpackController().stalePacks().isEmpty())
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.restart.removeStale"),

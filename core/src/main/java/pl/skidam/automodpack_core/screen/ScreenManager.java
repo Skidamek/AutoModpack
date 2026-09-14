@@ -29,8 +29,8 @@ public final class ScreenManager {
 		instance.download(downloadManager, modpackName);
 	}
 
-	public static void changelog(Object parent, Changelogs changelogs) {
-		instance.changelog(parent, changelogs);
+	public static void changelog(Changelogs changelogs) {
+		instance.changelog(changelogs);
 	}
 
 	public static void restart(UpdateType updateType, Changelogs changelogs) {
@@ -63,7 +63,7 @@ public final class ScreenManager {
 	public static void failure(FailureRequest request) {
 		Objects.requireNonNull(request, "request");
 		if (CertificateTrustCancelledException.is(request.cause())) return;
-		String previousScreen = getScreen().map(screen -> screen.getClass().getSimpleName()).orElse("none");
+		String previousScreen = getScreenKind().orElse("none");
 		LOGGER.error("AutoModpack client failure [{}] ({}) on {}", request.category().key(), request.messageKey(), previousScreen, request.cause());
 		instance.failure(request);
 	}
@@ -96,7 +96,11 @@ public final class ScreenManager {
 		return instance.getScreenString();
 	}
 
-	public static Optional<Object> getScreen() {
-		return instance.getScreen();
+	public static boolean hasScreen() {
+		return instance.hasScreen();
+	}
+
+	public static Optional<String> getScreenKind() {
+		return instance.getScreenKind();
 	}
 }

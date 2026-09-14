@@ -8,8 +8,8 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import net.minecraft.client.ResourceLoadStateTracker;
 import net.minecraft.client.gui.screens.TitleScreen;
 
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.autotest.AutoTestBridge;
-import pl.skidam.automodpack_core.screen.ScreenManager;
 
 @Mixin(ResourceLoadStateTracker.class)
 public class ResourceLoadStateTrackerMixin {
@@ -18,6 +18,6 @@ public class ResourceLoadStateTrackerMixin {
 	private void onFinishReload(Operation<Void> original) {
 		original.call();
 		AutoTestBridge.markReloadFinished();
-		if (ScreenManager.getScreen().orElse(null) instanceof TitleScreen) AutoTestBridge.onClientReady();
+		if (ScreenImpl.currentScreen() instanceof TitleScreen) AutoTestBridge.onClientReady();
 	}
 }
