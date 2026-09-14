@@ -104,7 +104,8 @@ final class ReviewSession {
 			LOGGER.warn("Cannot measure the first-install download cost", e);
 			uncached = -1;
 		}
-		return new ReviewPayload(updater.getSelectedTarget(), reviewCatalogue(), getFirstInstallPatchNotes(), joinOrigin(), unverifiedSelectedJarPaths(), firstInstallLocalModPaths(),
+		return new ReviewPayload(updater.getSelectedTarget(), reviewCatalogue(), getFirstInstallPatchNotes(), joinOrigin(), unverifiedSelectedJarPaths(),
+				sourceCatalogue.selectedJarSourceCounts(updater.getSelectedTarget()), firstInstallLocalModPaths(),
 				uncached < 0 ? OptionalLong.empty() : OptionalLong.of(uncached), reviewActions());
 	}
 

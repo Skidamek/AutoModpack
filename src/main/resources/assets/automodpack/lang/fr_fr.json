@@ -35,6 +35,7 @@
   "automodpack.confirm.computerRisk": "Les mods d'un modpack sont des programmes qui tournent sur votre ordinateur. Ils peuvent modifier des fichiers, voler des identifiants ou laisser quelqu'un d'autre contrôler votre ordinateur. Ça ne veut pas dire qu'ils le feront.",
   "automodpack.confirm.commands": "Vérifiez les fichiers avant de les télécharger. Si votre launcher a un mode sandbox, activez-le. Si vous connaissez à peine les gens qui gèrent ce serveur, ou que vous ne leur faites pas confiance, ne téléchargez pas.",
   "automodpack.confirm.unverifiedCount": "%s fichiers de mods sur %s sont introuvables sur Modrinth ou CurseForge.",
+  "automodpack.confirm.sourceCounts": "Trouvés sur Modrinth : %s  |  Trouvés sur CurseForge : %s  |  Uniquement depuis le serveur : %s",
   "automodpack.confirm.unverifiedExplain": "Ce peuvent être des mods personnalisés inoffensifs, des mods modifiés ou des mods malveillants. AutoModpack ne peut pas les distinguer.",
   "automodpack.confirm.ack": "Je comprends le risque et je fais confiance à ce serveur.",
   "automodpack.confirm.ackCountdown": "La case de risque se débloque dans %s secondes.",

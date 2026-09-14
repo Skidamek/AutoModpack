@@ -12,6 +12,7 @@ import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.screen.SourceCounts;
 
 /** Shared copy and catalogue helpers for the pack confirm screen. */
 final class PackConfirmCopy {
@@ -101,6 +102,12 @@ final class PackConfirmCopy {
 
 	static String unverifiedCount(int unverified, int jars) {
 		return VersionedText.translatable("automodpack.confirm.unverifiedCount", unverified, jars).getString();
+	}
+
+	/** The per-source breakdown line; empty when the target has no jars, so the stat hides instead of reading zeros. */
+	static String sourceCounts(SourceCounts counts) {
+		if (counts == null || (counts.modrinth() == 0 && counts.curseforge() == 0 && counts.serverOnly() == 0)) return "";
+		return VersionedText.translatable("automodpack.confirm.sourceCounts", counts.modrinth(), counts.curseforge(), counts.serverOnly()).getString();
 	}
 
 	static int selectedJarCount(SelectedModpackTarget target) {
