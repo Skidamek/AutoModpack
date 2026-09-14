@@ -644,6 +644,11 @@ public class ModpackUpdater implements AutoCloseable {
 		return attempt.get() == candidate;
 	}
 
+	/** The review this engine drives; package-visible so the state machine tests drive the same instance the engine does. */
+	ReviewSession reviewSession() {
+		return review;
+	}
+
 	void interruptInFlight() {
 		sourceCatalogue.cancelIfRunning();
 		objectAcquisition.interrupt();
