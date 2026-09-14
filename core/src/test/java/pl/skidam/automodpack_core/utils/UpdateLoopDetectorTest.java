@@ -21,11 +21,29 @@ class UpdateLoopDetectorTest {
 		Path stateFile = tempDir.resolve("restart-state.json");
 		AtomicLong now = new AtomicLong(1_000);
 
-		assertEquals(UpdateLoopDetector.Decision.RESTART, detector(stateFile, now).evaluateAndRecord("same-state"));
+		assertEquals(UpdateLoopDetector.Decision.RESTART, detector(stateFile, now).evaluateAndRecord("same-state").decision());
 		now.addAndGet(30_000);
-		assertEquals(UpdateLoopDetector.Decision.RESTART, detector(stateFile, now).evaluateAndRecord("same-state"));
+		assertEquals(UpdateLoopDetector.Decision.RESTART, detector(stateFile, now).evaluateAndRecord("same-state").decision());
 		now.addAndGet(30_000);
-		assertEquals(UpdateLoopDetector.Decision.SUPPRESS, detector(stateFile, now).evaluateAndRecord("same-state"));
+		assertEquals(UpdateLoopDetector.Decision.SUPPRESS, detector(stateFile, now).evaluateAndRecord("same-state").decision());
+	}
+
+	@Test
+	void countsRestartsUpToTheCap() {
+		Path stateFile = tempDir.resolve("restart-state.json");
+		AtomicLong now = new AtomicLong(1_000);
+		UpdateLoopDetector detector = detector(stateFile, now);
+
+		UpdateLoopDetector.Outcome first = detector.evaluateAndRecord("same-state");
+		assertEquals(UpdateLoopDetector.Decision.RESTART, first.decision());
+		assertEquals(1, first.restarts());
+		assertEquals(2, first.maxRestarts());
+		UpdateLoopDetector.Outcome second = detector.evaluateAndRecord("same-state");
+		assertEquals(UpdateLoopDetector.Decision.RESTART, second.decision());
+		assertEquals(2, second.restarts());
+		UpdateLoopDetector.Outcome third = detector.evaluateAndRecord("same-state");
+		assertEquals(UpdateLoopDetector.Decision.SUPPRESS, third.decision());
+		assertEquals(2, third.restarts());
 	}
 
 	@Test
@@ -34,10 +52,10 @@ class UpdateLoopDetectorTest {
 		AtomicLong now = new AtomicLong(1_000);
 		UpdateLoopDetector detector = detector(stateFile, now);
 
-		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("first-state"));
-		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("changed-state"));
+		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("first-state").decision());
+		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("changed-state").decision());
 		now.addAndGet(60_001);
-		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("changed-state"));
+		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("changed-state").decision());
 	}
 
 	@Test
@@ -47,11 +65,11 @@ class UpdateLoopDetectorTest {
 		Files.writeString(stateFile, "not json");
 
 		UpdateLoopDetector detector = detector(stateFile, now);
-		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("same-state"));
+		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("same-state").decision());
 		now.addAndGet(1_000);
-		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("same-state"));
+		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("same-state").decision());
 		detector.clear();
-		assertEquals(UpdateLoopDetector.Decision.RESTART, detector(stateFile, now).evaluateAndRecord("same-state"));
+		assertEquals(UpdateLoopDetector.Decision.RESTART, detector(stateFile, now).evaluateAndRecord("same-state").decision());
 	}
 
 	@Test
@@ -60,14 +78,14 @@ class UpdateLoopDetectorTest {
 		AtomicLong now = new AtomicLong(1_000);
 
 		UpdateLoopDetector detector = new UpdateLoopDetector(stateFile, now::get, 3, null);
-		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("stuck-transaction"));
+		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("stuck-transaction").decision());
 		now.addAndGet(Duration.ofDays(30).toMillis());
-		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("stuck-transaction"));
+		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("stuck-transaction").decision());
 		now.addAndGet(Duration.ofDays(30).toMillis());
-		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("stuck-transaction"));
+		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("stuck-transaction").decision());
 		now.addAndGet(Duration.ofDays(30).toMillis());
-		assertEquals(UpdateLoopDetector.Decision.SUPPRESS, detector.evaluateAndRecord("stuck-transaction"));
-		assertEquals(UpdateLoopDetector.Decision.SUPPRESS, new UpdateLoopDetector(stateFile, now::get, 3, null).evaluateAndRecord("stuck-transaction"));
+		assertEquals(UpdateLoopDetector.Decision.SUPPRESS, detector.evaluateAndRecord("stuck-transaction").decision());
+		assertEquals(UpdateLoopDetector.Decision.SUPPRESS, new UpdateLoopDetector(stateFile, now::get, 3, null).evaluateAndRecord("stuck-transaction").decision());
 	}
 
 	private UpdateLoopDetector detector(Path stateFile, AtomicLong now) {

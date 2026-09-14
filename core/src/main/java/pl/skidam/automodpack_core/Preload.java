@@ -174,13 +174,14 @@ public class Preload {
 			deferred = execution.transaction() == null ? original : execution.transaction();
 		}
 		if (!execution.success()) {
-			logDeferredRecovery(deferred, execution);
-			if (deferredRecoveryGuard().evaluateAndRecord(deferred.transactionId) == UpdateLoopDetector.Decision.SUPPRESS) {
+			UpdateLoopDetector.Outcome loop = deferredRecoveryGuard().evaluateAndRecord(deferred.transactionId);
+			logDeferredRecovery(deferred, execution, loop);
+			if (loop.decision() == UpdateLoopDetector.Decision.SUPPRESS) {
 				Path stuckJournal = UpdateTransactionSupport.executor().abandonStuckPublication(deferred);
 				deferredRecoveryGuard().clear();
 				rolledBackStuckUpdate = true;
 				LOGGER.error("The same update transaction {} failed after {} deferred restarts; kept the last finalized generation and retired the transaction to {}", deferred.transactionId,
-						MAX_DEFERRED_RESTARTS, stuckJournal.toAbsolutePath().normalize());
+						loop.restarts(), stuckJournal.toAbsolutePath().normalize());
 				LOGGER.error("If the update keeps failing, send that file together with {} and the latest log", GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());
 				return;
 			}
@@ -196,13 +197,15 @@ public class Preload {
 		LOGGER.info("Recovered update transaction {}", deferred.transactionId);
 	}
 
-	private void logDeferredRecovery(UpdateTransaction transaction, UpdateTransactionExecutor.Execution execution) {
+	private void logDeferredRecovery(UpdateTransaction transaction, UpdateTransactionExecutor.Execution execution, UpdateLoopDetector.Outcome loop) {
 		LOGGER.error("The pending modpack update did not finish: transaction {} (purpose {}, phase {}) ended with status {}", transaction.transactionId, transaction.purpose, transaction.phase,
 				execution.status());
 		LOGGER.error("Blocked operation {}, blocked path {}, message {}", execution.operation(), execution.blockedPath(), execution.message());
 		LOGGER.error("Journal-recorded result: status {}, operation {}, path {}, message {}", transaction.resultStatus, transaction.resultOperation, transaction.resultPath, transaction.resultMessage);
 		LOGGER.error("The full transaction journal is at {}", storage.transactionFile().toAbsolutePath().normalize());
 		LOGGER.error("The detached helper's own log, with its per-attempt recovery failures, is at {}", GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());
+		if (loop.decision() == UpdateLoopDetector.Decision.RESTART)
+			LOGGER.error("This is deferred restart {} of {} for the transaction; when they run out, the next failed launch rolls back to the last finalized generation", loop.restarts(), loop.maxRestarts());
 	}
 
 	private UpdateLoopDetector deferredRecoveryGuard() {
