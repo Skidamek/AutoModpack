@@ -56,8 +56,9 @@ JNIEXPORT jboolean JNICALL Java_pl_skidam_automodpack_1core_utils_cache_WindowsF
 	}
 	DWORD reparseTag = 0;
 	if ((basic.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
-		/* A reparse point is not a symlink - the tag identifies the kind (symlink, junction, dedup, cloud
-		 * placeholder). A failed tag query fails the whole stat: Java must not read a reparse file as an
+		/* A reparse point is broader than a symbolic link; the reparse tag identifies the
+		 * reparse mechanism (for example symbolic link, mount point, or filesystem-specific tag).
+		 * A failed tag query fails the whole stat: Java must not read a reparse file as an
 		 * ordinary one just because its tag was unavailable. */
 		FILE_ATTRIBUTE_TAG_INFO tag;
 		if (!GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &tag, sizeof(tag))) {
