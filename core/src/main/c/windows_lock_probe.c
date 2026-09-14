@@ -54,6 +54,7 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 	RM_PROCESS_INFO *infos;
 	RM_PROCESS_INFO *grown = NULL;
 	DWORD *reasons;
+	DWORD *grownReasons = NULL;
 	jchar *out;
 	UINT listed = MAX_PROCESSES;
 	UINT needed = 0;
@@ -93,15 +94,20 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 		if (rm_register(session, 1, &resource, 0, NULL, 0, NULL) == ERROR_SUCCESS) {
 			rmResult = rm_getlist(session, &needed, &listed, infos, reasons);
 			if (rmResult == ERROR_MORE_DATA && needed > MAX_PROCESSES && needed <= MAX_KNOWN_PROCESSES) {
+				/* lpdwRebootReasons is parallel to rgAffectedApps: it receives one reason per listed entry, so it must grow to the same size before the second query. */
 				grown = (RM_PROCESS_INFO *) HeapAlloc(GetProcessHeap(), 0, sizeof(RM_PROCESS_INFO) * needed);
-				if (grown != NULL) {
-					listed = needed;
-					needed = 0;
-					rmResult = rm_getlist(session, &needed, &listed, grown, reasons);
+				grownReasons = (DWORD *) HeapAlloc(GetProcessHeap(), 0, sizeof(DWORD) * needed);
+				if (grown != NULL && grownReasons != NULL) {
+					UINT grownListed = needed;
+					UINT grownNeeded = 0;
+					rmResult = rm_getlist(session, &grownNeeded, &grownListed, grown, grownReasons);
 					if (rmResult == ERROR_SUCCESS) {
 						HeapFree(GetProcessHeap(), 0, infos);
+						HeapFree(GetProcessHeap(), 0, reasons);
 						infos = grown;
+						reasons = grownReasons;
 						grown = NULL;
+						grownReasons = NULL;
 					}
 				}
 			}
@@ -120,6 +126,7 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 		rm_end(session);
 	}
 	if (grown != NULL) HeapFree(GetProcessHeap(), 0, grown);
+	if (grownReasons != NULL) HeapFree(GetProcessHeap(), 0, grownReasons);
 	HeapFree(GetProcessHeap(), 0, out);
 	HeapFree(GetProcessHeap(), 0, reasons);
 	HeapFree(GetProcessHeap(), 0, infos);
