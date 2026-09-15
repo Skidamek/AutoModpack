@@ -64,7 +64,9 @@ public final class HeadMirror {
 			// Re-read under the lock so the swap publishes exactly the bytes that were verified.
 			GenerationJsons.HeadDocumentFields verified = ModpackContentTools.readHeadDocument(fetchedFile);
 			if (verified == null || !modpackId.equals(verified.policy.modpackId)) throw new IOException("Fetched head document changed while it was swapped into the mirror");
-			DurableFiles.replace(fetchedFile, storage.historyHeadFile(modpackId));
+			Path mirror = storage.historyHeadFile(modpackId);
+			Files.createDirectories(mirror.getParent());
+			DurableFiles.replace(fetchedFile, mirror);
 			return null;
 		});
 	}
