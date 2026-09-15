@@ -41,13 +41,15 @@ def test_connection_path_variants_keep_modes_independent():
         "connectionPaths": [
             {"mode": "DIRECT", "bindPort": 25566, "endpointPort": 25566},
             {"mode": "MAGIC", "bindPort": -1, "endpointPort": 25565},
+            {"mode": "HOLEPUNCH", "bindPort": -1, "endpointPort": 25565},
+            {"mode": "HTTP", "bindPort": 25567, "endpointPort": 25567},
         ],
     }
 
     variants = connection_path_variants(scenario)
 
-    assert [variant["id"] for variant in variants] == ["paths-direct", "paths-magic"]
-    assert [variant["connectionPath"]["mode"] for variant in variants] == ["DIRECT", "MAGIC"]
+    assert [variant["id"] for variant in variants] == ["paths-direct", "paths-magic", "paths-holepunch", "paths-http"]
+    assert [variant["connectionPath"]["mode"] for variant in variants] == ["DIRECT", "MAGIC", "HOLEPUNCH", "HTTP"]
     assert "connectionPath" not in scenario
 
 

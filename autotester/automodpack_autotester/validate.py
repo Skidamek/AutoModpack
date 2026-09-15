@@ -12,7 +12,7 @@ from .engine.util import parse_duration
 
 _VALID_MODES = {"full", "client-only"}
 _VALID_NETWORKS = {"bridge", "host"}
-CONNECTION_MODES = {"DIRECT", "MAGIC", "HOLEPUNCH"}
+CONNECTION_MODES = {"DIRECT", "MAGIC", "HOLEPUNCH", "HTTP"}
 _COND_FIELDS = ("when", "until", "that")
 _DURATION_FIELDS = ("timeout", "poll", "duration")
 _REGEX_FIELDS = ("matches", "matches_all", "matches_any", "not_matches")
@@ -139,8 +139,8 @@ def _check_connection_paths(paths, problems):
             value = path.get(field)
             if not isinstance(value, int) or isinstance(value, bool) or value < -1 or value > 65535 or value == 0:
                 problems.append(f"{where}.{field}: expected an integer port or -1, got {value!r}")
-        if mode == "DIRECT" and path.get("bindPort", -1) == -1:
-            problems.append(f"{where}.bindPort: DIRECT needs a built-in listener for an end-to-end case")
+        if mode in ("DIRECT", "HTTP") and path.get("bindPort", -1) == -1:
+            problems.append(f"{where}.bindPort: {mode} needs a built-in listener for an end-to-end case")
 
 
 def _target_pattern_matches(pattern: str, target_id: str) -> bool:

@@ -12,6 +12,7 @@
 - `/automodpack generate revert <seq>` - Previews a rollback to journal sequence `<seq>`.
 - `/automodpack generate revert <seq> confirm [notes <text...>]` - Publishes the selected old state as a new generation.
 - `/automodpack generate storage` - Reports how many bytes the journal and the object store hold.
+- `/automodpack generate export-http <directory>` - Writes the URL-contract tree (`head`, `journal`, `objects/<sha1>`) as byte-for-byte copies of the hosted files, ready for any static HTTPS host. Works in every connection mode and never deletes anything from the directory.
 - `/automodpack generate storage collect confirm` - Deletes every object the current generation does not serve. Older generations stay listed in the journal but can no longer be restored.
 - `/automodpack generate export-http [--all] <directory>` - Writes the pack as plain files (`head`, `journal`, `objects/<sha1>`) that any static HTTPS host can serve. Files that Modrinth or CurseForge still serve themselves are pruned. `--all` keeps everything. The export refuses while `validateSecrets` is on, because a static host cannot check download secrets. See [hosting](how-it-works/hosting#serving-the-pack-from-a-static-https-host).
 
