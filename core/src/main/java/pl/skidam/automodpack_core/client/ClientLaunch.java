@@ -92,32 +92,34 @@ public final class ClientLaunch {
 
 	private void syncFromServer(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
 		var manifestResult = ManifestFetcher.requestServerModpackContent(storage, connectionInfo, secret, false);
-		SelectedModpackTarget selectedTarget = loadStoredTarget();
-		DownloadClient downloadClient = null;
-		if (manifestResult.successful()) {
-			downloadClient = manifestResult.client();
-			try {
-				selectedTarget = SelectedModpackTarget.prepare(manifestResult.content(), new ClientSelectionStore(storage.selectionFile()), ClientPlatform.current());
-			} catch (RuntimeException e) {
-				LOGGER.error("Failed to resolve the downloaded modpack catalogue and group selection", e);
-				downloadClient.close();
-				loadLocalModpack(connectionInfo, secret, hasActiveProjection());
-				return;
-			}
-			ModpackJsons.ModpackContentFields latestModpackContent = selectedTarget.flatTarget();
-			if (!Objects.equals(clientConfig.selectedModpackId, latestModpackContent.modpackId)) {
-				LOGGER.error("Selected modpack catalogue changed ID from {} to {}", clientConfig.selectedModpackId, latestModpackContent.modpackId);
-				downloadClient.close();
-				loadLocalModpack(connectionInfo, secret, hasActiveProjection());
-				return;
-			}
-			if (SelfUpdater.update(latestModpackContent)) {
-				downloadClient.close();
-				return;
-			}
-		}
-		if (selectedTarget == null) {
+		if (!manifestResult.successful()) {
+			// An unreachable server is a normal boot condition, not a failure: the installed pack keeps working and the
+			// next launch with the server up catches up. One calm line says so; the cause stays at debug.
+			LOGGER.info("Modpack server {} is unreachable; continuing with the local state without a sync", AddressHelpers.formatAddress(connectionInfo.origin));
+			LOGGER.debug("Manifest fetch did not succeed", manifestResult.failure());
 			loadLocalModpack(connectionInfo, secret, hasActiveProjection());
+			return;
+		}
+
+		DownloadClient downloadClient = manifestResult.client();
+		SelectedModpackTarget selectedTarget;
+		try {
+			selectedTarget = SelectedModpackTarget.prepare(manifestResult.content(), new ClientSelectionStore(storage.selectionFile()), ClientPlatform.current());
+		} catch (RuntimeException e) {
+			LOGGER.error("Failed to resolve the downloaded modpack catalogue and group selection", e);
+			downloadClient.close();
+			loadLocalModpack(connectionInfo, secret, hasActiveProjection());
+			return;
+		}
+		ModpackJsons.ModpackContentFields latestModpackContent = selectedTarget.flatTarget();
+		if (!Objects.equals(clientConfig.selectedModpackId, latestModpackContent.modpackId)) {
+			LOGGER.error("Selected modpack catalogue changed ID from {} to {}", clientConfig.selectedModpackId, latestModpackContent.modpackId);
+			downloadClient.close();
+			loadLocalModpack(connectionInfo, secret, hasActiveProjection());
+			return;
+		}
+		if (SelfUpdater.update(latestModpackContent)) {
+			downloadClient.close();
 			return;
 		}
 
@@ -171,20 +173,6 @@ public final class ClientLaunch {
 		} catch (IOException | RuntimeException e) {
 			LOGGER.warn("Cannot read the detached flag of the selected modpack", e);
 			return false;
-		}
-	}
-
-	private SelectedModpackTarget loadStoredTarget() {
-		try {
-			SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
-			if (target != null && !Objects.equals(clientConfig.selectedModpackId, target.manifest().modpackId())) {
-				LOGGER.warn("Ignoring stored modpack target {} because the selected modpack is {}", target.manifest().modpackId(), clientConfig.selectedModpackId);
-				return null;
-			}
-			return target;
-		} catch (IOException | RuntimeException e) {
-			LOGGER.error("Failed to resolve the stored modpack catalogue and group selection", e);
-			return null;
 		}
 	}
 
