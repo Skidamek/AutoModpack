@@ -17,4 +17,17 @@ class TransientAttentionTest {
 		assertTrue(attention.isCurrent(second));
 		assertFalse(attention.isCurrent(first));
 	}
+
+	@Test
+	void restoreMustNotRunAfterASuccessorHasClaimedTheWait() {
+		TransientAttention attention = new TransientAttention();
+		attention.begin();
+		assertFalse(attention.successorCommitted());
+		attention.commitSuccessor();
+		assertTrue(attention.successorCommitted());
+		attention.supersede();
+		assertTrue(attention.successorCommitted());
+		attention.begin();
+		assertFalse(attention.successorCommitted());
+	}
 }
