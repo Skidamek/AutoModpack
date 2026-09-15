@@ -33,8 +33,8 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 			if (sha1 == null || sha1.isBlank()) continue;
 			String normalizedHash = sha1.toLowerCase(Locale.ROOT);
 			synchronized (lock(normalizedHash)) {
-				Record record = readRecord(normalizedHash, Record.class);
-				if (record != null) records.put(sha1, record);
+				Record record = sanitize(readRecord(normalizedHash, Record.class), normalizedHash);
+				if (record != null && (record.modrinth() != null || record.curseforge() != null)) records.put(sha1, record);
 			}
 		}
 		return records;
@@ -74,8 +74,21 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 	}
 
 	private Record readOrCreateRecord(String normalizedHash) {
-		Record record = readRecord(normalizedHash, Record.class);
+		Record record = sanitize(readRecord(normalizedHash, Record.class), normalizedHash);
 		return record != null ? record : new Record(normalizedHash);
+	}
+
+	private Record sanitize(Record record, String normalizedHash) {
+		if (record == null) return null;
+		if (record.curseforge != null && CurseForgeAPI.isPlaceholderProjectPage(record.curseforge.projectPageUrl())) {
+			record.curseforge = null;
+			if (record.modrinth == null) {
+				evict(normalizedHash);
+				return null;
+			}
+			writeRecord(normalizedHash, record);
+		}
+		return record;
 	}
 
 	@Override
