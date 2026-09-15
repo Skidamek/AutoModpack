@@ -45,16 +45,49 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 				CurseForgeAPI curseForgeAPI = parseJsonObject(JSONObject, hashes);
 				if (curseForgeAPI != null) curseForgeAPIList.add(curseForgeAPI);
 			}
-			Map<Integer, String> projectPageUrls = getProjectPageUrls(curseForgeAPIList);
-			for (int index = 0; index < curseForgeAPIList.size(); index++) {
-				CurseForgeAPI info = curseForgeAPIList.get(index);
-				curseForgeAPIList.set(index, info.withProjectPageUrl(projectPageUrls.get(info.modId())));
+			Map<Integer, String> listedPages = getListedProjectPages(curseForgeAPIList);
+			if (listedPages != null) {
+				List<CurseForgeAPI> listed = new LinkedList<>();
+				for (CurseForgeAPI info : curseForgeAPIList) {
+					if (!listedPages.containsKey(info.modId())) continue;
+					listed.add(info.withProjectPageUrl(listedPages.get(info.modId())));
+				}
+				curseForgeAPIList = listed;
 			}
 		} catch (Exception e) {
 			LOGGER.error("Failed to fetch data from CurseForge API", e);
 		}
 
 		return curseForgeAPIList;
+	}
+
+	/** CurseForge assigns `project-{id}` as the slug/name/page of unlisted or deleted projects. */
+	public static boolean isPlaceholderSlug(String slug) {
+		if (slug == null || slug.length() < 9 || !slug.regionMatches(true, 0, "project-", 0, 8)) return false;
+		for (int i = 8; i < slug.length(); i++) {
+			char character = slug.charAt(i);
+			if (character < '0' || character > '9') return false;
+		}
+		return true;
+	}
+
+	public static boolean isPlaceholderProjectPage(String url) {
+		if (url == null || url.isBlank()) return false;
+		int end = url.length();
+		while (end > 0 && url.charAt(end - 1) == '/') end--;
+		int start = url.lastIndexOf('/', end - 1) + 1;
+		return start > 0 && start < end && isPlaceholderSlug(url.substring(start, end));
+	}
+
+	public static boolean isListedProject(JsonObject project) {
+		if (project == null || !project.has("isAvailable") || project.get("isAvailable").isJsonNull()) return false;
+		return project.get("isAvailable").getAsBoolean();
+	}
+
+	public static String publicProjectPageUrl(String websiteUrl, String slug) {
+		if (websiteUrl != null && !websiteUrl.isBlank() && !isPlaceholderProjectPage(websiteUrl)) return websiteUrl;
+		if (slug != null && !slug.isBlank() && !isPlaceholderSlug(slug)) return "https://www.curseforge.com/minecraft/mc-mods/" + slug;
+		return null;
 	}
 
 	private static CurseForgeAPI parseJsonObject(JsonObject JSONObject, Map<String, String> hashes) {
@@ -109,27 +142,27 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		return new CurseForgeAPI(null, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmur, sha1, modId, null);
 	}
 
-	private static Map<Integer, String> getProjectPageUrls(List<CurseForgeAPI> infos) throws IOException {
+	/** Listed projects keyed by mod id; the page url may be null. Null means the bulk lookup failed and fingerprint hits should be kept. */
+	private static Map<Integer, String> getListedProjectPages(List<CurseForgeAPI> infos) throws IOException {
 		List<Integer> modIds = infos.stream().map(CurseForgeAPI::modId).filter(id -> id > 0).distinct().toList();
-		if (modIds.isEmpty()) return Map.of();
+		if (modIds.isEmpty()) return new HashMap<>();
 		JsonObject request = new JsonObject();
 		request.add("modIds", new Gson().toJsonTree(modIds));
 		JsonObject response = fromCurseForgeUrl(BASE_URL + "/mods", request);
-		if (response == null || !response.has("data") || !response.get("data").isJsonArray()) return Map.of();
-		Map<Integer, String> urls = new HashMap<>();
+		if (response == null || !response.has("data") || !response.get("data").isJsonArray()) return null;
+		Map<Integer, String> listed = new HashMap<>();
 		for (JsonElement element : response.getAsJsonArray("data")) {
 			JsonObject project = element.getAsJsonObject();
-			if (!project.has("id")) continue;
-			String pageUrl = null;
+			if (!project.has("id") || !isListedProject(project)) continue;
+			String websiteUrl = null;
 			if (project.has("links") && project.get("links").isJsonObject()) {
 				JsonElement website = project.getAsJsonObject("links").get("websiteUrl");
-				if (website != null && !website.isJsonNull() && !website.getAsString().isBlank()) pageUrl = website.getAsString();
+				if (website != null && !website.isJsonNull() && !website.getAsString().isBlank()) websiteUrl = website.getAsString();
 			}
-			if (pageUrl == null && project.has("slug") && !project.get("slug").isJsonNull() && !project.get("slug").getAsString().isBlank())
-				pageUrl = "https://www.curseforge.com/minecraft/mc-mods/" + project.get("slug").getAsString();
-			if (pageUrl != null) urls.put(project.get("id").getAsInt(), pageUrl);
+			String slug = project.has("slug") && !project.get("slug").isJsonNull() ? project.get("slug").getAsString() : null;
+			listed.put(project.get("id").getAsInt(), publicProjectPageUrl(websiteUrl, slug));
 		}
-		return urls;
+		return listed;
 	}
 
 	private CurseForgeAPI withProjectPageUrl(String url) {

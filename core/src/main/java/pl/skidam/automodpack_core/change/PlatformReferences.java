@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
 /**
@@ -86,7 +87,8 @@ public final class PlatformReferences {
 		if (record == null) return List.of();
 		List<Page> pages = new ArrayList<>();
 		if (record.modrinth() != null && isPresent(record.modrinth().mainPageUrl())) pages.add(new Page("modrinth", record.modrinth().mainPageUrl()));
-		if (record.curseforge() != null && isPresent(record.curseforge().projectPageUrl())) pages.add(new Page("curseforge", record.curseforge().projectPageUrl()));
+		if (record.curseforge() != null && isPresent(record.curseforge().projectPageUrl()) && !CurseForgeAPI.isPlaceholderProjectPage(record.curseforge().projectPageUrl()))
+			pages.add(new Page("curseforge", record.curseforge().projectPageUrl()));
 		return List.copyOf(pages);
 	}
 

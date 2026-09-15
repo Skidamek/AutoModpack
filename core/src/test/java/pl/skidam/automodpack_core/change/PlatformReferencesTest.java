@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.change;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -24,6 +25,18 @@ class PlatformReferencesTest {
 
 	@TempDir
 	Path temporaryDirectory;
+
+	@Test
+	void ignoresDeletedCurseForgePlaceholderPages() throws Exception {
+		try (PlatformCache cache = PlatformCache.open(temporaryDirectory)) {
+			cache.putModrinth(SHA1, new ModrinthAPI("example", null, "https://cdn.modrinth.com/data/example/file.jar", "1", "example.jar", 1, "release", SHA1), MODRINTH_PAGE);
+			cache.putCurseForge(SHA1,
+					new CurseForgeAPI(null, "https://edge.forgecdn.net/file.jar", "1", "example.jar", "1", "release", "1", SHA1, 1318792, "https://www.curseforge.com/minecraft/mc-mods/project-1318792"));
+			ChangeSet referenced = PlatformReferences.withCachedReferences(catalogue(), cache);
+			assertEquals(List.of(MODRINTH_PAGE), referenced.changes().get(0).occurrences().get(0).references());
+			assertNull(cache.getAll(List.of(SHA1)).get(SHA1).curseforge());
+		}
+	}
 
 	@Test
 	void attachesCachedPagesWhenACatalogueOccurrenceHasOnlyAnAfterHash() throws Exception {
