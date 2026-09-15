@@ -1,25 +1,21 @@
-Most of the launchers will work without any issues, but some modified custom clients won't work. Here is a list of known launchers and their compatibility with AutoModpack:
+Most launchers work as-is. Custom clients that replace the game's loading pipeline are the ones that break. Known status:
 
-| Launcher Name             | Compatibility | Notes                                                                                               |
-|---------------------------|---------------|-----------------------------------------------------------------------------------------------------|
-| Vanilla official Launcher | ✅             | Supported                                                                                           |
-| Pandora Launcher          | ✅             | **Recommended** - Offers sandbox on all platforms and has support for modloader version synchronization |
-| Prism/MultiMC Launcher    | ✅             | Supported with modloader version synchronization                                                    |
-| Modrinth Launcher         | ✅             | Supported                                                                                           |
-| CurseForge                | ✅             | Supported                                                                                           |
-| GDLauncher                | ✅             | Supported                                                                                           |
-| ATLauncher                | ✅             | Supported                                                                                           |
-| Android launchers         | ✅             | Seem to work                                                                                        |
-| Feather Client            | ❌             | Unsupported - breaks modpack loading                                                                |
-| Lunar Client              | ❌             | Unsupported - breaks modpack loading                                                                |
-| PCL2                      | ⚠️            | Unclear, may work                                                                                   |
+| Launcher | Compatibility | Notes |
+| --- | --- | --- |
+| Vanilla official launcher | Works | |
+| Pandora | Works | Recommended: sandboxing on all platforms and modloader version sync |
+| Prism / MultiMC | Works | With modloader version sync |
+| Modrinth App | Works | |
+| CurseForge | Works | |
+| GDLauncher | Works | |
+| ATLauncher | Works | |
+| Android launchers | Work | Reported working |
+| Feather | Broken | Breaks modpack loading |
+| Lunar Client | Broken | Breaks modpack loading |
+| PCL2 | Unclear | May work |
 
-### Loader version sync
+## Loader version sync
 
-Works only on Prism/MultiMC/forks and Pandora launchers.
+When the server publishes a loader version, AutoModpack updates the loader on Prism, MultiMC forks, and Pandora. Other launchers manage the loader themselves, so the game keeps the version the launcher installed.
 
-Before AutoModpack changes the loader version, it checks the Prism meta server.
-
-If the meta server does not have the loader version, AutoModpack does not change the loader version. The game keeps the loader version that the launcher installed.
-
-Server owners can turn loader version syncing off with `syncLoaderVersion: false` in the server config. Then the server does not provide a loader version at all.
+Before changing anything, AutoModpack asks the Prism meta server whether it knows the target loader version. If it does not, the loader is left alone rather than risk installing something the launcher cannot resolve. Server owners can stop publishing a loader version entirely with `syncLoaderVersion: false` in the [server config](../configuration/server-config).

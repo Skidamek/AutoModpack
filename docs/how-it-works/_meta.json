@@ -1,0 +1,22 @@
+{
+  "generations.mdx": {
+    "name": "Generations and publishing",
+    "icon": null
+  },
+  "hosting.mdx": {
+    "name": "Hosting and connections",
+    "icon": null
+  },
+  "client-updates.mdx": {
+    "name": "Client updates and edits",
+    "icon": null
+  },
+  "client-storage.mdx": {
+    "name": "Client storage",
+    "icon": null
+  },
+  "files-on-disk.mdx": {
+    "name": "Files on disk",
+    "icon": null
+  }
+}

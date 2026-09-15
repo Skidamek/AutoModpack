@@ -3,16 +3,24 @@
     "name": "Quick start",
     "icon": null
   },
+  "pack-content.mdx": {
+    "name": "Building the modpack",
+    "icon": null
+  },
   "configuration": {
     "name": "Configuration",
     "icon": null
   },
-  "commands": {
+  "commands.mdx": {
     "name": "Commands",
     "icon": null
   },
-  "technicals": {
-    "name": "Technical details",
+  "security.mdx": {
+    "name": "Security",
+    "icon": null
+  },
+  "how-it-works": {
+    "name": "How it works",
     "icon": null
   },
   "compatibility": {

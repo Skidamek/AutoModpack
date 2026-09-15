@@ -4,11 +4,7 @@
     "icon": null
   },
   "client-config.mdx": {
-      "name": "Client configuration",
-      "icon": null
-  },
-  "troubleshooting.mdx": {
-    "name": "Troubleshooting",
+    "name": "Client configuration",
     "icon": null
   }
 }
