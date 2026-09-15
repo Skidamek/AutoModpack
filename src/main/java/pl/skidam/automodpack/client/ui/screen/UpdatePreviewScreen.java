@@ -132,7 +132,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	}
 
 	private void continueUpdate() {
-		if (finished) return;
+		if (finished && (actions == null || !actions.reviewActive().getAsBoolean() || actions.cancelledByPlayer().getAsBoolean())) return;
 		finished = true;
 		ScreenManager.waiting(actions == null ? null : actions.cancelFromPlayer());
 		continueAction.run();

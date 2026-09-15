@@ -567,7 +567,7 @@ public class ModpackUpdater implements AutoCloseable {
 		return runReviewedFlow(new ApplyFlow("Update", () -> {
 			if (!review.isCancelledByPlayer()) new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
 		}, e -> {
-			if (review.abortedByPlayer(e)) LOGGER.warn("Modpack update apply was aborted by the player", e);
+			if (review.abortedByPlayer(e)) LOGGER.info("Modpack update apply was aborted by the player");
 			else showUpdateFailure(e);
 		}, this::close), () -> {
 			ApplyResult applyResult = reviewed.commit();

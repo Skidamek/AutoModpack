@@ -87,6 +87,8 @@ final class ModpackObjectAcquisition {
 	}
 
 	int acquireTargetObjects(ModpackJsons.ModpackContentFields target, FileCache cache, boolean playerFacing) throws Exception {
+		failedDownloads.clear();
+		failedDownloadCategories.clear();
 		Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items = target.list == null ? List.of() : target.list;
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> targetObjects = uniqueObjects(items);
 		reserveObjects(targetObjects.stream().map(item -> item.sha1).collect(Collectors.toSet()));
@@ -146,6 +148,7 @@ final class ModpackObjectAcquisition {
 			Path downloadFile = storage.activePath(serverItem.file);
 			List<DownloadSource> sources = fetchManager == null ? List.of() : fetchManager.sourcesFor(serverItem.sha1);
 			Consumer<DownloadManager.FailureCategory> failureCallback = category -> {
+				if (category == DownloadManager.FailureCategory.CANCELLED) return;
 				failedDownloads.put(serverItem, sources.stream().map(DownloadSource::url).toList());
 				failedDownloadCategories.put(serverItem, category);
 			};
