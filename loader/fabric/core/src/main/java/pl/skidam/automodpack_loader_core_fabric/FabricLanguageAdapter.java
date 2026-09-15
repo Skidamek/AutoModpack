@@ -2,7 +2,6 @@ package pl.skidam.automodpack_loader_core_fabric;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
-import java.io.IOException;
 import java.nio.file.Path;
 
 import net.fabricmc.api.EnvType;
@@ -24,7 +23,7 @@ public class FabricLanguageAdapter implements LanguageAdapter {
 		FabricLoaderMods.install();
 		LoaderManager loaderManager = new LoaderManager();
 		mountImpl(loaderManager);
-		new Preload(loaderManager, new ModpackLoader(loaderManager));
+		new Preload(loaderManager, new ModpackLoader());
 	}
 
 	/**
@@ -42,9 +41,9 @@ public class FabricLanguageAdapter implements LanguageAdapter {
 		boolean client = FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT;
 		try {
 			Path implJar = ImplStore.select(FabricLanguageAdapter.class, targetId, client);
-			ImplMount.mount(implJar, loaderManager.getLoaderVersion());
-		} catch (IOException e) {
-			throw new RuntimeException("Failed to stage the AutoModpack impl jar", e);
+			ImplMount.mount(implJar);
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to stage or mount the AutoModpack impl jar", e);
 		}
 	}
 

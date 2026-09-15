@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_loader_core_fabric_15.mods;
+package pl.skidam.automodpack_loader_core_fabric.mods;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

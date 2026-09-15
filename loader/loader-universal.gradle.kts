@@ -9,8 +9,6 @@ import org.gradle.api.file.DuplicatesStrategy
 evaluationDependsOn(":core")
 evaluationDependsOn(":loader-fabric-shared")
 evaluationDependsOn(":loader-fabric-core")
-evaluationDependsOn(":loader-fabric-15")
-evaluationDependsOn(":loader-fabric-16")
 evaluationDependsOn(":loader-modlauncher-earlyservices")
 evaluationDependsOn(":loader-forge-earlyservices")
 evaluationDependsOn(":loader-forge-fml40")
@@ -85,8 +83,6 @@ tasks.named<ShadowJar>("shadowJar") {
 			":core",
 			":loader-fabric-shared",
 			":loader-fabric-core",
-			":loader-fabric-15",
-			":loader-fabric-16",
 			":loader-modlauncher-earlyservices",
 			":loader-forge-earlyservices",
 			":loader-forge-fml40",
