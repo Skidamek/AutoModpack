@@ -42,11 +42,15 @@ flow:
               - 'Bootstrapping \d+ early-service'
               - 'AUTOMODPACK_CONNECTOR_FIXTURE_INITIALIZED'
         - log:
+            # FML 11 enumerates every locator/reader service BEFORE the candidate phase that appends
+            # the hosted jars, so AutoModpack replays Connector's locators and forwards its reader
+            # itself (see EarlyServiceLayer). The coremod ClassProcessor is still discovered natively:
+            # FML scans ClassProcessors after discovery, when the flat chain already holds the jar.
             file: logs/debug.log
             matches_all:
-              - 'org\.sinytra\.connector\.locator\.ConnectorModFileReader from .*connector-3\.0\.0'
-              - 'org\.sinytra\.connector\.service\.ModuleLayerMigrator from .*connector-3\.0\.0'
-              - 'org\.sinytra\.connector\.locator\.ConnectorLocator from .*connector-3\.0\.0'
+              - 'Running in-place candidate locator org\.sinytra\.connector\.service\.ModuleLayerMigrator'
+              - 'Running in-place dependency locator org\.sinytra\.connector\.locator\.ConnectorLocator'
+              - 'Forwarded \d+ in-place IModFileReader.*connector-3\.0\.0'
               - 'org\.sinytra\.connector\.service\.coremod\.ConnectorClassProcessor'
   - do: assert
     name: Connector loaded the downstream Fabric mod cleanly and entirely in place

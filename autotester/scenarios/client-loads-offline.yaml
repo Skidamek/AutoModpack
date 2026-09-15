@@ -31,7 +31,11 @@ flow:
           - 'Prelaunching AutoModpack'
           - 'AutoModpack prelaunched'
         not_matches:
-          - 'ClassNotFoundException'
+          # The Mixin subsystem probes the @Pseudo FabricLoginMixin target (a Fabric API class this
+          # modpack deliberately does not install) and logs the absent target as a benign WARN -
+          # Mixin then skips the pseudo mixin ("Skipping virtual target"), so that probe alone is
+          # not a classloading failure and must not fail the assert. Any other CNFE still does.
+          - '^(?!.*Error loading class: net/fabricmc/fabric/impl/networking/server/ServerLoginNetworkAddon).*ClassNotFoundException'
           - 'Failed to load modpack'
   - use: finish_client_only
 

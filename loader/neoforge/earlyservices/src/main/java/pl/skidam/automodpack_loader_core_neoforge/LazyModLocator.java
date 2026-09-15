@@ -35,6 +35,10 @@ public class LazyModLocator implements IDependencyLocator {
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
+		// FML enumerated dependency locators before the candidate phase appended the hosted jars, so
+		// their own jar-in-jar locators never run natively - replay them here, in the dependency phase
+		// they belong to (see EarlyServiceLayer.runDependencyLocators).
+		EarlyServiceLayer.runDependencyLocators(loadedMods, pipeline);
 	}
 
 	private static Path implJar() throws IOException {

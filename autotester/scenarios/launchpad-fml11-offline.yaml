@@ -35,11 +35,15 @@ flow:
               - 'Bootstrapping \d+ early-service'
               - 'AUTOMODPACK_LAUNCHPAD_FIXTURE_INITIALIZED'
         - log:
+            # FML 11 enumerates every locator/reader service BEFORE the candidate phase that appends
+            # the hosted jars, so AutoModpack replays Launchpad's locators and forwards its reader
+            # itself (see EarlyServiceLayer). The ClassProcessorProvider is still discovered natively:
+            # FML scans processor providers after discovery, when the flat chain already holds the jar.
             file: logs/debug.log
             matches_all:
-              - 'org\.sinytra\.launchpad\.service\.FabricModJsonFileReader from .*launchpad-1\.8\.0'
-              - 'org\.sinytra\.launchpad\.service\.InDevFabricJarLocator from .*launchpad-1\.8\.0'
-              - 'org\.sinytra\.launchpad\.service\.FabricJarInJarLocator from .*launchpad-1\.8\.0'
+              - 'Running in-place candidate locator org\.sinytra\.launchpad\.service\.InDevFabricJarLocator'
+              - 'Running in-place dependency locator org\.sinytra\.launchpad\.service\.FabricJarInJarLocator'
+              - 'Forwarded \d+ in-place IModFileReader.*launchpad-1\.8\.0'
               - 'org\.sinytra\.launchpad\.service\.FabricAccessTransformerServiceProvider'
   - do: assert
     name: Launchpad loaded the downstream Fabric mod cleanly and entirely in place

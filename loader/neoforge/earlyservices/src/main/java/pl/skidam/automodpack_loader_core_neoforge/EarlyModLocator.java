@@ -78,7 +78,7 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 		try {
 			// Early-service hosting serves the client's active projection; a dedicated server has none.
 			if (Constants.LOADER_MANAGER.getEnvironmentType() != LoaderManagerService.EnvironmentType.CLIENT) {
-				addCandidates(pipeline);
+				addCandidates(context, pipeline);
 				return;
 			}
 
@@ -90,7 +90,11 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 				Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
 				hostInPlace(earlyServiceJars);
 			}
-			addCandidates(pipeline);
+			// Register every custom reader before adding any candidate, so a jar owned by a hosted
+			// reader (a translated Fabric mod, for example) is read with it no matter which jar
+			// discovery reaches first.
+			EarlyServiceLayer.runModFileReaders(pipeline);
+			addCandidates(context, pipeline);
 		} catch (Throwable t) {
 			Constants.LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
 			throw new RuntimeException("AutoModpack early-service bootstrap failed", t);
@@ -98,11 +102,11 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 	}
 
 	/** Adds this launch's projected mods to discovery; hosted early-service shims are skipped (their locators contribute the real mod). */
-	private void addCandidates(IDiscoveryPipeline pipeline) {
+	private void addCandidates(ILaunchContext context, IDiscoveryPipeline pipeline) {
+		List<Path> unclaimablePaths = new ArrayList<>();
 		for (Path path : ModpackLoader.modsToLoad) {
 			// A standalone early-service jar is a regular mod file. A split service shim is not:
-			// its candidate/dependency locator was discovered natively after the jar was appended to
-			// FMLLoader's classloader chain and is responsible for contributing the real mod.
+			// its replayed candidate/dependency locator is responsible for contributing the real mod.
 			if (EarlyServiceLayer.isEarlyServiceJar(path)) {
 				if (!EarlyServiceLayer.isStandaloneModFile(path)) continue;
 				try {
@@ -114,8 +118,15 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 				continue;
 			}
 
-			pipeline.addPath(path, ModFileDiscoveryAttributes.DEFAULT, IncompatibleFileReporting.WARN_ALWAYS);
+			// A path no native reader could turn into a mod file is exactly the Fabric-only jar a
+			// replayed Connector-style locator owns - hand it to the connector additional locations.
+			if (pipeline.addPath(path, ModFileDiscoveryAttributes.DEFAULT, IncompatibleFileReporting.WARN_ALWAYS).isEmpty()) {
+				unclaimablePaths.add(path);
+			}
 		}
+		ModpackLoader.configureConnectorFallback(unclaimablePaths);
+		// Replay all hosted candidate locators together, priority-ordered (see the method).
+		EarlyServiceLayer.runCandidateLocators(context, pipeline);
 	}
 
 	/**
@@ -139,7 +150,7 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 			if (earlyServiceJars.isEmpty()) return;
 		}
 
-		EarlyServiceLayer.register(earlyServiceJars);
+		EarlyServiceLayer.register(earlyServiceJars, childLoader);
 
 		for (Path jar : earlyServiceJars) {
 			for (String impl : EarlyServiceLayer.serviceImpls(jar, EarlyServiceLayer.GRAPHICS_BOOTSTRAPPER_SERVICE)) {
