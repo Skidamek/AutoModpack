@@ -30,6 +30,9 @@ Usually not. The default `HOLEPUNCH` mode carries the modpack connection through
 ### What happens when the server updates AutoModpack itself?
 Clients follow the version the server runs: they update or downgrade through Modrinth to match it. See [AutoModpack's own updates](how-it-works/client-updates#automodpacks-own-updates).
 
+### Which modes need a port on the server?
+`HOLEPUNCH` and `MAGIC` can share the Minecraft port. `MAGIC`, `DIRECT`, and `HTTP` can also run on their own `bindPort`, and `HTTP` additionally runs fine advertise-only with the URL contract served by any static HTTPS host. The complete matrix is in [hosting](how-it-works/hosting#connection-modes-and-ports).
+
 ### Why does the pack live under `host-modpack/main/`?
 Each group has a directory under `automodpack/host-modpack/<group>/`, and `main` is the default group. File rules live on each group in the `modpack` section of the [server config](configuration/server-config#groups); pasting `syncedFiles` at the top level of the config does nothing.
 

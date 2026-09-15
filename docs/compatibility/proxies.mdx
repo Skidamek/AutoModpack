@@ -19,6 +19,7 @@ Gate Lite forwards the packets out of the box. What needs care is routing: the c
 - `HOLEPUNCH` must deliver the marked Minecraft login to a backend with holepunch handling enabled. On Forge and NeoForge the Handshake hostname carries the normal `\0FML3\0` extra, so a packed backend classifies the connection as modded.
 - `MAGIC` must preserve the AMMH handshake before any TLS. With `bindPort: -1`, route to the backend Minecraft port; with an explicit port, route to the dedicated magic listener.
 - `DIRECT` must deliver TLS to a dedicated listener. `DIRECT` with `bindPort: -1` starts no built-in listener at all.
+- `HTTP` is a plain HTTPS file host from the routing point of view: any reverse proxy or static host that forwards HTTPS GETs for `/head`, `/journal`, and `/objects/<sha1>` to the dedicated listener, or to an exported contract tree, works.
 
 PROXY protocol headers on dedicated `MAGIC` and `DIRECT` listeners are honored only when `acceptProxyProtocol` is on, and only when a trusted proxy fronts AutoModpack, since a claimed source address feeds IP bans and audit logs.
 

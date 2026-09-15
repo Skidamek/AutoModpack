@@ -9,12 +9,15 @@ Players need a route from their game to your modpack files. AutoModpack ships a 
 | `HOLEPUNCH` | Serves the pack over your Minecraft server port. | `bindPort` is ignored; HOLEPUNCH always uses your Minecraft server port. |
 | `MAGIC` | Serves the pack over your Minecraft server port. | Serves the pack on `bindPort`. |
 | `DIRECT` | `bindPort` is ignored; DIRECT opens no port, so the pack endpoint must be handled by something else. | Serves the pack on `bindPort`. |
+| `HTTP` | Opens no port; the pack endpoint must be handled by something else, for example a static HTTPS host of an exported contract tree. | Serves the pack on `bindPort` as plain HTTPS file semantics. |
 
 `HOLEPUNCH` is the default and needs no open port beyond Minecraft's. The client sends a Minecraft Login Start whose UUID carries a marker, and the server claims that connection for AutoModpack before vanilla builds a login listener. Unmarked logins reach Minecraft unchanged. On Forge and NeoForge the holepunch handshake carries the same `\0FML3\0` hostname extra a normal modded client sends, so packed servers do not reject the connection as vanilla before the marker is read.
 
 `MAGIC` marks its connections with the bytes `AMMH` followed by an `AMOK` confirmation before any TLS. On the shared Minecraft port, traffic without the marker passes through to Minecraft untouched. On a dedicated listener, non-magic traffic is rejected.
 
 The advertised mode is strict: the client uses the one mode the server advertises and does not fall back to another after a failure.
+
+`HTTP` serves a 100%-public pack over plain HTTPS file semantics: clients fetch the three routes with ordinary GET requests, and the client sends no secret, so `validateSecrets` and `secretLifetime` do not apply to this listener. The certificate verification ladder is the same as in every other mode. The embedded listener and any static host of an exported contract tree serve byte-identical bytes, so clients cannot tell them apart.
 
 ## TLS
 
@@ -28,7 +31,11 @@ PROXY protocol headers are honored on dedicated `MAGIC` and `DIRECT` listeners w
 
 ## Reverse proxies and external endpoints
 
-Setting `modpackHost` to `false` turns off every built-in listener and holepunch handler. Clients still receive connection information, which can point at a proxy or a separate host. AutoModpack cannot validate that routing from the Minecraft server process, so the endpoint must speak the advertised mode exactly. Known-good proxy setups, including the Velocity plugin and Gate Lite, are described on the [proxies page](../compatibility/proxies).
+Setting `modpackHost` to `false` turns off every built-in listener and holepunch handler. Clients still receive connection information, which can point at a proxy or a separate host. AutoModpack cannot validate that routing from the Minecraft server process, so the endpoint must speak the advertised mode exactly. For `HTTP` this is a supported advertise-only shape: the game server only advertises, and the URL contract is served externally. Known-good proxy setups, including the Velocity plugin and Gate Lite, are described on the [proxies page](../compatibility/proxies).
+
+## HTTP contract export
+
+The whole URL contract is three GET routes — `/head`, `/journal`, and `/objects/<sha1>` — so any static HTTPS host can serve it. `/automodpack generate export-http <directory>` writes the tree as byte-for-byte copies of the hosted files: point nginx, S3, or any dumb file host at the directory and clients cannot tell it apart from the embedded listener. The export works in every connection mode and needs no listener, and nothing already in the directory is ever deleted, so stale objects from old generations are yours to collect. Setting `exportHttpDirectory` in the [server config](../configuration/server-config#network-and-hosting) does the same export automatically after every publish.
 
 ## Bandwidth
 

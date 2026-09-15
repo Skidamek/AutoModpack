@@ -8,8 +8,10 @@ description: |
 renderClient: true
 
 # Run the complete release gate independently through each supported opening.
-# DIRECT uses a dedicated listener while MAGIC shares the Minecraft
-# listener and HOLEPUNCH takes over the marked Login stream.
+# DIRECT and HTTP use dedicated listeners while MAGIC shares the Minecraft
+# listener and HOLEPUNCH takes over the marked Login stream. HTTP serves the
+# pack over plain HTTPS file semantics for a fully public pack and carries no
+# secret.
 connectionPaths:
   - mode: DIRECT
     bindPort: 25566
@@ -20,6 +22,9 @@ connectionPaths:
   - mode: HOLEPUNCH
     bindPort: -1
     endpointPort: 25565
+  - mode: HTTP
+    bindPort: 25567
+    endpointPort: 25567
 
 releaseGate:
   covers:
@@ -168,7 +173,7 @@ flow:
     patchNotes: "Initial release: core content and optional client groups."
     timeout: 300s
   - do: assert_authenticated_secret
-    name: verify authenticated login persisted the server-issued secret
+    name: verify the login persisted the connection mode's honest secret state
   - do: assert_generation
     name: verify advanced group metadata and latest notes were installed
     groups:

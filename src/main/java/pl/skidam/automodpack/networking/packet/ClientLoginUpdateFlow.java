@@ -31,6 +31,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
@@ -211,7 +212,9 @@ final class ClientLoginUpdateFlow {
 		connectionInfo.approveOrigin(AddressHelpers.formatAddress(connectionInfo.origin));
 		try {
 			ConnectionStore.saveConnection(storage, serverModpackContent.modpackId, connectionInfo);
-			ConnectionStore.saveClientSecret(storage, serverModpackContent.modpackId, connectionInfo.origin, secret);
+			// HTTP packs have no credential: the login handshake still issues a secret for the custom modes, but
+			// absence persisted as absence is what keeps the auth machinery out of the HTTP mode entirely.
+			if (connectionInfo.connectionMode != ModpackConnectionMode.HTTP) ConnectionStore.saveClientSecret(storage, serverModpackContent.modpackId, connectionInfo.origin, secret);
 		} catch (Exception e) {
 			transport.close();
 			presentFailure(e, "automodpack.error.storage", FailureCategory.STORAGE);

@@ -86,6 +86,7 @@ When a client cannot detect a platform at all, groups without `compatiblePlatfor
 | `acceptProxyProtocol` | `false` | Honors HAProxy PROXY protocol headers on dedicated listeners. Enable only behind a trusted proxy: a claimed source address feeds IP bans and audit logs, and a forged one lets a banned player past the ban. |
 | `validateSecrets` | `true` | Requires a per-player secret, issued through the Minecraft login, for pack downloads. See [security](../security#download-authorization). A standalone host process has no login to provision secrets, so a fresh standalone config defaults this to `false`. |
 | `secretLifetime` | `336` | How long a download secret stays valid, in hours. 336 hours is 14 days. |
+| `exportHttpDirectory` | `""` | Non-empty: after every publish, the URL-contract tree (`head`, `journal`, `objects/`) is exported to this directory, ready to serve with any static HTTPS host. See [HTTP contract export](../how-it-works/hosting#http-contract-export). |
 
 Setting `modpackHost` to `false` turns off every built-in listener while clients keep receiving connection information. AutoModpack cannot validate external routing from the Minecraft server process, so a reverse proxy setup is your responsibility; the [proxies page](../compatibility/proxies) covers known-good setups.
 

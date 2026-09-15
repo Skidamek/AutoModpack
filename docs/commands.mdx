@@ -12,6 +12,7 @@
 - `/automodpack generate revert <seq>` - Previews a rollback to journal sequence `<seq>`.
 - `/automodpack generate revert <seq> confirm [notes <text...>]` - Publishes the selected old state as a new generation.
 - `/automodpack generate storage` - Reports how many bytes the journal and the object store hold.
+- `/automodpack generate export-http <directory>` - Writes the URL-contract tree (`head`, `journal`, `objects/<sha1>`) as byte-for-byte copies of the hosted files, ready for any static HTTPS host. Works in every connection mode and never deletes anything from the directory.
 - `/automodpack generate storage collect confirm` - Deletes every object the current generation does not serve. Older generations stay listed in the journal but can no longer be restored.
 
 Patch notes for the next publish can also be written to `automodpack/host-modpack/patch-notes.md`; the file is read and cleared when a generation publishes. Publishing, rollbacks, and storage are explained in [generations](how-it-works/generations).

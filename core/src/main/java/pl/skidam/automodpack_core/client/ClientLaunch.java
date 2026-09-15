@@ -18,6 +18,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -55,7 +56,8 @@ public final class ClientLaunch {
 
 		ConnectionJsons.ConnectionInfo connectionInfo = seeded.connection();
 		Secrets.Secret secret = seeded.secret();
-		if (secret == null) LOGGER.info("No saved secret yet for origin {}; the server will decide", AddressHelpers.formatAddress(connectionInfo.origin));
+		// A missing secret is news only where one is expected: HTTP packs have no credential at any point.
+		if (secret == null && connectionInfo.connectionMode != ModpackConnectionMode.HTTP) LOGGER.info("No saved secret yet for origin {}; the server will decide", AddressHelpers.formatAddress(connectionInfo.origin));
 
 		// updateSelectedModpackOnLaunch=false loads the current projection and does not contact the
 		// server, so extra jars in mods/ stay put (binary search, pinning experiments). A trusted
