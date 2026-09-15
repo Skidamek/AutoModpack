@@ -78,7 +78,9 @@ public interface ScreenService {
 
 	/**
 	 * Ends the current wait/download episode and returns to the remembered parent. No-op when a successor already
-	 * replaced it or no wait is showing. A wait cannot outlive the engine: {@code ModpackUpdater.close()} always calls this.
+	 * claimed the episode (restart, welcome, preview, failure) or no wait is showing — including when that successor
+	 * is still waiting on the loading dwell. A wait cannot outlive the engine: {@code ModpackUpdater.close()} always
+	 * calls this.
 	 */
 	default void restore() {}
 

@@ -66,62 +66,62 @@ public class ScreenImpl implements ScreenService {
 
 	@Override
 	public void changelog(Changelogs changelogs) {
-		Screens.supersedeWait();
+		Screens.commitSuccessor();
 		executeOnClient(() -> Screens.changelog(Screens.getScreen(), changelogs));
 	}
 
 	@Override
 	public void restart(UpdateType updateType, Changelogs changelogs) {
-		Screens.supersedeWait();
+		Screens.commitSuccessor();
 		executeOnClient(() -> Screens.restart(updateType, changelogs));
 	}
 
 	@Override
 	public void completeWithoutRestart() {
-		Screens.supersedeWait();
+		Screens.commitSuccessor();
 		executeOnClient(Screens::multiplayer);
 	}
 
 	@Override
 	public void welcome(ReviewPayload payload) {
-		Screens.supersedeWait();
+		Screens.commitSuccessor();
 		executeOnClient(() -> Screens.welcome(payload));
 	}
 
 	@Override
 	public boolean preview(PreviewPayload payload) {
-		Screens.supersedeWait();
+		Screens.commitSuccessor();
 		executeOnClient(() -> Screens.preview(payload));
 		return true;
 	}
 
 	@Override
 	public void history(HistoryViewRequest request) {
-		Screens.supersedeWait();
+		Screens.commitSuccessor();
 		executeOnClient(() -> Screens.history(request));
 	}
 
 	@Override
 	public void failure(FailureRequest request) {
-		Screens.supersedeWait();
+		Screens.commitSuccessor();
 		executeOnClient(() -> Screens.failure(request));
 	}
 
 	@Override
 	public void validation(String fingerprint, String origin, Runnable validated, Runnable canceled) {
-		Screens.supersedeWait();
+		Screens.commitSuccessor();
 		executeOnClient(() -> Screens.validation(fingerprint, origin, validated, canceled));
 	}
 
 	@Override
 	public void originChange(String modpackName, String approvedOrigins, String newOrigin, Runnable allowed, Runnable refused) {
-		Screens.supersedeWait();
+		Screens.commitSuccessor();
 		executeOnClient(() -> Screens.originChange(modpackName, approvedOrigins, newOrigin, allowed, refused));
 	}
 
 	@Override
 	public void detachedJoin(String modpackName, boolean headMatchesActive, Runnable continueJoin, Runnable syncNow) {
-		Screens.supersedeWait();
+		Screens.commitSuccessor();
 		executeOnClient(() -> Screens.detachedJoin(modpackName, headMatchesActive, continueJoin, syncNow));
 	}
 
@@ -151,6 +151,7 @@ public class ScreenImpl implements ScreenService {
 
 	@Override
 	public void restore() {
+		if (Screens.successorCommitted()) return;
 		Screens.supersedeWait();
 		executeOnClient(Screens::restoreIfWaiting);
 	}
@@ -204,6 +205,14 @@ public class ScreenImpl implements ScreenService {
 
 		static void supersedeWait() {
 			WAIT.supersede();
+		}
+
+		static void commitSuccessor() {
+			WAIT.commitSuccessor();
+		}
+
+		static boolean successorCommitted() {
+			return WAIT.successorCommitted();
 		}
 
 		private static Screen getScreen() {
@@ -347,6 +356,7 @@ public class ScreenImpl implements ScreenService {
 
 		/** Leaves a wait/download episode for the remembered parent; no-op when a successor already replaced it. */
 		static void restoreIfWaiting() {
+			if (WAIT.successorCommitted()) return;
 			WAIT.supersede();
 			if (!transientAttention && !isTransient(getScreen())) return;
 			Screens.setScreen(returnTarget(interactiveParent));
