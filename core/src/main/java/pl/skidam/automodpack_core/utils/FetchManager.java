@@ -134,11 +134,11 @@ public class FetchManager {
 		Map<String, String> slugs = ModrinthAPI.getProjectSlugs(results.stream().map(ModrinthAPI::modrinthID).collect(Collectors.toSet()));
 		for (ModrinthAPI info : results) {
 			Datas datas = fetchDatas.get(info.SHA1Hash());
-			if (datas != null) {
-				String mainPageUrl = ModrinthAPI.getMainPageUrl(datas.fetchData.fileType, slugs.getOrDefault(info.modrinthID(), info.modrinthID()));
-				platformCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
-				applyModrinth(datas, info.downloadUrl(), mainPageUrl);
-			}
+			String slug = slugs.get(info.modrinthID());
+			if (datas == null || slug == null || slug.isBlank()) continue;
+			String mainPageUrl = ModrinthAPI.getMainPageUrl(datas.fetchData.fileType, slug);
+			platformCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
+			applyModrinth(datas, info.downloadUrl(), mainPageUrl);
 		}
 	}
 
@@ -199,9 +199,11 @@ public class FetchManager {
 		if (modrinthInfos != null) {
 			Map<String, String> slugs = ModrinthAPI.getProjectSlugs(modrinthInfos.stream().map(ModrinthAPI::modrinthID).collect(Collectors.toSet()));
 			for (ModrinthAPI info : modrinthInfos) {
+				String slug = slugs.get(info.modrinthID());
+				if (slug == null || slug.isBlank()) continue;
 				String sha1 = info.SHA1Hash().toLowerCase(Locale.ROOT);
 				DeadLink deadLink = batch.get(sha1);
-				String mainPageUrl = deadLink == null ? null : ModrinthAPI.getMainPageUrl(deadLink.fileType(), slugs.getOrDefault(info.modrinthID(), info.modrinthID()));
+				String mainPageUrl = deadLink == null ? null : ModrinthAPI.getMainPageUrl(deadLink.fileType(), slug);
 				platformCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
 				fresh.computeIfAbsent(sha1, key -> new ArrayList<>()).add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.MODRINTH));
 			}
