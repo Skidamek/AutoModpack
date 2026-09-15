@@ -159,12 +159,14 @@ final class ReviewSession {
 	 * Opens the first-install review: scans the loader-visible mods for the cleanup consent, arms the confirmation, and
 	 * shows the welcome screen. The caller has already established that the pack has no local state.
 	 */
-	void beginFirstInstallReview() throws IOException {
+	void beginFirstInstallReview() throws IOException, InterruptedException {
 		firstConnection = true;
 		updater.fullDownload = true;
 		LOGGER.info("First-time install; scanning existing mods before the review screen");
 		sourceCatalogue.startSourceFetch();
+		if (isCancelledByPlayer()) throw new InterruptedException("Modpack update cancelled by the player");
 		firstInstallLocalModFiles = updater.storedTarget() == null ? scanFirstInstallLocalMods() : Map.of();
+		if (isCancelledByPlayer()) throw new InterruptedException("Modpack update cancelled by the player");
 		if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
 		ScreenManager.welcome(reviewPayload());
 	}
@@ -302,6 +304,7 @@ final class ReviewSession {
 		updater.getSelectedTarget(); // the engine's requireNonNull states the unavailable-target error
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		sourceCatalogue.startSourceFetch();
+		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		updater.requireLiveConnection();
 		UpdateSession session = updater.beginUpdateAttempt();
 		session.prepare(true, false);

@@ -52,31 +52,31 @@ final class SourceCatalogue {
 		return manager.mainPageUrlsFor(sha1);
 	}
 
-	void startSourceFetch() throws IOException {
-		if (sourceFetchManager != null) {
-			sourceFetchManager.fetch();
-			return;
+	void startSourceFetch() throws IOException, InterruptedException {
+		if (sourceFetchManager != null && sourceFetchManager.isCancelled()) sourceFetchManager = null;
+		if (sourceFetchManager == null) {
+			Map<String, FetchManager.FetchData> unique = new LinkedHashMap<>();
+			SelectedModpackTarget target = selectedTarget.get();
+			if (target != null) {
+				ModpackJsons.ModpackContentFields catalogue = target.completeTarget();
+				if (catalogue.list != null)
+					for (var item : catalogue.list)
+						addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.type);
+			}
+			sourceFetchManager = newSourceFetchManager(new ArrayList<>(unique.values()));
 		}
-		Map<String, FetchManager.FetchData> unique = new LinkedHashMap<>();
-		SelectedModpackTarget target = selectedTarget.get();
-		if (target != null) {
-			ModpackJsons.ModpackContentFields catalogue = target.completeTarget();
-			if (catalogue.list != null)
-				for (var item : catalogue.list)
-					addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.type);
-		}
-		sourceFetchManager = newSourceFetchManager(new ArrayList<>(unique.values()));
 		if (sourceFetchManager != null) sourceFetchManager.fetch();
 	}
 
 	/**
 	 * Joins an in-flight Modrinth/CurseForge lookup, so a review presented afterwards carries the final unverified
-	 * verdict instead of a late arrival flipping it. Bounded by the platform APIs' own HTTP timeouts; a cancelled
-	 * lookup just logs and returns.
+	 * verdict instead of a late arrival flipping it. Bounded by the platform APIs' own HTTP timeouts. A cancelled
+	 * lookup aborts; it is not a settled miss.
 	 */
-	void awaitSourceLookup() {
+	void awaitSourceLookup() throws InterruptedException {
 		FetchManager manager = sourceFetchManager;
-		if (manager == null || manager.isComplete()) return;
+		if (manager == null || (manager.isComplete() && !manager.isCancelled())) return;
+		if (manager.isCancelled()) throw new InterruptedException("Third-party source lookup was cancelled");
 		manager.fetch();
 	}
 
@@ -94,7 +94,7 @@ final class SourceCatalogue {
 	}
 
 	List<String> unverifiedSelectedJarPaths(SelectedModpackTarget target) {
-		if (target == null || target.flatTarget().list == null) return List.of();
+		if (target == null || target.flatTarget().list == null || !lookupSettled()) return List.of();
 		List<String> unverified = new ArrayList<>();
 		for (var item : target.flatTarget().list) {
 			if (!gatedJar(item.file)) continue;
@@ -103,9 +103,17 @@ final class SourceCatalogue {
 		return List.copyOf(unverified);
 	}
 
+	/** True when the platform lookup finished without being aborted, so a miss is a real miss. */
+	private boolean lookupSettled() {
+		FetchManager manager = sourceFetchManager;
+		return manager == null || (manager.isComplete() && !manager.isCancelled());
+	}
+
 	/** Jar counts by lookup source over the target's selected files; the server-only count equals the unverified set. */
 	SourceCounts selectedJarSourceCounts(SelectedModpackTarget target) {
 		if (target == null || target.flatTarget().list == null) return new SourceCounts(0, 0, 0);
+		FetchManager manager = sourceFetchManager;
+		if (manager != null && (manager.isCancelled() || !manager.isComplete())) return new SourceCounts(0, 0, 0);
 		Set<String> hashes = new LinkedHashSet<>();
 		for (var item : target.flatTarget().list) if (gatedJar(item.file) && item.sha1 != null && !item.sha1.isBlank()) hashes.add(item.sha1);
 		Map<String, PlatformCache.Record> records = hashes.isEmpty() ? Map.of() : platformCache.getAll(hashes);
@@ -146,7 +154,7 @@ final class SourceCatalogue {
 		List<FetchManager.FetchData> fetchData = new ArrayList<>(unique.values());
 		if (fetchData.isEmpty()) return null;
 		FetchManager current = sourceFetchManager;
-		if (current != null && fetchData.stream().allMatch(item -> current.tracks(item.sha1()))) return current;
+		if (current != null && !current.isCancelled() && fetchData.stream().allMatch(item -> current.tracks(item.sha1()))) return current;
 		if (current != null) current.cancel();
 		sourceFetchManager = newSourceFetchManager(fetchData);
 		return sourceFetchManager;
