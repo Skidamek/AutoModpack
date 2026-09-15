@@ -328,6 +328,11 @@ public final class ClientStorage {
 		return historyPackDirectory(modpackId).resolve(SERVER_JOURNAL_FILE.getFileName().toString()).normalize();
 	}
 
+	/** The per-pack replica of the server head document; like the journal mirror, a pure server artifact the client only swaps atomically. */
+	public Path historyHeadFile(String modpackId) {
+		return historyPackDirectory(modpackId).resolve("head.json").normalize();
+	}
+
 	/** The per-pack receipt of the last manual history compaction; informational state for the storage UI. */
 	public Path historyCompactionReceiptFile(String modpackId) {
 		return historyPackDirectory(modpackId).resolve("compaction.json").normalize();

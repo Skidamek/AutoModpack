@@ -18,7 +18,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
@@ -55,7 +55,7 @@ public final class ClientLaunch {
 
 		ConnectionJsons.ConnectionInfo connectionInfo = seeded.connection();
 		Secrets.Secret secret = seeded.secret();
-		if (seeded.anonymousSecret()) LOGGER.info("No saved secret for seeded/selected origin {}; using an anonymous preload secret", AddressHelpers.formatAddress(connectionInfo.origin));
+		if (secret == null) LOGGER.info("No saved secret yet for origin {}; the server will decide", AddressHelpers.formatAddress(connectionInfo.origin));
 
 		// updateSelectedModpackOnLaunch=false loads the current projection and does not contact the
 		// server, so extra jars in mods/ stay put (binary search, pinning experiments). A trusted
@@ -91,7 +91,7 @@ public final class ClientLaunch {
 	}
 
 	private void syncFromServer(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) throws Exception {
-		var manifestResult = ManifestFetcher.requestServerModpackContent(storage, connectionInfo, secret, false);
+		var manifestResult = ManifestFetcher.requestServerModpackContent(storage, connectionInfo, secret, false, clientConfig.selectedModpackId);
 		if (!manifestResult.successful()) {
 			// An unreachable server is a normal boot condition, not a failure: the installed pack keeps working and the
 			// next launch with the server up catches up. One calm line says so; the cause stays at debug.
@@ -101,29 +101,36 @@ public final class ClientLaunch {
 			return;
 		}
 
-		DownloadClient downloadClient = manifestResult.client();
+		PackTransport transport = manifestResult.transport();
 		SelectedModpackTarget selectedTarget;
 		try {
 			selectedTarget = SelectedModpackTarget.prepare(manifestResult.content(), new ClientSelectionStore(storage.selectionFile()), ClientPlatform.current());
 		} catch (RuntimeException e) {
 			LOGGER.error("Failed to resolve the downloaded modpack catalogue and group selection", e);
-			downloadClient.close();
+			transport.close();
 			loadLocalModpack(connectionInfo, secret, hasActiveProjection());
 			return;
 		}
 		ModpackJsons.ModpackContentFields latestModpackContent = selectedTarget.flatTarget();
 		if (!Objects.equals(clientConfig.selectedModpackId, latestModpackContent.modpackId)) {
 			LOGGER.error("Selected modpack catalogue changed ID from {} to {}", clientConfig.selectedModpackId, latestModpackContent.modpackId);
-			downloadClient.close();
+			transport.close();
 			loadLocalModpack(connectionInfo, secret, hasActiveProjection());
 			return;
 		}
 		if (SelfUpdater.update(latestModpackContent)) {
-			downloadClient.close();
+			transport.close();
+			return;
+		}
+		if (manifestResult.unchanged()) {
+			// The installed head is the server head by hash: no planning or object work can be pending, so boot the local pack.
+			LOGGER.info("Server head matches the installed generation of {}; booting the local pack", latestModpackContent.modpackId);
+			transport.close();
+			loadLocalModpack(connectionInfo, secret, hasActiveProjection());
 			return;
 		}
 
-		ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, downloadClient);
+		ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, transport);
 		if (trustedBootstrapApply) updater.applyTrustedInstall();
 		else updater.processModpackUpdate(true);
 	}

@@ -2,6 +2,8 @@ package pl.skidam.automodpack_core.config;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Base64;
+
 import org.junit.jupiter.api.Test;
 
 import pl.skidam.automodpack_core.auth.Secrets;
@@ -104,7 +106,7 @@ class BootstrapConfigTest {
 		fields.modpackId = "abc1234";
 		fields.endpoint = "downloads.example.com:25564";
 		fields.connectionMode = ModpackConnectionMode.HOLEPUNCH;
-		fields.secret = Secrets.anonymousSecret().secret();
+		fields.secret = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[Secrets.BYTE_LENGTH]);
 		assertThrows(IllegalArgumentException.class, () -> BootstrapConfig.validate(fields));
 	}
 
