@@ -243,10 +243,6 @@ public final class UpdatePlanner {
 			// stops declaring the path editable.
 			if (overlay == null && session.has(new FileKey(Root.OVERLAY, relative)))
 				session.delete(new FileKey(Root.OVERLAY, relative), session.projected(new FileKey(Root.OVERLAY, relative)).sha1());
-			// Overlay bytes are published by editable-state reconciliation after the plan, never as plan installs;
-			// the plan only removes overlay rows the target no longer carries.
-			if (overlay == null && session.has(new FileKey(Root.OVERLAY, relative)))
-				session.delete(new FileKey(Root.OVERLAY, relative), session.projected(new FileKey(Root.OVERLAY, relative)).sha1());
 			if (!matches(existing, item.sha1, item.size)) session.install(modpackKey, item.sha1, item.size);
 
 			boolean copyToLive = !PinnedMods.protects(protectedIds, idsForPath(targetModsByPath, relative)) && (!activeMod || forceCopyPaths.contains(relative) || overlay != null);
