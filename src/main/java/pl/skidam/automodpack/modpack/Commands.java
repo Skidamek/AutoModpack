@@ -74,10 +74,12 @@ public class Commands {
 						.executes(Commands::previewModpack)
 						.then(literal("notes")
 								.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::previewModpack))))
-				.then(generateIfContentNode)
-				.then(generateRevertNode)
-				.then(literal("history").executes(Commands::generationHistory))
-				.then(generateStorageNode);
+			.then(generateIfContentNode)
+			.then(generateRevertNode)
+			.then(literal("history").executes(Commands::generationHistory))
+			.then(generateStorageNode)
+			.then(literal("export-http")
+					.then(argument("directory", StringArgumentType.greedyString()).executes(Commands::exportHttpTree)));
 		var automodpackNode = dispatcher.register(
 				literal("automodpack")
 						.executes(Commands::about)
@@ -396,9 +398,13 @@ public class Commands {
 
 	private static void reportHostStart(CommandContext<CommandSourceStack> context, String action) {
 		if (hostServer.isRunning()) {
-			send(context, "Modpack hosting " + action + "!", ChatFormatting.GREEN, true);
+			if (serverConfig.connectionMode == ModpackConnectionMode.HTTP)
+				send(context, "Modpack hosting " + action + "!", ChatFormatting.GREEN, "HTTP contract over HTTPS on port " + serverConfig.bindPort, ChatFormatting.WHITE, true);
+			else send(context, "Modpack hosting " + action + "!", ChatFormatting.GREEN, true);
 		} else if (!serverConfig.modpackHost) {
 			send(context, "Built-in modpack hosting is disabled by modpackHost.", ChatFormatting.YELLOW, false);
+		} else if (serverConfig.connectionMode == ModpackConnectionMode.HTTP && serverConfig.bindPort == -1) {
+			send(context, "HTTP with bindPort -1 is only advertised; the URL contract must be served externally over HTTPS.", ChatFormatting.YELLOW, false);
 		} else if (serverConfig.connectionMode == ModpackConnectionMode.DIRECT && serverConfig.bindPort == -1) {
 			send(context, "DIRECT with bindPort -1 uses only the advertised external endpoint; no built-in listener was started.", ChatFormatting.YELLOW, false);
 		} else {
@@ -419,7 +425,7 @@ public class Commands {
 		send(context, "/automodpack generate preview [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate if-content <content-token> [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate revert <seq> confirm [notes <text...>]", ChatFormatting.YELLOW, false);
-		send(context, "/automodpack generate history/storage [collect confirm]", ChatFormatting.YELLOW, false);
+		send(context, "/automodpack generate history/storage [collect confirm]/export-http <dir>", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack host start/stop/restart/connections/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
@@ -558,6 +564,20 @@ public class Commands {
 			send(context, "Changes from current: +" + netChanges.added() + " added, " + netChanges.changed() + " changed, " + netChanges.removed() + " removed",
 					ChatFormatting.YELLOW, false);
 		}
+	}
+
+	private static int exportHttpTree(CommandContext<CommandSourceStack> context) {
+		String directory = StringArgumentType.getString(context, "directory");
+		Util.backgroundExecutor().execute(() -> {
+			send(context, "Exporting the HTTP contract tree...", ChatFormatting.YELLOW, true);
+			try {
+				int written = modpackExecutor.exportHttp(Path.of(directory));
+				send(context, "Exported the HTTP contract tree", ChatFormatting.GREEN, written + " files, " + directory, ChatFormatting.WHITE, true);
+			} catch (IOException e) {
+				send(context, "FAILED: could not export the HTTP contract tree: " + e.getMessage(), ChatFormatting.RED, true);
+			}
+		});
+		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int generationHistory(CommandContext<CommandSourceStack> context) {

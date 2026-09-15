@@ -37,6 +37,7 @@ import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.handler.ConnectionLifetimeHandler;
+import pl.skidam.automodpack_core.protocol.netty.handler.HttpContractHandler;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -152,6 +153,19 @@ public class NettyServer {
 			return Optional.empty();
 		}
 
+		if (connectionMode == ModpackConnectionMode.HTTP) {
+			// HTTP is HTTPS-only by design: the embedded listener terminates TLS itself, so without it there is no
+			// protocol left to serve. Advertising-only stays supported through an external static host of the contract.
+			if (serverConfig.disableInternalTLS) {
+				LOGGER.error("HTTP requires the built-in TLS termination; disableInternalTLS leaves the listener with no protocol it can serve");
+				return Optional.empty();
+			}
+			if (serverConfig.bindPort == -1) {
+				LOGGER.info("HTTP is advertised without a built-in listener; expecting the contract to be served externally");
+				return Optional.empty();
+			}
+		}
+
 		try {
 			senderExecutor = Executors.newCachedThreadPool(r -> {
 				Thread t = new Thread(r, "automodpack-sender");
@@ -210,6 +224,15 @@ public class NettyServer {
 				.childHandler(new ChannelInitializer<SocketChannel>() {
 					@Override
 					protected void initChannel(SocketChannel ch) {
+						if (connectionMode == ModpackConnectionMode.HTTP) {
+							// No ConnectionLifetimeHandler and no authentication handshake in HTTP: the lifetime timer's
+							// pre-configuration bound would kill a long download, and the TLS handshake is the whole session.
+							// TLS is never optional here, so a cleartext request dies as an invalid TLS record and the socket closes.
+							ch.pipeline().addLast("traffic-shaper", NettyServer.this.trafficHandler());
+							ch.pipeline().addLast("tls", NettyServer.this.getSslCtx().newHandler(ch.alloc()));
+							ch.pipeline().addLast(MOD_ID, new HttpContractHandler(NettyServer.this, senderExecutor));
+							return;
+						}
 						// Nothing vanilla owns this socket, so the connection lifetime timer must exist from
 						// the first accepted byte: a connection that never sends its magic cannot pin the listener.
 						ch.pipeline().addLast(MOD_ID + "-connection-lifetime", new ConnectionLifetimeHandler());

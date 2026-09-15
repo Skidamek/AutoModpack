@@ -33,6 +33,8 @@ public class ServerConfigJsons {
 		public int bandwidthLimit = 0;
 		public boolean validateSecrets = true;
 		public long secretLifetime = 336; // 336 hours = 14 days
+		/** Non-empty: the URL-contract tree (head, journal, objects/) is exported to this directory after every publish, ready to serve with any static HTTPS host. */
+		public String exportHttpDirectory = "";
 		public boolean selfUpdater = false;
 		/** Loaders a client may run the modpack with; seeded with this server's loader on first load only, never re-added after the admin edits the set. */
 		public Set<String> acceptedLoaders = new HashSet<>();
