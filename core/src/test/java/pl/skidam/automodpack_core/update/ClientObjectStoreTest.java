@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -18,9 +19,12 @@ import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.modpack.generation.Journal;
+import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.ExpectedSizes;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileTrees;
@@ -149,6 +153,55 @@ class ClientObjectStoreTest {
 	}
 
 	@Test
+	void contradictoryMirrorSizeClaimsCannotFailTheSweep() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "contested-object".getBytes(StandardCharsets.UTF_8);
+		String contested = store(storage, bytes);
+		String orphan = store(storage, "orphan");
+		// The first claim lies about the size, the second tells the truth: server-authored history, so neither may throw.
+		writeMirror(storage, new JournalEntry.Change("mods/one.jar", null, 0, contested, bytes.length + 5),
+				new JournalEntry.Change("mods/two.jar", null, 0, contested, bytes.length));
+
+		assertTrue(ClientObjectStore.referencedHashes(storage).contains(contested));
+		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage, Set.of());
+
+		assertEquals(1, result.deletedObjectCount());
+		assertTrue(Files.exists(storage.objectFile(contested)), "The contested object stays reachable through the lying mirror");
+		assertFalse(Files.exists(storage.objectFile(orphan)));
+	}
+
+	@Test
+	void aContestedMirrorSizeStaysUnvouchedSoTheObjectMeasuresValid() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "contested-object".getBytes(StandardCharsets.UTF_8);
+		String contested = store(storage, bytes);
+		writeMirror(storage, new JournalEntry.Change("mods/one.jar", null, 0, contested, bytes.length + 5),
+				new JournalEntry.Change("mods/two.jar", null, 0, contested, bytes.length));
+
+		// The contradiction demotes the size to unknown, so it is measured from the bytes: no false invalid count.
+		ClientObjectStore.StorageReport report = ClientObjectStore.measure(storage);
+		assertEquals(2, report.referencedObjectCount(), "The contested object and the entry's policy document");
+		assertEquals(1, report.validReferencedObjectCount());
+		assertEquals(0, report.invalidReferencedObjectCount());
+	}
+
+	@Test
+	void historyClaimsFillUnknownHashesWithoutOverridingLocalReceipts() throws Exception {
+		String local = HashUtils.sha1("local".getBytes(StandardCharsets.UTF_8));
+		String unknown = HashUtils.sha1("unknown".getBytes(StandardCharsets.UTF_8));
+		String fresh = HashUtils.sha1("fresh".getBytes(StandardCharsets.UTF_8));
+		ExpectedSizes owned = new ExpectedSizes();
+		owned.optional(local, 100, "client baseline");
+		owned.optional(unknown, -1, "policy document");
+
+		ClientObjectStore.mergeHistoryClaims(owned, new TreeMap<>(Map.of(local, 5L, unknown, 7L, fresh, 9L)));
+
+		assertEquals(100L, owned.sizes().get(local), "A claim never overrides a locally verified receipt");
+		assertEquals(-1L, owned.sizes().get(unknown), "A claim never turns a local unknown into a receipt");
+		assertEquals(9L, owned.sizes().get(fresh));
+	}
+
+	@Test
 	void refusesCollectionWhenObjectStoreContainsSymlink() throws Exception {
 		ClientStorage storage = storage();
 		Path target = temporaryDirectory.resolve("outside");
@@ -220,6 +273,15 @@ class ClientObjectStoreTest {
 
 	private static String store(ClientStorage storage, String text) throws Exception {
 		return store(storage, text.getBytes(StandardCharsets.UTF_8));
+	}
+
+	/** Writes a hand-crafted mirror journal: the fixture for server-authored history that no honest staging would produce. */
+	private static void writeMirror(ClientStorage storage, JournalEntry.Change... changes) throws Exception {
+		Path fetched = Files.createTempFile(storage.gameDirectory(), "fetched-journal-", ".jsonl");
+		Journal journal = Journal.open(fetched);
+		journal.append(new JournalEntry(1, HashUtils.sha1("test-token".getBytes(StandardCharsets.UTF_8)), HashUtils.sha1("test-policy".getBytes(StandardCharsets.UTF_8)), TestPacks.CREATED, "Crafted",
+				JournalEntry.NO_RESTORE, List.of(changes)));
+		new JournalMirror(storage).replaceFrom(MODPACK_ID, fetched);
 	}
 
 	private static String store(ClientStorage storage, byte[] bytes) throws Exception {

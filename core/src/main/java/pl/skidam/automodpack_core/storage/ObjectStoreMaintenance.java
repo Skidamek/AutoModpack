@@ -45,7 +45,11 @@ public final class ObjectStoreMaintenance {
 		}
 	}
 
-	/** Hash-to-size reference accounting that rejects conflicting advertised sizes. */
+	/**
+	 * Hash-to-size reference accounting that rejects conflicting advertised sizes. One instance holds one trust
+	 * domain: a conflict means the domain's own state disagrees with itself, so it throws instead of guessing.
+	 * Claims from another domain (a peer's history) are resolved against it by the caller, never fed through raw.
+	 */
 	public static final class ExpectedSizes {
 		private final TreeMap<String, Long> sizes = new TreeMap<>();
 		private final HashSet<String> required = new HashSet<>();
