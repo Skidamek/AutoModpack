@@ -133,17 +133,21 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		openBrowserScreen(heading, VersionedText.translatable("automodpack.history.detailsDescription"), notes, changeSet(entry), restoreAction);
 	}
 
-	/** Turns one journal entry's recorded changes into the shared logical change model. */
+	/** Turns one journal entry's recorded changes into the shared logical change model: a removal's size is the bytes it freed, a modification also carries its "was" size. */
 	private static ChangeSet changeSet(JournalEntry entry) {
 		List<ChangeSet.Change> changes = new ArrayList<>(entry.changes().size());
-		for (JournalEntry.Change change : entry.changes())
+		for (JournalEntry.Change change : entry.changes()) {
+			JournalEntry.Change.Kind kind = change.kind();
+			long size = kind == JournalEntry.Change.Kind.REMOVED ? change.fromSize() : change.toSize();
+			Long beforeSize = kind == JournalEntry.Change.Kind.CHANGED ? change.fromSize() : null;
 			changes.add(new ChangeSet.Change(change.path(),
-					switch (change.kind()) {
+					switch (kind) {
 						case ADDED -> ChangeSet.Kind.ADDED;
 						case CHANGED -> ChangeSet.Kind.MODIFIED;
 						case REMOVED -> ChangeSet.Kind.REMOVED;
 					},
-					List.of(new ChangeSet.Occurrence("journal", change.path(), change.toSize(), change.fromSha1(), change.toSha1()))));
+					List.of(new ChangeSet.Occurrence("journal", change.path(), size, beforeSize, change.fromSha1(), change.toSha1(), null, List.of(), List.of()))));
+		}
 		return ChangeSet.of(changes);
 	}
 
@@ -153,7 +157,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, platformCacheDirectory());
 			this.minecraft.execute(() -> {
 				if (closed) return;
-				ScreenImpl.setScreen(new ChangeBrowserScreen(this, heading, description, referenced, Map.of(), restoreAction, notes, false, 0, ""));
+				ScreenImpl.setScreen(new ChangeBrowserScreen(this, heading, description, referenced, Map.of(), restoreAction, notes, 0, ""));
 			});
 		});
 	}

@@ -46,7 +46,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private final Component heading;
 	private final Component description;
 	private final List<MutableComponent> preamble;
-	private final boolean warnUnverified;
 	private final long downloadBytes;
 	private ChangeSet changes;
 	private final Map<String, String> groupNames;
@@ -75,16 +74,16 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private final List<Button> paneButtons = new ArrayList<>();
 
 	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> groupNames) {
-		this(parent, heading, description, changes, groupNames, null, List.of(), false, 0, "");
+		this(parent, heading, description, changes, groupNames, null, List.of(), 0, "");
 	}
 
 	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> groupNames, BrowserAction auxiliaryAction) {
-		this(parent, heading, description, changes, groupNames, auxiliaryAction, List.of(), false, 0, "");
+		this(parent, heading, description, changes, groupNames, auxiliaryAction, List.of(), 0, "");
 	}
 
 	/** The preamble is a pre-wrapped text block (for example an entry's full patch notes) drawn between the description and the browser. */
 	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> groupNames, BrowserAction auxiliaryAction, List<? extends MutableComponent> preamble,
-			boolean warnUnverified, long downloadBytes, String initialGroup) {
+			long downloadBytes, String initialGroup) {
 		super(heading);
 		this.parent = parent;
 		this.heading = Objects.requireNonNull(heading, "browser heading");
@@ -93,7 +92,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.changes = Objects.requireNonNull(changes, "browser changes");
 		this.groupNames = Map.copyOf(groupNames == null ? Map.of() : groupNames);
 		this.auxiliaryAction = auxiliaryAction;
-		this.warnUnverified = warnUnverified;
 		this.downloadBytes = Math.max(0, downloadBytes);
 		this.selectedGroup = initialGroup == null ? "" : initialGroup;
 	}
@@ -110,7 +108,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		int searchY = 35 + preambleHeight;
 		int controlsY = (narrow ? 59 : 35) + preambleHeight;
 		int controlsLeft = narrow ? panelLeft : panelLeft + searchWidth + GAP;
-		int controlCount = warnUnverified ? 3 : 2;
+		int controlCount = 3;
 		int controlWidth = Math.max(1, (panelWidth - (narrow ? GAP * controlCount : searchWidth + GAP * (controlCount + 1))) / controlCount);
 		this.browserTop = (narrow ? 83 : 59) + preambleHeight;
 		this.searchField = fieldWidget(panelLeft, searchY, searchWidth, VersionedText.translatable("automodpack.browser.search"), null, Integer.MAX_VALUE);
@@ -135,7 +133,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.paneActionsY = paneTop + 2 * this.font.lineHeight + 2;
 		this.contentDropdown = dropdownWidget(controlsLeft, controlsY, controlWidth, 20, VersionedText.literal(""));
 		this.groupDropdown = dropdownWidget(controlsLeft + GAP + controlWidth, controlsY, controlWidth, 20, VersionedText.literal(""));
-		if (warnUnverified) this.sourceDropdown = dropdownWidget(controlsLeft + (GAP + controlWidth) * 2, controlsY, controlWidth, 20, VersionedText.literal(""));
+		this.sourceDropdown = dropdownWidget(controlsLeft + (GAP + controlWidth) * 2, controlsY, controlWidth, 20, VersionedText.literal(""));
 		refreshDropdowns();
 		rebuildBrowser();
 		addPaneActions(this.paneActionsY);
@@ -231,7 +229,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		recomputeSummary();
 		if (menuOpen()) return;
 		if (this.browser != null) this.removeWidget(this.browser);
-		this.browser = new ChangeBrowserWidget(this.currentProjection, collapsedFolders, groupNames, warnUnverified, referencesResolved, this::toggleFolder, this::onFileSelected,
+		this.browser = new ChangeBrowserWidget(this.currentProjection, collapsedFolders, groupNames, referencesResolved, this::toggleFolder, this::onFileSelected,
 				this.minecraft, this.width, this.height, browserTop, browserBottom);
 		this.addRenderableWidget(this.browser);
 		this.browser.selectPath(selectedPath);
@@ -245,10 +243,8 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		}
 		String summary = UiFormat.plural(currentProjection.total().fileCount(), "automodpack.browser.summary", UiFormat.formatSize(currentProjection.total().byteCount())).getString();
 		if (!currentProjection.effects().isEmpty()) summary += " | " + UiFormat.plural(currentProjection.effects().size(), "automodpack.browser.effectsSummary").getString();
-		if (warnUnverified) {
-			long custom = currentProjection.files().stream().filter(ChangeBrowserScreen::isUnreferencedJar).count();
-			if (custom > 0) summary += " · " + UiFormat.plural(custom, "automodpack.browser.customSummary").getString();
-		}
+		long custom = currentProjection.files().stream().filter(ChangeBrowserScreen::isUnreferencedJar).count();
+		if (custom > 0) summary += " · " + UiFormat.plural(custom, "automodpack.browser.customSummary").getString();
 		if (downloadBytes > 0) summary += " · " + VersionedText.translatable("automodpack.browser.downloadCost", UiFormat.formatSize(downloadBytes)).getString();
 		this.summaryText = summary;
 	}
@@ -329,7 +325,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		return false;
 	}
 
-	/** A jar whose every occurrence lacks a platform reference: the pack ships a custom copy of it. */
+	/** A jar whose every occurrence lacks a platform reference: no Modrinth or CurseForge page is recorded for it. */
 	private static boolean isUnreferencedJar(ChangeBrowserProjection.FileRow file) {
 		if (!file.path().toLowerCase(Locale.ROOT).endsWith(".jar")) return false;
 		for (ChangeSet.Occurrence occurrence : file.occurrences()) if (!occurrence.references().isEmpty()) return false;

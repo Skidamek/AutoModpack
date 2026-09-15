@@ -79,10 +79,10 @@ public final class TestPacks {
 		for (var entry : next.files().entrySet()) {
 			ContentTree.ContentFile old = previous.files().get(entry.getKey());
 			if (old == null) changes.add(JournalEntry.Change.added(entry.getKey(), entry.getValue().sha1(), entry.getValue().size()));
-			else changes.add(new JournalEntry.Change(entry.getKey(), old.sha1(), entry.getValue().sha1(), entry.getValue().size()));
+			else changes.add(new JournalEntry.Change(entry.getKey(), old.sha1(), old.size(), entry.getValue().sha1(), entry.getValue().size()));
 		}
 		for (var entry : previous.files().entrySet())
-			if (!next.files().containsKey(entry.getKey())) changes.add(JournalEntry.Change.removed(entry.getKey(), entry.getValue().sha1()));
+			if (!next.files().containsKey(entry.getKey())) changes.add(JournalEntry.Change.removed(entry.getKey(), entry.getValue().sha1(), entry.getValue().size()));
 		changes.sort(Comparator.comparing(JournalEntry.Change::path));
 		return changes;
 	}

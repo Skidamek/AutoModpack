@@ -20,6 +20,7 @@ public class GenerationJsons {
 	public static class JournalChangeFields {
 		public String path = "";
 		public String fromSha1 = "";
+		public long fromSize;
 		public String toSha1 = "";
 		public long toSize;
 	}

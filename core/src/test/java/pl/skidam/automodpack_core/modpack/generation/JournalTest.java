@@ -13,6 +13,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.google.gson.Gson;
+
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 class JournalTest {
@@ -90,9 +93,32 @@ class JournalTest {
 		assertThrows(IOException.class, () -> Journal.openComplete(file));
 	}
 
+	@Test
+	void removalsCarryTheirFreedSizeThroughTheJournalLine() {
+		String sha1 = HashUtils.sha1("gone".getBytes(StandardCharsets.UTF_8));
+		JournalEntry.Change parsed = JournalEntry.Change.fromFields(JournalEntry.Change.removed("mods/custom.jar", sha1, 54321).toFields());
+		assertEquals(JournalEntry.Change.Kind.REMOVED, parsed.kind());
+		assertEquals(sha1, parsed.fromSha1());
+		assertEquals(54321, parsed.fromSize());
+		assertEquals(0, parsed.toSize());
+		assertEquals(0, JournalEntry.Change.fromFields(JournalEntry.Change.added("mods/new.jar", sha1, 7).toFields()).fromSize());
+		assertThrows(IllegalArgumentException.class, () -> new JournalEntry.Change("mods/custom.jar", null, 5, sha1, 0));
+	}
+
+	@Test
+	void journalLinesFromServersWithoutSourceSizesStillParse() {
+		String sha1 = HashUtils.sha1("gone".getBytes(StandardCharsets.UTF_8));
+		String line = "{\"path\":\"mods/custom.jar\",\"fromSha1\":\"" + sha1 + "\",\"toSha1\":\"\",\"toSize\":0}";
+		JournalEntry.Change parsed = JournalEntry.Change.fromFields(new Gson().fromJson(line, GenerationJsons.JournalChangeFields.class));
+		assertEquals(JournalEntry.Change.Kind.REMOVED, parsed.kind());
+		assertEquals(sha1, parsed.fromSha1());
+		assertEquals(0, parsed.fromSize());
+		assertThrows(IllegalArgumentException.class, () -> new JournalEntry.Change("mods/custom.jar", sha1, -1, null, 0));
+	}
+
 	private static JournalEntry entry(long seq, String content) {
 		String sha1 = HashUtils.sha1(content.getBytes(StandardCharsets.UTF_8));
 		return new JournalEntry(seq, sha1, HashUtils.sha1(("policy-" + seq).getBytes(StandardCharsets.UTF_8)), TestPacks.CREATED, "Entry " + seq, JournalEntry.NO_RESTORE,
-				List.of(new JournalEntry.Change("config/example.txt", null, sha1, content.length())));
+				List.of(new JournalEntry.Change("config/example.txt", null, 0, sha1, content.length())));
 	}
 }

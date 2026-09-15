@@ -39,17 +39,14 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 	private static final int BADGE_MODRINTH_COLOR = 0xFF00AF5C;
 	private static final int BADGE_CURSEFORGE_COLOR = 0xFFF16436;
 	private static final int BADGE_CUSTOM_COLOR = 0xFFAAAAAA;
-	private static final int BADGE_CUSTOM_UNVERIFIED_COLOR = 0xFFFF5555;
-	private final boolean warnUnverified;
 	private final boolean referencesResolved;
 	private final Consumer<String> folderToggle;
 	private final Consumer<ChangeBrowserProjection.FileRow> selectionChanged;
 
-	public ChangeBrowserWidget(ChangeBrowserProjection.Projection projection, Set<String> collapsedFolders, Map<String, String> groupNames, boolean warnUnverified, boolean referencesResolved,
+	public ChangeBrowserWidget(ChangeBrowserProjection.Projection projection, Set<String> collapsedFolders, Map<String, String> groupNames, boolean referencesResolved,
 			Consumer<String> folderToggle, Consumer<ChangeBrowserProjection.FileRow> selectionChanged, Minecraft client, int width, int height, int top, int bottom) {
 		super(client, width, height, 0, top, bottom, Math.min(600, Math.max(1, width - 24)), ROW_HEIGHT);
 		this.folderToggle = Objects.requireNonNull(folderToggle, "folder toggle");
-		this.warnUnverified = warnUnverified;
 		this.referencesResolved = referencesResolved;
 		this.selectionChanged = selectionChanged;
 		Set<String> collapsed = Set.copyOf(collapsedFolders == null ? Set.of() : collapsedFolders);
@@ -171,7 +168,7 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 			}
 			if (modrinth) badges.add(new Badge("MR", BADGE_MODRINTH_COLOR));
 			if (curseforge) badges.add(new Badge("CF", BADGE_CURSEFORGE_COLOR));
-			if (referencesResolved && badges.isEmpty() && file.path().toLowerCase(Locale.ROOT).endsWith(".jar")) badges.add(new Badge(VersionedText.translatable("automodpack.browser.custom").getString(), warnUnverified ? BADGE_CUSTOM_UNVERIFIED_COLOR : BADGE_CUSTOM_COLOR));
+			if (referencesResolved && badges.isEmpty() && file.path().toLowerCase(Locale.ROOT).endsWith(".jar")) badges.add(new Badge(VersionedText.translatable("automodpack.browser.custom").getString(), BADGE_CUSTOM_COLOR));
 			return badges;
 		}
 

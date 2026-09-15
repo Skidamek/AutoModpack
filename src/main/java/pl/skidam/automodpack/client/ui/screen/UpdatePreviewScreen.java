@@ -158,7 +158,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 
 	private void openFiles() {
 		ScreenImpl.setScreen(new ChangeBrowserScreen(this,
-				VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable(reviewKey(mode)), changes, preview.featureNames(), null, List.of(), true, preview.uncachedAcquisitionBytes(),
+				VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable(reviewKey(mode)), changes, preview.featureNames(), null, List.of(), preview.uncachedAcquisitionBytes(),
 				""));
 	}
 

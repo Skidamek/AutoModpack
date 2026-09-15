@@ -318,10 +318,10 @@ public final class GenerationStore {
 			ContentTree.ContentFile newFile = after.files().get(path);
 			if (oldFile == null && newFile == null) continue;
 			if (oldFile == null) changes.add(JournalEntry.Change.added(path, newFile.sha1(), newFile.size()));
-			else if (newFile == null) changes.add(JournalEntry.Change.removed(path, oldFile.sha1()));
+			else if (newFile == null) changes.add(JournalEntry.Change.removed(path, oldFile.sha1(), oldFile.size()));
 			else
 				if (!oldFile.sha1().equalsIgnoreCase(newFile.sha1()) || oldFile.size() != newFile.size())
-					changes.add(new JournalEntry.Change(path, oldFile.sha1(), newFile.sha1(), newFile.size()));
+					changes.add(new JournalEntry.Change(path, oldFile.sha1(), oldFile.size(), newFile.sha1(), newFile.size()));
 		}
 		return changes;
 	}

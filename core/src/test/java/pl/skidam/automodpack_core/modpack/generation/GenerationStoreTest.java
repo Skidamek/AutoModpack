@@ -130,9 +130,9 @@ class GenerationStoreTest {
 		String policyOne = storePolicyObject(objects, manifestOne);
 		String policyTwo = storePolicyObject(objects, manifestTwo);
 		JournalEntry firstEntry = new JournalEntry(1, ContentTree.tokenOf(manifestOne), policyOne, TestPacks.CREATED, "First", JournalEntry.NO_RESTORE,
-				List.of(new JournalEntry.Change("config/example.txt", sha1("previous"), first, "content-one".length())));
+				List.of(new JournalEntry.Change("config/example.txt", sha1("previous"), "previous".length(), first, "content-one".length())));
 		JournalEntry secondEntry = new JournalEntry(2, ContentTree.tokenOf(manifestTwo), policyTwo, TestPacks.CREATED, "Second", JournalEntry.NO_RESTORE,
-				List.of(new JournalEntry.Change("config/example.txt", first, second, "content-two".length())));
+				List.of(new JournalEntry.Change("config/example.txt", first, "content-one".length(), second, "content-two".length())));
 		Files.createDirectories(state);
 		Files.writeString(state.resolve("journal.jsonl"),
 				new Gson().toJson(firstEntry.toFields()) + "\n" + new Gson().toJson(secondEntry.toFields()) + "\n", StandardCharsets.UTF_8);
