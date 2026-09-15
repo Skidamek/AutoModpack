@@ -213,8 +213,8 @@ public class DownloadScreen extends VersionedScreen {
 
 	public void cancelDownload() {
 		try {
-			if (download != null && !download.isCancelled()) download.cancelAllAndShutdown();
 			if (onCancel != null) onCancel.run();
+			if (download != null && !download.isCancelled()) download.cancelAllAndShutdown();
 		} catch (Exception e) {
 			LOGGER.error("Failed to cancel the download run", e);
 		}

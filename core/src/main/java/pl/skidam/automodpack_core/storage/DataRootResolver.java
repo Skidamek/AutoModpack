@@ -10,6 +10,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.DurableFiles;
@@ -18,6 +19,7 @@ import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 /** Resolves the one shared-or-local AutoModpack data root for an instance. */
 public final class DataRootResolver {
+	private static final AtomicReference<Path> loggedRoot = new AtomicReference<>();
 	public record Layout(Path root) {
 		public Layout {
 			root = Objects.requireNonNull(root, "data root").toAbsolutePath().normalize();
@@ -156,23 +158,28 @@ public final class DataRootResolver {
 		if (configured != null) {
 			String failure = probe(configured);
 			if (failure != null) throw new IOException("Configured AutoModpack data root is unusable: " + failure);
-			LOGGER.info("Using the configured AutoModpack data root: {}", configured);
+			logRootOnce("Using the configured AutoModpack data root: {}", configured);
 			return configured;
 		}
 		if (environment == LoaderManagerService.EnvironmentType.SERVER) {
 			Path serverRoot = gameRoot.resolve(StoragePaths.SERVER_DATA_DIR).normalize();
-			LOGGER.info("AutoModpack server data root: {}", serverRoot);
+			logRootOnce("AutoModpack server data root: {}", serverRoot);
 			return serverRoot;
 		}
 		Path sharedRoot = platformDataRoot();
 		String sharedFailure = probe(sharedRoot);
 		if (sharedFailure == null) {
-			LOGGER.info("AutoModpack shared data root: {}", sharedRoot);
+			logRootOnce("AutoModpack shared data root: {}", sharedRoot);
 			return sharedRoot;
 		}
 		Path clientRoot = gameRoot.resolve(StoragePaths.CLIENT_DATA_DIR).normalize();
 		LOGGER.warn("Shared AutoModpack data root {} is unusable ({}); falling back to instance-local {}", sharedRoot, sharedFailure, clientRoot);
 		return clientRoot;
+	}
+
+	private static void logRootOnce(String message, Path root) {
+		Path previous = loggedRoot.getAndSet(root);
+		if (!root.equals(previous)) LOGGER.info(message, root);
 	}
 
 	private static Path configuredRoot(Path gameRoot) {

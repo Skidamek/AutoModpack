@@ -288,7 +288,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 	}
 
 	private void confirm() {
-		if (finished) return;
+		if (finished && (actions == null || !actions.reviewActive().getAsBoolean() || actions.cancelledByPlayer().getAsBoolean())) return;
 		if (unverified && (!acknowledged || countdown.running())) return;
 		if (firstInstall) {
 			if (!actions.reviewActive().getAsBoolean()) return;

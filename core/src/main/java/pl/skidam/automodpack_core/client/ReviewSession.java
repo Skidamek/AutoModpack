@@ -32,6 +32,7 @@ import pl.skidam.automodpack_core.update.JournalMirror;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.Throwables;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
@@ -223,7 +224,7 @@ final class ReviewSession {
 	}
 
 	boolean abortedByPlayer(Throwable cause) {
-		return isCancelledByPlayer() || CertificateTrustCancelledException.is(cause);
+		return isCancelledByPlayer() || CertificateTrustCancelledException.is(cause) || Throwables.findCause(cause, InterruptedException.class) != null;
 	}
 
 	/** Applies a new group selection and re-enters the preview path from confirm or preview customize. */
@@ -285,7 +286,10 @@ final class ReviewSession {
 			return outcome;
 		} catch (Exception e) {
 			if (abortedByPlayer(e) || confirmationState.get() == ConfirmationState.WAITING) {
-				if (abortedByPlayer(e)) LOGGER.warn("Modpack update preparation was aborted by the player", e);
+				if (abortedByPlayer(e)) {
+					playerCancelled.compareAndSet(false, true);
+					LOGGER.info("Modpack update preparation was aborted by the player");
+				}
 				return confirmCancellationHandled() ? ModpackUpdater.UpdateOutcome.REVIEW_OPENED : ModpackUpdater.UpdateOutcome.INCOMPLETE;
 			}
 			updater.close();

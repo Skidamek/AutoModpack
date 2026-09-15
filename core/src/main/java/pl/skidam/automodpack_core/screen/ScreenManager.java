@@ -11,6 +11,7 @@ import java.util.concurrent.Semaphore;
 import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.client.UpdateType;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
+import pl.skidam.automodpack_core.utils.Throwables;
 
 public final class ScreenManager {
 
@@ -65,6 +66,7 @@ public final class ScreenManager {
 	public static void failure(FailureRequest request) {
 		Objects.requireNonNull(request, "request");
 		if (CertificateTrustCancelledException.is(request.cause())) return;
+		if (Throwables.findCause(request.cause(), InterruptedException.class) != null) return;
 		String previousScreen = getScreenKind().orElse("none");
 		LOGGER.error("AutoModpack client failure [{}] ({}) on {}", request.category().key(), request.messageKey(), previousScreen, request.cause());
 		instance.failure(request);
