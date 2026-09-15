@@ -572,15 +572,34 @@ public class VersionedScreen extends Screen {
 	}
 
 	protected static List<String> wrapToWidth(Font font, String text, int maxWidth) {
+		if (text == null || text.isBlank() || maxWidth <= 0) return new ArrayList<>();
 		List<String> lines = new ArrayList<>();
-		if (text == null || text.isBlank() || maxWidth <= 0) return lines;
+		wrapLines(font, text, maxWidth, Integer.MAX_VALUE, lines);
+		return lines;
+	}
+
+	protected static List<String> wrapToWidth(Font font, String text, int maxWidth, int maxLines) {
+		if (maxLines <= 0 || text == null || text.isBlank() || maxWidth <= 0) return new ArrayList<>();
+		List<String> lines = new ArrayList<>();
+		boolean overflow = wrapLines(font, text, maxWidth, maxLines, lines);
+		if (!overflow) return lines;
+		List<String> truncated = new ArrayList<>(lines.subList(0, maxLines));
+		int last = truncated.size() - 1;
+		truncated.set(last, truncateToWidth(font, truncated.get(last) + "…", maxWidth));
+		return truncated;
+	}
+
+	/** Fills lines with wrapped lines; stops once limit is reached and reports whether content remained past it. */
+	private static boolean wrapLines(Font font, String text, int maxWidth, int limit, List<String> lines) {
 		for (String rawLine : text.split("\\R", -1)) {
 			String remaining = rawLine.strip();
 			if (remaining.isEmpty()) {
+				if (lines.size() >= limit) return true;
 				lines.add("");
 				continue;
 			}
 			while (!remaining.isEmpty()) {
+				if (lines.size() >= limit) return true;
 				String fitting = fitPrefix(font, remaining, maxWidth);
 				int end = fitting.length();
 				if (end < remaining.length()) {
@@ -592,24 +611,19 @@ public class VersionedScreen extends Screen {
 				remaining = remaining.substring(Math.min(end, remaining.length())).strip();
 			}
 		}
-		if (lines.isEmpty()) lines.add("");
-		return lines;
+		return false;
 	}
 
-	protected static List<String> wrapToWidth(Font font, String text, int maxWidth, int maxLines) {
-		List<String> lines = wrapToWidth(font, text, maxWidth);
-		if (maxLines <= 0) return new ArrayList<>();
-		if (lines.size() <= maxLines) return lines;
-		List<String> truncated = new ArrayList<>(lines.subList(0, maxLines));
-		int last = truncated.size() - 1;
-		truncated.set(last, truncateToWidth(font, truncated.get(last) + "…", maxWidth));
-		return truncated;
-	}
-
+	/** Largest prefix fitting maxWidth; width grows monotonically with length, so the fit binary searches in O(n log n). */
 	private static String fitPrefix(Font font, String text, int maxWidth) {
-		int end = text.length();
-		while (end > 0 && font.width(text.substring(0, end)) > maxWidth) end--;
-		return text.substring(0, end);
+		int lo = 0;
+		int hi = text.length();
+		while (lo < hi) {
+			int mid = (lo + hi + 1) / 2;
+			if (font.width(text.substring(0, mid)) <= maxWidth) lo = mid;
+			else hi = mid - 1;
+		}
+		return text.substring(0, lo);
 	}
 
 	protected final boolean isEnterKey(int keyCode) {
