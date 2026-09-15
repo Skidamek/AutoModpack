@@ -4,6 +4,8 @@ import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 import java.net.SocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.*;
 
 import io.netty.buffer.ByteBuf;
@@ -12,10 +14,12 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Serves post-handshake protocol messages. File sends are {@link FileSend}. */
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
@@ -68,11 +72,29 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 				break;
 			case FILE_REQUEST_TYPE :
 				FileRequestMessage fileRequest = (FileRequestMessage) msg;
-				fileSend.send(ctx, fileRequest.getFileHash(), protocolVersion, chunkSize);
+				if (documentUnchanged(fileRequest)) {
+					FileSend.sendUnchanged(ctx, protocolVersion);
+					break;
+				}
+				fileSend.send(ctx, fileRequest.getFileHash(), protocolVersion, chunkSize, fileRequest.getOffset(), fileRequest.getEndInclusive());
 				break;
 			default :
 				FileSend.sendError(ctx, protocolVersion, "Unknown message type");
 		}
+	}
+
+	private boolean documentUnchanged(FileRequestMessage request) {
+		byte[] expected = request.getExpectedSha1();
+		if (expected == null) return false;
+		String key = new String(request.getFileHash(), StandardCharsets.UTF_8);
+		// The expected-hash comparison happens here, after authentication; the decoder only parses the field.
+		if (!key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) && !key.equals(GenerationHosting.JOURNAL_KEY)) return false;
+		Optional<Path> path = server.getPath(key);
+		if (path.isEmpty()) return false;
+		String servedHash = HashUtils.getHash(path.get());
+		String expectedHash = new String(expected, StandardCharsets.UTF_8);
+		// The expected hash is untrusted wire input: only a well-formed digest matching the served document's SHA-1 short-circuits, anything else falls through to the normal send.
+		return servedHash != null && HashUtils.isSha1(expectedHash) && servedHash.equals(HashUtils.normalizeSha1(expectedHash));
 	}
 
 	private boolean validateSecret(ChannelHandlerContext ctx, SocketAddress address, byte[] secret) {

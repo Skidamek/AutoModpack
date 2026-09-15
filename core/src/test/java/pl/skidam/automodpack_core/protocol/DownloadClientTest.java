@@ -224,7 +224,7 @@ class DownloadClientTest {
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS,
 					TimeUnit.SECONDS)) {
 				List<CompletableFuture<Path>> downloads = new ArrayList<>();
-				for (int i = 0; i < 6; i++) downloads.add(client.downloadFile(new byte[0], directory.resolve("download-" + i), null));
+				for (int i = 0; i < 6; i++) downloads.add(client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), null));
 
 				assertTrue(server.firstFiveRequests().await(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertEquals(5, server.acceptedConnections());

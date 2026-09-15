@@ -70,6 +70,23 @@ class Connection implements AutoCloseable {
 	}
 
 	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
+		return sendDownloadFile(fileHash, destination, chunkCallback, null, 0, null);
+	}
+
+	/** Object request with an optional conditional hash and an inclusive range ({@code endInclusive} requires {@code offset} on the wire). */
+	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback, byte[] expectedSha1, long offset, Long endInclusive) {
+		return sendRequest(fileHash, destination, expectedSha1, offset, endInclusive, chunkCallback).thenApply(fetch -> {
+			if (fetch.unchanged()) throw new CompletionException(new IOException("Server answered UNCHANGED to an object request"));
+			return fetch.path();
+		});
+	}
+
+	/** Document request (reserved keys); a non-null expected hash may be answered with UNCHANGED instead of the document body. */
+	public CompletableFuture<DocumentFetch> sendDownloadDocument(byte[] key, Path destination, byte[] expectedSha1, IntConsumer chunkCallback) {
+		return sendRequest(key, destination, expectedSha1, 0, null, chunkCallback);
+	}
+
+	private CompletableFuture<DocumentFetch> sendRequest(byte[] fileHash, Path destination, byte[] expectedSha1, long offset, Long endInclusive, IntConsumer chunkCallback) {
 		if (destination == null) throw new IllegalArgumentException("Destination cannot be null");
 
 		return CompletableFuture.supplyAsync(() -> {
@@ -82,6 +99,14 @@ class Connection implements AutoCloseable {
 				dos.write(secretBytes);
 				dos.writeInt(fileHash.length);
 				dos.write(fileHash);
+				byte flags = 0;
+				if (expectedSha1 != null) flags |= FILE_REQUEST_EXPECTED_SHA1_FLAG;
+				if (offset != 0 || endInclusive != null) flags |= FILE_REQUEST_OFFSET_FLAG;
+				if (endInclusive != null) flags |= FILE_REQUEST_END_FLAG;
+				dos.writeByte(flags);
+				if (expectedSha1 != null) dos.write(expectedSha1);
+				if ((flags & FILE_REQUEST_OFFSET_FLAG) != 0) dos.writeLong(offset);
+				if ((flags & FILE_REQUEST_END_FLAG) != 0) dos.writeLong(endInclusive);
 
 				writeProtocolMessage(baos.toByteArray());
 				return readFileResponse(destination, chunkCallback);
@@ -113,7 +138,7 @@ class Connection implements AutoCloseable {
 		return ProtocolFrameCodec.read(in, getCompressionCodec(), chunkSize, frameScratch);
 	}
 
-	private Path readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {
+	private DocumentFetch readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {
 		ProtocolFrameCodec.Frame header = readProtocolMessageFrame();
 		ByteBuffer headerWrap = ByteBuffer.wrap(header.data(), 0, header.length());
 
@@ -127,7 +152,9 @@ class Connection implements AutoCloseable {
 			throw new IOException("Server error: " + new String(errBytes, StandardCharsets.UTF_8));
 		}
 
-		if (messageType == END_OF_TRANSMISSION) return destination;
+		if (messageType == UNCHANGED_TYPE) return new DocumentFetch(null, true);
+
+		if (messageType == END_OF_TRANSMISSION) return new DocumentFetch(destination, false);
 
 		if (messageType != FILE_RESPONSE_TYPE) throw new IOException("Unexpected message type: " + messageType);
 
@@ -148,7 +175,7 @@ class Connection implements AutoCloseable {
 
 		ProtocolFrameCodec.Frame eot = readProtocolMessageFrame();
 		if (eot.length() < 2 || eot.data()[0] != version || eot.data()[1] != END_OF_TRANSMISSION) throw new IOException("Invalid EOT frame");
-		return destination;
+		return new DocumentFetch(destination, false);
 	}
 
 	private CompressionType sendCompressionConfig(CompressionType desiredCompression) throws IOException {
@@ -174,10 +201,10 @@ class Connection implements AutoCloseable {
 		out.flush();
 	}
 
-	/** Reads and verifies the [version][type] header of one configuration reply, adopting the server's protocol version when it is older. */
+	/** Reads and verifies the [version][type] header of one configuration reply; both ends ship together, so any version other than ours fails loudly. */
 	private byte readConfigResponseHeader(byte expectedType) throws IOException {
 		byte version = in.readByte();
-		if (version >= 1 && version < protocolVersion) protocolVersion = version;
+		if (version != protocolVersion) throw new IOException("Protocol version mismatch: " + version);
 		byte type = in.readByte();
 		if (type != expectedType) throw new IOException("Unexpected response: " + type);
 		return version;

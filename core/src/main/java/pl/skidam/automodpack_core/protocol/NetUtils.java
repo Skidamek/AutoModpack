@@ -74,14 +74,22 @@ public class NetUtils {
 	public static final int MAGIC_AMMH = 0x414D4D48;
 	public static final int MAGIC_AMOK = 0x414D4F4B;
 
-	public static final byte LATEST_SUPPORTED_PROTOCOL_VERSION = 0x01;
+	public static final byte LATEST_SUPPORTED_PROTOCOL_VERSION = 0x02;
 
 	// Message types and configuration message types should not overlap
 	public static final byte ECHO_TYPE = 0x00;
 	public static final byte FILE_REQUEST_TYPE = 0x01;
 	public static final byte FILE_RESPONSE_TYPE = 0x02;
+	// Answer to a conditional document request whose expected hash still matches the served document; documents only, objects never.
+	public static final byte UNCHANGED_TYPE = 0x03;
 	public static final byte END_OF_TRANSMISSION = 0x04;
 	public static final byte ERROR = 0x05;
+
+	// FILE_REQUEST trailing extension flags (protocol 0x02): a set bit means the field follows the flags byte, in bit order; the end offset requires the range offset.
+	public static final byte FILE_REQUEST_EXPECTED_SHA1_FLAG = 0x01;
+	public static final byte FILE_REQUEST_OFFSET_FLAG = 0x02;
+	public static final byte FILE_REQUEST_END_FLAG = 0x04;
+	public static final byte FILE_REQUEST_KNOWN_FLAGS = FILE_REQUEST_EXPECTED_SHA1_FLAG | FILE_REQUEST_OFFSET_FLAG | FILE_REQUEST_END_FLAG;
 
 	public static final byte CONFIGURATION_ECHO_TYPE = 0x40;
 	public static final byte CONFIGURATION_COMPRESSION_TYPE = 0x41;

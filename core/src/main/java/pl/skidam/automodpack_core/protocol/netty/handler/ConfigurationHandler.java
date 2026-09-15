@@ -3,9 +3,11 @@ package pl.skidam.automodpack_core.protocol.netty.handler;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 
@@ -41,9 +43,8 @@ public class ConfigurationHandler extends ByteToMessageDecoder {
 		}
 
 		if (type == CONFIGURATION_ECHO_TYPE) {
-			if (version > LATEST_SUPPORTED_PROTOCOL_VERSION || version <= 0) {
-				LOGGER.debug("Failed to negotiate protocol version with client");
-				ctx.close();
+			if (version != LATEST_SUPPORTED_PROTOCOL_VERSION) {
+				rejectProtocolVersion(ctx, version);
 				return;
 			}
 			ctx.channel().attr(NettyServer.PROTOCOL_VERSION).set(version);
@@ -89,5 +90,20 @@ public class ConfigurationHandler extends ByteToMessageDecoder {
 			LOGGER.debug("Received unknown configuration message type: {} version: {}", type, version);
 			ctx.writeAndFlush(new UnknownConfigurationMessage(LATEST_SUPPORTED_PROTOCOL_VERSION).toByteBuf());
 		}
+	}
+
+	/**
+	 * Both ends ship together, so negotiation accepts exactly one version: anything else gets an ERROR frame and a closed socket. The reply echoes the client's claimed version and stays raw - the compression handler is
+	 * not involved yet.
+	 */
+	private static void rejectProtocolVersion(ChannelHandlerContext ctx, byte version) {
+		LOGGER.debug("Rejected protocol version {} from client", version);
+		byte[] message = "Unsupported protocol version".getBytes(StandardCharsets.UTF_8);
+		ByteBuf error = ctx.alloc().buffer(2 + Integer.BYTES + message.length);
+		error.writeByte(version);
+		error.writeByte(ERROR);
+		error.writeInt(message.length);
+		error.writeBytes(message);
+		ctx.writeAndFlush(error).addListener(ChannelFutureListener.CLOSE);
 	}
 }

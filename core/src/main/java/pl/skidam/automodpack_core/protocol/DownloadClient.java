@@ -435,6 +435,11 @@ public class DownloadClient implements AutoCloseable {
 		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback));
 	}
 
+	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers UNCHANGED and {@code destination} is not written. */
+	public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer chunkCallback) {
+		return withConnection(connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex == null ? null : expectedSha1Hex.getBytes(StandardCharsets.UTF_8), chunkCallback));
+	}
+
 	/** Drops every pooled and in-flight transfer connection so a cancelled run cannot poison the next one. */
 	public void abortTransfers() {
 		List<Connection> connections;

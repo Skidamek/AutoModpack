@@ -141,7 +141,7 @@ public class NettyServer {
 			return Optional.empty();
 		}
 
-		if (getPath("").isEmpty()) {
+		if (getPath(GenerationHosting.HEAD_DOCUMENT_KEY).isEmpty()) {
 			LOGGER.warn("No current generation record is prepared. Can't start modpack hosting.");
 			return Optional.empty();
 		}

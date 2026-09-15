@@ -72,15 +72,16 @@ public final class ManifestFetcher {
 		}
 
 		return createDownloadClient(connectionInfo, secret.secretBytes(), manualValidationCallbackAsync(connectionInfo, allowAskingUser))
-				.thenCompose(client -> fetchModpackContentAsync(storage, client, current -> current.downloadFile(new byte[0], storage.modpackContentTempFile(), null))
-						.thenCompose(content -> syncJournalMirror(storage, client, content.orElse(null))).handle((content, error) -> {
-							if (error != null || content.isEmpty()) {
-								client.close();
-								Throwable cause = error == null ? new IOException("Server returned no usable modpack content") : Throwables.unwrap(error);
-								return new ManifestFetchResult(ManifestFetchState.OPERATION_FAILED, null, null, cause);
-							}
-							return new ManifestFetchResult(ManifestFetchState.SUCCESS, content.get(), client, null);
-						}))
+				.thenCompose(
+						client -> fetchModpackContentAsync(storage, client, current -> current.downloadFile(GenerationHosting.HEAD_DOCUMENT_KEY.getBytes(StandardCharsets.UTF_8), storage.modpackContentTempFile(), null))
+								.thenCompose(content -> syncJournalMirror(storage, client, content.orElse(null))).handle((content, error) -> {
+									if (error != null || content.isEmpty()) {
+										client.close();
+										Throwable cause = error == null ? new IOException("Server returned no usable modpack content") : Throwables.unwrap(error);
+										return new ManifestFetchResult(ManifestFetchState.OPERATION_FAILED, null, null, cause);
+									}
+									return new ManifestFetchResult(ManifestFetchState.SUCCESS, content.get(), client, null);
+								}))
 				.exceptionally(error -> {
 					Throwable cause = Throwables.unwrap(error);
 					return new ManifestFetchResult(connectionFailedState, null, null, cause);

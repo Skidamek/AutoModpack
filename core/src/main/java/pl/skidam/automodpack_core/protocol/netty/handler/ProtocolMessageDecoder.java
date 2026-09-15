@@ -11,6 +11,7 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 public class ProtocolMessageDecoder extends ByteToMessageDecoder {
 	private static final int COMMON_HEADER_LENGTH = 2 * Byte.BYTES + Secrets.BYTE_LENGTH;
@@ -52,7 +53,30 @@ public class ProtocolMessageDecoder extends ByteToMessageDecoder {
 				}
 				byte[] fileHash = new byte[fileHashLength];
 				in.readBytes(fileHash);
-				out.add(new FileRequestMessage(version, secret, fileHash));
+				// Version 0x02 requests always carry the trailing extension section; a set flag bit means its field follows, in bit order.
+				if (in.readableBytes() < Byte.BYTES) {
+					in.resetReaderIndex();
+					return;
+				}
+				byte flags = in.readByte();
+				if ((flags & ~FILE_REQUEST_KNOWN_FLAGS) != 0) throw new IllegalArgumentException("Unknown file request extension flags: " + flags);
+				if ((flags & FILE_REQUEST_END_FLAG) != 0 && (flags & FILE_REQUEST_OFFSET_FLAG) == 0) throw new IllegalArgumentException("File request end offset requires a range offset");
+				int extensionBytes = ((flags & FILE_REQUEST_EXPECTED_SHA1_FLAG) != 0 ? HashUtils.SHA1_HEX_LENGTH : 0) + ((flags & FILE_REQUEST_OFFSET_FLAG) != 0 ? Long.BYTES : 0)
+						+ ((flags & FILE_REQUEST_END_FLAG) != 0 ? Long.BYTES : 0);
+				if (in.readableBytes() < extensionBytes) {
+					in.resetReaderIndex();
+					return;
+				}
+				byte[] expectedSha1 = null;
+				long offset = 0;
+				Long endInclusive = null;
+				if ((flags & FILE_REQUEST_EXPECTED_SHA1_FLAG) != 0) {
+					expectedSha1 = new byte[HashUtils.SHA1_HEX_LENGTH];
+					in.readBytes(expectedSha1);
+				}
+				if ((flags & FILE_REQUEST_OFFSET_FLAG) != 0) offset = in.readLong();
+				if ((flags & FILE_REQUEST_END_FLAG) != 0) endInclusive = in.readLong();
+				out.add(new FileRequestMessage(version, secret, fileHash, expectedSha1, offset, endInclusive));
 				break;
 			default :
 				throw new IllegalArgumentException("Unknown message type: " + type);
