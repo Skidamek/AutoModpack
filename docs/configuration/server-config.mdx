@@ -85,7 +85,7 @@ The client deletes a file only when all of the following conditions are met:
 - The local entry is a regular file.
 - The local SHA-1 hash and size match one of the historical entries in the ownership ledger.
 
-Files with changed contents and player-local paths are preserved. Before deletion, AutoModpack preserves the file bytes in the client content store. There is no configuration setting for arbitrary client-file deletion.
+Files with changed contents and files under `saves/`, `screenshots/`, `logs/`, and `automodpack/` are preserved. Before deletion, AutoModpack preserves the file bytes in the client content store. There is no configuration setting for arbitrary client-file deletion.
 
 ## Network & Hosting
 

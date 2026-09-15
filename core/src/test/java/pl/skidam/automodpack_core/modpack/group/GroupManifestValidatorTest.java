@@ -164,12 +164,11 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
-	void rejectsPlayerLocalRootsAndInvalidTypePathCombinations() {
+	void rejectsReservedRootsAndInvalidTypePathCombinations() {
 		for (var invalid : List.of(
 				Map.entry("saves/world.dat", "other"),
 				Map.entry("logs/latest.log", "other"),
 				Map.entry("screenshots/image.png", "other"),
-				Map.entry("server-resource-packs/pack.zip", "other"),
 				Map.entry("config/settings.json", "other"),
 				Map.entry("shaderpacks/shader.zip", "other"),
 				Map.entry("resourcepacks/pack.zip", "other"),
@@ -181,7 +180,7 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
-	void acceptsModFilesAtAnyNonPlayerLocalNonReservedPath() {
+	void acceptsModFilesAtAnyNonReservedPath() {
 		for (String path : List.of("mods/example.jar", "resourcepacks/example.jar", "shaderpacks/example.jar", "config/example.jar", "outside/example.jar")) {
 			var fields = catalogue();
 			fields.groups = Map.of("main", groupAt(path, fileOfType("mod")));
