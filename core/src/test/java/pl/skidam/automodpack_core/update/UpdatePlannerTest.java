@@ -27,6 +27,21 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void configOnlyGroupChangeRequestsNoRestart() {
+		String path = "config/example.toml";
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of(path, item(path, TARGET_HASH, 9, "config")),
+				ledger(entry(path, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		installed.selectedGroups = Set.of("group-a");
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(path, item(path, TARGET_HASH, 9, "config")),
+				ledger(entry(path, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		target.selectedGroups = Set.of("group-b");
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertEquals(Set.of(RestartReason.CHANGED_GROUP_SELECTION), plan.restartReasons());
+	}
+
+	@Test
 	void modShapedFileOutsideModsIsInstalledAtItsDeclaredPath() {
 		String path = "resourcepacks/mod-shaped-pack.jar";
 		UpdatePlan plan = UpdatePlanner.plan(input(manifest(Map.of(path, item(path, TARGET_HASH, 9, "mod")),
