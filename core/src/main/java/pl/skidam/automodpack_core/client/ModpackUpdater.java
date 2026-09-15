@@ -22,7 +22,7 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
@@ -66,7 +66,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private SelectedModpackTarget selectedTarget;
 	private ModpackJsons.ModpackContentFields serverModpackContent;
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
-	private final DownloadClient downloadClient;
+	private final PackTransport transport;
 	private final AtomicBoolean closed = new AtomicBoolean();
 	private final UpdateLoopDetector updateLoopDetector;
 	private final ClientStorage storage;
@@ -213,7 +213,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	public ModpackUpdater(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage,
-			DownloadClient downloadClient) {
+			PackTransport transport) {
 		this.selectedTarget = selectedTarget;
 		this.serverModpackContent = selectedTarget == null ? null : selectedTarget.flatTarget();
 		this.connectionInfo = connectionInfo;
@@ -223,9 +223,9 @@ public class ModpackUpdater implements AutoCloseable {
 		this.updateLoopDetector = new UpdateLoopDetector(storage.restartLoopStateFile());
 		this.sourceCatalogue = new SourceCatalogue(() -> selectedTarget, this.platformCache);
 		this.projectionLoader = new ProjectionLoader(this.storage, this::storedTarget);
-		this.downloadClient = downloadClient;
+		this.transport = transport;
 		AtomicBoolean playerCancelled = new AtomicBoolean();
-		this.objectAcquisition = new ModpackObjectAcquisition(this.storage, this.platformCache, this.sourceCatalogue, this.planBuilder, this.connectionInfo, this.downloadClient,
+		this.objectAcquisition = new ModpackObjectAcquisition(this.storage, this.platformCache, this.sourceCatalogue, this.planBuilder, this.connectionInfo, this.transport,
 				playerCancelled, this::getModpackName, this::cancelFromPlayer);
 		this.review = new ReviewSession(this, this.storage, this.sourceCatalogue, playerCancelled);
 		this.lifecycle = new LifecycleFlow(this, this.storage, this.planBuilder, this.changelogs);
@@ -627,7 +627,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (current != null) current.cancel();
 		objectAcquisition.release();
 		if (closed.compareAndSet(false, true)) {
-			if (downloadClient != null) downloadClient.close();
+			if (transport != null) transport.close();
 			platformCache.close();
 		}
 		ScreenManager.restore();

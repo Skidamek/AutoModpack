@@ -13,6 +13,8 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
@@ -20,12 +22,14 @@ import java.util.function.IntConsumer;
 
 import javax.net.ssl.SSLSocket;
 
+import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationChunkSizeMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationCompressionMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationEchoMessage;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** One configured TLS connection to the modpack server: negotiates compression and chunk size, then serves serialized file downloads. */
 class Connection implements AutoCloseable {
@@ -48,7 +52,9 @@ class Connection implements AutoCloseable {
 		if (transport != null && transport.isClosed()) throw new IOException("Server connection is closed");
 		this.socket = socket;
 		this.transport = transport;
-		this.secretBytes = secretBytes;
+		// Absence is absence on the wire too: a client with no secret sends the zero field the protocol shape reserves,
+		// which the server rejects as unauthenticated. One zero array per connection, never per message.
+		this.secretBytes = secretBytes == null ? new byte[Secrets.BYTE_LENGTH] : secretBytes;
 		this.executor = executor;
 
 		this.in = new DataInputStream(new BufferedInputStream(this.socket.getInputStream()));
@@ -75,7 +81,7 @@ class Connection implements AutoCloseable {
 
 	/** Object request with an optional conditional hash and an inclusive range ({@code endInclusive} requires {@code offset} on the wire). */
 	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback, byte[] expectedSha1, long offset, Long endInclusive) {
-		return sendRequest(fileHash, destination, expectedSha1, offset, endInclusive, chunkCallback).thenApply(fetch -> {
+		return sendRequest(fileHash, destination, expectedSha1, offset, endInclusive, false, chunkCallback).thenApply(fetch -> {
 			if (fetch.unchanged()) throw new CompletionException(new IOException("Server answered UNCHANGED to an object request"));
 			return fetch.path();
 		});
@@ -83,10 +89,11 @@ class Connection implements AutoCloseable {
 
 	/** Document request (reserved keys); a non-null expected hash may be answered with UNCHANGED instead of the document body. */
 	public CompletableFuture<DocumentFetch> sendDownloadDocument(byte[] key, Path destination, byte[] expectedSha1, IntConsumer chunkCallback) {
-		return sendRequest(key, destination, expectedSha1, 0, null, chunkCallback);
+		return sendRequest(key, destination, expectedSha1, 0, null, true, chunkCallback);
 	}
 
-	private CompletableFuture<DocumentFetch> sendRequest(byte[] fileHash, Path destination, byte[] expectedSha1, long offset, Long endInclusive, IntConsumer chunkCallback) {
+	private CompletableFuture<DocumentFetch> sendRequest(byte[] fileHash, Path destination, byte[] expectedSha1, long offset, Long endInclusive, boolean document,
+			IntConsumer chunkCallback) {
 		if (destination == null) throw new IllegalArgumentException("Destination cannot be null");
 
 		return CompletableFuture.supplyAsync(() -> {
@@ -109,7 +116,9 @@ class Connection implements AutoCloseable {
 				if ((flags & FILE_REQUEST_END_FLAG) != 0) dos.writeLong(endInclusive);
 
 				writeProtocolMessage(baos.toByteArray());
-				return readFileResponse(destination, chunkCallback);
+				// A conditional document's body hash is the ground truth, so a host that streams instead of answering
+				// UNCHANGED still reads as unchanged when the bytes match the expectation.
+				return readFileResponse(destination, offset, expectedSha1 != null && document ? expectedSha1 : null, chunkCallback);
 			} catch (Exception e) {
 				exception = e;
 				throw new CompletionException(e);
@@ -138,7 +147,7 @@ class Connection implements AutoCloseable {
 		return ProtocolFrameCodec.read(in, getCompressionCodec(), chunkSize, frameScratch);
 	}
 
-	private DocumentFetch readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {
+	private DocumentFetch readFileResponse(Path destination, long offset, byte[] expectedSha1, IntConsumer chunkCallback) throws IOException {
 		ProtocolFrameCodec.Frame header = readProtocolMessageFrame();
 		ByteBuffer headerWrap = ByteBuffer.wrap(header.data(), 0, header.length());
 
@@ -161,20 +170,26 @@ class Connection implements AutoCloseable {
 		long expectedFileSize = headerWrap.getLong();
 		if (expectedFileSize < 0) throw new IOException("Negative file size: " + expectedFileSize);
 		long receivedBytes = 0;
-
-		try (OutputStream fos = LocalFileWriter.open(destination)) {
-			while (receivedBytes < expectedFileSize) {
-				ProtocolFrameCodec.Frame dataFrame = readProtocolMessageFrame();
-				int toWrite = ProtocolFrameCodec.writableFrameBytes(dataFrame.length(), expectedFileSize - receivedBytes);
-				if (toWrite <= 0) throw new IOException("File frame did not advance the download");
-				fos.write(dataFrame.data(), 0, toWrite);
-				receivedBytes += toWrite;
-				if (chunkCallback != null) chunkCallback.accept(toWrite);
+		// A ranged request's length is the remaining suffix, so it appends into the stored partial; a zero-length
+		// answer to a range leaves the partial untouched, and an unconditional empty object still creates its file.
+		MessageDigest hash = expectedSha1 == null ? null : HashUtils.newSha1Digest();
+		if (expectedFileSize > 0 || offset == 0) {
+			try (OutputStream fos = offset == 0 ? LocalFileWriter.open(destination) : LocalFileWriter.openAppending(destination)) {
+				while (receivedBytes < expectedFileSize) {
+					ProtocolFrameCodec.Frame dataFrame = readProtocolMessageFrame();
+					int toWrite = ProtocolFrameCodec.writableFrameBytes(dataFrame.length(), expectedFileSize - receivedBytes);
+					if (toWrite <= 0) throw new IOException("File frame did not advance the download");
+					fos.write(dataFrame.data(), 0, toWrite);
+					if (hash != null) hash.update(dataFrame.data(), 0, toWrite);
+					receivedBytes += toWrite;
+					if (chunkCallback != null) chunkCallback.accept(toWrite);
+				}
 			}
 		}
 
 		ProtocolFrameCodec.Frame eot = readProtocolMessageFrame();
 		if (eot.length() < 2 || eot.data()[0] != version || eot.data()[1] != END_OF_TRANSMISSION) throw new IOException("Invalid EOT frame");
+		if (hash != null && HexFormat.of().formatHex(hash.digest()).equals(new String(expectedSha1, StandardCharsets.UTF_8))) return new DocumentFetch(destination, true);
 		return new DocumentFetch(destination, false);
 	}
 

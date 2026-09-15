@@ -17,6 +17,17 @@ public final class LocalFileWriter {
 		}
 	}
 
+	/** Opens the destination for appending: the resume path writes the served suffix behind the already-stored prefix. */
+	public static OutputStream openAppending(Path destination) throws LocalStorageException {
+		try {
+			Path parent = destination.getParent();
+			if (parent != null) Files.createDirectories(parent);
+			return new LocalOutputStream(new BufferedOutputStream(Files.newOutputStream(destination, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND)));
+		} catch (IOException e) {
+			throw new LocalStorageException("Failed to open local destination for appending " + destination, e);
+		}
+	}
+
 	private static final class LocalOutputStream extends FilterOutputStream {
 		private LocalOutputStream(OutputStream output) {
 			super(output);

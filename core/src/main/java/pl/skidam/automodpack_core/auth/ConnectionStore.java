@@ -59,9 +59,15 @@ public final class ConnectionStore {
 		return read(storage, modpackId).secrets.get(AddressHelpers.formatAddress(origin));
 	}
 
+	/** Persists the origin's client secret; a null secret removes the stored one, because absence is stored as absence. */
 	public static void saveClientSecret(ClientStorage storage, String modpackId, InetSocketAddress origin, Secrets.Secret secret) throws IOException {
-		if (origin == null || secret == null || secret.secret().isBlank()) throw new IllegalArgumentException("Origin and secret are required");
-		update(storage, modpackId, fields -> fields.secrets.put(AddressHelpers.formatAddress(origin), secret));
+		if (origin == null) throw new IllegalArgumentException("Origin is required");
+		if (secret != null && secret.secret().isBlank()) throw new IllegalArgumentException("Secret is blank");
+		update(storage, modpackId, fields -> {
+			String formattedOrigin = AddressHelpers.formatAddress(origin);
+			if (secret == null) fields.secrets.remove(formattedOrigin);
+			else fields.secrets.put(formattedOrigin, secret);
+		});
 	}
 
 	/**

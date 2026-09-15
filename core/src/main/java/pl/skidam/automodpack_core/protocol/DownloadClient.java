@@ -8,10 +8,6 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.ArrayDeque;
@@ -20,38 +16,30 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
-import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManager;
 
-import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
-import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.Throwables;
 import pl.skidam.mcholepunch.HolepunchClient;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchOptions;
 import pl.skidam.mcholepunch.HolepunchRoute;
 
-public class DownloadClient implements AutoCloseable {
+public class DownloadClient implements PackTransport {
 
 	/** The transport's own async callbacks (connection IO, manifest and platform fetches); app work belongs to the app's executor. */
 	public static final ExecutorService NET_EXECUTOR = Executors.newCachedThreadPool(r -> {
@@ -59,10 +47,6 @@ public class DownloadClient implements AutoCloseable {
 		t.setDaemon(true);
 		return t;
 	});
-
-	/** One daemon thread heartbeats every candidate parked on a certificate-trust decision. */
-	private static final ScheduledExecutorService PRE_CONFIGURATION_KEEPALIVE_EXECUTOR = Executors.newSingleThreadScheduledExecutor(
-			new CustomThreadFactoryBuilder().setNameFormat("AutoModpack PreConfigurationKeepalive #%d").setDaemon(true).build());
 
 	private static final int MAX_CONNECTIONS = 5;
 
@@ -155,13 +139,13 @@ public class DownloadClient implements AutoCloseable {
 		} catch (Exception e) {
 			throw new IOException("Failed to initialize certificate trust", e);
 		}
-		SSLContext context = createSSLContext(trustManager);
+		SSLContext context = CandidateTrustValidation.newSslContext(trustManager);
 		Socket plainSocket = connectTransport();
 
 		try {
 			plainSocket.setSoTimeout(NETWORK_TIMEOUT_MILLIS);
 			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC) performMagicHandshake(plainSocket);
-			SSLSocket tlsSocket = wrapWithTls(plainSocket, context);
+			SSLSocket tlsSocket = CandidateTrustValidation.wrapWithTls(plainSocket, context, connectionInfo.origin.getHostString(), connectionInfo.endpoint.getPort());
 			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket);
 			tlsSocket.setSoTimeout(0);
 			return new TlsCandidate(tlsSocket, plainSocket, trustManager);
@@ -238,100 +222,10 @@ public class DownloadClient implements AutoCloseable {
 		if (handshakeResponse != MAGIC_AMOK) throw new IOException("Invalid response from server: " + handshakeResponse);
 	}
 
-	private SSLSocket wrapWithTls(Socket plainSocket, SSLContext context) throws IOException {
-		SSLSocketFactory factory = context.getSocketFactory();
-		String originHost = connectionInfo.origin.getHostString();
-		SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, originHost, connectionInfo.endpoint.getPort(), true);
-		sslSocket.setEnabledProtocols(new String[]{"TLSv1.3"});
-		sslSocket.setEnabledCipherSuites(new String[]{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"});
-
-		SSLParameters parameters = new SSLParameters();
-		parameters.setEndpointIdentificationAlgorithm("HTTPS");
-		sslSocket.setSSLParameters(parameters);
-
-		try {
-			sslSocket.startHandshake();
-			return sslSocket;
-		} catch (IOException e) {
-			closeQuietly(sslSocket);
-			throw e;
-		}
-	}
-
+	/** The shared candidate trust ladder; completion means the certificate is pinned into this session's trust. */
 	private CompletableFuture<TlsCandidate> validateCandidate(TlsCandidate candidate) {
-		X509Certificate certificate = candidate.trustManager().getDeferredCertificate();
-		if (certificate == null) return CompletableFuture.completedFuture(candidate);
-
-		try {
-			certificate.checkValidity();
-		} catch (CertificateException e) {
-			return rejectCandidate(candidate, new IOException("Untrusted certificate is not valid", e));
-		}
-
-		CompletableFuture<TlsCandidate> validation = DnsPinResolver.resolvePinAsync(connectionInfo.origin.getHostString()).thenCompose(result -> {
-			if (result instanceof DnsPinResolver.Authoritative authoritative) {
-				try {
-					String fingerprint = getFingerprint(certificate);
-					if (!authoritative.fingerprint().equals(fingerprint)) {
-						return rejectCandidate(candidate,
-								new IOException("Certificate does not match the DNSSEC fingerprint for " + connectionInfo.origin.getHostString()));
-					}
-					sessionTrust.accept(certificate);
-					LOGGER.info("Trusting the self-signed certificate from {} because it matches the DNSSEC fingerprint for {}",
-							connectionInfo.endpoint.getHostString(), connectionInfo.origin.getHostString());
-					return CompletableFuture.completedFuture(candidate);
-				} catch (CertificateException e) {
-					return rejectCandidate(candidate, new IOException("Failed to validate DNSSEC-pinned certificate", e));
-				}
-			}
-			if (result instanceof DnsPinResolver.Misconfigured misconfigured) {
-				return rejectCandidate(candidate, new IOException(
-						"Invalid DNSSEC AutoModpack fingerprint for " + connectionInfo.origin.getHostString() + ": " + misconfigured.reason()));
-			}
-			return requestManualTrust(candidate, certificate);
-		});
-		return validation.whenComplete((ignored, error) -> {
-			if (error != null) closeQuietly(candidate.socket());
-		});
-	}
-
-	private CompletableFuture<TlsCandidate> requestManualTrust(TlsCandidate candidate, X509Certificate certificate) {
-		if (trustCallback == null) {
-			CertificateException failure = candidate.trustManager().getDeferredFailure();
-			return rejectCandidate(candidate, failure == null ? new IOException("Certificate is not trusted") : failure);
-		}
-
-		CompletableFuture<Boolean> decision;
-		try {
-			decision = Objects.requireNonNull(trustCallback.apply(certificate), "trust callback result");
-		} catch (Exception e) {
-			return rejectCandidate(candidate, new IOException("Certificate trust callback failed", e));
-		}
-
-		BooleanSupplier clientAlive = () -> !closed;
-		PreConfigurationKeepalive keepalive = new PreConfigurationKeepalive(candidate.socket(), preConfigurationKeepaliveInterval, PRE_CONFIGURATION_KEEPALIVE_EXECUTOR, clientAlive);
-		return decision.handle((trusted, error) -> {
-			// The heartbeat must be gone before the negotiation writes start, so a straggler keepalive record can
-			// never land after the configuration echo and misframe the configured connection.
-			keepalive.retire();
-			if (error != null) {
-				closeQuietly(candidate.socket());
-				Throwable cause = Throwables.unwrap(error);
-				if (cause instanceof CertificateTrustCancelledException cancelled) throw new CompletionException(cancelled);
-				throw new CompletionException(new IOException("Certificate trust decision failed", cause));
-			}
-			if (!trusted) {
-				closeQuietly(candidate.socket());
-				throw new CompletionException(new IOException("User rejected certificate"));
-			}
-			try {
-				sessionTrust.accept(certificate);
-				return candidate;
-			} catch (CertificateException e) {
-				closeQuietly(candidate.socket());
-				throw new CompletionException(e);
-			}
-		});
+		return CandidateTrustValidation.validate(new CandidateTrustValidation.Candidate(candidate.socket(), candidate.trustManager(), sessionTrust, connectionInfo.origin.getHostString(),
+				connectionInfo.endpoint.getHostString(), trustCallback, () -> !closed), preConfigurationKeepaliveInterval).thenApply(ignored -> candidate);
 	}
 
 	/** Turns a validated candidate into a configured connection, releasing the socket when the negotiation fails. */
@@ -342,21 +236,6 @@ public class DownloadClient implements AutoCloseable {
 		} catch (IOException e) {
 			closeQuietly(candidate.socket());
 			throw e;
-		}
-	}
-
-	private static <T> CompletableFuture<T> rejectCandidate(TlsCandidate candidate, Throwable error) {
-		closeQuietly(candidate.socket());
-		return CompletableFuture.failedFuture(error);
-	}
-
-	private static SSLContext createSSLContext(CustomizableTrustManager trustManager) {
-		try {
-			SSLContext context = SSLContext.getInstance("TLSv1.3");
-			context.init(null, new TrustManager[]{trustManager}, new SecureRandom());
-			return context;
-		} catch (NoSuchAlgorithmException | KeyManagementException e) {
-			throw new RuntimeException("Failed to initialize SSLContext", e);
 		}
 	}
 
@@ -432,15 +311,30 @@ public class DownloadClient implements AutoCloseable {
 	}
 
 	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
-		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback));
+		return downloadFile(fileHash, destination, 0, chunkCallback);
+	}
+
+	@Override
+	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, IntConsumer chunkCallback) {
+		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback, null, offset, null)).exceptionally(error -> {
+			Throwable cause = Throwables.unwrap(error);
+			// A valid range the object can no longer satisfy is the stale-partial verdict, not an ordinary remote failure.
+			if (cause instanceof IOException io && ("Server error: " + StaleRangeException.WIRE_MESSAGE).equals(io.getMessage()))
+				throw new CompletionException(new StaleRangeException());
+			if (error instanceof RuntimeException runtime) throw runtime;
+			if (error instanceof Error failure) throw failure;
+			throw new CompletionException(error);
+		});
 	}
 
 	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers UNCHANGED and {@code destination} is not written. */
+	@Override
 	public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer chunkCallback) {
 		return withConnection(connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex == null ? null : expectedSha1Hex.getBytes(StandardCharsets.UTF_8), chunkCallback));
 	}
 
 	/** Drops every pooled and in-flight transfer connection so a cancelled run cannot poison the next one. */
+	@Override
 	public void abortTransfers() {
 		List<Connection> connections;
 		synchronized (poolLock) {
@@ -456,10 +350,7 @@ public class DownloadClient implements AutoCloseable {
 	}
 
 	static void closeQuietly(AutoCloseable closeable) {
-		try {
-			closeable.close();
-		} catch (Exception ignored) {
-		}
+		CandidateTrustValidation.closeQuietly(closeable);
 	}
 
 	@Override

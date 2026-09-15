@@ -40,10 +40,6 @@ public class Secrets {
 		}
 	}
 
-	public static Secret anonymousSecret() {
-		return new Secret(Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[BYTE_LENGTH]), 0L);
-	}
-
 	public static Secret generateSecret() {
 		SecureRandom random = new SecureRandom();
 		byte[] bytes = new byte[BYTE_LENGTH];

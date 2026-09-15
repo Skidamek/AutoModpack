@@ -13,8 +13,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
-import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.LocalStorageException;
+import pl.skidam.automodpack_core.protocol.PackTransport;
+import pl.skidam.automodpack_core.protocol.StaleRangeException;
 import pl.skidam.automodpack_core.screen.DownloadView;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
@@ -46,7 +47,7 @@ public class DownloadManager implements DownloadView {
 	private final ExecutorService downloadExecutor;
 
 	private final HttpFileDownloader httpDownloader = new HttpFileDownloader();
-	private DownloadClient downloadClient = null;
+	private PackTransport transport = null;
 	// Owns the batched platform-metadata refetch of this run: concurrent dead links share the bulk API calls.
 	private final FetchManager metadataFetcher;
 
@@ -82,8 +83,8 @@ public class DownloadManager implements DownloadView {
 		this.metadataFetcher = new FetchManager(List.of(), Objects.requireNonNull(platformCache, "platformCache"));
 	}
 
-	public void attachDownloadClient(DownloadClient downloadClient) {
-		this.downloadClient = downloadClient;
+	public void attachTransport(PackTransport transport) {
+		this.transport = transport;
 	}
 
 	public synchronized void download(Path file, String sha1, String murmur, String fileType, List<DownloadSource> sources, long fileSize, Runnable successCallback, Runnable failureCallback) {
@@ -226,80 +227,94 @@ public class DownloadManager implements DownloadView {
 		Path tempStoreFile = null;
 
 		try {
-			try {
+			// One partial temp per task: it survives failed attempts as the resume prefix, and its activeTemporaryFiles
+			// registration spans the whole task so cancel still sweeps it even between attempts.
+			if (task.partialFile == null) {
 				Path stagingDirectory = dataLayout.stagingDirectory();
 				Files.createDirectories(stagingDirectory);
-				tempStoreFile = Files.createTempFile(stagingDirectory, "." + hashPathPair.hash() + ".", ".tmp");
-				activeTemporaryFiles.put(hashPathPair, tempStoreFile);
-			} catch (IOException e) {
-				task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
-				LOGGER.warn("Failed to create temporary CAS object {}", hashPathPair.hash(), e);
-				return false;
+				task.partialFile = Files.createTempFile(stagingDirectory, "." + hashPathPair.hash() + ".", ".tmp");
 			}
-
-			long attemptStart = System.nanoTime();
-			AtomicLong attemptBytes = new AtomicLong(0);
-			// One hook for everything the written bytes mean: global progress, display speed, this attempt's sample and the in-flight backlog left for the scheduler.
-			IntConsumer progressAction = bytes -> {
-				updateNetworkProgress(bytes);
-				attemptBytes.addAndGet(bytes);
-				data.remainingBytes.addAndGet(-bytes);
-			};
-			boolean platformTransfer = source != null && task.attempts < MAX_DOWNLOAD_ATTEMPTS * numberOfIndexes;
-			try {
-				if (platformTransfer) {
-					httpDownloader.download(source, tempStoreFile, progressAction);
-				} else if (downloadClient != null) {
-					hostDownloadFile(hashPathPair, tempStoreFile, progressAction);
-				} else {
-					task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
-					return false;
-				}
-			} catch (LocalStorageException e) {
-				task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
-				LOGGER.warn("Failed to write temporary CAS object {}", hashPathPair.hash(), e);
-				return false;
-			} catch (HttpFileDownloader.HttpStatusException e) {
-				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
-				if (isDeadPlatformLink(source, e)) markDeadPlatformLink(hashPathPair.hash(), task);
-				else if (source != null && source.provider() == DownloadSource.Provider.CURSEFORGE && e.statusCode() == HttpURLConnection.HTTP_UNAUTHORIZED) {
-					LOGGER.warn("CurseForge rejected the download API key with HTTP 401; trying the next source");
-					task.domainFailures.merge(data.activeDomain, MAX_DOWNLOAD_ATTEMPTS, Integer::sum);
-				}
-				return false;
-			} catch (IOException e) {
-				if (cancelled || Thread.currentThread().isInterrupted()) throw new InterruptedException("Download of CAS object " + hashPathPair.hash() + " was cancelled");
-				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
-				LOGGER.warn("Remote source failed for CAS object {}", hashPathPair.hash(), e);
-				return false;
-			} finally {
-				// Every byte that arrived is real bandwidth data for the path it actually travelled, whatever happened to the transfer.
-				if (attemptBytes.get() > 0) scheduler.report(platformTransfer ? data.activeDomain : INTERNAL_CLIENT_SOURCE, attemptBytes.get(), System.nanoTime() - attemptStart);
-			}
-
-			try {
-				VerifiedFileTransfer.promoteAtomic(tempStoreFile, storeFile, task.fileSize, hashPathPair.hash(), cache);
-			} catch (VerifiedFileTransfer.VerificationMismatchException e) {
-				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
-				LOGGER.warn("Size or hash mismatch for downloaded file {}", task.file.getFileName());
-				return false;
-			} catch (IOException e) {
-				task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
-				LOGGER.warn("Failed to persist verified CAS object {}", hashPathPair.hash(), e);
-				return false;
-			}
-			tempStoreFile = null;
-			task.lastFailureCategory = null;
-			return true;
-		} finally {
-			activeTemporaryFiles.remove(hashPathPair);
-			if (tempStoreFile != null) {
-				try {
-					Files.deleteIfExists(tempStoreFile);
-				} catch (IOException ignored) {
-				}
-			}
+			tempStoreFile = task.partialFile;
+			activeTemporaryFiles.put(hashPathPair, tempStoreFile);
+		} catch (IOException e) {
+			task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
+			LOGGER.warn("Failed to create temporary CAS object {}", hashPathPair.hash(), e);
+			return false;
 		}
+
+		long attemptStart = System.nanoTime();
+		AtomicLong attemptBytes = new AtomicLong(0);
+		// One hook for everything the written bytes mean: global progress, display speed, this attempt's sample and the in-flight backlog left for the scheduler.
+		IntConsumer progressAction = bytes -> {
+			updateNetworkProgress(bytes);
+			attemptBytes.addAndGet(bytes);
+			data.remainingBytes.addAndGet(-bytes);
+		};
+		boolean platformTransfer = source != null && task.attempts < MAX_DOWNLOAD_ATTEMPTS * numberOfIndexes;
+		try {
+			if (platformTransfer) {
+				httpDownloader.download(source, tempStoreFile, progressAction);
+			} else if (transport != null) {
+				hostDownloadFile(hashPathPair, task, tempStoreFile, progressAction);
+			} else {
+				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
+				return false;
+			}
+		} catch (LocalStorageException e) {
+			task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
+			LOGGER.warn("Failed to write temporary CAS object {}", hashPathPair.hash(), e);
+			deletePartial(task);
+			return false;
+		} catch (HttpFileDownloader.HttpStatusException e) {
+			task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
+			if (isDeadPlatformLink(source, e)) markDeadPlatformLink(hashPathPair.hash(), task);
+			else if (source != null && source.provider() == DownloadSource.Provider.CURSEFORGE && e.statusCode() == HttpURLConnection.HTTP_UNAUTHORIZED) {
+				LOGGER.warn("CurseForge rejected the download API key with HTTP 401; trying the next source");
+				task.domainFailures.merge(data.activeDomain, MAX_DOWNLOAD_ATTEMPTS, Integer::sum);
+			}
+			return false;
+		} catch (StaleRangeException e) {
+			// The partial is beyond the served object's end: worthless, so the next attempt starts clean.
+			task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
+			LOGGER.warn("Stored partial for CAS object {} is past the served object's end; restarting from zero", hashPathPair.hash());
+			deletePartial(task);
+			return false;
+		} catch (IOException e) {
+			if (cancelled || Thread.currentThread().isInterrupted()) throw new InterruptedException("Download of CAS object " + hashPathPair.hash() + " was cancelled");
+			task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
+			LOGGER.warn("Remote source failed for CAS object {}", hashPathPair.hash(), e);
+			return false;
+		} finally {
+			// Every byte that arrived is real bandwidth data for the path it actually travelled, whatever happened to the transfer.
+			if (attemptBytes.get() > 0) scheduler.report(platformTransfer ? data.activeDomain : INTERNAL_CLIENT_SOURCE, attemptBytes.get(), System.nanoTime() - attemptStart);
+		}
+
+		try {
+			VerifiedFileTransfer.promoteAtomic(tempStoreFile, storeFile, task.fileSize, hashPathPair.hash(), cache);
+		} catch (VerifiedFileTransfer.VerificationMismatchException e) {
+			task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
+			LOGGER.warn("Size or hash mismatch for downloaded file {}", task.file.getFileName());
+			deletePartial(task);
+			return false;
+		} catch (IOException e) {
+			task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
+			LOGGER.warn("Failed to persist verified CAS object {}", hashPathPair.hash(), e);
+			deletePartial(task);
+			return false;
+		}
+		task.partialFile = null;
+		task.lastFailureCategory = null;
+		return true;
+	}
+
+	/** Deletes the task's partial temp and forgets it; the next attempt, if any, starts from zero. */
+	private static void deletePartial(QueuedDownload task) {
+		if (task.partialFile == null) return;
+		try {
+			Files.deleteIfExists(task.partialFile);
+		} catch (IOException ignored) {
+		}
+		task.partialFile = null;
 	}
 
 	private static boolean isDeadPlatformLink(DownloadSource source, HttpFileDownloader.HttpStatusException e) {
@@ -331,6 +346,7 @@ public class DownloadManager implements DownloadView {
 
 		try {
 			if (success) {
+				activeTemporaryFiles.remove(key);
 				downloadedCount++;
 				acquiredFiles.incrementAndGet();
 				LOGGER.info("Acquired CAS object {} for {}", storeFile.getFileName(), task.file.getFileName());
@@ -340,51 +356,70 @@ public class DownloadManager implements DownloadView {
 					semaphore.release();
 				}
 			} else {
-				handleRetry(key, task, interrupted);
+				// A task that ended for good stops tracking its partial; a requeued one keeps it for the next attempt.
+				if (handleRetry(key, task, interrupted)) activeTemporaryFiles.remove(key);
 			}
 		} finally {
 			if (!interrupted && !cancelled && !downloadExecutor.isShutdown()) downloadNext();
 		}
 	}
 
-	private void handleRetry(FileInspection.HashPathPair key, QueuedDownload task, boolean interrupted) {
+	/** Requeues the task for another attempt; false means it was requeued, true means the task ended for good. */
+	private boolean handleRetry(FileInspection.HashPathPair key, QueuedDownload task, boolean interrupted) {
 		if (interrupted || cancelled) {
 			failedFiles.incrementAndGet();
 			semaphore.release();
-			return;
+			return true;
 		}
 		if (task.lastFailureCategory != FailureCategory.LOCAL_STORAGE && task.attempts < (task.sources.size() + 1) * MAX_DOWNLOAD_ATTEMPTS) {
 			LOGGER.warn("Retrying download: {}", task.file.getFileName());
 			task.attempts++;
 			queuedDownloads.put(key, task);
-		} else {
-			FailureCategory category = task.lastFailureCategory == null ? FailureCategory.REMOTE_SOURCE : task.lastFailureCategory;
-			failedFiles.incrementAndGet();
-			LOGGER.error("Permanently failed to download {} ({})", task.file.getFileName(), category);
-			try {
-				task.failureCallback.accept(category);
-			} finally {
-				semaphore.release();
-			}
+			return false;
 		}
+		FailureCategory category = task.lastFailureCategory == null ? FailureCategory.REMOTE_SOURCE : task.lastFailureCategory;
+		failedFiles.incrementAndGet();
+		LOGGER.error("Permanently failed to download {} ({})", task.file.getFileName(), category);
+		deletePartial(task);
+		try {
+			task.failureCallback.accept(category);
+		} finally {
+			semaphore.release();
+		}
+		return true;
 	}
 
-	private void hostDownloadFile(FileInspection.HashPathPair hashPathPair, Path targetFile, IntConsumer progressAction)
+	/**
+	 * Host fetch with resume: the partial's length is the offset. An oversized partial starts over, a complete-sized
+	 * one skips the network and lets promotion judge it for free, and a range past the object's end deletes it.
+	 */
+	private void hostDownloadFile(FileInspection.HashPathPair hashPathPair, QueuedDownload task, Path partial, IntConsumer progressAction)
 			throws IOException, InterruptedException {
-		var future = downloadClient.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), targetFile, progressAction);
+		long offset = 0;
+		if (Files.exists(partial)) {
+			offset = Files.size(partial);
+			if (offset > task.fileSize) {
+				deletePartial(task);
+				offset = 0;
+			} else if (offset == task.fileSize) {
+				return;
+			}
+		}
+		var future = transport.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), partial, offset, progressAction);
 		try {
 			future.get();
 		} catch (InterruptedException e) {
 			future.cancel(true);
-			downloadClient.abortTransfers();
+			transport.abortTransfers();
 			throw e;
 		} catch (CancellationException e) {
 			future.cancel(true);
-			downloadClient.abortTransfers();
+			transport.abortTransfers();
 			throw new InterruptedException("AutoModpack host download was cancelled");
 		} catch (ExecutionException e) {
 			Throwable cause = e.getCause();
 			if (cause instanceof LocalStorageException localStorageException) throw localStorageException;
+			if (cause instanceof StaleRangeException staleRange) throw staleRange;
 			if (cause instanceof InterruptedException) throw new InterruptedException("AutoModpack host download was interrupted");
 			throw new IOException("AutoModpack host download failed", cause);
 		}
@@ -433,7 +468,7 @@ public class DownloadManager implements DownloadView {
 
 	public void cancelAllAndShutdown() {
 		cancelled = true;
-		if (downloadClient != null) downloadClient.abortTransfers();
+		if (transport != null) transport.abortTransfers();
 		LOGGER.info("Cancelling the download run: {} queued, {} in-flight", queuedDownloads.size(), downloadsInProgress.size());
 		queuedDownloads.clear();
 		downloadsInProgress.forEach((k, v) -> v.future.cancel(true));
@@ -491,6 +526,8 @@ public class DownloadManager implements DownloadView {
 		public final Consumer<FailureCategory> failureCallback;
 		public FailureCategory lastFailureCategory;
 		public boolean needsMetadataRefetch;
+		/** The one partial temp of the whole task: kept across failed attempts as the resume prefix, deleted at its ends. */
+		public Path partialFile;
 
 		public QueuedDownload(Path f, List<DownloadSource> sources, String murmur, String fileType, long size, int seq, int a, Runnable s, Consumer<FailureCategory> fa) {
 			file = f;

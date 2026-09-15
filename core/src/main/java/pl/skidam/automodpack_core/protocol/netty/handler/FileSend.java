@@ -24,6 +24,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.stream.ChunkedWriteHandler;
 
 import pl.skidam.automodpack_core.protocol.ProtocolFrameCodec;
+import pl.skidam.automodpack_core.protocol.StaleRangeException;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
@@ -54,7 +55,7 @@ final class FileSend {
 		final long length = (endInclusive == null ? fileSize : Math.min(endInclusive + 1, fileSize)) - offset;
 
 		if (offset < 0 || offset > fileSize || length < 0) {
-			sendError(ctx, protocolVersion, "Invalid range");
+			sendError(ctx, protocolVersion, StaleRangeException.WIRE_MESSAGE);
 			return;
 		}
 
