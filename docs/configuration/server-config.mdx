@@ -65,6 +65,12 @@ A typical optional group looks like:
 
 Its files go into `host-modpack/shaders/` following the same layout as `~/.minecraft/`.
 
+### The same path in several groups
+
+Groups may include the same file path, in any number. Identical copies are always fine: the file is stored once on the server, every group that includes it lists it, and a client selecting any combination of those groups receives a single copy. Identical means the same bytes and the same editability, so give the path the same `allowEditsInFiles` verdict everywhere.
+
+Different content under one path is allowed only between groups that can never be selected together - groups that `breaksWith` each other, or groups limited to different `compatiblePlatforms`. That is how you ship variants, e.g. a Windows-only file alongside a generic one. If two groups that could be selected together disagree about a path, `/automodpack generate` fails with an error naming the path and both groups, and nothing is published until you separate the paths or make the groups mutually exclusive.
+
 ## Globbing wildcards
 
 For each group's `syncedFiles`, `excludedFiles` and `allowEditsInFiles`, use the following patterns relative to the server root (a leading `/` is allowed and ignored):
