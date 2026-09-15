@@ -158,6 +158,7 @@
   "automodpack.storage.compacted": "%s에 정리됨: #%s보다 오래된 세대는 이 컴퓨터에서 더 이상 복원할 수 없습니다.",
   "automodpack.storage.preservedKept": "보존된 파일 %s개는 유지됩니다. 정리해도 삭제되지 않습니다.",
   "automodpack.storage.confirm": "로컬 저장소 정리",
+  "automodpack.storage.confirmArmed": "Click again to clean",
   "automodpack.storage.verify": "저장소 확인",
   "automodpack.storage.verifying": "저장소를 확인하는 중입니다. 이 화면을 나가도 작업은 안전하게 이어집니다.",
   "automodpack.storage.verified": "저장소 확인됨",

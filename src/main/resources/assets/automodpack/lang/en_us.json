@@ -160,6 +160,7 @@
   "automodpack.storage.compacted": "Cleaned on %s: generations older than #%s can no longer be restored on this computer.",
   "automodpack.storage.preservedKept": "%s files in Preserved files stay. Cleanup does not remove them.",
   "automodpack.storage.confirm": "Clean local storage",
+  "automodpack.storage.confirmArmed": "Click again to clean",
   "automodpack.storage.verify": "Verify storage",
   "automodpack.storage.verifying": "Storage verification is active. You can leave this screen. The operation will continue safely.",
   "automodpack.storage.verified": "Storage verified",

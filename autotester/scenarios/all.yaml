@@ -682,8 +682,11 @@ flow:
     name: capture client local storage before cleanup
     file: all-local-storage-before
   - do: click
-    name: clean stale client local storage
+    name: arm the cleanup command with the first press
     select: { text: Clean local storage }
+  - do: click
+    name: confirm the cleanup with the second press
+    select: { text: Click again to clean }
   - do: wait_for
     name: wait for client local storage cleanup to complete
     timeout: 120s

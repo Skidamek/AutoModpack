@@ -161,6 +161,7 @@
   "automodpack.storage.compacted": "Очищено %s: покоління старші за #%s вже не можна відновити на цьому комп'ютері.",
   "automodpack.storage.preservedKept": "%s файлів у збережених залишаються. Очищення їх не вилучає.",
   "automodpack.storage.confirm": "Очистити сховище",
+  "automodpack.storage.confirmArmed": "Click again to clean",
   "automodpack.storage.verify": "Перевірити сховище",
   "automodpack.storage.verifying": "Триває перевірка сховища. Можна закрити цей екран. Операція безпечно триватиме.",
   "automodpack.storage.verified": "Сховище перевірено",

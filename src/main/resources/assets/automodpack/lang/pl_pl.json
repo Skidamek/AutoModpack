@@ -161,6 +161,7 @@
   "automodpack.storage.compacted": "Wyczyszczono %s: generacje starsze niż #%s nie da się już przywrócić na tym komputerze.",
   "automodpack.storage.preservedKept": "%s pliki w Zachowanych plikach zostają. Czyszczenie ich nie usuwa.",
   "automodpack.storage.confirm": "Wyczyść pamięć lokalną",
+  "automodpack.storage.confirmArmed": "Click again to clean",
   "automodpack.storage.verify": "Sprawdź pamięć",
   "automodpack.storage.verifying": "Trwa weryfikacja pamięci. Możesz opuścić ten ekran. Operacja będzie bezpiecznie kontynuowana.",
   "automodpack.storage.verified": "Pamięć zweryfikowana",

@@ -161,6 +161,7 @@
   "automodpack.storage.compacted": "Очищено %s: поколения старше #%s больше нельзя восстановить на этом компьютере.",
   "automodpack.storage.preservedKept": "%s файлов в сохранённых остаются. Очистка их не удаляет.",
   "automodpack.storage.confirm": "Очистить хранилище",
+  "automodpack.storage.confirmArmed": "Click again to clean",
   "automodpack.storage.verify": "Проверить хранилище",
   "automodpack.storage.verifying": "Идёт проверка хранилища. Можно закрыть этот экран. Операция безопасно продолжится.",
   "automodpack.storage.verified": "Хранилище проверено",

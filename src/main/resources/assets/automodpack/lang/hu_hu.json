@@ -161,6 +161,7 @@
   "automodpack.storage.compacted": "Kitisztítva %s: a #%s-nál régebbi generációk már nem állíthatók helyre ezen a számítógépen.",
   "automodpack.storage.preservedKept": "%s fájl megmarad a Megőrzött fájlokban. A tisztítás nem távolítja el őket.",
   "automodpack.storage.confirm": "Helyi tárhely tisztítása",
+  "automodpack.storage.confirmArmed": "Click again to clean",
   "automodpack.storage.verify": "Tárhely ellenőrzése",
   "automodpack.storage.verifying": "A tárhely ellenőrzése folyamatban van. Elhagyhatod ezt a képernyőt. A művelet biztonságosan folytatódik.",
   "automodpack.storage.verified": "Tárhely ellenőrizve",

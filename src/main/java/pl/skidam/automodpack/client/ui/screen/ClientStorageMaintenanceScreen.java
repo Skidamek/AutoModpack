@@ -31,6 +31,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private final InstalledModpackController controller;
 	private boolean busy;
 	private boolean closed;
+	private boolean compactArmed;
 	private boolean presentingFailure;
 	private Operation operation;
 	private ClientObjectStore.CollectionResult collectionResult;
@@ -52,7 +53,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		preservedCount = controller.preservedClaimCount();
 		ActionRow maintenanceRow = actionRow(ActionAreaLayout.RowKind.AUXILIARY,
 				optionalAction(VersionedText.translatable("automodpack.storage.verify"), button -> verify()),
-				primaryAction(VersionedText.translatable("automodpack.storage.confirm"), button -> compact()));
+				primaryAction(VersionedText.translatable(compactArmed ? "automodpack.storage.confirmArmed" : "automodpack.storage.confirm"), button -> compactPressed()));
 		ActionRow footerRow = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> closeToParent()));
 
 		// One pinned status line rides with the column, so the busy/complete feedback never moves.
@@ -98,6 +99,17 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		});
 	}
 
+	/** The destructive command fires on the second press only; any state change disarms it again. */
+	private void compactPressed() {
+		if (busy || closed) return;
+		if (!compactArmed) {
+			compactArmed = true;
+			rebuild();
+			return;
+		}
+		compact();
+	}
+
 	private void compact() {
 		if (busy || closed) return;
 		begin(Operation.COMPACT);
@@ -116,6 +128,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		operation = nextOperation;
 		collectionResult = null;
 		verificationReport = null;
+		compactArmed = false;
 		rebuild();
 	}
 
@@ -124,6 +137,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		collectionResult = collected;
 		operation = null;
 		busy = false;
+		compactArmed = false;
 		rebuild();
 	}
 
@@ -132,6 +146,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		verificationReport = report;
 		operation = null;
 		busy = false;
+		compactArmed = false;
 		rebuild();
 	}
 
@@ -139,6 +154,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		if (closed) return;
 		busy = false;
 		operation = null;
+		compactArmed = false;
 		presentingFailure = true;
 		ScreenManager.failure(FailureRequest.of(exception, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 	}

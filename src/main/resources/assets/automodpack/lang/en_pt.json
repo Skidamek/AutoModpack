@@ -161,6 +161,7 @@
   "automodpack.storage.compacted": "Cleaned on %s: generations older than #%s can no longer be dug up on this ship.",
   "automodpack.storage.preservedKept": "%s stashed files stay. Swabbin' does not toss them.",
   "automodpack.storage.confirm": "Swab the hold",
+  "automodpack.storage.confirmArmed": "Click again to clean",
   "automodpack.storage.verify": "Check the hold",
   "automodpack.storage.verifying": "Hold check be runnin'. Ye can leave this screen. It'll finish safe.",
   "automodpack.storage.verified": "Hold checked",
