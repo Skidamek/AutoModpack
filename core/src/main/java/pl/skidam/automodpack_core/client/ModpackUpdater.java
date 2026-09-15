@@ -448,13 +448,20 @@ public class ModpackUpdater implements AutoCloseable {
 
 	/**
 	 * Post-apply restart for a running game: the engine owns the restart decision, the flows only supply their kind.
-	 * Content the running game reads from disk on demand (configs, resource packs) never justifies a restart here;
-	 * {@code markAppliedContentNotLoaded} already receipts it, and the next quiet login surfaces the toast.
+	 * Only boot-critical changes relaunch the game on their own. Read-from-disk content (configs, resource packs) is
+	 * different: whether a mod ever re-reads its config is unknowable, so an in-game apply still asks the player,
+	 * and the applied-but-maybe-unloaded flag also surfaces a toast on the next quiet login if the player declines.
 	 */
 	void restartAfterApply(ApplyResult applyResult) {
 		if (!preload && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty())) SessionUpdateState.markAppliedContentNotLoaded();
 		if (!applyResult.requiresRestart()) {
 			updateLoopDetector.clear();
+			if (!preload && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty())) {
+				LOGGER.info("Update applied with {} changed and {} removed files the running game may not have loaded; asking the player to restart", changelogs.changedFiles().size(),
+						changelogs.removedFiles().size());
+				ScreenManager.restart(fullDownload ? UpdateType.FULL : UpdateType.UPDATE, changelogs);
+				return;
+			}
 			ScreenManager.completeWithoutRestart();
 			return;
 		}
