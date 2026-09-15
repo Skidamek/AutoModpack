@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -25,6 +26,7 @@ import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.StoragePaths;
 
 class ModpackExecutorTest {
@@ -291,6 +293,57 @@ class ModpackExecutorTest {
 			clean.stop();
 			guarded.stop();
 			snapshot.restore();
+		}
+	}
+
+	@Test
+	void exportHttpWritesTheUrlContractTreeForStaticHosting() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("host-modpack");
+		Path generationRoot = tempDir.resolve("host-generations");
+		Path source = groups.resolve("main/config/example.txt");
+		Files.createDirectories(source.getParent());
+		Files.writeString(source, "exported-object", StandardCharsets.UTF_8);
+
+		ConstantsSnapshot snapshot = new ConstantsSnapshot();
+		Constants.serverConfig = config();
+		Constants.serverConfig.exportHttpDirectory = tempDir.resolve("auto-export").toString();
+		Constants.AM_VERSION = "test";
+		Constants.LOADER = "test";
+		Constants.LOADER_VERSION = "test";
+		Constants.MC_VERSION = "test";
+		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
+		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
+		try {
+			assertEquals("", new ServerConfigJsons.ServerConfigFieldsV3().exportHttpDirectory);
+			assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
+
+			// The publish-time hook exported the contract tree without any listener running.
+			Path autoExport = tempDir.resolve("auto-export");
+			assertTrue(Files.exists(autoExport.resolve(GenerationHosting.HEAD_DOCUMENT_KEY)));
+			assertTrue(Files.exists(autoExport.resolve(GenerationHosting.JOURNAL_KEY)));
+
+			Path exportRoot = tempDir.resolve("manual-export");
+			int written = executor.exportHttp(exportRoot);
+			GenerationStore store = new GenerationStore(generationRoot, DataRootResolver.resolve(server).layout().objectsDirectory());
+			var hosting = store.hosting().asMap();
+			assertEquals(hosting.size(), written);
+			for (Map.Entry<String, Path> entry : hosting.entrySet()) {
+				Path exported = entry.getKey().equals(GenerationHosting.HEAD_DOCUMENT_KEY) || entry.getKey().equals(GenerationHosting.JOURNAL_KEY)
+						? exportRoot.resolve(entry.getKey())
+						: exportRoot.resolve("objects").resolve(entry.getKey().toLowerCase(Locale.ROOT));
+				assertArrayEquals(Files.readAllBytes(entry.getValue()), Files.readAllBytes(exported), entry.getKey());
+			}
+
+			// Deterministic and idempotent, with a relative target resolved against the server root.
+			assertEquals(written, executor.exportHttp(exportRoot));
+			assertEquals(written, executor.exportHttp(Path.of("relative-export")));
+			assertTrue(Files.exists(server.resolve("relative-export").resolve(GenerationHosting.HEAD_DOCUMENT_KEY)));
+		} finally {
+			executor.stop();
+			snapshot.restore();
+			if (previous == null) System.clearProperty(StoragePaths.DATA_ROOT_PROPERTY);
+			else System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, previous);
 		}
 	}
 

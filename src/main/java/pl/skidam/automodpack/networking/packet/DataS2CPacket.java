@@ -77,6 +77,10 @@ public class DataS2CPacket {
 					LOGGER.warn("MAGIC expects AMMH/AMOK routing on the Minecraft port.");
 				} else if (serverConfig.connectionMode == ModpackConnectionMode.MAGIC) {
 					LOGGER.warn("MAGIC expects AMMH/AMOK before TLS on dedicated port '{}'.", serverConfig.bindPort);
+				} else if (serverConfig.connectionMode == ModpackConnectionMode.HTTP && serverConfig.bindPort == -1) {
+					LOGGER.warn("HTTP with bindPort -1 is only advertised; the URL contract must be served externally over HTTPS.");
+				} else if (serverConfig.connectionMode == ModpackConnectionMode.HTTP) {
+					LOGGER.warn("HTTP expects TLS immediately on dedicated port '{}'.", serverConfig.bindPort);
 				} else if (serverConfig.bindPort == -1) {
 					LOGGER.warn("DIRECT with bindPort -1 starts no built-in listener; the advertised endpoint must be handled externally.");
 				} else {

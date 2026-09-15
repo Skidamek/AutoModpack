@@ -6,6 +6,7 @@ import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -156,6 +157,27 @@ public class ModpackExecutor {
 		return generationStore.history(limit);
 	}
 
+	/**
+	 * Writes the URL-contract tree (head, journal, objects/&lt;sha1&gt;) as byte-for-byte copies of the hosted files, ready for
+	 * any static HTTPS host. Nothing already in the target directory is ever deleted, so stale objects from old generations
+	 * may accumulate there; the operator owns the directory. Orthogonal to hosting: works in every connection mode.
+	 */
+	public int exportHttp(Path targetDirectory) throws IOException {
+		Path target = (targetDirectory.isAbsolute() ? targetDirectory : serverRoot.resolve(targetDirectory)).normalize();
+		int written = 0;
+		for (Map.Entry<String, Path> entry : generationStore.hosting().asMap().entrySet()) {
+			String key = entry.getKey();
+			Path destination;
+			if (key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY)) destination = target.resolve(key);
+			else if (HashUtils.isSha1(key)) destination = target.resolve("objects").resolve(HashUtils.normalizeSha1(key));
+			else throw new IOException("Unexpected hosting key in the generation store: " + key);
+			Files.createDirectories(destination.getParent());
+			Files.copy(entry.getValue(), destination, StandardCopyOption.REPLACE_EXISTING);
+			written++;
+		}
+		return written;
+	}
+
 	public GenerationStore.StorageReport storageReport() throws IOException {
 		return generationStore.measureStorage();
 	}
@@ -287,15 +309,29 @@ public class ModpackExecutor {
 	 */
 	private <R extends HostingOutcome> R bindHosting(R result) {
 		if (!(result instanceof CommittedOutcome committed)) return result;
+		R bound = result;
 		try {
 			hostingBinder.bind(committed.hosting());
 		} catch (Exception e) {
 			LOGGER.error("The generation committed, but the hosting swap failed", e);
 			@SuppressWarnings("unchecked")
 			R failed = (R) committed.withHostingFailure(e);
-			return failed;
+			bound = failed;
 		}
-		return result;
+		autoExportHttp();
+		return bound;
+	}
+
+	/** Publish-time mirror of the URL contract for static hosting; a failed export is logged loudly but never fails the committed publication. */
+	private void autoExportHttp() {
+		String directory = serverConfig == null || serverConfig.exportHttpDirectory == null ? "" : serverConfig.exportHttpDirectory.trim();
+		if (directory.isEmpty()) return;
+		try {
+			int written = exportHttp(Path.of(directory));
+			LOGGER.info("Exported the HTTP contract tree ({} files) to {}", written, directory);
+		} catch (Exception e) {
+			LOGGER.error("Failed to export the HTTP contract tree to {}", directory, e);
+		}
 	}
 
 	private void consumePatchNotes(GenerationPatchNotes.Resolution notes) {
