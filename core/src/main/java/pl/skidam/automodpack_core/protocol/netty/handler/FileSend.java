@@ -39,7 +39,7 @@ final class FileSend {
 		this.server = server;
 	}
 
-	void send(ChannelHandlerContext ctx, byte[] bsha1, byte protocolVersion, int chunkSize) throws IOException {
+	void send(ChannelHandlerContext ctx, byte[] bsha1, byte protocolVersion, int chunkSize, long offset, Long endInclusive) throws IOException {
 		final String sha1 = new String(bsha1, StandardCharsets.UTF_8);
 		final Optional<Path> optionalPath = server.getPath(sha1);
 
@@ -51,8 +51,14 @@ final class FileSend {
 
 		final Path path = optionalPath.get();
 		final long fileSize = Files.size(path);
+		final long length = (endInclusive == null ? fileSize : Math.min(endInclusive + 1, fileSize)) - offset;
 
-		if (fileSize == 0) {
+		if (offset < 0 || offset > fileSize || length < 0) {
+			sendError(ctx, protocolVersion, "Invalid range");
+			return;
+		}
+
+		if (length == 0) {
 			writeControlAndFlush(ctx, fileResponseHeader(ctx, protocolVersion, 0));
 			sendEOT(ctx, protocolVersion);
 			return;
@@ -65,12 +71,13 @@ final class FileSend {
 
 		FileChannel file = null;
 		try {
-			ChannelFuture headerFuture = writeControlAndFlush(ctx, fileResponseHeader(ctx, protocolVersion, fileSize));
+			ChannelFuture headerFuture = writeControlAndFlush(ctx, fileResponseHeader(ctx, protocolVersion, length));
 			final CompressionCodec codec = NettyServer.compressionCodec(ctx.channel());
 			final ChannelHandlerContext encoderContext = encoderContext(ctx);
 			final FileChannel opened = FileChannel.open(path, StandardOpenOption.READ);
 			file = opened;
-			server.senderExecutor().execute(() -> streamFile(ctx, opened, fileSize, chunkSize, protocolVersion, headerFuture, codec, encoderContext));
+			opened.position(offset);
+			server.senderExecutor().execute(() -> streamFile(ctx, opened, length, chunkSize, protocolVersion, headerFuture, codec, encoderContext));
 		} catch (Exception e) {
 			inFlightTransfers.decrementAndGet();
 			closeQuietly(file);
@@ -90,7 +97,7 @@ final class FileSend {
 		}
 	}
 
-	private void streamFile(ChannelHandlerContext ctx, FileChannel file, long fileSize, int chunkSize, byte protocolVersion, ChannelFuture headerFuture, CompressionCodec codec, ChannelHandlerContext encoderContext) {
+	private void streamFile(ChannelHandlerContext ctx, FileChannel file, long length, int chunkSize, byte protocolVersion, ChannelFuture headerFuture, CompressionCodec codec, ChannelHandlerContext encoderContext) {
 		ByteBuf chunk = null;
 		Throwable failure = null;
 		try {
@@ -103,14 +110,16 @@ final class FileSend {
 				failure = headerFailure;
 			} else {
 				long sent = 0;
-				while (failure == null && sent < fileSize) {
+				while (failure == null && sent < length) {
 					chunkBuffer.clear();
-					int length = fill(file, chunkBuffer);
-					if (length == 0) break;
-					chunk.writerIndex(length);
-					sent += length;
-					failure = writeFrame(ctx, chunk, length, codec, chunkSize, scratch, encoderContext);
+					chunkBuffer.limit((int) Math.min(chunkSize, length - sent));
+					int read = fill(file, chunkBuffer);
+					if (read == 0) break;
+					chunk.writerIndex(read);
+					sent += read;
+					failure = writeFrame(ctx, chunk, read, codec, chunkSize, scratch, encoderContext);
 				}
+				if (failure == null && sent < length) failure = new IOException("File ended before the requested range was streamed");
 			}
 		} catch (Exception e) {
 			failure = e;
@@ -124,7 +133,7 @@ final class FileSend {
 		} else {
 			// The client is mid-stream: an ERROR frame would be consumed as file bytes, so the transfer's only honest
 			// completion is dropping the connection; the reason lives in this log.
-			LOGGER.error("File transfer failed {} of {}: {}", file, fileSize, failure.getMessage(), failure);
+			LOGGER.error("File transfer failed {} of {} bytes: {}", file, length, failure.getMessage(), failure);
 			executeOnLoop(ctx.channel(), ctx.channel()::close);
 		}
 	}
@@ -228,6 +237,14 @@ final class FileSend {
 		eot.writeByte(protocolVersion);
 		eot.writeByte(END_OF_TRANSMISSION);
 		writeControlAndFlush(ctx, eot);
+	}
+
+	/** Completes a conditional document request whose expected hash still matches; nothing but this frame follows. */
+	static void sendUnchanged(ChannelHandlerContext ctx, byte protocolVersion) {
+		ByteBuf unchanged = ctx.alloc().buffer(2);
+		unchanged.writeByte(protocolVersion);
+		unchanged.writeByte(UNCHANGED_TYPE);
+		writeControlAndFlush(ctx, unchanged);
 	}
 
 	static ChannelFuture writeControlAndFlush(ChannelHandlerContext ctx, Object message) {

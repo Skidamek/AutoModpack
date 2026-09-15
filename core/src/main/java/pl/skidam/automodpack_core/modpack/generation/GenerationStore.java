@@ -194,7 +194,7 @@ public final class GenerationStore {
 	}
 
 	/**
-	 * The hosting map: the head document under the reserved empty key, the journal file under the reserved journal
+	 * The hosting map: the head document under the reserved head key, the journal file under the reserved journal
 	 * key, and exactly the objects the head generation serves. Everything else stays on disk until an explicit collect.
 	 */
 	public GenerationHosting hosting() throws IOException {
