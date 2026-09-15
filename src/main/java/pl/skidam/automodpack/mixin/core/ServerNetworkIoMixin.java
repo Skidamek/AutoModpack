@@ -22,7 +22,7 @@ public abstract class ServerNetworkIoMixin {
 	private void injectAutoModpackHost(Channel channel, Operation<Void> original) {
 		original.call(channel);
 		if (hostServer != null && hostServer.isSharedMagicEnabled()) {
-			channel.pipeline().addFirst(MOD_ID, new ProtocolServerHandler(hostServer, ModpackConnectionMode.MAGIC, true));
+			channel.pipeline().addFirst(MOD_ID, new ProtocolServerHandler(hostServer, ModpackConnectionMode.MAGIC, true, false));
 			return;
 		}
 		if (Common.server != null && ServerHolepunchBridge.isRegistered()) {

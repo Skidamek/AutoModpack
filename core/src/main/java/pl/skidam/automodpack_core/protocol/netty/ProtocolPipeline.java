@@ -16,8 +16,8 @@ import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.handler.CompressionDecoder;
 import pl.skidam.automodpack_core.protocol.netty.handler.CompressionEncoder;
 import pl.skidam.automodpack_core.protocol.netty.handler.ConfigurationHandler;
+import pl.skidam.automodpack_core.protocol.netty.handler.ConnectionLifetimeHandler;
 import pl.skidam.automodpack_core.protocol.netty.handler.ErrorPrinter;
-import pl.skidam.automodpack_core.protocol.netty.handler.PreConfigurationLifetimeHandler;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolMessageDecoder;
 import pl.skidam.automodpack_core.protocol.netty.handler.ServerMessageHandler;
 
@@ -54,9 +54,9 @@ public final class ProtocolPipeline {
 		NettyServer.setCompression(channel, defaultCompression);
 		channel.attr(NettyServer.CHUNK_SIZE).set(NetUtils.DEFAULT_CHUNK_SIZE);
 
-		PreConfigurationLifetimeHandler preConfigurationLifetime = new PreConfigurationLifetimeHandler();
-		channel.pipeline().addLast("pre-configuration-lifetime", preConfigurationLifetime)
-				.addLast("configuration-handler", new ConfigurationHandler(preConfigurationLifetime)).addLast("compression-encoder", new CompressionEncoder())
+		ConnectionLifetimeHandler connectionLifetime = new ConnectionLifetimeHandler();
+		channel.pipeline().addLast("connection-lifetime", connectionLifetime)
+				.addLast("configuration-handler", new ConfigurationHandler(connectionLifetime)).addLast("compression-encoder", new CompressionEncoder())
 				.addLast("compression-decoder", new CompressionDecoder()).addLast("chunked-write", new ChunkedWriteHandler())
 				.addLast("protocol-msg-decoder", new ProtocolMessageDecoder()).addLast("msg-handler", new ServerMessageHandler(server))
 				.addLast("error-printer-last", new ErrorPrinter());

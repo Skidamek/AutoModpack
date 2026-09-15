@@ -39,6 +39,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.PlatformUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.WindowsLockProbe;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -578,10 +579,16 @@ public final class UpdateTransactionExecutor {
 	}
 
 	public static boolean isLockFailure(IOException exception) {
+		return isLockFailure(exception, PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS);
+	}
+
+	static boolean isLockFailure(IOException exception, boolean windows) {
 		Throwable current = exception;
 		while (current != null) {
-			// Windows reports an open handle that denies delete sharing as AccessDeniedException, without a lock-specific reason.
-			if (current instanceof AccessDeniedException) return true;
+			// Windows reports an open handle that denies delete sharing as AccessDeniedException, without a lock-specific
+			// reason. On other kernels the same exception is a plain permission problem - a permanent failure, not an
+			// update that should defer forever with a locked-file story - so only the explicit lock-worded messages count.
+			if (windows && current instanceof AccessDeniedException) return true;
 			if (current instanceof FileSystemException fileSystemException) {
 				String detail = (Objects.toString(fileSystemException.getReason(), "") + " " + Objects.toString(fileSystemException.getMessage(), "")).toLowerCase(Locale.ROOT);
 				if (detail.contains("used by another process") || detail.contains("being used by another process") || detail.contains("sharing violation")) return true;

@@ -123,7 +123,7 @@ class UpdatePreviewTest {
 	}
 
 	private static UpdatePlan plan(ModpackJsons.ModpackContentFields target, Map<FileKey, FileState> files) {
-		return UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+		return UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				new ClientConfigJsons.ClientConfigFieldsV3()));
 	}
 
