@@ -51,9 +51,8 @@ public class AutoModpackTransformationService implements ITransformationService 
 	// FMLLoader.versionInfo()/getDist() are still null at onLoad() (processArguments/initialize
 	// have not run yet). ModLauncher already has the real launch args in ArgumentHandler; the
 	// JVM's sun.java.command does not when Prism launches through ForgeWrapper by reflection.
-	public static volatile String EARLY_MC_VERSION;
-	public static volatile String EARLY_FORGE_VERSION;
-	public static volatile Boolean EARLY_IS_CLIENT;
+	// The values live in EarlyLaunchEnvironment so the locator base can read them without
+	// class-loading this forge-typed class.
 
 	@Override
 	public String name() {
@@ -66,14 +65,14 @@ public class AutoModpackTransformationService implements ITransformationService 
 
 		String[] launchArgs = ModuleClassLoaderAccess.launchArguments();
 		String[] processArgs = System.getProperty("sun.java.command", "").split("\\s+");
-		EARLY_MC_VERSION = firstNonNull(argValue(launchArgs, "--fml.mcVersion"), argValue(processArgs, "--fml.mcVersion"));
-		EARLY_FORGE_VERSION = firstNonNull(argValue(launchArgs, "--fml.forgeVersion"), argValue(processArgs, "--fml.forgeVersion"));
+		EarlyLaunchEnvironment.MC_VERSION = firstNonNull(argValue(launchArgs, "--fml.mcVersion"), argValue(processArgs, "--fml.mcVersion"));
+		EarlyLaunchEnvironment.FORGE_VERSION = firstNonNull(argValue(launchArgs, "--fml.forgeVersion"), argValue(processArgs, "--fml.forgeVersion"));
 		String launchTarget = firstNonNull(argValue(launchArgs, "--launchTarget"), argValue(processArgs, "--launchTarget"));
-		if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
+		if (launchTarget != null) EarlyLaunchEnvironment.IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
 
 		// TargetId throws when the id cannot be resolved: a launch without a target id must crash,
 		// not silently run on an unknown combination.
-		LOGGER.info("AutoModpack target: {}", TargetId.id("forge", EARLY_MC_VERSION));
+		LOGGER.info("AutoModpack target: {}", TargetId.id("forge", EarlyLaunchEnvironment.MC_VERSION));
 
 		new Preload(new LoaderManager(), new ModpackLoader());
 		EarlyServiceLayer.bootstrap();

@@ -79,7 +79,7 @@ class Target:
     fabric_loader: str | None = None
     forge_version: str | None = None
     neoforge_version: str | None = None
-    artifact_pattern: str = "automodpack-mc{id}-*.jar"
+    artifact_pattern: str = "automodpack-*.jar"
 
 
 def load_targets() -> dict[str, Target]:
@@ -113,7 +113,7 @@ def load_targets() -> dict[str, Target]:
                 ),
                 artifact_pattern=item.get(
                     "artifactPattern",
-                    defaults.get("artifactPattern", "automodpack-mc{id}-*.jar"),
+                    defaults.get("artifactPattern", "automodpack-*.jar"),
                 ),
             )
         )

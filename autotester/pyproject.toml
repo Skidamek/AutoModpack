@@ -11,6 +11,7 @@ dependencies = [
     "docker>=7.2.0",
     "filelock>=3.20.3",
     "PyYAML>=6.0.3",
+    "zstandard>=0.25.0",
 ]
 
 [project.scripts]

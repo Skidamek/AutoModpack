@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import struct
 import threading
 import time
 import types
@@ -26,6 +28,26 @@ def _target(**kw):
     }
     base.update(kw)
     return types.SimpleNamespace(**base)
+
+
+def _manifest(entries: list[tuple[str, int, int, bytes]]) -> bytes:
+    out = io.BytesIO()
+    out.write(b"AMP1")
+    out.write(b"\x00" * 20)
+    out.write(struct.pack("<H", len(entries)))
+    for target_id, offset, length, sha1 in entries:
+        encoded = target_id.encode("utf-8")
+        out.write(struct.pack("<H", len(encoded)))
+        out.write(encoded)
+        out.write(struct.pack("<II", offset, length))
+        out.write(sha1)
+    return out.getvalue()
+
+
+def _zstd_compress(data: bytes) -> bytes:
+    import zstandard
+
+    return zstandard.compress(data)
 
 
 def test_targets_command_uses_configured_defaults(monkeypatch, capsys):
@@ -322,29 +344,54 @@ def test_artifact_resolution_uses_target_id(tmp_path):
         id="26.1-fabric",
         minecraft="26.1.2",
         loader="fabric",
-        artifact_pattern="automodpack-mc{id}-*.jar",
+        artifact_pattern="automodpack-{id}-*.jar",
     )
-    artifact = tmp_path / "automodpack-mc26.1-fabric-test.jar"
+    artifact = tmp_path / "automodpack-26.1-fabric-test.jar"
     with zipfile.ZipFile(artifact, "w") as jar:
         jar.writestr("pl/skidam/automodpack/client/autotest/AutoTestBridge.class", b"")
 
     assert runner._resolve_artifact(target, tmp_path) == artifact.resolve()
 
 
-def test_artifact_resolution_rejects_release_mode_artifact(tmp_path):
-    target = _target(artifact_pattern="automodpack-mc{id}-*.jar")
-    artifact = tmp_path / "automodpack-mc1.21.1-neoforge-test.jar"
+def test_artifact_resolution_descends_into_the_impl_solid(tmp_path):
+    target = _target(artifact_pattern="automodpack-*.jar")
+    bridge = zipfile.ZipInfo("pl/skidam/automodpack/client/autotest/AutoTestBridge.class")
+    bridge.date_time = (1980, 1, 1, 0, 0, 0)
+    bridge.compress_type = zipfile.ZIP_STORED
+    impl = io.BytesIO()
+    with zipfile.ZipFile(impl, "w") as mod_jar:
+        mod_jar.writestr("fabric.mod.json", "{}")
+        mod_jar.writestr(bridge, b"")
+    impl_bytes = impl.getvalue()
+    artifact = tmp_path / "automodpack-4.0.5-test.jar"
     with zipfile.ZipFile(artifact, "w") as jar:
         jar.writestr("fabric.mod.json", "{}")
+        jar.writestr("impl/manifest.bin", _manifest([("1.20.1-fabric", 0, len(impl_bytes), b"\x00" * 20)]))
+        jar.writestr("impl/all.zst", _zstd_compress(impl_bytes))
+
+    assert runner._resolve_artifact(target, tmp_path) == artifact.resolve()
+
+
+def test_artifact_resolution_rejects_release_mode_artifact(tmp_path):
+    target = _target(artifact_pattern="automodpack-*.jar")
+    impl = io.BytesIO()
+    with zipfile.ZipFile(impl, "w") as mod_jar:
+        mod_jar.writestr("fabric.mod.json", "{}")
+    impl_bytes = impl.getvalue()
+    artifact = tmp_path / "automodpack-4.0.5-test.jar"
+    with zipfile.ZipFile(artifact, "w") as jar:
+        jar.writestr("fabric.mod.json", "{}")
+        jar.writestr("impl/manifest.bin", _manifest([("1.20.1-fabric", 0, len(impl_bytes), b"\x00" * 20)]))
+        jar.writestr("impl/all.zst", _zstd_compress(impl_bytes))
 
     with pytest.raises(RuntimeError, match="rebuild with -Pautomodpack.autotest"):
         runner._resolve_artifact(target, tmp_path)
 
 
 def test_artifact_resolution_rejects_ambiguous_matches(tmp_path):
-    target = _target(artifact_pattern="automodpack-mc{id}-*.jar")
-    (tmp_path / "automodpack-mc1.21.1-neoforge-a.jar").touch()
-    (tmp_path / "automodpack-mc1.21.1-neoforge-b.jar").touch()
+    target = _target(artifact_pattern="automodpack-*.jar")
+    (tmp_path / "automodpack-4.0.5-a.jar").touch()
+    (tmp_path / "automodpack-4.0.5-b.jar").touch()
     with pytest.raises(RuntimeError, match="Ambiguous artifacts"):
         runner._resolve_artifact(target, tmp_path)
 

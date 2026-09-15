@@ -177,20 +177,27 @@ val writeReleaseMatrix =
 			val displayName = project.property("mod_name").toString()
 			val modName = displayName.lowercase(Locale.ROOT)
 			val modVersion = project.property("mod_version").toString()
+			// One jar publishes once for every loader; the game-version list is the distinct union
+			// across the selected targets, in stable target order.
+			val publishVersions =
+				selectedTargets
+					.map { target -> structuredString(target.substringBeforeLast('-'), "publish_versions") }
+					.flatMap { it.split('\n') }
+					.filter { it.isNotBlank() }
+					.distinct()
+					.joinToString(",")
 			val entries =
-				selectedTargets.map { target ->
-					val targetLine = target.substringBeforeLast('-')
-					val loader = target.substringAfterLast('-')
+				listOf(
 					mapOf(
-						"subproject" to target,
-						"target" to targetLine,
-						"loader" to loader,
-						"file" to "$modName-mc$target-$modVersion.jar",
+						"subproject" to "one-jar",
+						"target" to "universal",
+						"loader" to "fabric,forge,neoforge",
+						"file" to "$modName-$modVersion.jar",
 						"mod_name" to displayName,
 						"mod_version" to modVersion,
-						"publish_versions" to structuredString(targetLine, "publish_versions"),
-					)
-				}
+						"publish_versions" to publishVersions,
+					),
+				)
 			val output = releaseMatrixFile.get().asFile
 			output.parentFile.mkdirs()
 			output.writeText(ObjectMapper().writeValueAsString(mapOf("include" to entries)) + "\n")
@@ -198,10 +205,58 @@ val writeReleaseMatrix =
 		}
 	}
 
+val automodpackBuildMode =
+	providers
+		.gradleProperty("automodpack.autotest")
+		.map { "autotest" }
+		.orElse("release")
+val modVersion = project.property("mod_version").toString()
+val modName = project.property("mod_name").toString().lowercase(Locale.ROOT)
+val modId = project.property("mod.id").toString()
+
+// Convention paths shared with the producing tasks; if a convention drifts, oneJar fails loudly on
+// the missing file instead of packing stale bytes.
+fun optimizedImplJar(target: String) = layout.projectDirectory.file("versions/$target/build/libs-optimized/$modName-mc$target-$modVersion-optimized.jar")
+
+fun optimizedOuterJar() = layout.projectDirectory.file("loader/universal/build/libs/$modId-loader-universal-$modVersion-optimized.jar")
+
+val oneJarTask =
+	tasks.register<OneJarTask>("oneJar") {
+		group = "build"
+		description = "Packs the optimized universal outer and every selected target's optimized impl jar into the one published jar."
+		buildMode.set(automodpackBuildMode)
+		outerJar.set(optimizedOuterJar())
+		implJars.set(providers.provider { selectedTargets.associateWith { target -> optimizedImplJar(target).asFile.absolutePath } })
+		implJarFiles.setFrom(selectedTargets.map { optimizedImplJar(it) })
+		oneJar.set(layout.projectDirectory.file("merged/$modName-$modVersion.jar"))
+		dependsOn(":loader-universal:optimizeUniversalJar")
+		dependsOn(selectedTargets.map { ":$it:optimizeModJar" })
+		if (automodpackBuildMode.get() == "autotest") {
+			dependsOn(":autotest-fixtures:build")
+		}
+	}
+
+val auditOneJarTask =
+	tasks.register<OneJarAuditTask>("auditOneJar") {
+		group = "verification"
+		description = "Audits the packed one jar: size budget, manifest ids, STORE entries, assets, no nested jarjar."
+		oneJar.set(oneJarTask.flatMap { it.oneJar })
+		expectedIds.set(selectedTargets.sorted())
+		// Packed one-jar measured 4131389 bytes (deflated outer assets, 22 STORE impls in a 917037-byte zstd solid); 5 MiB is the tripwire past any good build.
+		maxJarBytes.set(5L * 1024 * 1024)
+		enforceReleaseSizeBudget.set(automodpackBuildMode.map { it != "autotest" })
+		// The waiting loop is the transcribed note-block bossa nova, 550322 bytes as packaged; 1 MiB leaves it headroom and still trips on accidental full songs.
+		maxMusicBytes.set(1024L * 1024)
+	}
+
+oneJarTask.configure {
+	finalizedBy(auditOneJarTask)
+}
+
 tasks.register("buildTargets") {
 	group = "build"
-	description = "Builds the selected AutoModpack targets and writes their release metadata."
-	dependsOn(selectedTargets.map { ":$it:build" })
+	description = "Builds the one release jar from the selected AutoModpack targets and writes its release metadata."
+	dependsOn(oneJarTask)
 	dependsOn(writeReleaseMatrix)
 }
 

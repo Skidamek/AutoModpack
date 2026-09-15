@@ -11,10 +11,8 @@ import net.fabricmc.loader.api.LanguageAdapter;
 import net.fabricmc.loader.api.ModContainer;
 
 import pl.skidam.automodpack_core.Preload;
-import pl.skidam.automodpack_core.loader.NestedImpl;
+import pl.skidam.automodpack_core.loader.ImplStore;
 import pl.skidam.automodpack_core.loader.TargetId;
-import pl.skidam.automodpack_core.storage.GameDirectory;
-import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_loader_core_fabric.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core_fabric.mods.ImplMount;
 import pl.skidam.automodpack_loader_core_fabric.mods.ModpackLoader;
@@ -30,23 +28,23 @@ public class FabricLanguageAdapter implements LanguageAdapter {
 	}
 
 	/**
-	 * Surfaces the outer's nested impl jar explicitly (no {@code jars} metadata anymore): extract it
-	 * to a real file and add it as a mod before {@link Preload}. This runs mid
+	 * Surfaces the one jar's impl for this target explicitly (no {@code jars} metadata anymore): select it
+	 * into the instance's impl cache and add it as a mod before {@link Preload}. This runs mid
 	 * {@code FabricLoaderImpl#load()}, so the loader's own passes pick the impl up like any late-added
 	 * modpack mod: access wideners, mixins and entrypoints all bootstrap after {@code load()} returns.
 	 */
 	private static void mountImpl(LoaderManager loaderManager) {
 		// TargetId throws when the id cannot be resolved: a launch without a target id must crash,
 		// not silently run on an unknown combination.
-		LOGGER.info("AutoModpack target: {}", TargetId.id("fabric", loaderManager.getModVersion("minecraft")));
+		String targetId = TargetId.id("fabric", loaderManager.getModVersion("minecraft"));
+		LOGGER.info("AutoModpack target: {}", targetId);
 
 		boolean client = FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT;
-		Path cacheDir = GameDirectory.current().resolve(client ? StoragePaths.CLIENT_IMPL_CACHE_DIR : StoragePaths.SERVER_IMPL_CACHE_DIR);
 		try {
-			Path implJar = NestedImpl.extract(FabricLanguageAdapter.class, cacheDir);
+			Path implJar = ImplStore.select(FabricLanguageAdapter.class, targetId, client);
 			ImplMount.mount(implJar, loaderManager.getLoaderVersion());
 		} catch (IOException e) {
-			throw new RuntimeException("Failed to extract the AutoModpack impl jar", e);
+			throw new RuntimeException("Failed to stage the AutoModpack impl jar", e);
 		}
 	}
 

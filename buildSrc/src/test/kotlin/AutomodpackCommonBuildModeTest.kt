@@ -28,10 +28,6 @@ class AutomodpackCommonBuildModeTest {
 				java
 				id("automodpack.common")
 			}
-
-			tasks.named("mergeJar") {
-				enabled = false
-			}
 			""".trimIndent() + "\n",
 		)
 		for (module in listOf("core", "loader/universal")) {

@@ -1,10 +1,11 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import dev.luna5ama.jaroptimizer.OptimizeJarTask
 import org.gradle.api.file.DuplicatesStrategy
 
 // The one universal OUTER trampoline jar: every loader generation's entrypoints plus the three
 // metadata files (fabric.mod.json, mods.toml, neoforge.mods.toml), published under every target.
-// The nested per-target META-INF/jarjar/automodpack-mod.jar is merged in afterwards by MergeJarTask
-// and mounted explicitly by each generation's entrypoints - no jars/metadata.json discovery anywhere.
+// The root project's oneJar task optimizes this jar, then appends every target's impl as the
+// solid impl/manifest.bin + impl/all.zst pair - no nested jarjar discovery anywhere.
 evaluationDependsOn(":core")
 evaluationDependsOn(":loader-fabric-shared")
 evaluationDependsOn(":loader-fabric-core")
@@ -21,6 +22,7 @@ plugins {
 	kotlin("jvm")
 	id("automodpack.utils")
 	id("com.gradleup.shadow")
+	id("dev.luna5ama.jar-optimizer")
 }
 
 base {
@@ -145,6 +147,26 @@ tasks.named<Jar>("jar") {
 	isEnabled = false
 }
 
+// The outer keeps the optimizer pass the merged jar used to get; the oneJar task appends the impl
+// entries only afterwards, so they stay STORE.
+val optimizeUniversalJar =
+	tasks.register<OptimizeJarTask>("optimizeUniversalJar") {
+		dependsOn(tasks.named("shadowJar"))
+		jarFile.set(tasks.named<ShadowJar>("shadowJar").flatMap { it.archiveFile })
+		keeps.add("pl.skidam")
+		archiveFileName.set(
+			provider {
+				tasks
+					.named<ShadowJar>("shadowJar")
+					.get()
+					.archiveFileName
+					.get()
+					.replace(".jar", "-optimized.jar")
+			},
+		)
+	}
+
 tasks.named("assemble") {
 	dependsOn("shadowJar")
+	finalizedBy(optimizeUniversalJar)
 }

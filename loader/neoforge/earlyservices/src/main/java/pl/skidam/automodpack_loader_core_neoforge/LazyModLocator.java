@@ -9,10 +9,8 @@ import net.neoforged.neoforgespi.locating.*;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.GenerationProbes;
-import pl.skidam.automodpack_core.loader.NestedImpl;
+import pl.skidam.automodpack_core.loader.ImplStore;
 import pl.skidam.automodpack_core.loader.TargetId;
-import pl.skidam.automodpack_core.storage.GameDirectory;
-import pl.skidam.automodpack_core.storage.StoragePaths;
 
 /**
  * Cross-generation linkage: the universal outer jar registers this class and the fml4 locator under
@@ -46,8 +44,7 @@ public class LazyModLocator implements IDependencyLocator {
 	private static Path implJar() throws IOException {
 		Boolean client = EarlyServiceBootstrapper.EARLY_IS_CLIENT;
 		if (client == null) throw new IllegalStateException("AutoModpack cannot tell client from server before mounting the impl jar");
-		Path cacheDir = GameDirectory.current().resolve(client ? StoragePaths.CLIENT_IMPL_CACHE_DIR : StoragePaths.SERVER_IMPL_CACHE_DIR);
-		return NestedImpl.extract(LazyModLocator.class, cacheDir);
+		return ImplStore.select(LazyModLocator.class, TargetId.id("neoforge", EarlyServiceBootstrapper.EARLY_MC_VERSION), client);
 	}
 
 	@Override

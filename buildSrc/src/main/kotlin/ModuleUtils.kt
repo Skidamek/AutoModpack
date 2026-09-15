@@ -9,14 +9,11 @@ fun Project.loaderVersion(moduleName: String = project.name): String {
     return versions[moduleName] ?: error("Unknown loader module: $moduleName")
 }
 
-// Every published target merges the same universal outer jar (:loader-universal) with its own
-// nested per-target impl; the universal shadowJar transitively builds every loader generation.
-fun getUniversalLoaderModuleName(): String = "universal"
-
-fun getAllDependentLoaderModules(): List<String> = listOf("core", "loader-${getUniversalLoaderModuleName()}")
-
-fun getMergedJarPath(buildDirLibs: File): File {
+// The one jar packs each target's optimized impl jar (build/libs-optimized) into the optimized
+// universal outer (:loader-universal); the universal shadowJar transitively builds every loader
+// generation.
+fun getModJarPath(buildDirLibs: File): File {
     return buildDirLibs.listFiles()
         ?.firstOrNull { file -> file.isFile && !file.name.endsWith("-sources.jar") && file.name.endsWith(".jar") }
-        ?: error("No jar found to merge in build/libs directory! ${buildDirLibs.absolutePath}")
+        ?: error("No jar found in build/libs directory! ${buildDirLibs.absolutePath}")
 }
