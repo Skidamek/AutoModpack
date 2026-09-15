@@ -74,7 +74,10 @@ final class FileSend {
 		} catch (Exception e) {
 			inFlightTransfers.decrementAndGet();
 			closeQuietly(file);
-			sendError(ctx, protocolVersion, "File transfer error: " + e.getMessage());
+			// The response header is already in flight, so an ERROR frame here would land inside the data stream the client is
+			// already reading; the only honest completion is dropping the connection.
+			LOGGER.error("File transfer of {} aborted after the response header was sent", sha1, e);
+			ctx.channel().close();
 		}
 	}
 
@@ -119,8 +122,10 @@ final class FileSend {
 		if (failure == null) {
 			executeOnLoop(ctx.channel(), () -> sendEOT(ctx, protocolVersion));
 		} else {
-			final Throwable outcome = failure;
-			executeOnLoop(ctx.channel(), () -> sendError(ctx, protocolVersion, "File transfer error: " + outcome.getMessage()));
+			// The client is mid-stream: an ERROR frame would be consumed as file bytes, so the transfer's only honest
+			// completion is dropping the connection; the reason lives in this log.
+			LOGGER.error("File transfer failed {} of {}: {}", file, fileSize, failure.getMessage(), failure);
+			executeOnLoop(ctx.channel(), ctx.channel()::close);
 		}
 	}
 
