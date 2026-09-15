@@ -24,6 +24,11 @@ import net.minecraftforge.forgespi.locating.IModFile;
  * is version-agnostic; the one forgespi-seamed call, {@code createMod} - {@code Optional<IModFile>} on
  * 1.18.2, {@code IModLocator.ModFileOrException} on 1.19+ - stays in the per-version subclasses via
  * {@link #embeddedMod(Path)}, since this module compiles against a single forgespi generation for both.
+ *
+ * <p>
+ * This class is not ServiceLoaded: the universal outer jar registers only the generation-agnostic
+ * dispatchers ({@link ModLocatorDispatcher}, {@link DependencyLocatorDispatcher}), which instantiate
+ * the subclass matching {@code GenerationProbes} and reach it through {@link LazyModLocatorView}.
  */
 @SuppressWarnings("unused")
 public abstract class LazyModLocatorBase extends AbstractJarFileDependencyLocator {

@@ -1,6 +1,5 @@
 plugins {
 	kotlin("jvm")
-	id("automodpack.utils")
 	id("net.neoforged.moddev.legacyforge")
 }
 
@@ -12,8 +11,8 @@ val selectedForgeVersion = loaderVersion()
 // as net.minecraftforge:modlauncher/securejarhandler) are Java-17-safe, matching every consumer's
 // bytecode floor (see java{} below). The two classes here reference nothing else from that
 // dependency and NeoForge's own cpw.mods:modlauncher republishes the identical cpw.mods.* package,
-// so this module's compiled output is equally valid raw .class input for both
-// :loader-forge-earlyservices' and :loader-neoforge-fml4's shadowJar merges.
+// so this module's compiled output is equally valid raw .class input for the universal jar whether
+// it ends up serving :loader-forge-earlyservices or :loader-neoforge-fml4.
 base {
 	archivesName = property("mod.id") as String + "-" + project.name
 	version = property("mod_version") as String

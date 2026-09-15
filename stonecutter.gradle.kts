@@ -43,9 +43,7 @@ extra["loaderVersions"] =
 		"loader-forge-earlyservices" to structuredString("1.20.1-forge", "deps", "forge"),
 		"loader-modlauncher-earlyservices" to structuredString("1.20.1-forge", "deps", "forge"),
 		"loader-neoforge-fml4" to structuredString("1.21.1-neoforge", "deps", "neoforge"),
-		"loader-neoforge-fml10" to structuredString("1.21.10-neoforge", "deps", "neoforge"),
 		"loader-neoforge-earlyservices" to structuredString("1.21.10-neoforge", "deps", "neoforge"),
-		"loader-neoforge-fml11" to structuredString("26.1-neoforge", "deps", "neoforge"),
 	)
 
 stonecutter.parameters {

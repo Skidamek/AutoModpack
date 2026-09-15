@@ -6,7 +6,6 @@ evaluationDependsOn(":loader-modlauncher-earlyservices")
 
 plugins {
 	kotlin("jvm")
-	id("automodpack.utils")
 	id("net.neoforged.moddev.legacyforge")
 }
 

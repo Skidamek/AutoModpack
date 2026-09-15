@@ -9,33 +9,11 @@ fun Project.loaderVersion(moduleName: String = project.name): String {
     return versions[moduleName] ?: error("Unknown loader module: $moduleName")
 }
 
-fun getLoaderModuleName(projectName: String): String {
-    val minecraftFamily = projectName.substringBefore("-")
-        .ifEmpty { error("Could not determine Minecraft family from: $projectName") }
+// Every published target merges the same universal outer jar (:loader-universal) with its own
+// nested per-target impl; the universal shadowJar transitively builds every loader generation.
+fun getUniversalLoaderModuleName(): String = "universal"
 
-    return when {
-        projectName.contains("fabric") -> "fabric-core"
-        projectName.contains("neoforge") -> when (minecraftFamily) {
-            "1.21.8", "1.21.5", "1.21.4", "1.21.1" -> "neoforge-fml4"
-            "1.21.10", "1.21.11" -> "neoforge-fml10"
-            "26.1", "26.2" -> "neoforge-fml11"
-            else -> error("Unknown neoforge loader module for Minecraft family: $minecraftFamily")
-        }
-        projectName.contains("forge") -> if (minecraftFamily == "1.18.2") "forge-fml40" else "forge-fml47"
-        else -> error("Unknown loader type")
-    }
-}
-
-fun getAllDependentLoaderModules(name: String): List<String> {
-    val loaderModule = getLoaderModuleName(name)
-    val list = mutableListOf("core", "loader-$loaderModule")
-    if (loaderModule == "fabric-core") { // Special case for fabric.
-        list.add("loader-fabric-shared")
-        list.add("loader-fabric-15")
-        list.add("loader-fabric-16")
-    }
-    return list
-}
+fun getAllDependentLoaderModules(): List<String> = listOf("core", "loader-${getUniversalLoaderModuleName()}")
 
 fun getMergedJarPath(buildDirLibs: File): File {
     return buildDirLibs.listFiles()

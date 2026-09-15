@@ -85,7 +85,7 @@ repositories {
 
 tasks.named("build") {
 	val taksToRun = mutableListOf<String>()
-	for (module in getAllDependentLoaderModules(project.name)) {
+	for (module in getAllDependentLoaderModules()) {
 		taksToRun.add(":$module:build")
 	}
 	dependsOn(taksToRun)
@@ -111,7 +111,7 @@ tasks.register("cleanMerged") {
 val mergeJarTask =
 	tasks.register<MergeJarTask>("mergeJar") {
 		this.rootProjectPath.set(project.rootProject.projectDir.absolutePath)
-		this.loaderModuleName.set(getLoaderModuleName(project.name))
+		this.loaderModuleName.set(getUniversalLoaderModuleName())
 		this.buildMode.set(automodpackBuildMode)
 		this.buildDirectory.set(layout.buildDirectory)
 		this.mergedJar.set(
@@ -137,7 +137,7 @@ val mergeJarTask =
 			dependsOn(projectJar)
 			filesToHash.add(projectJar)
 		}
-		for (module in getAllDependentLoaderModules(project.name)) {
+		for (module in getAllDependentLoaderModules()) {
 			val moduleTasks = rootProject.project(module).tasks
 			(moduleTasks.findByName("shadowJar") ?: moduleTasks.findByName("jar"))?.let { modLoaderJar ->
 				filesToHash.add(modLoaderJar)

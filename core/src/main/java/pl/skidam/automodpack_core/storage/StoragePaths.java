@@ -36,6 +36,9 @@ public final class StoragePaths {
 	/** The client's instance-local cache, used only when the shared platform root is unusable. */
 	public static final Path CLIENT_DATA_DIR = CLIENT_DIR.resolve("data");
 
+	/** The client's extracted nested impl jars, mounted by loaders that cannot open nested zips in place. */
+	public static final Path CLIENT_IMPL_CACHE_DIR = CLIENT_DIR.resolve("impl-cache");
+
 	/** The instance-level pending self-update swap; consumed at boot before any role machinery wakes up. */
 	public static final Path SELF_UPDATE_FILE = AUTOMODPACK_DIR.resolve("self-update.json");
 	public static final Path HELPER_DIR = AUTOMODPACK_DIR.resolve("helper");
@@ -49,6 +52,9 @@ public final class StoragePaths {
 
 	/** The dedicated server's own cache: visible, deletable with the folder, never derived from HOME. */
 	public static final Path SERVER_DATA_DIR = SERVER_DIR.resolve("data");
+
+	/** The dedicated server's extracted nested impl jars, mounted by loaders that cannot open nested zips in place. */
+	public static final Path SERVER_IMPL_CACHE_DIR = SERVER_DIR.resolve("impl-cache");
 
 	public static final Path CREDENTIALS_DIR = AUTOMODPACK_DIR.resolve("credentials");
 	public static final Path SERVER_CERT_FILE = CREDENTIALS_DIR.resolve("certificate.crt");

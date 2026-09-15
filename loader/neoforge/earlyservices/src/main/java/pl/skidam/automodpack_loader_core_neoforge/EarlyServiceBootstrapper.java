@@ -13,10 +13,20 @@ import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.Preload;
+import pl.skidam.automodpack_core.loader.GenerationProbes;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.loader.TargetId;
 import pl.skidam.automodpack_loader_core_neoforge.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
 
+/**
+ * Cross-generation linkage: the universal outer jar registers this class and the fml4 bootstrapper
+ * under the same GraphicsBootstrapper service. That interface declares the identical abstract pair
+ * {@code name()}/{@code bootstrap(String[])} in neoforgespi 4.x, 10.x and 11.x, and this class's only
+ * supertype beyond it is Object - so it loads on every NeoForge generation, and the
+ * {@link GenerationProbes#NEOFORGE_EARLYSERVICES} guard no-ops it wherever the ModLauncher-era
+ * generation runs. Everything generation-specific in the body sits behind that guard.
+ */
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
 	// FMLLoader.getCurrent().getVersionInfo() is still null this early, so LoaderManager can't
@@ -38,10 +48,17 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
 	@Override
 	public void bootstrap(String[] arguments) {
+		// Coexists with the fml4 bootstrapper in the universal outer jar; only 21.10+ may act.
+		if (!GenerationProbes.NEOFORGE_EARLYSERVICES) return;
+
 		EARLY_MC_VERSION = argValue(arguments, "--fml.mcVersion");
 		EARLY_NEOFORGE_VERSION = argValue(arguments, "--fml.neoForgeVersion");
 		String launchTarget = argValue(arguments, "--launchTarget");
 		if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
+
+		// TargetId throws when the id cannot be resolved: a launch without a target id must crash,
+		// not silently run on an unknown combination.
+		TargetId.id("neoforge", EARLY_MC_VERSION);
 
 		// Run the update/reconcile step first: it decides what this launch loads, and the
 		// early-service hosting below hosts only jars from that decision. Preload failures must crash
