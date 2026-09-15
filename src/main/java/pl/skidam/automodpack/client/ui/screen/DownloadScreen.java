@@ -10,7 +10,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 
-import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.WaitingPresentation;
@@ -30,6 +29,7 @@ public class DownloadScreen extends VersionedScreen {
 
 	private final DownloadView download;
 	private final String header;
+	private final Runnable onCancel;
 
 	private final long startedAtNanos = System.nanoTime();
 	private long ticks = 0;
@@ -46,10 +46,11 @@ public class DownloadScreen extends VersionedScreen {
 	private long lastTextUpdate = 0;
 	private static final long TEXT_UPDATE_INTERVAL = 100; // Update strings 10x per second
 
-	public DownloadScreen(DownloadView download, String header) {
+	public DownloadScreen(DownloadView download, String header, Runnable onCancel) {
 		super(VersionedText.translatable("automodpack.download.title"));
 		this.download = download;
 		this.header = header;
+		this.onCancel = onCancel;
 	}
 
 	@Override
@@ -212,8 +213,8 @@ public class DownloadScreen extends VersionedScreen {
 
 	public void cancelDownload() {
 		try {
-			if (download != null) download.cancelAllAndShutdown();
-			ScreenImpl.multiplayer();
+			if (download != null && !download.isCancelled()) download.cancelAllAndShutdown();
+			if (onCancel != null) onCancel.run();
 		} catch (Exception e) {
 			LOGGER.error("Failed to cancel the download run", e);
 		}

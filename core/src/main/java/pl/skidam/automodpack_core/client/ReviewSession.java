@@ -219,7 +219,7 @@ final class ReviewSession {
 	}
 
 	public boolean isCancelledByPlayer() {
-		return playerCancelled.get() || updater.downloadCancelled();
+		return playerCancelled.get();
 	}
 
 	boolean abortedByPlayer(Throwable cause) {
@@ -239,13 +239,19 @@ final class ReviewSession {
 		ModpackUpdater.executor().execute(() -> startUpdate(true));
 	}
 
-	/** Returns the review to the confirmation seam once drained work observes the player's cancellation. */
-	private void confirmCancellationHandled() {
+	/**
+	 * Returns the review to the confirmation seam once drained work observes the player's cancellation. True when the
+	 * review is still open for a follow-up confirm; false when the engine closed because a commit had already begun.
+	 */
+	private boolean confirmCancellationHandled() {
 		if (confirmationState.get() == ConfirmationState.WAITING || confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING)) {
 			clearPlayerCancel();
-			return;
+			if (firstConnection) ScreenManager.welcome(reviewPayload());
+			else ScreenManager.restore();
+			return true;
 		}
 		updater.close();
+		return false;
 	}
 
 	/** Returns {@link ModpackUpdater.UpdateOutcome#REVIEW_OPENED} only when the review preview was accepted for display; every other outcome still owns the screen. */
@@ -264,18 +270,12 @@ final class ReviewSession {
 					yield ModpackUpdater.UpdateOutcome.INCOMPLETE;
 				}
 				case FAILED -> {
-					if (isCancelledByPlayer()) {
-						confirmCancellationHandled();
-						yield ModpackUpdater.UpdateOutcome.INCOMPLETE;
-					}
+					if (isCancelledByPlayer()) yield confirmCancellationHandled() ? ModpackUpdater.UpdateOutcome.REVIEW_OPENED : ModpackUpdater.UpdateOutcome.INCOMPLETE;
 					LOGGER.error("Already-authorized no-op update failed; the installed generation was not advanced");
 					yield ModpackUpdater.UpdateOutcome.INCOMPLETE;
 				}
 				case PREVIEW_NOT_SHOWN -> {
-					if (isCancelledByPlayer()) {
-						confirmCancellationHandled();
-						yield ModpackUpdater.UpdateOutcome.INCOMPLETE;
-					}
+					if (isCancelledByPlayer()) yield confirmCancellationHandled() ? ModpackUpdater.UpdateOutcome.REVIEW_OPENED : ModpackUpdater.UpdateOutcome.INCOMPLETE;
 					LOGGER.warn("Update preview could not be shown; leaving the installed generation unchanged");
 					yield ModpackUpdater.UpdateOutcome.INCOMPLETE;
 				}
@@ -284,14 +284,9 @@ final class ReviewSession {
 			updater.close();
 			return outcome;
 		} catch (Exception e) {
-			if (updater.downloadCancelled()) {
-				updater.close();
-				return ModpackUpdater.UpdateOutcome.INCOMPLETE;
-			}
 			if (abortedByPlayer(e) || confirmationState.get() == ConfirmationState.WAITING) {
 				if (abortedByPlayer(e)) LOGGER.warn("Modpack update preparation was aborted by the player", e);
-				confirmCancellationHandled();
-				return ModpackUpdater.UpdateOutcome.INCOMPLETE;
+				return confirmCancellationHandled() ? ModpackUpdater.UpdateOutcome.REVIEW_OPENED : ModpackUpdater.UpdateOutcome.INCOMPLETE;
 			}
 			updater.close();
 			ModpackUpdater.showUpdateFailure(e);

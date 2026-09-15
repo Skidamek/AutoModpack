@@ -19,6 +19,7 @@ import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.screen.HistoryViewRequest;
 import pl.skidam.automodpack_core.screen.DownloadView;
+import pl.skidam.automodpack_core.screen.TransientAttention;
 import pl.skidam.automodpack_core.client.UpdateType;
 import pl.skidam.automodpack_core.utils.Throwables;
 
@@ -51,63 +52,82 @@ public class ScreenImpl implements ScreenService {
 
 	@Override
 	public void download(DownloadView download, String modpackName) {
-		executeOnClient(() -> Screens.download(download, modpackName));
+		download(download, modpackName, null);
+	}
+
+	@Override
+	public void download(DownloadView download, String modpackName, Runnable onCancel) {
+		long token = Screens.beginWait();
+		executeOnClient(() -> {
+			if (!Screens.waitIsCurrent(token)) return;
+			Screens.download(download, modpackName, onCancel);
+		});
 	}
 
 	@Override
 	public void changelog(Changelogs changelogs) {
+		Screens.supersedeWait();
 		executeOnClient(() -> Screens.changelog(Screens.getScreen(), changelogs));
 	}
 
 	@Override
 	public void restart(UpdateType updateType, Changelogs changelogs) {
+		Screens.supersedeWait();
 		executeOnClient(() -> Screens.restart(updateType, changelogs));
 	}
 
 	@Override
 	public void completeWithoutRestart() {
+		Screens.supersedeWait();
 		executeOnClient(Screens::multiplayer);
 	}
 
 	@Override
 	public void welcome(ReviewPayload payload) {
+		Screens.supersedeWait();
 		executeOnClient(() -> Screens.welcome(payload));
 	}
 
 	@Override
 	public boolean preview(PreviewPayload payload) {
+		Screens.supersedeWait();
 		executeOnClient(() -> Screens.preview(payload));
 		return true;
 	}
 
 	@Override
 	public void history(HistoryViewRequest request) {
+		Screens.supersedeWait();
 		executeOnClient(() -> Screens.history(request));
 	}
 
 	@Override
 	public void failure(FailureRequest request) {
+		Screens.supersedeWait();
 		executeOnClient(() -> Screens.failure(request));
 	}
 
 	@Override
 	public void validation(String fingerprint, String origin, Runnable validated, Runnable canceled) {
+		Screens.supersedeWait();
 		executeOnClient(() -> Screens.validation(fingerprint, origin, validated, canceled));
 	}
 
 	@Override
 	public void originChange(String modpackName, String approvedOrigins, String newOrigin, Runnable allowed, Runnable refused) {
+		Screens.supersedeWait();
 		executeOnClient(() -> Screens.originChange(modpackName, approvedOrigins, newOrigin, allowed, refused));
 	}
 
 	@Override
 	public void detachedJoin(String modpackName, boolean headMatchesActive, Runnable continueJoin, Runnable syncNow) {
+		Screens.supersedeWait();
 		executeOnClient(() -> Screens.detachedJoin(modpackName, headMatchesActive, continueJoin, syncNow));
 	}
 
 	@Override
 	public void waiting() {
-		executeOnClient(() -> Screens.waiting(null));
+		waiting(null);
 	}
 
 	@Override
@@ -122,7 +142,17 @@ public class ScreenImpl implements ScreenService {
 
 	@Override
 	public void waiting(Runnable onCancel) {
-		executeOnClient(() -> Screens.waiting(onCancel));
+		long token = Screens.beginWait();
+		executeOnClient(() -> {
+			if (!Screens.waitIsCurrent(token)) return;
+			Screens.waiting(onCancel);
+		});
+	}
+
+	@Override
+	public void restore() {
+		Screens.supersedeWait();
+		executeOnClient(Screens::restoreIfWaiting);
 	}
 
 	@Override
@@ -161,7 +191,20 @@ public class ScreenImpl implements ScreenService {
 		private static Screen interactiveParent;
 		// A Preparing/Download screen owns the player's attention from the moment one is asked for until a real screen shows again; the loading transition delays that swap, so this flag and not the live screen says when a flow is transient.
 		private static boolean transientAttention;
+		private static final TransientAttention WAIT = new TransientAttention();
 		private static final LoadingTransition LOADING_TRANSITION = new LoadingTransition(ScreenImpl::executeOnClient);
+
+		static long beginWait() {
+			return WAIT.begin();
+		}
+
+		static boolean waitIsCurrent(long token) {
+			return WAIT.isCurrent(token);
+		}
+
+		static void supersedeWait() {
+			WAIT.supersede();
+		}
 
 		private static Screen getScreen() {
 			/*? if >=26.2 {*/
@@ -215,13 +258,16 @@ public class ScreenImpl implements ScreenService {
 			return transientAttention ? interactiveParent : getScreen();
 		}
 
-		/** Screens with nowhere honest to return to land on the multiplayer hub. */
+		/** Screens with nowhere honest to return to land on the multiplayer hub. A torn-down connecting screen is the same as nowhere. */
 		private static Screen returnTarget(Screen parent) {
-			return parent == null ? multiplayerScreen() : parent;
+			return parent == null || parent instanceof ConnectScreen ? multiplayerScreen() : parent;
 		}
 
-		public static void download(DownloadView download, String modpackName) {
-			Screens.setScreen(new DownloadScreen(download, modpackName));
+		public static void download(DownloadView download, String modpackName, Runnable onCancel) {
+			Screens.setScreen(new DownloadScreen(download, modpackName, () -> {
+				if (onCancel != null) onCancel.run();
+				restoreIfWaiting();
+			}));
 		}
 
 		public static void changelog(Screen parent, Changelogs changelogs) {
@@ -295,8 +341,15 @@ public class ScreenImpl implements ScreenService {
 		public static void waiting(Runnable onCancel) {
 			Screens.setScreen(new PreparingScreen(() -> {
 				if (onCancel != null) onCancel.run();
-				Screens.setScreen(returnTarget(interactiveParent));
+				restoreIfWaiting();
 			}));
+		}
+
+		/** Leaves a wait/download episode for the remembered parent; no-op when a successor already replaced it. */
+		static void restoreIfWaiting() {
+			WAIT.supersede();
+			if (!transientAttention && !isTransient(getScreen())) return;
+			Screens.setScreen(returnTarget(interactiveParent));
 		}
 	}
 }

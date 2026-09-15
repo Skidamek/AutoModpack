@@ -11,6 +11,11 @@ public interface ScreenService {
 
 	default void download(DownloadView download, String modpackName) {}
 
+	/** Shows the download screen; {@code onCancel} is the same player-cancel seam the preparing screen uses. */
+	default void download(DownloadView download, String modpackName, Runnable onCancel) {
+		download(download, modpackName);
+	}
+
 	default void changelog(Changelogs changelogs) {}
 
 	default void restart(UpdateType updateType, Changelogs changelogs) {}
@@ -70,6 +75,12 @@ public interface ScreenService {
 	default void waiting(Runnable onCancel) {
 		waiting();
 	}
+
+	/**
+	 * Ends the current wait/download episode and returns to the remembered parent. No-op when a successor already
+	 * replaced it or no wait is showing. A wait cannot outlive the engine: {@code ModpackUpdater.close()} always calls this.
+	 */
+	default void restore() {}
 
 	/**
 	 * The screens the player interacted with in this flow are gone, e.g. a login torn down before its modpack sync;

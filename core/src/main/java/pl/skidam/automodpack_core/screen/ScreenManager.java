@@ -27,6 +27,10 @@ public final class ScreenManager {
 		instance.download(download, modpackName);
 	}
 
+	public static void download(DownloadView download, String modpackName, Runnable onCancel) {
+		instance.download(download, modpackName, onCancel);
+	}
+
 	public static void changelog(Changelogs changelogs) {
 		instance.changelog(changelogs);
 	}
@@ -94,6 +98,10 @@ public final class ScreenManager {
 
 	public static void waiting(Runnable onCancel) {
 		instance.waiting(onCancel);
+	}
+
+	public static void restore() {
+		instance.restore();
 	}
 
 	public static void discardReturnTarget() {

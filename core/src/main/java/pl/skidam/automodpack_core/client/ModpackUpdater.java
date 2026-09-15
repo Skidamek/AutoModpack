@@ -215,7 +215,7 @@ public class ModpackUpdater implements AutoCloseable {
 		this.downloadClient = downloadClient;
 		AtomicBoolean playerCancelled = new AtomicBoolean();
 		this.objectAcquisition = new ModpackObjectAcquisition(this.storage, this.platformCache, this.sourceCatalogue, this.planBuilder, this.connectionInfo, this.downloadClient,
-				playerCancelled, this::getModpackName);
+				playerCancelled, this::getModpackName, this::cancelFromPlayer);
 		this.review = new ReviewSession(this, this.storage, this.sourceCatalogue, playerCancelled);
 	}
 
@@ -285,7 +285,7 @@ public class ModpackUpdater implements AutoCloseable {
 		REVIEW_OPENED,
 		/** The update applied inline; nothing is pending and the pack is current. */
 		APPLIED,
-		/** Cancelled by the player, deferred to a restart, or failed; the caller still owns the screen. */
+		/** Cancelled by the player, deferred to a restart, or failed; the wait episode is settled. */
 		INCOMPLETE
 	}
 
@@ -294,7 +294,7 @@ public class ModpackUpdater implements AutoCloseable {
 	 * Returns {@link UpdateOutcome#APPLIED} exactly when the update ran inline to completion; {@link
 	 * UpdateOutcome#REVIEW_OPENED} when a player-facing flow took over (first-install welcome, or a review preview
 	 * accepted for display); {@link UpdateOutcome#INCOMPLETE} when the flow was cancelled, deferred to a restart, or
-	 * failed, so the caller still owns the screen either way.
+	 * failed. A wait episode never outlives this call: a successor screen or {@link ScreenManager#restore()} settled it.
 	 */
 	public UpdateOutcome processModpackUpdate(boolean showWaitingScreen) {
 		if (preload) {
@@ -631,10 +631,6 @@ public class ModpackUpdater implements AutoCloseable {
 				sourceCatalogue.selectedJarSourceCounts(getSelectedTarget()), review.reviewActions(), continueAction, cancelAction);
 	}
 
-	boolean downloadCancelled() {
-		return objectAcquisition.downloadCancelled();
-	}
-
 	boolean isCurrentAttempt(UpdateAttempt candidate) {
 		return attempt.get() == candidate;
 	}
@@ -660,6 +656,7 @@ public class ModpackUpdater implements AutoCloseable {
 			if (downloadClient != null) downloadClient.close();
 			platformCache.close();
 		}
+		ScreenManager.restore();
 	}
 
 	enum ApplyStatus {

@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -10,6 +11,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,7 +23,13 @@ import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.screen.DownloadView;
+import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.PreviewPayload;
 import pl.skidam.automodpack_core.screen.ReviewActions;
+import pl.skidam.automodpack_core.screen.ReviewPayload;
+import pl.skidam.automodpack_core.screen.ScreenManager;
+import pl.skidam.automodpack_core.screen.ScreenService;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.FileInspection;
@@ -33,6 +42,20 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 class ReviewSessionTest {
 	@TempDir
 	Path temporaryDirectory;
+
+	private RecordingScreens screens;
+
+	@BeforeEach
+	void installScreens() {
+		screens = new RecordingScreens();
+		ScreenManager.install(screens);
+	}
+
+	@AfterEach
+	void resetScreens() {
+		ScreenManager.install(new ScreenService() {
+		});
+	}
 
 	@Test
 	void welcomeOpensTheReviewAndConfirmDrainsToCancelledWhenPreparationCannotRun() throws Exception {
@@ -49,6 +72,8 @@ class ReviewSessionTest {
 		// The drain cannot prepare anything without a live connection, so it closes the engine and the review lands on CANCELLED.
 		awaitTrue(() -> harness.actions().reviewCancelled().getAsBoolean());
 		assertFalse(harness.actions().reviewActive().getAsBoolean());
+		assertFalse(screens.waitOpen);
+		assertNotEquals(RecordingScreens.Kind.WAITING, screens.last);
 	}
 
 	@Test
@@ -59,6 +84,7 @@ class ReviewSessionTest {
 		harness.actions().cancelConfirmation().run();
 
 		assertTrue(harness.actions().reviewCancelled().getAsBoolean());
+		assertFalse(screens.waitOpen);
 	}
 
 	@Test
@@ -75,6 +101,21 @@ class ReviewSessionTest {
 		// cancel flag clears, so a follow-up confirmation can never race a still-draining run.
 		awaitTrue(() -> harness.actions().reviewActive().getAsBoolean());
 		assertFalse(harness.actions().cancelledByPlayer().getAsBoolean());
+		assertFalse(screens.waitOpen);
+		assertEquals(RecordingScreens.Kind.WELCOME, screens.last);
+	}
+
+	@Test
+	void closingTheEngineSettlesAnOpenWait() throws Exception {
+		Harness harness = harness(false);
+		harness.review().beginFirstInstallReview();
+		ScreenManager.waiting(harness.actions()::cancelFromPlayer);
+		assertTrue(screens.waitOpen);
+
+		harness.updater().close();
+
+		assertFalse(screens.waitOpen);
+		assertEquals(RecordingScreens.Kind.RESTORE, screens.last);
 	}
 
 	@Test
@@ -98,6 +139,57 @@ class ReviewSessionTest {
 	}
 
 	private record Harness(ModpackUpdater updater, ReviewSession review, ReviewActions actions) {}
+
+	/** Records the screen seam so a wait episode cannot silently outlive the engine in these tests. */
+	private static final class RecordingScreens implements ScreenService {
+		enum Kind {
+			WAITING, WELCOME, PREVIEW, FAILURE, RESTORE, DOWNLOAD
+		}
+
+		volatile Kind last;
+		volatile boolean waitOpen;
+
+		@Override
+		public void waiting(Runnable onCancel) {
+			show(Kind.WAITING);
+			waitOpen = true;
+		}
+
+		@Override
+		public void welcome(ReviewPayload payload) {
+			show(Kind.WELCOME);
+			waitOpen = false;
+		}
+
+		@Override
+		public boolean preview(PreviewPayload payload) {
+			show(Kind.PREVIEW);
+			waitOpen = false;
+			return true;
+		}
+
+		@Override
+		public void failure(FailureRequest request) {
+			show(Kind.FAILURE);
+			waitOpen = false;
+		}
+
+		@Override
+		public void restore() {
+			show(Kind.RESTORE);
+			waitOpen = false;
+		}
+
+		@Override
+		public void download(DownloadView download, String modpackName, Runnable onCancel) {
+			show(Kind.DOWNLOAD);
+			waitOpen = true;
+		}
+
+		private void show(Kind kind) {
+			last = kind;
+		}
+	}
 
 	/** One engine on empty storage, with an optional leftover file in the loader-visible mods directory for the consent scan. */
 	private Harness harness(boolean leftoverMod) throws Exception {

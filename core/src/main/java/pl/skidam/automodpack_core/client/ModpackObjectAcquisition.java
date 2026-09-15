@@ -42,13 +42,14 @@ final class ModpackObjectAcquisition {
 	private final DownloadClient downloadClient;
 	private final AtomicBoolean playerCancelled;
 	private final Supplier<String> modpackName;
+	private final Runnable onPlayerCancel;
 	private final Set<String> reservedObjectHashes = new TreeSet<>();
 	private final Map<ModpackJsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new ConcurrentHashMap<>();
 	private final Map<ModpackJsons.ModpackContentFields.ModpackContentItem, DownloadManager.FailureCategory> failedDownloadCategories = new ConcurrentHashMap<>();
 	private DownloadManager downloadManager;
 
 	ModpackObjectAcquisition(ClientStorage storage, PlatformCache platformCache, SourceCatalogue sourceCatalogue, ClientUpdatePlanBuilder planBuilder,
-			ConnectionJsons.ConnectionInfo connectionInfo, DownloadClient downloadClient, AtomicBoolean playerCancelled, Supplier<String> modpackName) {
+			ConnectionJsons.ConnectionInfo connectionInfo, DownloadClient downloadClient, AtomicBoolean playerCancelled, Supplier<String> modpackName, Runnable onPlayerCancel) {
 		this.storage = storage;
 		this.platformCache = platformCache;
 		this.sourceCatalogue = sourceCatalogue;
@@ -57,10 +58,7 @@ final class ModpackObjectAcquisition {
 		this.downloadClient = downloadClient;
 		this.playerCancelled = playerCancelled;
 		this.modpackName = modpackName;
-	}
-
-	boolean downloadCancelled() {
-		return downloadManager != null && downloadManager.isCancelled();
+		this.onPlayerCancel = onPlayerCancel;
 	}
 
 	void interrupt() {
@@ -142,7 +140,7 @@ final class ModpackObjectAcquisition {
 		}
 
 		downloadManager = new DownloadManager(totalBytes, storage.dataLocation().layout(), platformCache);
-		if (playerFacing) ScreenManager.download(downloadManager, modpackName.get());
+		if (playerFacing) ScreenManager.download(downloadManager, modpackName.get(), onPlayerCancel);
 		downloadManager.attachDownloadClient(downloadClient);
 		for (var serverItem : files) {
 			Path downloadFile = storage.activePath(serverItem.file);
