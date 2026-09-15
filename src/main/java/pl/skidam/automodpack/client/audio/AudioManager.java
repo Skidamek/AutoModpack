@@ -20,6 +20,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.sounds.SoundSource;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.utils.Assets;
 
 /**
  * The waiting-music loop, decoded straight from our jar with Minecraft's own vorbis decoder and played through a
@@ -115,7 +116,7 @@ public class AudioManager {
 
 		/** Decodes the whole ogg through Minecraft's vorbis decoder; the PCM stays resident so looping never re-decodes. */
 		private byte[] decode() {
-			try (InputStream input = AudioManager.class.getResourceAsStream(MUSIC_PATH); AudioStream stream = openStream(input)) {
+			try (InputStream input = Assets.stream(MUSIC_PATH); AudioStream stream = openStream(input)) {
 				this.format = stream.getFormat();
 				ByteArrayOutputStream pcm = new ByteArrayOutputStream();
 				ByteBuffer chunk;

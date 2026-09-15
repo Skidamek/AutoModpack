@@ -11,6 +11,7 @@ import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.resources.Identifier;
 
 import pl.skidam.automodpack.init.Common;
+import pl.skidam.automodpack_core.utils.Assets;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
@@ -43,11 +44,7 @@ public final class ClientTextures {
 
 	private static void register(TextureManager textureManager, String sprite) {
 		Identifier id = Common.id("textures/gui/sprites/" + sprite + ".png");
-		try (InputStream stream = ClientTextures.class.getResourceAsStream("/assets/automodpack/textures/gui/sprites/" + sprite + ".png")) {
-			if (stream == null) {
-				LOGGER.error("Bundled sprite {} is missing from the jar", id);
-				return;
-			}
+		try (InputStream stream = Assets.stream("/assets/automodpack/textures/gui/sprites/" + sprite + ".png")) {
 			NativeImage image = NativeImage.read(stream);
 			textureManager.register(id, dynamicTexture(sprite, image));
 		} catch (Exception e) {
