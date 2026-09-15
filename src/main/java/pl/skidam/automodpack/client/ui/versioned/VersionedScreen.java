@@ -461,6 +461,9 @@ public class VersionedScreen extends Screen {
 	/** One input row shared by every screen: the field on the rail, an optional square help button at its right. */
 	protected static final int HELP_BUTTON_SIZE = 20;
 
+	/** The published security docs every in-game link points at; the path stays in step with docs/security.mdx. */
+	public static final String SECURITY_DOCS_URL = "https://moddedmc.wiki/en/project/automodpack/latest/docs/security";
+
 	protected final EditBox fieldWidget(int x, int y, int railWidth, Component label, Component helpHint, int maxLength) {
 		int helpSize = helpHint == null ? 0 : HELP_BUTTON_SIZE + ActionAreaLayout.SEAM;
 		int fieldWidth = Math.max(1, railWidth - helpSize);
@@ -469,7 +472,7 @@ public class VersionedScreen extends Screen {
 		this.addRenderableWidget(field);
 		if (helpHint != null) {
 			Button help = buttonWidget(x + fieldWidth + ActionAreaLayout.SEAM, y, HELP_BUTTON_SIZE, HELP_BUTTON_SIZE, VersionedText.literal("?"),
-					button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/security"));
+					button -> Util.getPlatform().openUri(SECURITY_DOCS_URL));
 			setTooltip(help, helpHint);
 			this.addRenderableWidget(help);
 		}

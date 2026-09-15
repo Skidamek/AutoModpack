@@ -99,6 +99,14 @@ A fingerprint is public verification data, closer to a serial number than to a p
 
 An attacker who controls the modpack connection chooses which files every connecting player downloads. Certificate verification is what turns "some server on this address" into "the server that owns this name or this fingerprint". It complements, and does not replace, normal server administration: strong passwords, restricted file permissions, current software, and careful private-key handling.
 
+## Certificate mismatch
+
+A saved pin says: this address serves exactly this certificate. When the server presents any other certificate, the client stops the connection and shows the certificate mismatch screen with both fingerprints. There is no bypass on that screen, and no modpack is downloaded.
+
+Only two things can cause a mismatch: the certificate on the server changed, or something else answers on that address. A renewal, a move to a new host, or a new proxy changes the certificate; so does an impostor. The two fingerprints on the screen cannot tell you which happened — the server operator can.
+
+Ask the operator about the change through a channel you trust. If the change is real, they can give you a new pinned address to import, or you can remove the pin yourself: in the multiplayer menu select the server, press Edit, press the Certificate pin button twice, and reconnect. The client then verifies the new certificate like a first connection. Until the operator confirms the change, leave the pin in place — it is what stops an impostor from serving you mods from that address.
+
 ## Download authorization
 
 Verification proves the server to the player. Authorization is the reverse: the server proving a downloader is a real player.
