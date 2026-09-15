@@ -19,6 +19,7 @@ import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
@@ -187,6 +188,25 @@ class DownloadClientTest {
 	}
 
 	@Test
+	void abortTransfersFailsInFlightDownloadAndAllowsARetry(@TempDir Path directory) throws Exception {
+		KeyPair keyPair = NetUtils.generateKeyPair();
+		X509Certificate certificate = NetUtils.selfSign(keyPair);
+		String fingerprint = NetUtils.getFingerprint(certificate);
+		try (LeasingServer server = new LeasingServer(keyPair, certificate)) {
+			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, fingerprint, null);
+			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(5, TimeUnit.SECONDS)) {
+				CompletableFuture<Path> first = client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("first"), null);
+				assertTrue(server.receivedRequest().await(5, TimeUnit.SECONDS));
+				client.abortTransfers();
+				assertThrows(Exception.class, () -> first.get(5, TimeUnit.SECONDS));
+				server.allowResponses(2);
+				assertEquals(directory.resolve("second"), client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("second"), null).get(5, TimeUnit.SECONDS));
+			}
+		}
+	}
+
+	@Test
 	void lazyPoolCapsAtFiveAndQueuesSixthRequest(@TempDir Path directory) throws Exception {
 		KeyPair keyPair = NetUtils.generateKeyPair();
 		X509Certificate certificate = NetUtils.selfSign(keyPair);
@@ -241,6 +261,7 @@ class DownloadClientTest {
 		private final ExecutorService executor = Executors.newCachedThreadPool();
 		private final List<SSLSocket> sockets = new CopyOnWriteArrayList<>();
 		private final AtomicInteger acceptedConnections = new AtomicInteger();
+		private final CountDownLatch receivedRequest = new CountDownLatch(1);
 		private final CountDownLatch firstFiveRequests = new CountDownLatch(5);
 		private final CompletableFuture<Void> sixthRequest = new CompletableFuture<>();
 		private final Semaphore responsePermits = new Semaphore(0);
@@ -259,6 +280,10 @@ class DownloadClientTest {
 
 		int acceptedConnections() {
 			return acceptedConnections.get();
+		}
+
+		CountDownLatch receivedRequest() {
+			return receivedRequest;
 		}
 
 		CountDownLatch firstFiveRequests() {
@@ -316,6 +341,7 @@ class DownloadClientTest {
 				while (!closed && !socket.isClosed()) {
 					byte[] request = readFrame(in, codec);
 					if (request.length < 2 || request[1] != FILE_REQUEST_TYPE) throw new IOException("Unexpected file request");
+					receivedRequest.countDown();
 					if (firstFiveRequests.getCount() > 0) {
 						firstFiveRequests.countDown();
 					} else {

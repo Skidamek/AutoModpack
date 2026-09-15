@@ -9,6 +9,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -35,15 +36,18 @@ class Connection implements AutoCloseable {
 	private int chunkSize = DEFAULT_CHUNK_SIZE;
 	private final byte[] secretBytes;
 	private final SSLSocket socket;
+	private final Socket transport;
 	private final DataInputStream in;
 	private final DataOutputStream out;
 	private CompressionCodec compressionCodec;
 	private final ProtocolFrameCodec.FrameScratch frameScratch = new ProtocolFrameCodec.FrameScratch();
 	private final Executor executor;
 
-	public Connection(SSLSocket socket, byte[] secretBytes, Executor executor) throws IOException {
+	public Connection(SSLSocket socket, Socket transport, byte[] secretBytes, Executor executor) throws IOException {
 		if (socket == null || socket.isClosed()) throw new IOException("Server connection is closed");
+		if (transport != null && transport.isClosed()) throw new IOException("Server connection is closed");
 		this.socket = socket;
+		this.transport = transport;
 		this.secretBytes = secretBytes;
 		this.executor = executor;
 
@@ -58,7 +62,7 @@ class Connection implements AutoCloseable {
 	}
 
 	public boolean isActive() {
-		return !socket.isClosed();
+		return !socket.isClosed() && (transport == null || !transport.isClosed());
 	}
 
 	private CompressionCodec getCompressionCodec() {

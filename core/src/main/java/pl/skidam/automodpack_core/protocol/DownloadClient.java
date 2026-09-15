@@ -81,7 +81,7 @@ public class DownloadClient implements AutoCloseable {
 
 	private record TransportRoute(InetSocketAddress directAddress, HolepunchRoute holepunchRoute) {}
 
-	private record TlsCandidate(SSLSocket socket, CustomizableTrustManager trustManager) {}
+	private record TlsCandidate(SSLSocket socket, Socket transport, CustomizableTrustManager trustManager) {}
 
 	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback,
 			Duration preConfigurationKeepaliveInterval, TransportRoute route) {
@@ -164,7 +164,7 @@ public class DownloadClient implements AutoCloseable {
 			SSLSocket tlsSocket = wrapWithTls(plainSocket, context);
 			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket);
 			tlsSocket.setSoTimeout(0);
-			return new TlsCandidate(tlsSocket, trustManager);
+			return new TlsCandidate(tlsSocket, plainSocket, trustManager);
 		} catch (IOException e) {
 			closeQuietly(plainSocket);
 			throw e;
@@ -338,7 +338,7 @@ public class DownloadClient implements AutoCloseable {
 	private Connection configuredConnection(TlsCandidate candidate) throws IOException {
 		try {
 			candidate.socket().setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
-			return new Connection(candidate.socket(), secretBytes, NET_EXECUTOR);
+			return new Connection(candidate.socket(), candidate.transport(), secretBytes, NET_EXECUTOR);
 		} catch (IOException e) {
 			closeQuietly(candidate.socket());
 			throw e;
@@ -433,6 +433,21 @@ public class DownloadClient implements AutoCloseable {
 
 	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
 		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback));
+	}
+
+	/** Drops every pooled and in-flight transfer connection so a cancelled run cannot poison the next one. */
+	public void abortTransfers() {
+		List<Connection> connections;
+		synchronized (poolLock) {
+			if (closed) return;
+			connections = new ArrayList<>(allConnections);
+			allConnections.clear();
+			availableConnections.clear();
+		}
+		connections.forEach(DownloadClient::closeQuietly);
+		synchronized (poolLock) {
+			if (!closed) pumpPool();
+		}
 	}
 
 	static void closeQuietly(AutoCloseable closeable) {
