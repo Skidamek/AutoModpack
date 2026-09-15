@@ -47,8 +47,14 @@ import pl.skidam.automodpack_core.utils.ActionAreaLayout;
  */
 public class ModpackSelectionScreen extends VersionedScreen {
 
-	/** Symmetric margins on both sides of the group list; rows span the rest of the screen, like vanilla list screens. */
-	private static final int LIST_MARGIN = 12;
+	/**
+	 * The list panel's width on wide windows, shared with the other list screens (pack manager, change browser);
+	 * narrow windows degrade to width - 24, which keeps the old 12px edge margins exactly. The panel itself centers,
+	 * but rows keep their left-aligned labels, so content never floats mid-screen.
+	 */
+	private static final int PANEL_WIDTH = 500;
+	/** Air between the list's last row and the footer rail: a row's checkbox needs a little more than the plain 8px widget gap. */
+	private static final int LIST_FOOTER_GAP = 12;
 	/** Vanilla checkbox geometry: the box plus the gap before its label. */
 	private static final int CHECKBOX_LABEL_OFFSET = 24;
 
@@ -160,7 +166,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.saveButton.active = canSave();
 		if (selectionAction == null && resolutionError.isEmpty() && !this.saveButton.active) setTooltip(this.saveButton, VersionedText.translatable("automodpack.selection.noChanges"));
 		int listTop = 80;
-		listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, footer) - 8;
+		listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, footer) - LIST_FOOTER_GAP;
 		this.addRenderableWidget(new GroupSelectionList(this.minecraft, this.width, this.height, listWidth(), listTop, listBottom, listItems(), this::onListToggle, this::onListInspect));
 		String platformLabel = platformLabel();
 		int platformButtonWidth = Math.max(90, Math.min(160, this.font.width(platformLabel) + 26));
@@ -525,13 +531,13 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return Math.max(1, listWidth() - CHECKBOX_LABEL_OFFSET - GroupSelectionList.filesButtonWidth() - ActionAreaLayout.SEAM - 4);
 	}
 
-	/** The group list spans the screen between two symmetric margins. */
+	/** The group list sits on the same centered panel as every other list screen. */
 	private int listWidth() {
-		return Math.max(1, this.width - LIST_MARGIN * 2);
+		return panelWidth(PANEL_WIDTH);
 	}
 
 	private int listLeft() {
-		return (this.width - listWidth()) / 2;
+		return panelLeft(PANEL_WIDTH);
 	}
 
 	private static long groupBytes(GroupManifest.Group group) {
