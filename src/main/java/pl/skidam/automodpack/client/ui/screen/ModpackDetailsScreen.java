@@ -204,8 +204,9 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		return y;
 	}
 
+	// The grid reads as one block of controls, not another text line: it clears the prose by the line gap plus two widget gaps.
 	private int actionGridTop() {
-		return generationY() + LINE_GAP + ActionAreaLayout.GAP;
+		return generationY() + LINE_GAP + 2 * ActionAreaLayout.GAP;
 	}
 
 	/** Picks the widest column count whose grid stays clear of the bottom rail; 3 columns still keeps every button at or above the 88px minimum width. */
