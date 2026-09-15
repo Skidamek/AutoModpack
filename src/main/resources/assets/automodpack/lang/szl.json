@@ -161,6 +161,7 @@
   "automodpack.storage.compacted": "Wyczyszczone %s: starszych generacyji jak #%s niy idzie już prtwracić na tym kōmputrze.",
   "automodpack.storage.preservedKept": "%s pliki w Zachowanych plikach ôstawiōm. Sprzōntanie ich niy wyciepuje.",
   "automodpack.storage.confirm": "Wyczyść lokalne dane",
+  "automodpack.storage.confirmArmed": "Click again to clean",
   "automodpack.storage.verify": "Sprawdź dane",
   "automodpack.storage.verifying": "Sprawdzanie danych idzie. Możesz wylyźć z tego ekranu. Robota bydzie bezpiecznie leciała dali.",
   "automodpack.storage.verified": "Dane sōm sprawdzōne",

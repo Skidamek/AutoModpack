@@ -158,6 +158,7 @@
   "automodpack.storage.compacted": "已于 %s 清理：早于第 %s 代的世代已无法在这台电脑上还原。",
   "automodpack.storage.preservedKept": "%s 个保留的文件会留下来。清理不会删除它们。",
   "automodpack.storage.confirm": "清理本地存储",
+  "automodpack.storage.confirmArmed": "Click again to clean",
   "automodpack.storage.verify": "验证存储",
   "automodpack.storage.verifying": "正在验证存储。你可以离开此界面，操作会安全继续。",
   "automodpack.storage.verified": "存储已验证",

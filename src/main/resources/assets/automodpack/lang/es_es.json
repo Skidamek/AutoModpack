@@ -161,6 +161,7 @@
   "automodpack.storage.compacted": "Limpiado el %s: las generaciones anteriores a la nº%s ya no se pueden restaurar en este ordenador.",
   "automodpack.storage.preservedKept": "%s ficheros en Ficheros conservados se quedan. La limpieza no los borra.",
   "automodpack.storage.confirm": "Limpiar almacenamiento local",
+  "automodpack.storage.confirmArmed": "Click again to clean",
   "automodpack.storage.verify": "Verificar almacenamiento",
   "automodpack.storage.verifying": "La verificación del almacenamiento está en marcha. Puedes salir de esta pantalla. La operación seguirá con seguridad.",
   "automodpack.storage.verified": "Almacenamiento verificado",

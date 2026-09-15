@@ -161,6 +161,7 @@
   "automodpack.storage.compacted": "Gesäubert am %s: Generationen älter als #%s lassen sich auf diesem Computer nicht mehr wiederherstellen.",
   "automodpack.storage.preservedKept": "%s Dateien in Gesicherte Dateien bleiben. Die Bereinigung entfernt sie nicht.",
   "automodpack.storage.confirm": "Lokalen Speicher bereinigen",
+  "automodpack.storage.confirmArmed": "Click again to clean",
   "automodpack.storage.verify": "Speicher prüfen",
   "automodpack.storage.verifying": "Die Speicherprüfung läuft. Du kannst diesen Bildschirm verlassen. Der Vorgang läuft sicher weiter.",
   "automodpack.storage.verified": "Speicher geprüft",

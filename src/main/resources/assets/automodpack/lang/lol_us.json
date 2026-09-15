@@ -161,6 +161,7 @@
   "automodpack.storage.compacted": "cleaned on %s: genz older dan #%s can not be un-smushed on dis puter.",
   "automodpack.storage.preservedKept": "%s stashd filez stay. kleenup doez not yeet dem.",
   "automodpack.storage.confirm": "kleen storaj",
+  "automodpack.storage.confirmArmed": "Click again to clean",
   "automodpack.storage.verify": "check storaj",
   "automodpack.storage.verifying": "checkin storaj. u can leev. it keepz goin. trust.",
   "automodpack.storage.verified": "storaj iz ok. good cat.",

@@ -161,6 +161,7 @@
   "automodpack.storage.compacted": "Nettoyé le %s : les générations plus anciennes que la n°%s ne peuvent plus être restaurées sur cet ordinateur.",
   "automodpack.storage.preservedKept": "%s fichiers dans Fichiers conservés restent. Le nettoyage ne les supprime pas.",
   "automodpack.storage.confirm": "Nettoyer le stockage local",
+  "automodpack.storage.confirmArmed": "Click again to clean",
   "automodpack.storage.verify": "Vérifier le stockage",
   "automodpack.storage.verifying": "La vérification du stockage est en cours. Vous pouvez quitter cet écran. L'opération continuera en toute sécurité.",
   "automodpack.storage.verified": "Stockage vérifié",
