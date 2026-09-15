@@ -373,10 +373,8 @@ final class InstalledModpackController {
 	}
 
 	void openFiles(Screen parent, Pack pack) {
-		// The source filter and the red custom mark read the platform cache, so the installed catalogue answers
-		// the same question as the update preview: which of these files came from a storefront, and which never did.
 		ScreenImpl.setScreen(new ChangeBrowserScreen(parent, VersionedText.translatable("automodpack.files.title", pack.name()),
-				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), groupNames(pack.record().manifest()), null, List.of(), true, 0, ""));
+				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), groupNames(pack.record().manifest()), null, List.of(), 0, ""));
 	}
 
 	/** Display names for the active pack's groups, for browsers that only see group ids, like the changelog. */

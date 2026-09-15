@@ -321,11 +321,11 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private void openFiles() {
 		if (firstInstall) {
 			ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.firstConnect.description"),
-					welcome.catalogue(), PackConfirmCopy.groupNames(target().manifest()), null, List.of(), true, PackConfirmCopy.selectedBytes(target()), ""));
+					welcome.catalogue(), PackConfirmCopy.groupNames(target().manifest()), null, List.of(), PackConfirmCopy.selectedBytes(target()), ""));
 			return;
 		}
 		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable(UpdatePreviewScreen.reviewKey(laterPreview.mode())),
-				laterPreview.changeSet(), laterPreview.featureNames(), null, List.of(), true, laterPreview.uncachedAcquisitionBytes(), ""));
+				laterPreview.changeSet(), laterPreview.featureNames(), null, List.of(), laterPreview.uncachedAcquisitionBytes(), ""));
 	}
 
 	private void openHistory() {

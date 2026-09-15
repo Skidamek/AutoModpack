@@ -239,7 +239,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private void inspect(String groupId) {
 		if (!groups.containsKey(groupId)) return;
 		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.literal(displayName(groupId)),
-				VersionedText.translatable("automodpack.browser.groupDescription"), groupChanges(groupId), Map.of(groupId, displayName(groupId)), null, List.of(), false, 0, groupId));
+				VersionedText.translatable("automodpack.browser.groupDescription"), groupChanges(groupId), Map.of(groupId, displayName(groupId)), null, List.of(), 0, groupId));
 	}
 
 	/** The group's shipped files as a preserved catalogue for the shared browser. */

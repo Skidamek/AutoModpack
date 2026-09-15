@@ -262,7 +262,8 @@ public final class ClientObjectStore {
 				retained.optional(entry.policySha1(), -1, "journal policy document");
 				for (JournalEntry.Change change : entry.changes()) {
 					if (change.toSha1() != null) retained.optional(change.toSha1(), change.toSize(), "journal change target");
-					if (change.fromSha1() != null) retained.optional(change.fromSha1(), -1, "journal change source");
+					// Mirrors fetched from older servers carry no source size; only a positive size is a receipt, anything else stays unknown.
+					if (change.fromSha1() != null) retained.optional(change.fromSha1(), change.fromSize() > 0 ? change.fromSize() : -1, "journal change source");
 				}
 			}
 		}

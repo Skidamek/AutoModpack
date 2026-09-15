@@ -102,14 +102,16 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 		return new JournalEntry(fields.seq, fields.contentToken, fields.policySha1, createdAt, fields.notes == null ? "" : fields.notes, fields.restoreOf, changes);
 	}
 
-	public record Change(String path, String fromSha1, String toSha1, long toSize) {
+	public record Change(String path, String fromSha1, long fromSize, String toSha1, long toSize) {
 		public enum Kind {
 			ADDED, CHANGED, REMOVED
 		}
 
 		public Change {
 			Objects.requireNonNull(path, "path");
+			if (fromSize < 0 || toSize < 0) throw new IllegalArgumentException("Negative change size for " + path);
 			if (fromSha1 != null && !isCanonicalSha1(fromSha1)) throw new IllegalArgumentException("Invalid change source for " + path);
+			if (fromSha1 == null && fromSize != 0) throw new IllegalArgumentException("An added path cannot carry a previous size: " + path);
 			if (toSha1 == null && toSize != 0) throw new IllegalArgumentException("A removed path cannot carry a size: " + path);
 			if (toSha1 != null && !isCanonicalSha1(toSha1)) throw new IllegalArgumentException("Invalid change target for " + path);
 		}
@@ -122,17 +124,18 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 		}
 
 		public static Change added(String path, String toSha1, long toSize) {
-			return new Change(path, null, toSha1, toSize);
+			return new Change(path, null, 0, toSha1, toSize);
 		}
 
-		public static Change removed(String path, String fromSha1) {
-			return new Change(path, fromSha1, null, 0);
+		public static Change removed(String path, String fromSha1, long fromSize) {
+			return new Change(path, fromSha1, fromSize, null, 0);
 		}
 
 		public GenerationJsons.JournalChangeFields toFields() {
 			GenerationJsons.JournalChangeFields fields = new GenerationJsons.JournalChangeFields();
 			fields.path = path;
 			fields.fromSha1 = fromSha1;
+			fields.fromSize = fromSize;
 			fields.toSha1 = toSha1;
 			fields.toSize = toSize;
 			return fields;
@@ -142,7 +145,7 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 			if (fields == null || fields.path == null || fields.path.isBlank()) throw new IllegalArgumentException("Journal change is missing its path");
 			String from = fields.fromSha1 == null || fields.fromSha1.isBlank() ? null : fields.fromSha1;
 			String to = fields.toSha1 == null || fields.toSha1.isBlank() ? null : fields.toSha1;
-			return new Change(fields.path, from, to, to == null ? 0 : fields.toSize);
+			return new Change(fields.path, from, from == null ? 0 : fields.fromSize, to, to == null ? 0 : fields.toSize);
 		}
 	}
 
