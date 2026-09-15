@@ -103,12 +103,16 @@ public final class DropdownWidget extends Button {
 			closeMenu();
 			return;
 		}
+		if (options.isEmpty()) return;
 		List<RowListWidget.Row> rows = new ArrayList<>(options.size());
 		for (int index = 0; index < options.size(); index++)
 			rows.add(new RowListWidget.Row(List.of(VersionedText.literal(VersionedScreen.truncateToWidth(font, options.get(index).getString(), Math.max(1, getWidth() - 12)))
 					.withStyle(index == selected ? ChatFormatting.YELLOW : ChatFormatting.WHITE))));
 		int top = top() + getHeight() + MENU_GAP;
-		int visibleRows = Math.max(1, Math.min(options.size(), (bottomLimit - top) / MENU_ROW_HEIGHT));
+		// The caller's limit is the taste - which rail to stop above; the screen edge is the hard bound the widget
+		// enforces itself, keeping the panel sprite's soft margin on-screen. One row is the floor either way.
+		int bottom = Math.min(bottomLimit, minecraft.getWindow().getGuiScaledHeight() - SPRITE_MARGIN);
+		int visibleRows = Math.max(1, Math.min(options.size(), (bottom - top) / MENU_ROW_HEIGHT));
 		menu = new RowListWidget(minecraft, getWidth(), minecraft.getWindow().getGuiScaledHeight(), getWidth(), left(), top, top + visibleRows * MENU_ROW_HEIGHT, MENU_ROW_HEIGHT, rows,
 				index -> {
 					closeMenu();
