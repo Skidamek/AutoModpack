@@ -1,9 +1,0 @@
-# Update review
-
-When AutoModpack applies a pack while the game is running, it shows a review first. First install, a new generation, a pack switch, and any file plan with impact go through that screen. Certificate checks, trust prompts, and fingerprint mismatches stay separate.
-
-`updateSelectedModpackOnLaunch` (default true) fetches and applies an already-installed selected pack during preload. Extra jars in the instance `mods/` folder are reconciled there too. There is no review screen at that stage.
-
-If the plan copies or deletes files in the standard `mods/` folder, changes the loader version, or otherwise sets a restart reason, AutoModpack stops this process and asks for a relaunch so the loader reads the real tree. Fabric has already enumerated that folder before Preload; Forge and NeoForge discover it later in the same boot, but the restart is shared so every loader sees the real tree. Projection-only work, and live deletions outside `mods/` (configs, resource packs), load in this process through the active projection. A first install waits for the in-game review so leftover-mod consent and group customize stay on that screen. Trusted bootstrap is the exception: it applies the pack on that launch.
-
-Set `updateSelectedModpackOnLaunch` to false to load the current projection on boot without contacting the server. Joining a server still uses the in-game review when files still need work.

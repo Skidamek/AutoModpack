@@ -469,7 +469,7 @@ public class VersionedScreen extends Screen {
 		this.addRenderableWidget(field);
 		if (helpHint != null) {
 			Button help = buttonWidget(x + fieldWidth + ActionAreaLayout.SEAM, y, HELP_BUTTON_SIZE, HELP_BUTTON_SIZE, VersionedText.literal("?"),
-					button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"));
+					button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/security"));
 			setTooltip(help, helpHint);
 			this.addRenderableWidget(help);
 		}

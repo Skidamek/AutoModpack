@@ -1,0 +1,25 @@
+# Client storage
+
+The client keeps its own copy of every pack it follows. The storage screen, reachable through the modpack manager, shows what that copy holds and offers two actions: Verify storage and Clean local storage.
+
+## What is stored
+
+Each pack's files live once in a content-addressed store, keyed by hash. On top of that sit the journal mirror (the server's generation timeline), the active projection the game loads from, baselines and overlays for editable files, notes, and preserved files. When two generations ship the same jar, the store holds one copy of the bytes and both generations point at it.
+
+Every synced generation stays restorable: its file data is kept so the History screen can put it back later. Storage grows until you clean it or remove the pack.
+
+## Clean local storage
+
+Cleaning is the one explicit cleanup pass. Per pack it keeps the active generation and the newest generation with all their file data, plus every generation's policy document, so the history list keeps working. File data that only older generations still reference is deleted, and nothing about the running pack changes: the journal mirror, the active projection, overlays, baselines, notes, and preserved files are untouched.
+
+A clean refuses to run while an update transaction is active. After it finishes, the screen shows one receipt per pack: the date of the clean, the generation it cleaned through, and how much was reclaimed. Generations older than that boundary can no longer be restored on this computer, and the History screen marks them as such before you try.
+
+## Verify storage
+
+Verification checks every object the pack references and reports how many are present and valid. It runs in the background and keeps running when you leave the screen.
+
+## History, restore, and stop syncing
+
+The History screen lists the synced generations from the journal mirror. An entry shows its patch notes and file changes, and Restore puts that generation's files back when their data is still in the store. Restoring a generation other than the current one also stops syncing, so the server cannot immediately overwrite the state you restored.
+
+"Stop syncing" detaches the pack: your files stay exactly as they are and the server can no longer change them. While detached, joining the server warns you that it may expect different files, and "Sync now" reattaches and applies the server's current generation.

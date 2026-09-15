@@ -1,164 +1,39 @@
-# AutoModpack Quick Start Guide
+# Quick start
 
-So you want to start using AutoModpack? Great! Let's get you started.
+AutoModpack keeps every player's game in sync with the server's modpack. Install the mod on both sides. After that, clients download the pack on their first connection and follow every change you publish.
 
-> ### For more detailed information:
-> - Read the [Modpack Creation page](technicals/modpack-creation) to learn how to manage your modpack
-> - Read the [Configuration page](configuration/server-config) to learn how to customize AutoModpack for your needs
+## 1. Install
 
-## Installation
+1. Download AutoModpack for your Minecraft version from [Modrinth](https://modrinth.com/mod/automodpack) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack).
+2. Put the jar in the `mods` folder of the server, and in the `mods` folder of every client.
+3. Back up anything valuable in the client instance first. A mod that manages files deserves a backup.
+4. Start the server once. AutoModpack creates `automodpack/server-config.json` and publishes the first generation of the pack.
 
-1. **Download AutoModpack**: Get the latest version of AutoModpack for your Minecraft version from [Modrinth](https://modrinth.com/mod/automodpack) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack)
-2. **Install AutoModpack**: Place the downloaded mod into your `mods` folder of your Minecraft instance
-3. **Start your server**: Launch your Minecraft server with AutoModpack installed. This will generate the initial modpack metadata
+By default the pack contains every jar in the server's `mods` folder plus `kubejs/**` and `emotes/*`. The files `options.txt` and `config/**` are marked editable, so players can change them locally. [Building the modpack](pack-content) explains how all of that is decided.
 
-> #### It is recommended to connect to your server with just AutoModpack installed on the client first to ensure everything works.
+Before inviting players, connect once with a client that has only AutoModpack installed. If that works, the setup is proven and any future problem points at pack content.
 
----
+## 2. Connect
 
-## First Connection
+1. Join the server as usual. Before anything is downloaded, AutoModpack verifies the server's identity: a CA-signed certificate, a DNSSEC-published fingerprint, or a pinned join address passes on its own, and anything else shows the certificate fingerprint and asks. The methods are compared in [security](security).
+2. Confirm the installation prompt. The client downloads the pack.
+3. Restart the game and connect again. The pack is loaded.
 
-On first connection, AutoModpack authenticates the modpack host using a CA-signed certificate, DNSSEC AMP1, a pinned server address, or manual fingerprint verification. See the [certificate verification decision guide](technicals/certificate) to choose the right method for your server.
+From then on, clients update during launch. Most changes apply before the game loads anything; the mod asks for a restart only when files in the standard `mods` folder or the loader version change. [Client updates](how-it-works/client-updates) explains when a restart is needed and what happens while you are already in-game.
 
-After verification, AutoModpack will ask you to confirm the modpack installation. Confirm it, and the modpack will download and install automatically.
+## 3. Add your own content
 
-Restart your game. Your server's modpack should now be loaded, and you should be able to connect, spawning in the overworld.
+Everything under `automodpack/host-modpack/main/` on the server ships with the pack, even when the server itself has no such file. This is where client-side-only mods go:
 
-> #### **Note:** Most modpack mods are loaded from AutoModpack's active projection. Only loader-required placements are copied to the live `mods` folder.
-
----
-
-## Server Setup & Configuration
-
-### Server Config File
-
-**Location:** `~/automodpack/server-config.json`
-
-**Example Configuration:**
-```json
-{
-  "modpackHost": true,
-  "generateModpackOnStart": true,
-  "groups": {
-    "main": {
-      "syncedFiles": [
-        "mods/*.jar",
-        "resourcepacks/*",
-        "config/**",
-        "shaderpacks/*"
-      ],
-      "excludedFiles": [
-        "config/fancymenu/user_variables.db"
-      ],
-      "allowEditsInFiles": [
-        "options.txt"
-      ]
-    }
-  },
-  "autoExcludeServerSideMods": true,
-  "requireAutoModpackOnClient": true
-}
+```
+automodpack/host-modpack/main/mods/sodium-extra.jar
 ```
 
-File rules live on each group. Unknown top-level keys are ignored, so `syncedFiles`, `excludedFiles`, and `allowEditsInFiles` at the root of `server-config.json` have no effect.
+Run `/automodpack generate` after changing anything, and players receive the new version on their next connection. Optional groups that players can turn on and off, file rules, and editable files are all covered in [building the modpack](pack-content).
 
-**Key Configuration Options:**
+## Where to go next
 
-- **`groups.main.syncedFiles`**: Files and folders to sync to clients, relative to the server root. Nothing is synced from the server root unless a rule includes it. Use `*` for wildcards and `**` for recursive matching; a `!` rule excepts a path from the synced set only
-- **`groups.main.excludedFiles`**: Files and folders to leave out of the modpack from every source. The group directory under `host-modpack/` is included in full, so this is the way to keep a file there from reaching clients; it also carves exceptions out of what `syncedFiles` included
-- **`groups.main.allowEditsInFiles`**: Files that clients can edit locally. Local edits are preserved until the server version of the file changes
-  - **Example:** To always update FancyMenu configs (the server's copy always wins), negate them inside the list - a path matches the list when a positive rule matches it and no `!` rule does:
-    ```json
-    "groups": {
-      "main": {
-        "allowEditsInFiles": [
-          "config/**",
-          "!config/fancymenu/**"
-        ]
-      }
-    }
-    ```
-    Keep such files in `syncedFiles` - `excludedFiles` would remove them from the modpack entirely
-- **Other options**: See the [full configuration page](configuration/server-config) for detailed explanations of all settings
-
-### Splitting Mods for Server and Client
-
-- **Client-side mods**: Place in `~/automodpack/host-modpack/main/mods` (e.g., visual enhancements)
-- **Server-side mods (synced)**: Place in the standard `mods` folder; they will be synced to clients
-- **Excluding server-only mods example**:
-  ```json
-  "groups": {
-    "main": {
-      "syncedFiles": [
-        "mods/*.jar"
-      ],
-      "excludedFiles": [
-        "mods/lithostitched-fabric*.jar"
-      ]
-    }
-  }
-  ```
-
----
-
-## Client Setup & Configuration
-
-AutoModpack automatically manages client configuration. When you connect to a server, AutoModpack will:
-
-- Download the generation into the client CAS and expose the selected files through `~/.minecraft/automodpack/client/active/`.
-- Authenticate the modpack host using CA trust, DNSSEC AMP1, an explicit address pin, or the saved/manual fingerprint fallback
-- Ask for confirmation to install the modpack
-
-After installation, restart Minecraft to load the modpack.
-
-> #### **Note:** For advanced configuration, see the [client config page](configuration/client-config).
-
----
-
-## Maintaining Updates
-
-- Files listed in `groups.main.allowEditsInFiles` keep player edits until the server version of the file changes; then the edited copy is saved to the player's "Preserved files" and the new server version is applied once. Use this for files that players should be able to customize, and never change them server-side if the edits must never be replaced
-- For files that must always be in sync (e.g., specific configs), ensure they are in `groups.main.syncedFiles` and not in `groups.main.allowEditsInFiles`
-
-**Example for FancyMenu configs:**
-```json
-"groups": {
-  "main": {
-    "syncedFiles": [
-      "/config/fancymenu/**"
-    ],
-    "allowEditsInFiles": [
-      "/options.txt"
-    ]
-  }
-}
-```
-
-This ensures FancyMenu configs are always updated, while players can still edit their options.
-
-**Example for editable configs with server-controlled changes:**
-
-```json
-"groups": {
-  "main": {
-    "allowEditsInFiles": [
-      "/config/**"
-    ]
-  }
-}
-```
-
-Players can edit these config files normally. When you change one of them on the server, the player's edited copy is saved to their "Preserved files" and the new server version is applied once; local changes alone never trigger an update.
-
----
-
-## Troubleshooting
-
-> #### **Important:**
-> - Ensure the same version of AutoModpack is used on both server and client
-> - Make sure your server runs and is accessible without AutoModpack
-> - Check server logs for hints
-> - Read compatibility pages like [proxies](compatibility/proxies), [launchers](compatibility/launchers) and [mods](compatibility/mods) for known issues and solutions
-> - Read the [FAQ page](faq) for common questions
-
-If issues persist, join our [Discord server](https://discord.gg/hS6aMyeA9P) and post in the `#support` channel.
+- [Building the modpack](pack-content): file rules, groups, editable files.
+- [Server configuration](configuration/server-config): every server setting.
+- [Commands](commands): publishing, hosting, certificates, rollbacks.
+- [FAQ](faq): common questions and troubleshooting.

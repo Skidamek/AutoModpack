@@ -1,32 +1,25 @@
-Most Minecraft proxies drop early login packets. AutoModpack needs those packets to function. A standard proxy setup will break it.
+Most Minecraft proxies drop the early login packets AutoModpack uses, so a standard proxy setup breaks the modpack connection. The proxy has to forward those packets.
 
-You need a proxy that forwards those packets. Here is the current compatibility.
+| Proxy | Status | Setup |
+| --- | --- | --- |
+| [Velocity](https://papermc.io/software/velocity/) | Works | Needs a patch plugin |
+| [Gate Lite](https://gate.minekube.com/guide/lite) | Works | Port configuration |
+| Gate | Fails | |
+| Waterfall | Fails | |
+| BungeeCord | Fails | |
 
-| Proxy                                             | Status  | Setup Required     |
-|---------------------------------------------------|---------|--------------------|
-| [Velocity](https://papermc.io/software/velocity/) | ✅ Works | Needs patch plugin |
-| [Gate Lite](https://gate.minekube.com/guide/lite) | ✅ Works | Port configuration |
-| Gate                                              | ❌ Fails | N/A                |
-| Waterfall                                         | ❌ Fails | N/A                |
-| BungeeCord                                        | ❌ Fails | N/A                |
+## Velocity
 
-### Velocity
+Velocity does not forward the packets on its own. Install the official [AutoModpack Velocity plugin](https://modrinth.com/plugin/automodpackvelocity).
 
-Velocity will not forward the packets on its own. You need to patch it.
+## Gate Lite
 
-Install the official [AutoModpack Velocity plugin](https://modrinth.com/plugin/automodpackvelocity).
+Gate Lite forwards the packets out of the box. What needs care is routing: the client dials the advertised endpoint, controlled by `advertisedEndpointHost` and `advertisedEndpointPort`, and that route has to reach the backend in a shape the selected [connection mode](../how-it-works/hosting) accepts. It does not have to match the backend's `bindAddress` or `bindPort`.
 
+- `HOLEPUNCH` must deliver the marked Minecraft login to a backend with holepunch handling enabled. On Forge and NeoForge the Handshake hostname carries the normal `\0FML3\0` extra, so a packed backend classifies the connection as modded.
+- `MAGIC` must preserve the AMMH handshake before any TLS. With `bindPort: -1`, route to the backend Minecraft port; with an explicit port, route to the dedicated magic listener.
+- `DIRECT` must deliver TLS to a dedicated listener. `DIRECT` with `bindPort: -1` starts no built-in listener at all.
 
-### Gate Lite
+PROXY protocol headers on dedicated `MAGIC` and `DIRECT` listeners are honored only when `acceptProxyProtocol` is on, and only when a trusted proxy fronts AutoModpack, since a claimed source address feeds IP bans and audit logs.
 
-Gate Lite forwards the packets out of the box. Your issue here is routing.
-
-The endpoint sent to clients is controlled by `advertisedEndpointHost` and `advertisedEndpointPort`. Set them to the public route that accepts the selected `connectionMode`; they do not need to match the process's `bindAddress` or `bindPort` when a proxy or separate host is involved.
-
-- `HOLEPUNCH` must route the marked Minecraft Login connection to a server with holepunch handling enabled. On Forge and NeoForge the Handshake hostname carries the normal `\0FML3\0` extra so the backend does not classify the connection as vanilla and disconnect it before Login Start.
-- `MAGIC` must preserve AMMH/AMOK before the TLS session. With `bindPort: -1`, route it to the backend Minecraft port; with an explicit port, route it to the dedicated magic-only listener.
-- `DIRECT` must route TLS directly to an explicit dedicated listener or another endpoint that handles it. `DIRECT` with `bindPort: -1` starts no built-in listener.
-
-PROXY protocol metadata is honored before dedicated `MAGIC` and `DIRECT` connections only when `acceptProxyProtocol` is enabled. It is never consumed by shared Minecraft-port magic routing. Keep the option off unless a trusted proxy fronts AutoModpack: a claimed source address feeds IP-ban checks and audit logs, so accepting it from arbitrary clients would let a banned player forge their way past an IP ban.
-
-When `disableInternalTLS` is enabled, clients still initiate TLS. The proxy or another compatible component must terminate it and forward already-decrypted AutoModpack traffic.
+With `disableInternalTLS` on, your proxy terminates TLS and forwards decrypted AutoModpack traffic to the backend.
