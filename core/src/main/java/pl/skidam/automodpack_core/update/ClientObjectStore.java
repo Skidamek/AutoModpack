@@ -7,10 +7,13 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalDouble;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 
@@ -128,13 +131,11 @@ public final class ClientObjectStore {
 			long backupFileCount,
 			long backupBytes) {
 		public StorageReport {
-			if (List.of(objectCount, objectBytes, referencedObjectCount, referencedObjectBytes, validReferencedObjectCount, validReferencedObjectBytes,
-					missingReferencedObjectCount, invalidReferencedObjectCount, metadataFileCount, metadataBytes,
-					overlayFileCount, overlayBytes, baselineFileCount, baselineBytes, preservationFileCount, preservationBytes,
-					incomingFileCount, incomingBytes, backupFileCount, backupBytes).stream().anyMatch(value -> value < 0))
+			if (List.of(objectCount, objectBytes, referencedObjectCount, referencedObjectBytes, validReferencedObjectCount, validReferencedObjectBytes, missingReferencedObjectCount, invalidReferencedObjectCount,
+					metadataFileCount, metadataBytes, overlayFileCount, overlayBytes, baselineFileCount, baselineBytes, preservationFileCount, preservationBytes, incomingFileCount, incomingBytes, backupFileCount,
+					backupBytes).stream().anyMatch(value -> value < 0))
 				throw new IllegalArgumentException("Client storage report values cannot be negative");
-			if (validReferencedObjectCount > referencedObjectCount || missingReferencedObjectCount > referencedObjectCount
-					|| invalidReferencedObjectCount > referencedObjectCount - missingReferencedObjectCount)
+			if (validReferencedObjectCount > referencedObjectCount || missingReferencedObjectCount > referencedObjectCount || invalidReferencedObjectCount > referencedObjectCount - missingReferencedObjectCount)
 				throw new IllegalArgumentException("Client storage reference counts are inconsistent");
 		}
 
@@ -144,13 +145,13 @@ public final class ClientObjectStore {
 	}
 
 	/** The receipt returned by one explicitly requested collection pass. */
-	public record CollectionResult(StorageReport before, StorageReport after, long deletedObjectCount, long deletedObjectBytes) {
+	public record CollectionResult(StorageReport before, StorageReport after, long deletedObjectCount,
+			long deletedObjectBytes) {
 		public CollectionResult {
 			before = Objects.requireNonNull(before, "before receipt");
 			after = Objects.requireNonNull(after, "after receipt");
 			if (deletedObjectCount < 0 || deletedObjectBytes < 0) throw new IllegalArgumentException("Deleted object values cannot be negative");
-			if (after.objectCount() > before.objectCount() || after.objectBytes() > before.objectBytes())
-				throw new IllegalArgumentException("Collection increased the measured object store");
+			if (after.objectCount() > before.objectCount() || after.objectBytes() > before.objectBytes()) throw new IllegalArgumentException("Collection increased the measured object store");
 		}
 	}
 
@@ -251,24 +252,62 @@ public final class ClientObjectStore {
 	}
 
 	private static ExpectedSizes collectReferences(ClientStorage storage) throws IOException {
+		// Client-owned receipts first: the sweep's strict half, where a size conflict is local corruption and throws.
 		ExpectedSizes retained = new ExpectedSizes();
-		// The journal mirror is the client's only history store, so every hash any of its entries names is kept:
-		// each entry's policy document, every change target, and every replaced source. The active generation's
-		// tree is the set of change targets up to its entry, so the mirror sweep covers it as well. The sweep is
-		// consent-free on purpose: every existing mirror keeps its bytes, and only the manual compaction drops a
-		// never-consented mirror whole, so a collection outside it can never leave a mirror dangling.
+		collectNonHistoryReferences(storage, retained);
+		mergeHistoryClaims(retained, collectMirrorClaims(storage));
+		return retained;
+	}
+
+	/**
+	 * The journal mirror is the client's only history store, so every hash any entry names stays reachable: each
+	 * entry's policy document, every change target, and every replaced source. The active generation's tree is the
+	 * set of change targets up to its entry, so the mirror covers it as well. The sweep is consent-free on purpose:
+	 * every existing mirror keeps its bytes, and only the manual compaction drops a never-consented mirror whole, so
+	 * a collection outside it can never leave a mirror dangling. The claims are server-authored history, so they are
+	 * folded forgivingly: a buggy or hostile server must be able to fail a parse (the mirror asides unusable content)
+	 * but never the sweep.
+	 */
+	static Map<String, Long> collectMirrorClaims(ClientStorage storage) throws IOException {
+		TreeMap<String, Long> claims = new TreeMap<>();
+		Set<String> distrusted = new HashSet<>();
 		for (String modpackId : new ClientGenerationStore(storage).mirroredPackIds()) {
 			for (JournalEntry entry : new JournalMirror(storage).entries(modpackId)) {
-				retained.optional(entry.policySha1(), -1, "journal policy document");
+				claim(claims, distrusted, entry.policySha1(), -1);
 				for (JournalEntry.Change change : entry.changes()) {
-					if (change.toSha1() != null) retained.optional(change.toSha1(), change.toSize(), "journal change target");
+					claim(claims, distrusted, change.toSha1(), change.toSize());
 					// Mirrors fetched from older servers carry no source size; only a positive size is a receipt, anything else stays unknown.
-					if (change.fromSha1() != null) retained.optional(change.fromSha1(), change.fromSize() > 0 ? change.fromSize() : -1, "journal change source");
+					claim(claims, distrusted, change.fromSha1(), change.fromSize() > 0 ? change.fromSize() : -1);
 				}
 			}
 		}
-		collectNonHistoryReferences(storage, retained);
-		return retained;
+		if (!distrusted.isEmpty()) LOGGER.warn("The journal mirror names {} objects with contradictory sizes; their sizes stay unvouched and are measured from the bytes", distrusted.size());
+		return claims;
+	}
+
+	/** Records one server-authored claim: first claim wins, an unknown grows into a known size, a contradiction demotes the size to unknown for good. */
+	private static void claim(TreeMap<String, Long> claims, Set<String> distrusted, String hash, long size) {
+		if (hash == null) return;
+		String normalized = HashUtils.normalizeSha1(hash);
+		if (distrusted.contains(normalized)) return;
+		Long known = claims.get(normalized);
+		if (known == null) claims.put(normalized, size);
+		else if (known >= 0 && size >= 0 && known.longValue() != size) {
+			claims.put(normalized, -1L);
+			distrusted.add(normalized);
+		} else if (known < 0 && size >= 0) claims.put(normalized, size);
+	}
+
+	/** Folds history claims under the owned receipts: claims fill hashes local state does not know and never override a local receipt, so merging cannot throw. */
+	static void mergeHistoryClaims(ExpectedSizes owned, Map<String, Long> claims) throws IOException {
+		Map<String, Long> local = owned.sizes();
+		int disagreements = 0;
+		for (Map.Entry<String, Long> claim : claims.entrySet()) {
+			Long knownSize = local.get(claim.getKey());
+			if (knownSize == null) owned.optional(claim.getKey(), claim.getValue(), "journal history");
+			else if (knownSize >= 0 && claim.getValue() >= 0 && knownSize.longValue() != claim.getValue().longValue()) disagreements++;
+		}
+		if (disagreements > 0) LOGGER.warn("Local state and the journal mirror disagree about the size of {} objects; keeping the locally verified receipts", disagreements);
 	}
 
 	/** Adds every durable client pin outside the mirror's history: overlays, baselines, generated copies, preservation, the pending transaction, and repair state. */
