@@ -240,6 +240,11 @@ final class UpdateSession implements UpdateAttempt {
 		return Objects.requireNonNull(appliedPlan, "The session has not committed");
 	}
 
+	@Override
+	public ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig() {
+		return appliedPlan().plannedClientConfig();
+	}
+
 	private void recordChangelogs(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
 		UpdatePreview applied = previewFor(prepared, InstalledTokenRule.ACTIVE_BOOKMARK);
 		changelogs.replaceWith(applied.withReferences(sourceCatalogue.resolveMainPageReferences(prepared)));

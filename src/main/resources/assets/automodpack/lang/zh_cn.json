@@ -322,8 +322,6 @@
   "automodpack.download.acquired": "已获取：%s  失败：%s",
   "automodpack.error.title": "错误",
   "automodpack.error.titleLine": "[AutoModpack] %s！",
-  "automodpack.error.removalIncomplete": "整合包移除未完成",
-  "automodpack.error.deactivationIncomplete": "整合包停用未完成",
   "automodpack.error.repair": "本地整合包修复未完成",
   "automodpack.firstConnect.existingModsKeep": "检测到 %s 个现有模组文件。它们可能影响整合包。",
   "automodpack.firstConnect.existingModsArchive": "%s 个现有模组文件将从 mods 文件夹移除，并放到“保留的文件”中。",

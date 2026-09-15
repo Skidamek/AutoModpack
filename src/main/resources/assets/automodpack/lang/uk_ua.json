@@ -327,8 +327,6 @@
   "automodpack.download.acquired": "Отримано: %s  Помилки: %s",
   "automodpack.error.title": "Помилка",
   "automodpack.error.titleLine": "[AutoModpack] %s!",
-  "automodpack.error.removalIncomplete": "Вилучення модпака не завершено",
-  "automodpack.error.deactivationIncomplete": "Вимкнення модпака не завершено",
   "automodpack.error.repair": "Виправлення локального модпака не завершено",
   "automodpack.firstConnect.existingModsKeep": "Знайдено наявні файли модів: %s. Вони можуть заважати модпаку.",
   "automodpack.firstConnect.existingModsArchive": "Наявні файли модів (%s) буде прибрано з папки mods і вони потраплять у «Збережені файли».",

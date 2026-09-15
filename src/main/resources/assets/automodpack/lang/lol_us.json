@@ -327,8 +327,6 @@
   "automodpack.download.acquired": "got: %s  fail: %s",
   "automodpack.error.title": "oops",
   "automodpack.error.titleLine": "[AutoModpak] %s!",
-  "automodpack.error.removalIncomplete": "modpak yeet did not finish. still kinda here.",
-  "automodpack.error.deactivationIncomplete": "modpak turn-off did not finish",
   "automodpack.error.repair": "local modpak fix did not finish. try agen?",
   "automodpack.firstConnect.existingModsKeep": "found %s old mod filez. dey mite fite da modpak.",
   "automodpack.firstConnect.existingModsArchive": "%s old mod filez leev da mods foldr an go in stashd filez.",

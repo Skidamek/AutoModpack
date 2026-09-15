@@ -72,7 +72,7 @@ public final class SwitchFlow {
 		UpdatePreview preview = updater.previewInstalledSwitch();
 		if (forcedMode != null) preview = preview.withMode(forcedMode);
 		boolean writesUnverifiedJar = (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && updater.planWritesUnverifiedJar(preview.plan());
-		boolean shown = ScreenManager.preview(new PreviewPayload(preview, modpackName, updater.joinOrigin(), writesUnverifiedJar, updater.getSelectedTarget(), updater.unverifiedSelectedJarPaths(),
+		boolean shown = ScreenManager.preview(PreviewPayload.review(preview, modpackName, updater.joinOrigin(), writesUnverifiedJar, updater.getSelectedTarget(), updater.unverifiedSelectedJarPaths(),
 				updater.selectedJarSourceCounts(), updater.reviewActions(),
 				(Runnable) () -> ModpackUpdater.executor().execute(() -> apply(updater, release, rollback)),
 				(Runnable) () -> {

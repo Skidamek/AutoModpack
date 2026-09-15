@@ -327,8 +327,6 @@
   "automodpack.download.acquired": "Erhalten: %s  Fehlgeschlagen: %s",
   "automodpack.error.title": "Fehler",
   "automodpack.error.titleLine": "[AutoModpack] %s!",
-  "automodpack.error.removalIncomplete": "Das Entfernen des Modpacks wurde nicht abgeschlossen",
-  "automodpack.error.deactivationIncomplete": "Das Deaktivieren des Modpacks wurde nicht abgeschlossen",
   "automodpack.error.repair": "Die lokale Modpack-Reparatur wurde nicht abgeschlossen",
   "automodpack.firstConnect.existingModsKeep": "%s vorhandene Mod-Dateien gefunden. Die können Probleme mit dem Modpack verursachen.",
   "automodpack.firstConnect.existingModsArchive": "%s vorhandene Mod-Dateien werden aus dem mods-Ordner entfernt und in Gesicherte Dateien verschoben.",

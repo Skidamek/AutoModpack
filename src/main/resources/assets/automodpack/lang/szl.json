@@ -327,8 +327,6 @@
   "automodpack.download.acquired": "Dostane: %s  Niydane: %s",
   "automodpack.error.title": "Feler",
   "automodpack.error.titleLine": "[AutoModpack] %s!",
-  "automodpack.error.removalIncomplete": "Wyciepniyncie modpaka niy skōńczyło sie",
-  "automodpack.error.deactivationIncomplete": "Wyłōnczynie modpaka niy skōńczyło sie",
   "automodpack.error.repair": "Lokalnŏ naprawa modpaka niy skōńczyła sie",
   "automodpack.firstConnect.existingModsKeep": "Znalazło sie %s istnijōncych plikōw modōw. Mogōm robić problymy z modpakiym.",
   "automodpack.firstConnect.existingModsArchive": "%s istnijōncych plikōw modōw bydōm wyciepane z folderu mods i przeniesione do Zachowanych plikōw.",
