@@ -3,9 +3,9 @@
  * GetStringChars is not required to be NUL-terminated; CreateFileW and RmRegisterResources are.
  * Already-extended "\\?\" names are copied as-is (no slash conversion): that prefix disables
  * normal Win32 path parsing, so "/" is not a separator and "." / ".." are not interpreted as
- * current/parent-directory components. Ordinary drive and UNC names keep ordinary Win32 spelling
- * while they fit in MAX_PATH; only then is "\\?\" / "\\?\UNC\" added, and slashes become
- * backslashes because the extended namespace forbids forward slashes as separators.
+ * current/parent-directory components. Every non-extended path has its slashes converted to
+ * backslashes: Win32 accepts both separators in ordinary paths, and the "\\?\" / "\\?\UNC\" prefix
+ * (which forbids forward slashes) is still appended to ordinary names longer than MAX_PATH.
  * Device-namespace "\\.\" names are rejected: this helper is for filesystem paths, not
  * PhysicalDrive/COM devices. Java callers pass Path.toAbsolutePath().normalize(); this layer
  * does not re-validate absolute vs drive-relative vs relative.

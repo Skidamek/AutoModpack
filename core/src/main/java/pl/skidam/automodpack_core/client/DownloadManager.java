@@ -53,7 +53,7 @@ public class DownloadManager implements DownloadView {
 	private volatile boolean cancelled = false;
 
 	private final Map<FileInspection.HashPathPair, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
-	public final Map<FileInspection.HashPathPair, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
+	private final Map<FileInspection.HashPathPair, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
 	private final Map<FileInspection.HashPathPair, Path> activeTemporaryFiles = new ConcurrentHashMap<>();
 
 	// The acquisition summary outlives cancelAllAndShutdown, unlike downloadedCount which resets for the stage line;
