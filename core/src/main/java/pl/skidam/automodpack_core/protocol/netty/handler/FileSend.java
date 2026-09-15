@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.protocol.netty.handler;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 import java.io.IOException;
@@ -43,6 +44,7 @@ final class FileSend {
 		final Optional<Path> optionalPath = server.getPath(sha1);
 
 		if (optionalPath.isEmpty() || Files.isSymbolicLink(optionalPath.get()) || !Files.isRegularFile(optionalPath.get(), LinkOption.NOFOLLOW_LINKS)) {
+			LOGGER.warn("Hosted object not found: {}", sha1);
 			sendError(ctx, protocolVersion, "File not found");
 			return;
 		}

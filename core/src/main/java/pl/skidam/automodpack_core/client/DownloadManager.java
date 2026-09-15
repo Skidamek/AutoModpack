@@ -373,10 +373,16 @@ public class DownloadManager implements DownloadView {
 			throws IOException, InterruptedException {
 		var future = downloadClient.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), targetFile, progressAction);
 		try {
-			future.join();
+			future.get();
+		} catch (InterruptedException e) {
+			future.cancel(true);
+			downloadClient.abortTransfers();
+			throw e;
 		} catch (CancellationException e) {
+			future.cancel(true);
+			downloadClient.abortTransfers();
 			throw new InterruptedException("AutoModpack host download was cancelled");
-		} catch (CompletionException e) {
+		} catch (ExecutionException e) {
 			Throwable cause = e.getCause();
 			if (cause instanceof LocalStorageException localStorageException) throw localStorageException;
 			if (cause instanceof InterruptedException) throw new InterruptedException("AutoModpack host download was interrupted");
@@ -427,6 +433,7 @@ public class DownloadManager implements DownloadView {
 
 	public void cancelAllAndShutdown() {
 		cancelled = true;
+		if (downloadClient != null) downloadClient.abortTransfers();
 		LOGGER.info("Cancelling the download run: {} queued, {} in-flight", queuedDownloads.size(), downloadsInProgress.size());
 		queuedDownloads.clear();
 		downloadsInProgress.forEach((k, v) -> v.future.cancel(true));
