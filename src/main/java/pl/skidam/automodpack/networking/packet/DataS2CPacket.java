@@ -43,17 +43,26 @@ public class DataS2CPacket {
 				} else {
 					LOGGER.warn("{} has not installed modpack. Certificate fingerprint: {}", GameHelpers.getPlayerName(profile), fingerprint);
 				}
-				Component reason = VersionedText.literal("[AutoModpack] Install/Update modpack to join");
-				Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
-				connection.send(new ClientboundLoginDisconnectPacket(reason));
-				connection.disconnect(reason);
+				disconnect(handler, VersionedText.literal("[AutoModpack] Install/Update modpack to join"));
 			} else if (clientResponse == LoginUpdateResponse.CONTINUE) {
 				LOGGER.info("{} has installed whole modpack", GameHelpers.getPlayerName(profile));
+			} else if (clientResponse == LoginUpdateResponse.CLIENT_REJECTED) {
+				String fingerprint = hostServer.getCertificateFingerprint();
+				if (fingerprint == null) {
+					LOGGER.warn(
+							"{} refused this server's certificate: it does not match the fingerprint pinned on their client. If this server's certificate did not change, their pin is stale or something intercepts their connection.",
+							GameHelpers.getPlayerName(profile));
+				} else {
+					LOGGER.warn(
+							"{} refused this server's certificate: it does not match the fingerprint pinned on their client. Current server certificate fingerprint: {}. If the certificate did not change, their pin is stale or something intercepts their connection.",
+							GameHelpers.getPlayerName(profile), fingerprint);
+				}
+				disconnect(handler, VersionedText.literal("[AutoModpack] Your client stopped this connection: the server's certificate does not match the certificate saved for this server."));
+			} else if (clientResponse == LoginUpdateResponse.CLIENT_DECLINED) {
+				LOGGER.warn("{} dismissed the certificate verification prompt", GameHelpers.getPlayerName(profile));
+				disconnect(handler, VersionedText.literal("[AutoModpack] Certificate verification was dismissed. Reconnect and verify the certificate to join."));
 			} else {
-				Component reason = VersionedText.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!");
-				Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
-				connection.send(new ClientboundLoginDisconnectPacket(reason));
-				connection.disconnect(reason);
+				disconnect(handler, VersionedText.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!"));
 
 				LOGGER.error("AutoModpack connection failed. Check the advertised endpoint and its configured connection mode.");
 
@@ -82,5 +91,11 @@ public class DataS2CPacket {
 		} catch (Exception e) {
 			LOGGER.error("Error while handling DataS2CPacket", e);
 		}
+	}
+
+	private static void disconnect(ServerLoginPacketListenerImpl handler, Component reason) {
+		Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
+		connection.send(new ClientboundLoginDisconnectPacket(reason));
+		connection.disconnect(reason);
 	}
 }

@@ -97,8 +97,8 @@ final class ClientLoginUpdateFlow {
 		return ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo, secret, true).thenComposeAsync(manifestResult -> {
 			if (!manifestResult.successful()) {
 				disconnectImmediately(handler);
-				presentManifestFailure(manifestResult);
-				return CompletableFuture.completedFuture(LoginUpdateResponse.HOST_ERROR);
+				Throwable failure = manifestResult.failure() == null ? new IOException("Modpack manifest fetch returned no failure cause") : manifestResult.failure();
+				return CompletableFuture.completedFuture(presentReconcileFailure(failure, manifestResult.state()));
 			}
 
 			DownloadClient downloadClient = manifestResult.client();
@@ -156,28 +156,31 @@ final class ClientLoginUpdateFlow {
 			return continueReconcile(handler, connectionInfo, secret, storage, downloadClient, selectedTarget, false, false);
 		}, ModpackUpdater.executor()).exceptionally(e -> {
 			disconnectImmediately(handler);
-			Throwable failure = Throwables.unwrap(e);
-			if (Throwables.findCause(failure, CertificateTrustCancelledException.class) == null) {
-				presentFailure(failure, "automodpack.error.connection", FailureCategory.CONNECTION);
-			}
-			return LoginUpdateResponse.HOST_ERROR;
+			return presentReconcileFailure(Throwables.unwrap(e), null);
 		});
 	}
 
-	private static void presentManifestFailure(ManifestFetcher.ManifestFetchResult result) {
-		Throwable failure = result.failure() == null ? new IOException("Modpack manifest fetch returned no failure cause") : result.failure();
-		if (Throwables.findCause(failure, CertificateTrustCancelledException.class) != null) return;
+	/**
+	 * The failure tail shared by every path into the manifest fetch: shows the one screen that tells the player the truth
+	 * and returns the response that tells the server the same story. A refused certificate or a dismissed verification is
+	 * named on the wire so the server stops blaming its own config; everything else stays a host error.
+	 */
+	private static LoginUpdateResponse presentReconcileFailure(Throwable failure, ManifestFetcher.ManifestFetchState state) {
+		if (Throwables.findCause(failure, CertificateTrustCancelledException.class) != null) return LoginUpdateResponse.CLIENT_DECLINED;
 		CertificatePinMismatchException mismatch = Throwables.findCause(failure, CertificatePinMismatchException.class);
 		if (mismatch != null) {
 			FailureRequest request = FailureRequest.of(failure, "automodpack.pin.mismatch", FailureCategory.SECURITY, FailureDestination.MULTIPLAYER, null)
 					.withDiagnosticDetails("Origin: " + mismatch.getOrigin(), "Expected fingerprint: " + mismatch.getExpectedFingerprint(),
 							"Presented fingerprint: " + mismatch.getPresentedFingerprint());
 			ScreenManager.failure(request);
-		} else if (result.state() == ManifestFetcher.ManifestFetchState.OPERATION_FAILED) {
+			return LoginUpdateResponse.CLIENT_REJECTED;
+		}
+		if (state == ManifestFetcher.ManifestFetchState.OPERATION_FAILED) {
 			presentFailure(failure, "automodpack.error.hostContent", FailureCategory.HOST);
 		} else {
 			presentFailure(failure, "automodpack.error.connection", FailureCategory.CONNECTION);
 		}
+		return LoginUpdateResponse.HOST_ERROR;
 	}
 
 	private static void presentFailure(Throwable failure, String messageKey, FailureCategory category) {

@@ -4,7 +4,11 @@ package pl.skidam.automodpack.networking.content;
 public enum LoginUpdateResponse {
 	CONTINUE("false"),
 	UPDATE_REQUIRED("true"),
-	HOST_ERROR("null");
+	HOST_ERROR("null"),
+	/** The client refused the host's certificate, so the failure lives on the player's side of the connection. */
+	CLIENT_REJECTED("rejected"),
+	/** The player dismissed the certificate verification prompt and the client ended the login for it. */
+	CLIENT_DECLINED("declined");
 
 	private final String wireValue;
 
