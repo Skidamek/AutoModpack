@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.client.RestartDecision.ApplyResult;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
@@ -23,6 +24,9 @@ public interface UpdateAttempt {
 	boolean isApproved();
 
 	ApplyResult commit() throws Exception;
+
+	/** The config document this attempt's committed plan carries; refuses an attempt that has not committed. */
+	ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig();
 
 	static UpdateTransactionExecutor.Execution resume(ClientStorage storage, UpdateTransaction pending, ModpackLoaderService modpackLoader, String loaderType)
 			throws IOException {

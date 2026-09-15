@@ -73,6 +73,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private final ModpackObjectAcquisition objectAcquisition;
 	private final AtomicReference<UpdateAttempt> attempt = new AtomicReference<>();
 	private final ReviewSession review;
+	private final LifecycleFlow lifecycle;
 	/**
 	 * The attaching intent of an explicitly requested sync. Detachment ends only through this intent: an applied plan
 	 * clears the flag inside the commit, and a requested sync that finds nothing to apply clears it on its early exit.
@@ -179,7 +180,7 @@ public class ModpackUpdater implements AutoCloseable {
 		// The switch flow reports its failure through its own caller, so its failure handling carries the failure out of the harness.
 		AtomicReference<Exception> propagated = new AtomicReference<>();
 		runReviewedFlow(new ApplyFlow("Installed modpack switch", () -> new ReLauncher(UpdateType.SELECT, changelogs).restart(false), propagated::set, this::close),
-				() -> restartAfterApply(switchPlan.commit()));
+				() -> restartAfterApply(commitFlow(switchPlan)));
 		if (propagated.get() != null) throw propagated.get();
 	}
 
@@ -217,6 +218,7 @@ public class ModpackUpdater implements AutoCloseable {
 		this.objectAcquisition = new ModpackObjectAcquisition(this.storage, this.platformCache, this.sourceCatalogue, this.planBuilder, this.connectionInfo, this.downloadClient,
 				playerCancelled, this::getModpackName, this::cancelFromPlayer);
 		this.review = new ReviewSession(this, this.storage, this.sourceCatalogue, playerCancelled);
+		this.lifecycle = new LifecycleFlow(this, this.storage, this.planBuilder, this.changelogs);
 	}
 
 	/** A session for one update attempt against the currently selected target, carrying this attempt's consent and attach intent. */
@@ -236,7 +238,7 @@ public class ModpackUpdater implements AutoCloseable {
 		return beginAttempt(newSession());
 	}
 
-	private RemovalAttempt requireRemoval(RemovalAttempt.Kind kind) {
+	RemovalAttempt requireRemoval(RemovalAttempt.Kind kind) {
 		UpdateAttempt current = attempt.get();
 		if (!(current instanceof RemovalAttempt removal) || removal.kind() != kind) throw new IllegalStateException("Modpack lifecycle action was not prepared");
 		return removal;
@@ -378,8 +380,7 @@ public class ModpackUpdater implements AutoCloseable {
 			return;
 		}
 		launch.approve();
-		ApplyResult applyResult = launch.commit();
-		clientConfig = launch.appliedPlan().plannedClientConfig();
+		ApplyResult applyResult = commitFlow(launch);
 		LOGGER.info("Launch apply completed; restart required: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
 		finishLaunchApply(applyResult);
 	}
@@ -417,90 +418,25 @@ public class ModpackUpdater implements AutoCloseable {
 		return newSession().requiresUpdateBeforeLogin(result);
 	}
 
-	// Build the removal plan without changing the installed files.
-	UpdatePreview previewRemoval() throws Exception {
-		return beginAttempt(new RemovalAttempt(storage, planBuilder, changelogs, RemovalAttempt.Kind.REMOVAL)).preview();
-	}
-
-	UpdatePreview previewDeactivation() throws Exception {
-		return beginAttempt(new RemovalAttempt(storage, planBuilder, changelogs, RemovalAttempt.Kind.DEACTIVATION)).preview();
-	}
-
-	record LifecycleApply(boolean success, boolean restartRequired) {}
-
-	/**
-	 * Reviews then commits the active pack's removal or deactivation on this updater: the preview takes the screen, the
-	 * confirm click commits, and the caller's released (always) and removed (only when navigation makes sense) run on
-	 * the client thread.
-	 */
+	/** Removal and deactivation of the installed modpack: the lifecycle flow owns the dance, the facade is its construction point. */
 	public void removeOrDeactivate(boolean deactivation, String modpackName, Runnable released, Runnable removed) {
-		executor().execute(() -> {
-			try {
-				UpdatePreview preview = deactivation ? previewDeactivation() : previewRemoval();
-				boolean shown = ScreenManager.preview(new PreviewPayload(preview, modpackName, review.joinOrigin(), false, null, List.of(), null, reviewActions(),
-						(Runnable) () -> executor().execute(() -> executeRemoval(deactivation, released, removed)), released));
-				if (!shown) {
-					close();
-					ScreenManager.clientThread(released);
-				}
-			} catch (Exception e) {
-				close();
-				ScreenManager.clientThread(released);
-				showUpdateFailure(e);
-			}
-		});
+		lifecycle.removeOrDeactivate(deactivation, modpackName, released, removed);
 	}
 
-	private void executeRemoval(boolean deactivation, Runnable released, Runnable removed) {
-		boolean finishedWithoutRestart = false;
-		try {
-			LifecycleApply apply = deactivation ? deactivateModpack() : removeModpack();
-			if (!apply.success()) {
-				String error = deactivation ? "automodpack.error.deactivationIncomplete" : "automodpack.error.removalIncomplete";
-				ScreenManager.failure(FailureRequest.of(new IllegalStateException(error), error, FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
-			} else {
-				finishedWithoutRestart = removed != null && (!deactivation || !apply.restartRequired());
-			}
-		} catch (Exception e) {
-			showUpdateFailure(e);
-		} finally {
-			close();
-			boolean navigate = finishedWithoutRestart;
-			ScreenManager.clientThread(() -> {
-				released.run();
-				if (navigate) removed.run();
-			});
-		}
+	/** The one flow completion: the commit lands the attempt's planned config document on the engine, the same for every flow. */
+	ApplyResult commitFlow(UpdateAttempt attempt) throws Exception {
+		ApplyResult result = attempt.commit();
+		clientConfig = attempt.plannedClientConfig();
+		return result;
 	}
 
-	LifecycleApply deactivateModpack() throws Exception {
-		return commitRemoval(RemovalAttempt.Kind.DEACTIVATION);
-	}
-
-	// Remove the installed modpack and restore baseline files before metadata cleanup.
-	LifecycleApply removeModpack() throws Exception {
-		return commitRemoval(RemovalAttempt.Kind.REMOVAL);
-	}
-
-	private LifecycleApply commitRemoval(RemovalAttempt.Kind kind) throws Exception {
-		RemovalAttempt removal = requireRemoval(kind);
-		// The confirm click is the review's consent; commit itself refuses an unapproved plan.
-		removal.approve();
-		ApplyResult result = removal.commit();
-		// The flow completion applies the committed removal's config snapshot; the attempt never writes the global.
-		clientConfig = removal.plannedConfig();
-		afterRemovalApply(result);
-		return new LifecycleApply(true, result.requiresRestart());
-	}
-
-	/** Removal has no in-game content load: only a plan that names a restart reason asks the player to restart. */
-	private void afterRemovalApply(ApplyResult applyResult) {
-		if (applyResult.requiresRestart()) restartAfterApply(applyResult);
-		else updateLoopDetector.clear();
+	/** The pending restart demand is satisfied: no restart was asked for, so the loop detector forgets the history. */
+	void clearUpdateLoopDetector() {
+		updateLoopDetector.clear();
 	}
 
 	/** Post-apply restart for a running game: the engine owns the restart decision, the flows only supply their kind. */
-	private void restartAfterApply(ApplyResult applyResult) {
+	void restartAfterApply(ApplyResult applyResult) {
 		if (!preload && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty())) SessionUpdateState.markAppliedContentNotLoaded();
 		if (!applyResult.requiresRestart()) {
 			updateLoopDetector.clear();
@@ -570,9 +506,7 @@ public class ModpackUpdater implements AutoCloseable {
 			if (review.abortedByPlayer(e)) LOGGER.info("Modpack update apply was aborted by the player");
 			else showUpdateFailure(e);
 		}, this::close), () -> {
-			ApplyResult applyResult = reviewed.commit();
-			// The flow completion applies the committed plan's config snapshot; the deep transaction layer never writes the global.
-			clientConfig = reviewed.appliedPlan().plannedClientConfig();
+			ApplyResult applyResult = commitFlow(reviewed);
 			LOGGER.info("Update completed! Required restart: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
 			restartAfterApply(applyResult);
 		});
@@ -627,7 +561,7 @@ public class ModpackUpdater implements AutoCloseable {
 	/** Wraps a reviewable plan with this engine's review backing; the unverified-jar gate is precomputed, mode-gated. */
 	PreviewPayload previewPayload(UpdatePreview preview, Runnable continueAction, Runnable cancelAction) {
 		boolean writesUnverifiedJar = (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && review.planWritesUnverifiedJar(preview.plan());
-		return new PreviewPayload(preview, getModpackName(), review.joinOrigin(), writesUnverifiedJar, getSelectedTarget(), review.unverifiedSelectedJarPaths(),
+		return PreviewPayload.review(preview, getModpackName(), review.joinOrigin(), writesUnverifiedJar, getSelectedTarget(), review.unverifiedSelectedJarPaths(),
 				sourceCatalogue.selectedJarSourceCounts(getSelectedTarget()), review.reviewActions(), continueAction, cancelAction);
 	}
 

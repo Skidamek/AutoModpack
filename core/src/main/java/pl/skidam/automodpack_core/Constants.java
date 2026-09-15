@@ -32,6 +32,7 @@ public final class Constants {
 	public static ModpackExecutor modpackExecutor;
 	public static NettyServer hostServer;
 	public static ServerConfigJsons.ServerConfigFieldsV3 serverConfig;
-	public static ClientConfigJsons.ClientConfigFieldsV3 clientConfig;
+	/** The process config document: boot owns loading it, flows land committed snapshots through one seam, screens only read. */
+	public static volatile ClientConfigJsons.ClientConfigFieldsV3 clientConfig;
 	private Constants() {}
 }

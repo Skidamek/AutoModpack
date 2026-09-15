@@ -322,8 +322,6 @@
   "automodpack.download.acquired": "받음: %s  실패: %s",
   "automodpack.error.title": "오류",
   "automodpack.error.titleLine": "[AutoModpack] %s!",
-  "automodpack.error.removalIncomplete": "모드팩 제거가 끝나지 않았습니다",
-  "automodpack.error.deactivationIncomplete": "모드팩 비활성화가 끝나지 않았습니다",
   "automodpack.error.repair": "로컬 모드팩 복구가 끝나지 않았습니다",
   "automodpack.firstConnect.existingModsKeep": "기존 모드 파일 %s개가 있습니다. 모드팩과 문제가 생길 수 있습니다.",
   "automodpack.firstConnect.existingModsArchive": "기존 모드 파일 %s개를 mods 폴더에서 제거하고 보존된 파일에 둡니다.",

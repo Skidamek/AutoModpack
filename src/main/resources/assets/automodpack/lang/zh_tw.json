@@ -322,8 +322,6 @@
   "automodpack.download.acquired": "已取得：%s  失敗：%s",
   "automodpack.error.title": "錯誤",
   "automodpack.error.titleLine": "[AutoModpack] %s！",
-  "automodpack.error.removalIncomplete": "模組包移除未完成",
-  "automodpack.error.deactivationIncomplete": "模組包停用未完成",
   "automodpack.error.repair": "本機模組包修復未完成",
   "automodpack.firstConnect.existingModsKeep": "偵測到 %s 個現有模組檔案。它們可能影響模組包。",
   "automodpack.firstConnect.existingModsArchive": "%s 個現有模組檔案將從 mods 資料夾移除，並放到「保留的檔案」中。",

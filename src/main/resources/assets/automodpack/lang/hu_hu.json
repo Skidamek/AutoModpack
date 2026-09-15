@@ -327,8 +327,6 @@
   "automodpack.download.acquired": "Beszerezve: %s  Sikertelen: %s",
   "automodpack.error.title": "Hiba",
   "automodpack.error.titleLine": "[AutoModpack] %s!",
-  "automodpack.error.removalIncomplete": "A modpack eltávolítása nem fejeződött be",
-  "automodpack.error.deactivationIncomplete": "A modpack kikapcsolása nem fejeződött be",
   "automodpack.error.repair": "A helyi modpack javítása nem fejeződött be",
   "automodpack.firstConnect.existingModsKeep": "%s meglévő modfájl található. Ezek gondot okozhatnak a modpackkel.",
   "automodpack.firstConnect.existingModsArchive": "%s meglévő modfájl kikerül a mods mappából, és a Megőrzött fájlokba kerül.",

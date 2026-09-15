@@ -46,8 +46,8 @@ final class RemovalAttempt implements UpdateAttempt {
 		return kind;
 	}
 
-	/** The config snapshot the removal plans to persist; the flow applies it at completion. */
-	ClientConfigJsons.ClientConfigFieldsV3 plannedConfig() {
+	@Override
+	public ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig() {
 		return Objects.requireNonNull(prepared, "Modpack lifecycle action was not prepared").plannedConfig();
 	}
 

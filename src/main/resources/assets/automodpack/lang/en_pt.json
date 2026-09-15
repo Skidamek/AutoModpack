@@ -327,8 +327,6 @@
   "automodpack.download.acquired": "Hauled in: %s  Failed: %s",
   "automodpack.error.title": "Trouble",
   "automodpack.error.titleLine": "[AutoModpack] %s!",
-  "automodpack.error.removalIncomplete": "The modpack was not fully scuttled",
-  "automodpack.error.deactivationIncomplete": "The modpack deactivation did not finish",
   "automodpack.error.repair": "The local modpack repair did not finish",
   "automodpack.firstConnect.existingModsKeep": "%s existin' mod files spotted. They may pick a fight with the modpack.",
   "automodpack.firstConnect.existingModsArchive": "%s existin' mod files will leave the mods folder and be stashed.",

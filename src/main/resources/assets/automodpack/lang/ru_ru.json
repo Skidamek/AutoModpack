@@ -327,8 +327,6 @@
   "automodpack.download.acquired": "Получено: %s  Ошибки: %s",
   "automodpack.error.title": "Ошибка",
   "automodpack.error.titleLine": "[AutoModpack] %s!",
-  "automodpack.error.removalIncomplete": "Удаление модпака не завершено",
-  "automodpack.error.deactivationIncomplete": "Отключение модпака не завершено",
   "automodpack.error.repair": "Исправление локального модпака не завершено",
   "automodpack.firstConnect.existingModsKeep": "Найдены имеющиеся файлы модов: %s. Они могут мешать модпаку.",
   "automodpack.firstConnect.existingModsArchive": "Имеющиеся файлы модов (%s) будут убраны из папки mods и попадут в «Сохранённые файлы».",

@@ -232,7 +232,7 @@ final class InstalledModpackController {
 			PackDocument record = new ClientGenerationStore(storage).newestDocument(pack.modpackId());
 			if (record == null) throw new IOException("Stale pack has no installed generation: " + pack.modpackId());
 			UpdatePreview preview = removalPreview(pack.modpackId(), record, ChangeSet.catalogue(record.manifest(), ChangeSet.Kind.REMOVED));
-			boolean shown = ScreenManager.preview(new PreviewPayload(preview, pack.name(), originFor(pack.modpackId()), false, null, List.of(), null, null,
+			boolean shown = ScreenManager.preview(PreviewPayload.storageRemoval(preview, pack.name(), originFor(pack.modpackId()), null,
 					(Runnable) () -> ScreenManager.background(() -> {
 						try {
 							new ClientGenerationStore(storage).forgetModpack(pack.modpackId());
@@ -352,7 +352,7 @@ final class InstalledModpackController {
 		}
 		try {
 			UpdatePreview preview = removalPreview(pack.modpackId(), pack.record(), ChangeSet.empty());
-			boolean shown = ScreenManager.preview(new PreviewPayload(preview, pack.name(), originFor(pack.modpackId()), false, null, List.of(), null, null,
+			boolean shown = ScreenManager.preview(PreviewPayload.storageRemoval(preview, pack.name(), originFor(pack.modpackId()), null,
 					(Runnable) () -> ScreenManager.background(() -> forget(pack, released, removed)), released));
 			if (!shown) released.run();
 		} catch (Exception e) {
