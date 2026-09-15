@@ -3,6 +3,7 @@ package pl.skidam.automodpack.networking.packet;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -43,7 +44,55 @@ import pl.skidam.automodpack_core.utils.Throwables;
 final class ClientLoginUpdateFlow {
 	private ClientLoginUpdateFlow() {}
 
+	/** The entry to the login work: an optional modpack first asks a client with nothing synced from this server whether it wants the pack at all. */
 	static CompletableFuture<LoginUpdateResponse> reconcile(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo,
+			Secrets.Secret secret, ClientStorage storage, boolean requireModpack) {
+		if (!requireModpack && !syncedFromOrigin(storage, connectionInfo.origin)) return offerModpack(handler, connectionInfo, secret, storage);
+		return fetchAndReconcile(handler, connectionInfo, secret, storage);
+	}
+
+	/** Whether any installed pack's connection record names this joining origin; unreadable storage reads as never synced here, so the offer still shows. */
+	private static boolean syncedFromOrigin(ClientStorage storage, InetSocketAddress origin) {
+		try {
+			return ConnectionStore.hasOriginConnection(storage, origin);
+		} catch (IOException | RuntimeException e) {
+			LOGGER.warn("Cannot read the installed packs to compare connection origins; offering the modpack", e);
+			return false;
+		}
+	}
+
+	/**
+	 * The join offer for an optional modpack: the player picks before any transport opens, so nothing is fetched or
+	 * persisted yet. Sync chains into the standard flow unchanged; joining without it resumes the login in-session and
+	 * persists no connection record, trust entry or secret; backing out drops the join at the multiplayer hub.
+	 */
+	private static CompletableFuture<LoginUpdateResponse> offerModpack(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo,
+			Secrets.Secret secret, ClientStorage storage) {
+		if (!ScreenManager.hasScreen()) {
+			LOGGER.info("No screen available, treating the offered modpack as required");
+			return fetchAndReconcile(handler, connectionInfo, secret, storage);
+		}
+		LOGGER.info("The server offers its modpack; asking the player before any sync");
+		CompletableFuture<LoginUpdateResponse> answered = new CompletableFuture<>();
+		Runnable syncModpack = () -> ModpackUpdater.executor().execute(() -> fetchAndReconcile(handler, connectionInfo, secret, storage)
+				.whenComplete((response, error) -> {
+					if (error == null) answered.complete(response);
+					else answered.completeExceptionally(error);
+				}));
+		Runnable joinWithout = () -> ModpackUpdater.executor().execute(() -> {
+			LOGGER.info("Joining without the offered modpack; nothing is synced");
+			answered.complete(LoginUpdateResponse.CONTINUE);
+		});
+		Runnable cancel = () -> ModpackUpdater.executor().execute(() -> {
+			disconnectImmediately(handler);
+			ScreenImpl.multiplayer();
+			answered.complete(LoginUpdateResponse.UPDATE_REQUIRED);
+		});
+		ScreenManager.modpackOffer(syncModpack, joinWithout, cancel);
+		return answered;
+	}
+
+	private static CompletableFuture<LoginUpdateResponse> fetchAndReconcile(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo,
 			Secrets.Secret secret, ClientStorage storage) {
 		return ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo, secret, true).thenComposeAsync(manifestResult -> {
 			if (!manifestResult.successful()) {

@@ -86,6 +86,25 @@ public final class ConnectionStore {
 		return List.copyOf(stale);
 	}
 
+	/**
+	 * Whether any installed pack's stored connection origin equals this joining origin: a client already synced from
+	 * this server skips the join offer for an optional modpack. An unreadable or origin-less record only hides its
+	 * pack, exactly like the stale-cleanup offer above.
+	 */
+	public static boolean hasOriginConnection(ClientStorage storage, InetSocketAddress origin) throws IOException {
+		if (origin == null) return false;
+		String joiningOrigin = AddressHelpers.formatAddress(origin);
+		for (String modpackId : new ClientGenerationStore(storage).installedPackIds()) {
+			try {
+				ConnectionJsons.ConnectionInfo connection = getConnection(storage, modpackId);
+				if (connection != null && connection.origin != null && AddressHelpers.formatAddress(connection.origin).equals(joiningOrigin)) return true;
+			} catch (IOException | RuntimeException e) {
+				LOGGER.debug("Cannot read the connection record of modpack {}; it does not count as synced here", modpackId, e);
+			}
+		}
+		return false;
+	}
+
 	private static Path file(ClientStorage storage, String modpackId) {
 		return storage.connectionFile(ModpackId.requireValid(modpackId));
 	}

@@ -84,6 +84,10 @@ public final class ScreenManager {
 		instance.detachedJoin(modpackName, headMatchesActive, continueJoin, syncNow);
 	}
 
+	public static void modpackOffer(Runnable syncModpack, Runnable joinWithout, Runnable cancel) {
+		instance.modpackOffer(syncModpack, joinWithout, cancel);
+	}
+
 	public static void waiting() {
 		instance.waiting();
 	}

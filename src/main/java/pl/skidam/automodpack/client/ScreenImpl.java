@@ -126,6 +126,12 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
+	public void modpackOffer(Runnable syncModpack, Runnable joinWithout, Runnable cancel) {
+		Screens.commitSuccessor();
+		executeOnClient(() -> Screens.modpackOffer(syncModpack, joinWithout, cancel));
+	}
+
+	@Override
 	public void waiting() {
 		waiting(null);
 	}
@@ -345,6 +351,10 @@ public class ScreenImpl implements ScreenService {
 
 		public static void detachedJoin(String modpackName, boolean headMatchesActive, Runnable continueJoin, Runnable syncNow) {
 			Screens.setScreen(new DetachedJoinPromptScreen(Screens.getScreen(), modpackName, headMatchesActive, continueJoin, syncNow));
+		}
+
+		public static void modpackOffer(Runnable syncModpack, Runnable joinWithout, Runnable cancel) {
+			Screens.setScreen(new ModpackOfferScreen(Screens.getScreen(), syncModpack, joinWithout, cancel));
 		}
 
 		public static void waiting(Runnable onCancel) {

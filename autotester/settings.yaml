@@ -83,7 +83,7 @@ automodpack:
       - "/config/**"
     autoExcludeServerSideMods: true
     autoExcludeUnnecessaryFiles: true
-    requireAutoModpackOnClient: true
+    requireModpack: true
     nagUnModdedClients: false
     bindAddress: ""
     bindPort: -1
