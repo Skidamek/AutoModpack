@@ -46,7 +46,9 @@ The fields below shape what players see and can choose. Players pick optional gr
 | `groups.<id>.defaultSelected` | `false` | Preselected for players who have not chosen yet; ignored when `required` is true.                                         |
 | `groups.<id>.requires`   | `[]`    | Group ids that must also be selected for this group to make sense (a shader config pack that needs its shader pack).           |
 | `groups.<id>.breaksWith` | `[]`    | Group ids that cannot be selected alongside this one (two mods that replace the same files).                                   |
-| `groups.<id>.compatiblePlatforms` | `[]` | Restricts the group to matching platforms: `windows`, `linux`, or `macos`. Empty means every platform. A group with client-only mods stays out of a server's own pack this way. |
+| `groups.<id>.compatiblePlatforms` | `[]` | Restricts the group to matching platforms. A platform is any short lowercase name; `windows`, `linux`, and `macos` are the three a client auto-detects, and any other name a group declares (e.g. `steamdeck`) shows up as an extra choice in the client's platform dropdown. Empty means every platform. A group with client-only mods stays out of a server's own pack this way. |
+
+How clients treat platforms: they detect `windows`, `linux`, and `macos` automatically and preselect the matching entry in the platform dropdown of the Modpack settings screen. Every other platform name used by any group's `compatiblePlatforms` is listed there too, so players on a detected desktop OS can still opt into a custom platform. When a client cannot detect a platform at all, groups without `compatiblePlatforms` behave as usual, and platform-restricted groups stay unavailable until the player picks a platform themselves.
 
 A typical optional group looks like:
 
