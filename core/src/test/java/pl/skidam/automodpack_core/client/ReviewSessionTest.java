@@ -3,6 +3,8 @@ package pl.skidam.automodpack_core.client;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -74,6 +76,17 @@ class ReviewSessionTest {
 		assertFalse(harness.actions().reviewActive().getAsBoolean());
 		assertFalse(screens.waitOpen);
 		assertNotEquals(RecordingScreens.Kind.WAITING, screens.last);
+	}
+
+	@Test
+	void playerCancelDuringFirstInstallLookupAbortsInsteadOfOpeningTheWarningWelcome() throws Exception {
+		Harness harness = harness(false);
+
+		harness.review().cancelFromPlayer();
+		assertThrows(InterruptedException.class, () -> harness.review().beginFirstInstallReview());
+
+		assertNull(screens.last);
+		assertFalse(harness.actions().reviewActive().getAsBoolean());
 	}
 
 	@Test

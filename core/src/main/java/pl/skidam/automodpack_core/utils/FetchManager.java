@@ -71,13 +71,26 @@ public class FetchManager {
 		}
 	}
 
-	public void fetch() {
+	/**
+	 * Joins the lookup until it settles or is aborted. A cancelled lookup is an abort, not a completed miss: callers
+	 * must not present an unverified verdict from it.
+	 */
+	public void fetch() throws InterruptedException {
 		try {
 			fetchAsync().join();
 		} catch (CancellationException e) {
-			LOGGER.warn("Fetch canceled");
+			Thread.currentThread().interrupt();
+			throw new InterruptedException("Third-party source lookup was cancelled");
 		} catch (CompletionException e) {
+			if (cancelled) {
+				Thread.currentThread().interrupt();
+				throw new InterruptedException("Third-party source lookup was cancelled");
+			}
 			LOGGER.warn("Third-party source lookup failed", e.getCause() == null ? e : e.getCause());
+		}
+		if (cancelled) {
+			Thread.currentThread().interrupt();
+			throw new InterruptedException("Third-party source lookup was cancelled");
 		}
 	}
 
