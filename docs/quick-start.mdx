@@ -16,7 +16,7 @@ Before inviting players, connect once with a client that has only AutoModpack in
 ## 2. Connect
 
 1. Join the server as usual. Before anything is downloaded, AutoModpack verifies the server's identity: a CA-signed certificate, a DNSSEC-published fingerprint, or a pinned join address passes on its own, and anything else shows the certificate fingerprint and asks. The methods are compared in [security](security).
-2. Confirm the installation prompt. The client downloads the pack.
+2. Confirm the installation prompt. The client downloads the pack. On a server with `requireModpack` off, the prompt asks first whether you want the pack; declining joins without it.
 3. Restart the game and connect again. The pack is loaded.
 
 From then on, clients update during launch. Most changes apply before the game loads anything; the mod asks for a restart only when files in the standard `mods` folder or the loader version change. [Client updates](how-it-works/client-updates) explains when a restart is needed and what happens while you are already in-game.

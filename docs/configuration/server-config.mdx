@@ -17,7 +17,7 @@
 | `generateModpackOnStart` | `true` | Publishes a new generation on every start when the content changed. |
 | `autoExcludeServerSideMods` | `true` | Leaves out mods whose metadata declares them server-side only. |
 | `autoExcludeUnnecessaryFiles` | `true` | Skips empty, hidden, `.tmp`, `.disabled`, and `.bak` files at scan time. The `automodpack/` namespace and Windows-reserved device names are always excluded and cannot be turned off. |
-| `requireAutoModpackOnClient` | `true` | Kicks players who connect without AutoModpack installed. |
+| `requireModpack` | `true` | When true, players without AutoModpack are kicked and modded clients sync the pack before joining. When false, the pack is optional: players without the mod join vanilla, and modded clients are asked whether to sync before they join. |
 | `acceptedLoaders` | current loader | Modloaders allowed to connect, for example Fabric, Forge, NeoForge. The set is seeded with this server's loader on first load only; after that it is yours to edit, and removing the current loader keeps it removed. Most mods are loader-specific, so change it with care. |
 | `syncLoaderVersion` | `true` | Publishes a loader version to clients. When false, clients keep the loader version their launcher installed. See [launcher compatibility](../compatibility/launchers#loader-version-sync) for which launchers apply it. |
 | `selfUpdater` | `false` | Updates AutoModpack itself from Modrinth when a new version is published. |
@@ -86,7 +86,7 @@ Setting `modpackHost` to `false` turns off every built-in listener while clients
 
 ## Un-modded clients
 
-With `requireAutoModpackOnClient` off, players who join without AutoModpack stay in the game.
+With `requireModpack` off, players who join without AutoModpack stay in the game, and modded clients are asked whether to sync the pack when they connect.
 
 | Setting | Default | Description |
 |---|---|---|
