@@ -59,6 +59,13 @@ public final class SharedObjectOwnership {
 		ConfigTools.writeAtomic(owners.resolve(location.ownerId() + "." + canonicalComponent + ".json"), fields);
 	}
 
+	/**
+	 * Collects the pinned hashes of every receipt in the ownership root. A receipt that cannot be trusted is set aside
+	 * loudly instead of refusing collection store-wide forever: one stale receipt (an owner deleted by hand, a hand
+	 * edit, a stray editor file) must not permanently block every instance's collection on the shared data root.
+	 * Skipping an unreadable receipt can only release unknown pins - the store is closed under verified promotion, so
+	 * any wrongly reclaimed object is re-downloaded and re-verified on its consumer's next miss.
+	 */
 	private static Set<String> readAllOwners(DataRootResolver.Layout layout) throws IOException {
 		Path owners = layout.objectOwnersDirectory();
 		if (!Files.exists(owners, LinkOption.NOFOLLOW_LINKS)) return Set.of();
@@ -71,21 +78,29 @@ public final class SharedObjectOwnership {
 					Files.deleteIfExists(path);
 					continue;
 				}
-				if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || !path.getFileName().toString().endsWith(".json"))
-					throw new IOException("Shared object ownership root contains an unsupported entry: " + path);
-				StorageJsons.ObjectOwnershipFields fields = ConfigTools.read(path, StorageJsons.ObjectOwnershipFields.class)
-						.orElseThrow(() -> new IOException("Shared object ownership receipt is empty: " + path));
-				String ownerId = requireOwnerId(fields.ownerId);
-				if (fields.ownerPath == null || fields.ownerPath.isBlank()) throw new IOException("Shared object ownership receipt has no owner path: " + path);
-				String receiptId = path.getFileName().toString().substring(0, path.getFileName().toString().length() - ".json".length());
-				String expectedReceiptId = ownerId + "." + requireComponent(fields.component);
-				if (!expectedReceiptId.equals(receiptId) || fields.objectHashes == null) throw new IOException("Shared object ownership identity is invalid: " + path);
-				Set<String> hashes = canonical(Set.copyOf(fields.objectHashes));
-				if (!List.copyOf(hashes).equals(fields.objectHashes)) throw new IOException("Shared object ownership receipt is not canonical: " + path);
-				result.addAll(hashes);
+				try {
+					result.addAll(readOwner(path));
+				} catch (IOException unusable) {
+					DurableFiles.setAside(path, "Shared object ownership receipt " + path.getFileName(), unusable);
+				}
 			}
 		}
 		return Collections.unmodifiableSet(result);
+	}
+
+	private static Set<String> readOwner(Path path) throws IOException {
+		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || !path.getFileName().toString().endsWith(".json"))
+			throw new IOException("Shared object ownership root contains an unsupported entry: " + path);
+		StorageJsons.ObjectOwnershipFields fields = ConfigTools.read(path, StorageJsons.ObjectOwnershipFields.class)
+				.orElseThrow(() -> new IOException("Shared object ownership receipt is empty: " + path));
+		String ownerId = requireOwnerId(fields.ownerId);
+		if (fields.ownerPath == null || fields.ownerPath.isBlank()) throw new IOException("Shared object ownership receipt has no owner path: " + path);
+		String receiptId = path.getFileName().toString().substring(0, path.getFileName().toString().length() - ".json".length());
+		String expectedReceiptId = ownerId + "." + requireComponent(fields.component);
+		if (!expectedReceiptId.equals(receiptId) || fields.objectHashes == null) throw new IOException("Shared object ownership identity is invalid: " + path);
+		Set<String> hashes = canonical(Set.copyOf(fields.objectHashes));
+		if (!List.copyOf(hashes).equals(fields.objectHashes)) throw new IOException("Shared object ownership receipt is not canonical: " + path);
+		return hashes;
 	}
 
 	private static String requireOwnerId(String ownerId) throws IOException {

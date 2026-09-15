@@ -40,7 +40,7 @@ class ProtocolServerHandlerTest {
 	@Test
 	void sharedMagicMismatchReturnsBytesToMinecraftUnchanged() {
 		byte[] minecraftHandshake = {0x10, 0x00, 0x01, 0x02, 0x03};
-		EmbeddedChannel channel = new EmbeddedChannel(new ProtocolServerHandler(server, ModpackConnectionMode.MAGIC, true));
+		EmbeddedChannel channel = new EmbeddedChannel(new ProtocolServerHandler(server, ModpackConnectionMode.MAGIC, true, false));
 
 		assertTrue(channel.writeInbound(Unpooled.wrappedBuffer(minecraftHandshake)));
 		ByteBuf forwarded = channel.readInbound();
@@ -57,7 +57,7 @@ class ProtocolServerHandlerTest {
 
 	@Test
 	void dedicatedMagicRejectsDirectTls() {
-		EmbeddedChannel channel = new EmbeddedChannel(new ProtocolServerHandler(server, ModpackConnectionMode.MAGIC, false));
+		EmbeddedChannel channel = new EmbeddedChannel(new ProtocolServerHandler(server, ModpackConnectionMode.MAGIC, false, false));
 
 		channel.writeInbound(Unpooled.wrappedBuffer(new byte[]{0x16, 0x03, 0x03, 0x00, 0x00}));
 
@@ -68,7 +68,7 @@ class ProtocolServerHandlerTest {
 
 	@Test
 	void directDoesNotRespondToMagicPacket() {
-		EmbeddedChannel channel = new EmbeddedChannel(new ProtocolServerHandler(server, ModpackConnectionMode.DIRECT, false));
+		EmbeddedChannel channel = new EmbeddedChannel(new ProtocolServerHandler(server, ModpackConnectionMode.DIRECT, false, false));
 
 		channel.writeInbound(magicPacket("example.com"));
 

@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui.screen;
 
 import static pl.skidam.automodpack_core.Constants.clientConfig;
+import static pl.skidam.automodpack_core.Constants.clientConfigWriteLock;
 
 import java.io.IOException;
 import java.util.List;
@@ -15,11 +16,15 @@ final class ClientPreferences {
 	private ClientPreferences() {}
 
 	static void setMusicEnabled(boolean enabled) {
-		save(clientConfig.withPlayMusic(enabled));
+		synchronized (clientConfigWriteLock) {
+			save(clientConfig.withPlayMusic(enabled));
+		}
 	}
 
 	static void setPinnedModIds(List<String> pinnedModIds) {
-		save(clientConfig.withPinnedModIds(pinnedModIds));
+		synchronized (clientConfigWriteLock) {
+			save(clientConfig.withPinnedModIds(pinnedModIds));
+		}
 	}
 
 	private static void save(ClientConfigJsons.ClientConfigFieldsV3 next) {

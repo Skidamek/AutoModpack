@@ -20,7 +20,7 @@ class ConfigurationHandlerTest {
 	@Test
 	void acceptsAndEchoesEachKnownCompressionType() {
 		for (CompressionType compressionType : CompressionType.values()) {
-			EmbeddedChannel channel = new EmbeddedChannel(new ConfigurationHandler(new PreConfigurationLifetimeHandler()));
+			EmbeddedChannel channel = new EmbeddedChannel(new ConfigurationHandler(new ConnectionLifetimeHandler()));
 			channel.writeInbound(Unpooled.buffer(3).writeByte(LATEST_SUPPORTED_PROTOCOL_VERSION).writeByte(CONFIGURATION_COMPRESSION_TYPE).writeByte(compressionType.wireId()));
 			assertEquals(compressionType, NettyServer.compressionCodec(channel).getCompressionType());
 
@@ -38,7 +38,7 @@ class ConfigurationHandlerTest {
 
 	@Test
 	void absorbsKeepalivesSilentlyWithoutCompletingConfiguration() {
-		EmbeddedChannel channel = new EmbeddedChannel(new ConfigurationHandler(new PreConfigurationLifetimeHandler()));
+		EmbeddedChannel channel = new EmbeddedChannel(new ConfigurationHandler(new ConnectionLifetimeHandler()));
 
 		for (int absorbed = 0; absorbed < 3; absorbed++) {
 			channel.writeInbound(Unpooled.buffer(2).writeByte(LATEST_SUPPORTED_PROTOCOL_VERSION).writeByte(CONFIGURATION_KEEPALIVE_TYPE));
@@ -65,7 +65,7 @@ class ConfigurationHandlerTest {
 
 	@Test
 	void rejectsUnknownCompressionType() {
-		EmbeddedChannel channel = new EmbeddedChannel(new ConfigurationHandler(new PreConfigurationLifetimeHandler()));
+		EmbeddedChannel channel = new EmbeddedChannel(new ConfigurationHandler(new ConnectionLifetimeHandler()));
 		channel.writeInbound(Unpooled.buffer(3).writeByte(LATEST_SUPPORTED_PROTOCOL_VERSION).writeByte(CONFIGURATION_COMPRESSION_TYPE).writeByte(0x7F));
 		assertFalse(channel.isActive());
 		channel.finishAndReleaseAll();

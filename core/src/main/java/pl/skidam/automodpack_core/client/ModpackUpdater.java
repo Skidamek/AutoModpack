@@ -423,10 +423,17 @@ public class ModpackUpdater implements AutoCloseable {
 		lifecycle.removeOrDeactivate(deactivation, modpackName, released, removed);
 	}
 
-	/** The one flow completion: the commit lands the attempt's planned config document on the engine, the same for every flow. */
+	/**
+	 * The one flow completion: the commit lands the attempt's planned config document on the engine, the same for every
+	 * flow. The write lock spans the commit too, because the transaction's durable config write is part of the same
+	 * critical section as the landing - a concurrent preference save must wait for it rather than interleave.
+	 */
 	ApplyResult commitFlow(UpdateAttempt attempt) throws Exception {
-		ApplyResult result = attempt.commit();
-		clientConfig = attempt.plannedClientConfig();
+		ApplyResult result;
+		synchronized (clientConfigWriteLock) {
+			result = attempt.commit();
+			clientConfig = attempt.plannedClientConfig();
+		}
 		return result;
 	}
 

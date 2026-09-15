@@ -40,7 +40,6 @@ public final class UpdatePlanner {
 			ModpackJsons.ModpackContentFields installedManifest,
 			ModpackJsons.ModpackContentFields targetManifest,
 			Map<FileKey, FileState> files,
-			Map<String, FileState> editableOverlays,
 			Set<String> forceCopyServicePaths,
 			List<ModInfo> targetMods,
 			List<ModInfo> standardMods,
@@ -53,9 +52,6 @@ public final class UpdatePlanner {
 			if (installedManifest != null && consentedLocalModFiles != null && !consentedLocalModFiles.isEmpty())
 				throw new IllegalArgumentException("First-install consent cannot be used after a modpack is installed");
 			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
-			Map<String, FileState> normalizedOverlays = new TreeMap<>();
-			for (var entry : editableOverlays.entrySet()) normalizedOverlays.put(LogicalPath.normalize(entry.getKey()), entry.getValue());
-			editableOverlays = Collections.unmodifiableMap(normalizedOverlays);
 			forceCopyServicePaths = Collections.unmodifiableSet(new LinkedHashSet<>(forceCopyServicePaths));
 			targetMods = List.copyOf(targetMods);
 			standardMods = List.copyOf(standardMods);
@@ -68,10 +64,10 @@ public final class UpdatePlanner {
 		}
 
 		public Input(ModpackJsons.ModpackContentFields installedManifest, ModpackJsons.ModpackContentFields targetManifest, Map<FileKey, FileState> files,
-				Map<String, FileState> editableOverlays, Set<String> forceCopyServicePaths, List<ModInfo> targetMods, List<ModInfo> standardMods,
+				Set<String> forceCopyServicePaths, List<ModInfo> targetMods, List<ModInfo> standardMods,
 				List<NestedCopy> previousNestedCopies, List<NestedCopy> nestedCopies, SelectionContext selection,
 				ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig) {
-			this(installedManifest, targetManifest, files, editableOverlays, forceCopyServicePaths, targetMods, standardMods, previousNestedCopies, nestedCopies, selection,
+			this(installedManifest, targetManifest, files, forceCopyServicePaths, targetMods, standardMods, previousNestedCopies, nestedCopies, selection,
 					plannedClientConfig, Map.of());
 		}
 
@@ -224,17 +220,31 @@ public final class UpdatePlanner {
 		if (input.installedManifest() == null || isSelectionChange(input.selection(), target.modpackId)) session.restart(RestartReason.SELECTED_MODPACK);
 	}
 
+	/** The plan's overlay rows, keyed by normalized relative path: derived from {@code files}, which is their only source of truth. */
+	private static Map<String, FileState> overlaysByRelative(Map<FileKey, FileState> files) {
+		Map<String, FileState> overlays = new TreeMap<>();
+		for (var entry : files.entrySet())
+			if (entry.getKey().root() == Root.OVERLAY) overlays.put(LogicalPath.normalize(entry.getKey().relativePath()), entry.getValue());
+		return Collections.unmodifiableMap(overlays);
+	}
+
 	/** Installs every target manifest item into the projection, its overlay, and — when not protected from the player's mods directory — the live copy. */
 	private static void planTargetInstalls(Input input, Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, Set<String> forceCopyPaths,
 			Set<String> protectedIds, Map<String, ModInfo> targetModsByPath, PlanningSession session) {
+		Map<String, FileState> overlays = overlaysByRelative(input.files());
 		for (var item : targetItems.values()) {
 			String relative = LogicalPath.normalize(item.file);
 			boolean activeMod = ModpackPathPolicy.isActiveMod(relative, item.type);
 			FileKey modpackKey = new FileKey(Root.PROJECTION, relative);
 			FileState existing = session.projected(modpackKey);
-			FileState overlay = item.editable ? input.editableOverlays().get(relative) : null;
-			if (overlay != null && overlay.regularFile() && !matches(session.projected(new FileKey(Root.OVERLAY, relative)), overlay.sha1(), overlay.size()))
-				session.install(new FileKey(Root.OVERLAY, relative), overlay.sha1(), overlay.size());
+			FileState overlay = item.editable ? overlays.get(relative) : null;
+			// An overlay row is never planned as an install - it is already part of the seeded state or gets published
+			// by editable-state reconciliation after the plan. The plan only retires a stale overlay row when the target
+			// stops declaring the path editable.
+			if (overlay == null && session.has(new FileKey(Root.OVERLAY, relative)))
+				session.delete(new FileKey(Root.OVERLAY, relative), session.projected(new FileKey(Root.OVERLAY, relative)).sha1());
+			// Overlay bytes are published by editable-state reconciliation after the plan, never as plan installs;
+			// the plan only removes overlay rows the target no longer carries.
 			if (overlay == null && session.has(new FileKey(Root.OVERLAY, relative)))
 				session.delete(new FileKey(Root.OVERLAY, relative), session.projected(new FileKey(Root.OVERLAY, relative)).sha1());
 			if (!matches(existing, item.sha1, item.size)) session.install(modpackKey, item.sha1, item.size);

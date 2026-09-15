@@ -27,6 +27,6 @@ The endpoint sent to clients is controlled by `advertisedEndpointHost` and `adve
 - `MAGIC` must preserve AMMH/AMOK before the TLS session. With `bindPort: -1`, route it to the backend Minecraft port; with an explicit port, route it to the dedicated magic-only listener.
 - `DIRECT` must route TLS directly to an explicit dedicated listener or another endpoint that handles it. `DIRECT` with `bindPort: -1` starts no built-in listener.
 
-Optional PROXY protocol metadata is accepted before dedicated `MAGIC` and `DIRECT` connections. It is not consumed by shared Minecraft-port magic routing.
+PROXY protocol metadata is honored before dedicated `MAGIC` and `DIRECT` connections only when `acceptProxyProtocol` is enabled. It is never consumed by shared Minecraft-port magic routing. Keep the option off unless a trusted proxy fronts AutoModpack: a claimed source address feeds IP-ban checks and audit logs, so accepting it from arbitrary clients would let a banned player forge their way past an IP ban.
 
 When `disableInternalTLS` is enabled, clients still initiate TLS. The proxy or another compatible component must terminate it and forward already-decrypted AutoModpack traffic.

@@ -81,6 +81,8 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		if (authenticatedSecret == null) {
 			authenticatedSecret = decodedSecret;
 			server.addConnection(ctx.channel(), decodedSecret);
+			ConnectionLifetimeHandler lifetime = ctx.pipeline().get(ConnectionLifetimeHandler.class);
+			if (lifetime != null) lifetime.authenticated(ctx);
 		}
 		if (!authenticatedSecret.equals(decodedSecret)) {
 			LOGGER.warn("Connection from {} tried to switch to a different secret", address);

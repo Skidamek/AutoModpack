@@ -127,6 +127,11 @@ public final class Journal {
 		String line = COMPACT.toJson(entry.toFields());
 		Files.createDirectories(file.getParent());
 		Files.writeString(file, line + "\n", StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+		// The publication order is journal first, projection second: the appended entry must reach stable storage
+		// before the projection that names it is forced, or a power cut rolls the published head back one generation.
+		try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
+			channel.force(true);
+		}
 		List<JournalEntry> updated = new ArrayList<>(entries);
 		updated.add(entry);
 		entries = List.copyOf(updated);

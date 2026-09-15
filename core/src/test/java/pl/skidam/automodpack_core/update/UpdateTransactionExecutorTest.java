@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -442,7 +443,7 @@ class UpdateTransactionExecutorTest {
 		SelectedModpackTarget target = target(storage, "mods/server-sodium.jar", "mod", false, serverHash, serverBytes.length);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/local-sodium.jar"),
 				new UpdatePlan.FileState(localHash, localBytes.length, true));
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Map.of(), Set.of(),
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Set.of(),
 				List.of(new UpdatePlan.ModInfo("mods/server-sodium.jar", serverHash, serverBytes.length, Set.of("sodium"), Set.of())),
 				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, Set.of("sodium"), Set.of())), List.of(), List.of(), null,
 				clientConfig(target.manifest().modpackId())));
@@ -469,7 +470,7 @@ class UpdateTransactionExecutorTest {
 		SelectedModpackTarget target = target(storage, "mods/shared.jar", "other", false, serverHash, serverBytes.length);
 		UpdatePlan.FileState localState = new UpdatePlan.FileState(localHash, localBytes.length, true);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/shared.jar"), localState);
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				clientConfig(target.manifest().modpackId()), Map.of("mods/shared.jar", localState)));
 
 		assertTrue(commit(storage, plan, target).success());
@@ -502,7 +503,7 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan.FileState goneState = new UpdatePlan.FileState(goneHash, goneBytes.length, true);
 		UpdatePlan first = UpdatePlanner.plan(new UpdatePlanner.Input(installed.flatTarget(), next.flatTarget(),
 				Map.of(new UpdatePlan.FileKey(Root.PROJECTION, "mods/keep.jar"), keepState, new UpdatePlan.FileKey(Root.PROJECTION, "mods/gone.jar"), goneState),
-				Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, clientConfig(next.manifest().modpackId()), null));
+				Set.of(), List.of(), List.of(), List.of(), List.of(), null, clientConfig(next.manifest().modpackId()), null));
 		assertTrue(first.operations().stream().anyMatch(operation -> operation.operation() == OperationType.DELETE && operation.relativePath().equals("mods/gone.jar")),
 				"The plan must remove the file the next generation dropped");
 
@@ -510,7 +511,7 @@ class UpdateTransactionExecutorTest {
 		Files.delete(storage.activePath("mods/gone.jar"));
 		UpdatePlan rebuilt = UpdatePlanner.plan(new UpdatePlanner.Input(installed.flatTarget(), next.flatTarget(),
 				Map.of(new UpdatePlan.FileKey(Root.PROJECTION, "mods/keep.jar"), keepState),
-				Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, clientConfig(next.manifest().modpackId()), null));
+				Set.of(), List.of(), List.of(), List.of(), List.of(), null, clientConfig(next.manifest().modpackId()), null));
 
 		assertTrue(ReviewedUpdatePlan.outcomeCompatible(first, rebuilt), "An applied delete prefix must not read as a changed review");
 		ReviewedUpdatePlan.pending(first).requireCompatible(rebuilt);
@@ -535,14 +536,14 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan.FileState goneState = new UpdatePlan.FileState(goneHash, goneBytes.length, true);
 		UpdatePlan first = UpdatePlanner.plan(new UpdatePlanner.Input(installed.flatTarget(), installed.flatTarget(),
 				Map.of(new UpdatePlan.FileKey(Root.PROJECTION, "mods/keep.jar"), keepState, new UpdatePlan.FileKey(Root.PROJECTION, "mods/gone.jar"), goneState),
-				Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, clientConfig(installed.manifest().modpackId()), null));
+				Set.of(), List.of(), List.of(), List.of(), List.of(), null, clientConfig(installed.manifest().modpackId()), null));
 		assertTrue(first.operations().stream().anyMatch(operation -> operation.operation() == OperationType.DELETE && operation.relativePath().equals("mods/gone.jar")),
 				"The plan must remove the extra projection the target never listed");
 
 		Files.delete(storage.activePath("mods/gone.jar"));
 		UpdatePlan rebuilt = UpdatePlanner.plan(new UpdatePlanner.Input(installed.flatTarget(), installed.flatTarget(),
 				Map.of(new UpdatePlan.FileKey(Root.PROJECTION, "mods/keep.jar"), keepState),
-				Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, clientConfig(installed.manifest().modpackId()), null));
+				Set.of(), List.of(), List.of(), List.of(), List.of(), null, clientConfig(installed.manifest().modpackId()), null));
 
 		assertNotEquals(first.projectedFinalState(), rebuilt.projectedFinalState(), "The extra delete leaves an absent row only on the first plan");
 		assertTrue(ReviewedUpdatePlan.outcomeCompatible(first, rebuilt), "destination() must ignore the already-applied extra delete");
@@ -640,7 +641,7 @@ class UpdateTransactionExecutorTest {
 				new UpdatePlan.FileKey(Root.GAME_DIR, restoredPath), new UpdatePlan.FileState(serverHash, serverBytes.length, true));
 		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.manifest().modpackId(), installed.flatTarget(), Map.of(), baseline,
 				Set.of(baselineHash));
-		UpdatePlan switchPlan = UpdatePlanner.plan(new UpdatePlanner.Input(installed.flatTarget(), target.flatTarget(), files, Map.of(), Set.of(), List.of(), List.of(),
+		UpdatePlan switchPlan = UpdatePlanner.plan(new UpdatePlanner.Input(installed.flatTarget(), target.flatTarget(), files, Set.of(), List.of(), List.of(),
 				List.of(), List.of(), selection, clientConfig(target.manifest().modpackId())));
 
 		assertEquals(List.of(new UpdatePlan.Preservation(Root.GAME_DIR, restoredPath, serverHash, serverBytes.length)), switchPlan.preservations());
@@ -751,8 +752,12 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
-	void treatsAccessDeniedAsARecoverableStorageLock() {
-		assertTrue(UpdateTransactionExecutor.isLockFailure(new AccessDeniedException("active", "backup", null)));
+	void treatsAccessDeniedAsARecoverableStorageLockOnlyWhereItMeansOne() {
+		// On Windows a denied delete is how an open handle reports a sharing violation; on other kernels it is a
+		// plain permission problem - a permanent failure, not a lock the update should defer behind.
+		assertTrue(UpdateTransactionExecutor.isLockFailure(new AccessDeniedException("active", "backup", null), true));
+		assertFalse(UpdateTransactionExecutor.isLockFailure(new AccessDeniedException("active", "backup", null), false));
+		assertTrue(UpdateTransactionExecutor.isLockFailure(new FileSystemException("active", "backup", "being used by another process"), false));
 	}
 
 	private ClientStorage storage() throws Exception {

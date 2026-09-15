@@ -28,7 +28,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 	private boolean proxyCheckFinished;
 	private SocketAddress remoteAddress;
 
-	public ProtocolServerHandler(NettyServer server, ModpackConnectionMode connectionMode, boolean sharedMinecraftSocket) {
+	public ProtocolServerHandler(NettyServer server, ModpackConnectionMode connectionMode, boolean sharedMinecraftSocket, boolean acceptProxyProtocol) {
 		if (connectionMode == ModpackConnectionMode.HOLEPUNCH) throw new IllegalArgumentException("HOLEPUNCH does not use ProtocolServerHandler");
 		if (sharedMinecraftSocket && connectionMode != ModpackConnectionMode.MAGIC) {
 			throw new IllegalArgumentException("Only MAGIC can use a shared Minecraft socket");
@@ -37,7 +37,9 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 		this.server = server;
 		this.connectionMode = connectionMode;
 		this.sharedMinecraftSocket = sharedMinecraftSocket;
-		this.proxyCheckFinished = sharedMinecraftSocket;
+		// A PROXY header claims a source address that feeds IP bans and audit logs, so only a listener whose operator
+		// opted in (a trusted proxy is in front) may consume one.
+		this.proxyCheckFinished = sharedMinecraftSocket || !acceptProxyProtocol;
 	}
 
 	@Override

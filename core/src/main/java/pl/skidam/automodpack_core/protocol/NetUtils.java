@@ -57,6 +57,15 @@ public class NetUtils {
 	// Pre-configuration keepalive cadence: NAT mappings and holepunch relay bindings typically decay after 30-60s of
 	// silence, so a 20s heartbeat sits well inside that band while costing the parked client one two-byte write.
 	public static final Duration PRE_CONFIGURATION_KEEPALIVE_INTERVAL = Duration.ofSeconds(20);
+	// The configured-but-unauthenticated lifetime: every honest client sends its secret in its first protocol message,
+	// so the honest gap between configuration and authentication is machine-speed, and any byte sent after configuration
+	// either authenticates or closes the connection - the deadline cannot be stretched. 60s sits two orders of magnitude
+	// past that gap while bounding how long an unauthenticated peer can pin a host socket.
+	public static final Duration UNAUTHENTICATED_LIFETIME = Duration.ofSeconds(60);
+	// The authenticated all-idle bound: transfers and requests reset it continuously and an honest human pause between
+	// negotiation and confirmation fits inside it with room to spare, so only a zombie holding a revoked or leaked
+	// secret pays it - at the cost of one reconnect for a player who walks away for over an hour mid-review.
+	public static final Duration AUTHENTICATED_IDLE_TIMEOUT = Duration.ofHours(1);
 	public static final Duration HTTP_TIMEOUT = Duration.ofSeconds(5);
 	public static final int NETWORK_TIMEOUT_MILLIS = Math.toIntExact(NETWORK_TIMEOUT.toMillis());
 	public static final int TRANSFER_IDLE_TIMEOUT_MILLIS = Math.toIntExact(TRANSFER_IDLE_TIMEOUT.toMillis());

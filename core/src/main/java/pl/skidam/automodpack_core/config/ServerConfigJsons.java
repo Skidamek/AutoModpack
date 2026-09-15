@@ -28,6 +28,8 @@ public class ServerConfigJsons {
 		public String advertisedEndpointHost = "";
 		public int advertisedEndpointPort = -1;
 		public boolean disableInternalTLS = false;
+		/** Honor HAProxy PROXY protocol headers on dedicated listeners; enable only when a trusted proxy fronts AutoModpack, since a claimed source address feeds IP bans and audit logs. */
+		public boolean acceptProxyProtocol = false;
 		public ModpackConnectionMode connectionMode = ModpackConnectionMode.HOLEPUNCH;
 		/** Cap on per-client transfer speed in MiB/s; 0 disables limiting. */
 		public int bandwidthLimit = 0;

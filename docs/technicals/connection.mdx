@@ -24,7 +24,7 @@ On Forge and NeoForge the holepunch Handshake hostname includes the same `\0FML3
 
 The advertised mode is strict and clients do not retry another mode after failure. On a shared Minecraft listener, non-AMMH traffic is returned to Minecraft unchanged. On a dedicated `MAGIC` listener, non-AMMH traffic is rejected. A `DIRECT` listener never responds with AMOK.
 
-Optional PROXY protocol metadata may precede dedicated `MAGIC` and `DIRECT` connections. It is not consumed by the shared Minecraft-port handler.
+PROXY protocol metadata may precede dedicated `MAGIC` and `DIRECT` connections and is honored only when `acceptProxyProtocol` is enabled. It is not consumed by the shared Minecraft-port handler.
 
 `disableInternalTLS` changes only where the required TLS session is terminated. Clients still start TLS; when internal termination is disabled, a compatible external component must decrypt the connection before forwarding AutoModpack protocol traffic.
 

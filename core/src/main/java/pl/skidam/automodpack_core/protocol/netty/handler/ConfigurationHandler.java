@@ -18,9 +18,9 @@ import pl.skidam.automodpack_core.protocol.netty.message.configuration.UnknownCo
 
 public class ConfigurationHandler extends ByteToMessageDecoder {
 
-	private final PreConfigurationLifetimeHandler lifetime;
+	private final ConnectionLifetimeHandler lifetime;
 
-	public ConfigurationHandler(PreConfigurationLifetimeHandler lifetime) {
+	public ConfigurationHandler(ConnectionLifetimeHandler lifetime) {
 		this.lifetime = lifetime;
 	}
 
@@ -49,7 +49,7 @@ public class ConfigurationHandler extends ByteToMessageDecoder {
 			ctx.channel().attr(NettyServer.PROTOCOL_VERSION).set(version);
 			LOGGER.debug("Negotiated {} protocol version with the client", version);
 			ctx.pipeline().remove(this);
-			lifetime.configurationComplete();
+			lifetime.configurationComplete(ctx);
 			LOGGER.debug("Removed ConfigurationHandler from pipeline after receiving echo configuration message.");
 		} else if (type == CONFIGURATION_KEEPALIVE_TYPE) {
 			// A client parked on its certificate-trust decision heartbeats these to keep the transport warm; absorbing
