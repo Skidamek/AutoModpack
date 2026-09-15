@@ -97,7 +97,20 @@ def _prepare_client_files(ctx: Context) -> None:
     _stage_client_runtime_mods(ctx)
     _seed_client_options(game_dir)
     _ensure_client_data_root(game_dir)
+    _defer_http_first_sync_to_login(ctx, game_dir)
     _bridge_state(ctx).unlink(missing_ok=True)
+
+
+def _defer_http_first_sync_to_login(ctx: Context, game_dir: Path) -> None:
+    # A secretless bootstrap over a public HTTP pack legitimately preloads the whole catalogue (no auth exists to
+    # bypass), which would consume the first-connection review every later flow step pivots on. Deferring the first
+    # sync to the login keeps one shared flow: every mode shows its first review there, over its own transport.
+    mode = str((ctx.scenario.get("connectionPath") or {}).get("mode", "")).upper()
+    if mode != "HTTP":
+        return
+    config_path = game_dir / "automodpack" / "client-config.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps({"updateSelectedModpackOnLaunch": False}, indent=2) + "\n", encoding="utf-8")
 
 
 def _client_cache_paths(ctx: Context) -> tuple[Path, Path]:
