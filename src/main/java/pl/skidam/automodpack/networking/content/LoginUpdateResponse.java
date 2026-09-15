@@ -1,6 +1,6 @@
 package pl.skidam.automodpack.networking.content;
 
-/** The single response emitted for the AutoModpack data login query. */
+/** The single response emitted for the AutoModpack data login query; both ends run the same mod version, enforced by the handshake before this query exists. */
 public enum LoginUpdateResponse {
 	CONTINUE("false"),
 	UPDATE_REQUIRED("true"),
