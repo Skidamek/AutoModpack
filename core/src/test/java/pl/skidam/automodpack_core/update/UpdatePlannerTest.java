@@ -316,7 +316,7 @@ class UpdatePlannerTest {
 	}
 
 	@Test
-	void cleanupPreservesMismatchesUnsafeTypesAndPlayerLocalPaths() {
+	void cleanupPreservesMismatchesUnsafeTypesAndReservedPaths() {
 		String localHash = "4444444444444444444444444444444444444444";
 		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(
 				entry("config/changed.json", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE),

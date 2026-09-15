@@ -15,14 +15,14 @@ public final class ModpackPathPolicy {
 	private static final String MODS_PREFIX = MODS_ROOT + "/";
 
 	/** Roots owned by the player or by AutoModpack itself; a server manifest cannot claim them. */
-	private static final Set<String> PLAYER_LOCAL_ROOTS = Set.of("automodpack", "logs", "player-local", "saves", "screenshots", "server-resource-packs");
+	private static final Set<String> RESERVED_ROOTS = Set.of("automodpack", "logs", "saves", "screenshots");
 	/** Roots with client live-file semantics; descendants are valid only with their canonical lowercase spelling. */
 	private static final Set<String> LIVE_ROOTS = Set.of(MODS_ROOT, CONFIG_ROOT, SHADERPACKS_ROOT, RESOURCEPACKS_ROOT);
 
 	private ModpackPathPolicy() {}
 
-	public static boolean isPlayerLocal(String logicalPath) {
-		return PLAYER_LOCAL_ROOTS.contains(firstComponent(logicalPath).toLowerCase(Locale.ROOT));
+	public static boolean isReservedPath(String logicalPath) {
+		return RESERVED_ROOTS.contains(firstComponent(logicalPath).toLowerCase(Locale.ROOT));
 	}
 
 	public static String typeForPath(String logicalPath) {
@@ -42,7 +42,7 @@ public final class ModpackPathPolicy {
 		} catch (RuntimeException e) {
 			return false;
 		}
-		if (isPlayerLocal(normalized)) return false;
+		if (isReservedPath(normalized)) return false;
 		if (normalized.equalsIgnoreCase(MODPACK_CONTENT_FILE.toString())) return false;
 		if (normalized.equalsIgnoreCase(BOOTSTRAP_FILE.getFileName().toString())) return false;
 		if (isInvalidLiveRoot(normalized)) return false;

@@ -443,7 +443,7 @@ public final class UpdatePlanner {
 		} catch (RuntimeException e) {
 			return Optional.empty();
 		}
-		if (ModpackPathPolicy.isPlayerLocal(normalized)) return Optional.empty();
+		if (ModpackPathPolicy.isReservedPath(normalized)) return Optional.empty();
 		return Optional.of(new FileKey(Root.GAME_DIR, normalized));
 	}
 

@@ -464,7 +464,7 @@ class UpdateTransactionExecutorTest {
 		byte[] serverBytes = "server-replacement".getBytes(StandardCharsets.UTF_8);
 		String serverHash = store(storage, serverBytes);
 		Path local = storage.modsDirectory().resolve("shared.jar");
-		byte[] localBytes = "player-local".getBytes(StandardCharsets.UTF_8);
+		byte[] localBytes = "locally-modified".getBytes(StandardCharsets.UTF_8);
 		Files.write(local, localBytes);
 		String localHash = HashUtils.getHash(local);
 		SelectedModpackTarget target = target(storage, "mods/shared.jar", "other", false, serverHash, serverBytes.length);
