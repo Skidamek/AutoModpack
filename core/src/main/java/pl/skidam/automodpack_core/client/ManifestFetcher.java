@@ -114,6 +114,7 @@ public final class ManifestFetcher {
 			}
 			headExpected = head;
 			journalExpected = journal;
+			if (head != null) LOGGER.info("Installed head mirror vouches for {}; fetching conditionally", selectedModpackId);
 		} else {
 			headExpected = null;
 			journalExpected = null;
@@ -145,6 +146,7 @@ public final class ManifestFetcher {
 			content = ModpackContentTools.readHeadDocument(source);
 		} else {
 			headFromMirror = false;
+			LOGGER.info("Fetched the head document from the server (installed mirror {})", headExpected == null ? "did not vouch" : "is stale");
 			content = ModpackContentTools.readHeadDocument(storage.modpackContentTempFile());
 			if (content != null) {
 				try {

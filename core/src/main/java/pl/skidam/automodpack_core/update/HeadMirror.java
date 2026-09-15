@@ -1,11 +1,14 @@
 package pl.skidam.automodpack_core.update;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Objects;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -50,8 +53,16 @@ public final class HeadMirror {
 	/** The sha1 of the mirror bytes only when the mirror parses and names the generation the active state points at; null otherwise. */
 	public String installedSha1(ClientGenerationStore generations, String modpackId) throws IOException {
 		GenerationJsons.HeadDocumentFields head = read(modpackId);
-		if (head == null || head.contentToken == null || head.contentToken.isBlank()) return null;
-		if (!generations.headMatchesActive(modpackId, head.contentToken)) return null;
+		if (head == null || head.contentToken == null || head.contentToken.isBlank()) {
+			LOGGER.info("Installed head mirror of {} does not vouch: no readable mirror", modpackId);
+			return null;
+		}
+		if (!generations.headMatchesActive(modpackId, head.contentToken)) {
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+			LOGGER.info("Installed head mirror of {} does not vouch: the mirror names {}, the active generation is {}", modpackId, head.contentToken,
+					state == null ? "none" : state.modpackId + "/" + state.contentToken);
+			return null;
+		}
 		return HashUtils.getHash(storage.historyHeadFile(modpackId));
 	}
 

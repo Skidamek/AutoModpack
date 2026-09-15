@@ -189,10 +189,14 @@ class ConditionalFetchTest {
 	}
 
 	/** One TLS server speaking the FILE_REQUEST side of the protocol against an in-memory object store. */
-	private static final class ContractServer implements AutoCloseable {
+	static final class ContractServer implements AutoCloseable {
 		private final SSLServerSocket server;
 		private final ExecutorService executor = Executors.newCachedThreadPool();
 		private final Map<String, byte[]> store = new ConcurrentHashMap<>();
+
+		Map<String, byte[]> store() {
+			return store;
+		}
 		private final AtomicBoolean cooperate = new AtomicBoolean(true);
 		private final AtomicBoolean secretRecorded = new AtomicBoolean();
 		private final CompletableFuture<byte[]> firstSecret = new CompletableFuture<>();
