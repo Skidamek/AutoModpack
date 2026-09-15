@@ -153,6 +153,11 @@ public final class UpdatePreview {
 		return decision.restartReasons();
 	}
 
+	/** Whether applying this plan demands a relaunch: only boot-critical reasons count, selection narration does not. */
+	public boolean requiresRestart() {
+		return decision.restartReasons().stream().anyMatch(RestartReason::bootCritical);
+	}
+
 	public List<Conflict> conflicts() {
 		return decision.conflicts();
 	}

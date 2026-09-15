@@ -137,15 +137,32 @@ public final class UpdatePlan {
 		DELETE
 	}
 
+	/**
+	 * Why an applied plan asks for a relaunch. Only boot-critical reasons demand one: a change this boot cannot
+	 * absorb, because the running JVM already read the affected files (the loader version, the standard mods
+	 * directory). Selection reasons narrate the run - the group or pack the player chose - without forcing anything,
+	 * so projection-only work stays restart-free.
+	 */
 	public enum RestartReason {
-		REMOVED_LOCAL_MODS,
-		CORRECTED_FILE_LOCATIONS,
-		FIXED_NESTED_MODS,
-		REMOVED_DUPLICATE_MODS,
-		REMOVED_STANDARD_MODS,
-		CHANGED_LOADER_VERSION,
-		CHANGED_GROUP_SELECTION,
-		SELECTED_MODPACK
+		REMOVED_LOCAL_MODS(true),
+		CORRECTED_FILE_LOCATIONS(true),
+		FIXED_NESTED_MODS(true),
+		REMOVED_DUPLICATE_MODS(true),
+		REMOVED_STANDARD_MODS(true),
+		CHANGED_LOADER_VERSION(true),
+		CHANGED_GROUP_SELECTION(false),
+		SELECTED_MODPACK(false);
+
+		private final boolean bootCritical;
+
+		RestartReason(boolean bootCritical) {
+			this.bootCritical = bootCritical;
+		}
+
+		/** True when a running game cannot absorb this change and a relaunch is the only way to load it. */
+		public boolean bootCritical() {
+			return bootCritical;
+		}
 	}
 
 	public enum PreservationProof {

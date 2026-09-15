@@ -22,8 +22,9 @@ final class RestartDecision {
 			restartReasons = restartReasons.isEmpty() ? Set.of() : Collections.unmodifiableSet(EnumSet.copyOf(restartReasons));
 		}
 
+		/** Only a boot-critical change demands a relaunch; the selection narration describes the run without forcing one. */
 		boolean requiresRestart() {
-			return !restartReasons.isEmpty();
+			return restartReasons.stream().anyMatch(UpdatePlan.RestartReason::bootCritical);
 		}
 
 		List<String> reasonIds() {
@@ -72,18 +73,10 @@ final class RestartDecision {
 
 	/**
 	 * Preload runs before the loader reads anything, so the fresh projection can be hot-loaded in the same boot. Only
-	 * changes this boot cannot absorb demand a restart: a loader-version swap (the running JVM was started by the old
-	 * loader) and standard-mods-directory corrections the loader wiring does not re-scan.
+	 * changes this boot cannot absorb demand a restart; see {@link UpdatePlan.RestartReason#bootCritical()}.
 	 */
 	static boolean requiresRestartAtPreload(Set<UpdatePlan.RestartReason> reasons) {
-		return reasons.stream().anyMatch(RestartDecision::isBootCritical);
-	}
-
-	private static boolean isBootCritical(UpdatePlan.RestartReason reason) {
-		return switch (reason) {
-			case CHANGED_LOADER_VERSION, REMOVED_LOCAL_MODS, CORRECTED_FILE_LOCATIONS, FIXED_NESTED_MODS, REMOVED_DUPLICATE_MODS, REMOVED_STANDARD_MODS -> true;
-			case CHANGED_GROUP_SELECTION, SELECTED_MODPACK -> false;
-		};
+		return reasons.stream().anyMatch(UpdatePlan.RestartReason::bootCritical);
 	}
 
 	/** Fingerprint of the applied correction state so two rapid automatic restarts for the same state can be suppressed. */
