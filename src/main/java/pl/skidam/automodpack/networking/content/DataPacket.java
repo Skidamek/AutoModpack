@@ -9,12 +9,14 @@ public class DataPacket {
 	public int endpointPort;
 	public Secrets.Secret secret;
 	public ModpackConnectionMode connectionMode;
+	public boolean requireModpack;
 
-	public DataPacket(String endpointHost, int endpointPort, Secrets.Secret secret, ModpackConnectionMode connectionMode) {
+	public DataPacket(String endpointHost, int endpointPort, Secrets.Secret secret, ModpackConnectionMode connectionMode, boolean requireModpack) {
 		this.endpointHost = endpointHost;
 		this.endpointPort = endpointPort;
 		this.secret = secret;
 		this.connectionMode = connectionMode;
+		this.requireModpack = requireModpack;
 	}
 
 	public String toJson() {

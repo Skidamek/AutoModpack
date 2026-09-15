@@ -18,7 +18,7 @@ public class ServerConfigJsons {
 		public boolean autoExcludeServerSideMods = true;
 		/** Convenience tier only: skips empty, hidden, .tmp, .disabled and .bak files at scan time. The correctness tier (the 'automodpack/' namespace and Windows-reserved device names) is always enforced. */
 		public boolean autoExcludeUnnecessaryFiles = true;
-		public boolean requireAutoModpackOnClient = true;
+		public boolean requireModpack = true;
 		public boolean nagUnModdedClients = true;
 		public String nagMessage = "This server provides dedicated modpack through AutoModpack!";
 		public String nagClickableMessage = "Click here to get the AutoModpack!";

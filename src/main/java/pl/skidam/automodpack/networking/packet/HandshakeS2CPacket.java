@@ -54,7 +54,7 @@ public class HandshakeS2CPacket {
 		if (!understood) {
 			Common.players.put(playerName, false);
 			LOGGER.warn("{} has not installed AutoModpack.", playerName);
-			if (serverConfig.requireAutoModpackOnClient) {
+			if (serverConfig.requireModpack) {
 				Component reason = VersionedText.literal(
 						"AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT) + " modloader is required to play on this server!");
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
@@ -130,7 +130,7 @@ public class HandshakeS2CPacket {
 			int advertisedEndpointPort = serverConfig.advertisedEndpointPort;
 			LOGGER.info("Sending {} AutoModpack endpoint: {}:{} ({})", GameHelpers.getPlayerName(profile), advertisedEndpointHost, advertisedEndpointPort, serverConfig.connectionMode);
 
-			DataPacket dataPacket = new DataPacket(advertisedEndpointHost, advertisedEndpointPort, secret, serverConfig.connectionMode);
+			DataPacket dataPacket = new DataPacket(advertisedEndpointHost, advertisedEndpointPort, secret, serverConfig.connectionMode, serverConfig.requireModpack);
 			String packetContentJson = dataPacket.toJson();
 
 			FriendlyByteBuf outBuf = new FriendlyByteBuf(Unpooled.buffer());

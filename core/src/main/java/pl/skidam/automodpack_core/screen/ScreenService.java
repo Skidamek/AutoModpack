@@ -54,6 +54,15 @@ public interface ScreenService {
 		continueJoin.run();
 	}
 
+	/**
+	 * Offers the server's optional modpack before any sync transport opens; exactly one of the runnables runs. No
+	 * modpack name is known yet, since nothing was fetched. The default joins without the pack headlessly, keeping the
+	 * no-pack join an optional offer promises.
+	 */
+	default void modpackOffer(Runnable syncModpack, Runnable joinWithout, Runnable cancel) {
+		joinWithout.run();
+	}
+
 	default void waiting() {}
 
 	/** Runs a task on the client thread; headless adapters run it inline. */

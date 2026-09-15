@@ -1,0 +1,78 @@
+id: modpack-offer
+description: |
+  With requireModpack=false the server only offers its modpack: a fresh modded
+  client is asked during the login whether to sync the pack or join without it.
+  Joining without it downloads nothing and persists no connection state, so the
+  next join is offered again. Accepting the offer chains into the standard
+  first-sync flow, and the synced pack joins straight in-game afterwards.
+renderClient: true
+
+flow:
+  - use: boot
+  - do: wait_for
+    name: show the modpack offer for a client with nothing synced
+    timeout: 90s
+    until:
+      all:
+        - screen: ModpackOfferScreen
+        - element: { key: automodpack.offer.syncModpack, enabled: true }
+        - element: { key: automodpack.offer.joinWithout, enabled: true }
+  - do: screenshot
+    name: capture the modpack offer
+    file: modpack-offer
+  - do: click
+    name: join without the modpack
+    select: { key: automodpack.offer.joinWithout }
+  - do: wait_join
+    name: verify the join completed in-session
+  - do: assert
+    name: verify the skipped offer synced nothing and persisted no connection state
+    that:
+      all:
+        - file_gone: "${active_dir}/${marker}"
+        - log:
+            container: client
+            matches: 'Joining without the offered modpack; nothing is synced'
+  - do: disconnect
+    name: leave the game after joining without the pack
+  - do: connect
+    name: join again to prove the skip persisted nothing
+  - do: wait_for
+    name: show the offer again since the skip persisted nothing
+    timeout: 90s
+    until: { screen: ModpackOfferScreen }
+  - do: click
+    name: accept the offer and sync the modpack
+    select: { key: automodpack.offer.syncModpack }
+  - use: accept_certificate
+  - use: download_modpack
+  - use: restart_client
+  - use: rejoin
+  - do: assert
+    name: verify the accepted pack is installed and the rejoin needed no offer
+    that: { file: "${active_dir}/${marker}" }
+  - do: quit
+    name: quit the client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+    automodpack:
+      config:
+        requireModpack: false
+    modrinth:
+      projects:
+        - ferrite-core?
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  files:
+    - path: config/amp-autotest-alpha.txt
+      content: "amp-autotest-alpha\n"
+    - path: config/amp-autotest-beta.json
+      content: '{"id":"beta","value":42}'
+    - path: config/amp-autotest-gamma.cfg
+      content: "alpha=true\nbeta=false\n"

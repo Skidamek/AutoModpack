@@ -81,7 +81,7 @@ public class DataC2SPacket {
 		}
 
 		ClientStorage storage = ClientStorage.open(GameDirectory.current());
-		return ClientLoginUpdateFlow.reconcile(handler, connectionInfo, secret, storage).thenApply(DataC2SPacket::buildResponse);
+		return ClientLoginUpdateFlow.reconcile(handler, connectionInfo, secret, storage, dataPacket.requireModpack).thenApply(DataC2SPacket::buildResponse);
 	}
 
 	private static FriendlyByteBuf buildResponse(LoginUpdateResponse result) {
