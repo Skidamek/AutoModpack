@@ -2,13 +2,17 @@ package pl.skidam.automodpack_loader_core_neoforge_4;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
+import java.lang.module.Configuration;
+import java.lang.module.ModuleFinder;
 import java.lang.reflect.Field;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -18,12 +22,16 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import cpw.mods.cl.JarModuleFinder;
+import cpw.mods.cl.ModuleClassLoader;
+import cpw.mods.jarhandling.SecureJar;
 import cpw.mods.modlauncher.api.IEnvironment;
 import cpw.mods.modlauncher.api.IModuleLayerManager;
 import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
 import net.neoforged.neoforgespi.ILaunchContext;
 import net.neoforged.neoforgespi.coremod.ICoreMod;
+import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 import net.neoforged.neoforgespi.locating.IDependencyLocator;
 import net.neoforged.neoforgespi.locating.IDiscoveryPipeline;
 import net.neoforged.neoforgespi.locating.IModFile;
@@ -481,6 +489,92 @@ public final class EarlyServiceLayer {
 
 	static void register(Path jar, ClassLoader serviceClassLoader, ModuleLayer childLayer, String moduleName) {
 		ModLauncherEarlyServiceBridge.register(jar, serviceClassLoader, childLayer, moduleName);
+	}
+
+	/**
+	 * Resolves every eligible jar into ONE shared child configuration/layer/classloader - mirroring
+	 * {@code ModuleLayerHandler.buildLayer}, which resolves every jar destined for a given layer
+	 * together in a single {@code Configuration.resolveAndBind} call. Building one configuration per
+	 * jar (sibling layers) would mean one early-service jar's module can never {@code requires}/
+	 * classload another's - breaking a modpack-folder mod split across, or depending on, more than
+	 * one early-service jar.
+	 *
+	 * <p>
+	 * Lives here rather than on {@link EarlyServiceBootstrapper} so the bootstrapper stays free of
+	 * securejarhandler bytecode: the universal outer jar registers both generations' bootstrappers
+	 * under the same services, ServiceLoader links every provider it instantiates, and securejarhandler
+	 * classes do not exist on the flat-classloader generation - linking them there would crash the
+	 * launch. Only the fml4 generation ever executes into this class, so only it ever links it.
+	 */
+	static void bootstrapJars(List<Path> jars, ModuleLayer serviceLayer, String[] arguments) {
+		List<Path> registered = new ArrayList<>(jars);
+		if (!buildAndRegister(jars, serviceLayer)) {
+			// Shared resolution failed for the whole batch (e.g. a module-name clash). Retry each
+			// jar on its own layer so one bad jar doesn't take every other one down; cross-jar
+			// `requires` edges are lost in this degraded mode.
+			registered.clear();
+			for (Path jar : jars) {
+				if (buildAndRegister(List.of(jar), serviceLayer)) registered.add(jar);
+			}
+		}
+
+		for (Path jar : registered) {
+			for (String impl : serviceImpls(jar, GRAPHICS_BOOTSTRAPPER_SERVICE)) {
+				try {
+					GraphicsBootstrapper bootstrapper = (GraphicsBootstrapper) Class.forName(impl, true, classLoaderFor(jar)).getDeclaredConstructor().newInstance();
+					LOGGER.debug("[AutoModpack] Invoking in-place GraphicsBootstrapper {} ({}) from {}", impl, bootstrapper.name(), jar.getFileName());
+					bootstrapper.bootstrap(arguments);
+				} catch (Throwable t) {
+					LOGGER.error("[AutoModpack] In-place GraphicsBootstrapper {} from {} failed", impl, jar.getFileName(), t);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Resolves the given jars into one child configuration/layer/classloader and registers each with
+	 * this registry. Returns false - with nothing registered - if resolution fails.
+	 */
+	private static boolean buildAndRegister(List<Path> jars, ModuleLayer serviceLayer) {
+		try {
+			SecureJar[] secureJars = new SecureJar[jars.size()];
+			List<String> moduleNames = new ArrayList<>(jars.size());
+			for (int i = 0; i < jars.size(); i++) {
+				SecureJar secureJar = SecureJar.from(jars.get(i));
+				secureJars[i] = secureJar;
+				moduleNames.add(secureJar.name());
+			}
+
+			Configuration configuration = serviceLayer.configuration().resolveAndBind(JarModuleFinder.of(secureJars), ModuleFinder.of(), moduleNames);
+
+			List<ModuleLayer> parentLayers = flattenParents(serviceLayer);
+
+			ModuleClassLoader classLoader = new ModuleClassLoader("FML Early Services", configuration, parentLayers);
+			classLoader.setFallbackClassLoader(EarlyServiceLayer.class.getClassLoader());
+			ModuleLayer childLayer = ModuleLayer.defineModules(configuration, List.of(serviceLayer), name -> classLoader).layer();
+
+			for (int i = 0; i < jars.size(); i++) {
+				register(jars.get(i), classLoader, childLayer, moduleNames.get(i));
+			}
+			return true;
+		} catch (Throwable t) {
+			LOGGER.error("[AutoModpack] Could not build a service layer for early-service jar(s) {}", jars.stream().map(Path::getFileName).toList(), t);
+			return false;
+		}
+	}
+
+	private static List<ModuleLayer> flattenParents(ModuleLayer layer) {
+		List<ModuleLayer> result = new ArrayList<>();
+		Deque<ModuleLayer> queue = new ArrayDeque<>();
+		queue.add(layer);
+		while (!queue.isEmpty()) {
+			ModuleLayer current = queue.poll();
+			if (!result.contains(current)) {
+				result.add(current);
+				queue.addAll(current.parents());
+			}
+		}
+		return result;
 	}
 
 	/** Reads the implementation class names listed in a {@code META-INF/services/...} file. */

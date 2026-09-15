@@ -7,10 +7,8 @@ import java.util.List;
 import net.neoforged.fml.jarcontents.JarContents;
 import net.neoforged.neoforgespi.locating.*;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.GenerationProbes;
 import pl.skidam.automodpack_core.loader.ImplStore;
-import pl.skidam.automodpack_core.loader.TargetId;
 
 /**
  * Cross-generation linkage: the universal outer jar registers this class and the fml4 locator under
@@ -28,8 +26,6 @@ public class LazyModLocator implements IDependencyLocator {
 		// Coexists with the fml4 locators in the universal outer jar; only 21.10+ may act.
 		if (!GenerationProbes.NEOFORGE_EARLYSERVICES) return;
 
-		Constants.LOGGER.info("AutoModpack target: {}", TargetId.id("neoforge", EarlyServiceBootstrapper.EARLY_MC_VERSION));
-
 		try {
 			// The outer jar's nested impl carries no jarjar metadata anymore, so surface it explicitly.
 			// This is the native Jar-in-Jar flow: extract the nested jar, read it as a mod file, add it.
@@ -42,9 +38,9 @@ public class LazyModLocator implements IDependencyLocator {
 	}
 
 	private static Path implJar() throws IOException {
-		Boolean client = EarlyServiceBootstrapper.EARLY_IS_CLIENT;
+		Boolean client = EarlyModLocator.EARLY_IS_CLIENT;
 		if (client == null) throw new IllegalStateException("AutoModpack cannot tell client from server before mounting the impl jar");
-		return ImplStore.select(LazyModLocator.class, TargetId.id("neoforge", EarlyServiceBootstrapper.EARLY_MC_VERSION), client);
+		return ImplStore.select(LazyModLocator.class, "neoforge", EarlyModLocator.EARLY_MC_VERSION, client);
 	}
 
 	@Override

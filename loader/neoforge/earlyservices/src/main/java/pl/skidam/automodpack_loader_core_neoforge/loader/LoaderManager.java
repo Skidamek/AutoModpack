@@ -8,7 +8,7 @@ import net.neoforged.fml.loading.LoadingModList;
 import net.neoforged.fml.loading.moddiscovery.ModInfo;
 
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_loader_core_neoforge.EarlyServiceBootstrapper;
+import pl.skidam.automodpack_loader_core_neoforge.EarlyModLocator;
 
 @SuppressWarnings("unused")
 public class LoaderManager implements LoaderManagerService {
@@ -31,21 +31,21 @@ public class LoaderManager implements LoaderManagerService {
 
 	@Override
 	public String getLoaderVersion() {
-		// getVersionInfo() is still null when Preload runs from GraphicsBootstrapper (see
-		// EarlyServiceBootstrapper) - fall back to the value it captured straight off the command
-		// line for that window; by the time preload is false, getVersionInfo() is always populated.
-		if (preload && EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION != null) return EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION;
+		// getVersionInfo() is only reachable through the loader instance once it is current (see
+		// EarlyModLocator) - fall back to the value captured off the launch context during discovery;
+		// by the time preload is false, getVersionInfo() is always populated.
+		if (preload && EarlyModLocator.EARLY_NEOFORGE_VERSION != null) return EarlyModLocator.EARLY_NEOFORGE_VERSION;
 		return FMLLoader.getCurrent().getVersionInfo().neoForgeVersion();
 	}
 
 	@Override
 	public EnvironmentType getEnvironmentType() {
-		// At mod-construction time the loader-native dist is authoritative: the --launchTarget
-		// heuristic exists only for preload, where FMLLoader's dist isn't populated yet (see
-		// EarlyServiceBootstrapper). Trusting the heuristic past preload let a stale or misparsed
+		// At mod-construction time the loader-native dist is authoritative: the launch-context
+		// distribution exists only for preload, where FMLLoader's dist isn't populated yet (see
+		// EarlyModLocator). Trusting the capture past preload let a stale or misparsed
 		// launchTarget report CLIENT on a real dedicated server and crash mod construction.
-		if (preload && EarlyServiceBootstrapper.EARLY_IS_CLIENT != null) {
-			return EarlyServiceBootstrapper.EARLY_IS_CLIENT ? EnvironmentType.CLIENT : EnvironmentType.SERVER;
+		if (preload && EarlyModLocator.EARLY_IS_CLIENT != null) {
+			return EarlyModLocator.EARLY_IS_CLIENT ? EnvironmentType.CLIENT : EnvironmentType.SERVER;
 		}
 		if (FMLLoader.getCurrent().getDist() == Dist.CLIENT) {
 			return EnvironmentType.CLIENT;
@@ -58,7 +58,7 @@ public class LoaderManager implements LoaderManagerService {
 	public String getModVersion(String modId) {
 		if (preload) {
 			if (modId.equals("minecraft")) {
-				if (EarlyServiceBootstrapper.EARLY_MC_VERSION != null) return EarlyServiceBootstrapper.EARLY_MC_VERSION;
+				if (EarlyModLocator.EARLY_MC_VERSION != null) return EarlyModLocator.EARLY_MC_VERSION;
 				return FMLLoader.getCurrent().getVersionInfo().mcVersion();
 			}
 

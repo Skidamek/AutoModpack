@@ -25,6 +25,7 @@ import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
+import pl.skidam.automodpack_core.text.L10n;
 import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack.client.ui.widget.RowViewport;
@@ -522,8 +523,14 @@ public final class AutoTestBridge {
 			JsonObject o = new JsonObject();
 			o.addProperty("id", e.id());
 			o.addProperty("text", e.text());
-			String key = e.translationKey();
-			if (!key.isEmpty()) o.addProperty("key", key);
+			List<String> keys = e.translationKeys();
+			if (keys.size() == 1) o.addProperty("key", keys.get(0));
+			else if (keys.size() > 1) {
+				// Several lang keys may share a rendered value (e.g. two "Download" labels); matching treats them as a set.
+				JsonArray arr = new JsonArray();
+				keys.forEach(arr::add);
+				o.add("keys", arr);
+			}
 			o.addProperty("x", e.x());
 			o.addProperty("y", e.y());
 			o.addProperty("width", e.width());
@@ -540,18 +547,20 @@ public final class AutoTestBridge {
 		return a;
 	}
 
-	private static String translationKey(Component component) {
-		if (component == null) return "";
+	private static List<String> translationKeys(Component component) {
+		if (component == null) return List.of();
 		/*? if >= 1.19.2 {*/
-		if (component.getContents() instanceof TranslatableContents translatable) return translatable.getKey();
+		if (component.getContents() instanceof TranslatableContents translatable) return List.of(translatable.getKey());
 		/*?} else {*/
-		/*if (component instanceof TranslatableComponent translatable) return translatable.getKey();
+		/*if (component instanceof TranslatableComponent translatable) return List.of(translatable.getKey());
 		*//*?}*/
 		for (Component sibling : component.getSiblings()) {
-			String key = translationKey(sibling);
-			if (!key.isEmpty()) return key;
+			List<String> keys = translationKeys(sibling);
+			if (!keys.isEmpty()) return keys;
 		}
-		return "";
+		// Our own keys render as plain L10n literals (never vanilla translatables, so a server pack cannot
+		// puppeteer our UI), so the translation key is recovered from the rendered text for stable matching.
+		return L10n.keysFor(component.getString());
 	}
 
 	private static <T> String onMain(ThrowingSupplier<T> supplier) throws Exception {
@@ -679,8 +688,8 @@ public final class AutoTestBridge {
 			return widget instanceof EditBox editBox ? editBox.getValue() : widget.getMessage().getString();
 		}
 
-		String translationKey() {
-			return rows != null ? "" : AutoTestBridge.translationKey(widget.getMessage());
+		List<String> translationKeys() {
+			return rows != null ? List.of() : AutoTestBridge.translationKeys(widget.getMessage());
 		}
 
 		int x() {

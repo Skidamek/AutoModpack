@@ -9,7 +9,6 @@ import net.minecraftforge.fml.loading.moddiscovery.AbstractJarFileDependencyLoca
 import net.minecraftforge.forgespi.locating.IModFile;
 
 import pl.skidam.automodpack_core.loader.ImplStore;
-import pl.skidam.automodpack_core.loader.TargetId;
 
 /**
  * Surfaces the one jar's impl for this forge target as a mod file, then replays the early-service
@@ -55,7 +54,7 @@ public abstract class LazyModLocatorBase extends AbstractJarFileDependencyLocato
 		String mcVersion = EarlyLaunchEnvironment.MC_VERSION;
 		Boolean client = EarlyLaunchEnvironment.IS_CLIENT;
 		if (mcVersion == null || client == null) throw new IllegalStateException("AutoModpack cannot tell its forge target before mounting the impl jar");
-		Path implJar = ImplStore.select(LazyModLocatorBase.class, TargetId.id("forge", mcVersion), client);
+		Path implJar = ImplStore.select(LazyModLocatorBase.class, "forge", mcVersion, client);
 		return embeddedMod(implJar);
 	}
 

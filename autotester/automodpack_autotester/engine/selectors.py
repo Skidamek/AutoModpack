@@ -56,6 +56,16 @@ def _keys(selector: dict) -> list[str] | None:
     return None
 
 
+def _element_keys(element: dict) -> set[str]:
+    """The element's translation keys: the single dump or every key of an ambiguous rendered value."""
+    keys = set()
+    if element.get("key"):
+        keys.add(str(element["key"]))
+    for key in element.get("keys") or []:
+        keys.add(str(key))
+    return keys
+
+
 def find_all(gui: dict, selector: dict) -> list:
     role = str(selector.get("role", "any"))
     needles = _needles(selector)
@@ -74,7 +84,7 @@ def find_all(gui: dict, selector: dict) -> list:
             continue
         if selector.get("partial") is not None and bool(e.get("partial", False)) != bool(selector["partial"]):
             continue
-        if keys is not None and str(e.get("key") or "") not in keys:
+        if keys is not None and not _element_keys(e).intersection(keys):
             continue
         if klass is not None and str(klass).lower() not in str(e.get("class", "")).lower():
             continue

@@ -38,6 +38,10 @@ abstract class OneJarTask : DefaultTask() {
     @get:Input
     abstract val implJars: MapProperty<String, String>
 
+    /** Target id to the exact Minecraft versions that target covers (its `publish_versions`); the manifest's version-resolution source of truth. */
+    @get:Input
+    abstract val implVersions: MapProperty<String, List<String>>
+
     /** The same files as implJars, for content tracking. */
     @get:InputFiles
     @get:PathSensitive(PathSensitivity.NONE)
@@ -60,6 +64,9 @@ abstract class OneJarTask : DefaultTask() {
         val implJarsById = implJars.get().mapValues { File(it.value) }
         val missing = implJarsById.filterValues { jar -> !jar.isFile }
         if (missing.isNotEmpty()) throw GradleException("Missing optimized impl jars for ${missing.keys.sorted()}; build the targets first")
+        val versionsById = implVersions.get()
+        val uncovered = implJarsById.keys - versionsById.keys
+        if (uncovered.isNotEmpty()) throw GradleException("No covered Minecraft versions registered for ${uncovered.sorted()}; the manifest could not say who mounts them")
 
         val solid = ByteArrayOutputStream()
         val manifestEntries = mutableListOf<ImplManifestFormat.Entry>()
@@ -88,10 +95,23 @@ abstract class OneJarTask : DefaultTask() {
                 }
             }
             val bytes = normalized.toByteArray()
-            manifestEntries.add(ImplManifestFormat.Entry(id, solid.size().toLong(), bytes.size.toLong(), sha1(bytes)))
+            manifestEntries.add(ImplManifestFormat.Entry(id, versionsById.getValue(id), solid.size().toLong(), bytes.size.toLong(), sha1(bytes)))
             solid.write(bytes)
         }
         if (outerAssets.isEmpty()) throw GradleException("No impl jar carried assets/ - the outer would ship without lang, textures or sounds")
+
+        // The manifest's covered versions are the runtime's ONLY version-to-target resolution, so an overlap
+        // would make that resolution order-dependent: a launch could mount either impl depending on sort order.
+        val coveredBy = hashMapOf<String, String>()
+        for (entry in manifestEntries) {
+            val loader = entry.id.substringAfterLast('-')
+            for (version in entry.versions) {
+                val previous = coveredBy.putIfAbsent("$version-$loader", entry.id)
+                if (previous != null && previous != entry.id) {
+                    throw GradleException("Minecraft $version on $loader is covered by both $previous and ${entry.id} - impl selection would be ambiguous")
+                }
+            }
+        }
 
         val solidBytes = solid.toByteArray()
         val zstdBinary = runZstd(solidBytes)

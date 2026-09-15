@@ -39,6 +39,12 @@ def _manifest(entries: list[tuple[str, int, int, bytes]]) -> bytes:
         encoded = target_id.encode("utf-8")
         out.write(struct.pack("<H", len(encoded)))
         out.write(encoded)
+        versions = [target_id.rsplit("-", 1)[0].split(".")[0]]  # shape only; the runner skips the bytes
+        out.write(struct.pack("<H", len(versions)))
+        for version in versions:
+            encoded_version = version.encode("utf-8")
+            out.write(struct.pack("<H", len(encoded_version)))
+            out.write(encoded_version)
         out.write(struct.pack("<II", offset, length))
         out.write(sha1)
     return out.getvalue()

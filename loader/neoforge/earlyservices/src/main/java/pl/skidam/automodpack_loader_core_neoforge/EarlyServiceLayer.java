@@ -97,7 +97,7 @@ public final class EarlyServiceLayer {
 		}
 	}
 
-	// Modpack-folder jars EarlyServiceBootstrapper has appended to FMLLoader's classloader chain,
+	// Modpack-folder jars EarlyModLocator has appended to FMLLoader's classloader chain,
 	// plus that shared classloader.
 	private static final Set<Path> REGISTERED_JARS = ConcurrentHashMap.newKeySet();
 

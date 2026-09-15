@@ -96,6 +96,11 @@ def _manifest_entries(manifest: bytes) -> list[tuple[str, int, int, bytes]]:
         pos += 2
         target_id = manifest[pos : pos + id_len].decode("utf-8")
         pos += id_len
+        (version_count,) = struct.unpack_from("<H", manifest, pos)
+        pos += 2
+        for _ in range(version_count):
+            (version_len,) = struct.unpack_from("<H", manifest, pos)
+            pos += 2 + version_len
         offset, length = struct.unpack_from("<II", manifest, pos)
         pos += 8
         sha1 = manifest[pos : pos + 20]

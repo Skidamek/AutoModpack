@@ -226,6 +226,13 @@ val oneJarTask =
 		outerJar.set(optimizedOuterJar())
 		implJars.set(providers.provider { selectedTargets.associateWith { target -> optimizedImplJar(target).asFile.absolutePath } })
 		implJarFiles.setFrom(selectedTargets.map { optimizedImplJar(it) })
+		// The exact Minecraft versions each target covers (its group's publish_versions): the manifest's
+		// version-resolution source of truth, so a live 26.1.2 client resolves to the 26.1-fabric impl.
+		implVersions.set(
+			providers.provider {
+				selectedTargets.associateWith { target -> structuredString(target.substringBeforeLast('-'), "publish_versions").split('\n').filter(String::isNotBlank) }
+			},
+		)
 		oneJar.set(layout.projectDirectory.file("merged/$modName-$modVersion.jar"))
 		dependsOn(":loader-universal:optimizeUniversalJar")
 		dependsOn(selectedTargets.map { ":$it:optimizeModJar" })

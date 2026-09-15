@@ -47,14 +47,20 @@ public final class ImplStore {
 
 	private ImplStore() {}
 
-	/** Returns a real-file Path for the impl of {@code id} (a Stonecutter target spelling like {@code 1.20.1-fabric}). */
-	public static Path select(Class<?> outerClass, String id, boolean client) throws IOException {
+	/**
+	 * Returns a real-file Path for this launch's impl: the running loader and Minecraft version are resolved
+	 * against the manifest's covered versions ({@code TargetId} crashes on an unusable version, {@link
+	 * ImplManifest#entryFor} on an uncovered one - both are broken launches and crash instead of guessing).
+	 */
+	public static Path select(Class<?> outerClass, String loader, String mcVersion, boolean client) throws IOException {
+		// Crashes on an unusable loader/version shape before anything else runs; entryFor owns the coverage decision.
+		TargetId.id(loader, mcVersion);
 		Path outerJar = JarUtils.getJarPath(outerClass);
 		ImplManifest manifest = readManifest(outerJar);
-		// Crash before touching the cache when this jar carries no impl for the running target.
-		manifest.entry(id);
+		ImplManifest.Entry entry = manifest.entryFor(loader, mcVersion);
+		LOGGER.info("AutoModpack target: {}", entry.id());
 		Path cacheDir = GameDirectory.current().resolve(client ? StoragePaths.CLIENT_IMPL_CACHE_DIR : StoragePaths.SERVER_IMPL_CACHE_DIR);
-		Path implJar = cacheDir.resolve(id + ".jar");
+		Path implJar = cacheDir.resolve(entry.id() + ".jar");
 		Path lockFile = cacheDir.resolveSibling(cacheDir.getFileName() + LOCK_SUFFIX);
 
 		try (FileCache cache = FileCache.open(cacheDir.resolve(RECORDS_DIR))) {
