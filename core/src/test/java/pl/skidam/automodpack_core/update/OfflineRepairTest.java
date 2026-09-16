@@ -265,7 +265,7 @@ class OfflineRepairTest {
 		Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
 		for (FileSpec spec : specs) files.put(spec.path(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(spec.size()), spec.type(), spec.editable(), spec.hash(), "0"));
 		group.files = files;
-		fields.groups = Map.of("main", group);
+		fields.categories = Map.of("General", Map.of("main", group));
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
 		TestPacks.stageGeneration(storage, document);
 		SelectedModpackTarget target = SelectedModpackTarget.prepare(document, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);

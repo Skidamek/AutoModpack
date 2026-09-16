@@ -16,7 +16,7 @@ class ConfigUtilsTest {
 		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
 		group.syncedFiles = new LinkedHashSet<>(List.of("third", "first", "second"));
 		group.allowEditsInFiles = new LinkedHashSet<>(List.of("third", "first", "second"));
-		config.groups = new LinkedHashMap<>(Map.of("main", group));
+		config.modpack = Map.of("General", new LinkedHashMap<>(Map.of("main", group)));
 
 		ConfigUtils.normalizeServerConfig(config);
 
@@ -31,7 +31,7 @@ class ConfigUtilsTest {
 		group.syncedFiles = new LinkedHashSet<>(List.of("/mods/*.jar", "/automodpack/host-modpack/main/extra", "!kubejs/server_scripts/**", "!/kubejs/assets/**"));
 		group.excludedFiles = new LinkedHashSet<>(List.of("/automodpack/host-modpack/main/secret.bin", "!/automodpack/host-modpack/main/keep.bin"));
 		group.allowEditsInFiles = new LinkedHashSet<>(List.of("//config/**"));
-		config.groups = new LinkedHashMap<>(Map.of("main", group));
+		config.modpack = Map.of("General", new LinkedHashMap<>(Map.of("main", group)));
 
 		ConfigUtils.normalizeServerConfig(config);
 
@@ -47,7 +47,7 @@ class ConfigUtilsTest {
 		group.syncedFiles = new LinkedHashSet<>(List.of("automodpack/host-modpack/main/extra", "!automodpack/host-modpack/main/skip/**"));
 		group.excludedFiles = new LinkedHashSet<>(
 				List.of("automodpack/host-modpack/main/**", "automodpack/host-modpack/other/**", "/automodpack/host-modpack/main", "automodpack/host-modpack/main/**/**", "automodpack/host-modpack/main/**/*"));
-		config.groups = new LinkedHashMap<>(Map.of("main", group));
+		config.modpack = Map.of("General", new LinkedHashMap<>(Map.of("main", group)));
 
 		ConfigUtils.normalizeServerConfig(config);
 

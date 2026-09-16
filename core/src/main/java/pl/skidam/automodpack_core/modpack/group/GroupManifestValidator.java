@@ -14,6 +14,9 @@ import pl.skidam.automodpack_core.utils.OsPaths;
 public final class GroupManifestValidator {
 	private static final Pattern ID = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
 	private static final Pattern ILLEGAL_WINDOWS_COMPONENT = Pattern.compile(".*[<>:\"|?*\\\\\\p{Cntrl}].*");
+	private static final Pattern CONTROL_CHARACTER = Pattern.compile("\\p{Cntrl}");
+	// Deliberately matches the group ID cap: both name things a player browses in the same UI rows.
+	private static final int CATEGORY_NAME_MAX = 64;
 
 	private GroupManifestValidator() {}
 
@@ -21,26 +24,36 @@ public final class GroupManifestValidator {
 		List<String> errors = new ArrayList<>();
 		if (fields == null) throw new GroupValidationException(List.of("Complete modpack catalogue is missing"));
 		if (!ModpackId.isValid(fields.modpackId)) errors.add("Invalid modpack ID");
-		if (fields.groups == null || fields.groups.isEmpty()) errors.add("Group catalogue is empty");
-		Map<String, GroupManifest.Group> groups = new TreeMap<>();
-		if (fields.groups != null) for (var entry : fields.groups.entrySet()) {
-			String id = entry.getKey();
-			ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = entry.getValue();
-			if (!isValidIdentifier(id)) {
-				errors.add("Invalid group ID: " + id);
+		if (fields.categories == null || fields.categories.isEmpty()) errors.add("Group catalogue is empty");
+		Map<String, GroupManifest.Group> groups = new LinkedHashMap<>();
+		Map<String, String> seenCategoryNames = new LinkedHashMap<>();
+		if (fields.categories != null) for (var categoryEntry : fields.categories.entrySet()) {
+			String category = validateCategoryName(categoryEntry.getKey(), seenCategoryNames, errors);
+			if (categoryEntry.getValue() == null || categoryEntry.getValue().isEmpty()) {
+				errors.add("Category '" + value(categoryEntry.getKey()) + "' is empty");
 				continue;
 			}
-			if (group == null) {
-				errors.add("Group '" + id + "' is missing its declaration");
-				continue;
+			for (var entry : categoryEntry.getValue().entrySet()) {
+				String id = entry.getKey();
+				if (groups.containsKey(id)) {
+					errors.add("Group '" + id + "' is declared more than once");
+					continue;
+				}
+				ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = entry.getValue();
+				if (!isValidIdentifier(id)) {
+					errors.add("Invalid group ID: " + id);
+					continue;
+				}
+				if (group == null) {
+					errors.add("Group '" + id + "' is missing its declaration");
+					continue;
+				}
+				Set<String> breaksWith = validateIds("Group '" + id + "' breaksWith", group.breaksWith, errors);
+				Set<String> requires = validateIds("Group '" + id + "' requires", group.requires, errors);
+				Set<ClientPlatform> platforms = validatePlatforms(id, group.compatiblePlatforms, errors);
+				Map<String, GroupManifest.GroupFile> files = validateFiles(id, group.files, errors);
+				groups.put(id, new GroupManifest.Group(group.displayName, group.description, category, group.required, group.defaultSelected, breaksWith, requires, platforms, files));
 			}
-			Set<String> breaksWith = validateIds("Group '" + id + "' breaksWith", group.breaksWith, errors);
-			Set<String> requires = validateIds("Group '" + id + "' requires", group.requires, errors);
-			String category = validateCategory(id, group.category, errors);
-			Set<ClientPlatform> platforms = validatePlatforms(id, group.compatiblePlatforms, errors);
-			Map<String, GroupManifest.GroupFile> files = validateFiles(id, group.files, errors);
-			groups.put(id, new GroupManifest.Group(group.displayName, group.description, category, group.required, group.defaultSelected,
-					new TreeSet<>(breaksWith), new TreeSet<>(requires), platforms, new TreeMap<>(files)));
 		}
 
 		validateReferences(groups, errors);
@@ -48,7 +61,7 @@ public final class GroupManifestValidator {
 
 		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
 		GroupManifest manifest = new GroupManifest(fields.modpackId, value(fields.modpackName), value(fields.automodpackVersion), value(fields.loader),
-				value(fields.loaderVersion), value(fields.mcVersion), new TreeMap<>(groups));
+				value(fields.loaderVersion), value(fields.mcVersion), groups);
 		validatePlatformPaths(manifest, errors);
 		validateDefaultAndIndividualSelections(manifest, errors);
 		validateObjectSizes(manifest, errors);
@@ -59,7 +72,7 @@ public final class GroupManifestValidator {
 
 	private static Map<String, GroupManifest.GroupFile> validateFiles(String groupId,
 			Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> input, List<String> errors) {
-		Map<String, GroupManifest.GroupFile> files = new TreeMap<>();
+		Map<String, GroupManifest.GroupFile> files = new LinkedHashMap<>();
 		if (input == null) {
 			errors.add("Group '" + groupId + "' files are missing");
 			return files;
@@ -106,8 +119,8 @@ public final class GroupManifestValidator {
 
 	private static void validatePlatformPaths(GroupManifest manifest, List<String> errors) {
 		for (ClientPlatform platform : coveredPlatforms(manifest)) {
-			Map<String, List<PathOwner>> aliases = new TreeMap<>();
-			Map<String, List<PathOwner>> modBasenameAliases = new TreeMap<>();
+			Map<String, List<PathOwner>> aliases = new LinkedHashMap<>();
+			Map<String, List<PathOwner>> modBasenameAliases = new LinkedHashMap<>();
 			for (var groupEntry : manifest.groups().entrySet()) {
 				String groupId = groupEntry.getKey();
 				GroupManifest.Group group = groupEntry.getValue();
@@ -245,7 +258,7 @@ public final class GroupManifestValidator {
 	}
 
 	private static void validateObjectSizes(GroupManifest manifest, List<String> errors) {
-		Map<String, Long> sizesByHash = new TreeMap<>();
+		Map<String, Long> sizesByHash = new LinkedHashMap<>();
 		for (var groupEntry : manifest.groups().entrySet()) for (var fileEntry : groupEntry.getValue().files().entrySet()) {
 			GroupManifest.GroupFile file = fileEntry.getValue();
 			Long previous = sizesByHash.putIfAbsent(file.sha1(), file.size());
@@ -255,7 +268,7 @@ public final class GroupManifestValidator {
 	}
 
 	private static void validateOverlaps(GroupManifest manifest, List<String> errors) {
-		Map<String, List<Map.Entry<String, GroupManifest.GroupFile>>> byPath = new TreeMap<>();
+		Map<String, List<Map.Entry<String, GroupManifest.GroupFile>>> byPath = new LinkedHashMap<>();
 		for (var groupEntry : manifest.groups().entrySet())
 			for (var fileEntry : groupEntry.getValue().files().entrySet())
 				byPath.computeIfAbsent(fileEntry.getKey(), ignored -> new ArrayList<>()).add(Map.entry(groupEntry.getKey(), fileEntry.getValue()));
@@ -312,7 +325,7 @@ public final class GroupManifestValidator {
 			errors.add(description + " is missing");
 			return Set.of();
 		}
-		Set<String> ids = new TreeSet<>();
+		Set<String> ids = new LinkedHashSet<>();
 		for (String id : input) {
 			validateId(description, id, errors);
 			if (id != null) ids.add(id);
@@ -321,7 +334,7 @@ public final class GroupManifestValidator {
 	}
 
 	public static String requireIdentifier(String id) {
-		if (!isValidIdentifier(id)) throw new IllegalArgumentException("Invalid group or category ID: " + id);
+		if (!isValidIdentifier(id)) throw new IllegalArgumentException("Invalid group ID: " + id);
 		return id;
 	}
 
@@ -337,10 +350,22 @@ public final class GroupManifestValidator {
 		}
 	}
 
-	private static String validateCategory(String groupId, String input, List<String> errors) {
-		if (input == null || input.isEmpty()) return "";
-		if (!isValidIdentifier(input)) errors.add("Invalid Group '" + groupId + "' category ID: " + input);
-		return input;
+	/**
+	 * Category names are player-facing display strings, not ids. Guards run on the raw key: it must carry no leading/trailing
+	 * whitespace, be non-blank, hold no control characters, fit the length cap, and be case-insensitively unique.
+	 */
+	private static String validateCategoryName(String raw, Map<String, String> seenNames, List<String> errors) {
+		if (raw == null) {
+			errors.add("Category name is missing");
+			return "";
+		}
+		if (!raw.equals(raw.strip())) errors.add("Category '" + raw + "' has leading or trailing whitespace");
+		if (raw.strip().isEmpty()) errors.add("Category '" + raw + "' is blank");
+		if (CONTROL_CHARACTER.matcher(raw).find()) errors.add("Category '" + raw + "' contains control characters");
+		if (raw.length() > CATEGORY_NAME_MAX) errors.add("Category '" + raw + "' is longer than " + CATEGORY_NAME_MAX + " characters");
+		String first = seenNames.putIfAbsent(raw.toLowerCase(Locale.ROOT), raw);
+		if (first != null) errors.add("Category '" + raw + "' duplicates category '" + first + "'");
+		return raw;
 	}
 
 	private static String value(String value) {

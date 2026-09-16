@@ -299,7 +299,7 @@ class ModpackExecutorTest {
 		ServerConfigJsons.GroupDeclaration main = new ServerConfigJsons.GroupDeclaration();
 		main.required = true;
 		main.syncedFiles = Set.of();
-		config.groups = Map.of("main", main);
+		config.modpack = Map.of("General", Map.of("main", main));
 		config.autoExcludeUnnecessaryFiles = false;
 		config.autoExcludeServerSideMods = false;
 		return config;

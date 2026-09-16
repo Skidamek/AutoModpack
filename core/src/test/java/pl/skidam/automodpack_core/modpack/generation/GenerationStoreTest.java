@@ -40,7 +40,7 @@ class GenerationStoreTest {
 		GenerationStore.Current current = store.loadCurrent().orElseThrow();
 		assertEquals(root.entry().seq(), current.seq());
 		assertEquals("First", root.entry().notes());
-		assertEquals("one", current.manifest().toFields().groups.get("main").description);
+		assertEquals("one", current.manifest().toFields().categories.get("General").get("main").description);
 		assertEquals(1, current.seq());
 
 		GenerationStore.Publication second = store.publish(candidate("two", "content-two"), "Second");
@@ -185,7 +185,7 @@ class GenerationStoreTest {
 	}
 
 	private static ModpackJsons.CompleteModpackContentFields.GroupFileFields fileEntry(GenerationJsons.HeadDocumentFields fields) {
-		return fields.policy.groups.get("main").files.get("config/example.txt");
+		return fields.policy.categories.get("General").get("main").files.get("config/example.txt");
 	}
 
 	private static GroupManifest manifest(String description, String content) {
@@ -194,7 +194,7 @@ class GenerationStoreTest {
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.description = description;
 		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), "config", false, sha1(content), null));
-		fields.groups = new TreeMap<>(Map.of("main", group));
+		fields.categories = Map.of("General", Map.of("main", group));
 		return GroupManifestValidator.validate(fields);
 	}
 
@@ -223,7 +223,7 @@ class GenerationStoreTest {
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.description = "multi";
 		group.files = entries;
-		fields.groups = new TreeMap<>(Map.of("main", group));
+		fields.categories = Map.of("General", Map.of("main", group));
 		return new ModpackCandidate(GroupManifestValidator.validate(fields), staged, new TreeMap<>(), List.of());
 	}
 
@@ -237,7 +237,7 @@ class GenerationStoreTest {
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.description = description;
 		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), "config", false, hash, null));
-		fields.groups = new TreeMap<>(Map.of("main", group));
+		fields.categories = Map.of("General", Map.of("main", group));
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 		return new ModpackCandidate(manifest, new TreeMap<>(Map.of(hash, stagedObject(staged, hash, content.length()))), new TreeMap<>(), List.of());
 	}

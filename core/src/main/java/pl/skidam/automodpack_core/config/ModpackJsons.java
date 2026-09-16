@@ -15,12 +15,12 @@ public class ModpackJsons {
 		public String loader = "";
 		public String loaderVersion = "";
 		public String mcVersion = "";
-		public Map<String, ModpackGroupFields> groups = Map.of();
+		// Category name -> group id -> group fields. The group id is referenced by requires/breaksWith and by the client's saved selection; the category name is the player-facing section label.
+		public Map<String, Map<String, ModpackGroupFields>> categories = Map.of();
 
 		public static class ModpackGroupFields {
 			public String displayName = "";
 			public String description = "";
-			public String category = "";
 			public boolean required;
 			public boolean defaultSelected;
 			public Set<String> breaksWith = Set.of();

@@ -15,7 +15,6 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -62,9 +61,9 @@ class ModpackCandidateScannerTest {
 		assertNotNull(provenance);
 		assertEquals(CandidateSource.SourceKind.GROUP_DIRECTORY, provenance.selectedSource().kind());
 		assertEquals("config/example.txt", provenance.selectedSource().logicalPath());
-		assertEquals("config/example.txt", candidate.manifest().groups().get("main").files().firstKey());
-		assertEquals("", candidate.manifest().groups().get("main").category());
-		assertEquals("", candidate.manifest().toFields().groups.get("main").category);
+		assertEquals("config/example.txt", candidate.manifest().groups().get("main").files().keySet().iterator().next());
+		assertEquals("General", candidate.manifest().groups().get("main").category());
+		assertEquals("main", candidate.manifest().toFields().categories.get("General").keySet().iterator().next());
 	}
 
 	@Test
@@ -140,7 +139,7 @@ class ModpackCandidateScannerTest {
 	}
 
 	@Test
-	void shuffledDeclarationsProduceSameCatalogue() throws Exception {
+	void declarationOrderSurvivesTheScan() throws Exception {
 		Path server = tempDir.resolve("server");
 		Path groups = tempDir.resolve("groups");
 		Files.createDirectories(server.resolve("config"));
@@ -153,10 +152,8 @@ class ModpackCandidateScannerTest {
 		second.put("main", group("/config/**"));
 		second.put("visuals", group("/config/**"));
 
-		String firstJson = ConfigTools.GSON.toJson(scan(server, groups, first, false).manifest().toFields());
-		String secondJson = ConfigTools.GSON.toJson(scan(server, groups, second, false).manifest().toFields());
-
-		assertEquals(firstJson, secondJson);
+		assertEquals(List.of("visuals", "main"), new ArrayList<>(scan(server, groups, first, false).manifest().groups().keySet()));
+		assertEquals(List.of("main", "visuals"), new ArrayList<>(scan(server, groups, second, false).manifest().groups().keySet()));
 	}
 
 	@Test
@@ -293,7 +290,7 @@ class ModpackCandidateScannerTest {
 
 	private ModpackCandidate scan(Path server, Path groups, Map<String, ServerConfigJsons.GroupDeclaration> declarations, boolean autoExclude) throws Exception {
 		Executor direct = Runnable::run;
-		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, declarations,
+		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, Map.of("General", declarations),
 				autoExclude, false, tempDir.resolve("staging"), direct, null, null, null, true);
 		return new ModpackCandidateScanner().scan(request);
 	}

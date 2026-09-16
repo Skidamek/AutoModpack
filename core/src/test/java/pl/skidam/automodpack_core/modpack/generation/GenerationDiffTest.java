@@ -79,9 +79,8 @@ class GenerationDiffTest {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.category = category;
 		group.files = Map.of();
-		fields.groups = Map.of("main", group);
+		fields.categories = Map.of(category, Map.of("main", group));
 		return GroupManifestValidator.validate(fields);
 	}
 
@@ -106,7 +105,7 @@ class GenerationDiffTest {
 			group.files = entry.getValue();
 			declarations.put(entry.getKey(), group);
 		}
-		fields.groups = declarations;
+		fields.categories = Map.of(category.isEmpty() ? "General" : category, declarations);
 		return GroupManifestValidator.validate(fields);
 	}
 

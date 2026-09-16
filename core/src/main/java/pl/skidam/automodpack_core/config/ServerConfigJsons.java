@@ -13,8 +13,8 @@ public class ServerConfigJsons {
 		public String modpackName = "";
 		public boolean modpackHost = true;
 		public boolean generateModpackOnStart = true;
-		// Key is the group id referenced by requires/breaksWith and by the client's saved selection.
-		public Map<String, GroupDeclaration> groups = Map.of("main", mainGroupDeclaration());
+		// Category name -> group id -> declaration. The group id is referenced by requires/breaksWith and by the client's saved selection; the category name is the player-facing section label.
+		public Map<String, Map<String, GroupDeclaration>> modpack = Map.of("General", Map.of("main", mainGroupDeclaration()));
 		public boolean autoExcludeServerSideMods = true;
 		/** Convenience tier only: skips empty, hidden, .tmp, .disabled and .bak files at scan time. The correctness tier (the 'automodpack/' namespace and Windows-reserved device names) is always enforced. */
 		public boolean autoExcludeUnnecessaryFiles = true;
@@ -50,7 +50,7 @@ public class ServerConfigJsons {
 		config.validateSecrets = false;
 		GroupDeclaration main = mainGroupDeclaration();
 		main.syncedFiles = Set.of();
-		config.groups = Map.of("main", main);
+		config.modpack = Map.of("General", Map.of("main", main));
 		return config;
 	}
 
@@ -71,13 +71,12 @@ public class ServerConfigJsons {
 		// UI metadata. The map key is the group id; displayName is what the player sees.
 		public String displayName = "";
 		public String description = "";
-		public String category = "";
 
 		// If required, the client cannot uncheck it. defaultSelected is ignored when required.
 		public boolean required = false;
 		public boolean defaultSelected = false;
 
-		// Group ids this one conflicts with / depends on and its optional player-facing category.
+		// Group ids this one conflicts with / depends on.
 		public Set<String> breaksWith = Set.of();
 		public Set<String> requires = Set.of();
 		public Set<String> compatiblePlatforms = Set.of();

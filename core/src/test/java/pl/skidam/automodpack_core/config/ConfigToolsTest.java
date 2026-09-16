@@ -139,14 +139,16 @@ class ConfigToolsTest {
 		String json = """
 				{
 				  "syncedfile": "typo",
-				  "groups": {
-				    "main": {"syncedfile": "typo"},
-				    "extra": {"displayName": "Extra", "bogus": true}
+				  "modpack": {
+				    "General": {
+				      "main": {"syncedfile": "typo"},
+				      "extra": {"displayName": "Extra", "bogus": true}
+				    }
 				  }
 				}
 				""";
 
-		assertEquals(List.of("syncedfile", "groups.main.syncedfile", "groups.extra.bogus"), ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class));
+		assertEquals(List.of("syncedfile", "modpack.General.main.syncedfile", "modpack.General.extra.bogus"), ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class));
 	}
 
 	@Test
@@ -154,16 +156,18 @@ class ConfigToolsTest {
 		String json = """
 				{
 				  "syncedfile": "typo",
-				  "groups": {
-				    "main": {"syncedfile": "typo"},
-				    "extra": {"displayName": "Extra", "bogus": true}
+				  "modpack": {
+				    "General": {
+				      "main": {"syncedfile": "typo"},
+				      "extra": {"displayName": "Extra", "bogus": true}
+				    }
 				  }
 				}
 				""";
 
 		List<String> first = ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class);
 		List<String> second = ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class);
-		assertEquals(List.of("syncedfile", "groups.main.syncedfile", "groups.extra.bogus"), first);
+		assertEquals(List.of("syncedfile", "modpack.General.main.syncedfile", "modpack.General.extra.bogus"), first);
 		assertEquals(first, second);
 	}
 

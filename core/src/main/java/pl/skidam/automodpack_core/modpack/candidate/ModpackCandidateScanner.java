@@ -19,18 +19,24 @@ public final class ModpackCandidateScanner {
 
 	public ModpackCandidate scan(Request request) throws CandidateBuildException {
 		Objects.requireNonNull(request);
-		if (request.groups() == null || request.groups().isEmpty()) throw new CandidateBuildException("No groups are configured");
-		Map<String, ServerConfigJsons.GroupDeclaration> declarations = new TreeMap<>();
-		Map<String, GroupRules> rulesByGroup = new TreeMap<>();
-		for (var entry : request.groups().entrySet()) {
-			try {
-				GroupManifestValidator.requireIdentifier(entry.getKey());
-			} catch (IllegalArgumentException e) {
-				throw new CandidateBuildException(e.getMessage(), e);
+		if (request.modpack() == null || request.modpack().isEmpty()) throw new CandidateBuildException("No groups are configured");
+		Map<String, ServerConfigJsons.GroupDeclaration> declarations = new LinkedHashMap<>();
+		Map<String, String> categoryByGroup = new LinkedHashMap<>();
+		Map<String, GroupRules> rulesByGroup = new LinkedHashMap<>();
+		for (var categoryEntry : request.modpack().entrySet()) {
+			if (categoryEntry.getValue() == null) continue; // GroupManifestValidator reports the empty category.
+			for (var entry : categoryEntry.getValue().entrySet()) {
+				try {
+					GroupManifestValidator.requireIdentifier(entry.getKey());
+				} catch (IllegalArgumentException e) {
+					throw new CandidateBuildException(e.getMessage(), e);
+				}
+				if (declarations.containsKey(entry.getKey())) throw new CandidateBuildException("Group '" + entry.getKey() + "' is declared more than once");
+				if (entry.getValue() == null) throw new CandidateBuildException("Group '" + entry.getKey() + "' has no declaration");
+				declarations.put(entry.getKey(), entry.getValue());
+				categoryByGroup.put(entry.getKey(), categoryEntry.getKey());
+				rulesByGroup.put(entry.getKey(), compileRules(entry.getKey(), entry.getValue()));
 			}
-			if (entry.getValue() == null) throw new CandidateBuildException("Group '" + entry.getKey() + "' has no declaration");
-			declarations.put(entry.getKey(), entry.getValue());
-			rulesByGroup.put(entry.getKey(), compileRules(entry.getKey(), entry.getValue()));
 		}
 
 		List<ExcludedCandidate> ruleExclusions = new ArrayList<>();
@@ -137,22 +143,21 @@ public final class ModpackCandidateScanner {
 			fields.loader = request.loader();
 			fields.loaderVersion = request.loaderVersion();
 			fields.mcVersion = request.mcVersion();
-			Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> groups = new LinkedHashMap<>();
+			Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields>> categories = new LinkedHashMap<>();
 			for (var entry : declarations.entrySet()) {
 				ServerConfigJsons.GroupDeclaration declaration = entry.getValue();
 				ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 				group.displayName = declaration.displayName;
 				group.description = declaration.description;
-				group.category = declaration.category == null ? "" : declaration.category;
 				group.required = declaration.required;
 				group.defaultSelected = declaration.defaultSelected;
 				group.breaksWith = sortedSet(declaration.breaksWith);
 				group.requires = sortedSet(declaration.requires);
 				group.compatiblePlatforms = sortedSet(declaration.compatiblePlatforms);
 				group.files = filesByGroup.get(entry.getKey());
-				groups.put(entry.getKey(), group);
+				categories.computeIfAbsent(categoryByGroup.get(entry.getKey()), ignored -> new LinkedHashMap<>()).put(entry.getKey(), group);
 			}
-			fields.groups = groups;
+			fields.categories = categories;
 			GroupManifest manifest = GroupManifestValidator.validate(fields);
 			if (manifest.groups().values().stream().allMatch(group -> group.files().isEmpty()))
 				throw new CandidateBuildException("Candidate contains no published files");
@@ -337,7 +342,7 @@ public final class ModpackCandidateScanner {
 			String mcVersion,
 			Path serverRoot,
 			Path groupRoot,
-			Map<String, ServerConfigJsons.GroupDeclaration> groups,
+			Map<String, Map<String, ServerConfigJsons.GroupDeclaration>> modpack,
 			boolean autoExcludeUnnecessaryFiles,
 			boolean autoExcludeServerSideMods,
 			Path stagingDirectory,

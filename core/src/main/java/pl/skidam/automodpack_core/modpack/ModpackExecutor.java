@@ -244,7 +244,7 @@ public class ModpackExecutor {
 		try (FileCache fileCache = FileCache.open(dataLayout.fileCacheDirectory());
 				ModFileCache modFileCache = ModFileCache.open(dataLayout.modCacheDirectory())) {
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
-					serverConfig.syncLoaderVersion ? LOADER_VERSION : null, MC_VERSION, serverRoot, groupRoot, serverConfig.groups,
+					serverConfig.syncLoaderVersion ? LOADER_VERSION : null, MC_VERSION, serverRoot, groupRoot, serverConfig.modpack,
 					serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()), creationExecutor,
 					generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects);
 			ModpackCandidate candidate = candidateScan.scan(request);
@@ -311,26 +311,32 @@ public class ModpackExecutor {
 	}
 
 	private static void validateConfiguration() throws CandidateBuildException {
-		if (serverConfig == null || serverConfig.groups == null || serverConfig.groups.isEmpty())
+		if (serverConfig == null || serverConfig.modpack == null || serverConfig.modpack.isEmpty())
 			throw new CandidateBuildException("Server group configuration is missing");
-		for (var entry : serverConfig.groups.entrySet()) {
-			try {
-				GroupManifestValidator.requireIdentifier(entry.getKey());
-			} catch (IllegalArgumentException e) {
-				throw new CandidateBuildException(e.getMessage(), e);
+		for (var categoryEntry : serverConfig.modpack.entrySet()) {
+			if (categoryEntry.getValue() == null) continue; // GroupManifestValidator reports the empty category.
+			for (var entry : categoryEntry.getValue().entrySet()) {
+				try {
+					GroupManifestValidator.requireIdentifier(entry.getKey());
+				} catch (IllegalArgumentException e) {
+					throw new CandidateBuildException(e.getMessage(), e);
+				}
+				if (entry.getValue() == null) throw new CandidateBuildException("Group '" + entry.getKey() + "' has no declaration");
 			}
-			if (entry.getValue() == null) throw new CandidateBuildException("Group '" + entry.getKey() + "' has no declaration");
 		}
 	}
 
 	private void prepareDirectories() throws IOException, CandidateBuildException {
 		Map<String, Path> groupDirectories = new TreeMap<>();
-		for (String groupId : serverConfig.groups.keySet()) {
-			Path groupDirectory = groupRoot.resolve(groupId).normalize();
-			if (!groupDirectory.startsWith(groupRoot)) throw new CandidateBuildException("Group directory escapes host-modpack: " + groupId);
-			if (groupDirectory.startsWith(generationRoot) || generationRoot.startsWith(groupDirectory))
-				throw new CandidateBuildException("Group directory overlaps managed generation store: " + groupId);
-			groupDirectories.put(groupId, groupDirectory);
+		for (var categoryEntry : serverConfig.modpack.entrySet()) {
+			if (categoryEntry.getValue() == null) continue;
+			for (String groupId : categoryEntry.getValue().keySet()) {
+				Path groupDirectory = groupRoot.resolve(groupId).normalize();
+				if (!groupDirectory.startsWith(groupRoot)) throw new CandidateBuildException("Group directory escapes host-modpack: " + groupId);
+				if (groupDirectory.startsWith(generationRoot) || generationRoot.startsWith(groupDirectory))
+					throw new CandidateBuildException("Group directory overlaps managed generation store: " + groupId);
+				groupDirectories.put(groupId, groupDirectory);
+			}
 		}
 		Files.createDirectories(groupRoot);
 		GenerationPatchNotes.ensurePresent(patchNotesFile);

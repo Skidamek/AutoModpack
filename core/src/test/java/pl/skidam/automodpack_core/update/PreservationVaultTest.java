@@ -251,7 +251,7 @@ class PreservationVaultTest {
 		file.sha1 = hash;
 		file.murmur = "0";
 		group.files = Map.of(path, file);
-		fields.groups = Map.of("main", group);
+		fields.categories = Map.of("General", Map.of("main", group));
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
 		TestPacks.stageGeneration(storage, document);
 		storage.writeActiveState(document.manifest().modpackId(), document.contentToken(), document.ownershipLedger().toFields());

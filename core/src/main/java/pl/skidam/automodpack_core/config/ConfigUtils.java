@@ -62,17 +62,20 @@ public class ConfigUtils {
 		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
 
 		// Rules are group-directory-relative: no leading slash, no '/automodpack/host-modpack/<this group>' prefix (slash optional).
-		if (config.groups == null) return;
-		for (var groupEntry : config.groups.entrySet()) {
-			var group = groupEntry.getValue();
-			if (group == null) {
-				LOGGER.warn("Ignored null group declaration '{}'.", groupEntry.getKey());
-				continue;
+		if (config.modpack == null) return;
+		for (var categoryEntry : config.modpack.entrySet()) {
+			if (categoryEntry.getValue() == null) continue;
+			for (var groupEntry : categoryEntry.getValue().entrySet()) {
+				var group = groupEntry.getValue();
+				if (group == null) {
+					LOGGER.warn("Ignored null group declaration '{}' in category '{}'.", groupEntry.getKey(), categoryEntry.getKey());
+					continue;
+				}
+				Pattern ownGroupPrefix = Pattern.compile("^/?automodpack/host-modpack/" + Pattern.quote(groupEntry.getKey()) + "(?:/|$)");
+				group.syncedFiles = normalizeRuleSet(group.syncedFiles, "syncedFiles", groupEntry.getKey(), ownGroupPrefix, true);
+				group.excludedFiles = normalizeRuleSet(group.excludedFiles, "excludedFiles", groupEntry.getKey(), ownGroupPrefix, false);
+				group.allowEditsInFiles = normalizeRuleSet(group.allowEditsInFiles, "allowEditsInFiles", groupEntry.getKey(), ownGroupPrefix, false);
 			}
-			Pattern ownGroupPrefix = Pattern.compile("^/?automodpack/host-modpack/" + Pattern.quote(groupEntry.getKey()) + "(?:/|$)");
-			group.syncedFiles = normalizeRuleSet(group.syncedFiles, "syncedFiles", groupEntry.getKey(), ownGroupPrefix, true);
-			group.excludedFiles = normalizeRuleSet(group.excludedFiles, "excludedFiles", groupEntry.getKey(), ownGroupPrefix, false);
-			group.allowEditsInFiles = normalizeRuleSet(group.allowEditsInFiles, "allowEditsInFiles", groupEntry.getKey(), ownGroupPrefix, false);
 		}
 	}
 

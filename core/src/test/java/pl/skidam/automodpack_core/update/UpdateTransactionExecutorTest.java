@@ -820,7 +820,7 @@ class UpdateTransactionExecutorTest {
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.required = true;
 		group.files = Map.of(pathA, file(pathA, hashA, sizeA), pathB, file(pathB, hashB, sizeB));
-		fields.groups = Map.of("main", group);
+		fields.categories = Map.of("General", Map.of("main", group));
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
 		TestPacks.stageGeneration(storage, document);
 		return SelectedModpackTarget.prepare(document, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
@@ -856,7 +856,7 @@ class UpdateTransactionExecutorTest {
 		file.sha1 = hash;
 		file.murmur = "0";
 		group.files = Map.of(path, file);
-		fields.groups = Map.of("main", group);
+		fields.categories = Map.of("General", Map.of("main", group));
 		return fields;
 	}
 

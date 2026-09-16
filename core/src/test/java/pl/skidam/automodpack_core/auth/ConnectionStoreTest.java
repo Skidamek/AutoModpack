@@ -93,7 +93,7 @@ class ConnectionStoreTest {
 		group.description = description;
 		String sha1 = HashUtils.sha1(content.getBytes(StandardCharsets.UTF_8));
 		group.files = new TreeMap<>(Map.of(path, new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), "config", false, sha1, null)));
-		fields.groups = new TreeMap<>(Map.of("main", group));
+		fields.categories = Map.of("General", Map.of("main", group));
 		return GroupManifestValidator.validate(fields);
 	}
 }

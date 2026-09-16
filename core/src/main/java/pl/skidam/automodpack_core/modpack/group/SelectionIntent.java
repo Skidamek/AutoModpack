@@ -12,13 +12,13 @@ public record SelectionIntent(NavigableSet<String> requestedGroups, NavigableSet
 	}
 
 	public SelectionIntent(Collection<String> requestedGroups, Collection<String> requestedCategories, Collection<String> excludedGroups, ClientPlatform platform) {
-		this(toSortedSet(requestedGroups), toSortedSet(requestedCategories), toSortedSet(excludedGroups), platform);
+		this(toGroupIdSet(requestedGroups), toNameSet(requestedCategories), toGroupIdSet(excludedGroups), platform);
 	}
 
 	public SelectionIntent {
-		requestedGroups = toSortedSet(requestedGroups);
-		requestedCategories = toSortedSet(requestedCategories);
-		excludedGroups = toSortedSet(excludedGroups);
+		requestedGroups = toGroupIdSet(requestedGroups);
+		requestedCategories = toNameSet(requestedCategories);
+		excludedGroups = toGroupIdSet(excludedGroups);
 	}
 
 	/** Returns the same choice carrying a per-pack platform override; null keeps following the detected platform. */
@@ -40,9 +40,16 @@ public record SelectionIntent(NavigableSet<String> requestedGroups, NavigableSet
 		return Objects.hash(requestedGroups, requestedCategories, excludedGroups);
 	}
 
-	private static NavigableSet<String> toSortedSet(Collection<String> values) {
+	private static NavigableSet<String> toGroupIdSet(Collection<String> values) {
 		TreeSet<String> sorted = new TreeSet<>();
 		if (values != null) for (String value : values) sorted.add(GroupManifestValidator.requireIdentifier(value));
+		return Collections.unmodifiableNavigableSet(sorted);
+	}
+
+	/** Category entries are player-facing display names, so unlike group ids they skip the ID pattern. */
+	private static NavigableSet<String> toNameSet(Collection<String> values) {
+		TreeSet<String> sorted = new TreeSet<>();
+		if (values != null) sorted.addAll(values);
 		return Collections.unmodifiableNavigableSet(sorted);
 	}
 }

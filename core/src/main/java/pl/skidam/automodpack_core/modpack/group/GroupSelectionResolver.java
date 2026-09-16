@@ -54,7 +54,7 @@ public final class GroupSelectionResolver {
 		Set<String> requestedCategories = new TreeSet<>(current.requestedCategories());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
 		GroupManifest.Group clickedGroup = manifest.groups().get(clicked);
-		if (clickedGroup != null && !clickedGroup.category().isEmpty() && requestedCategories.remove(clickedGroup.category())) {
+		if (clickedGroup != null && requestedCategories.remove(clickedGroup.category())) {
 			for (var entry : manifest.groups().entrySet()) {
 				GroupManifest.Group group = entry.getValue();
 				if (clickedGroup.category().equals(group.category()) && !group.required() && group.supports(platform)) requestedGroups.add(entry.getKey());
