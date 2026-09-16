@@ -438,6 +438,16 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
     bridge.click(94)
     assert bridge.gui()["screenClass"] == "ClientStorageMaintenanceScreen"
 
+    # Cleanup fires on the second press only; verify (and leaving) disarms the first press.
+    object_path.write_bytes(b"gamma")
+    bridge.click(46)
+    assert any(button["text"] == "Click again to clean" for button in bridge.gui()["buttons"])
+    bridge.click(91)
+    assert any(button["text"] == "Clean local storage" for button in bridge.gui()["buttons"])
+    bridge.click(46)
+    bridge.click(46)
+    assert any(button["text"] == "Clean local storage" and button["enabled"] for button in bridge.gui()["buttons"])
+
     # Restore refuses to overwrite an active owned path. Save-copy and two-click deletion remain available.
     active_owned = ctx.game_dir / "automodpack/client/active/config/amp-autotest-gamma.cfg"
     active_owned.parent.mkdir(parents=True, exist_ok=True)

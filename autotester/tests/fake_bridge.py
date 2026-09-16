@@ -65,6 +65,7 @@ class FakeBridge:
         self.switch_count = 0
         self.vault_message: str | None = None
         self.storage_running = False
+        self.storage_compact_armed = False
         self.baseline_snapshots: dict[Path, bytes] = {}
         self.first_install_archive_existing = False
         self.storage_verified = False
@@ -211,7 +212,7 @@ class FakeBridge:
                 "buttons": [
                     *([{"id": 101, "text": "Storage verified", "enabled": False, "visible": True}] if self.storage_verified else []),
                     {"id": 91, "text": "Verify storage", "enabled": not self.storage_running, "visible": True},
-                    {"id": 46, "text": "Clean local storage", "enabled": not self.storage_running, "visible": True},
+                    {"id": 46, "text": "Click again to clean" if self.storage_compact_armed else "Clean local storage", "enabled": not self.storage_running, "visible": True, "key": "automodpack.storage.confirmArmed" if self.storage_compact_armed else "automodpack.storage.confirm"},
                     {"id": 47, "text": "Back", "enabled": True, "visible": True},
                 ],
                 "textFields": [],
@@ -494,14 +495,20 @@ class FakeBridge:
         elif element_id == 46:
             if self.screen == "manager":
                 self.storage_parent = "manager"
+                self.storage_compact_armed = False
                 self.screen = "storage"
-            else:
+            elif self.screen == "storage" and not self.storage_compact_armed:
+                self.storage_compact_armed = True
+            elif self.screen == "storage":
                 self.storage_running = True
                 self._compact_local_storage()
                 self.storage_running = False
+                self.storage_compact_armed = False
         elif element_id == 47:
+            self.storage_compact_armed = False
             self.screen = self.storage_parent if self.screen == "storage" else "multiplayer"
         elif element_id == 91:
+            self.storage_compact_armed = False
             if self._has_damaged_preservation_object():
                 self.error_parent = "storage"
                 self.screen = "error"
@@ -724,6 +731,7 @@ class FakeBridge:
         self.vault_claim_selected = False
         self.first_install_archive_existing = False
         self.storage_verified = False
+        self.storage_compact_armed = False
         self.groups_parent = "first_connection"
         self.acknowledged = False
         self.dependency = False

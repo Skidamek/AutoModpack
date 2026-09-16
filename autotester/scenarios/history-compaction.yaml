@@ -68,8 +68,11 @@ flow:
     name: capture client local storage before the compaction
     file: compaction-storage-before
   - do: click
-    name: compact the local history
+    name: arm the compaction command with the first press
     select: { text: Clean local storage }
+  - do: click
+    name: confirm the compaction with the second press
+    select: { text: Click again to clean }
   - do: wait_for
     name: wait for the compaction to complete
     timeout: 120s
