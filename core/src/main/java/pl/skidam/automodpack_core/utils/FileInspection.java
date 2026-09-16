@@ -11,11 +11,6 @@ import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import org.tomlj.Toml;
-import org.tomlj.TomlArray;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
-
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -247,8 +242,8 @@ public class FileInspection {
 
 	private static ModMetadata parseTomlMetadata(BufferedReader reader) {
 		try {
-			TomlParseResult result = Toml.parse(reader);
-			TomlArray mods = result.getArray("mods");
+			Map<String, Object> result = MiniToml.parse(reader);
+			List<Object> mods = MiniToml.getList(result, "mods");
 			if (mods == null || mods.isEmpty()) return null;
 
 			String modId = null;
@@ -257,32 +252,36 @@ public class FileInspection {
 			Set<String> deps = new HashSet<>();
 			LoaderManagerService.EnvironmentType env = LoaderManagerService.EnvironmentType.UNIVERSAL;
 
-			for (int i = 0; i < mods.size(); i++) {
-				TomlTable modTable = mods.getTable(i);
-				if (modTable == null) continue;
+			for (Object mod : mods) {
+				if (!(mod instanceof Map)) continue;
+				Map<String, Object> modTable = cast(mod);
 
-				if (modId == null) modId = modTable.getString("modId");
+				if (modId == null) modId = MiniToml.getString(modTable, "modId");
 
-				String v = modTable.getString("version");
+				String v = MiniToml.getString(modTable, "version");
 				if (v != null && !v.equals("${file.jarVersion}")) version = v;
 
-				TomlArray prov = modTable.getArray("provides");
-				if (prov != null) for (int j = 0; j < prov.size(); j++) provides.add(prov.getString(j));
+				List<Object> prov = MiniToml.getList(modTable, "provides");
+				if (prov != null) for (Object p : prov) if (p instanceof String s) provides.add(s);
 			}
 
 			if (modId != null) {
-				TomlArray depArray = result.getArray("deps.\"" + modId + "\"");
+				// Deliberately deps, not the dependencies.<modId> tables the forge/neoforge format actually declares - long-standing scanner behavior
+				Map<String, Object> depsTable = MiniToml.getTable(result, "deps");
+				List<Object> depArray = depsTable == null ? null : MiniToml.getList(depsTable, modId);
 				if (depArray != null) {
-					for (int i = 0; i < depArray.size(); i++) {
-						TomlTable depTable = depArray.getTable(i);
-						String depId = depTable.getString("modId");
+					for (Object dep : depArray) {
+						if (!(dep instanceof Map)) continue;
+						Map<String, Object> depTable = cast(dep);
+
+						String depId = MiniToml.getString(depTable, "modId");
 						if (depId == null) continue;
 
 						deps.add(depId);
 
 						// Determine Environment based on Minecraft/Forge side requirement
 						if (isPlatformId(depId)) {
-							String side = depTable.getString("side");
+							String side = MiniToml.getString(depTable, "side");
 							if ("client".equalsIgnoreCase(side)) env = LoaderManagerService.EnvironmentType.CLIENT;
 							else if ("server".equalsIgnoreCase(side)) env = LoaderManagerService.EnvironmentType.SERVER;
 						}
@@ -294,6 +293,11 @@ public class FileInspection {
 			LOGGER.error("TOML Parse Error: {}", e.getMessage());
 			return null;
 		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static <T> T cast(Object value) {
+		return (T) value;
 	}
 
 	private static ModMetadata parseJsonMetadata(BufferedReader reader) {
