@@ -43,14 +43,16 @@ A server with this layout:
     └── sodium-fabric.jar
 ```
 
-and this group in `server-config.json`:
+and this group declared in `server-config.json`:
 
 ```json
-"groups": {
-  "main": {
-    "syncedFiles": ["mods/*.jar", "kubejs/**", "emotes/*"],
-    "excludedFiles": ["kubejs/server_scripts/**"],
-    "allowEditsInFiles": ["options.txt", "config/**"]
+"modpack": {
+  "General": {
+    "main": {
+      "syncedFiles": ["mods/*.jar", "kubejs/**", "emotes/*"],
+      "excludedFiles": ["kubejs/server_scripts/**"],
+      "allowEditsInFiles": ["options.txt", "config/**"]
+    }
   }
 }
 ```
@@ -108,7 +110,7 @@ Do not put cache directories in `host-modpack/`, for example a connector's `.con
 
 ## Groups
 
-Groups split a modpack into parts. `main` is the required core; extra groups become optional entries that players pick in the in-game "Modpack settings" screen, and the choice sticks across updates. A shader bundle or a platform-specific mod set is a typical use.
+Groups split a modpack into parts. `main` is the required core; extra groups become optional entries that players pick in the in-game "Group Selection" screen, and the choice sticks across updates. Every group is declared under a category, whose name is the section header the group is listed under. A shader bundle or a platform-specific mod set is a typical use.
 
 The [group settings](configuration/server-config#groups) document every field: display metadata, `required`, `defaultSelected`, `requires` and `breaksWith` relations, and `compatiblePlatforms`.
 

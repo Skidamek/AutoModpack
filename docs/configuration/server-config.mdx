@@ -24,7 +24,13 @@
 
 ## Groups
 
-`groups` maps a group id to one part of the modpack. The factory config contains a single group `main`, which is required and selected by default. Extra entries become optional parts that players pick in the in-game "Modpack settings" screen. Group content comes from two sources: the directory `automodpack/host-modpack/<id>/` is included in full, and `syncedFiles` pulls in files from the server root. The full picture is in [building the modpack](../pack-content).
+The `modpack` section declares the pack's groups, nested under the category each one belongs to: category name, then group id, then the declaration. The factory config contains one category, `General`, holding a single group `main`, which is required and selected by default. Extra groups become optional parts that players pick in the in-game "Group Selection" screen, listed under their categories. Group content comes from two sources: the directory `automodpack/host-modpack/<id>/` is included in full, and `syncedFiles` pulls in files from the server root. The full picture is in [building the modpack](../pack-content).
+
+Both keys are identities, so treat them as permanent. The group id is the slug used by `requires` and `breaksWith`, by players' saved selections, and as the folder name under `automodpack/host-modpack/<id>/`; renaming it strands saved selections, breaks references from other groups, and requires renaming the folder. Renaming a category strands players' saved category choices. `displayName` is the always-safe rename, so keep anything volatile — versions, dates — out of ids and category names.
+
+### Categories
+
+Category names are player-facing display strings, not ids: they render verbatim as the section headers of the Group Selection screen. A name must be non-blank, carry no leading or trailing whitespace or control characters, and be at most 64 characters long, and names must be unique case-insensitively. An empty category or a group id declared twice is a validation error that fails `/automodpack generate` with the reasons in the log. Categories and their groups appear in the client in declared order, not alphabetically.
 
 ### Rule lists
 
@@ -32,9 +38,9 @@ Each group carries three rule lists, relative to the server root.
 
 | Setting | Factory value for `main` | Description |
 |---|---|---|
-| `groups.<id>.syncedFiles` | `mods/*.jar`, `kubejs/**`, `emotes/*` | Files pulled from the server root into the pack. The server root contributes only what a rule matches. |
-| `groups.<id>.excludedFiles` | `kubejs/server_scripts/**` | Files kept out of the pack from every source. This is the only way to exclude something from the group directory, and it also carves exceptions out of `syncedFiles`. |
-| `groups.<id>.allowEditsInFiles` | `options.txt`, `config/**` | Pack files that players may edit locally. Local edits survive updates until the server changes the file; see [client updates](../how-it-works/client-updates#editable-files). |
+| `modpack.<category>.<id>.syncedFiles` | `mods/*.jar`, `kubejs/**`, `emotes/*` | Files pulled from the server root into the pack. The server root contributes only what a rule matches. |
+| `modpack.<category>.<id>.excludedFiles` | `kubejs/server_scripts/**` | Files kept out of the pack from every source. This is the only way to exclude something from the group directory, and it also carves exceptions out of `syncedFiles`. |
+| `modpack.<category>.<id>.allowEditsInFiles` | `options.txt`, `config/**` | Pack files that players may edit locally. Local edits survive updates until the server changes the file; see [client updates](../how-it-works/client-updates#editable-files). |
 
 ### Globbing wildcards
 
@@ -52,18 +58,17 @@ Read more about glob syntax on the [Globbing Wikipedia article](https://wikipedi
 
 | Setting | Default | Description |
 |---|---|---|
-| `groups.<id>.displayName` | `""` | Name shown to players in the Modpack settings screen. The map key is the id used by rules and by `requires` and `breaksWith`. |
-| `groups.<id>.description` | `""` | Short player-facing description of the group. |
-| `groups.<id>.category` | `""` | Optional label that groups related entries together in the client screen. |
-| `groups.<id>.required` | `false` | Players cannot deselect the group. The factory `main` group sets this. |
-| `groups.<id>.defaultSelected` | `false` | Preselected for players who have not chosen yet. Ignored when `required` is true. |
-| `groups.<id>.requires` | `[]` | Group ids that must also be selected for this group to make sense, for example a shader config pack that needs its shader pack. |
-| `groups.<id>.breaksWith` | `[]` | Group ids that cannot be selected alongside this one, for example two mods that replace the same files. |
-| `groups.<id>.compatiblePlatforms` | `[]` | Restricts the group to matching platforms, for example a group of Windows-only mods. See platforms below. |
+| `modpack.<category>.<id>.displayName` | `""` | Name shown to players in the Group Selection screen. The map key is the id used by rules and by `requires` and `breaksWith`. |
+| `modpack.<category>.<id>.description` | `""` | Short player-facing description of the group. |
+| `modpack.<category>.<id>.required` | `false` | Players cannot deselect the group. The factory `main` group sets this. |
+| `modpack.<category>.<id>.defaultSelected` | `false` | Preselected for players who have not chosen yet. Ignored when `required` is true. |
+| `modpack.<category>.<id>.requires` | `[]` | Group ids that must also be selected for this group to make sense, for example a shader config pack that needs its shader pack. |
+| `modpack.<category>.<id>.breaksWith` | `[]` | Group ids that cannot be selected alongside this one, for example two mods that replace the same files. |
+| `modpack.<category>.<id>.compatiblePlatforms` | `[]` | Restricts the group to matching platforms, for example a group of Windows-only mods. See platforms below. |
 
 ### Platforms
 
-A platform is any short lowercase name. Clients detect `windows`, `linux`, and `macos` automatically and preselect the matching entry in the platform dropdown of the Modpack settings screen. Any other name a group declares, for example `steamdeck`, is listed there too, so a player on a detected desktop OS can still opt into it. An empty `compatiblePlatforms` means every platform.
+A platform is any short lowercase name. Clients detect `windows`, `linux`, and `macos` automatically and preselect the matching entry in the platform dropdown of the Group Selection screen. Any other name a group declares, for example `steamdeck`, is listed there too, so a player on a detected desktop OS can still opt into it. An empty `compatiblePlatforms` means every platform.
 
 When a client cannot detect a platform at all, groups without `compatiblePlatforms` behave as usual and platform-restricted groups stay unavailable until the player picks a platform.
 
