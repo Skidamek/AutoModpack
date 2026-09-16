@@ -26,18 +26,28 @@ public class Constants {
 	public static ModpackLoaderService MODPACK_LOADER = new NullModpackLoader();
 	public static GameCallService GAME_CALL = new NullGameCall();
 	public static Path THIS_MOD_JAR;
-	public static Path MODS_DIR;
 	public static ModpackExecutor modpackExecutor;
 	public static NettyServer hostServer;
 	public static Jsons.ServerConfigFieldsV3 serverConfig;
 	public static Jsons.ClientConfigFieldsV3 clientConfig;
 	public static Jsons.KnownHostsFields knownHosts;
 	public static final Path automodpackDir = Path.of("automodpack");
-	public static final Path storeDir = automodpackDir.resolve("store");
+	public static final Path clientGenerationsDir = automodpackDir.resolve("client-generations");
+	public static final Path clientGenerationObjectsDir = clientGenerationsDir.resolve("objects");
+	public static final Path clientGenerationRecordsDir = clientGenerationsDir.resolve("generations");
+	public static final Path clientGenerationOverlaysDir = clientGenerationsDir.resolve("overlays");
+	public static final Path clientGenerationBaselinesDir = clientGenerationsDir.resolve("baselines");
+	public static final Path clientGenerationActiveDir = clientGenerationsDir.resolve("active");
+	public static final Path clientGenerationIncomingDir = clientGenerationsDir.resolve("incoming");
+	public static final Path clientGenerationBackupDir = clientGenerationsDir.resolve("backup");
+	public static final Path clientGenerationStateFile = clientGenerationsDir.resolve("active-state.json");
 	public static final Path hostModpackDir = automodpackDir.resolve("host-modpack");
 	public static final Path hostGenerationsDir = automodpackDir.resolve("host-generations");
 	public static final Path hostGenerationCurrentFile = hostGenerationsDir.resolve("current.json");
-	public static final Path hostGenerationRecordsDir = hostGenerationsDir.resolve("records");
+	public static final Path hostGenerationCurrentProjectionFile = hostGenerationsDir.resolve("current-projection.json");
+	public static final Path hostGenerationCataloguesDir = hostGenerationsDir.resolve("catalogues");
+	public static final Path hostGenerationCommitsDir = hostGenerationsDir.resolve("commits");
+	public static final Path hostGenerationDeltasDir = hostGenerationsDir.resolve("deltas");
 	public static final Path hostGenerationObjectsDir = hostGenerationsDir.resolve("objects");
 	public static final Path hostGenerationStagingDir = hostGenerationsDir.resolve("staging");
 	public static final Path hostPatchNotesFile = automodpackDir.resolve("host-patch-notes.md");
@@ -47,7 +57,8 @@ public class Constants {
 	// Switches - optional or required packs, chosen by the player, only one can be installed at a time
 	public static final Path hostContentModpackDir = hostModpackDir.resolve("main");
 	public static final Path modpackContentFileName = Path.of("automodpack-content.json");
-	public static final Path modpackCatalogueFileName = Path.of("automodpack-catalogue.json");
+	public static final Path recoveryDir = automodpackDir.resolve("recovery");
+	public static final Path recoveryManifestFile = recoveryDir.resolve("manifest.json");
 	public static Path serverConfigFile = automodpackDir.resolve("automodpack-server.json");
 	public static Path clientLocalMetadataFile = automodpackDir.resolve("automodpack-client-metadata.json");
 	public static Path cacheDir = automodpackDir.resolve("cache");
@@ -57,11 +68,11 @@ public class Constants {
 	public static Path clientDummyFilesFile = automodpackDir.resolve("automodpack-dummy-files.json");
 	public static Path serverCoreConfigFile = automodpackDir.resolve("automodpack-core.json");
 	public static final Path privateDir = automodpackDir.resolve(".private");
+	public static final Path clientRestartLoopStateFile = privateDir.resolve("automodpack-restart-state.json");
 	public static final Path serverSecretsFile = privateDir.resolve("automodpack-secrets.json");
 	public static final Path knownHostsFile = privateDir.resolve("automodpack-known-hosts.json");
 	public static final Path knownHostsBootstrapFile = automodpackDir.resolve("automodpack-bootstrap.json");
 	public static final Path transactionFile = privateDir.resolve("update-transaction.json");
-	public static final Path transactionResultFile = privateDir.resolve("update-transaction-result.json");
 	public static final Path helperDir = cacheDir.resolve("update-helper");
 	public static final Path serverCertFile = privateDir.resolve("cert.crt");
 	public static final Path serverPrivateKeyFile = privateDir.resolve("key.pem");
@@ -70,8 +81,5 @@ public class Constants {
 	public static final Path modpackContentTempFile = automodpackDir.resolve("automodpack-content.json.temp");
 	public static final Path clientConfigFile = automodpackDir.resolve("automodpack-client.json");
 	public static final Path clientSecretsFile = privateDir.resolve("automodpack-client-secrets.json");
-	public static final Path modpacksDir = automodpackDir.resolve("modpacks");
-
-	public static Path selectedModpackDir;
 
 }

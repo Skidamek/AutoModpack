@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_loader_core;
 
-import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.File;
 import java.io.IOException;
@@ -11,20 +11,21 @@ import java.util.*;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransaction.LegacyDummyTarget;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.LegacyDummyFiles;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public final class LegacyDummyCleanup {
 	private LegacyDummyCleanup() {}
 
 	public static void migrate() throws IOException {
-		Path registryPath = SmartFileUtils.CWD.resolve(clientDummyFilesFile).toAbsolutePath().normalize();
+		ClientStorage storage = UpdateTransactionSupport.storage();
+		Path registryPath = storage.dummyFilesFile();
 		if (!Files.isRegularFile(registryPath, LinkOption.NOFOLLOW_LINKS)) return;
 		Jsons.ClientDummyFiles registry;
 		try {
@@ -41,18 +42,18 @@ public final class LegacyDummyCleanup {
 		Set<String> remaining = new LinkedHashSet<>(registry.files);
 		Map<Path, LegacyDummyTarget> lockedTargets = new LinkedHashMap<>();
 		for (String entry : registry.files.stream().filter(Objects::nonNull).sorted().toList()) {
-			Path target = resolveRegistryEntry(entry);
+			Path target = resolveRegistryEntry(entry, storage.gameDirectory());
 			if (target == null) {
 				LOGGER.warn("Preserving unconstrained legacy dummy registry entry: {}", entry);
 				continue;
 			}
-			LegacyDummyTarget constrained = constrain(target);
+			LegacyDummyTarget constrained = constrain(target, storage);
 			if (constrained == null) {
 				LOGGER.warn("Preserving legacy dummy registry target outside supported roots: {}", target);
 				continue;
 			}
 			try {
-				UpdateTransactionExecutor.validateNoSymbolicLinkDescendants(constrainedRoot(constrained.root()), target);
+				UpdateTransactionExecutor.validateNoSymbolicLinkDescendants(constrainedRoot(constrained.root(), storage), target);
 			} catch (IOException e) {
 				LOGGER.warn("Preserving legacy dummy registry target with a symbolic-link component: {}", target);
 				continue;
@@ -96,11 +97,10 @@ public final class LegacyDummyCleanup {
 		if (remaining.isEmpty()) Files.deleteIfExists(registryPath);
 	}
 
-	private static Path resolveRegistryEntry(String entry) {
+	private static Path resolveRegistryEntry(String entry, Path gameDirectory) {
 		if (entry == null || entry.isBlank() || entry.indexOf('\0') >= 0) return null;
 		try {
 			Path parsed = Path.of(entry);
-			Path gameDirectory = SmartFileUtils.CWD.toAbsolutePath().normalize();
 			Path resolved = (parsed.isAbsolute() ? parsed : gameDirectory.resolve(parsed)).toAbsolutePath().normalize();
 			return resolved.startsWith(gameDirectory) ? resolved : null;
 		} catch (RuntimeException e) {
@@ -108,22 +108,19 @@ public final class LegacyDummyCleanup {
 		}
 	}
 
-	private static LegacyDummyTarget constrain(Path target) {
-		Path gameDirectory = SmartFileUtils.CWD.toAbsolutePath().normalize();
-		Path modsDirectory = gameDirectory.resolve("mods");
-		Path automodpackDirectory = gameDirectory.resolve("automodpack");
+	private static LegacyDummyTarget constrain(Path target, ClientStorage storage) {
+		Path gameDirectory = storage.gameDirectory();
+		Path automodpackDirectory = storage.automodpackDirectory();
 		if (!target.startsWith(gameDirectory) || target.equals(gameDirectory)) return null;
-		if (target.startsWith(modsDirectory)) return target(Root.MODS_DIR, modsDirectory, target);
 		if (target.startsWith(automodpackDirectory)) return target(Root.AUTOMODPACK_DIR, automodpackDirectory, target);
 		return target(Root.GAME_DIR, gameDirectory, target);
 	}
 
-	private static Path constrainedRoot(Root root) {
-		Path gameDirectory = SmartFileUtils.CWD.toAbsolutePath().normalize();
+	private static Path constrainedRoot(Root root, ClientStorage storage) {
+		Path gameDirectory = storage.gameDirectory();
 		return switch (root) {
 			case GAME_DIR -> gameDirectory;
-			case MODS_DIR -> gameDirectory.resolve("mods");
-			case AUTOMODPACK_DIR -> gameDirectory.resolve("automodpack");
+			case AUTOMODPACK_DIR -> storage.automodpackDirectory();
 			default -> throw new IllegalArgumentException("Unsupported legacy cleanup root: " + root);
 		};
 	}

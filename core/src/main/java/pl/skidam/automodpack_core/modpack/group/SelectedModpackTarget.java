@@ -17,7 +17,7 @@ public record SelectedModpackTarget(
 		selection = Objects.requireNonNull(selection);
 		platform = Objects.requireNonNull(platform);
 		flatTarget = Objects.requireNonNull(flatTarget);
-		if (!GenerationTarget.from(generationRecord.metadata()).equals(GenerationTarget.fromFlat(flatTarget)))
+		if (!GenerationTarget.from(generationRecord).equals(GenerationTarget.fromFlat(flatTarget)))
 			throw new IllegalArgumentException("Selected flat target generation identity does not match complete generation record");
 	}
 
@@ -30,18 +30,14 @@ public record SelectedModpackTarget(
 	}
 
 	public GenerationTarget generationTarget() {
-		return GenerationTarget.from(generationRecord.metadata());
+		return GenerationTarget.from(generationRecord);
 	}
 
 	public static SelectedModpackTarget prepare(Jsons.CompleteModpackContentFields fields, ClientSelectionStore store, ClientPlatform platform) {
 		GenerationRecord record = GenerationRecord.fromFields(fields);
 		SelectionIntent existing = store.get(record.manifest().modpackId()).orElse(null);
 		if (existing == null) return prepare(record, null, GroupSelectionResolver.defaultIntent(record.manifest()), platform);
-		try {
-			return prepare(record, existing, existing, platform);
-		} catch (SelectionResolutionException e) {
-			return prepare(record, existing, GroupSelectionResolver.defaultIntent(record.manifest()), platform);
-		}
+		return prepare(record, existing, existing, platform);
 	}
 
 	public static SelectedModpackTarget prepare(Jsons.CompleteModpackContentFields fields, SelectionIntent expectedPriorIntent, SelectionIntent intent,
@@ -52,7 +48,7 @@ public record SelectedModpackTarget(
 	private static SelectedModpackTarget prepare(GenerationRecord record, SelectionIntent expectedPriorIntent, SelectionIntent intent, ClientPlatform platform) {
 		GroupManifest manifest = record.manifest();
 		ResolvedSelection resolved = GroupSelectionResolver.resolve(manifest, intent, platform);
-		Jsons.ModpackContentFields flatTarget = SelectedTreeComposer.compose(manifest, resolved, GenerationTarget.from(record.metadata()));
+		Jsons.ModpackContentFields flatTarget = SelectedTreeComposer.compose(manifest, resolved, GenerationTarget.from(record));
 		flatTarget.ownershipLedger = record.ownershipLedger().toFields();
 		return new SelectedModpackTarget(record, expectedPriorIntent, resolved, platform, flatTarget);
 	}

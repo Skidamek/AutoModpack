@@ -5,380 +5,178 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
-import pl.skidam.automodpack_core.update.UpdatePlan.*;
+import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
+import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
+import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
+import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.ModpackContentTools;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 class UpdateTransactionExecutorTest {
 	@TempDir
 	Path temporaryDirectory;
 
 	@Test
-	void commitsFromCasAndPublishesManifestLastState() throws Exception {
-		Paths paths = paths();
-		Files.createDirectories(paths.store());
-		byte[] bytes = "target-object".getBytes(StandardCharsets.UTF_8);
-		String hash = store(paths, bytes);
-		Files.createDirectories(paths.game());
-		Path oldFile = Files.writeString(paths.game().resolve("old.txt"), "old");
-		String oldHash = HashUtils.getHash(oldFile);
+	void commitsAnImmutableProjectionFromCas() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "projection-object".getBytes(StandardCharsets.UTF_8);
+		String hash = store(storage, bytes);
+		SelectedModpackTarget target = target("mods/new.jar", "mod", false, hash, bytes.length);
+		Path projectionFile = storage.activeDirectory().resolve("mods/new.jar");
+		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()),
+				List.of(new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, hash, bytes.length)));
 
-		Jsons.ModpackContentFields manifest = manifest(hash, bytes.length);
-		SelectedModpackTarget target = selectedTarget(manifest);
-		UpdatePlan plan = new UpdatePlan(manifest.modpackId, target.generationTarget(),
-				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null),
-						new Operation(Root.GAME_DIR, "old.txt", OperationType.DELETE, null, -1, oldHash)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length),
-						new ProjectedFile(Root.GAME_DIR, "old.txt", false, null, -1)),
-				clientConfig(manifest.modpackId), Set.of(RestartReason.REMOVED_NON_MODPACK_FILES));
-
-		UpdateTransactionExecutor.Execution result = executor(paths, transaction -> {
-			assertFalse(Files.exists(paths.catalogue()));
-			assertFalse(Files.exists(paths.manifest()));
-		}).commit(plan, target);
-
-		assertTrue(result.success());
-		assertFalse(Files.exists(paths.transaction()));
-		assertFalse(Files.exists(oldFile));
-		assertArrayEquals(bytes, Files.readAllBytes(paths.modpack().resolve("mods/new.jar")));
-		Jsons.ModpackContentFields installed = ModpackContentTools.read(paths.manifest());
-		assertEquals(manifest.modpackId, installed.modpackId);
-		assertEquals(target.generationTarget().targetGenerationId(), installed.targetGenerationId);
-		assertEquals(target.generationTarget().parentGenerationId(), installed.parentGenerationId);
-		assertEquals(target.generationTarget().stateDigest(), installed.stateDigest);
-		assertEquals(manifest.modpackId, ModpackContentTools.readGenerationRecord(paths.catalogue()).manifest().modpackId());
-		assertEquals(target.generationRecord(), ModpackContentTools.readGenerationRecord(paths.catalogue()));
-		assertEquals(Set.of("main"), new ClientSelectionStore(paths.selection()).get(manifest.modpackId).orElseThrow().requestedGroups());
-		assertEquals(manifest.modpackId, ConfigTools.read(paths.clientConfig(), Jsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
-	}
-
-	@Test
-	void rejectsGenerationIdentityMismatchesBeforeFileMutation() throws Exception {
-		Paths paths = paths();
-		Files.createDirectories(paths.store());
-		byte[] bytes = "identity-object".getBytes(StandardCharsets.UTF_8);
-		String hash = store(paths, bytes);
-		Jsons.ModpackContentFields manifest = manifest(hash, bytes.length);
-		SelectedModpackTarget target = selectedTarget(manifest);
-		UpdatePlan plan = new UpdatePlan(manifest.modpackId, target.generationTarget(),
-				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
-
-		List<UpdateTransaction> mismatches = new ArrayList<>();
-		UpdateTransaction tamperedTargetId = UpdateTransaction.create(plan, target, paths.modpack());
-		tamperedTargetId.targetGenerationId = "f".repeat(40);
-		mismatches.add(tamperedTargetId);
-		UpdateTransaction tamperedParentId = UpdateTransaction.create(plan, target, paths.modpack());
-		tamperedParentId.parentGenerationId = "e".repeat(40);
-		mismatches.add(tamperedParentId);
-		UpdateTransaction tamperedStateDigest = UpdateTransaction.create(plan, target, paths.modpack());
-		tamperedStateDigest.stateDigest = "d".repeat(40);
-		mismatches.add(tamperedStateDigest);
-		UpdateTransaction tamperedFlat = UpdateTransaction.create(plan, target, paths.modpack());
-		Jsons.ModpackContentFields flat = tamperedFlat.targetManifest();
-		flat.targetGenerationId = "c".repeat(40);
-		tamperedFlat.targetManifestJson = ConfigTools.GSON.toJson(flat);
-		mismatches.add(tamperedFlat);
-		UpdateTransaction tamperedRecord = UpdateTransaction.create(plan, target, paths.modpack());
-		Jsons.CompleteModpackContentFields complete = target.completeFields();
-		complete.generation.generationId = "b".repeat(40);
-		tamperedRecord.completeManifestJson = ConfigTools.GSON.toJson(complete);
-		mismatches.add(tamperedRecord);
-
-		for (UpdateTransaction mismatch : mismatches) {
-			assertThrows(IOException.class, () -> executor(paths, null).commit(mismatch));
-			assertFalse(Files.exists(paths.transaction()));
-			assertFalse(Files.exists(paths.modpack().resolve("mods/new.jar")));
-		}
-	}
-
-	@Test
-	void directSkippedGenerationUpdateConvergesWithoutIntermediateRecords() throws Exception {
-		Paths paths = paths();
-		Files.createDirectories(paths.store());
-		Files.createDirectories(paths.modpack().resolve("mods"));
-		byte[] oldBytes = "generation-a".getBytes(StandardCharsets.UTF_8);
-		String oldHash = store(paths, oldBytes);
-		Jsons.ModpackContentFields oldManifest = manifest(oldHash, oldBytes.length);
-		oldManifest.list = Set.of(new Jsons.ModpackContentFields.ModpackContentItem("/mods/old.jar", String.valueOf(oldBytes.length), "mod", false,
-				false, false, oldHash, "0"));
-		SelectedModpackTarget oldTarget = selectedTarget(oldManifest, "", "2026-01-01T00:00:00Z");
-		ConfigTools.writeAtomic(paths.catalogue(), oldTarget.completeFields());
-		ModpackContentTools.write(paths.manifest(), oldTarget.flatTarget());
-		Files.write(paths.modpack().resolve("mods/old.jar"), oldBytes);
-
-		byte[] newBytes = "generation-d".getBytes(StandardCharsets.UTF_8);
-		String newHash = store(paths, newBytes);
-		Jsons.ModpackContentFields newManifest = manifest(newHash, newBytes.length);
-		SelectedModpackTarget newTarget = selectedTarget(newManifest, "c".repeat(40), "2026-01-02T00:00:00Z");
-		UpdatePlan plan = new UpdatePlan(newManifest.modpackId, newTarget.generationTarget(),
-				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, newHash, newBytes.length, null),
-						new Operation(Root.MODPACK_DIR, "mods/old.jar", OperationType.DELETE, null, -1, oldHash)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, newHash, newBytes.length),
-						new ProjectedFile(Root.MODPACK_DIR, "mods/old.jar", false, null, -1)),
-				clientConfig(newManifest.modpackId), Set.of());
-
-		UpdateTransactionExecutor.Execution result = executor(paths, null).commit(plan, newTarget);
-
-		assertTrue(result.success());
-		assertEquals(newTarget.generationRecord(), ModpackContentTools.readGenerationRecord(paths.catalogue()));
-		assertEquals(newTarget.generationTarget().targetGenerationId(), ModpackContentTools.read(paths.manifest()).targetGenerationId);
-		assertFalse(Files.exists(paths.modpack().resolve("mods/old.jar")));
-	}
-
-	@Test
-	void recoveryAfterCataloguePublicationConvergesBothGenerationFiles() throws Exception {
-		Paths paths = paths();
-		Files.createDirectories(paths.store());
-		byte[] bytes = "catalogue-before-manifest".getBytes(StandardCharsets.UTF_8);
-		String hash = store(paths, bytes);
-		Jsons.ModpackContentFields manifest = manifest(hash, bytes.length);
-		SelectedModpackTarget target = selectedTarget(manifest);
-		UpdatePlan plan = new UpdatePlan(manifest.modpackId, target.generationTarget(),
-				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
-		UpdateTransactionExecutor executor = executor(paths,
-				transaction -> {
-					if (!Files.exists(paths.catalogue(), LinkOption.NOFOLLOW_LINKS)) Files.createDirectory(paths.manifest());
-				});
-
-		assertThrows(UpdateExecutionException.class, () -> executor.commit(plan, target));
-		assertTrue(Files.isRegularFile(paths.catalogue(), LinkOption.NOFOLLOW_LINKS));
-		assertTrue(Files.isDirectory(paths.manifest(), LinkOption.NOFOLLOW_LINKS));
-		UpdateTransaction persisted = executor.readPersisted();
-		assertNotNull(persisted);
-		Files.delete(paths.manifest());
-
-		UpdateTransactionExecutor.Execution recovered = executor.recover(persisted);
-
-		assertTrue(recovered.success());
-		assertFalse(Files.exists(paths.transaction()));
-		assertEquals(target.generationRecord(), ModpackContentTools.readGenerationRecord(paths.catalogue()));
-		assertEquals(target.generationTarget(), GenerationTarget.fromFlat(ModpackContentTools.read(paths.manifest())));
-	}
-
-	@Test
-	void rejectsUnrelatedStoredCatalogueAndManifestBeforeFileMutation() throws Exception {
-		Paths paths = paths();
-		Files.createDirectories(paths.store());
-		byte[] oldBytes = "stored-catalogue".getBytes(StandardCharsets.UTF_8);
-		String oldHash = store(paths, oldBytes);
-		Jsons.ModpackContentFields oldManifest = manifest(oldHash, oldBytes.length);
-		SelectedModpackTarget oldTarget = selectedTarget(oldManifest, "", "2026-01-01T00:00:00Z");
-		byte[] otherBytes = "stored-manifest".getBytes(StandardCharsets.UTF_8);
-		String otherHash = store(paths, otherBytes);
-		Jsons.ModpackContentFields otherManifest = manifest(otherHash, otherBytes.length);
-		SelectedModpackTarget otherTarget = selectedTarget(otherManifest, oldTarget.generationTarget().targetGenerationId(), "2026-01-02T00:00:00Z");
-		ConfigTools.writeAtomic(paths.catalogue(), oldTarget.completeFields());
-		ModpackContentTools.write(paths.manifest(), otherTarget.flatTarget());
-		byte[] targetBytes = "new-target".getBytes(StandardCharsets.UTF_8);
-		String targetHash = store(paths, targetBytes);
-		Jsons.ModpackContentFields targetManifest = manifest(targetHash, targetBytes.length);
-		SelectedModpackTarget target = selectedTarget(targetManifest, otherTarget.generationTarget().targetGenerationId(), "2026-01-03T00:00:00Z");
-		UpdatePlan plan = new UpdatePlan(targetManifest.modpackId, target.generationTarget(),
-				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, targetHash, targetBytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, targetHash, targetBytes.length)), clientConfig(targetManifest.modpackId), Set.of());
-
-		assertThrows(IOException.class, () -> executor(paths, null).commit(plan, target));
-		assertFalse(Files.exists(paths.transaction()));
-		assertFalse(Files.exists(paths.modpack().resolve("mods/new.jar")));
-		assertEquals(oldTarget.generationRecord(), ModpackContentTools.readGenerationRecord(paths.catalogue()));
-		assertEquals(otherTarget.generationTarget().targetGenerationId(), ModpackContentTools.read(paths.manifest()).targetGenerationId);
-	}
-
-	@Test
-	void recoveryAfterManifestPublicationConvergesAndClearsTransaction() throws Exception {
-		Paths paths = paths();
-		Files.createDirectories(paths.store());
-		byte[] bytes = "published-object".getBytes(StandardCharsets.UTF_8);
-		String hash = store(paths, bytes);
-		Jsons.ModpackContentFields manifest = manifest(hash, bytes.length);
-		UpdatePlan plan = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(),
-				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
-		UpdateTransactionExecutor executor = executor(paths, null);
-		UpdateTransactionExecutor.Execution committed = executor.commit(plan, selectedTarget(manifest));
-		ConfigTools.writeAtomic(paths.transaction(), committed.transaction());
-
-		UpdateTransactionExecutor.Execution recovered = executor.recover(committed.transaction());
-
-		assertTrue(recovered.success());
-		assertFalse(Files.exists(paths.transaction()));
-		assertEquals(manifest.modpackId, ModpackContentTools.read(paths.manifest()).modpackId);
-	}
-
-	@Test
-	void completeFinalStateDetectsAFileChangedDuringCommitAndKeepsTransaction() throws Exception {
-		Paths paths = paths();
-		Files.createDirectories(paths.modpack().resolve("config"));
-		Path unchanged = Files.writeString(paths.modpack().resolve("config/settings.json"), "planned");
-		String hash = HashUtils.getHash(unchanged);
-		Jsons.ModpackContentFields manifest = editableManifest(hash, Files.size(unchanged));
-		UpdatePlan plan = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(), List.of(),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "config/settings.json", true, hash, Files.size(unchanged))), clientConfig(manifest.modpackId), Set.of());
-
-		assertThrows(Exception.class, () -> executor(paths, ignored -> Files.writeString(unchanged, "changed during commit")).commit(plan, selectedTarget(manifest)));
-		assertTrue(Files.exists(paths.transaction()));
-		assertFalse(Files.exists(paths.manifest()));
-	}
-
-	@Test
-	void rejectsTraversalAndTamperedProjectionBeforeMutation() throws Exception {
-		Paths paths = paths();
-		Files.createDirectories(paths.store());
-		byte[] bytes = {1};
-		String hash = store(paths, bytes);
-		Jsons.ModpackContentFields manifest = manifest(hash, bytes.length);
-		UpdatePlan traversal = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(),
-				List.of(new Operation(Root.MODPACK_DIR, "../escape.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
-		assertThrows(Exception.class, () -> executor(paths, null).commit(traversal, selectedTarget(manifest)));
-
-		UpdatePlan valid = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(),
-				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
-		UpdateTransaction tampered = UpdateTransaction.create(valid, selectedTarget(manifest), paths.modpack());
-		tampered.projectedFinalState = List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, "f".repeat(40), bytes.length));
-		assertThrows(Exception.class, () -> executor(paths, null).recover(tampered));
-
-		UpdateTransaction aliased = UpdateTransaction.create(valid, selectedTarget(manifest), paths.modpack());
-		aliased.projectedFinalState = List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length),
-				new ProjectedFile(Root.AUTOMODPACK_DIR, "modpacks/abc1234/mods/new.jar", true, hash, bytes.length));
-		assertThrows(Exception.class, () -> executor(paths, null).recover(aliased));
-
-		UpdateTransaction protectedCatalogue = UpdateTransaction.create(valid, selectedTarget(manifest), paths.modpack());
-		protectedCatalogue.operations = List.of(new Operation(Root.MODPACK_DIR, "automodpack-catalogue.json", OperationType.INSTALL_OBJECT, hash, bytes.length, null));
-		protectedCatalogue.projectedFinalState = List.of(new ProjectedFile(Root.MODPACK_DIR, "automodpack-catalogue.json", true, hash, bytes.length));
-		assertThrows(IOException.class, () -> executor(paths, null).recover(protectedCatalogue));
-		assertFalse(Files.exists(paths.catalogue()));
-		assertFalse(Files.exists(paths.transaction()));
-		assertFalse(Files.exists(paths.modpack().resolve("mods/new.jar")));
-	}
-
-	@Test
-	void rejectsSymlinkedParentEscapingConstrainedRoot() throws Exception {
-		Paths paths = paths();
-		Files.createDirectories(paths.store());
-		Files.createDirectories(paths.modpack());
-		Path outside = temporaryDirectory.resolve("outside");
-		Files.createDirectories(outside);
-		try {
-			Files.createSymbolicLink(paths.modpack().resolve("linked"), outside);
-		} catch (IOException | UnsupportedOperationException | SecurityException e) {
-			Assumptions.assumeTrue(false, "Symbolic links are unavailable: " + e);
-		}
-		byte[] bytes = "escaped-object".getBytes(StandardCharsets.UTF_8);
-		String hash = store(paths, bytes);
-		Jsons.ModpackContentFields manifest = new Jsons.ModpackContentFields(Set.of(
-				new Jsons.ModpackContentFields.ModpackContentItem("/linked/new.jar", String.valueOf(bytes.length), "mod", false, false, false, hash, "0")));
-		manifest.modpackId = "abc1234";
-		UpdatePlan plan = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(),
-				List.of(new Operation(Root.MODPACK_DIR, "linked/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "linked/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
-
-		assertThrows(IOException.class, () -> executor(paths, null).commit(plan, selectedTarget(manifest)));
-		assertFalse(Files.exists(outside.resolve("new.jar")));
-		assertFalse(Files.exists(paths.transaction()));
-	}
-
-	@Test
-	void changedSelectionRejectsTransactionBeforeFileMutation() throws Exception {
-		Paths paths = paths();
-		Files.createDirectories(paths.store());
-		byte[] bytes = "target-object".getBytes(StandardCharsets.UTF_8);
-		String hash = store(paths, bytes);
-		Jsons.ModpackContentFields manifest = manifest(hash, bytes.length);
-		UpdatePlan plan = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(),
-				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
-		new ClientSelectionStore(paths.selection()).compareAndSet(manifest.modpackId, null, new SelectionIntent(Set.of("visuals")));
-
-		assertThrows(IOException.class, () -> executor(paths, null).commit(plan, selectedTarget(manifest)));
-		assertFalse(Files.exists(paths.transaction()));
-		assertFalse(Files.exists(paths.modpack().resolve("mods/new.jar")));
-	}
-
-	@Test
-	void selectionIsNotClaimedWhenTransactionCannotBePersisted() throws Exception {
-		Paths paths = paths();
-		Files.createDirectories(paths.store());
-		byte[] bytes = "target-object".getBytes(StandardCharsets.UTF_8);
-		String hash = store(paths, bytes);
-		Jsons.ModpackContentFields manifest = manifest(hash, bytes.length);
-		UpdatePlan plan = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(),
-				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
-		Files.createDirectories(paths.automodpack());
-		Files.writeString(paths.automodpack().resolve(".private"), "blocked");
-
-		assertThrows(IOException.class, () -> executor(paths, null).commit(plan, selectedTarget(manifest)));
-		assertTrue(new ClientSelectionStore(paths.selection()).get(manifest.modpackId).isEmpty());
-	}
-
-	@Test
-	void selfUpdateUsesConstrainedCasOperationsWithoutPublishingModpackState() throws Exception {
-		Paths paths = paths();
-		Files.createDirectories(paths.store());
-		Files.createDirectories(paths.mods());
-		Path currentJar = Files.writeString(paths.mods().resolve("automodpack-old.jar"), "old");
-		String currentHash = HashUtils.getHash(currentJar);
-		byte[] replacement = "official-update".getBytes(StandardCharsets.UTF_8);
-		String replacementHash = store(paths, replacement);
-		UpdateTransaction transaction = UpdateTransaction.createSelfUpdate(currentJar.getFileName().toString(), "automodpack-new.jar", replacementHash,
-				replacement.length, currentHash);
-
-		UpdateTransactionExecutor.Execution execution = executor(paths, null).commit(transaction);
+		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
 
 		assertTrue(execution.success());
-		assertFalse(Files.exists(currentJar));
-		assertArrayEquals(replacement, Files.readAllBytes(paths.mods().resolve("automodpack-new.jar")));
-		assertFalse(Files.exists(paths.manifest()));
-		assertFalse(Files.exists(paths.clientConfig()));
-		assertFalse(Files.exists(paths.transaction()));
-
-		UpdateTransaction tampered = UpdateTransaction.createSelfUpdate("automodpack-old.jar", "../outside.jar", replacementHash, replacement.length, currentHash);
-		assertThrows(IOException.class, () -> executor(paths, null).validate(tampered));
+		assertTrue(SmartFileUtils.isValidFile(projectionFile, bytes.length, hash));
+		assertTrue(Files.isSameFile(storage.objectsDirectory().resolve(hash), projectionFile));
+		assertEquals(target.generationTarget().targetGenerationId(), storage.readActiveState().generationId);
+		assertEquals(target.generationRecord(), new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).orElseThrow());
+		assertEquals(target.selection().intent(), new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).orElseThrow());
+		assertEquals(target.manifest().modpackId(), ConfigTools.read(storage.clientConfigFile(), Jsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
+		assertFalse(Files.exists(storage.gameDirectory().resolve("automodpack/modpacks")));
+		assertFalse(Files.exists(storage.transactionFile()));
 	}
 
-	private UpdateTransactionExecutor executor(Paths paths, UpdateTransactionExecutor.CommitAction action) {
-		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(paths.game(), paths.modpack(), paths.mods(), paths.store(), paths.automodpack(),
-				paths.transaction(), paths.result(), paths.clientConfig(), paths.manifest(), paths.catalogue(), paths.selection(), action));
+	@Test
+	void installsEditableOverlayAsCasLinkAndCopiesItToTheLiveGamePath() throws Exception {
+		ClientStorage storage = storage();
+		byte[] baseBytes = "server-base".getBytes(StandardCharsets.UTF_8);
+		String baseHash = store(storage, baseBytes);
+		byte[] editedBytes = "player-edit".getBytes(StandardCharsets.UTF_8);
+		String editedHash = store(storage, editedBytes);
+		SelectedModpackTarget target = target("config/settings.json", "config", true, baseHash, baseBytes.length);
+		List<Operation> operations = List.of(
+				new Operation(Root.PROJECTION, "config/settings.json", OperationType.INSTALL_OBJECT, baseHash, baseBytes.length, null),
+				new Operation(Root.OVERLAY, "config/settings.json", OperationType.INSTALL_OBJECT, editedHash, editedBytes.length, null),
+				new Operation(Root.GAME_DIR, "config/settings.json", OperationType.INSTALL_OBJECT, editedHash, editedBytes.length, null));
+		List<ProjectedFile> finalState = List.of(
+				new ProjectedFile(Root.PROJECTION, "config/settings.json", true, baseHash, baseBytes.length),
+				new ProjectedFile(Root.OVERLAY, "config/settings.json", true, editedHash, editedBytes.length),
+				new ProjectedFile(Root.GAME_DIR, "config/settings.json", true, editedHash, editedBytes.length));
+
+		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan(target, clientConfig(target.manifest().modpackId()), operations, finalState), target);
+
+		Path overlay = storage.overlayFile(target.manifest().modpackId(), "config/settings.json");
+		Path live = storage.gameDirectory().resolve("config/settings.json");
+		assertTrue(execution.success());
+		assertTrue(Files.isSameFile(storage.objectsDirectory().resolve(editedHash), overlay));
+		assertFalse(Files.isSameFile(storage.objectsDirectory().resolve(editedHash), live));
+		assertArrayEquals(editedBytes, Files.readAllBytes(live));
+		assertTrue(SmartFileUtils.isValidFile(storage.activeDirectory().resolve("config/settings.json"), baseBytes.length, baseHash));
 	}
 
-	private Paths paths() {
-		Path game = temporaryDirectory.resolve("game");
-		Path automodpack = game.resolve("automodpack");
-		Path modpack = automodpack.resolve("modpacks/abc1234");
-		return new Paths(game, modpack, game.resolve("mods"), automodpack.resolve("store"), automodpack,
-				automodpack.resolve(".private/update-transaction.json"), automodpack.resolve(".private/update-transaction-result.json"),
-				automodpack.resolve("automodpack-client.json"),
-				modpack.resolve("automodpack-content.json"), modpack.resolve("automodpack-catalogue.json"),
-				automodpack.resolve("automodpack-client-selection.json"));
+	@Test
+	void removalSwapsToAnEmptyProjectionAndKeepsImmutableGenerationRecords() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "removable-object".getBytes(StandardCharsets.UTF_8);
+		String hash = store(storage, bytes);
+		SelectedModpackTarget target = target("mods/remove.jar", "mod", false, hash, bytes.length);
+		UpdatePlan install = plan(target, clientConfig(target.manifest().modpackId()),
+				List.of(new Operation(Root.PROJECTION, "mods/remove.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/remove.jar", true, hash, bytes.length)));
+		UpdateTransactionExecutor executor = executor(storage);
+		executor.commit(install, target);
+
+		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
+		baseline.modpackId = target.manifest().modpackId();
+		baseline.entries = List.of();
+		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(
+				new UpdatePlan.FileKey(Root.PROJECTION, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true, true));
+		Jsons.ClientConfigFieldsV3 removalConfig = new Jsons.ClientConfigFieldsV3();
+		UpdatePlan removal = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(target.flatTarget(), baseline, files, Set.of(), removalConfig));
+		SelectionIntent expected = target.selection().intent();
+		UpdateTransaction transaction = UpdateTransaction.createRemoval(removal, ClientPlatform.LINUX, expected, storage.overlayDigest(target.manifest().modpackId()));
+
+		assertTrue(executor.commit(transaction).success());
+		assertTrue(Files.isDirectory(storage.activeDirectory()));
+		try (var paths = Files.list(storage.activeDirectory())) {
+			assertEquals(List.of(), paths.toList());
+		}
+		assertNull(storage.readActiveState());
+		assertTrue(new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).isPresent());
+		assertTrue(new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).isEmpty());
 	}
 
-	private static String store(Paths paths, byte[] bytes) throws Exception {
-		Path temporaryObject = Files.write(paths.store().resolve("object.tmp"), bytes);
-		String hash = HashUtils.getHash(temporaryObject);
-		Files.move(temporaryObject, paths.store().resolve(hash));
+	@Test
+	void selfUpdateRemainsAConstrainedCasOperation() throws Exception {
+		ClientStorage storage = storage();
+		Path current = Files.writeString(storage.modsDirectory().resolve("automodpack-old.jar"), "old", StandardCharsets.UTF_8);
+		String currentHash = HashUtils.getHash(current);
+		byte[] replacement = "replacement".getBytes(StandardCharsets.UTF_8);
+		String replacementHash = store(storage, replacement);
+		UpdateTransaction transaction = UpdateTransaction.createSelfUpdate(current.getFileName().toString(), "automodpack-new.jar", replacementHash, replacement.length, currentHash);
+
+		assertTrue(executor(storage).commit(transaction).success());
+		assertFalse(Files.exists(current));
+		assertTrue(SmartFileUtils.isValidFile(storage.modsDirectory().resolve("automodpack-new.jar"), replacement.length, replacementHash));
+		assertNull(storage.readActiveState());
+
+		UpdateTransaction invalid = UpdateTransaction.createSelfUpdate("automodpack-old.jar", "../outside.jar", replacementHash, replacement.length, currentHash);
+		assertThrows(IOException.class, () -> executor(storage).validate(invalid));
+	}
+
+	private ClientStorage storage() throws Exception {
+		ClientStorage storage = ClientStorage.fromGameDirectory(temporaryDirectory.resolve("game"));
+		storage.ensureRoots();
+		Files.createDirectories(storage.modsDirectory());
+		return storage;
+	}
+
+	private static UpdateTransactionExecutor executor(ClientStorage storage) {
+		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(storage, null));
+	}
+
+	private static String store(ClientStorage storage, byte[] bytes) throws Exception {
+		Path temporary = Files.createTempFile(storage.objectsDirectory(), ".object-", ".tmp");
+		Files.write(temporary, bytes);
+		String hash = HashUtils.getHash(temporary);
+		Files.move(temporary, storage.objectsDirectory().resolve(hash));
 		return hash;
+	}
+
+	private static UpdatePlan plan(SelectedModpackTarget target, Jsons.ClientConfigFieldsV3 config, List<Operation> operations, List<ProjectedFile> finalState) {
+		return new UpdatePlan(target.manifest().modpackId(), target.generationTarget(), operations, finalState, config, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK));
+	}
+
+	private static SelectedModpackTarget target(String path, String type, boolean editable, String hash, long size) {
+		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+		fields.modpackId = "abc1234";
+		fields.modpackName = "Test";
+		fields.selectionTags = Map.of();
+		Jsons.CompleteModpackContentFields.ModpackGroupFields group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.required = true;
+		Jsons.CompleteModpackContentFields.GroupFileFields file = new Jsons.CompleteModpackContentFields.GroupFileFields();
+		file.size = String.valueOf(size);
+		file.type = type;
+		file.editable = editable;
+		file.sha1 = hash;
+		file.murmur = "0";
+		group.files = Map.of(path, file);
+		fields.groups = Map.of("main", group);
+		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse("2026-01-01T00:00:00Z"), "");
+		return SelectedModpackTarget.prepare(record.toFields(), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
 	}
 
 	private static Jsons.ClientConfigFieldsV3 clientConfig(String modpackId) {
@@ -389,48 +187,4 @@ class UpdateTransactionExecutorTest {
 						ModpackConnectionMode.MAGIC_PACKET, null, null));
 		return config;
 	}
-
-	private static Jsons.ModpackContentFields manifest(String hash, long size) {
-		Jsons.ModpackContentFields manifest = new Jsons.ModpackContentFields(Set.of(
-				new Jsons.ModpackContentFields.ModpackContentItem("/mods/new.jar", String.valueOf(size), "mod", false, false, false, hash, "0")));
-		manifest.modpackId = "abc1234";
-		manifest.modpackName = "Test";
-		return manifest;
-	}
-
-	private static Jsons.ModpackContentFields editableManifest(String hash, long size) {
-		Jsons.ModpackContentFields manifest = new Jsons.ModpackContentFields(Set.of(new Jsons.ModpackContentFields.ModpackContentItem("/config/settings.json",
-				String.valueOf(size), "config", true, false, false, hash, "0")));
-		manifest.modpackId = "abc1234";
-		return manifest;
-	}
-
-	private static SelectedModpackTarget selectedTarget(Jsons.ModpackContentFields manifest) {
-		return selectedTarget(manifest, "", "2026-01-01T00:00:00Z");
-	}
-
-	private static SelectedModpackTarget selectedTarget(Jsons.ModpackContentFields manifest, String parentGenerationId, String createdAt) {
-		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
-		fields.modpackId = manifest.modpackId;
-		fields.modpackName = manifest.modpackName;
-		fields.automodpackVersion = manifest.automodpackVersion;
-		fields.loader = manifest.loader;
-		fields.loaderVersion = manifest.loaderVersion;
-		fields.mcVersion = manifest.mcVersion;
-		Jsons.CompleteModpackContentFields.ModpackGroupFields group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
-		Map<String, Jsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
-		for (var item : manifest.list)
-			files.put(UpdatePlanner.normalize(item.file), new Jsons.CompleteModpackContentFields.GroupFileFields(item.size,
-					item.type, item.editable, item.overwriteEditable, item.forceCopy, item.sha1, item.murmur));
-		group.files = files;
-		fields.groups = Map.of("main", group);
-		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse(createdAt), "");
-		manifest.targetGenerationId = record.metadata().generationId();
-		manifest.parentGenerationId = record.metadata().parentGenerationId();
-		manifest.stateDigest = record.metadata().stateDigest();
-		return SelectedModpackTarget.prepare(record.toFields(), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
-	}
-
-	private record Paths(Path game, Path modpack, Path mods, Path store, Path automodpack, Path transaction, Path result, Path clientConfig,
-			Path manifest, Path catalogue, Path selection) {}
 }

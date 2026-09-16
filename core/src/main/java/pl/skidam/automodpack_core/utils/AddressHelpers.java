@@ -165,7 +165,10 @@ public class AddressHelpers {
 		if (normalized.isEmpty()) throw new IllegalArgumentException("Host is blank");
 
 		if (normalized.contains(":")) return normalizeIpv6(normalized);
-		if (normalized.matches("[0-9.]+")) return normalizeIpv4(normalized);
+		if (normalized.matches("[0-9.]+")) {
+			String ipv4 = tryNormalizeIpv4(normalized);
+			if (ipv4 != null) return ipv4;
+		}
 
 		if (normalized.endsWith(".")) normalized = normalized.substring(0, normalized.length() - 1);
 		if (normalized.isEmpty()) throw new IllegalArgumentException("Host is blank");
@@ -176,19 +179,19 @@ public class AddressHelpers {
 		}
 	}
 
-	private static String normalizeIpv4(String host) {
+	private static String tryNormalizeIpv4(String host) {
 		String[] parts = host.split("\\.", -1);
-		if (parts.length != 4) throw new IllegalArgumentException("Invalid IPv4 address: " + host);
+		if (parts.length != 4) return null;
 		StringBuilder normalized = new StringBuilder();
 		for (String part : parts) {
-			if (part.isEmpty() || !part.chars().allMatch(Character::isDigit)) throw new IllegalArgumentException("Invalid IPv4 address: " + host);
+			if (part.isEmpty() || !part.chars().allMatch(Character::isDigit)) return null;
 			int value;
 			try {
 				value = Integer.parseInt(part);
 			} catch (NumberFormatException e) {
-				throw new IllegalArgumentException("Invalid IPv4 address: " + host, e);
+				return null;
 			}
-			if (value > 255) throw new IllegalArgumentException("Invalid IPv4 address: " + host);
+			if (value > 255) return null;
 			if (!normalized.isEmpty()) normalized.append('.');
 			normalized.append(value);
 		}

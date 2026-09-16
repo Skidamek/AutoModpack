@@ -132,12 +132,11 @@ public final class ModpackCandidateScanner {
 				Jsons.CompleteModpackContentFields.ModpackGroupFields group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
 				group.displayName = declaration.displayName;
 				group.description = declaration.description;
-				group.category = declaration.category;
+				group.tag = declaration.tag == null ? "" : declaration.tag;
 				group.required = declaration.required;
 				group.recommended = declaration.recommended;
 				group.breaksWith = sortedSet(declaration.breaksWith);
 				group.requires = sortedSet(declaration.requires);
-				group.tags = sortedSet(declaration.tags);
 				group.compatiblePlatforms = sortedSet(declaration.compatiblePlatforms);
 				group.files = filesByGroup.get(entry.getKey());
 				groups.put(entry.getKey(), group);

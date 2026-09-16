@@ -17,10 +17,10 @@ Likely no, most of these type of mods forward only minecraft packets. These mods
 Yes, you can add any mod you want to use alongside downloaded modpack by just placing the mod into the standard mods' folder.
 
 ### How can I delete files from modpack?
-Just delete file from server, or exclude it from sync, read about `syncedFiles` in [config](configuration/server-config)
+Just delete file from server, or exclude it from sync, read about `syncedFiles` in [config](configuration/server-config). AutoModpack removes the previously managed client file during the next update when its path, SHA-1 hash, and size match the cumulative ownership ledger.
 
-### Can I remove/disable non modpack files/mods from player use?
-Read about `nonModpackFilesToDelete` in [config](configuration/server-config)
+### Can I remove files that are not part of the modpack from the client?
+No. AutoModpack does not support arbitrary client-file deletion. Changed files and player-local paths are preserved.
 
 ### Do I have to open any port on my router?
 Usually not. On supported targets, the default `HOLEPUNCH` mode uses the Minecraft Login connection. Otherwise, the default `MAGIC_PACKET` mode can share the Minecraft port when `bindPort` is `-1`.

@@ -1,6 +1,8 @@
 package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -8,7 +10,6 @@ import pl.skidam.automodpack_loader_core.screen.ScreenService;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
-import java.nio.file.Path;
 import java.util.Optional;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -32,17 +33,38 @@ public class ScreenImpl implements ScreenService {
 
 	@Override
 	public void changelog(Object... args) {
-		executeOnClient(() -> Screens.changelog(args[0], args[1], args[2]));
+		executeOnClient(() -> Screens.changelog(args[0], args[1]));
 	}
 
 	@Override
 	public void restart(Object... args) {
-		executeOnClient(() -> Screens.restart(args[0], args[1], args[2]));
+		executeOnClient(() -> Screens.restart(args[1], args[2]));
 	}
 
 	@Override
 	public void danger(Object... args) {
 		executeOnClient(() -> Screens.danger(args[0]));
+	}
+
+	@Override
+	public void welcome(Object... args) {
+		executeOnClient(() -> Screens.welcome(args[0]));
+	}
+
+	@Override
+	public boolean preview(Object... args) {
+		executeOnClient(() -> Screens.preview(args));
+		return true;
+	}
+
+	@Override
+	public void recovery(Object... args) {
+		executeOnClient(() -> Screens.recovery(args));
+	}
+
+	@Override
+	public void history(Object... args) {
+		executeOnClient(() -> Screens.history(args));
 	}
 
 	@Override
@@ -81,7 +103,13 @@ public class ScreenImpl implements ScreenService {
 		return Optional.ofNullable(Screens.getScreen());
 	}
 
+	public static void setScreen(Screen screen) {
+		Screens.setScreen(screen);
+	}
+
 	private static class Screens {
+		private static Screen parentBeforePreparing;
+
 		private static Screen getScreen() {
 			/*? if >=26.2 {*/
 			return Minecraft.getInstance().gui.screen();
@@ -91,6 +119,12 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void setScreen(Screen screen) {
+			Screen current = Screens.getScreen();
+			if (screen instanceof PreparingScreen) {
+				if (!(current instanceof PreparingScreen)) parentBeforePreparing = current;
+			} else {
+				parentBeforePreparing = null;
+			}
 			/*? if >=26.2 {*/
 			Minecraft.getInstance().gui.setScreen(screen);
 			/*?} else {*/
@@ -106,16 +140,42 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(new FetchScreen((FetchManager) fetchManager));
 		}
 
-		public static void changelog(Object parent, Object modpackDir, Object changelog) {
-			Screens.setScreen(new ChangelogScreen((Screen) parent, (Path) modpackDir, (Changelogs) changelog));
+		public static void changelog(Object parent, Object changelog) {
+			Screens.setScreen(new ChangelogScreen((Screen) parent, (Changelogs) changelog));
 		}
 
-		public static void restart(Object modpackDir, Object updateType, Object changelogs) {
-			Screens.setScreen(new RestartScreen((Path) modpackDir, (UpdateType) updateType, (Changelogs) changelogs));
+		public static void restart(Object updateType, Object changelogs) {
+			Screens.setScreen(new RestartScreen((UpdateType) updateType, (Changelogs) changelogs));
 		}
 
 		public static void danger(Object modpackUpdaterInstance) {
 			Screens.setScreen(new DangerScreen((ModpackUpdater) modpackUpdaterInstance));
+		}
+
+		public static void welcome(Object modpackUpdaterInstance) {
+			Screens.setScreen(new FirstConnectScreen((ModpackUpdater) modpackUpdaterInstance));
+		}
+
+		public static void preview(Object... args) {
+			Screen parent = Screens.getScreen();
+			if (parent instanceof PreparingScreen) parent = parentBeforePreparing;
+			parentBeforePreparing = null;
+			boolean removal = args.length > 4 && Boolean.TRUE.equals(args[4]);
+			Screens.setScreen(new UpdatePreviewScreen(parent, (UpdatePreview) args[0], (String) args[1], removal, (Runnable) args[2], (Runnable) args[3]));
+		}
+
+		public static void recovery(Object... args) {
+			Screen parent = Screens.getScreen();
+			Runnable closed = args.length > 3 && args[3] instanceof Runnable callback ? callback : () -> {};
+			Screens.setScreen(new RecoveryArchiveScreen(parent, (ModpackUpdater) args[0], (ModpackUpdater.RecoverySnapshot) args[1], (String) args[2], closed));
+		}
+
+		public static void history(Object... args) {
+			Screen parent = Screens.getScreen();
+			Runnable closed = args.length > 2 && args[2] instanceof Runnable callback ? callback : () -> {};
+			@SuppressWarnings("unchecked")
+			java.util.List<GenerationRecord> history = (java.util.List<GenerationRecord>) args[0];
+			Screens.setScreen(new ContentHistoryScreen(parent, history, (String) args[1], closed));
 		}
 
 		public static void error(String... errors) {

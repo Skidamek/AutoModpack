@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.modpack.generation;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,11 +28,11 @@ class GenerationPatchNotesTest {
 	void fileNotesRequireStrictUtf8AndBoundedSize() throws Exception {
 		Path file = tempDir.resolve("host-patch-notes.md");
 		Files.write(file, new byte[]{(byte) 0xc3, (byte) 0x28});
-		assertThrows(java.io.IOException.class, () -> GenerationPatchNotes.resolve(null, file));
-		assertThrows(java.io.IOException.class, () -> GenerationPatchNotes.resolve(String.valueOf((char) 0xD800), file));
+		assertThrows(IOException.class, () -> GenerationPatchNotes.resolve(null, file));
+		assertThrows(IOException.class, () -> GenerationPatchNotes.resolve(String.valueOf((char) 0xD800), file));
 
 		Files.write(file, "x".repeat(GenerationPatchNotes.MAX_UTF8_BYTES + 1).getBytes(StandardCharsets.UTF_8));
-		assertThrows(java.io.IOException.class, () -> GenerationPatchNotes.resolve(null, file));
+		assertThrows(IOException.class, () -> GenerationPatchNotes.resolve(null, file));
 	}
 
 	@Test

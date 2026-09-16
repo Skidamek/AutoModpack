@@ -1,39 +1,33 @@
 package pl.skidam.automodpack.client.ui;
 
-import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.ListEntry;
 import pl.skidam.automodpack.client.ui.widget.ListEntryWidget;
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 
 public class ChangelogScreen extends VersionedScreen {
 
 	private final Screen parent;
-	private final Path modpackDir;
 	private final Changelogs changelogs;
 	private static Map<String, String> formattedChanges;
-	private Jsons.ModpackContentFields modpackContent = null;
 	private ListEntryWidget listEntryWidget;
 	private EditBox searchField;
 	private Button backButton;
 	private Button openMainPageButton;
 
-	public ChangelogScreen(Screen parent, Path modpackDir, Changelogs changelogs) {
+	public ChangelogScreen(Screen parent, Changelogs changelogs) {
 		super(VersionedText.literal("ChangelogScreen"));
 		this.parent = parent;
-		this.modpackDir = modpackDir;
 		this.changelogs = changelogs;
 
 		if (AudioManager.isMusicPlaying()) {
@@ -83,7 +77,7 @@ public class ChangelogScreen extends VersionedScreen {
 			140,
 			20,
 			VersionedText.translatable("automodpack.back"),
-			button -> this.minecraft.gui.setScreen(this.parent)
+			button -> ScreenImpl.setScreen(this.parent)
 		);
 
 		this.openMainPageButton = buttonWidget(
@@ -129,16 +123,6 @@ public class ChangelogScreen extends VersionedScreen {
 	}
 
 	private void drawSummaryOfChanges(VersionedMatrices matrices) {
-		if (modpackContent == null) {
-			var optionalModpackContentFile =
-				ModpackContentTools.getModpackContentFile(modpackDir);
-			if (optionalModpackContentFile.isEmpty()) return;
-			modpackContent = ModpackContentTools.read(
-				optionalModpackContentFile.get()
-			);
-		}
-
-		if (modpackContent == null) return;
 		int filesAdded = changelogs.changesAddedList.size();
 		int filesRemoved = changelogs.changesDeletedList.size();
 
@@ -193,7 +177,7 @@ public class ChangelogScreen extends VersionedScreen {
 	@Override
 	public boolean shouldCloseOnEsc() {
 		assert this.minecraft != null;
-		this.minecraft.gui.setScreen(this.parent);
+		ScreenImpl.setScreen(this.parent);
 		return false;
 	}
 }

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.time.Clock;
 import java.util.*;
 import java.util.concurrent.Executor;
 
@@ -79,9 +80,9 @@ class GenerationStoreImmutableObjectTest {
 	}
 
 	@Test
-	void pointerFailureLeavesPromotedObjectAndRecordUnreachable() throws Exception {
+	void pointerFailureLeavesPromotedObjectAndCompactStateUnreachable() throws Exception {
 		Path root = tempDir.resolve("host-generations");
-		GenerationStore store = new GenerationStore(root, java.time.Clock.systemUTC(), () -> {
+		GenerationStore store = new GenerationStore(root, Clock.systemUTC(), () -> {
 			throw new IOException("pointer failure");
 		});
 		try (ModpackCandidate candidate = scan()) {
@@ -92,9 +93,10 @@ class GenerationStoreImmutableObjectTest {
 			Path promoted = root.resolve("objects").resolve(staged.sha1());
 			assertTrue(Files.isRegularFile(promoted, LinkOption.NOFOLLOW_LINKS));
 			assertEquals(staged.sha1(), HashUtils.getHash(promoted));
-			try (var records = Files.list(root.resolve("records"))) {
-				assertEquals(1, records.count());
+			try (var commits = Files.list(root.resolve("commits"))) {
+				assertEquals(1, commits.count());
 			}
+			assertFalse(Files.exists(root.resolve("records")));
 			assertTrue(store.loadCurrent().isEmpty());
 		}
 	}

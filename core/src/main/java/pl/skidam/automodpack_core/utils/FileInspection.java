@@ -35,6 +35,9 @@ public class FileInspection {
 	public record HashPathPair(String hash, Path path) {}
 
 	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods) implements Serializable {
+		public Mod at(Path newPath) {
+			return new Mod(IDs, hash, version, newPath, deps, nestedMods);
+		}
 
 		// Magic to de/serialize Path properly
 

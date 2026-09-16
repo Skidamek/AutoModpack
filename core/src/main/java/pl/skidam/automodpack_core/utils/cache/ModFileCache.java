@@ -3,10 +3,12 @@ package pl.skidam.automodpack_core.utils.cache;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.h2.mvstore.MVMap;
@@ -47,7 +49,7 @@ public class ModFileCache implements AutoCloseable {
 		this.dbPath = dbPath;
 		this.store = new MVStore.Builder().fileName(dbPath.toString()).cacheSize(20).open();
 
-		this.modFileMap = store.openMap("mod_file_data");
+		this.modFileMap = store.openMap("mod_file_by_hash");
 
 		for (int i = 0; i < locks.length; i++) {
 			locks[i] = new Object();
@@ -56,29 +58,29 @@ public class ModFileCache implements AutoCloseable {
 
 	public FileInspection.Mod getOrComputeMod(Path file, FileMetadataCache cache) throws IOException {
 		Path absPath = file.toAbsolutePath().normalize();
-		String pathKey = absPath.toString();
-
 		String hash = cache.getOrComputeHash(absPath);
-		FileInspection.Mod cached = modFileMap.get(pathKey);
+		if (hash == null) return null;
+		FileInspection.Mod cached = modFileMap.get(hash);
 		if (cached != null && hash.equalsIgnoreCase(cached.hash())) {
-			return cached; // CACHE HIT
+			return cached.at(absPath); // CACHE HIT
 		}
 
 		// Calculate which lock bucket to use
-		int lockIndex = Math.abs(pathKey.hashCode() % locks.length);
+		int lockIndex = Math.floorMod(hash.hashCode(), locks.length);
 
 		synchronized (locks[lockIndex]) {
 			// Check if another thread has already updated the cache
 			hash = cache.getOrComputeHash(absPath);
-			cached = modFileMap.get(pathKey);
+			if (hash == null) return null;
+			cached = modFileMap.get(hash);
 			if (cached != null && hash.equalsIgnoreCase(cached.hash())) {
-				return cached; // CACHE HIT
+				return cached.at(absPath); // CACHE HIT
 			}
 
 			// Actual work happens here
 			FileInspection.Mod modFile = FileInspection.getMod(absPath, cache);
 
-			if (modFile != null) modFileMap.put(pathKey, modFile);
+			if (modFile != null) modFileMap.put(hash, modFile.at(null));
 
 			return modFile;
 		}
@@ -93,10 +95,11 @@ public class ModFileCache implements AutoCloseable {
 		}
 	}
 
-	// TODO: Consider running periodically
-	public void cleanup() {
+	public void retainOnly(Iterable<String> retainedHashes) {
+		Set<String> retained = new HashSet<>();
+		for (String hash : retainedHashes) if (hash != null) retained.add(hash.toLowerCase(Locale.ROOT));
 		synchronized (store) {
-			modFileMap.keySet().removeIf(pathString -> Files.notExists(Path.of(pathString)));
+			modFileMap.keySet().removeIf(hash -> !retained.contains(hash));
 			store.commit();
 			store.compactFile(2000);
 		}

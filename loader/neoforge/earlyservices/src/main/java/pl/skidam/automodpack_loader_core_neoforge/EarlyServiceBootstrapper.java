@@ -13,7 +13,9 @@ import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.EarlyServiceScan;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_loader_core.Preload;
 
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
@@ -45,16 +47,15 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
 			// Run the update/reconcile step before anything below reads the modpack folder, so an
 			// update that changes which mods are early-service mods is reflected in the same boot.
-			// This also publishes Constants.selectedModpackDir / Constants.MODS_DIR.
 			ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
 			new Preload();
 			progress.complete();
 
-			// Set by Preload only when a modpack is selected on a client - null means nothing to do.
-			Path modpackMods = Constants.selectedModpackDir == null ? null : Constants.selectedModpackDir.resolve("mods");
-			if (modpackMods == null || !Files.isDirectory(modpackMods)) return;
+			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+			Path modpackMods = storage.activeDirectory().resolve("mods");
+			if (!Files.isDirectory(modpackMods)) return;
 
-			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(modpackMods, EarlyServiceLayer::eligibleForInPlace);
+			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(modpackMods, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);
 
 			if (earlyServiceJars.isEmpty()) return;
 

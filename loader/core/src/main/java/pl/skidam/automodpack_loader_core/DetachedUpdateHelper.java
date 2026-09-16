@@ -17,8 +17,8 @@ import org.apache.logging.log4j.core.LoggerContext;
 import com.google.gson.Gson;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
-import pl.skidam.automodpack_core.update.UpdateTransactionResult;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
@@ -32,7 +32,8 @@ public final class DetachedUpdateHelper {
 		if (transaction == null || transaction.transactionId == null) throw new IOException("Cannot launch update helper without a transaction UUID");
 		Path sourceJar = THIS_MOD_JAR.toAbsolutePath().normalize();
 		if (!Files.isRegularFile(sourceJar)) throw new IOException("Runnable AutoModpack JAR is missing: " + sourceJar);
-		Path absoluteHelperDirectory = SmartFileUtils.CWD.resolve(helperDir).toAbsolutePath().normalize();
+		ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+		Path absoluteHelperDirectory = storage.helperDirectory();
 		Files.createDirectories(absoluteHelperDirectory);
 		cleanupOldHelperJars(absoluteHelperDirectory);
 
@@ -51,37 +52,8 @@ public final class DetachedUpdateHelper {
 		LOGGER.info("Launched detached update helper for transaction {} from {}", transaction.transactionId, helperJar);
 	}
 
-	public static void consumeResult() {
-		Path resultPath = SmartFileUtils.CWD.resolve(transactionResultFile);
-		if (!Files.isRegularFile(resultPath)) return;
-		try {
-			UpdateTransactionResult result = ConfigTools.read(resultPath, UpdateTransactionResult.class)
-					.orElseThrow(() -> new IOException("Update helper result is missing"));
-			UUID.fromString(result.transactionId);
-			UpdateTransaction pending = ConfigTools.read(SmartFileUtils.CWD.resolve(transactionFile), UpdateTransaction.class).orElse(null);
-			if (pending != null && !result.transactionId.equals(pending.transactionId)) {
-				LOGGER.warn("Ignoring stale update-helper result {} while transaction {} is pending", result.transactionId, pending.transactionId);
-			} else if (pending == null && result.status != UpdateTransactionResult.Status.SUCCESS) {
-				LOGGER.warn("Ignoring stale update-helper {} result for transaction {}", result.status, result.transactionId);
-			} else if (result.status == UpdateTransactionResult.Status.SUCCESS) {
-				LOGGER.info("Detached update helper completed transaction {}", result.transactionId);
-			} else {
-				LOGGER.error("Detached update helper reported {} for transaction {} at {} {}: {}", result.status, result.transactionId, result.operation,
-						result.path, result.message);
-			}
-		} catch (Exception e) {
-			LOGGER.error("Ignoring invalid update-helper result {}", resultPath.toAbsolutePath().normalize(), e);
-		} finally {
-			try {
-				Files.deleteIfExists(resultPath);
-			} catch (IOException e) {
-				LOGGER.warn("Failed to remove consumed update-helper result {}", resultPath, e);
-			}
-		}
-	}
-
 	public static void cleanupOldHelperJars() {
-		cleanupOldHelperJars(SmartFileUtils.CWD.resolve(helperDir).toAbsolutePath().normalize());
+		cleanupOldHelperJars(ClientStorage.fromGameDirectory(SmartFileUtils.CWD).helperDirectory());
 	}
 
 	private static void cleanupOldHelperJars(Path directory) {
@@ -104,7 +76,7 @@ public final class DetachedUpdateHelper {
 	}
 
 	private static CleanupGuard cleanupGuard() {
-		Path pendingPath = SmartFileUtils.CWD.resolve(transactionFile).toAbsolutePath().normalize();
+		Path pendingPath = ClientStorage.fromGameDirectory(SmartFileUtils.CWD).transactionFile();
 		if (!Files.exists(pendingPath, LinkOption.NOFOLLOW_LINKS)) return new CleanupGuard(true, null);
 		if (!Files.isRegularFile(pendingPath, LinkOption.NOFOLLOW_LINKS)) {
 			LOGGER.warn("Skipping update-helper cleanup because pending transaction state is not a regular file: {}", pendingPath);

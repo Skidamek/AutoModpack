@@ -25,6 +25,17 @@ class AddressHelpersTest {
 	}
 
 	@Test
+	void acceptsNumericMinecraftHosts() {
+		var origin = AddressHelpers.format("127.0.0", 25565);
+		var shortOrigin = AddressHelpers.format("0.0", 25565);
+
+		assertEquals("127.0.0", origin.getHostString());
+		assertEquals(25565, origin.getPort());
+		assertEquals("0.0", shortOrigin.getHostString());
+		assertEquals(25565, shortOrigin.getPort());
+	}
+
+	@Test
 	void canonicalizesAndBracketsIpv6() {
 		var defaultPort = AddressHelpers.parseOrigin("2001:0DB8:0:0:0:0:0:1");
 		var explicitPort = AddressHelpers.parseEndpoint("[2001:0DB8:0:0:0:0:0:1]:24444");

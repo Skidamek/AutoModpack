@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.client.ui;
 
 import static pl.skidam.automodpack_core.Constants.clientConfig;
-import static pl.skidam.automodpack_core.Constants.clientConfigFile;
 
 import java.io.IOException;
 
@@ -17,6 +16,8 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.SpeedFormatter;
@@ -60,7 +61,7 @@ public class DownloadScreen extends VersionedScreen {
 
 	private void saveClientConfig() {
 		try {
-			ConfigTools.writeAtomic(clientConfigFile, clientConfig);
+			ConfigTools.writeAtomic(ClientStorage.fromGameDirectory(SmartFileUtils.CWD).clientConfigFile(), clientConfig);
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Failed to save client configuration", e);
 		}
@@ -122,6 +123,18 @@ public class DownloadScreen extends VersionedScreen {
 		return "-1".equals(cachedETA)
 				? VersionedText.translatable("automodpack.download.calculating")
 				: VersionedText.translatable("automodpack.download.eta", cachedETA);
+	}
+
+	private Component getAcquisitionSummary() {
+		int acquired = 0;
+		int failed = 0;
+		if (downloadManager != null) {
+			for (DownloadManager.AcquisitionResult result : downloadManager.getAcquisitionResults().values()) {
+				if (result.success()) acquired++;
+				else failed++;
+			}
+		}
+		return VersionedText.literal("Acquired: " + acquired + "  Failed: " + failed);
 	}
 
 	private float getDownloadScale() {
@@ -190,6 +203,8 @@ public class DownloadScreen extends VersionedScreen {
 
 			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalDownloadSpeed(), this.width / 2, this.height / 2 + 36 + lineHeight * 2,
 					TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getAcquisitionSummary(), this.width / 2, this.height / 2 + 36 + lineHeight * 3,
+					TextColors.GRAY);
 			cancelButton.active = true;
 		} else {
 			cancelButton.active = false;

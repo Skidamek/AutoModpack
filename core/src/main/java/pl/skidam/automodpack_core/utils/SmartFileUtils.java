@@ -43,6 +43,51 @@ public class SmartFileUtils {
 		}
 	}
 
+	/** Installs an immutable CAS object as a hard link, with verified-copy fallback for filesystems that cannot link it. */
+	public static boolean linkVerifiedAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
+		if (isValidFile(targetFile, expectedSize, expectedSha1)) return false;
+		if (!isValidFile(sourceFile, expectedSize, expectedSha1)) throw new IOException("Source file failed size/SHA-1 verification: " + sourceFile);
+		createParentDirs(targetFile);
+		Path parent = targetFile.toAbsolutePath().normalize().getParent();
+		if (parent == null) throw new IOException("Target path has no parent: " + targetFile);
+		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", ".tmp");
+		Files.deleteIfExists(temporary);
+		try {
+			try {
+				Files.createLink(temporary, sourceFile);
+			} catch (UnsupportedOperationException | FileSystemException unsupportedLink) {
+				Files.createFile(temporary);
+				Files.copy(sourceFile, temporary, StandardCopyOption.REPLACE_EXISTING);
+			}
+			if (!isValidFile(temporary, expectedSize, expectedSha1)) throw new IOException("Linked file failed size/SHA-1 verification: " + temporary);
+			moveAtomicReplace(temporary, targetFile);
+			return true;
+		} finally {
+			Files.deleteIfExists(temporary);
+		}
+	}
+
+	public static void moveDirectoryAtomic(Path sourceDirectory, Path targetDirectory) throws IOException {
+		if (sourceDirectory.toAbsolutePath().normalize().getParent() == null || targetDirectory.toAbsolutePath().normalize().getParent() == null)
+			throw new IOException("Directory move requires concrete parent directories");
+		try {
+			Files.move(sourceDirectory, targetDirectory, StandardCopyOption.ATOMIC_MOVE);
+		} catch (AtomicMoveNotSupportedException e) {
+			throw new IOException("Atomic directory replacement is unsupported for " + targetDirectory, e);
+		}
+	}
+
+	public static void deleteTree(Path directory) throws IOException {
+		if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return;
+		if (Files.isSymbolicLink(directory)) {
+			Files.delete(directory);
+			return;
+		}
+		try (Stream<Path> paths = Files.walk(directory)) {
+			for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
+		}
+	}
+
 	public record CopyRequest(Path source, Path target, long expectedSize, String expectedSha1) {}
 
 	public static class CopyBatchException extends IOException {

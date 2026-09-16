@@ -32,6 +32,26 @@ public class ScreenManager implements ScreenService {
 	}
 
 	@Override
+	public void welcome(Object... args) {
+		INSTANCE.welcome(args);
+	}
+
+	@Override
+	public boolean preview(Object... args) {
+		return INSTANCE.preview(args);
+	}
+
+	@Override
+	public void recovery(Object... args) {
+		INSTANCE.recovery(args);
+	}
+
+	@Override
+	public void history(Object... args) {
+		INSTANCE.history(args);
+	}
+
+	@Override
 	public void error(String... args) {
 		INSTANCE.error(args);
 	}

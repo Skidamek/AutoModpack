@@ -59,7 +59,6 @@ public class ModpackLoader16 implements ModpackLoaderService {
 	@Override
 	public List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir, FileMetadataCache cache) {
 		Path modpackModsDir = modpackDir.resolve("mods");
-		Path standardModsDir = MODS_DIR;
 
 		List<ModCandidateImpl> modpackNestedMods = new ArrayList<>();
 		List<ModCandidateImpl> standardNestedMods = new ArrayList<>();
