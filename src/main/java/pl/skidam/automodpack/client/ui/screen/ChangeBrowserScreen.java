@@ -19,7 +19,6 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
@@ -36,6 +35,7 @@ import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
+import pl.skidam.automodpack_core.utils.UriOpener;
 
 /** Shared vanilla-style file browser used for installed catalogues and generation diffs. */
 public class ChangeBrowserScreen extends VersionedScreen {
@@ -345,7 +345,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	}
 
 	private void openPage(String url) {
-		if (url != null) Util.getPlatform().openUri(url);
+		if (url != null) UriOpener.openUri(url);
 	}
 
 	private void copyHash() {

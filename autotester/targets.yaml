@@ -2,6 +2,8 @@ defaults:
   artifactPattern: "automodpack-*.jar"
 
 targets:
+  - { id: "26.3-fabric", java: 25 }
+  - { id: "26.3-neoforge", java: 25 }
   - { id: "26.2-fabric", java: 25 }
   - { id: "26.2-neoforge", java: 25 }
   - { id: "26.1-fabric", java: 25 }

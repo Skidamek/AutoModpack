@@ -79,6 +79,11 @@ stonecutter.parameters {
 			replace("minecraft.setScreen(", "minecraft.gui.setScreen(")
 			replace("minecraft.getToastManager()", "minecraft.gui.toastManager()")
 		}
+
+		// KeyEvent renamed its record component in 26.3 (GLFW scancode -> SDL keycode)
+		string(current.parsed >= "26.3") {
+			replace(".scancode()", ".keycode()")
+		}
 	}
 }
 

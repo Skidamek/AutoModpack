@@ -7,7 +7,6 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
@@ -15,6 +14,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
+import pl.skidam.automodpack_core.utils.UriOpener;
 
 /**
  * Security rejection for a pinned certificate that no longer matches. States what happened, what it can mean,
@@ -53,7 +53,7 @@ public final class PinMismatchScreen extends VersionedScreen {
 		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.pinMismatch.dont"), wrapWidth, ChatFormatting.RED));
 		ActionRow copyRow = actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.error.copyDetails"), button -> copyDetails()),
-				optionalAction(VersionedText.text("automodpack.learnmore"), button -> Util.getPlatform().openUri(SECURITY_DOCS_URL + "#certificate-mismatch")));
+				optionalAction(VersionedText.text("automodpack.learnmore"), button -> UriOpener.openUri(SECURITY_DOCS_URL + "#certificate-mismatch")));
 		ActionRow footerRow = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), button -> ScreenImpl.setScreen(parent)));
 		// The header is part of the centered block: title and origin, plus the "copied" confirmation line while it shows.
 		int headerLines = 2 + (copied ? 1 : 0);

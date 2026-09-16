@@ -16,7 +16,6 @@ import net.minecraft.client.gui.components.EditBox;
 /*? if >=1.20.4 {*/
 /*?}*/
 import net.minecraft.ChatFormatting;
-import net.minecraft.util.Util;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
@@ -60,6 +59,7 @@ import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack.client.ClientTextures;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
+import pl.skidam.automodpack_core.utils.UriOpener;
 
 public class VersionedScreen extends Screen {
 
@@ -459,7 +459,7 @@ public class VersionedScreen extends Screen {
 		this.addRenderableWidget(field);
 		if (helpHint != null) {
 			Button help = buttonWidget(x + fieldWidth + ActionAreaLayout.SEAM, y, HELP_BUTTON_SIZE, HELP_BUTTON_SIZE, VersionedText.literal("?"),
-					button -> Util.getPlatform().openUri(SECURITY_DOCS_URL));
+					button -> UriOpener.openUri(SECURITY_DOCS_URL));
 			setTooltip(help, helpHint);
 			this.addRenderableWidget(help);
 		}

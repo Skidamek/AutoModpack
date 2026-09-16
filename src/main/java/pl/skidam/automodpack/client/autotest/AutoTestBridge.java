@@ -247,6 +247,9 @@ public final class AutoTestBridge {
 		}
 
 		s.mouseMoved(x, y);
+		/*? if >= 26.3 {*/
+		/*if (button == 0) button = 1;
+		*//*?}*/
 		/*? if >= 1.21.10 {*/
 		MouseButtonEvent event = new MouseButtonEvent(x, y, new MouseButtonInfo(button, 0));
 		s.mouseClicked(event, false);

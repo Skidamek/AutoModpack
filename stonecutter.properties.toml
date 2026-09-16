@@ -1,3 +1,14 @@
+["26.3-fabric"]
+
+["26.3-neoforge"]
+deps.neoforge = "26.3.0.3-beta"
+
+["26.3"]
+deps.minecraft = "26.3"
+meta.minecraft = "~26.3"
+publish_versions = "26.3"
+
+
 ["26.2-fabric"]
 
 ["26.2-neoforge"]
@@ -120,7 +131,7 @@ publish_versions = "1.18\n1.18.1\n1.18.2"
 
 
 ["fabric"]
-deps.fabric-loader = "0.19.3"
+deps.fabric-loader = "0.19.5"
 
 ["loader-modules"]
 fabric = "0.16.1"
