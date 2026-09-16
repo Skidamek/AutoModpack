@@ -130,7 +130,7 @@ def _seed_bootstrap(ctx, step):
         sha1 = hashlib.sha1(payload).hexdigest()
         files[path] = {"sha1": sha1, "size": str(len(payload))}
     (projection_root / "current-projection.json").write_text(
-        json.dumps({"policy": {"modpackId": "packaaa", "groups": {"main": {"files": files}}}}), encoding="utf-8"
+        json.dumps({"policy": {"modpackId": "packaaa", "categories": {"General": {"main": {"files": files}}}}}), encoding="utf-8"
     )
 
 

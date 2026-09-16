@@ -260,6 +260,7 @@ class FakeBridge:
         """
         visuals_checked = self.visuals_selected and not self.visuals_excluded
         return [
+            {"id": 51, "text": "Category: General", "enabled": False, "visible": True, "checked": True, "type": "ListRow"},
             {"id": 27, "text": "Core (5 files, 90 B)", "enabled": False, "visible": True, "checked": True, "type": "ListRow"},
             {"id": 49, "text": "Category: Visuals", "enabled": True, "visible": True, "checked": visuals_checked, "type": "ListRow"},
             {"id": 29, "text": "Visuals (1 file, 15 B)", "enabled": True, "visible": True, "checked": visuals_checked, "type": "ListRow"},
@@ -978,17 +979,20 @@ class FakeBridge:
                 {"id": 78, "text": "Back", "enabled": True, "visible": True}]
 
     def _write_manifest(self) -> None:
-        groups = self.ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}).get("config", {}).get("groups", {})
+        config = self.ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}).get("config", {})
+        categories = config.get("modpack", {})
         notes = "Initial release: core content and optional client groups." if not self.ctx.vars.get("published_server_generation") else "Update 2: changed alpha, added delta, and removed gamma."
-        manifest_groups = {}
-        for group_id, declaration in groups.items():
-            manifest_groups[group_id] = dict(declaration)
-            manifest_groups[group_id].setdefault("required", False)
-            manifest_groups[group_id].setdefault("defaultSelected", False)
-            manifest_groups[group_id].setdefault("category", "")
-            manifest_groups[group_id].setdefault("breaksWith", [])
-            manifest_groups[group_id].setdefault("requires", [])
-            manifest_groups[group_id].setdefault("compatiblePlatforms", [])
+        manifest_categories = {}
+        for category, groups in categories.items():
+            manifest_group = manifest_categories.setdefault(str(category), {})
+            for group_id, declaration in groups.items():
+                group = dict(declaration)
+                group.setdefault("required", False)
+                group.setdefault("defaultSelected", False)
+                group.setdefault("breaksWith", [])
+                group.setdefault("requires", [])
+                group.setdefault("compatiblePlatforms", [])
+                manifest_group[str(group_id)] = group
         active = self.ctx.game_dir / "automodpack" / "client" / "active"
         active_files = {}
         self.repair_expected = {}
@@ -1002,7 +1006,7 @@ class FakeBridge:
                 object_path = cas_object(self.ctx.game_dir / "automodpack" / "client" / "data" / "objects", digest)
                 object_path.parent.mkdir(parents=True, exist_ok=True)
                 object_path.write_bytes(payload)
-        manifest_groups.setdefault("main", {"required": True, "defaultSelected": True})["files"] = active_files
+        manifest_categories.setdefault("General", {}).setdefault("main", {"required": True, "defaultSelected": True})["files"] = active_files
         policy = {
             "modpackId": "packaaa",
             "modpackName": "Pack A",
@@ -1010,7 +1014,7 @@ class FakeBridge:
             "loader": self.ctx.target.loader,
             "loaderVersion": "",
             "mcVersion": self.ctx.target.minecraft,
-            "groups": manifest_groups,
+            "categories": manifest_categories,
         }
         file_map = {path: (file["sha1"], int(file["size"])) for path, file in active_files.items()}
         created_at = canonical_timestamp(datetime.now(timezone.utc))

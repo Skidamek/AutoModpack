@@ -609,21 +609,23 @@ def test_assert_preload_acquired_checks_complete_projection(make_ctx):
     payloads = {"a" * 40: b"first", "b" * 40: b"second"}
     projection = {
         "policy": {
-            "groups": {
-                "main": {
-                    "files": {
-                        "config/a.txt": {
-                            "sha1": hashlib.sha1(payloads["a" * 40]).hexdigest(),
-                            "size": str(len(payloads["a" * 40])),
-                        },
-                        "config/b.txt": {
-                            "sha1": hashlib.sha1(payloads["b" * 40]).hexdigest(),
-                            "size": str(len(payloads["b" * 40])),
-                        },
-                        "config/a-copy.txt": {
-                            "sha1": hashlib.sha1(payloads["a" * 40]).hexdigest(),
-                            "size": str(len(payloads["a" * 40])),
-                        },
+            "categories": {
+                "General": {
+                    "main": {
+                        "files": {
+                            "config/a.txt": {
+                                "sha1": hashlib.sha1(payloads["a" * 40]).hexdigest(),
+                                "size": str(len(payloads["a" * 40])),
+                            },
+                            "config/b.txt": {
+                                "sha1": hashlib.sha1(payloads["b" * 40]).hexdigest(),
+                                "size": str(len(payloads["b" * 40])),
+                            },
+                            "config/a-copy.txt": {
+                                "sha1": hashlib.sha1(payloads["a" * 40]).hexdigest(),
+                                "size": str(len(payloads["a" * 40])),
+                            },
+                        }
                     }
                 }
             }

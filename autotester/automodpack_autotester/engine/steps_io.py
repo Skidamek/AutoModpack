@@ -86,12 +86,15 @@ def _active_file(ctx, logical_path):
         raise ValueError(f"active logical path must be relative: {logical_path!r}")
     canonical = wanted.as_posix()
     matches = []
-    for group in ((manifest.get("policy", {}) or {}).get("groups", {}) or {}).values():
-        if not isinstance(group, dict):
+    for category in ((manifest.get("policy", {}) or {}).get("categories", {}) or {}).values():
+        if not isinstance(category, dict):
             continue
-        entry = (group.get("files", {}) or {}).get(canonical)
-        if isinstance(entry, dict):
-            matches.append(entry)
+        for group in category.values():
+            if not isinstance(group, dict):
+                continue
+            entry = (group.get("files", {}) or {}).get(canonical)
+            if isinstance(entry, dict):
+                matches.append(entry)
     if not matches:
         raise ValueError(f"active generation has no file {canonical!r}")
     identities = {(str(entry.get("sha1", "")), str(entry.get("size", ""))) for entry in matches}
@@ -524,13 +527,25 @@ def assert_generation(ctx, step):
             notes = _active_generation_notes(ctx, state["modpackId"], state["contentToken"])
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"active generation metadata is invalid: {error}") from error
-    groups = (manifest.get("policy", {}) or {}).get("groups", {}) or {}
+    policy = manifest.get("policy", {}) or {}
+    groups = {
+        group_id: group
+        for category in (policy.get("categories", {}) or {}).values() if isinstance(category, dict)
+        for group_id, group in category.items() if isinstance(group, dict)
+    }
+    group_categories = {
+        group_id: category_name
+        for category_name, category in (policy.get("categories", {}) or {}).items() if isinstance(category, dict)
+        for group_id, group in category.items() if isinstance(group, dict)
+    }
     for group_id, requirements in (step.get("groups", {}) or {}).items():
         if group_id not in groups:
             raise AssertionError(f"active generation is missing group {group_id!r}")
         actual = groups[group_id]
         for field, value in (requirements or {}).items():
-            if actual.get(field) != value:
-                raise AssertionError(f"group {group_id!r} field {field!r}: expected {value!r}, got {actual.get(field)!r}")
+            # 'category' names the containing category in the policy, since groups carry no category field of their own.
+            expected = group_categories[group_id] if field == "category" else actual.get(field)
+            if expected != value:
+                raise AssertionError(f"group {group_id!r} field {field!r}: expected {value!r}, got {expected!r}")
     if "patchNotes" in step and notes != ctx.resolve(step["patchNotes"]):
         raise AssertionError("active generation patch notes do not match the scenario")

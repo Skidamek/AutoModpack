@@ -68,9 +68,11 @@ def _write_server_generation(ctx: Context, index: int) -> None:
     main_root = host_root / "main"
     (main_root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
     (main_root / ctx.marker_rel).write_text(json.dumps({"marker": ctx.modpack_name}) + "\n", encoding="utf-8")
+    config = ((ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}) or {}).get("config", {}) or {})
     configured_groups = {
         str(group_id)
-        for group_id in ((ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}) or {}).get("config", {}).get("groups", {}) or {})
+        for category in (config.get("modpack", {}) or {}).values() if isinstance(category, dict)
+        for group_id in category
     }
     for item in generation.get("files", []):
         if not isinstance(item, dict) or "path" not in item:

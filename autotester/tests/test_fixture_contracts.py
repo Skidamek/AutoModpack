@@ -52,7 +52,9 @@ def test_release_fixture_uses_server_config_and_declared_group_directories(make_
     config_path = ctx.server_dir / "automodpack" / "server-config.json"
     assert config_path.is_file()
     assert not (ctx.server_dir / "automodpack" / "automodpack-server.json").exists()
-    assert set(json.loads(config_path.read_text(encoding="utf-8"))["groups"]) == {
+    categories = json.loads(config_path.read_text(encoding="utf-8"))["modpack"]
+    assert set(categories) == {"General", "Visuals", "Extras", "Platform"}
+    assert {gid for groups in categories.values() for gid in groups} == {
         "main",
         "visual",
         "addon",
@@ -302,7 +304,7 @@ def test_staged_generation_uses_actual_file_metadata(make_ctx):
     policy = json.loads(
         client_steps.cas_object(data_root / "objects", generation["policySha1"]).read_text(encoding="utf-8")
     )
-    by_path = policy["groups"]["main"]["files"]
+    by_path = policy["categories"]["General"]["main"]["files"]
     assert by_path["mods/fixture.jar"]["size"] == str(len(b"fixture"))
     assert by_path["mods/fixture.jar"]["sha1"] == hashlib.sha1(b"fixture").hexdigest()
     assert by_path["mods/fixture.jar"]["editable"] is False
@@ -325,7 +327,7 @@ def test_staged_generation_preserves_explicit_editable_file_metadata(make_ctx):
         client_steps.cas_object(data_root / "objects", generation["policySha1"]).read_text(encoding="utf-8")
     )
     assert (
-        policy["groups"]["main"]["files"]["config/editable.txt"]["editable"] is True
+        policy["categories"]["General"]["main"]["files"]["config/editable.txt"]["editable"] is True
     )
 
 
@@ -477,7 +479,7 @@ def test_record_only_stages_a_valid_cross_loader_mod_fixture(make_ctx):
     policy = json.loads(
         client_steps.cas_object(ctx.game_dir / "automodpack/client/data/objects", mirror[0]["policySha1"]).read_text(encoding="utf-8")
     )
-    metadata = policy["groups"]["main"]["files"]["mods/amp-autotest-conflict.jar"]
+    metadata = policy["categories"]["General"]["main"]["files"]["mods/amp-autotest-conflict.jar"]
     object_path = client_steps.cas_object(ctx.game_dir / "automodpack/client/data/objects", metadata["sha1"])
     assert_valid_mod_fixture(object_path.read_bytes(), server, ctx.target.minecraft)
 
@@ -499,9 +501,10 @@ def test_record_only_content_token_matches_its_policy_files(make_ctx):
         client_steps.cas_object(ctx.game_dir / "automodpack/client/data/objects", mirror[0]["policySha1"]).read_text(encoding="utf-8")
     )
     file_map = {}
-    for group in policy["groups"].values():
-        for logical_path, file in group["files"].items():
-            file_map[logical_path] = (file["sha1"], int(file["size"]))
+    for category in policy["categories"].values():
+        for group in category.values():
+            for logical_path, file in group["files"].items():
+                file_map[logical_path] = (file["sha1"], int(file["size"]))
 
     assert mirror[0]["contentToken"] == content_token(file_map)
     assert hashlib.sha1(staging_steps.policy_bytes(policy)).hexdigest() == mirror[0]["policySha1"]

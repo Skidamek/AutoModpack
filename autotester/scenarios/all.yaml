@@ -173,10 +173,10 @@ flow:
     name: verify advanced group metadata and latest notes were installed
     groups:
       main: { required: true, defaultSelected: true }
-      visual: { required: false, defaultSelected: true, category: visuals, requires: [main] }
-      addon: { required: false, defaultSelected: false, category: extras, requires: [visual] }
-      alternative: { required: false, defaultSelected: false, category: extras, breaksWith: [visual] }
-      windows: { required: false, compatiblePlatforms: [windows], category: platform }
+      visual: { required: false, defaultSelected: true, category: Visuals, requires: [main] }
+      addon: { required: false, defaultSelected: false, category: Extras, requires: [visual] }
+      alternative: { required: false, defaultSelected: false, category: Extras, breaksWith: [visual] }
+      windows: { required: false, compatiblePlatforms: [windows], category: Platform }
     patchNotes: "Initial release: core content and optional client groups."
   - do: wait_for
     name: wait for restart review
@@ -1406,39 +1406,39 @@ topology:
         # reject its anonymous preload and let authenticated login issue the first
         # usable secret before the modpack download.
         validateSecrets: true
-        groups:
-          main:
-            displayName: Core
-            description: Required core files
-            required: true
-            defaultSelected: true
-            allowEditsInFiles: ["/config/pack-shared-editable.txt"]
-            syncedFiles: ["/config/amp-autotest-alpha.txt", "/config/amp-autotest-beta.json", "/config/amp-autotest-gamma.cfg", "/config/amp-autotest-baseline.json", "/config/amp-autotest-delta.txt", "/config/amp-autotest-marker.json", "/config/pack-a-only.txt", "/config/pack-shared-editable.txt", "/mods/amp-autotest-removed.jar"]
-          visual:
-            displayName: Visuals
-            description: Default client visuals
-            category: visuals
-            defaultSelected: true
-            requires: [main]
-            syncedFiles: ["/config/amp-autotest-visual.txt"]
-          addon:
-            displayName: Addon
-            description: Optional addon depending on visuals
-            category: extras
-            requires: [visual]
-            syncedFiles: ["/config/amp-autotest-addon.txt"]
-          alternative:
-            displayName: Alternative
-            description: Mutually exclusive alternative
-            category: extras
-            breaksWith: [visual]
-            syncedFiles: ["/config/amp-autotest-alternative.txt"]
-          windows:
-            displayName: Windows-only
-            description: Platform-filtered fixture
-            category: platform
-            compatiblePlatforms: [windows]
-            syncedFiles: ["/config/amp-autotest-windows.txt"]
+        modpack:
+          General:
+            main:
+              displayName: Core
+              description: Required core files
+              required: true
+              defaultSelected: true
+              allowEditsInFiles: ["/config/pack-shared-editable.txt"]
+              syncedFiles: ["/config/amp-autotest-alpha.txt", "/config/amp-autotest-beta.json", "/config/amp-autotest-gamma.cfg", "/config/amp-autotest-baseline.json", "/config/amp-autotest-delta.txt", "/config/amp-autotest-marker.json", "/config/pack-a-only.txt", "/config/pack-shared-editable.txt", "/mods/amp-autotest-removed.jar"]
+          Visuals:
+            visual:
+              displayName: Visuals
+              description: Default client visuals
+              defaultSelected: true
+              requires: [main]
+              syncedFiles: ["/config/amp-autotest-visual.txt"]
+          Extras:
+            addon:
+              displayName: Addon
+              description: Optional addon depending on visuals
+              requires: [visual]
+              syncedFiles: ["/config/amp-autotest-addon.txt"]
+            alternative:
+              displayName: Alternative
+              description: Mutually exclusive alternative
+              breaksWith: [visual]
+              syncedFiles: ["/config/amp-autotest-alternative.txt"]
+          Platform:
+            windows:
+              displayName: Windows-only
+              description: Platform-filtered fixture
+              compatiblePlatforms: [windows]
+              syncedFiles: ["/config/amp-autotest-windows.txt"]
 
 serverFiles:
   modpackName: Pack A

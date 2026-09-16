@@ -61,12 +61,15 @@ def policy_bytes(policy: dict) -> bytes:
 def _policy_tree(policy: dict) -> dict[str, tuple[str, int]]:
     """The served file set (path -> (sha1, size)) described by one policy document."""
     tree = {}
-    for group in (policy.get("groups") or {}).values():
-        if not isinstance(group, dict):
+    for category in (policy.get("categories") or {}).values():
+        if not isinstance(category, dict):
             continue
-        for path, file in (group.get("files") or {}).items():
-            if isinstance(file, dict) and file.get("sha1"):
-                tree[str(path)] = (str(file["sha1"]).lower(), int(file["size"]))
+        for group in category.values():
+            if not isinstance(group, dict):
+                continue
+            for path, file in (group.get("files") or {}).items():
+                if isinstance(file, dict) and file.get("sha1"):
+                    tree[str(path)] = (str(file["sha1"]).lower(), int(file["size"]))
     return tree
 
 
@@ -172,26 +175,27 @@ def _write_staged_generation(
         "loader": ctx.target.loader,
         "loaderVersion": _load_ver(ctx.target),
         "mcVersion": ctx.target.minecraft,
-        "groups": {
-            "main": {
-                "displayName": modpack_name,
-                "description": "",
-                "category": "",
-                "required": True,
-                "defaultSelected": True,
-                "breaksWith": [],
-                "requires": [],
-                "compatiblePlatforms": [],
-                "files": {
-                    entry["logicalPath"]: {
-                        "size": entry["size"],
-                        "type": entry["type"],
-                        "editable": entry["editable"],
-                        "sha1": entry["sha1"],
-                        "murmur": "",
-                    }
-                    for entry in files
-                },
+        "categories": {
+            "General": {
+                "main": {
+                    "displayName": modpack_name,
+                    "description": "",
+                    "required": True,
+                    "defaultSelected": True,
+                    "breaksWith": [],
+                    "requires": [],
+                    "compatiblePlatforms": [],
+                    "files": {
+                        entry["logicalPath"]: {
+                            "size": entry["size"],
+                            "type": entry["type"],
+                            "editable": entry["editable"],
+                            "sha1": entry["sha1"],
+                            "murmur": "",
+                        }
+                        for entry in files
+                    },
+                }
             }
         },
     }

@@ -327,7 +327,11 @@ def _published_objects(ctx: Context, only_groups: list[str] | None = None) -> di
         projection = json.loads(projection_path.read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"published projection is not readable: {error}") from error
-    groups = (projection.get("policy", {}) or {}).get("groups", {}) or {}
+    policy = projection.get("policy", {}) or {}
+    groups: dict = {}
+    for category in (policy.get("categories", {}) or {}).values():
+        if isinstance(category, dict):
+            groups.update(category)
     if only_groups:
         unknown = [group for group in only_groups if group not in groups]
         if unknown:
