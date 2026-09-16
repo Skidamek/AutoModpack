@@ -47,6 +47,7 @@ dupes
 __pycache__/
 *.egg-info/
 autotester/out/
+autotester/out-*/
 autotester/.hmc-cache/
 
 # agent scratch and internal notes, never commit these
