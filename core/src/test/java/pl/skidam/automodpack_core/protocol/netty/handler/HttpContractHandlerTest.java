@@ -43,7 +43,7 @@ class HttpContractHandlerTest {
 	}
 
 	@Test
-	void headAndJournalRoutesServeDocumentsWithEtags() throws Exception {
+	void headAndJournalRoutesServeDocuments() throws Exception {
 		Fixture fixture = fixture();
 		String head = Files.readString(fixture.headPath(), StandardCharsets.UTF_8);
 		byte[] headBytes = head.getBytes(StandardCharsets.UTF_8);
@@ -53,7 +53,8 @@ class HttpContractHandlerTest {
 		assertTrue(response.startsWith("HTTP/1.1 200 OK\r\n"), response);
 		assertTrue(response.contains("Content-Length: " + headBytes.length + "\r\n"), response);
 		assertTrue(response.contains("Content-Type: application/octet-stream\r\n"), response);
-		assertTrue(response.contains("ETag: \"" + HashUtils.getHash(fixture.headPath()) + "\"\r\n"), response);
+		// Document bodies hash on the client side anyway, so plain GETs skip the server-side hash and carry no ETag.
+		assertFalse(response.contains("ETag:"), response);
 		assertEquals(head, bodyOf(response));
 
 		String journal = exchange(channel, request("/journal"));

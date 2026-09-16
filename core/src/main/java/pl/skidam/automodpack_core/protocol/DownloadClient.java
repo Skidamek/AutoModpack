@@ -316,15 +316,8 @@ public class DownloadClient implements PackTransport {
 
 	@Override
 	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, IntConsumer chunkCallback) {
-		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback, null, offset, null)).exceptionally(error -> {
-			Throwable cause = Throwables.unwrap(error);
-			// A valid range the object can no longer satisfy is the stale-partial verdict, not an ordinary remote failure.
-			if (cause instanceof IOException io && ("Server error: " + StaleRangeException.WIRE_MESSAGE).equals(io.getMessage()))
-				throw new CompletionException(new StaleRangeException());
-			if (error instanceof RuntimeException runtime) throw runtime;
-			if (error instanceof Error failure) throw failure;
-			throw new CompletionException(error);
-		});
+		// A stale range already surfaces as StaleRangeException from the response parse; no mapping happens here.
+		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback, null, offset, null));
 	}
 
 	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers UNCHANGED and {@code destination} is not written. */

@@ -24,7 +24,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.stream.ChunkedWriteHandler;
 
 import pl.skidam.automodpack_core.protocol.ProtocolFrameCodec;
-import pl.skidam.automodpack_core.protocol.StaleRangeException;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
@@ -55,7 +54,7 @@ final class FileSend {
 		final long length = (endInclusive == null ? fileSize : Math.min(endInclusive + 1, fileSize)) - offset;
 
 		if (offset < 0 || offset > fileSize || length < 0) {
-			sendError(ctx, protocolVersion, StaleRangeException.WIRE_MESSAGE);
+			sendError(ctx, protocolVersion, "Invalid range", ERROR_CODE_STALE_RANGE);
 			return;
 		}
 
@@ -216,12 +215,18 @@ final class FileSend {
 	}
 
 	static void sendError(ChannelHandlerContext ctx, byte version, String errorMessage) {
+		sendError(ctx, version, errorMessage, ERROR_CODE_GENERIC);
+	}
+
+	/** Writes an ERROR frame: `[version][ERROR][int len][message][code]`. The trailing code is the machine-readable half; the message stays for logs and humans. */
+	static void sendError(ChannelHandlerContext ctx, byte version, String errorMessage, byte errorCode) {
 		byte[] errMsgBytes = errorMessage.getBytes(StandardCharsets.UTF_8);
-		ByteBuf errorBuf = ctx.alloc().buffer(1 + 1 + 4 + errMsgBytes.length);
+		ByteBuf errorBuf = ctx.alloc().buffer(1 + 1 + 4 + errMsgBytes.length + 1);
 		errorBuf.writeByte(version);
 		errorBuf.writeByte(ERROR);
 		errorBuf.writeInt(errMsgBytes.length);
 		errorBuf.writeBytes(errMsgBytes);
+		errorBuf.writeByte(errorCode);
 		writeControlAndFlush(ctx, errorBuf).addListener(ChannelFutureListener.CLOSE);
 	}
 

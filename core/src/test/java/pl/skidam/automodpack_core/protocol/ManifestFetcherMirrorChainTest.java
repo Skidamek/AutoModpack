@@ -73,7 +73,7 @@ class ManifestFetcherMirrorChainTest {
 		Path file = Files.createTempFile(temporaryDirectory, "journal-", ".jsonl");
 		Journal journal = Journal.open(file);
 		journal.append(new JournalEntry(1, headToken, HashUtils.sha1(ConfigTools.GSON.toJson(manifest.toFields()).getBytes(StandardCharsets.UTF_8)), TestPacks.CREATED, "First",
-				JournalEntry.NO_RESTORE, List.of(new JournalEntry.Change("config/example.txt", null, headToken, 1))));
+				JournalEntry.NO_RESTORE, List.of(JournalEntry.Change.added("config/example.txt", headToken, 1))));
 		byte[] bytes = Files.readAllBytes(file);
 		Files.delete(file);
 		return bytes;

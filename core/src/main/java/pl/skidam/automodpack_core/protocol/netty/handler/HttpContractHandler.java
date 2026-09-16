@@ -24,6 +24,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.handler.timeout.IdleStateEvent;
 
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
@@ -102,6 +103,18 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		ctx.close();
 	}
 
+	@Override
+	public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+		// The pipeline's all-idle reap: a silent connection holds a public FD for nothing. A streaming response writes
+		// continuously, so the event can only fire for a connection with no request in flight and no body draining.
+		if (evt instanceof IdleStateEvent) {
+			LOGGER.debug("HTTP contract connection went idle; closing it");
+			ctx.close();
+			return;
+		}
+		super.userEventTriggered(ctx, evt);
+	}
+
 	private void releaseCumulation() {
 		if (cumulation != null) {
 			cumulation.release();
@@ -125,8 +138,10 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	private void serveLoop(ChannelHandlerContext ctx) {
 		while (ctx.channel().isActive() && !streaming && cumulation != null) {
 			int headerEnd = headerEnd(cumulation);
-			if (headerEnd < 0) {
-				if (cumulation.readableBytes() > MAX_HEADER_BLOCK_BYTES) rejectUnparseable(ctx);
+			// The cap binds the block whether or not a terminator has arrived: junk-then-terminator streams must find no
+			// richer welcome than an unterminated trickle.
+			if (headerEnd < 0 || headerEnd > MAX_HEADER_BLOCK_BYTES) {
+				if (headerEnd > MAX_HEADER_BLOCK_BYTES || cumulation.readableBytes() > MAX_HEADER_BLOCK_BYTES) rejectUnparseable(ctx);
 				return;
 			}
 			if (!handleRequest(ctx, headerEnd)) return;
@@ -173,10 +188,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			}
 		}
 
-		if (!method.equals("GET")) {
-			respond(ctx, STATUS_405, 0, null, null);
-			return keepAlive;
-		}
+		if (!method.equals("GET")) return respondOrClose(ctx, STATUS_405, 0, null, null, keepAlive);
 
 		// The contract paths carry no encoding, so a percent-encoded target cannot name a route.
 		if (target.indexOf('%') >= 0) {
@@ -186,36 +198,32 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		String key = routeKey(target);
 		Optional<Path> path = key == null ? Optional.<Path>empty() : server.getPath(key);
-		if (path.isEmpty()) {
-			respond(ctx, STATUS_404, 0, null, null);
-			return keepAlive;
-		}
+		if (path.isEmpty()) return respondOrClose(ctx, STATUS_404, 0, null, null, keepAlive);
 
 		Path file = path.get();
 		long total;
 		try {
 			total = Files.size(file);
 		} catch (IOException e) {
-			respond(ctx, STATUS_404, 0, null, null);
-			return keepAlive;
+			return respondOrClose(ctx, STATUS_404, 0, null, null, keepAlive);
 		}
 
-		// Documents hash for their ETag, objects already are their hash. A null hash means the file vanished under us.
-		String etag = key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY) ? HashUtils.getHash(file) : key;
-		if (etag == null) {
-			respond(ctx, STATUS_404, 0, null, null);
-			return keepAlive;
+		// Objects already are their hash. A document is only hashed when a validator actually asks, keeping the SHA-1
+		// of a possibly large journal off the event loop for the plain GETs; the response then simply carries no ETag.
+		boolean document = key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY);
+		String etag = document ? null : key;
+		if (ifNoneMatch != null) {
+			etag = document ? HashUtils.getHash(file) : key;
+			if (etag == null) return respondOrClose(ctx, STATUS_404, 0, null, null, keepAlive);
 		}
 
 		if (ifNoneMatch != null && (ifNoneMatch.equals(etag) || ifNoneMatch.equals("\"" + etag + "\""))) {
-			respond(ctx, STATUS_304, 0, etag, null);
-			return keepAlive;
+			return respondOrClose(ctx, STATUS_304, 0, etag, null, keepAlive);
 		}
 
 		ByteRange byteRange = range == null ? null : parseRange(range, total);
 		if (byteRange != null && !byteRange.satisfiable) {
-			respond(ctx, STATUS_416, 0, etag, "bytes */" + total);
-			return keepAlive;
+			return respondOrClose(ctx, STATUS_416, 0, etag, "bytes */" + total, keepAlive);
 		}
 
 		long offset = byteRange == null ? 0 : byteRange.start;
@@ -223,10 +231,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		String status = byteRange == null ? STATUS_200 : STATUS_206;
 		String contentRange = byteRange == null ? null : "bytes " + byteRange.start + "-" + byteRange.endInclusive + "/" + total;
 
-		if (length == 0) {
-			respond(ctx, status, 0, etag, contentRange);
-			return keepAlive;
-		}
+		if (length == 0) return respondOrClose(ctx, status, 0, etag, contentRange, keepAlive);
 
 		FileChannel channel = null;
 		try {
@@ -234,8 +239,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			channel.position(offset);
 		} catch (IOException e) {
 			closeQuietly(channel);
-			respond(ctx, STATUS_404, 0, null, null);
-			return keepAlive;
+			return respondOrClose(ctx, STATUS_404, 0, null, null, keepAlive);
 		}
 
 		// The head is in flight from here on, so the only honest completion of a mid-stream failure is dropping the connection.
@@ -252,6 +256,16 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		return false;
 	}
 
+	/** Writes one bodyless response, honoring a client's close preference on responses that would otherwise keep the connection open. */
+	private boolean respondOrClose(ChannelHandlerContext ctx, String status, long contentLength, String etag, String contentRange, boolean keepAlive) {
+		if (keepAlive) {
+			respond(ctx, status, contentLength, etag, contentRange);
+			return true;
+		}
+		respondThenClose(ctx, status, contentLength, etag, contentRange);
+		return false;
+	}
+
 	private void streamBody(ChannelHandlerContext ctx, FileChannel file, long length, ChannelFuture headWritten, boolean keepAlive) {
 		Channel channel = ctx.channel();
 		Throwable failure = awaitWritten(channel, headWritten);
@@ -261,11 +275,13 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			while (failure == null && sent < length) {
 				int chunkLength = (int) Math.min(DEFAULT_CHUNK_SIZE, length - sent);
 				ByteBuf chunk = channel.alloc().heapBuffer(chunkLength, chunkLength);
+				// Owned by the write once handed to writeAndFlush; until then every exit must release it.
 				try {
 					ByteBuffer buffer = chunk.nioBuffer(0, chunkLength);
 					int read = fill(file, buffer);
 					if (read <= 0) {
 						failure = new IOException("File ended before the response was fully streamed");
+						chunk.release();
 						break;
 					}
 					chunk.writerIndex(read);
