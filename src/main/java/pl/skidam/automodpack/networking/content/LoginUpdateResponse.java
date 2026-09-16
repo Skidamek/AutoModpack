@@ -8,7 +8,9 @@ public enum LoginUpdateResponse {
 	/** The client refused the host's certificate, so the failure lives on the player's side of the connection. */
 	CLIENT_REJECTED("rejected"),
 	/** The player dismissed the certificate verification prompt and the client ended the login for it. */
-	CLIENT_DECLINED("declined");
+	CLIENT_DECLINED("declined"),
+	/** The player backed out of joining during the optional modpack offer. */
+	JOIN_CANCELLED("cancelled");
 
 	private final String wireValue;
 

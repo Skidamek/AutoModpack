@@ -86,7 +86,7 @@ final class ClientLoginUpdateFlow {
 		Runnable cancel = () -> ModpackUpdater.executor().execute(() -> {
 			disconnectImmediately(handler);
 			ScreenImpl.multiplayer();
-			answered.complete(LoginUpdateResponse.UPDATE_REQUIRED);
+			answered.complete(LoginUpdateResponse.JOIN_CANCELLED);
 		});
 		ScreenManager.modpackOffer(syncModpack, joinWithout, cancel);
 		return answered;

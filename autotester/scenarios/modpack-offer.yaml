@@ -21,6 +21,26 @@ flow:
     name: capture the modpack offer
     file: modpack-offer
   - do: click
+    name: cancel the join from the optional pack offer
+    select: { key: automodpack.back }
+  - do: wait_for
+    name: record the cancelled join on the server
+    timeout: 30s
+    until:
+      log:
+        container: server
+        matches: 'cancelled the join during the optional modpack offer'
+  - do: connect
+    name: join again after cancelling the offer
+  - do: wait_for
+    name: show the modpack offer again after the cancelled join
+    timeout: 90s
+    until:
+      all:
+        - screen: ModpackOfferScreen
+        - element: { key: automodpack.offer.syncModpack, enabled: true }
+        - element: { key: automodpack.offer.joinWithout, enabled: true }
+  - do: click
     name: join without the modpack
     select: { key: automodpack.offer.joinWithout }
   - do: wait_join

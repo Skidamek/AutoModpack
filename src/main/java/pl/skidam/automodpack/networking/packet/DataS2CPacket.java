@@ -61,6 +61,9 @@ public class DataS2CPacket {
 			} else if (clientResponse == LoginUpdateResponse.CLIENT_DECLINED) {
 				LOGGER.warn("{} dismissed the certificate verification prompt", GameHelpers.getPlayerName(profile));
 				disconnect(handler, VersionedText.literal("[AutoModpack] Certificate verification was dismissed. Reconnect and verify the certificate to join."));
+			} else if (clientResponse == LoginUpdateResponse.JOIN_CANCELLED) {
+				LOGGER.info("{} cancelled the join during the optional modpack offer", GameHelpers.getPlayerName(profile));
+				disconnect(handler, VersionedText.literal("[AutoModpack] Join cancelled."));
 			} else {
 				disconnect(handler, VersionedText.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!"));
 

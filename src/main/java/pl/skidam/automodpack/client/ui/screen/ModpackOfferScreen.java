@@ -41,6 +41,7 @@ public final class ModpackOfferScreen extends VersionedScreen {
 		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.offer.syncAnytime").getString(), wrapWidth));
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.offer.joinWithout"), button -> joinWithoutIt()),
+				optionalAction(VersionedText.translatable("automodpack.back"), button -> cancelJoin()),
 				primaryAction(VersionedText.translatable("automodpack.offer.syncModpack"), button -> syncToServer()));
 		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, footer);
 		this.titleTop = layout.titleTop();
