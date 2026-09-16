@@ -61,11 +61,14 @@ public final class VersionedPanels {
 		drawNineSlice(panelSprite(false), matrices, x, y, width, height, 9);
 	}
 
+	/** Sprite id semantics per branch: 26.1+ addresses atlas entries, 1.21.2+ blitSprite addresses atlas sprites by the path under textures/gui/sprites, and below 1.21.2 the texture is bound by its full path. */
 	private static Identifier panelSprite(boolean frame) {
 		/*? if >=26.1 {*/
 		return Identifier.withDefaultNamespace(frame ? "tooltip/frame" : "tooltip/background");
-		/*?} else {*/
+		/*?} elif <1.21.2 {*/
 		/*return Common.id("textures/gui/sprites/tooltip/" + (frame ? "frame" : "background") + ".png");
+		*//*?} else {*/
+		/*return Common.id("tooltip/" + (frame ? "frame" : "background"));
 		*//*?}*/
 	}
 

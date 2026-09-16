@@ -651,7 +651,9 @@ public class GroupSelectionScreen extends VersionedScreen {
 			railY += 11;
 		}
 		List<String> descriptionLines = wrapToWidth(this.font, description.getString(), railWidth - platformDropdown.getWidth() - 8);
-		if (descriptionLines.size() > 44 - railY) descriptionLines = descriptionLines.subList(0, (44 - railY) / 11);
+		// The description shares the rail with the summary line at y=44, so it may only use the rows above it.
+		int maxDescriptionLines = Math.max(1, (44 - railY) / 11);
+		if (descriptionLines.size() > maxDescriptionLines) descriptionLines = descriptionLines.subList(0, maxDescriptionLines);
 		for (int index = 0; index < descriptionLines.size(); index++)
 			drawTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), railLeft, railY + index * 11, TextColors.WHITE);
 		drawTextWithShadow(matrices, this.font,

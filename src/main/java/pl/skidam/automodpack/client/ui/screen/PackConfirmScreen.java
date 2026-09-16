@@ -130,9 +130,11 @@ public final class PackConfirmScreen extends VersionedScreen {
 		ActionDefinition reviewAction = optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles());
 		ActionDefinition primaryDef = primaryAction(primaryLabel, button -> confirm());
 		List<ActionRow> rows = new ArrayList<>();
-		if (historyAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, historyAction));
+		// History and Customize are both compact optional actions: one shared row instead of two full-width ones.
+		if (historyAction != null && customizeAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, historyAction, customizeAction));
+		else if (historyAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, historyAction));
+		else if (customizeAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, customizeAction));
 		if (leftoverAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, leftoverAction));
-		if (customizeAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, customizeAction));
 		if (ackAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, ackAction));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, cancelAction, reviewAction, primaryDef));
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
