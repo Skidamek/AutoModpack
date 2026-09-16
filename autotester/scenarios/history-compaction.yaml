@@ -101,7 +101,7 @@ flow:
     timeout: 20s
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { text: History, enabled: true }
   - do: click
     name: open the content history

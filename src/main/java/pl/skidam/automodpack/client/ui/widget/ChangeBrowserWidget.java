@@ -245,7 +245,8 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 				String name = groupNames.get(effect.value());
 				return name == null || name.isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : name;
 			}
-			return VersionedText.translatable("automodpack.ui.general").getString();
+			// Pack metadata effects carry the modpack id as their value, so the row names the pack it reshaped.
+			return VersionedText.translatable("automodpack.browser.packEffect", effect.value()).getString();
 		}
 
 		/*? if >= 1.21.9 {*/

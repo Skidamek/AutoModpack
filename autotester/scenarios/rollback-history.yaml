@@ -62,7 +62,7 @@ flow:
     name: show the history action on the pack details
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { text: History, enabled: true }
   - do: click
     name: open the content history

@@ -214,7 +214,7 @@ open_multiplayer:
 open_pack_manager:
   - do: click
     name: open installed pack manager from multiplayer
-    select: { key_any: [automodpack.selection.button, automodpack.selection.shortButton] }
+    select: { key_any: [automodpack.packManager.button, automodpack.packManager.shortButton] }
   - do: wait_for
     name: wait for installed pack manager
     until: { screen: InstalledModpacksScreen }

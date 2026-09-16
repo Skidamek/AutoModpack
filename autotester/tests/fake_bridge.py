@@ -118,7 +118,7 @@ class FakeBridge:
                 "other": [{"id": 90, "text": "I understand the risk and trust this server.", "enabled": True, "visible": True, "key": "automodpack.confirm.ack"}],
             },
             "groups": {
-                "screenClass": "ModpackSelectionScreen",
+                "screenClass": "GroupSelectionScreen",
                 "buttons": [
                     {"id": 37, "text": "Defaults", "enabled": True, "visible": True},
                     {"id": 31, "text": "Continue", "enabled": True, "visible": True},
@@ -131,12 +131,6 @@ class FakeBridge:
             "group_files": {
                 "screenClass": "ChangeBrowserScreen",
                 "buttons": [{"id": 39, "text": "Back", "enabled": True, "visible": True}],
-                "textFields": [],
-            },
-            "feature_conflict": {
-                "screenClass": "GroupConflictScreen",
-                "buttons": [{"id": 50, "text": "Use Alternative", "enabled": True, "visible": True},
-                            {"id": 51, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "preview": {
@@ -163,7 +157,7 @@ class FakeBridge:
             "multiplayer": {
                 "screenClass": "JoinMultiplayerScreen",
                 "title": "Play Multiplayer",
-                "buttons": [{"id": 7, "text": "Modpack settings", "enabled": True, "visible": True, "key": "automodpack.selection.button"},
+                "buttons": [{"id": 7, "text": "Modpacks", "enabled": True, "visible": True, "key": "automodpack.packManager.button"},
                             {"id": 8, "text": "Multiplayer", "enabled": True, "visible": True}],
                 "textFields": [],
             },
@@ -173,7 +167,7 @@ class FakeBridge:
                 "textFields": [],
             },
             "details": {
-                "screenClass": "ModpackDetailsScreen",
+                "screenClass": "ModpackSettingsScreen",
                 "buttons": self._details_buttons(),
                 "textFields": [],
             },
@@ -218,7 +212,7 @@ class FakeBridge:
                 "textFields": [],
             },
             "settings": {
-                "screenClass": "ModpackSelectionScreen",
+                "screenClass": "GroupSelectionScreen",
                 "buttons": [{"id": 10, "text": "Pack manager", "enabled": True, "visible": True, "key": "automodpack.packManager.switch"},
                             {"id": 13, "text": "Save", "enabled": True, "visible": True},
                             {"id": 57, "text": "History", "enabled": True, "visible": True},
@@ -257,7 +251,7 @@ class FakeBridge:
 
     # --- actions ----------------------------------------------------------
     def _group_list_rows(self) -> list[dict]:
-        """Rows of the checkbox group list, mirroring ModpackSelectionScreen.listItems().
+        """Rows of the checkbox group list, mirroring GroupSelectionScreen.listItems().
 
         Every row is a vanilla checkbox: optional groups and their category headers are
         enabled, locked rows are disabled. State lives in `checked`, never in the text,
@@ -333,10 +327,9 @@ class FakeBridge:
             self.visuals_excluded = False
             self.screen = "groups"
         elif element_id == 34:
+            # Alternative conflicts with Visuals: the resolver's replacement applies immediately,
+            # swapping Visuals out; the groups screen shows the receipt line instead of a dialog.
             self.conflict = True
-            self.screen = "feature_conflict"
-        elif element_id == 50:
-            # Keep Alternative: the conflict replacement swaps Visuals out.
             self.alternative_selected = True
             self.visuals_selected = False
             self.visuals_excluded = False

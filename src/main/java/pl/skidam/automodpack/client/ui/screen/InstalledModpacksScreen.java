@@ -93,7 +93,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	}
 
 	private void open(InstalledModpackController.Pack entry) {
-		ScreenImpl.setScreen(new ModpackDetailsScreen(this, controller, entry));
+		ScreenImpl.setScreen(new ModpackSettingsScreen(this, controller, entry));
 	}
 
 	@Override

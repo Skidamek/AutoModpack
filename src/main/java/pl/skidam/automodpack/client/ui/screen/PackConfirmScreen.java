@@ -315,7 +315,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 				ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.MULTIPLAYER, null));
 			}
 		};
-		ScreenImpl.setScreen(new ModpackSelectionScreen(this, target(), actions, action));
+		ScreenImpl.setScreen(new GroupSelectionScreen(this, target(), actions, action));
 	}
 
 	private void openFiles() {

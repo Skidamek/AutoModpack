@@ -20,7 +20,7 @@ flow:
   - use: open_multiplayer
   - do: click
     name: open the installed pack manager
-    select: { text: Modpack settings }
+    select: { text: Modpacks }
   - do: wait_for
     name: show the installed pack row
     until:
@@ -34,7 +34,7 @@ flow:
     name: show the pack details actions
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { key: automodpack.management.groups, enabled: true }
   - do: click
     name: open the installed group selection
@@ -43,7 +43,7 @@ flow:
     name: show the unchanged required-only selection
     until:
       all:
-        - screen: ModpackSelectionScreen
+        - screen: GroupSelectionScreen
         - element: { text: "Optional Feature (", checked: false }
         - element: { text: Save, enabled: false }
   - do: click

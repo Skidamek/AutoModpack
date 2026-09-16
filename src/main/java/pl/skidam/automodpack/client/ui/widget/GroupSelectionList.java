@@ -11,17 +11,11 @@ import net.minecraft.client.gui.components.ContainerObjectSelectionList;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 
-import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
-
-/*? if >= 1.21.9 {*/
-import net.minecraft.client.input.MouseButtonEvent;
-/*?}*/
 
 /*? if >=26.1 {*/
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -147,7 +141,7 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	public RowView rowView(int index) {
 		Item item = this.children().get(index).item();
 		String text = item.counter().isBlank() ? item.label().getString() : item.label().getString() + " " + item.counter();
-		return new RowView(text, item.canToggle(), item.kind() == Kind.CAPTION ? null : item.selected(), item.partial());
+		return new RowView(text, item.canToggle(), item.selected(), item.partial());
 	}
 
 	public int rowCount() {
@@ -180,7 +174,6 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	}
 
 	public enum Kind {
-		CAPTION,
 		HEADER,
 		GROUP
 	}
@@ -193,7 +186,6 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	}
 
 	public final class Entry extends ContainerObjectSelectionList.Entry<Entry> {
-		private static final int TEXT_MARGIN = 6;
 		private final Item item;
 		private final AbstractWidget row;
 		private final AbstractWidget filesButton;
@@ -202,33 +194,27 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		private Entry(Item item, Consumer<Item> onToggle, Consumer<Item> onInspect) {
 			this.item = item;
 			int rowWidth = GroupSelectionList.this.getRowWidth();
-			if (item.kind() == Kind.CAPTION) {
-				// The plain "General" section caption is a label, not a control: there is nothing to toggle.
-				this.row = null;
-				this.filesButton = null;
+			int indent = item.kind() == Kind.GROUP ? CHILD_INDENT : 0;
+			int filesWidth = item.kind() == Kind.GROUP ? filesButtonWidth() : 0;
+			int mainWidth = item.kind() == Kind.GROUP ? Math.max(1, rowWidth - indent - filesWidth - ActionAreaLayout.SEAM) : rowWidth;
+			AbstractWidget checkbox = item.kind() == Kind.HEADER
+					? new CategoryHeaderRow(minecraft.font, 0, 0, mainWidth, item.label(), state(item), item.counter(), () -> onToggle.accept(item))
+					: new CheckboxWidget(minecraft.font, 0, 0, mainWidth, item.label(), item.selected(), value -> {
+						if (value != item.selected()) onToggle.accept(item);
+					});
+			// Locked rows and inert headers still show their state, but the box is dead: the resolution owns it.
+			checkbox.active = item.canToggle();
+			if (item.tooltip() != null) VersionedScreen.setTooltip(checkbox, item.tooltip());
+			this.row = checkbox;
+			if (item.kind() == Kind.GROUP) {
+				// The narration keeps the "Files" label so screen readers and the tooling bridge still name the action.
+				Button files = VersionedScreen.iconButtonWidget(0, 0, filesWidth, 16, button -> onInspect.accept(item), "folder", filesLabel());
+				if (item.tooltip() != null) VersionedScreen.setTooltip(files, item.tooltip());
+				this.filesButton = files;
 			} else {
-				int indent = item.kind() == Kind.GROUP ? CHILD_INDENT : 0;
-				int filesWidth = item.kind() == Kind.GROUP ? filesButtonWidth() : 0;
-				int mainWidth = item.kind() == Kind.GROUP ? Math.max(1, rowWidth - indent - filesWidth - ActionAreaLayout.SEAM) : rowWidth;
-				AbstractWidget checkbox = item.kind() == Kind.HEADER
-						? new CategoryHeaderRow(minecraft.font, 0, 0, mainWidth, item.label(), state(item), item.counter(), () -> onToggle.accept(item))
-						: new CheckboxWidget(minecraft.font, 0, 0, mainWidth, item.label(), item.selected(), value -> {
-							if (value != item.selected()) onToggle.accept(item);
-						});
-				// Locked rows and inert headers still show their state, but the box is dead: the resolution owns it.
-				checkbox.active = item.canToggle();
-				if (item.tooltip() != null) VersionedScreen.setTooltip(checkbox, item.tooltip());
-				this.row = checkbox;
-				if (item.kind() == Kind.GROUP) {
-					// The narration keeps the "Files" label so screen readers and the tooling bridge still name the action.
-					Button files = VersionedScreen.iconButtonWidget(0, 0, filesWidth, 16, button -> onInspect.accept(item), "folder", filesLabel());
-					if (item.tooltip() != null) VersionedScreen.setTooltip(files, item.tooltip());
-					this.filesButton = files;
-				} else {
-					this.filesButton = null;
-				}
+				this.filesButton = null;
 			}
-			this.children = this.row == null ? List.of() : this.filesButton == null ? List.of(this.row) : List.of(this.row, this.filesButton);
+			this.children = this.filesButton == null ? List.of(this.row) : List.of(this.row, this.filesButton);
 		}
 
 		public Item item() {
@@ -272,11 +258,6 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		*//*?}*/
 
 		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth, int mouseX, int mouseY, float tickDelta) {
-			if (row == null) {
-				Component label = item.label();
-				VersionedScreen.drawTextWithShadow(matrices, minecraft.font, label instanceof MutableComponent mutable ? mutable : VersionedText.literal(label.getString()), x + TEXT_MARGIN, y + 7, TextColors.WHITE);
-				return;
-			}
 			/*? if >=26.1 {*/
 			row.extractRenderState(matrices.getContext(), mouseX, mouseY, tickDelta);
 			if (filesButton != null) filesButton.extractRenderState(matrices.getContext(), mouseX, mouseY, tickDelta);
@@ -294,7 +275,6 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 			this.setWidth(entryWidth);
 			this.setHeight(ROW_HEIGHT);
 			/*?}*/
-			if (row == null) return;
 			positionWidget(row, x + (item.kind() == Kind.GROUP ? CHILD_INDENT : 0), y);
 			if (filesButton != null) positionWidget(filesButton, x + GroupSelectionList.this.getRowWidth() - filesButton.getWidth(), y);
 		}
@@ -308,19 +288,5 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 			widget.y = y;
 			*//*?}*/
 		}
-
-		/*? if >= 1.21.9 {*/
-		@Override
-		public boolean mouseClicked(MouseButtonEvent mouseButtonEvent, boolean bl) {
-			if (row != null) return super.mouseClicked(mouseButtonEvent, bl);
-			return false;
-		}
-		/*?} else {*/
-		/*@Override
-		public boolean mouseClicked(double mouseX, double mouseY, int button) {
-			if (row != null) return super.mouseClicked(mouseX, mouseY, button);
-			return false;
-		}
-		*//*?}*/
 	}
 }

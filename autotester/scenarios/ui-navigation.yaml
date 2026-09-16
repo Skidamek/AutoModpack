@@ -21,7 +21,7 @@ flow:
     name: wait for group customization
     until:
       all:
-        - screen: ModpackSelectionScreen
+        - screen: GroupSelectionScreen
         - element: { text: "Visuals (", checked: false }
         - element: { text: "Category: Visuals", checked: false }
   - do: screenshot
@@ -99,7 +99,7 @@ flow:
     name: verify group customization is still usable after the file browser
     until:
       all:
-        - screen: ModpackSelectionScreen
+        - screen: GroupSelectionScreen
         - element: { text: continue, enabled: true }
   - do: click
     name: turn the whole category off through its header
@@ -148,7 +148,7 @@ flow:
     name: verify group customization is reusable
     until:
       all:
-        - screen: ModpackSelectionScreen
+        - screen: GroupSelectionScreen
         - element: { text: continue, enabled: true }
   - do: click
     name: preview the selection again
@@ -168,7 +168,7 @@ flow:
     select: { text: Customize }
   - do: wait_for
     name: return from customization to first connection
-    until: { screen: ModpackSelectionScreen }
+    until: { screen: GroupSelectionScreen }
   - do: click
     name: return to first connection
     select: { text: back }

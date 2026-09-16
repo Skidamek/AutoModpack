@@ -75,7 +75,7 @@ flow:
     name: show the group-selection list without pagination
     until:
       all:
-        - screen: ModpackSelectionScreen
+        - screen: GroupSelectionScreen
         - element: { text: Core }
         - element: { text: Visuals }
         - element: { text: "Category: Visuals" }
@@ -98,17 +98,15 @@ flow:
     name: select the conflicting alternative
     select: { text: "Alternative (" }
   - do: wait_for
-    name: show the conflict explanation
+    name: show the auto-resolved conflict receipt
     until:
       all:
-        - screen: GroupConflictScreen
-        - element: { text: "Use Alternative", enabled: true }
+        - screen: GroupSelectionScreen
+        - element: { text: "Alternative (", checked: true }
+        - element: { text: "Visuals (", checked: false }
   - do: screenshot
     name: capture deterministic conflict replacement
     file: all-feature-conflict
-  - do: click
-    name: keep the alternative and replace the conflicting visual choice
-    select: { text: "Use Alternative" }
   - do: wait_for
     name: show the unavailable platform group
     until:
@@ -277,7 +275,7 @@ flow:
     name: show Pack B lifecycle actions
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { text: Activate, enabled: true }
   - do: screenshot
     name: capture the installed pack details
@@ -349,7 +347,7 @@ flow:
     name: keep repair unavailable for an inactive pack
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - no_element: { text: Repair }
   - do: click
     name: return from inactive Pack A details
@@ -361,7 +359,7 @@ flow:
     name: expose repair only for the active pack
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { text: Repair, enabled: true }
   - do: click
     name: open a healthy repair review
@@ -383,7 +381,7 @@ flow:
     name: return from repair without leaving Pack B details stale
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { text: Repair, enabled: true }
   - do: click
     name: return to the installed pack list before preserved files
@@ -449,7 +447,7 @@ flow:
     name: show Pack A lifecycle actions
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { text: Activate, enabled: true }
   - do: click
     name: review the B to A cached switch
@@ -555,7 +553,7 @@ flow:
   - use: open_multiplayer
   - do: click
     name: open Pack B v2 settings directly from multiplayer
-    select: { text: Modpack settings }
+    select: { text: Modpacks }
   - do: wait_for
     name: show the installed pack list from multiplayer
     until:
@@ -569,7 +567,7 @@ flow:
     name: show Pack B history action
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { text: History, enabled: true }
   - do: click
     name: open Pack B generation history from multiplayer settings
@@ -600,7 +598,7 @@ flow:
     select: { text: Back }
   - do: wait_for
     name: return to Pack B details after history
-    until: { screen: ModpackDetailsScreen }
+    until: { screen: ModpackSettingsScreen }
   - do: click
     name: return to the installed pack list before preserved files restore
     select: { text: Back }
@@ -840,7 +838,7 @@ flow:
   - use: open_multiplayer
   - do: click
     name: open Pack A settings for recovered
-    select: { text: Modpack settings }
+    select: { text: Modpacks }
   - do: wait_for
     name: show the installed pack list for recovered
     until:
@@ -893,7 +891,7 @@ flow:
     name: expose active-pack repair beside update
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { text: Repair, enabled: true }
   - do: click
     name: inspect deliberate corruption without trusting caches
@@ -946,7 +944,7 @@ flow:
     name: return to usable Pack A details after repair cancellation
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { text: Repair, enabled: true }
   - do: click
     name: reopen repair to verify choices did not leak
@@ -1231,7 +1229,7 @@ flow:
     select: { key: automodpack.confirm.customize }
   - do: wait_for
     name: show first-install group customization
-    until: { screen: ModpackSelectionScreen }
+    until: { screen: GroupSelectionScreen }
   - do: click
     name: return from customization without installing
     select: { text: Back }
@@ -1325,7 +1323,7 @@ flow:
   - use: open_multiplayer
   - do: click
     name: open modpack settings for the installed Pack A
-    select: { text: Modpack settings }
+    select: { text: Modpacks }
   - do: wait_for
     name: show Pack A row without lifecycle actions on the list
     until:
@@ -1341,7 +1339,7 @@ flow:
     name: show active Pack A lifecycle actions
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { text: Remove, enabled: true }
   - do: screenshot
     name: capture active Pack A manager actions

@@ -136,7 +136,7 @@ flow:
     timeout: 20s
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { key: automodpack.management.stopSyncing, enabled: true }
   - do: screenshot
     name: capture the attached pack details
@@ -149,7 +149,7 @@ flow:
     timeout: 20s
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { key: automodpack.management.resumeSyncing, enabled: true }
   - do: click
     name: return to the installed pack list
@@ -196,7 +196,7 @@ flow:
     timeout: 20s
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { key: automodpack.management.resumeSyncing, enabled: true }
   - do: click
     name: attach by resuming the sync
@@ -206,7 +206,7 @@ flow:
     timeout: 60s
     until:
       all:
-        - screen: ModpackDetailsScreen
+        - screen: ModpackSettingsScreen
         - element: { key: automodpack.management.stopSyncing, enabled: true }
   - do: click
     name: return to the installed pack list

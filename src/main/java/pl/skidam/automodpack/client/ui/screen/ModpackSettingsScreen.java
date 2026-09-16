@@ -19,7 +19,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /** A single, calm entry point for all actions on one installed modpack. */
-public final class ModpackDetailsScreen extends VersionedScreen {
+public final class ModpackSettingsScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = ActionAreaLayout.FOOTER_RAIL;
 	// Busy stays invisible for this long first, so a fast check never flashes the disabled state.
 	private static final long BUSY_VISIBLE_MILLIS = 500L;
@@ -33,7 +33,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 	private long busyAt;
 	private boolean upToDate;
 
-	public ModpackDetailsScreen(Screen parent, InstalledModpackController controller, InstalledModpackController.Pack pack) {
+	public ModpackSettingsScreen(Screen parent, InstalledModpackController controller, InstalledModpackController.Pack pack) {
 		super(VersionedText.translatable("automodpack.packDetails.title"));
 		this.parent = parent;
 		this.controller = controller;
@@ -124,7 +124,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 
 	private void openGroups() {
 		if (busy) return;
-		ScreenImpl.setScreen(ModpackSelectionScreen.forInstalledRecord(this, pack.record(), false));
+		ScreenImpl.setScreen(GroupSelectionScreen.forInstalledRecord(this, pack.record(), false));
 	}
 
 	private void openHistory() {
@@ -173,7 +173,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 
 	private void reopenOrList() {
 		InstalledModpackController.Pack next = controller.installedPack(pack.modpackId());
-		ScreenImpl.setScreen(next == null ? parent : new ModpackDetailsScreen(parent, controller, next));
+		ScreenImpl.setScreen(next == null ? parent : new ModpackSettingsScreen(parent, controller, next));
 	}
 
 	private void released() {

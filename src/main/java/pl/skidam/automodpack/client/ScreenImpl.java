@@ -338,7 +338,7 @@ public class ScreenImpl implements ScreenService {
 
 		public static void repairSelection(GenerationJsons.HeadDocumentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
 			GroupManifest manifest = PackDocument.fromFields(fields).manifest();
-			Screens.setScreen(ModpackSelectionScreen.repair(multiplayerScreen(), manifest, savedSelection, selectionAction, cancelAction));
+			Screens.setScreen(GroupSelectionScreen.repair(multiplayerScreen(), manifest, savedSelection, selectionAction, cancelAction));
 		}
 
 		/** The certificate prompt interrupts the vanilla connecting screen, which owns no connection of its own; backing out of the join lands on the multiplayer hub. */

@@ -423,7 +423,7 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
     bridge.click(97)  # Checking the unowned row opts into keeping them.
     assert any(button["text"] == "Keep 2 existing mod files" and button.get("checked") for button in bridge.gui()["buttons"])
     bridge.click(100)
-    assert bridge.gui()["screenClass"] == "ModpackDetailsScreen"
+    assert bridge.gui()["screenClass"] == "ModpackSettingsScreen"
 
     # Storage verification returns to the same screen after a corrupt claimed object fails.
     object_path = bridge._vault_claim("packaaa", "config/amp-autotest-gamma.cfg", b"gamma", "SERVER_REMOVAL")

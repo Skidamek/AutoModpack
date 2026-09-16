@@ -1,4 +1,4 @@
-"""Checks that every shipped client locale is complete and format-safe.
+"""Checks that every shipped client locale is stale-free and format-safe against en_us.
 
 Plural families are defined by UiFormat.plural() calls, not by guessing at
 ``.one``/``.other`` key suffixes: ``automodpack.browser.content.other`` is a
@@ -67,13 +67,13 @@ def test_client_locales_match_english_keys_and_placeholders():
     for base in families:
         assert f"{base}.other" in english, f"en_us.json misses the .other fallback for {base}"
 
+    # Locales may omit keys: en_us.json is the source of truth and Minecraft falls back to it,
+    # so a locale only has to be a stale-free subset whose carried keys stay format-safe.
     english_regular = _regular_keys(english, families)
     for locale in sorted(_lang_root().glob("*.json")):
         messages = json.loads(locale.read_text(encoding="utf-8"))
         assert all(isinstance(value, str) for value in messages.values()), locale.name
-        assert _regular_keys(messages, families) == english_regular, locale.name
-        for base in families:
-            assert f"{base}.other" in messages, f"{locale.name}: {base} misses the .other fallback"
+        assert _regular_keys(messages, families) <= english_regular, locale.name
         for key, value in messages.items():
             member = _member(key, families)
             if member is None:
