@@ -175,8 +175,9 @@ val writeReleaseMatrix =
 			val displayName = project.property("mod_name").toString()
 			val modName = displayName.lowercase(Locale.ROOT)
 			val modVersion = project.property("mod_version").toString()
-			// One jar publishes once for every loader; the game-version list is the distinct union
-			// across the selected targets, in stable target order.
+			// One jar publishes once per loader that actually has an impl among the selected targets;
+			// a partial selection must never advertise a loader whose manifest would crash the boot.
+			// The game-version list is the distinct union across the selected targets, in stable order.
 			val publishVersions =
 				selectedTargets
 					.map { target -> structuredString(target.substringBeforeLast('-'), "publish_versions") }
@@ -189,7 +190,11 @@ val writeReleaseMatrix =
 					mapOf(
 						"subproject" to "one-jar",
 						"target" to "universal",
-						"loader" to "fabric,forge,neoforge",
+						"loader" to
+							selectedTargets
+								.map { it.substringAfterLast('-') }
+								.distinct()
+								.joinToString(","),
 						"file" to "$modName-$modVersion.jar",
 						"mod_name" to displayName,
 						"mod_version" to modVersion,

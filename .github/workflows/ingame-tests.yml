@@ -82,10 +82,10 @@ jobs:
         with:
           add-job-summary: never
           cache-provider: basic
-      - name: Build instrumented target
+      - name: Build instrumented one jar
         env:
           TARGET: ${{ matrix.target }}
-        run: ./gradlew ":$TARGET:build" -Pautomodpack.autotest
+        run: ./gradlew oneJar -Pautomodpack.targets=$TARGET -Pautomodpack.autotest
       - name: Install uv
         uses: astral-sh/setup-uv@v10.1.0
       - name: Download client image
