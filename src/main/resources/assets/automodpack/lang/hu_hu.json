@@ -55,6 +55,7 @@
   "automodpack.summary.otherEffects": "Egyéb hatások: %s",
   "automodpack.summary.noRestart": "Újraindítás nem várható",
   "automodpack.summary.restartRequired": "Újraindítás szükséges",
+  "automodpack.summary.restartOffered": "Újraindítást fog kérni",
   "automodpack.packManager.title": "Telepített modpackek",
   "automodpack.packManager.description": "Válassz egy modpacket a csoportjai áttekintéséhez. Egy sor kijelölése nem aktiválja.",
   "automodpack.packManager.empty": "Ezen a kliensen nincs teljes modpack-bejegyzés.",

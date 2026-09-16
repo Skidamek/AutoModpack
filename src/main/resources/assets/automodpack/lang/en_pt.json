@@ -55,6 +55,7 @@
   "automodpack.summary.otherEffects": "Other effects: %s",
   "automodpack.summary.noRestart": "No restart on the horizon",
   "automodpack.summary.restartRequired": "Restart required",
+  "automodpack.summary.restartOffered": "Ye will be asked to restart",
   "automodpack.packManager.title": "Installed modpacks",
   "automodpack.packManager.description": "Pick a pack to look at its groups. Tappin' a row does not put it at the helm.",
   "automodpack.packManager.empty": "No complete modpack records on this client. The hold be empty.",

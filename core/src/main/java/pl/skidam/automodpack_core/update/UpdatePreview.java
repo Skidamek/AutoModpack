@@ -153,9 +153,18 @@ public final class UpdatePreview {
 		return decision.restartReasons();
 	}
 
-	/** Whether applying this plan demands a relaunch: only boot-critical reasons count, selection narration does not. */
-	public boolean requiresRestart() {
-		return decision.restartReasons().stream().anyMatch(RestartReason::bootCritical);
+	/** In-game restart demand for this preview. Preload never shows this screen. */
+	public RestartDemand restartDemand() {
+		return RestartPolicy.inGame(decision.restartReasons(), changedOrRemovedPaths());
+	}
+
+	private List<String> changedOrRemovedPaths() {
+		List<String> paths = new ArrayList<>();
+		for (ChangeSet.Change change : changeSet.changes()) {
+			if (change.kind() == ChangeSet.Kind.ADDED || change.kind() == ChangeSet.Kind.MODIFIED || change.kind() == ChangeSet.Kind.REMOVED)
+				paths.add(change.logicalPath());
+		}
+		return paths;
 	}
 
 	public List<Conflict> conflicts() {

@@ -55,6 +55,7 @@
   "automodpack.summary.otherEffects": "Прочее: %s",
   "automodpack.summary.noRestart": "Перезапуск не нужен",
   "automodpack.summary.restartRequired": "Нужен перезапуск",
+  "automodpack.summary.restartOffered": "Вам будет предложено перезапустить игру",
   "automodpack.packManager.title": "Установленные модпаки",
   "automodpack.packManager.description": "Выберите модпак, чтобы просмотреть его группы. Выбор строки его не включает.",
   "automodpack.packManager.empty": "На этом клиенте нет полных записей модпаков.",

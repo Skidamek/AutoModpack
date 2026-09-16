@@ -55,6 +55,7 @@
   "automodpack.summary.otherEffects": "기타 영향: %s",
   "automodpack.summary.noRestart": "재시작 없음",
   "automodpack.summary.restartRequired": "재시작 필요",
+  "automodpack.summary.restartOffered": "재시작을 요청합니다",
   "automodpack.packManager.title": "설치된 모드팩",
   "automodpack.packManager.description": "그룹을 보려면 모드팩을 선택하세요. 줄을 골라도 활성화되지 않습니다.",
   "automodpack.packManager.empty": "이 클라이언트에 완전한 모드팩 기록이 없습니다.",

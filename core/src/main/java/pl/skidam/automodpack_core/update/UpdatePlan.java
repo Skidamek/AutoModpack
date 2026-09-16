@@ -138,10 +138,10 @@ public final class UpdatePlan {
 	}
 
 	/**
-	 * Why an applied plan asks for a relaunch. Only boot-critical reasons demand one: a change this boot cannot
-	 * absorb, because the running JVM already read the affected files (the loader version, the standard mods
-	 * directory). Selection reasons narrate the run - the group or pack the player chose - without forcing anything,
-	 * so projection-only work stays restart-free.
+	 * Why an applied plan mentions a relaunch. {@link #blocksHotLoad()} is the preload half of
+	 * {@link RestartPolicy}: the loader version and the vanilla {@code mods/} tree this boot cannot
+	 * re-scan. Selection reasons only narrate the run. In-game demand also looks at changed paths, so a
+	 * projection-only mod update with no reason here is still {@link RestartDemand#REQUIRED} in-game.
 	 */
 	public enum RestartReason {
 		REMOVED_LOCAL_MODS(true),
@@ -153,15 +153,15 @@ public final class UpdatePlan {
 		CHANGED_GROUP_SELECTION(false),
 		SELECTED_MODPACK(false);
 
-		private final boolean bootCritical;
+		private final boolean blocksHotLoad;
 
-		RestartReason(boolean bootCritical) {
-			this.bootCritical = bootCritical;
+		RestartReason(boolean blocksHotLoad) {
+			this.blocksHotLoad = blocksHotLoad;
 		}
 
-		/** True when a running game cannot absorb this change and a relaunch is the only way to load it. */
-		public boolean bootCritical() {
-			return bootCritical;
+		/** True when preload cannot absorb this change in the same boot. */
+		public boolean blocksHotLoad() {
+			return blocksHotLoad;
 		}
 	}
 

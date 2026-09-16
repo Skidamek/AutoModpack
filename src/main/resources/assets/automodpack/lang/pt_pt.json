@@ -55,6 +55,7 @@
   "automodpack.summary.otherEffects": "Outros efeitos: %s",
   "automodpack.summary.noRestart": "Não é preciso reiniciar",
   "automodpack.summary.restartRequired": "É necessário reiniciar",
+  "automodpack.summary.restartOffered": "Será pedido que reinicies",
   "automodpack.packManager.title": "Modpacks instalados",
   "automodpack.packManager.description": "Escolhe um pack para rever os grupos. Selecionar uma linha não o ativa.",
   "automodpack.packManager.empty": "Não existem registos completos de modpack neste cliente.",

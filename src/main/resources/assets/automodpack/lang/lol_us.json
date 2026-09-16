@@ -55,6 +55,7 @@
   "automodpack.summary.otherEffects": "other stuff: %s",
   "automodpack.summary.noRestart": "no restart. lucky.",
   "automodpack.summary.restartRequired": "need restart. kthxbai.",
+  "automodpack.summary.restartOffered": "u will be asked to restert",
   "automodpack.packManager.title": "installed modpakz",
   "automodpack.packManager.description": "pick a pak 2 see its groupz. tappin a row duz not turn it on. no invisible bike here.",
   "automodpack.packManager.empty": "no complete modpak records. such empty.",

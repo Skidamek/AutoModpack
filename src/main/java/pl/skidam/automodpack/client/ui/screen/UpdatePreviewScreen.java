@@ -125,9 +125,11 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		long otherEffects = changes.effects().stream().filter(effect -> !"restart".equals(effect.category())).count();
 		if (otherEffects > 0) lines.add(VersionedText.translatable("automodpack.summary.otherEffects", otherEffects).withStyle(ChatFormatting.YELLOW));
 		lines.add(blankLine());
-		lines.add(preview.requiresRestart()
-				? VersionedText.translatable("automodpack.summary.restartRequired").withStyle(ChatFormatting.YELLOW)
-				: VersionedText.translatable("automodpack.summary.noRestart").withStyle(ChatFormatting.GREEN));
+		lines.add(switch (preview.restartDemand()) {
+			case REQUIRED -> VersionedText.translatable("automodpack.summary.restartRequired").withStyle(ChatFormatting.YELLOW);
+			case OFFERED -> VersionedText.translatable("automodpack.summary.restartOffered").withStyle(ChatFormatting.YELLOW);
+			case NONE -> VersionedText.translatable("automodpack.summary.noRestart").withStyle(ChatFormatting.GREEN);
+		});
 		return lines;
 	}
 

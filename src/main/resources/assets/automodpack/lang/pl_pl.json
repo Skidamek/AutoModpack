@@ -55,6 +55,7 @@
   "automodpack.summary.otherEffects": "Inne skutki: %s",
   "automodpack.summary.noRestart": "Restart nie jest potrzebny",
   "automodpack.summary.restartRequired": "Wymagany restart",
+  "automodpack.summary.restartOffered": "Zostaniesz poproszony o restart",
   "automodpack.packManager.title": "Zainstalowane modpacki",
   "automodpack.packManager.description": "Wybierz modpack, aby przejrzeć jego grupy. Zaznaczenie wiersza go nie aktywuje.",
   "automodpack.packManager.empty": "Na tym kliencie nie ma kompletnych zapisów modpacków.",

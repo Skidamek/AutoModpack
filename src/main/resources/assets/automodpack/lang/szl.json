@@ -55,6 +55,7 @@
   "automodpack.summary.otherEffects": "Inksze skutki: %s",
   "automodpack.summary.noRestart": "Resztart niy bydzie potrzebny",
   "automodpack.summary.restartRequired": "Resztart je potrzebny",
+  "automodpack.summary.restartOffered": "Bydziesz proszōny ô resztart",
   "automodpack.packManager.title": "Zainstalowane modpaki",
   "automodpack.packManager.description": "Wybier modpak, coby ôbejrzeć jego grupy. Wybranie wiersza niy aktywuje modpaka.",
   "automodpack.packManager.empty": "Na tym klijyncie niy ma dostympnych kōmpletnych zŏpisōw modpakōw.",

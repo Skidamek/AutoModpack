@@ -55,6 +55,7 @@
   "automodpack.summary.otherEffects": "其他影響：%s",
   "automodpack.summary.noRestart": "無需重新啟動",
   "automodpack.summary.restartRequired": "需要重新啟動",
+  "automodpack.summary.restartOffered": "之後會詢問你是否重啟",
   "automodpack.packManager.title": "已安裝的模組包",
   "automodpack.packManager.description": "選擇一個模組包以檢視其群組。選取列不會啟用它。",
   "automodpack.packManager.empty": "此用戶端沒有完整的模組包紀錄。",

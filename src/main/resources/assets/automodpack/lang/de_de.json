@@ -55,6 +55,7 @@
   "automodpack.summary.otherEffects": "Weitere Auswirkungen: %s",
   "automodpack.summary.noRestart": "Kein Neustart erwartet",
   "automodpack.summary.restartRequired": "Neustart erforderlich",
+  "automodpack.summary.restartOffered": "Du wirst um einen Neustart gebeten",
   "automodpack.packManager.title": "Installierte Modpacks",
   "automodpack.packManager.description": "Wähle ein Modpack, um seine Gruppen zu prüfen. Das Auswählen einer Zeile aktiviert es nicht.",
   "automodpack.packManager.empty": "Auf diesem Client sind keine vollständigen Modpack-Einträge vorhanden.",

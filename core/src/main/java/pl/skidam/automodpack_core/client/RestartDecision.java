@@ -22,11 +22,6 @@ final class RestartDecision {
 			restartReasons = restartReasons.isEmpty() ? Set.of() : Collections.unmodifiableSet(EnumSet.copyOf(restartReasons));
 		}
 
-		/** Only a boot-critical change demands a relaunch; the selection narration describes the run without forcing one. */
-		boolean requiresRestart() {
-			return restartReasons.stream().anyMatch(UpdatePlan.RestartReason::bootCritical);
-		}
-
 		List<String> reasonIds() {
 			return restartReasons.stream().map(Enum::name).toList();
 		}
@@ -69,14 +64,6 @@ final class RestartDecision {
 	 */
 	static UpdateType applyRestartType(boolean fullDownload, Set<UpdatePlan.RestartReason> reasons) {
 		return reasons.contains(UpdatePlan.RestartReason.SELECTED_MODPACK) ? UpdateType.SELECT : fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
-	}
-
-	/**
-	 * Preload runs before the loader reads anything, so the fresh projection can be hot-loaded in the same boot. Only
-	 * changes this boot cannot absorb demand a restart; see {@link UpdatePlan.RestartReason#bootCritical()}.
-	 */
-	static boolean requiresRestartAtPreload(Set<UpdatePlan.RestartReason> reasons) {
-		return reasons.stream().anyMatch(UpdatePlan.RestartReason::bootCritical);
 	}
 
 	/** Fingerprint of the applied correction state so two rapid automatic restarts for the same state can be suppressed. */

@@ -47,7 +47,7 @@ public class RestartScreen extends VersionedScreen {
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.restart.removeStale"),
 					button -> new InstalledModpackController().offerStalePackRemoval(this::rebuild))));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.restart.cancel"), button -> ScreenImpl.setScreen(null)),
+				secondaryAction(VersionedText.translatable("automodpack.restart.cancel"), button -> ScreenImpl.multiplayer()),
 				primaryAction(VersionedText.translatable("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> minecraft.stop())));
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
 		List<MutableComponent> lines = buildBodyLines();
@@ -105,6 +105,6 @@ public class RestartScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		return handleBackOnEscape(() -> ScreenImpl.setScreen(null));
+		return handleBackOnEscape(ScreenImpl::multiplayer);
 	}
 }

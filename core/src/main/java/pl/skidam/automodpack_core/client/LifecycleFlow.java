@@ -3,6 +3,8 @@ package pl.skidam.automodpack_core.client;
 import pl.skidam.automodpack_core.screen.PreviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.RestartDemand;
+import pl.skidam.automodpack_core.update.RestartPolicy;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 
 /**
@@ -52,8 +54,9 @@ final class LifecycleFlow {
 			// The confirm click is the review's consent; commit itself refuses an unapproved plan.
 			removal.approve();
 			RestartDecision.ApplyResult result = updater.commitFlow(removal);
-			finishedWithoutRestart = removed != null && (!deactivation || !result.requiresRestart());
-			afterApply(result);
+			RestartDemand demand = RestartPolicy.inGame(result.restartReasons(), changelogs.changedOrRemovedPaths());
+			finishedWithoutRestart = removed != null && (!deactivation || demand == RestartDemand.NONE);
+			afterApply(result, demand);
 		} catch (Exception e) {
 			ModpackUpdater.showUpdateFailure(e);
 		} finally {
@@ -70,9 +73,9 @@ final class LifecycleFlow {
 		return updater.beginAttempt(new RemovalAttempt(storage, planBuilder, changelogs, kind)).preview();
 	}
 
-	/** Removal has no in-game content load: only a plan that names a restart reason asks the player to restart. */
-	private void afterApply(RestartDecision.ApplyResult result) {
-		if (result.requiresRestart()) updater.restartAfterApply(result);
+	/** Removal has no in-game content load: only a non-none in-game demand asks the player to restart. */
+	private void afterApply(RestartDecision.ApplyResult result, RestartDemand demand) {
+		if (demand != RestartDemand.NONE) updater.restartAfterApply(result);
 		else updater.clearUpdateLoopDetector();
 	}
 }

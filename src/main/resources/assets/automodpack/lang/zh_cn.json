@@ -55,6 +55,7 @@
   "automodpack.summary.otherEffects": "其他影响：%s",
   "automodpack.summary.noRestart": "无需重启",
   "automodpack.summary.restartRequired": "需要重启",
+  "automodpack.summary.restartOffered": "之后会询问你是否重启",
   "automodpack.packManager.title": "已安装的整合包",
   "automodpack.packManager.description": "选择一个整合包以查看其分组。选中一行不会启用它。",
   "automodpack.packManager.empty": "此客户端没有完整的整合包记录。",

@@ -33,6 +33,8 @@ import pl.skidam.automodpack_core.screen.SourceCounts;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.RestartDemand;
+import pl.skidam.automodpack_core.update.RestartPolicy;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
@@ -385,7 +387,7 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 		launch.approve();
 		ApplyResult applyResult = commitFlow(launch);
-		LOGGER.info("Launch apply completed; restart required: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
+		LOGGER.info("Launch apply completed; restart demand: {} Took: {}ms", RestartPolicy.atPreload(applyResult.restartReasons()), System.currentTimeMillis() - start);
 		finishLaunchApply(applyResult);
 	}
 
@@ -404,8 +406,15 @@ public class ModpackUpdater implements AutoCloseable {
 			restartAfterApply(applyResult);
 			return;
 		}
-		if (!RestartDecision.requiresRestartAtPreload(applyResult.restartReasons())) {
+		if (RestartPolicy.atPreload(applyResult.restartReasons()) != RestartDemand.REQUIRED) {
 			LOGGER.info("Launch apply needs no restart at preload; hot-loading the fresh pack in this boot");
+			return;
+		}
+		String fingerprint = RestartDecision.stateFingerprint(storage, applyResult);
+		if (updateLoopDetector.evaluateAndRecord(fingerprint).decision() == UpdateLoopDetector.Decision.SUPPRESS) {
+			LOGGER.error("Automatic restart loop detected. AutoModpack already requested two rapid restarts for the same correction state.");
+			LOGGER.error("Corrections were applied but still require a restart: {}", String.join(", ", applyResult.reasonDescriptions()));
+			LOGGER.error("Another automatic restart was suppressed. The modpack may not be fully active; inspect the surrounding logs and report recurring issues at https://github.com/Skidamek/AutoModpack/issues");
 			return;
 		}
 		new ReLauncher(RestartDecision.launchRestartType(review.firstConnection(), applyResult.restartReasons()), changelogs).restart(true);
@@ -447,32 +456,21 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	/**
-	 * Post-apply restart for a running game: the engine owns the restart decision, the flows only supply their kind.
-	 * Only boot-critical changes relaunch the game on their own. Read-from-disk content (configs, resource packs) is
-	 * different: whether a mod ever re-reads its config is unknowable, so an in-game apply still asks the player,
-	 * and the applied-but-maybe-unloaded flag also surfaces a toast on the next quiet login if the player declines.
+	 * Post-apply restart for a running game. {@link RestartPolicy#inGame} chooses required, offered, or none.
+	 * Required and offered both open the restart screen with a way back; none returns to the multiplayer hub.
+	 * File-changing applies mark content as not loaded so a failed join before a world exists can nudge a restart.
 	 */
 	void restartAfterApply(ApplyResult applyResult) {
-		if (!preload && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty())) SessionUpdateState.markAppliedContentNotLoaded();
-		if (!applyResult.requiresRestart()) {
+		Set<String> paths = changelogs.changedOrRemovedPaths();
+		if (!paths.isEmpty()) SessionUpdateState.markAppliedContentNotLoaded();
+		RestartDemand demand = RestartPolicy.inGame(applyResult.restartReasons(), paths);
+		if (demand == RestartDemand.NONE) {
 			updateLoopDetector.clear();
-			if (!preload && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty())) {
-				LOGGER.info("Update applied with {} changed and {} removed files the running game may not have loaded; asking the player to restart", changelogs.changedFiles().size(),
-						changelogs.removedFiles().size());
-				ScreenManager.restart(fullDownload ? UpdateType.FULL : UpdateType.UPDATE, changelogs);
-				return;
-			}
 			ScreenManager.completeWithoutRestart();
 			return;
 		}
-		String fingerprint = RestartDecision.stateFingerprint(storage, applyResult);
-		if (updateLoopDetector.evaluateAndRecord(fingerprint).decision() == UpdateLoopDetector.Decision.SUPPRESS) {
-			LOGGER.error("Automatic restart loop detected. AutoModpack already requested two rapid restarts for the same correction state.");
-			LOGGER.error("Corrections were applied but still require a restart: {}", String.join(", ", applyResult.reasonDescriptions()));
-			LOGGER.error("Another automatic restart was suppressed. The modpack may not be fully active; inspect the surrounding logs and report recurring issues at https://github.com/Skidamek/AutoModpack/issues");
-			return;
-		}
-		new ReLauncher(RestartDecision.applyRestartType(fullDownload, applyResult.restartReasons()), changelogs).restart(false);
+		LOGGER.info("Update applied with in-game restart demand {}; asking the player to restart", demand);
+		ScreenManager.restart(RestartDecision.applyRestartType(fullDownload, applyResult.restartReasons()), changelogs);
 	}
 
 	/**
@@ -523,7 +521,8 @@ public class ModpackUpdater implements AutoCloseable {
 			else showUpdateFailure(e);
 		}, this::close), () -> {
 			ApplyResult applyResult = commitFlow(reviewed);
-			LOGGER.info("Update completed! Required restart: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
+			LOGGER.info("Update completed! Restart demand: {} Took: {}ms", RestartPolicy.inGame(applyResult.restartReasons(), changelogs.changedOrRemovedPaths()),
+					System.currentTimeMillis() - start);
 			restartAfterApply(applyResult);
 		});
 	}

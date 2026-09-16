@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.client;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -26,6 +27,14 @@ public class Changelogs {
 	/** Removed files derived on demand from the canonical change set. */
 	public Map<String, FileChange> removedFiles() {
 		return fileChanges(ChangeSet.Kind.REMOVED);
+	}
+
+	/** Logical paths of added, modified, or removed files; the in-game restart policy reads these. */
+	public Set<String> changedOrRemovedPaths() {
+		Set<String> paths = new LinkedHashSet<>();
+		paths.addAll(changedFiles().keySet());
+		paths.addAll(removedFiles().keySet());
+		return paths;
 	}
 
 	private Map<String, FileChange> fileChanges(ChangeSet.Kind... kinds) {

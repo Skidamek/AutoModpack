@@ -55,6 +55,7 @@
   "automodpack.summary.otherEffects": "Autres effets : %s",
   "automodpack.summary.noRestart": "Aucun redémarrage prévu",
   "automodpack.summary.restartRequired": "Redémarrage requis",
+  "automodpack.summary.restartOffered": "Un redémarrage vous sera demandé",
   "automodpack.packManager.title": "Modpacks installés",
   "automodpack.packManager.description": "Choisissez un modpack pour revoir ses groupes. Sélectionner une ligne ne l'active pas.",
   "automodpack.packManager.empty": "Aucun enregistrement complet de modpack n'est disponible sur ce client.",
