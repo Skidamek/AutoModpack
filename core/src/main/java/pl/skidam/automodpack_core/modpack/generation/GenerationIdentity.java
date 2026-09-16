@@ -1,12 +1,10 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class GenerationIdentity {
 	private static final String STATE_DOMAIN = "automodpack-state-v1";
@@ -62,10 +60,6 @@ public final class GenerationIdentity {
 	}
 
 	private static String sha1(byte[] bytes) {
-		try {
-			return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-1").digest(bytes));
-		} catch (NoSuchAlgorithmException e) {
-			throw new IllegalStateException("SHA-1 is unavailable", e);
-		}
+		return HashUtils.sha1(bytes);
 	}
 }

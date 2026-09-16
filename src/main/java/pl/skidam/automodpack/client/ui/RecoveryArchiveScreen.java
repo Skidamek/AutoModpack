@@ -141,7 +141,7 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 				});
 			} catch (Exception e) {
 				this.minecraft.execute(() -> busy = false);
-				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 		});
 	}

@@ -6,14 +6,15 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.Locale;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
@@ -55,7 +56,7 @@ public final class StableSourceSnapshotter {
 				String sha1 = exclusion == null ? HashUtils.getHash(staged) : null;
 				if (exclusion == null && sha1 == null) throw new IOException("SHA-1 calculation returned null");
 				String murmur = null;
-				if (exclusion == null && (type.equals("mod") || type.equals("shader") || type.equals("resourcepack")))
+				if (exclusion == null && ModpackContentType.isSourceFetchable(type))
 					murmur = HashUtils.getCurseforgeMurmurHash(staged);
 				BasicFileAttributes after = attributes(source.sourcePath());
 				if (!stable(before, after)) {
@@ -119,7 +120,7 @@ public final class StableSourceSnapshotter {
 				return new Snapshot(null, exclusion, null);
 			}
 			String type = fileType(staged, source.logicalPath(), mod);
-			String murmur = type.equals("mod") || type.equals("shader") || type.equals("resourcepack") ? HashUtils.getCurseforgeMurmurHash(staged) : null;
+			String murmur = ModpackContentType.isSourceFetchable(type) ? HashUtils.getCurseforgeMurmurHash(staged) : null;
 			return new Snapshot(new GroupManifest.GroupFile(before.size(), type, false, false, sha1, murmur), null, new StagedObject(sha1, before.size(), staged));
 		} catch (IOException e) {
 			Files.deleteIfExists(staged);
@@ -171,13 +172,13 @@ public final class StableSourceSnapshotter {
 	}
 
 	private static String fileType(Path staged, String logicalPath, FileInspection.Mod cachedMod) {
-		if ((cachedMod != null || FileInspection.isMod(staged)) && ModpackPathPolicy.isActiveMod(logicalPath, "mod")) return "mod";
+		if (cachedMod != null || FileInspection.isMod(staged)) return ModpackContentType.MOD;
 		return ModpackPathPolicy.typeForPath(logicalPath);
 	}
 
 	private static String stagingSuffix(Path source) {
 		String name = source.getFileName().toString();
-		return name.toLowerCase(Locale.ROOT).endsWith(".jar") ? ".jar" : ".staged";
+		return JarUtils.hasJarExtension(name) ? ".jar" : ".staged";
 	}
 
 	private static void ensureStagingDirectory(Path stagingDirectory) throws IOException {

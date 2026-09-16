@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.util.function.LongSupplier;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 
 /** Stops rapid updater restart loops which repeatedly fail to converge. */
@@ -20,7 +21,7 @@ public final class UpdateLoopDetector {
 	private final LongSupplier currentTimeMillis;
 
 	public UpdateLoopDetector() {
-		this(ClientStorage.fromGameDirectory(SmartFileUtils.CWD).restartLoopStateFile(), System::currentTimeMillis);
+		this(ClientStorage.fromGameDirectory(GameDirectory.current()).restartLoopStateFile(), System::currentTimeMillis);
 	}
 
 	public UpdateLoopDetector(Path stateFile) {

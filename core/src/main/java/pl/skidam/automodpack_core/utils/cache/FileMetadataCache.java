@@ -3,20 +3,15 @@ package pl.skidam.automodpack_core.utils.cache;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HashMap;
-import java.util.HexFormat;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -33,13 +28,11 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  */
 public class FileMetadataCache implements AutoCloseable {
 
-	private static final Map<Path, FileMetadataCache> INSTANCES = new HashMap<>();
-	private static final Object GLOBAL_LOCK = new Object();
+	private static final SharedCacheRegistry<FileMetadataCache> REGISTRY = new SharedCacheRegistry<>();
 	private static final String RECORD_SUFFIX = ".json";
 
 	private final Path recordsDirectory;
 	private final Map<String, CachedFile> hotRecords = new HashMap<>();
-	private final AtomicInteger refCount = new AtomicInteger(1);
 	private final Object[] locks = new Object[64];
 
 	public static final class CachedFile {
@@ -97,19 +90,7 @@ public class FileMetadataCache implements AutoCloseable {
 	private record ComputedHash(String hash, BasicFileAttributes attributes) {}
 
 	public static FileMetadataCache open(Path path) throws IOException {
-		Path absPath = path.toAbsolutePath().normalize();
-		Files.createDirectories(absPath);
-		synchronized (GLOBAL_LOCK) {
-			FileMetadataCache existing = INSTANCES.get(absPath);
-			if (existing != null) {
-				existing.refCount.incrementAndGet();
-				return existing;
-			}
-
-			FileMetadataCache newCache = new FileMetadataCache(absPath);
-			INSTANCES.put(absPath, newCache);
-			return newCache;
-		}
+		return REGISTRY.acquire(path, FileMetadataCache::new);
 	}
 
 	private FileMetadataCache(Path recordsDirectory) {
@@ -272,20 +253,11 @@ public class FileMetadataCache implements AutoCloseable {
 	}
 
 	private static String sha1(String value) {
-		try {
-			return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-1").digest(value.getBytes(StandardCharsets.UTF_8)));
-		} catch (NoSuchAlgorithmException e) {
-			throw new AssertionError("SHA-1 is required by the cache record layout", e);
-		}
+		return HashUtils.sha1(value);
 	}
 
 	@Override
 	public void close() {
-		synchronized (GLOBAL_LOCK) {
-			if (refCount.decrementAndGet() <= 0) {
-				hotRecords.clear();
-				INSTANCES.remove(recordsDirectory, this);
-			}
-		}
+		if (REGISTRY.release(recordsDirectory, this)) hotRecords.clear();
 	}
 }

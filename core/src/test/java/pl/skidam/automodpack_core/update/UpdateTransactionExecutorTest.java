@@ -30,8 +30,8 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 class UpdateTransactionExecutorTest {
 	@TempDir
@@ -51,7 +51,7 @@ class UpdateTransactionExecutorTest {
 		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
 
 		assertTrue(execution.success());
-		assertTrue(SmartFileUtils.isValidFile(projectionFile, bytes.length, hash));
+		assertTrue(FileIntegrity.matches(projectionFile, bytes.length, hash));
 		assertVerifiedObjectProjection(storage.objectsDirectory().resolve(hash), projectionFile, bytes.length, hash);
 		assertEquals(target.generationTarget().targetGenerationId(), storage.readActiveState().generationId);
 		assertEquals(target.generationRecord(), new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).orElseThrow());
@@ -82,7 +82,7 @@ class UpdateTransactionExecutorTest {
 		GeneratedCopyState state = GeneratedCopyState.read(storage, target.manifest().modpackId(), target.generationTarget().targetGenerationId(),
 				UpdateTransaction.digest(target.selection().intent()));
 		assertEquals(List.of(new GeneratedCopyState.Entry("mods/nested.jar", nestedHash, nestedBytes.length)), state.entries());
-		assertTrue(SmartFileUtils.isValidFile(storage.modsDirectory().resolve("nested.jar"), nestedBytes.length, nestedHash));
+		assertTrue(FileIntegrity.matches(storage.modsDirectory().resolve("nested.jar"), nestedBytes.length, nestedHash));
 	}
 
 	@Test
@@ -98,7 +98,7 @@ class UpdateTransactionExecutorTest {
 		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
 
 		assertTrue(execution.success());
-		assertTrue(SmartFileUtils.isValidFile(storage.activePath("mods/existing.jar"), bytes.length, hash));
+		assertTrue(FileIntegrity.matches(storage.activePath("mods/existing.jar"), bytes.length, hash));
 		assertFalse(Files.exists(storage.objectsDirectory().resolve(hash)));
 		assertEquals(target.generationTarget().targetGenerationId(), storage.readActiveState().generationId);
 	}
@@ -114,7 +114,7 @@ class UpdateTransactionExecutorTest {
 		String localHash = HashUtils.getHash(local);
 		SelectedModpackTarget target = target("mods/server-sodium.jar", "mod", false, serverHash, serverBytes.length);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/local-sodium.jar"),
-				new UpdatePlan.FileState(localHash, localBytes.length, true, true));
+				new UpdatePlan.FileState(localHash, localBytes.length, true));
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Map.of(), Set.of(),
 				List.of(new UpdatePlan.ModInfo("mods/server-sodium.jar", serverHash, serverBytes.length, Set.of("sodium"), Set.of())),
 				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, Set.of("sodium"), Set.of())), List.of(), List.of(), null,
@@ -128,10 +128,10 @@ class UpdateTransactionExecutorTest {
 
 		assertTrue(execution.success());
 		assertFalse(Files.exists(local));
-		assertTrue(SmartFileUtils.isValidFile(storage.activePath("mods/server-sodium.jar"), serverBytes.length, serverHash));
+		assertTrue(FileIntegrity.matches(storage.activePath("mods/server-sodium.jar"), serverBytes.length, serverHash));
 		ClientStorageJsons.ClientQuarantineFields quarantine = QuarantineArchive.read(storage, target.manifest().modpackId());
 		assertEquals(1, quarantine.entries.size());
-		assertTrue(SmartFileUtils.isValidFile(storage.quarantinePayload(target.manifest().modpackId(), plan.conflicts().get(0).conflictId()), localBytes.length, localHash));
+		assertTrue(FileIntegrity.matches(storage.quarantinePayload(target.manifest().modpackId(), plan.conflicts().get(0).conflictId()), localBytes.length, localHash));
 	}
 
 	@Test
@@ -211,10 +211,10 @@ class UpdateTransactionExecutorTest {
 		Path overlay = storage.overlayFile(target.manifest().modpackId(), "config/settings.json");
 		Path live = storage.gameDirectory().resolve("config/settings.json");
 		assertTrue(execution.success());
-		assertTrue(SmartFileUtils.isValidFile(overlay, editedBytes.length, editedHash));
+		assertTrue(FileIntegrity.matches(overlay, editedBytes.length, editedHash));
 		assertFalse(Files.isSameFile(storage.objectsDirectory().resolve(editedHash), live));
 		assertArrayEquals(editedBytes, Files.readAllBytes(live));
-		assertTrue(SmartFileUtils.isValidFile(storage.activePath("config/settings.json"), baseBytes.length, baseHash));
+		assertTrue(FileIntegrity.matches(storage.activePath("config/settings.json"), baseBytes.length, baseHash));
 	}
 
 	@Test
@@ -248,9 +248,9 @@ class UpdateTransactionExecutorTest {
 		baselineEntry.size = -1;
 		baseline.entries = List.of(baselineEntry);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(
-				new UpdatePlan.FileKey(Root.PROJECTION, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true, true),
-				new UpdatePlan.FileKey(Root.GAME_DIR, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true, true),
-				new UpdatePlan.FileKey(Root.GAME_DIR, "mods/generated-remove.jar"), new UpdatePlan.FileState(generatedHash, generatedBytes.length, true, true));
+				new UpdatePlan.FileKey(Root.PROJECTION, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true),
+				new UpdatePlan.FileKey(Root.GAME_DIR, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true),
+				new UpdatePlan.FileKey(Root.GAME_DIR, "mods/generated-remove.jar"), new UpdatePlan.FileState(generatedHash, generatedBytes.length, true));
 		ClientConfigJsons.ClientConfigFieldsV3 removalConfig = new ClientConfigJsons.ClientConfigFieldsV3();
 		UpdatePlan removal = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(target.flatTarget(), baseline, files, Set.of(), generatedCopies, removalConfig));
 		assertEquals(List.of(new UpdatePlan.Preservation(Root.GAME_DIR, "mods/remove.jar", hash, bytes.length)), removal.preservations());
@@ -263,7 +263,7 @@ class UpdateTransactionExecutorTest {
 		assertFalse(Files.exists(live));
 		assertFalse(Files.exists(generatedLive));
 		assertFalse(Files.exists(storage.generatedCopiesFile(target.manifest().modpackId(), target.generationTarget().targetGenerationId(), UpdateTransaction.digest(expected))));
-		assertTrue(SmartFileUtils.isValidFile(storage.objectsDirectory().resolve(hash), bytes.length, hash));
+		assertTrue(FileIntegrity.matches(storage.objectsDirectory().resolve(hash), bytes.length, hash));
 		assertTrue(Files.isDirectory(storage.activeDirectory()));
 		try (var paths = Files.list(storage.activeDirectory())) {
 			assertEquals(List.of(), paths.toList());
@@ -271,6 +271,58 @@ class UpdateTransactionExecutorTest {
 		assertNull(storage.readActiveState());
 		assertTrue(new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).isPresent());
 		assertTrue(new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).isEmpty());
+	}
+
+	@Test
+	void deactivationRestoresTheClientAndKeepsPackState() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "deactivated-object".getBytes(StandardCharsets.UTF_8);
+		String hash = store(storage, bytes);
+		String managedPath = "config/empty/deactivate.txt";
+		SelectedModpackTarget target = target(managedPath, "config", false, hash, bytes.length);
+		UpdateTransactionExecutor executor = executor(storage);
+		executor.commit(plan(target, clientConfig(target.manifest().modpackId()),
+				List.of(new Operation(Root.PROJECTION, managedPath, OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, managedPath, true, hash, bytes.length))), target);
+		Path live = storage.gameDirectory().resolve(managedPath);
+		Files.createDirectories(live.getParent());
+		Files.write(live, bytes);
+		Path userFile = Files.writeString(storage.gameDirectory().resolve("config/user.txt"), "user-owned", StandardCharsets.UTF_8);
+		Path overlay = storage.overlayFile(target.manifest().modpackId(), "config/options.txt");
+		Files.createDirectories(overlay.getParent());
+		Files.writeString(overlay, "player-edit", StandardCharsets.UTF_8);
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
+		baseline.modpackId = target.manifest().modpackId();
+		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
+		baselineEntry.logicalPath = managedPath;
+		baselineEntry.absent = true;
+		baselineEntry.objectHash = "";
+		baselineEntry.size = -1;
+		baseline.entries = List.of(baselineEntry);
+		ConfigTools.writeAtomic(storage.baselineFile(target.manifest().modpackId()), baseline);
+		SelectionIntent expected = target.selection().intent();
+		GeneratedCopyState generatedCopies = new GeneratedCopyState(target.manifest().modpackId(), target.generationTarget().targetGenerationId(),
+				UpdateTransaction.digest(expected), List.of());
+		generatedCopies.write(storage);
+		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(
+				new UpdatePlan.FileKey(Root.PROJECTION, managedPath), new UpdatePlan.FileState(hash, bytes.length, true),
+				new UpdatePlan.FileKey(Root.GAME_DIR, managedPath), new UpdatePlan.FileState(hash, bytes.length, true));
+		UpdatePlan deactivation = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(target.flatTarget(), baseline, files, Set.of(), generatedCopies,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertTrue(executor.commit(UpdateTransaction.createDeactivation(deactivation, ClientPlatform.LINUX, expected,
+				storage.overlayDigest(target.manifest().modpackId()))).success());
+
+		assertFalse(Files.exists(live));
+		assertFalse(Files.exists(live.getParent()));
+		assertTrue(Files.isDirectory(userFile.getParent()));
+		assertEquals("user-owned", Files.readString(userFile, StandardCharsets.UTF_8));
+		assertNull(storage.readActiveState());
+		assertTrue(new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).isPresent());
+		assertEquals(expected, new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).orElseThrow());
+		assertTrue(Files.exists(storage.generatedCopiesFile(target.manifest().modpackId(), target.generationTarget().targetGenerationId(), UpdateTransaction.digest(expected))));
+		assertTrue(Files.exists(storage.baselineFile(target.manifest().modpackId())));
+		assertEquals("player-edit", Files.readString(overlay, StandardCharsets.UTF_8));
 	}
 
 	@Test
@@ -287,7 +339,7 @@ class UpdateTransactionExecutorTest {
 
 		assertTrue(executor(storage).commit(transaction).success());
 		assertFalse(Files.exists(current));
-		assertTrue(SmartFileUtils.isValidFile(replacementPath, replacement.length, replacementHash));
+		assertTrue(FileIntegrity.matches(replacementPath, replacement.length, replacementHash));
 		assertNull(storage.readActiveState());
 
 		UpdateTransaction invalid = UpdateTransaction.createSelfUpdate(currentPath, "../outside.jar", replacementHash, replacement.length, currentHash);
@@ -311,14 +363,14 @@ class UpdateTransactionExecutorTest {
 		String hash = HashUtils.getHash(temporary);
 		Path destination = storage.objectsDirectory().resolve(hash);
 		if (Files.exists(destination)) {
-			assertTrue(SmartFileUtils.isValidFile(destination, bytes.length, hash));
+			assertTrue(FileIntegrity.matches(destination, bytes.length, hash));
 			Files.delete(temporary);
 		} else Files.move(temporary, destination);
 		return hash;
 	}
 
 	private static void assertVerifiedObjectProjection(Path object, Path projection, long size, String hash) throws Exception {
-		assertTrue(SmartFileUtils.isValidFile(projection, size, hash));
+		assertTrue(FileIntegrity.matches(projection, size, hash));
 		if (Files.getFileStore(object).equals(Files.getFileStore(projection))) assertTrue(Files.isSameFile(object, projection));
 	}
 

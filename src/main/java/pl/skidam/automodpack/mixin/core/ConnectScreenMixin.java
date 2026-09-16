@@ -37,7 +37,7 @@ public abstract class ConnectScreenMixin {
 		ServerAddressPin.Parsed parsed = ServerAddressPin.parse(info.ip);
 		info.ip = parsed.address();
 		if (parsed.isMalformed()) {
-			new ScreenManager().error("automodpack.pin.invalid", parsed.error());
+			new ScreenManager().error(new IllegalArgumentException(parsed.error()), "automodpack.pin.invalid", parsed.error());
 			ci.cancel();
 			return;
 		}

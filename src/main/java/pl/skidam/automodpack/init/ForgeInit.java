@@ -20,7 +20,7 @@ public class ForgeInit {
 
 	public ForgeInit(/^? if >=1.19.2 {^/FMLJavaModLoadingContext context/^?}^/) {
 		preload = false;
-		ScreenManager.INSTANCE = new ScreenImpl();
+		ScreenManager.install(new ScreenImpl());
 
 		long start = System.currentTimeMillis();
 		LOGGER.info("Launching AutoModpack...");

@@ -9,6 +9,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 
 public class ModpackContentTools {
 	public static ModpackJsons.ModpackContentFields read(Path path) {
@@ -54,7 +55,7 @@ public class ModpackContentTools {
 				return item.type;
 			}
 		}
-		return "other";
+		return ModpackContentType.OTHER;
 	}
 
 }

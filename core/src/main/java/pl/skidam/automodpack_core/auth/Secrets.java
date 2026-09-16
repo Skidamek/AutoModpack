@@ -9,6 +9,8 @@ import java.util.Base64;
 import pl.skidam.automodpack_core.utils.TimedSet;
 
 public class Secrets {
+	public static final int BYTE_LENGTH = 32;
+
 	public static class Secret { // unfortunately has to be a class instead of record because of older gson version in 1.18 mc
 		private String secret; // and these also can't be final
 		private Long timestamp;
@@ -37,12 +39,12 @@ public class Secrets {
 	}
 
 	public static Secret anonymousSecret() {
-		return new Secret(Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]), 0L);
+		return new Secret(Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[BYTE_LENGTH]), 0L);
 	}
 
 	public static Secret generateSecret() {
 		SecureRandom random = new SecureRandom();
-		byte[] bytes = new byte[32]; // 32 bytes = 256 bits
+		byte[] bytes = new byte[BYTE_LENGTH];
 		random.nextBytes(bytes);
 		String secret = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
 		long timestamp = System.currentTimeMillis() / 1000;

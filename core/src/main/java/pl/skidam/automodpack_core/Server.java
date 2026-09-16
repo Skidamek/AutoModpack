@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core;
 
 import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_CONFIG_FILE;
 
 import java.io.IOException;
 import java.util.HashSet;
@@ -19,7 +20,7 @@ public class Server {
 		NettyServer server = new NettyServer();
 		hostServer = server;
 
-		serverConfig = ConfigTools.readOrCreate(serverConfigFile, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
+		serverConfig = ConfigTools.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
 		if (serverConfig == null) {
 			LOGGER.error("Failed to load standalone host configuration");
 			return;
@@ -27,7 +28,7 @@ public class Server {
 		// Standalone host serves only what is already in host-modpack, so no group pulls in CWD files.
 		if (serverConfig.groups != null) serverConfig.groups.values().stream().filter(Objects::nonNull).forEach(group -> group.syncedFiles = new HashSet<>());
 		serverConfig.validateSecrets = false;
-		ConfigTools.writeAtomic(serverConfigFile, serverConfig);
+		ConfigTools.writeAtomic(SERVER_CONFIG_FILE, serverConfig);
 
 		if (serverConfig.bindPort == -1) {
 			LOGGER.error("Host port not set in config!");

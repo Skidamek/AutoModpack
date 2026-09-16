@@ -20,4 +20,12 @@ public final class LogicalPath {
 		if (!normalized.equals(path)) throw new IllegalArgumentException("Logical path is not canonical: " + path);
 		return normalized;
 	}
+
+	/** Resolves a canonical logical path without allowing it to escape {@code root}. */
+	public static Path resolve(Path root, String logicalPath) {
+		Path normalizedRoot = root.normalize();
+		Path resolved = normalizedRoot.resolve(requireCanonical(logicalPath)).normalize();
+		if (!resolved.startsWith(normalizedRoot)) throw new IllegalArgumentException("Logical path escapes its root: " + logicalPath);
+		return resolved;
+	}
 }

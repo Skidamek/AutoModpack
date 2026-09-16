@@ -19,7 +19,7 @@ class ClientSelectionStoreTest {
 	void roundTripsGroupsAndExclusionsWithoutDerivedGroups() throws Exception {
 		Path path = temporaryDirectory.resolve("selection.json");
 		ClientSelectionStore store = new ClientSelectionStore(path);
-		SelectionIntent intent = new SelectionIntent(Set.of("optional", "stale-group"), Set.of("variant"));
+		SelectionIntent intent = new SelectionIntent(Set.of("optional", "stale-group"), Set.of("client"), Set.of("variant"));
 
 		store.compareAndSet("abc1234", null, intent);
 
@@ -27,6 +27,7 @@ class ClientSelectionStoreTest {
 		SelectionJsons.ClientSelectionStoreFields fields = ConfigTools.read(path, SelectionJsons.ClientSelectionStoreFields.class).orElseThrow();
 		SelectionJsons.ClientSelectionStoreFields.ModpackSelection selection = fields.selections.get("abc1234");
 		assertEquals(Set.of("optional", "stale-group"), selection.requestedGroups);
+		assertEquals(Set.of("client"), selection.requestedTags);
 		assertEquals(Set.of("variant"), selection.excludedGroups);
 	}
 

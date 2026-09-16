@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import random
+import re
 import secrets
 import shutil
 import time
@@ -224,6 +225,10 @@ def _prepare_server(ctx: Context):
     cfg["acceptedLoaders"] = [ctx.target.loader]
     (srv_dir / "automodpack").mkdir(parents=True, exist_ok=True)
     (srv_dir / "automodpack" / "server-config.json").write_text(json.dumps(cfg, indent=2))
+    (srv_dir / "automodpack" / "data-root.json").write_text(
+        json.dumps({"root": "/data/automodpack/data", "shared": False}, indent=2) + "\n",
+        encoding="utf-8",
+    )
     _write_server_generation(ctx, 0)
 
 
@@ -468,6 +473,226 @@ def _v_publish_server_generation(ctx: Context, step):
         f"server generation {index} was not published",
     )
     ctx.vars["published_server_generation"] = index
+
+
+def _read_server_json(ctx: Context, relative: str, description: str) -> dict:
+    path = ctx.server_dir / "automodpack" / "server" / relative
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AssertionError(f"{description} is not readable: {path}: {error}") from error
+    if not isinstance(value, dict):
+        raise AssertionError(f"{description} must be a JSON object: {path}")
+    return value
+
+
+def _server_data_root_container(ctx: Context) -> Path:
+    marker_path = ctx.server_dir / "automodpack" / "data-root.json"
+    try:
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+        root = Path(str(marker["root"]))
+    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AssertionError(f"server data-root marker is not readable: {marker_path}: {error}") from error
+    data_root = Path("/data")
+    if not root.is_absolute() or not root.is_relative_to(data_root) or root == data_root or ".." in root.parts:
+        raise AssertionError(f"server data-root marker escaped the mounted /data root: {root}")
+    return root
+
+
+def _exec_output(result) -> str:
+    output = result.output
+    if isinstance(output, bytes):
+        return output.decode("utf-8", errors="replace")
+    return str(output or "")
+
+
+def _server_object_measurement(ctx: Context, object_root: Path) -> tuple[int, int]:
+    result = _container(ctx.srv_name).exec_run([
+        "sh",
+        "-c",
+        'set -eu; count=0; bytes=0; for path in "$1"/*; do [ -f "$path" ] || continue; count=$((count + 1)); size=$(wc -c < "$path"); bytes=$((bytes + size)); done; printf "%s %s\\n" "$count" "$bytes"',
+        "autotester",
+        str(object_root),
+    ])
+    output = _exec_output(result)
+    if result.exit_code != 0:
+        raise RuntimeError(f"could not measure mounted server object store {object_root}: {output}")
+    match = re.fullmatch(r"\s*(\d+)\s+(\d+)\s*", output)
+    if match is None:
+        raise AssertionError(f"mounted server object store returned an invalid measurement: {output!r}")
+    return int(match.group(1)), int(match.group(2))
+
+
+def _write_server_orphan_object(ctx: Context, object_root: Path) -> str:
+    payload = b"autotester-orphan-object\n"
+    object_hash = hashlib.sha1(payload).hexdigest()
+    result = _container(ctx.srv_name).exec_run([
+        "sh",
+        "-c",
+        'set -eu; mkdir -p "$1"; if [ -e "$1/$3" ]; then test -f "$1/$3"; else printf "%s" "$2" > "$1/$3"; fi; test "$(sha1sum "$1/$3" | cut -d " " -f 1)" = "$3"',
+        "autotester",
+        str(object_root),
+        payload.decode("utf-8"),
+        object_hash,
+    ])
+    output = _exec_output(result)
+    if result.exit_code != 0:
+        raise RuntimeError(f"could not create the valid server object fixture {object_hash}: {output}")
+    return object_hash
+
+
+@verb("rollback_server_generation")
+def _v_rollback_server_generation(ctx: Context, step):
+    """Select a durable retained ancestor and publish a confirmed real RCON revert."""
+    projection = _read_server_json(ctx, "current-projection.json", "server current projection")
+    pointer = _read_server_json(ctx, "current.json", "server current pointer")
+    current = projection.get("generation")
+    history = projection.get("patchNotesHistory")
+    if not isinstance(current, dict) or not isinstance(history, list) or len(history) < 2:
+        raise AssertionError("server rollback scenario needs durable current generation metadata and history")
+    current_id = str(current.get("generationId", ""))
+    if str(pointer.get("generationId", "")) != current_id:
+        raise AssertionError("server current pointer and projection disagree before rollback")
+    history_by_id = {
+        str(entry.get("generationId", "")): entry
+        for entry in history
+        if isinstance(entry, dict) and entry.get("generationId")
+    }
+    ancestor_ids = []
+    next_id = str(current.get("parentGenerationId", ""))
+    while next_id:
+        if next_id in ancestor_ids:
+            raise AssertionError(f"server generation history contains a parent cycle at {next_id}")
+        ancestor_ids.append(next_id)
+        entry = history_by_id.get(next_id)
+        if entry is None:
+            raise AssertionError(f"server generation history omits retained ancestor {next_id}")
+        next_id = str(entry.get("parentGenerationId", ""))
+    target_id = next((
+        generation_id
+        for generation_id in reversed(ancestor_ids)
+        if (ctx.server_dir / "automodpack" / "server" / "commits" / f"{generation_id}.json").is_file()
+        and isinstance(_read_server_json(ctx, f"commits/{generation_id}.json", "retained generation commit").get("stateDigest"), str)
+    ), None)
+    if target_id is None:
+        raise AssertionError(f"server rollback has no valid retained ancestor: {ancestor_ids}")
+    target_commit = _read_server_json(ctx, f"commits/{target_id}.json", "retained generation commit")
+    state_digest = str(target_commit.get("stateDigest", ""))
+    ledger_digest = str(target_commit.get("ledgerDigest", ""))
+    if not re.fullmatch(r"[0-9a-f]{40}", state_digest) or not re.fullmatch(r"[0-9a-f]{40}", ledger_digest) or not (ctx.server_dir / "automodpack" / "server" / "catalogues" / f"{state_digest}.json").is_file():
+        raise AssertionError(f"server rollback target metadata is not retained: {target_id}")
+    notes = str(step.get("notes", "Release gate rollback verification.")).strip()
+    if not notes:
+        raise AssertionError("server rollback notes must not be empty")
+    command = ["rcon-cli", "automodpack", "generate", "revert", target_id, "confirm", "notes", notes]
+    result = _container(ctx.srv_name).exec_run(command)
+    output = _exec_output(result)
+    if result.exit_code != 0 or "unknown command" in output.lower() or "incorrect argument" in output.lower():
+        raise RuntimeError(f"server generation rollback command was rejected: {output}")
+
+    def completed_state():
+        try:
+            after_projection = _read_server_json(ctx, "current-projection.json", "server rollback projection")
+            after_pointer = _read_server_json(ctx, "current.json", "server rollback pointer")
+        except AssertionError:
+            return None
+        after_current = after_projection.get("generation")
+        after_history = after_projection.get("patchNotesHistory")
+        if not isinstance(after_current, dict) or not isinstance(after_history, list):
+            return None
+        new_id = str(after_current.get("generationId", ""))
+        if not new_id or new_id == current_id or str(after_pointer.get("generationId", "")) != new_id:
+            return None
+        if str(after_current.get("parentGenerationId", "")) != current_id:
+            return None
+        if str(after_current.get("rollbackTargetGenerationId", "")) != target_id or str(after_current.get("patchNotes", "")) != notes:
+            return None
+        if str(after_current.get("stateDigest", "")) != state_digest or str(after_current.get("ledgerDigest", "")) != ledger_digest:
+            return None
+        history_ids = [str(entry.get("generationId", "")) for entry in after_history if isinstance(entry, dict)]
+        expected_history_ids = [str(entry.get("generationId", "")) for entry in history] + [new_id]
+        if history_ids != expected_history_ids:
+            return None
+        current_history = {str(entry.get("generationId", "")): entry for entry in after_history if isinstance(entry, dict)}
+        if target_id not in current_history or current_history[target_id].get("patchNotes") != history_by_id[target_id].get("patchNotes"):
+            return None
+        if current_history.get(new_id, {}).get("patchNotes") != notes:
+            return None
+        commit = _read_server_json(ctx, f"commits/{new_id}.json", "server rollback commit")
+        if str(commit.get("parentGenerationId", "")) != current_id or str(commit.get("rollbackTargetGenerationId", "")) != target_id:
+            return None
+        return after_pointer, after_projection
+
+    after_pointer, after_projection = await_condition(
+        completed_state,
+        parse_duration(step.get("timeout"), default=180),
+        step.get("poll"),
+        "server rollback did not publish a durable pointer, projection, and patch-note history",
+    )
+    after_current = after_projection["generation"]
+    ctx.vars["server_rollback"] = {
+        "targetGenerationId": target_id,
+        "currentGenerationId": str(after_pointer["generationId"]),
+        "rollbackTargetGenerationId": str(after_current["rollbackTargetGenerationId"]),
+        "stateDigest": str(after_current["stateDigest"]),
+        "ledgerDigest": str(after_current["ledgerDigest"]),
+        "patchNotes": str(after_current["patchNotes"]),
+        "historyEntries": len(after_projection["patchNotesHistory"]),
+        "command": command,
+    }
+
+
+@verb("collect_server_objects")
+def _v_collect_server_objects(ctx: Context, step):
+    """Create a valid mounted orphan, run real RCON collection, and verify its receipt."""
+    object_root = _server_data_root_container(ctx) / "objects"
+    orphan_hash = _write_server_orphan_object(ctx, object_root)
+    before_count, before_bytes = _server_object_measurement(ctx, object_root)
+    result = _container(ctx.srv_name).exec_run(["rcon-cli", "automodpack", "generate", "storage", "collect", "confirm"])
+    output = _exec_output(result)
+    if result.exit_code != 0 or "unknown command" in output.lower() or "incorrect argument" in output.lower():
+        raise RuntimeError(f"server object collection command was rejected: {output}")
+    objects_match = re.search(r"Objects\s*-\s*(\d+)\s*->\s*(\d+)", output)
+    bytes_match = re.search(r"Bytes\s*-\s*(\d+)\s*->\s*(\d+)", output)
+    deleted_match = re.search(r"Deleted\s*-\s*(\d+)\s+objects,\s*(\d+)\s+bytes", output)
+    if not objects_match or not bytes_match or not deleted_match:
+        raise AssertionError(f"server object collection did not return its durable receipt fields: {output!r}")
+    receipt = {
+        "beforeCount": int(objects_match.group(1)),
+        "afterCount": int(objects_match.group(2)),
+        "beforeBytes": int(bytes_match.group(1)),
+        "afterBytes": int(bytes_match.group(2)),
+        "deletedCount": int(deleted_match.group(1)),
+        "deletedBytes": int(deleted_match.group(2)),
+    }
+    if receipt["deletedCount"] <= 0 or receipt["deletedBytes"] <= 0:
+        raise AssertionError(f"server object collection reported no deletion for orphan {orphan_hash}: {output}")
+
+    def completed_state():
+        after_count, after_bytes = _server_object_measurement(ctx, object_root)
+        orphan_exists = _container(ctx.srv_name).exec_run(["test", "-e", str(object_root / orphan_hash)]).exit_code == 0
+        if orphan_exists or (after_count, after_bytes) != (receipt["afterCount"], receipt["afterBytes"]):
+            return None
+        return after_count, after_bytes
+
+    after_count, after_bytes = await_condition(
+        completed_state,
+        parse_duration(step.get("timeout"), default=120),
+        step.get("poll"),
+        "server object collection did not durably remove the valid orphan object",
+    )
+    if (before_count, before_bytes) != (receipt["beforeCount"], receipt["beforeBytes"]):
+        raise AssertionError(f"server object collection receipt disagrees with mounted-store measurement: {output}")
+    if receipt["beforeCount"] - receipt["afterCount"] != receipt["deletedCount"] or receipt["beforeBytes"] - receipt["afterBytes"] != receipt["deletedBytes"]:
+        raise AssertionError(f"server object collection receipt has inconsistent object transition: {output}")
+    ctx.vars["server_object_collection"] = {
+        **receipt,
+        "mountedObjectRoot": str(object_root),
+        "orphanHash": orphan_hash,
+        "measuredAfterCount": after_count,
+        "measuredAfterBytes": after_bytes,
+        "command": ["rcon-cli", "automodpack", "generate", "storage", "collect", "confirm"],
+    }
 
 
 @verb("compact_server_history")
@@ -823,14 +1048,21 @@ def _sha1(path: Path) -> str:
         return hashlib.file_digest(f, "sha1").hexdigest()
 
 
-def _staged_generation_id(modpack_id: str, created_at: str, state_digest: str, ledger_digest: str, patch_notes: str = "") -> str:
+def _staged_generation_id(
+    modpack_id: str,
+    created_at: str,
+    state_digest: str,
+    ledger_digest: str,
+    patch_notes: str = "",
+    parent_generation_id: str = "",
+) -> str:
     notes_digest = hashlib.sha1(patch_notes.encode("utf-8")).hexdigest()
     return (
         CanonicalEncoder()
         .string("automodpack-generation-v1")
         .integer(1)
         .string(modpack_id)
-        .string("")
+        .string(parent_generation_id)
         .string(created_at)
         .string(state_digest)
         .string(ledger_digest)
@@ -891,6 +1123,7 @@ def _write_staged_generation(
     client_root: Path | None = None,
     modpack_name: str | None = None,
     patch_notes: str = "",
+    parent_generation_id: str = "",
     editable_paths: set[str] | frozenset[str] = frozenset(),
 ) -> dict:
     files = []
@@ -922,7 +1155,8 @@ def _write_staged_generation(
     state_digest = _staged_state_digest(ctx, modpack_id, files, modpack_name)
     provisional_ledger_digest = _staged_ledger_digest(modpack_id, ledger_entries)
     created_at = datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
-    generation_id = _staged_generation_id(modpack_id, created_at, state_digest, provisional_ledger_digest, patch_notes)
+    client_root = client_root or root.parent
+    generation_id = _staged_generation_id(modpack_id, created_at, state_digest, provisional_ledger_digest, patch_notes, parent_generation_id)
     for entry in ledger_entries:
         entry["firstPublishedGenerationId"] = generation_id
         entry["lastPublishedGenerationId"] = generation_id
@@ -965,7 +1199,7 @@ def _write_staged_generation(
         "generation": {
             "schemaVersion": 1,
             "generationId": generation_id,
-            "parentGenerationId": "",
+            "parentGenerationId": parent_generation_id,
             "createdAt": created_at,
             "stateDigest": state_digest,
             "ledgerDigest": provisional_ledger_digest,
@@ -974,7 +1208,12 @@ def _write_staged_generation(
             "rollbackTargetGenerationId": "",
         },
     }
-    client_root = client_root or root.parent
+    if parent_generation_id:
+        parent_manifest_path = client_root / "records" / parent_generation_id / "manifest.json"
+        parent_manifest = json.loads(parent_manifest_path.read_text(encoding="utf-8"))
+        parent_generation = parent_manifest["generation"]
+        parent_history = parent_manifest.get("patchNotesHistory") or [_staged_patch_note_entry(parent_generation)]
+        manifest["patchNotesHistory"] = [*parent_history, _staged_patch_note_entry(manifest["generation"])]
     generation_path = client_root / "records" / generation_id / "manifest.json"
     generation_path.parent.mkdir(parents=True, exist_ok=True)
     generation_path.write_text(json.dumps(manifest, indent=2) + "\n")
@@ -985,6 +1224,34 @@ def _write_staged_generation(
         if not object_path.is_file():
             shutil.copy2(root / entry["logicalPath"], object_path)
     return {"generationId": generation_id, "stateDigest": state_digest, "ledgerDigest": provisional_ledger_digest}
+
+
+def _staged_patch_note_entry(generation: dict) -> dict:
+    return {
+        "schemaVersion": generation["schemaVersion"],
+        "generationId": generation["generationId"],
+        "parentGenerationId": generation["parentGenerationId"],
+        "createdAt": generation["createdAt"],
+        "patchNotes": generation["patchNotes"],
+        "patchNotesDigest": generation["patchNotesDigest"],
+    }
+
+
+def _latest_staged_generation_id(client_root: Path, modpack_id: str) -> str:
+    records_root = client_root / "records"
+    candidates = []
+    if not records_root.is_dir():
+        return ""
+    for path in records_root.glob("*/manifest.json"):
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            generation = manifest.get("generation")
+            generation_id = str(generation.get("generationId", "")) if isinstance(generation, dict) else ""
+            if manifest.get("modpackId") == modpack_id and generation_id:
+                candidates.append((str(generation.get("createdAt", "")), generation_id))
+        except (OSError, ValueError, TypeError):
+            continue
+    return max(candidates)[1] if candidates else ""
 
 
 @verb("stage_modpack")
@@ -1010,6 +1277,7 @@ def _v_stage_modpack(ctx: Context, step):
     client_root = automodpack / "client"
     data_root = _ensure_client_data_root(game)
     root = client_root / "staging" / modpack_id if record_only else client_root / "active"
+    parent_generation_id = _latest_staged_generation_id(client_root, modpack_id) if record_only else ""
     if root.exists():
         shutil.rmtree(root)
     if not record_only:
@@ -1078,6 +1346,7 @@ def _v_stage_modpack(ctx: Context, step):
         client_root=client_root,
         modpack_name=modpack_name,
         patch_notes=str(step.get("patchNotes", "")),
+        parent_generation_id=parent_generation_id,
         editable_paths=editable_paths,
     )
     if record_only:

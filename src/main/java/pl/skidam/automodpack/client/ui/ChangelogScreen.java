@@ -166,11 +166,11 @@ public class ChangelogScreen extends VersionedScreen {
 		List<ListEntryWidget.Row> reFormattedChanges = new ArrayList<>();
 
 		for (var changelog : changelogs.changedFiles().values()) {
-			reFormattedChanges.add(new ListEntryWidget.Row(VersionedText.literal("+ " + UiFormat.changePath(changelog.file())).withStyle(ChatFormatting.GREEN), firstUrl(changelog.mainPageUrls())));
+			reFormattedChanges.add(new ListEntryWidget.Row(VersionedText.literal("+ " + changelog.logicalPath()).withStyle(ChatFormatting.GREEN), firstUrl(changelog.mainPageUrls())));
 		}
 
 		for (var changelog : changelogs.removedFiles().values()) {
-			reFormattedChanges.add(new ListEntryWidget.Row(VersionedText.literal("- " + UiFormat.changePath(changelog.file())).withStyle(ChatFormatting.RED), firstUrl(changelog.mainPageUrls())));
+			reFormattedChanges.add(new ListEntryWidget.Row(VersionedText.literal("- " + changelog.logicalPath()).withStyle(ChatFormatting.RED), firstUrl(changelog.mainPageUrls())));
 		}
 
 		return reFormattedChanges;

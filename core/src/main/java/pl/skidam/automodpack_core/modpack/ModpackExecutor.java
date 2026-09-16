@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.modpack;
 
 import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -21,9 +22,11 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNotes;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
@@ -40,7 +43,7 @@ public class ModpackExecutor {
 	private final CandidateScan candidateScan;
 
 	public ModpackExecutor() {
-		this(SmartFileUtils.CWD, hostModpackDir, SmartFileUtils.CWD.resolve(serverDir));
+		this(GameDirectory.current(), HOST_MODPACK_DIR, GameDirectory.current().resolve(SERVER_DIR));
 	}
 
 	public ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot) {
@@ -54,7 +57,7 @@ public class ModpackExecutor {
 		this.serverRoot = serverRoot.toAbsolutePath().normalize();
 		this.groupRoot = groupRoot.toAbsolutePath().normalize();
 		this.generationRoot = generationRoot.toAbsolutePath().normalize();
-		this.patchNotesFile = this.generationRoot.resolve(serverPatchNotesFile.getFileName()).normalize();
+		this.patchNotesFile = this.generationRoot.resolve(SERVER_PATCH_NOTES_FILE.getFileName()).normalize();
 		this.generationStore = Objects.requireNonNull(generationStore);
 		this.dataLayout = new DataRootResolver.Layout(this.generationStore.objectRoot().getParent());
 		this.candidateScan = Objects.requireNonNull(candidateScan);
@@ -71,8 +74,9 @@ public class ModpackExecutor {
 	}
 
 	public PreviewResult preview(String inlineNotes) {
-		if (!acquire(false)) return new PreviewBusy("Another modpack operation is already in progress");
-		try {
+		OperationLease operation = acquire(false);
+		if (operation == null) return new PreviewBusy("Another modpack operation is already in progress");
+		try (operation) {
 			Optional<GenerationStore.CurrentSnapshot> previous = generationStore.loadCurrent();
 			try (ModpackCandidate candidate = buildCandidate(previous)) {
 				GenerationDiff diff = GenerationDiff.between(previous.map(snapshot -> snapshot.record().manifest()).orElse(null), candidate.manifest());
@@ -83,8 +87,6 @@ public class ModpackExecutor {
 		} catch (Exception e) {
 			LOGGER.error("Failed to preview modpack generation", e);
 			return new PreviewFailed(e);
-		} finally {
-			scanActive.set(false);
 		}
 	}
 
@@ -101,7 +103,7 @@ public class ModpackExecutor {
 	}
 
 	public PublishResult publishIfState(String expectedStateDigest, String inlineNotes) {
-		if (expectedStateDigest == null || !expectedStateDigest.matches("[0-9a-f]{40}"))
+		if (!HashUtils.isCanonicalSha1(expectedStateDigest))
 			return new PublishInvalidGuard("Guard digest must be a canonical 40-character lowercase SHA-1");
 		return publishInternal(expectedStateDigest, inlineNotes);
 	}
@@ -111,11 +113,12 @@ public class ModpackExecutor {
 	}
 
 	public RevertResult revert(String targetGenerationId, String inlineNotes) {
-		if (targetGenerationId == null || !targetGenerationId.matches("[0-9a-f]{40}"))
+		if (!HashUtils.isCanonicalSha1(targetGenerationId))
 			return new RevertInvalidTarget("Rollback target must be a canonical 40-character lowercase SHA-1");
-		if (!acquire(true)) return new RevertBusy("Another modpack operation is already in progress");
+		OperationLease operation = acquire(true);
+		if (operation == null) return new RevertBusy("Another modpack operation is already in progress");
 		GenerationStore.Publication publication = null;
-		try {
+		try (operation) {
 			Optional<GenerationStore.CurrentSnapshot> previous = generationStore.loadCurrent();
 			GenerationPatchNotes.Resolution notes = GenerationPatchNotes.resolve(inlineNotes, patchNotesFile);
 			publication = generationStore.publishRevert(targetGenerationId, previous, notes.text());
@@ -126,9 +129,6 @@ public class ModpackExecutor {
 			if (publication != null) return new Reverted(publication.record(), targetGenerationId, List.of("Revert published, but post-publication cleanup was incomplete"));
 			LOGGER.error("Failed to publish modpack revert", e);
 			return new RevertFailed(e);
-		} finally {
-			publicationActive.set(false);
-			scanActive.set(false);
 		}
 	}
 
@@ -141,21 +141,20 @@ public class ModpackExecutor {
 	}
 
 	public GenerationStore.CompactionResult compactHistory() throws IOException {
-		if (!acquire(true)) throw new IOException("Another modpack operation is already in progress");
-		try {
+		OperationLease operation = acquire(true);
+		if (operation == null) throw new IOException("Another modpack operation is already in progress");
+		try (operation) {
 			return generationStore.compact();
-		} finally {
-			publicationActive.set(false);
-			scanActive.set(false);
 		}
 	}
 
 	private PublishResult publishInternal(String expectedStateDigest, String inlineNotes) {
-		if (!acquire(true)) return new PublishBusy("Another modpack operation is already in progress");
+		OperationLease operation = acquire(true);
+		if (operation == null) return new PublishBusy("Another modpack operation is already in progress");
 		GenerationStore.Publication publication = null;
 		PublishResult committedResult = null;
 		CandidateState committedState = null;
-		try {
+		try (operation) {
 			Optional<GenerationStore.CurrentSnapshot> previous = generationStore.loadCurrent();
 			if (expectedStateDigest != null && previous.isEmpty())
 				return new PublishGuardUnsupported("A state guard is unavailable before the root generation is published");
@@ -198,9 +197,6 @@ public class ModpackExecutor {
 			}
 			LOGGER.error("Failed to publish modpack generation", e);
 			return new PublishFailed(e);
-		} finally {
-			publicationActive.set(false);
-			scanActive.set(false);
 		}
 	}
 
@@ -232,8 +228,9 @@ public class ModpackExecutor {
 	}
 
 	public LoadResult loadLast() {
-		if (!acquire(false)) return new LoadBusy("Another modpack operation is already in progress");
-		try {
+		OperationLease operation = acquire(false);
+		if (operation == null) return new LoadBusy("Another modpack operation is already in progress");
+		try (operation) {
 			GenerationStore.CurrentSnapshot current = generationStore.loadCurrentAndRepair().orElseThrow(() -> new IOException("No current generation pointer exists"));
 			try {
 				replaceHosting(current.hostingPaths());
@@ -246,8 +243,6 @@ public class ModpackExecutor {
 		} catch (Exception e) {
 			LOGGER.error("Failed to load the current modpack generation", e);
 			return new LoadFailed(e);
-		} finally {
-			scanActive.set(false);
 		}
 	}
 
@@ -268,19 +263,36 @@ public class ModpackExecutor {
 				ModFileCache modFileCache = ModFileCache.open(dataLayout.modMetadataDirectory())) {
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
 					LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups,
-					serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(serverStagingDir.getFileName()), creationExecutor,
+					serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()), creationExecutor,
 					generationStore.objectRoot(), fileMetadataCache, modFileCache);
 			return candidateScan.scan(request);
 		}
 	}
 
-	private boolean acquire(boolean publication) {
-		if (!scanActive.compareAndSet(false, true)) return false;
+	private OperationLease acquire(boolean publication) {
+		if (!scanActive.compareAndSet(false, true)) return null;
 		if (publication && !publicationActive.compareAndSet(false, true)) {
 			scanActive.set(false);
-			return false;
+			return null;
 		}
-		return true;
+		return new OperationLease(publication);
+	}
+
+	private final class OperationLease implements AutoCloseable {
+		private final boolean publication;
+		private boolean closed;
+
+		private OperationLease(boolean publication) {
+			this.publication = publication;
+		}
+
+		@Override
+		public void close() {
+			if (closed) return;
+			closed = true;
+			if (publication) publicationActive.set(false);
+			scanActive.set(false);
+		}
 	}
 
 	private void replaceHosting(GenerationHosting paths) {
@@ -290,7 +302,7 @@ public class ModpackExecutor {
 	}
 
 	private void cleanupLegacyCatalogue() throws IOException {
-		Path legacyCatalogue = groupRoot.resolve(modpackContentFileName).normalize();
+		Path legacyCatalogue = groupRoot.resolve(MODPACK_CONTENT_FILE).normalize();
 		if (Files.deleteIfExists(legacyCatalogue)) LOGGER.debug("Removed stale generated catalogue");
 	}
 
@@ -320,10 +332,10 @@ public class ModpackExecutor {
 		for (Path groupDirectory : groupDirectories.values()) Files.createDirectories(groupDirectory);
 		Path main = groupDirectories.get("main");
 		if (main == null) return;
-		Files.createDirectories(main.resolve("mods"));
-		Files.createDirectories(main.resolve("config"));
-		Files.createDirectories(main.resolve("shaderpacks"));
-		Files.createDirectories(main.resolve("resourcepacks"));
+		Files.createDirectories(main.resolve(ModpackPathPolicy.MODS_ROOT));
+		Files.createDirectories(main.resolve(ModpackPathPolicy.CONFIG_ROOT));
+		Files.createDirectories(main.resolve(ModpackPathPolicy.SHADERPACKS_ROOT));
+		Files.createDirectories(main.resolve(ModpackPathPolicy.RESOURCEPACKS_ROOT));
 	}
 
 	public boolean isGenerating() {
@@ -354,7 +366,7 @@ public class ModpackExecutor {
 			Optional<GenerationPatchNotes.Source> patchNotesSource) {
 		public CandidateState {
 			parent = parent == null ? Optional.empty() : parent;
-			if (candidateStateDigest == null || !candidateStateDigest.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid candidate state digest");
+			if (!HashUtils.isCanonicalSha1(candidateStateDigest)) throw new IllegalArgumentException("Invalid candidate state digest");
 			diff = Objects.requireNonNull(diff);
 			summary = Objects.requireNonNull(summary);
 			patchNotesSource = patchNotesSource == null ? Optional.empty() : patchNotesSource;
@@ -395,7 +407,7 @@ public class ModpackExecutor {
 	public record Reverted(GenerationRecord current, String targetGenerationId, List<String> warnings) implements RevertResult {
 		public Reverted {
 			current = Objects.requireNonNull(current);
-			if (targetGenerationId == null || !targetGenerationId.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid rollback target generation ID");
+			if (!HashUtils.isCanonicalSha1(targetGenerationId)) throw new IllegalArgumentException("Invalid rollback target generation ID");
 			warnings = warnings == null ? List.of() : List.copyOf(warnings);
 			if (!targetGenerationId.equals(current.metadata().rollbackTargetGenerationId())) throw new IllegalArgumentException("Revert result target does not match current metadata");
 		}

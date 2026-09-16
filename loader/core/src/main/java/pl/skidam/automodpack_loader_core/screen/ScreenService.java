@@ -21,9 +21,11 @@ public interface ScreenService {
 
 	void restart(UpdateType updateType, Changelogs changelogs);
 
+	void completeWithoutRestart();
+
 	void welcome(ModpackUpdater modpackUpdater);
 
-	boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean removal, boolean returnToSelection,
+	boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection,
 			Map<UpdatePlan.FileKey, List<String>> mainPageUrls);
 
 	void recovery(ModpackUpdater modpackUpdater, ModpackUpdater.RecoverySnapshot recoverySnapshot, String modpackName, Runnable closed);

@@ -118,6 +118,16 @@ public final class GenerationPatchNoteHistory {
 		return false;
 	}
 
+	/** Returns the newest non-empty note available at or before the end of this history. */
+	public static String latestNotes(List<Entry> history) {
+		Objects.requireNonNull(history, "patch notes history");
+		for (int index = history.size() - 1; index >= 0; index--) {
+			String notes = history.get(index).patchNotes();
+			if (!notes.isBlank()) return notes;
+		}
+		return "";
+	}
+
 	private static List<Entry> validate(List<Entry> history, String currentGenerationId) {
 		if (history == null || history.isEmpty()) throw new IllegalArgumentException("Patch-note history is empty");
 		Set<String> visited = new HashSet<>();

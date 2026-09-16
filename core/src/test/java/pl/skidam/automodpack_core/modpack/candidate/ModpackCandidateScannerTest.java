@@ -7,6 +7,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.Executor;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
 
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -18,6 +20,27 @@ import pl.skidam.automodpack_core.config.ServerConfigJsons;
 class ModpackCandidateScannerTest {
 	@TempDir
 	Path tempDir;
+
+	@Test
+	void classifiesModsByContentAndPacksByPath() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Path resourcepacks = groups.resolve("main/resourcepacks");
+		Path shaderpacks = groups.resolve("main/shaderpacks");
+		Files.createDirectories(server);
+		Files.createDirectories(resourcepacks);
+		Files.createDirectories(shaderpacks);
+		writeModJar(resourcepacks.resolve("mod-shaped.jar"));
+		Files.writeString(resourcepacks.resolve("pack.zip"), "resource pack", StandardCharsets.UTF_8);
+		Files.writeString(shaderpacks.resolve("shader.zip"), "shader pack", StandardCharsets.UTF_8);
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()), false);
+		var files = candidate.manifest().groups().get("main").files();
+
+		assertEquals("mod", files.get("resourcepacks/mod-shaped.jar").type());
+		assertEquals("resourcepack", files.get("resourcepacks/pack.zip").type());
+		assertEquals("shader", files.get("shaderpacks/shader.zip").type());
+	}
 
 	@Test
 	void groupFolderShadowsSyncedSourceAndRecordsProvenance() throws Exception {
@@ -208,5 +231,13 @@ class ModpackCandidateScannerTest {
 		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
 		group.syncedFiles = new LinkedHashSet<>(List.of(rules));
 		return group;
+	}
+
+	private static void writeModJar(Path path) throws IOException {
+		try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(path))) {
+			jar.putNextEntry(new JarEntry("fabric.mod.json"));
+			jar.write("{\"schemaVersion\":1,\"id\":\"testmod\",\"version\":\"1.0.0\"}".getBytes(StandardCharsets.UTF_8));
+			jar.closeEntry();
+		}
 	}
 }

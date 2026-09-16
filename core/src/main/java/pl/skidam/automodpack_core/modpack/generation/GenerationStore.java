@@ -16,6 +16,8 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ServerObjectStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.storage.StoragePaths;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class GenerationStore {
@@ -154,15 +156,15 @@ public final class GenerationStore {
 
 	GenerationStore(Path root, Path objectsDirectory, Clock clock, CommitHook commitHook, CompactionDeleteHook compactionDeleteHook) {
 		this.root = Objects.requireNonNull(root).toAbsolutePath().normalize();
-		this.currentPath = this.root.resolve(Constants.serverCurrentFile.getFileName());
-		this.currentProjectionPath = this.root.resolve(Constants.serverCurrentProjectionFile.getFileName());
-		this.checkpointPath = this.root.resolve(Constants.serverGenerationCheckpointFile.getFileName());
+		this.currentPath = this.root.resolve(StoragePaths.SERVER_CURRENT_FILE.getFileName());
+		this.currentProjectionPath = this.root.resolve(StoragePaths.SERVER_CURRENT_PROJECTION_FILE.getFileName());
+		this.checkpointPath = this.root.resolve(StoragePaths.SERVER_GENERATION_CHECKPOINT_FILE.getFileName());
 		this.publicationLockPath = this.root.resolve(".publication.lock");
-		this.cataloguesDirectory = this.root.resolve(Constants.serverCataloguesDir.getFileName());
-		this.commitsDirectory = this.root.resolve(Constants.serverCommitsDir.getFileName());
-		this.deltasDirectory = this.root.resolve(Constants.serverDeltasDir.getFileName());
+		this.cataloguesDirectory = this.root.resolve(StoragePaths.SERVER_CATALOGUES_DIR.getFileName());
+		this.commitsDirectory = this.root.resolve(StoragePaths.SERVER_COMMITS_DIR.getFileName());
+		this.deltasDirectory = this.root.resolve(StoragePaths.SERVER_DELTAS_DIR.getFileName());
 		this.objectsDirectory = Objects.requireNonNull(objectsDirectory).toAbsolutePath().normalize();
-		this.stagingDirectory = this.root.resolve(Constants.serverStagingDir.getFileName());
+		this.stagingDirectory = this.root.resolve(StoragePaths.SERVER_STAGING_DIR.getFileName());
 		this.clock = Objects.requireNonNull(clock);
 		this.commitHook = Objects.requireNonNull(commitHook);
 		this.compactionDeleteHook = Objects.requireNonNull(compactionDeleteHook);
@@ -498,7 +500,7 @@ public final class GenerationStore {
 		long deletedBytes = 0;
 		for (Path object : beforeFiles) {
 			String name = object.getFileName().toString();
-			if (!isDigest(name) || reachable.contains(name) || !isValidCanonicalObject(object, name)) continue;
+			if (!isDigest(name) || reachable.contains(name) || !FileIntegrity.matchesCanonicalSha1(object, name)) continue;
 			long size = Files.size(object);
 			if (Files.deleteIfExists(object)) {
 				deletedCount = addExact(deletedCount, 1, "deleted object count");
@@ -581,10 +583,6 @@ public final class GenerationStore {
 		} catch (ArithmeticException e) {
 			throw new IOException("Overflow while measuring " + description, e);
 		}
-	}
-
-	private boolean isValidCanonicalObject(Path object, String name) {
-		return !Files.isSymbolicLink(object) && Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS) && name.equals(HashUtils.getHash(object));
 	}
 
 	private GenerationJsons.GenerationPointerFields readCurrentPointer() throws IOException {
@@ -863,16 +861,16 @@ public final class GenerationStore {
 
 	private String catalogueStateDigest(Path path) throws IOException {
 		String filename = path.getFileName().toString();
-		if (filename.length() != 45 || !filename.endsWith(".json")) throw new IOException("Invalid generation catalogue path: " + path);
-		String stateDigest = filename.substring(0, 40);
+		if (filename.length() != HashUtils.SHA1_HEX_LENGTH + ".json".length() || !filename.endsWith(".json")) throw new IOException("Invalid generation catalogue path: " + path);
+		String stateDigest = filename.substring(0, HashUtils.SHA1_HEX_LENGTH);
 		if (!isDigest(stateDigest)) throw new IOException("Invalid generation catalogue filename: " + path);
 		return stateDigest;
 	}
 
 	private String commitGenerationId(Path path) throws IOException {
 		String filename = path.getFileName().toString();
-		if (filename.length() != 45 || !filename.endsWith(".json")) throw new IOException("Invalid generation commit path: " + path);
-		String generationId = filename.substring(0, 40);
+		if (filename.length() != HashUtils.SHA1_HEX_LENGTH + ".json".length() || !filename.endsWith(".json")) throw new IOException("Invalid generation commit path: " + path);
+		String generationId = filename.substring(0, HashUtils.SHA1_HEX_LENGTH);
 		if (!isDigest(generationId)) throw new IOException("Invalid generation commit filename: " + path);
 		return generationId;
 	}
@@ -966,7 +964,7 @@ public final class GenerationStore {
 	}
 
 	private static boolean isDigest(String value) {
-		return value != null && value.matches("[0-9a-f]{40}");
+		return HashUtils.isCanonicalSha1(value);
 	}
 
 	private record CompactGeneration(GenerationCommit commit, CatalogueSnapshot snapshot, OwnershipDelta delta) {}

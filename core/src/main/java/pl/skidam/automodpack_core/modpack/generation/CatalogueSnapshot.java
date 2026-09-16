@@ -1,16 +1,14 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
-import java.util.Locale;
 import java.util.Objects;
-import java.util.regex.Pattern;
 
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Deduplicated immutable catalogue state referenced by generation commits. */
 public record CatalogueSnapshot(GroupManifest manifest, String stateDigest) {
-	private static final Pattern DIGEST = Pattern.compile("[0-9a-f]{40}");
 
 	public CatalogueSnapshot {
 		manifest = Objects.requireNonNull(manifest, "catalogue manifest");
@@ -37,7 +35,7 @@ public record CatalogueSnapshot(GroupManifest manifest, String stateDigest) {
 	}
 
 	private static String requireDigest(String value, String name) {
-		if (value == null || !DIGEST.matcher(value).matches() || !value.equals(value.toLowerCase(Locale.ROOT)))
+		if (!HashUtils.isCanonicalSha1(value))
 			throw new IllegalArgumentException("Invalid canonical " + name);
 		return value;
 	}

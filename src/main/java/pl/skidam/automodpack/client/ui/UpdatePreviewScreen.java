@@ -24,7 +24,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private final Screen parent;
 	private final UpdatePreview preview;
 	private final String modpackName;
-	private final boolean removal;
+	private final UpdatePreview.Mode mode;
 	private final boolean returnToSelection;
 	private final Runnable continueAction;
 	private final Runnable cancelAction;
@@ -34,13 +34,13 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private boolean finished;
 	private Layout layout;
 
-	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, boolean removal, boolean returnToSelection, Runnable continueAction,
+	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, boolean returnToSelection, Runnable continueAction,
 			Runnable cancelAction, Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
-		super(VersionedText.translatable(removal ? "automodpack.update.removalTitle" : "automodpack.update.title"));
+		super(VersionedText.translatable(titleKey(preview.mode())));
 		this.parent = parent;
 		this.preview = preview;
 		this.modpackName = modpackName == null ? "" : modpackName;
-		this.removal = removal;
+		this.mode = preview.mode();
 		this.returnToSelection = returnToSelection;
 		this.continueAction = continueAction;
 		this.cancelAction = cancelAction;
@@ -65,7 +65,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 0), this.height - 28, actionWidth, 20,
 				returnToSelection ? VersionedText.translatable("automodpack.back") : VersionedText.translatable("automodpack.cancel"), button -> cancel()));
 		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 2), this.height - 28, actionWidth, 20,
-		VersionedText.translatable(removal ? "automodpack.update.remove" : "automodpack.update.apply"), button -> continueUpdate()));
+		VersionedText.translatable(actionKey(mode)), button -> continueUpdate()));
 	}
 
 	private int listBottom() {
@@ -104,7 +104,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 			String action = VersionedText.translatable(conflict.action() == UpdatePlan.ConflictAction.QUARANTINE ? "automodpack.update.localConflict" : "automodpack.update.ownedConflict", ids).getString();
 			rows.add(new ListEntryWidget.Row(VersionedText.literal(truncateToWidth(this.font, "! " + action, panelWidth(PANEL_WIDTH) - 8)).withStyle(ChatFormatting.YELLOW), null));
 		}
-		for (UpdatePreview.Entry entry : preview.displayEntries()) {
+		for (UpdatePreview.Entry entry : preview.entries()) {
 			UpdatePlan.FileKey file = new UpdatePlan.FileKey(entry.root(), entry.relativePath());
 			String text = entry.kind().displaySymbol() + UiFormat.changePath(file) + "  (" + UiFormat.formatSize(entry.size()) + ")";
 			ChatFormatting color = entry.kind().isPreserved() ? ChatFormatting.GRAY : entry.kind() == UpdatePreview.Kind.UNSAFE ? ChatFormatting.RED : ChatFormatting.WHITE;
@@ -151,12 +151,10 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		this.openMainPageButton.active = hasMainPage;
 		this.openMainPageButton.setMessage(VersionedText.translatable(hasMainPage ? "automodpack.changelog.openPage" : "automodpack.changelog.noPage"));
 
-		String title = removal
-				? VersionedText.translatable(modpackName.isBlank() ? "automodpack.update.removalTitle" : "automodpack.update.removeNamed", modpackName).getString()
-				: VersionedText.translatable(modpackName.isBlank() ? "automodpack.update.title" : "automodpack.update.updateNamed", modpackName).getString();
+		String title = VersionedText.translatable(modpackName.isBlank() ? titleKey(mode) : namedTitleKey(mode), modpackName).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.BOLD), this.width / 2, 14,
 				TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(removal ? "automodpack.update.reviewRemoval" : "automodpack.update.reviewUpdate").withStyle(ChatFormatting.GRAY),
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(reviewKey(mode)).withStyle(ChatFormatting.GRAY),
 				this.width / 2, 29, TextColors.WHITE);
 		Layout layout = this.layout;
 		String patchNotes = preview.latestPatchNotes();
@@ -188,6 +186,38 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 				layout.otherEffectsY(), TextColors.WHITE);
 		String restart = preview.restartReasons().isEmpty() ? VersionedText.translatable("automodpack.summary.noRestart").getString() : VersionedText.translatable("automodpack.summary.restartRequired").getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(restart).withStyle(ChatFormatting.GRAY), this.width / 2, layout.restartY(), TextColors.WHITE);
+	}
+
+	private static String titleKey(UpdatePreview.Mode mode) {
+		return switch (mode) {
+			case UPDATE -> "automodpack.update.title";
+			case DEACTIVATION -> "automodpack.update.deactivationTitle";
+			case REMOVAL -> "automodpack.update.removalTitle";
+		};
+	}
+
+	private static String namedTitleKey(UpdatePreview.Mode mode) {
+		return switch (mode) {
+			case UPDATE -> "automodpack.update.updateNamed";
+			case DEACTIVATION -> "automodpack.update.deactivateNamed";
+			case REMOVAL -> "automodpack.update.removeNamed";
+		};
+	}
+
+	private static String reviewKey(UpdatePreview.Mode mode) {
+		return switch (mode) {
+			case UPDATE -> "automodpack.update.reviewUpdate";
+			case DEACTIVATION -> "automodpack.update.reviewDeactivation";
+			case REMOVAL -> "automodpack.update.reviewRemoval";
+		};
+	}
+
+	private static String actionKey(UpdatePreview.Mode mode) {
+		return switch (mode) {
+			case UPDATE -> "automodpack.update.apply";
+			case DEACTIVATION -> "automodpack.update.deactivate";
+			case REMOVAL -> "automodpack.update.remove";
+		};
 	}
 
 	@Override

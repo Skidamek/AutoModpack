@@ -135,7 +135,7 @@ public class FileInspection {
 		Set<String> rootIds = new HashSet<>(metadata.provides());
 		rootIds.add(metadata.modId());
 		try (Stream<Path> walk = Files.walk(fs.getPath("/"))) {
-			return walk.filter(path -> path.toString().endsWith(".jar")).anyMatch(path -> nestedModHasAnyId(path, rootIds));
+			return walk.filter(JarUtils::isRegularJar).anyMatch(path -> nestedModHasAnyId(path, rootIds));
 		} catch (IOException e) {
 			LOGGER.debug("Failed to inspect nested mod IDs");
 			return false;
@@ -158,7 +158,7 @@ public class FileInspection {
 
 	private static boolean isJarInvalid(Path file) {
 		if (file == null || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return true;
-		if (file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar")) return false;
+		if (JarUtils.hasJarExtension(file)) return false;
 		try (InputStream input = Files.newInputStream(file)) {
 			int first = input.read();
 			int second = input.read();
@@ -186,7 +186,7 @@ public class FileInspection {
 		Set<Mod> nestedMods = new HashSet<>();
 		try (Stream<Path> walk = Files.walk(parentFs.getPath("/"))) {
 			for (Path path : walk.toList()) {
-				if (path.toString().endsWith(".jar") && !path.equals(parentFs.getPath("/"))) {
+				if (JarUtils.isRegularJar(path) && !path.equals(parentFs.getPath("/"))) {
 					try (InputStream is = Files.newInputStream(path)) {
 						Mod nested = readModFromStream(path, is);
 						if (nested != null) nestedMods.add(nested);
@@ -224,7 +224,7 @@ public class FileInspection {
 
 					if (name.endsWith(".toml")) metadata = parseTomlMetadata(reader);
 					else metadata = parseJsonMetadata(reader);
-				} else if (name.endsWith(".jar")) {
+				} else if (JarUtils.hasJarExtension(name)) {
 					// Wrap ZIS to protect current stream position
 					Mod child = readModFromStream(virtualPath.resolve(name), new FilterInputStream(zis) {
 						@Override

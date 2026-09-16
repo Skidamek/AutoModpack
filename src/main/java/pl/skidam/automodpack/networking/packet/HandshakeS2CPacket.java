@@ -4,6 +4,7 @@ import static pl.skidam.automodpack.networking.ModPackets.DATA;
 import static pl.skidam.automodpack_core.Constants.*;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.UUID;
 
 import com.mojang.authlib.GameProfile;
@@ -63,7 +64,7 @@ public class HandshakeS2CPacket {
 			LOGGER.warn("{} has not installed AutoModpack.", playerName);
 			if (serverConfig.requireAutoModpackOnClient) {
 				Component reason = VersionedText.literal(
-						"AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
+						"AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT) + " modloader is required to play on this server!");
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);
 			}
@@ -90,7 +91,7 @@ public class HandshakeS2CPacket {
 
 			if (!isAcceptedLoader || !clientHandshakePacket.amVersion.equals(AM_VERSION)) {
 				Component reason = VersionedText.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for "
-						+ LOADER_MANAGER.getPlatformType().toString().toLowerCase() + " to play on this server!");
+						+ LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT) + " to play on this server!");
 				if (isClientVersionHigher(clientHandshakePacket.amVersion)) {
 					reason = VersionedText.literal(
 							"You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");

@@ -38,6 +38,6 @@ public final class EarlyServiceScan {
 	}
 
 	private static boolean isJar(Path path) {
-		return Files.isRegularFile(path) && path.getFileName().toString().toLowerCase().endsWith(".jar");
+		return JarUtils.isRegularJar(path);
 	}
 }

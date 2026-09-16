@@ -7,14 +7,12 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -28,11 +26,11 @@ import pl.skidam.automodpack_core.update.QuarantineArchive;
 import pl.skidam.automodpack_core.update.RecoveryArchive;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Measures and explicitly maintains the client shared object store. */
 public final class ClientObjectStore {
-	private static final Pattern SHA1 = Pattern.compile("[0-9a-fA-F]{40}");
 
 	private ClientObjectStore() {}
 
@@ -128,10 +126,10 @@ public final class ClientObjectStore {
 		long deletedBytes = 0;
 		for (Path object : objects) {
 			String name = object.getFileName().toString();
-			if (!object.getParent().equals(storage.objectsDirectory()) || !name.equals(name.toLowerCase(Locale.ROOT)) || !SHA1.matcher(name).matches()
+			if (!object.getParent().equals(storage.objectsDirectory()) || !HashUtils.isCanonicalSha1(name)
 					|| references.hashes().contains(name))
 				continue;
-			if (!isValidCanonicalObject(object, name.toLowerCase(Locale.ROOT))) continue;
+			if (!FileIntegrity.matchesCanonicalSha1(object, name)) continue;
 			long size = Files.size(object);
 			if (Files.deleteIfExists(object)) {
 				deletedCount = addExact(deletedCount, 1, "deleted object count");
@@ -204,7 +202,7 @@ public final class ClientObjectStore {
 		List<String> generationIds = generationIds(storage);
 		Map<String, GenerationRecord> records = new TreeMap<>();
 		for (String generationId : generationIds) {
-			if (!SHA1.matcher(generationId).matches() || !generationId.equals(generationId.toLowerCase(Locale.ROOT))) throw new IOException("Client generation directory is not canonical: " + generationId);
+			if (!HashUtils.isCanonicalSha1(generationId)) throw new IOException("Client generation directory is not canonical: " + generationId);
 			GenerationRecord record;
 			try {
 				record = generations.read(generationId).orElseThrow(() -> new IOException("Client generation record is missing: " + generationId));
@@ -243,7 +241,10 @@ public final class ClientObjectStore {
 	}
 
 	private static void addRecordReferences(ReferenceSet retained, GenerationRecord record) throws IOException {
-		for (var group : record.manifest().groups().values()) for (var file : group.files().values()) retained.addRequired(file.sha1(), file.size(), "generation manifest");
+		// A generation record is the complete selectable catalogue. Clients acquire only their
+		// resolved selection, so absent objects from unselected groups are valid. Cached catalogue
+		// objects remain pinned for later offline selection changes.
+		for (var group : record.manifest().groups().values()) for (var file : group.files().values()) retained.addOptional(file.sha1(), file.size(), "generation catalogue");
 		// Historical ledger hashes are ownership-proof metadata, not current materialized file objects.
 	}
 
@@ -287,7 +288,7 @@ public final class ClientObjectStore {
 			Path packDirectory = generationDirectory.getParent();
 			String modpackId = packDirectory.getFileName().toString();
 			String generationId = generationDirectory.getFileName().toString();
-			String selectionDigest = path.getFileName().toString().substring(0, 40);
+			String selectionDigest = path.getFileName().toString().substring(0, HashUtils.SHA1_HEX_LENGTH);
 			GeneratedCopyState state = GeneratedCopyState.read(storage, modpackId, generationId, selectionDigest);
 			for (GeneratedCopyState.Entry entry : state.entries()) retained.addOptional(entry.sha1(), entry.size(), "generated-copy state");
 		}
@@ -443,13 +444,14 @@ public final class ClientObjectStore {
 						ensureNoSymbolicLink(generation, "client generated-copy state");
 						if (!Files.isDirectory(generation, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + generation);
 						String generationId = generation.getFileName().toString();
-						if (!SHA1.matcher(generationId).matches() || !generationId.equals(generationId.toLowerCase(Locale.ROOT)))
+						if (!HashUtils.isCanonicalSha1(generationId))
 							throw new IOException("Client generated-copy directory is not canonical: " + generationId);
 						try (Stream<Path> states = Files.list(generation)) {
 							for (Path state : states.sorted().toList()) {
 								ensureNoSymbolicLink(state, "client generated-copy state");
 								String name = state.getFileName().toString();
-								if (!Files.isRegularFile(state, LinkOption.NOFOLLOW_LINKS) || !name.matches("[0-9a-f]{40}\\.json"))
+								if (!Files.isRegularFile(state, LinkOption.NOFOLLOW_LINKS) || name.length() != HashUtils.SHA1_HEX_LENGTH + ".json".length() || !name.endsWith(".json")
+										|| !HashUtils.isCanonicalSha1(name.substring(0, HashUtils.SHA1_HEX_LENGTH)))
 									throw new IOException("Client generated-copy state contains an unsupported entry: " + state);
 								result.add(state);
 							}
@@ -465,10 +467,6 @@ public final class ClientObjectStore {
 		long bytes = 0;
 		for (Path path : paths) bytes = addExact(bytes, Files.size(path), "client storage bytes");
 		return new FileTotals(paths.size(), bytes);
-	}
-
-	private static boolean isValidCanonicalObject(Path object, String hash) {
-		return !Files.isSymbolicLink(object) && Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS) && hash.equals(HashUtils.getHash(object));
 	}
 
 	private static <T> T readJson(Path path, Class<T> type, String description) throws IOException {
@@ -515,8 +513,8 @@ public final class ClientObjectStore {
 	}
 
 	public static String normalizeHash(String sha1) {
-		if (sha1 == null || !SHA1.matcher(sha1).matches()) throw new IllegalArgumentException("Invalid client object SHA-1");
-		return sha1.toLowerCase(Locale.ROOT);
+		if (!HashUtils.isSha1(sha1)) throw new IllegalArgumentException("Invalid client object SHA-1");
+		return HashUtils.normalizeSha1(sha1);
 	}
 
 	private static long addExact(long first, long second, String description) throws IOException {

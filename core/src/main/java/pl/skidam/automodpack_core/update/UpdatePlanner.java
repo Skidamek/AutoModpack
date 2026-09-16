@@ -1,16 +1,11 @@
 package pl.skidam.automodpack_core.update;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -33,6 +28,7 @@ import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class UpdatePlanner {
 	private static final Comparator<Operation> OPERATION_ORDER = Comparator.comparing((Operation operation) -> operation.operation().ordinal())
@@ -67,13 +63,22 @@ public final class UpdatePlanner {
 
 	}
 
-	public record SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest, Map<String, FileState> previousEditableOverlays) {
+	public record SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest, Map<String, FileState> previousEditableOverlays,
+			ClientStorageJsons.ClientBaselineFields baseline, Set<String> availableBaselineObjects) {
 		public SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest) {
-			this(previousModpackId, previousManifest, Map.of());
+			this(previousModpackId, previousManifest, Map.of(), null, Set.of());
+		}
+
+		public SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest, Map<String, FileState> previousEditableOverlays) {
+			this(previousModpackId, previousManifest, previousEditableOverlays, null, Set.of());
 		}
 
 		public SelectionContext {
 			previousEditableOverlays = Collections.unmodifiableMap(new TreeMap<>(previousEditableOverlays == null ? Map.of() : previousEditableOverlays));
+			Set<String> normalizedObjects = new LinkedHashSet<>();
+			for (String value : availableBaselineObjects == null ? Set.<String>of() : availableBaselineObjects)
+				if (value != null) normalizedObjects.add(value.toLowerCase(Locale.ROOT));
+			availableBaselineObjects = Collections.unmodifiableSet(normalizedObjects);
 		}
 	}
 
@@ -109,7 +114,7 @@ public final class UpdatePlanner {
 			if (entry.absent) {
 				if (entry.objectHash == null || !entry.objectHash.isEmpty() || entry.size != -1)
 					throw new IllegalArgumentException("Absent removal baseline contains file metadata");
-			} else if (entry.objectHash == null || !entry.objectHash.matches("[0-9a-fA-F]{40}") || entry.size < 0) {
+			} else if (!HashUtils.isSha1(entry.objectHash) || entry.size < 0) {
 				throw new IllegalArgumentException("Removal baseline file metadata is invalid");
 			}
 		}
@@ -118,6 +123,7 @@ public final class UpdatePlanner {
 		Map<FileKey, Operation> operations = new HashMap<>();
 		List<Preservation> preservations = new ArrayList<>();
 		EnumSet<RestartReason> restartReasons = EnumSet.noneOf(RestartReason.class);
+		restartReasons.add(RestartReason.SELECTED_MODPACK);
 
 		if (installed.list != null) for (var item : installed.list) {
 			FileKey key = new FileKey(Root.PROJECTION, normalize(item.file));
@@ -146,20 +152,8 @@ public final class UpdatePlanner {
 			OwnershipLedger.Content current = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
 			if (!ledgerEntry.historicalHashes().contains(current)) continue;
 			ClientStorageJsons.ClientBaselineFields.EntryFields baseline = baselines.get(ledgerEntry.logicalPath());
-			if (baseline == null) continue;
-			if (baseline.absent) {
-				preservations.add(new Preservation(key.root(), key.relativePath(), current.sha1(), current.size()));
-				delete(operations, projected, key, current.sha1());
+			if (restoreOwnedLiveFile(key, state, baseline, input.availableBaselineObjects(), true, projected, operations, preservations))
 				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
-				continue;
-			}
-			if (baseline.objectHash == null || !baseline.objectHash.matches("[0-9a-fA-F]{40}") || baseline.size < 0) continue;
-			String baselineHash = baseline.objectHash.toLowerCase(Locale.ROOT);
-			if (!input.availableBaselineObjects().contains(baselineHash)) continue;
-			if (matches(state, baselineHash, baseline.size)) continue;
-			operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.INSTALL_OBJECT, baselineHash, baseline.size, current.sha1()));
-			projected.put(key, new FileState(baselineHash, baseline.size, true, state.mod()));
-			restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 		}
 
 		List<Operation> ordered = operations.values().stream().sorted(OPERATION_ORDER).toList();
@@ -213,8 +207,11 @@ public final class UpdatePlanner {
 			}
 		}
 
-		if (installedLedger != null) planLedgerCleanup(installedLedger, targetItems.keySet(), projected, operations, preservations, restartReasons);
-		else planServerKnownCleanup(ledger, targetItems.keySet(), projected, operations, preservations, restartReasons);
+		if (installedLedger != null)
+			planLedgerCleanup(installedLedger, installedItems.keySet(), targetItems.keySet(), input.selection(), !input.installedManifest().modpackId.equals(target.modpackId), projected, operations,
+					preservations, restartReasons);
+		else
+			planServerKnownCleanup(ledger, targetItems.keySet(), projected, operations, preservations, restartReasons);
 		if (input.installedManifest() != null && !Objects.equals(input.installedManifest().selectedGroups, target.selectedGroups))
 			restartReasons.add(RestartReason.CHANGED_GROUP_SELECTION);
 		if (input.installedManifest() == null || isSelectionChange(input.selection(), target.modpackId)) restartReasons.add(RestartReason.SELECTED_MODPACK);
@@ -229,11 +226,11 @@ public final class UpdatePlanner {
 			boolean overwriteEditable = item.editable && item.overwriteEditable && installedHashChanged;
 			FileState overlay = item.editable && !overwriteEditable ? input.editableOverlays().get(relative) : null;
 			if (overlay != null && overlay.regularFile() && !matches(projected.get(new FileKey(Root.OVERLAY, relative)), overlay.sha1(), overlay.size()))
-				install(operations, projected, new FileKey(Root.OVERLAY, relative), overlay.sha1(), overlay.size(), overlay.mod());
+				install(operations, projected, new FileKey(Root.OVERLAY, relative), overlay.sha1(), overlay.size());
 			if (overlay == null && projected.containsKey(new FileKey(Root.OVERLAY, relative)))
 				delete(operations, projected, new FileKey(Root.OVERLAY, relative), projected.get(new FileKey(Root.OVERLAY, relative)).sha1());
 			if (!matches(existing, item.sha1, parseSize(item.size)))
-				install(operations, projected, modpackKey, item.sha1, parseSize(item.size), activeMod);
+				install(operations, projected, modpackKey, item.sha1, parseSize(item.size));
 
 			boolean copyToLive = !activeMod || forceCopyPaths.contains(relative) || overlay != null;
 			FileKey liveKey = liveKey(item);
@@ -245,7 +242,7 @@ public final class UpdatePlanner {
 					String liveHash = overlay == null ? item.sha1 : overlay.sha1();
 					long liveSize = overlay == null ? parseSize(item.size) : overlay.size();
 					if (!matches(live, liveHash, liveSize)) {
-						install(operations, projected, liveKey, liveHash, liveSize, activeMod);
+						install(operations, projected, liveKey, liveHash, liveSize);
 						if (activeMod) restartReasons.add(RestartReason.CORRECTED_FILE_LOCATIONS);
 					}
 				}
@@ -290,10 +287,12 @@ public final class UpdatePlanner {
 		captures.addAll(planned.values());
 	}
 
-	private static void planLedgerCleanup(OwnershipLedger ledger, Set<String> targetPaths, Map<FileKey, FileState> projected,
+	private static void planLedgerCleanup(OwnershipLedger ledger, Set<String> installedPaths, Set<String> targetPaths, SelectionContext selection, boolean preserveReplacedBytes,
+			Map<FileKey, FileState> projected,
 			Map<FileKey, Operation> operations, List<Preservation> preservations, EnumSet<RestartReason> restartReasons) {
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselines = selection == null ? Map.of() : baselineEntries(selection.baseline(), ledger.modpackId());
 		for (OwnershipLedger.Entry entry : ledger.entries().values()) {
-			if (targetPaths.contains(entry.logicalPath())) continue;
+			if (!installedPaths.contains(entry.logicalPath()) || targetPaths.contains(entry.logicalPath())) continue;
 			Optional<FileKey> candidateKey = managedCleanupKey(entry.logicalPath());
 			if (candidateKey.isEmpty()) continue;
 			FileKey key = candidateKey.get();
@@ -301,10 +300,46 @@ public final class UpdatePlanner {
 			if (state == null || !state.regularFile() || state.sha1() == null) continue;
 			OwnershipLedger.Content content = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
 			if (!entry.historicalHashes().contains(content)) continue;
-			preservations.add(new Preservation(key.root(), key.relativePath(), state.sha1().toLowerCase(Locale.ROOT), state.size()));
-			delete(operations, projected, key, state.sha1());
-			restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
+			ClientStorageJsons.ClientBaselineFields.EntryFields baseline = baselines.get(entry.logicalPath());
+			if (selection == null || selection.baseline() == null) {
+				preservations.add(new Preservation(key.root(), key.relativePath(), state.sha1().toLowerCase(Locale.ROOT), state.size()));
+				delete(operations, projected, key, state.sha1());
+				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
+				continue;
+			}
+			if (restoreOwnedLiveFile(key, state, baseline, selection.availableBaselineObjects(), preserveReplacedBytes, projected, operations, preservations))
+				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 		}
+	}
+
+	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries(ClientStorageJsons.ClientBaselineFields baseline, String modpackId) {
+		if (baseline == null || !Objects.equals(modpackId, baseline.modpackId) || baseline.entries == null) return Map.of();
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
+		for (var entry : baseline.entries) if (entry != null && entry.logicalPath != null) entries.put(normalize(entry.logicalPath), entry);
+		return entries;
+	}
+
+	private static boolean baselineMatches(FileState state, ClientStorageJsons.ClientBaselineFields.EntryFields baseline) {
+		return !baseline.absent && HashUtils.isSha1(baseline.objectHash) && baseline.size >= 0 && matches(state, baseline.objectHash, baseline.size);
+	}
+
+	private static boolean restoreOwnedLiveFile(FileKey key, FileState state, ClientStorageJsons.ClientBaselineFields.EntryFields baseline,
+			Set<String> availableBaselineObjects, boolean preserveReplacedBytes, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations, List<Preservation> preservations) {
+		if (baseline != null && baselineMatches(state, baseline)) return false;
+		String currentHash = state.sha1().toLowerCase(Locale.ROOT);
+		// Callers prove these exact bytes belong to the installed selection before a missing
+		// baseline is interpreted as no pre-install file to restore.
+		if (baseline == null || baseline.absent) {
+			preservations.add(new Preservation(key.root(), key.relativePath(), currentHash, state.size()));
+			delete(operations, projected, key, currentHash);
+			return true;
+		}
+		if (!HashUtils.isSha1(baseline.objectHash) || baseline.size < 0) return false;
+		String baselineHash = HashUtils.normalizeSha1(baseline.objectHash);
+		if (!availableBaselineObjects.contains(baselineHash)) return false;
+		if (preserveReplacedBytes) preservations.add(new Preservation(key.root(), key.relativePath(), currentHash, state.size()));
+		install(operations, projected, key, baselineHash, baseline.size, currentHash);
+		return true;
 	}
 
 	private static void planServerKnownCleanup(OwnershipLedger ledger, Set<String> targetPaths, Map<FileKey, FileState> projected,
@@ -364,7 +399,7 @@ public final class UpdatePlanner {
 					continue;
 				}
 				String expectedExistingHash = previous == null ? null : previous.sha1();
-				install(operations, projected, key, copy.sha1(), copy.size(), true, expectedExistingHash);
+				install(operations, projected, key, copy.sha1(), copy.size(), expectedExistingHash);
 				restartReasons.add(RestartReason.FIXED_NESTED_MODS);
 			}
 		}
@@ -395,7 +430,6 @@ public final class UpdatePlanner {
 		Set<ModInfo> keep = new HashSet<>();
 		for (ModInfo standard : sortedStandard) if (!duplicates.containsValue(standard)) addDependencies(standard, sortedStandard, keep);
 		Set<String> idsToKeep = keep.stream().flatMap(mod -> mod.ids().stream()).collect(Collectors.toSet());
-		Set<String> pathsToKeep = keep.stream().map(mod -> normalize(mod.relativePath())).collect(Collectors.toSet());
 		List<Conflict> conflicts = new ArrayList<>();
 
 		for (var duplicate : duplicates.entrySet()) {
@@ -409,10 +443,8 @@ public final class UpdatePlanner {
 			boolean sourceNeedsDisposition = !oldKey.equals(targetKey) || !keepStandard || !targetAlreadyMatches;
 			if (sourceNeedsDisposition) conflicts.add(conflict(modpackId, target, standard, owned ? ConflictAction.REMOVE_OWNED : ConflictAction.QUARANTINE));
 			if (keepStandard) {
-				String targetPath = normalize(target.relativePath());
-				pathsToKeep.add(targetPath);
 				if (!targetAlreadyMatches) {
-					install(operations, projected, targetKey, target.sha1(), target.size(), true,
+					install(operations, projected, targetKey, target.sha1(), target.size(),
 							oldKey.equals(targetKey) ? standard.sha1() : null);
 					restartReasons.add(RestartReason.REMOVED_DUPLICATE_MODS);
 				}
@@ -441,15 +473,10 @@ public final class UpdatePlanner {
 	}
 
 	private static String conflictId(ModInfo target, ModInfo standard) {
-		try {
-			MessageDigest digest = MessageDigest.getInstance("SHA-1");
-			String value = String.join("\n", normalize(target.relativePath()), target.sha1().toLowerCase(Locale.ROOT), normalize(standard.relativePath()),
-					standard.sha1().toLowerCase(Locale.ROOT), String.join(",", new TreeSet<>(target.ids()).stream().map(id -> id.toLowerCase(Locale.ROOT)).toList()),
-					String.join(",", new TreeSet<>(standard.ids()).stream().map(id -> id.toLowerCase(Locale.ROOT)).toList()));
-			return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
-		} catch (NoSuchAlgorithmException e) {
-			throw new AssertionError("SHA-1 is required by the client protocol", e);
-		}
+		String value = String.join("\n", normalize(target.relativePath()), target.sha1().toLowerCase(Locale.ROOT), normalize(standard.relativePath()),
+				standard.sha1().toLowerCase(Locale.ROOT), String.join(",", new TreeSet<>(target.ids()).stream().map(id -> id.toLowerCase(Locale.ROOT)).toList()),
+				String.join(",", new TreeSet<>(standard.ids()).stream().map(id -> id.toLowerCase(Locale.ROOT)).toList()));
+		return HashUtils.sha1(value);
 	}
 
 	private static void addDependencies(ModInfo mod, List<ModInfo> all, Set<ModInfo> result) {
@@ -479,14 +506,14 @@ public final class UpdatePlanner {
 		return new FileKey(Root.GAME_DIR, relative);
 	}
 
-	private static void install(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key, String hash, long size, boolean mod) {
-		install(operations, projected, key, hash, size, mod, null);
+	private static void install(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key, String hash, long size) {
+		install(operations, projected, key, hash, size, null);
 	}
 
-	private static void install(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key, String hash, long size, boolean mod,
+	private static void install(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key, String hash, long size,
 			String expectedExistingHash) {
 		operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.INSTALL_OBJECT, hash, size, expectedExistingHash));
-		projected.put(key, new FileState(hash, size, true, mod));
+		projected.put(key, new FileState(hash, size, true));
 	}
 
 	private static void delete(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key, String expectedHash) {

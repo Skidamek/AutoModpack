@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
 import java.util.List;
+import java.time.temporal.ChronoUnit;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
@@ -17,9 +18,11 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 
 public final class ContentHistoryScreen extends VersionedScreen {
 	private static final int ENTRY_TOP = 44;
-	private static final int ENTRY_HEIGHT = 44;
+	private static final int ENTRY_HEIGHT = 50;
+	private static final int PANEL_WIDTH = 600;
 
 	private final Screen parent;
+	private final List<GenerationRecord> history;
 	private final List<GenerationHistorySummary.Entry> entries;
 	private final List<GenerationPatchNoteHistory.Entry> patchNotesHistory;
 	private final String modpackName;
@@ -32,7 +35,8 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			Runnable closedCallback) {
 		super(VersionedText.translatable("automodpack.history.title"));
 		this.parent = parent;
-		this.entries = GenerationHistorySummary.summarize(history, patchNotesHistory);
+		this.history = List.copyOf(history);
+		this.entries = GenerationHistorySummary.summarize(this.history, patchNotesHistory);
 		this.patchNotesHistory = List.copyOf(patchNotesHistory);
 		this.modpackName = modpackName == null ? "" : modpackName;
 		this.closedCallback = closedCallback;
@@ -42,23 +46,45 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		int y = this.height - 28;
-		int actionWidth = actionButtonWidth(310, 3);
 		boolean hasNotes = GenerationPatchNoteHistory.containsNotes(patchNotesHistory);
+		boolean hasFiles = !history.isEmpty();
 		boolean hasPagination = pageCount() > 1;
-		int navigationY = hasNotes && hasPagination ? y - 26 : y;
-		this.previousButton = buttonWidget(hasNotes ? centeredActionButtonX(310, 3, 2, 0) : actionButtonX(310, 3, 1), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.ui.previous"),
-				button -> changePage(-1));
-		this.nextButton = buttonWidget(hasNotes ? centeredActionButtonX(310, 3, 2, 1) : actionButtonX(310, 3, 2), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.ui.next"), button -> changePage(1));
+		int navigationY = hasPagination ? y - 24 : -1;
+		int actionWidth = actionButtonWidth(310, 3);
+		this.previousButton = buttonWidget(actionButtonX(310, 3, 0), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.ui.previous"), button -> changePage(-1));
+		this.nextButton = buttonWidget(actionButtonX(310, 3, 2), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.ui.next"), button -> changePage(1));
 		updateNavigation();
 		if (hasPagination) {
 			this.addRenderableWidget(this.previousButton);
+			Button pageLabel = buttonWidget(actionButtonX(310, 3, 1), navigationY, actionWidth, 20,
+					VersionedText.translatable("automodpack.ui.page", page + 1, pageCount()), button -> {});
+			pageLabel.active = false;
+			this.addRenderableWidget(pageLabel);
 			this.addRenderableWidget(this.nextButton);
 		}
-		int bottomButtonCount = hasNotes ? 2 : hasPagination ? 3 : 1;
-		this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 3, bottomButtonCount, 0), y, actionWidth, 20, VersionedText.translatable("automodpack.back"), button -> back()));
+		int bottomButtonCount = 1 + (hasNotes ? 1 : 0) + (hasFiles ? 1 : 0);
+		int bottomIndex = 0;
+		this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 3, bottomButtonCount, bottomIndex++), y, actionWidth, 20, VersionedText.translatable("automodpack.back"), button -> back()));
 		if (hasNotes)
-			this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 3, bottomButtonCount, 1), y, actionWidth, 20,
-					VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes()));
+			this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 3, bottomButtonCount, bottomIndex++), y, actionWidth, 20,
+					VersionedText.translatable("automodpack.patchNotes.button"), button -> openPatchNotes()));
+		if (hasFiles)
+			this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 3, bottomButtonCount, bottomIndex), y, actionWidth, 20,
+					VersionedText.translatable("automodpack.management.files"), button -> openFiles()));
+
+		int start = page * rowsPerPage();
+		int end = Math.min(entries.size(), start + rowsPerPage());
+		int rowWidth = panelWidth(PANEL_WIDTH);
+		int x = panelLeft(PANEL_WIDTH);
+		for (int index = start; index < end; index++) {
+			int entryIndex = index;
+			GenerationHistorySummary.Entry entry = entries.get(index);
+			boolean current = index == entries.size() - 1;
+			String label = VersionedText.translatable("automodpack.history.generation", entry.number(), entry.createdAt().truncatedTo(ChronoUnit.SECONDS)).getString()
+					+ (current ? "  " + VersionedText.translatable("automodpack.history.latest").getString() : "");
+			this.addRenderableWidget(buttonWidget(x, ENTRY_TOP + (index - start) * ENTRY_HEIGHT, rowWidth, 20,
+					VersionedText.literal(truncateToWidth(this.font, label, rowWidth - 12)).withStyle(current ? ChatFormatting.GREEN : ChatFormatting.WHITE), button -> openGeneration(entryIndex)));
+		}
 	}
 
 	private int pageCount() {
@@ -67,7 +93,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	}
 
 	private int rowsPerPage() {
-		return Math.max(1, (this.height - 50 - ENTRY_TOP) / ENTRY_HEIGHT);
+		return Math.max(1, (this.height - 76 - ENTRY_TOP) / ENTRY_HEIGHT);
 	}
 
 	private void updateNavigation() {
@@ -78,7 +104,16 @@ public final class ContentHistoryScreen extends VersionedScreen {
 
 	private void changePage(int amount) {
 		page = Math.max(0, Math.min(pageCount() - 1, page + amount));
-		updateNavigation();
+		rebuild();
+	}
+
+	private void rebuild() {
+		/*? if >=1.19.2 {*/
+		this.rebuildWidgets();
+		/*?} else {*/
+		/*
+		this.init(this.minecraft, this.width, this.height);
+		*//*?}*/
 	}
 
 	private void back() {
@@ -88,6 +123,21 @@ public final class ContentHistoryScreen extends VersionedScreen {
 
 	private void openPatchNotes() {
 		ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, patchNotesHistory, modpackName));
+	}
+
+	private void openFiles() {
+		GenerationRecord generation = history.get(history.size() - 1);
+		ScreenImpl.setScreen(new PagedTextScreen(this,
+				VersionedText.translatable("automodpack.files.title", modpackName),
+				VersionedText.translatable("automodpack.files.description"), GenerationCatalogueLines.files(generation)));
+	}
+
+	private void openGeneration(int index) {
+		GenerationRecord previous = index == 0 ? null : history.get(index - 1);
+		GenerationRecord current = history.get(index);
+		ScreenImpl.setScreen(new PagedTextScreen(this,
+				VersionedText.translatable("automodpack.history.details.title", entries.get(index).number()),
+				VersionedText.translatable("automodpack.history.details.description"), GenerationCatalogueLines.diff(previous, current)));
 	}
 
 	@Override
@@ -101,30 +151,18 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		for (int index = start; index < end; index++) {
 			GenerationHistorySummary.Entry entry = entries.get(index);
 			int y = ENTRY_TOP + (index - start) * ENTRY_HEIGHT;
-			boolean current = index == entries.size() - 1;
-			drawCenteredTextWithShadow(matrices, this.font,
-					VersionedText
-							.literal(truncateToWidth(this.font,
-									VersionedText.translatable("automodpack.history.generation", entry.number(), entry.createdAt()).getString()
-											+ (current ? "  " + VersionedText.translatable("automodpack.history.latest").getString() : ""),
-									this.width - 20))
-							.withStyle(current ? ChatFormatting.GREEN : ChatFormatting.WHITE),
-					this.width / 2, y, TextColors.WHITE);
 			String notes = entry.patchNotes().isBlank() ? VersionedText.translatable("automodpack.history.noPatchNotes").getString() : firstLine(entry.patchNotes());
 			drawCenteredTextWithShadow(matrices, this.font,
 					VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.history.patchNotes", notes).getString(), this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2,
-					y + 13,
+					y + 23,
 					TextColors.WHITE);
 			GenerationDiff.Summary diff = entry.diff().summary();
 			String diffText = VersionedText.translatable("automodpack.history.diff", diff.addedFiles(), diff.modifiedFiles(), diff.removedFiles(), diff.metadataOnlyFiles(), diff.metadataChanges()).getString();
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, diffText, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, y + 26,
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, diffText, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, y + 36,
 					TextColors.WHITE);
 		}
 		if (entries.isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 82,
-					TextColors.WHITE);
-		if (pageCount() > 1)
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.ui.page", page + 1, pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 42,
 					TextColors.WHITE);
 	}
 

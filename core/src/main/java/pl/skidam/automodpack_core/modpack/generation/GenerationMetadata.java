@@ -6,11 +6,10 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Locale;
 import java.util.Objects;
-import java.util.regex.Pattern;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 public record GenerationMetadata(
 		int schemaVersion,
@@ -26,7 +25,6 @@ public record GenerationMetadata(
 	public static final String ROOT_PARENT = "";
 	public static final String NO_ROLLBACK_TARGET = "";
 	public static final int MAX_PATCH_NOTES_UTF8_BYTES = 16 * 1024;
-	private static final Pattern DIGEST = Pattern.compile("[0-9a-f]{40}");
 
 	public GenerationMetadata {
 		if (schemaVersion != CURRENT_SCHEMA_VERSION) throw new IllegalArgumentException("Unsupported generation schema version: " + schemaVersion);
@@ -96,7 +94,7 @@ public record GenerationMetadata(
 	}
 
 	static String requireDigest(String value, String name) {
-		if (value == null || !DIGEST.matcher(value).matches() || !value.equals(value.toLowerCase(Locale.ROOT)))
+		if (!HashUtils.isCanonicalSha1(value))
 			throw new IllegalArgumentException("Invalid canonical " + name);
 		return value;
 	}

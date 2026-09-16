@@ -20,7 +20,6 @@ import java.util.concurrent.Executors;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.ssl.SslHandler;
-import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.ReferenceCountUtil;
 
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;

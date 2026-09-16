@@ -16,7 +16,7 @@ public class FabricInit {
 	public static void onInitialize() {
 
 		preload = false;
-		ScreenManager.INSTANCE = new ScreenImpl();
+		ScreenManager.install(new ScreenImpl());
 
 		long start = System.currentTimeMillis();
 		LOGGER.info("Launching AutoModpack...");

@@ -2,6 +2,8 @@ package pl.skidam.automodpack.networking;
 
 import static pl.skidam.automodpack_core.Constants.MOD_ID;
 
+import java.util.Locale;
+
 import net.minecraft.resources.Identifier;
 
 import pl.skidam.automodpack.init.Common;
@@ -21,7 +23,7 @@ public enum LoginNetworkingIDs {
 	}
 
 	public static Identifier getResourceLocation(LoginNetworkingIDs ID) {
-		return Common.id(ID.toString().toLowerCase());
+		return Common.id(ID.toString().toLowerCase(Locale.ROOT));
 	}
 
 	public static Integer getByKey(Identifier key) {

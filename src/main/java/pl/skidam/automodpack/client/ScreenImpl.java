@@ -46,14 +46,19 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
+	public void completeWithoutRestart() {
+		executeOnClient(Screens::multiplayer);
+	}
+
+	@Override
 	public void welcome(ModpackUpdater modpackUpdater) {
 		executeOnClient(() -> Screens.welcome(modpackUpdater));
 	}
 
 	@Override
-	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean removal, boolean returnToSelection,
+	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection,
 			Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
-		executeOnClient(() -> Screens.preview(preview, modpackName, continueAction, cancelAction, removal, returnToSelection, mainPageUrls));
+		executeOnClient(() -> Screens.preview(preview, modpackName, continueAction, cancelAction, returnToSelection, mainPageUrls));
 		return true;
 	}
 
@@ -151,13 +156,13 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(new FirstConnectScreen(modpackUpdater));
 		}
 
-		public static void preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean removal, boolean returnToSelection,
+		public static void preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection,
 				Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
 			Screen parent = Screens.getScreen();
 			if (isTransient(parent)) parent = interactiveParent;
 			parent = previewParent(parent);
 			interactiveParent = null;
-			Screens.setScreen(new UpdatePreviewScreen(parent, preview, modpackName, removal, returnToSelection, continueAction, cancelAction, mainPageUrls));
+			Screens.setScreen(new UpdatePreviewScreen(parent, preview, modpackName, returnToSelection, continueAction, cancelAction, mainPageUrls));
 		}
 
 		private static Screen previewParent(Screen parent) {

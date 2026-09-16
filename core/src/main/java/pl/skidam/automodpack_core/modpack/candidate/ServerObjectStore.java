@@ -5,7 +5,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.*;
 import java.util.*;
 
-import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 
 /** Promotes verified candidate snapshots into the immutable server object directory. */
 public final class ServerObjectStore {
@@ -110,9 +110,8 @@ public final class ServerObjectStore {
 			throw new IOException("Refusing to replace corrupt immutable object " + objectPath + " for SHA-1 " + advertised.sha1());
 	}
 
-	private static boolean valid(Path path, StagedObject object) throws IOException {
-		if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return false;
-		return Files.size(path) == object.size() && object.sha1().equalsIgnoreCase(HashUtils.getHash(path));
+	private static boolean valid(Path path, StagedObject object) {
+		return FileIntegrity.matches(path, object.size(), object.sha1());
 	}
 
 	private static void ensureManagedDirectory(Path directory, String description) throws IOException {

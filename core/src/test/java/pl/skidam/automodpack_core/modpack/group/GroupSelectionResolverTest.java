@@ -67,13 +67,45 @@ class GroupSelectionResolverTest {
 	}
 
 	@Test
-	void categoryToggleExpandsGroupsWithoutPersistingCategoryState() {
+	void dependencyExplanationNamesTheSelectedGroupThatRequiresIt() {
+		GroupManifest manifest = manifest(Map.of("dependency", group(false, false, Set.of()), "feature", group(false, false, Set.of("dependency"))));
+
+		ResolvedSelection resolved = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of("feature")), ClientPlatform.LINUX);
+
+		assertEquals(Set.of("feature"), resolved.explanation("dependency").relatedGroups());
+	}
+
+	@Test
+	void categoryTogglePersistsCategoryWithoutPretendingItsGroupsWereClicked() {
 		GroupManifest manifest = manifest(Map.of("one", tagged("one", ClientPlatform.LINUX), "two", tagged("two", ClientPlatform.LINUX)));
 
 		SelectionIntent selected = GroupSelectionResolver.preferCategory(manifest, new SelectionIntent(Set.of()), "visuals", ClientPlatform.LINUX);
 
-		assertEquals(Set.of("one", "two"), selected.requestedGroups());
+		assertEquals(Set.of(), selected.requestedGroups());
+		assertEquals(Set.of("visuals"), selected.requestedTags());
+		assertEquals(Set.of("one", "two"), GroupSelectionResolver.resolve(manifest, selected, ClientPlatform.LINUX).selectedGroups());
 		assertEquals(Set.of(), selected.excludedGroups());
+	}
+
+	@Test
+	void individualGroupDoesNotSelectItsSingleGroupCategory() {
+		GroupManifest manifest = manifest(Map.of("one", tagged("one", ClientPlatform.LINUX)));
+
+		SelectionIntent selected = GroupSelectionResolver.prefer(manifest, new SelectionIntent(Set.of()), "one", ClientPlatform.LINUX);
+
+		assertEquals(Set.of("one"), selected.requestedGroups());
+		assertTrue(selected.requestedTags().isEmpty());
+	}
+
+	@Test
+	void changingAChildConvertsTheRestOfItsSelectedCategoryToIndividualChoices() {
+		GroupManifest manifest = manifest(Map.of("one", tagged("one", ClientPlatform.LINUX), "two", tagged("two", ClientPlatform.LINUX)));
+		SelectionIntent category = GroupSelectionResolver.preferCategory(manifest, new SelectionIntent(Set.of()), "visuals", ClientPlatform.LINUX);
+
+		SelectionIntent changed = GroupSelectionResolver.prefer(manifest, category, "one", ClientPlatform.LINUX);
+
+		assertEquals(Set.of("two"), changed.requestedGroups());
+		assertTrue(changed.requestedTags().isEmpty());
 	}
 
 	private static GroupManifest manifest(Map<String, GroupManifest.Group> groups) {

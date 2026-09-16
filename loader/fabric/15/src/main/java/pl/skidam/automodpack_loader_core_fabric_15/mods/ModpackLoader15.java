@@ -21,6 +21,7 @@ import net.fabricmc.loader.impl.util.SystemProperties;
 
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter;
@@ -52,7 +53,7 @@ public class ModpackLoader15 implements ModpackLoaderService {
 
 	@Override
 	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileMetadataCache cache) {
-		Path activeModsDirectory = activeProjectionDirectory.resolve("mods");
+		Path activeModsDirectory = activeProjectionDirectory.resolve(ModpackPathPolicy.MODS_ROOT);
 
 		List<ModCandidate> modpackNestedMods = new ArrayList<>();
 		List<ModCandidate> standardNestedMods = new ArrayList<>();

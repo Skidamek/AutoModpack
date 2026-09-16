@@ -32,6 +32,10 @@ public final class GroupSelectionResolver {
 		state.collectStaleChoices();
 
 		for (String groupId : state.requiredGroups) state.resolveRoot(groupId, Source.REQUIRED, true);
+		for (String tag : intent.requestedTags()) for (var entry : manifest.groups().entrySet()) {
+			GroupManifest.Group group = entry.getValue();
+			if (tag.equals(group.tag()) && !group.required() && group.supports(platform)) state.resolveRoot(entry.getKey(), Source.EXPLICIT, false);
+		}
 		for (String groupId : intent.requestedGroups()) if (manifest.groups().containsKey(groupId)) {
 			GroupManifest.Group group = manifest.groups().get(groupId);
 			state.resolveRoot(groupId, defaultSelection && group.defaultSelected() ? Source.DEFAULT_SELECTED : Source.EXPLICIT, false);
@@ -43,17 +47,27 @@ public final class GroupSelectionResolver {
 		return resolved;
 	}
 
-	public static SelectionIntent prefer(SelectionIntent current, String clicked) {
+	public static SelectionIntent prefer(GroupManifest manifest, SelectionIntent current, String clicked, ClientPlatform platform) {
+		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(current);
 		Objects.requireNonNull(clicked);
+		Objects.requireNonNull(platform);
 		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
+		Set<String> requestedTags = new TreeSet<>(current.requestedTags());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
+		GroupManifest.Group clickedGroup = manifest.groups().get(clicked);
+		if (clickedGroup != null && !clickedGroup.tag().isEmpty() && requestedTags.remove(clickedGroup.tag())) {
+			for (var entry : manifest.groups().entrySet()) {
+				GroupManifest.Group group = entry.getValue();
+				if (clickedGroup.tag().equals(group.tag()) && !group.required() && group.supports(platform)) requestedGroups.add(entry.getKey());
+			}
+		}
 		if (!requestedGroups.add(clicked)) requestedGroups.remove(clicked);
 		excludedGroups.remove(clicked);
-		return new SelectionIntent(requestedGroups, excludedGroups);
+		return new SelectionIntent(requestedGroups, requestedTags, excludedGroups);
 	}
 
-	/** Toggles every optional group in a category using the same persisted group intent as individual choices. */
+	/** Toggles one persisted category intent without pretending that its groups were clicked individually. */
 	public static SelectionIntent preferCategory(GroupManifest manifest, SelectionIntent current, String category, ClientPlatform platform) {
 		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(current);
@@ -62,14 +76,15 @@ public final class GroupSelectionResolver {
 		Set<String> categoryGroups = new TreeSet<>();
 		for (var entry : manifest.groups().entrySet()) if (category.equals(entry.getValue().tag()) && !entry.getValue().required() && entry.getValue().supports(platform)) categoryGroups.add(entry.getKey());
 		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
+		Set<String> requestedTags = new TreeSet<>(current.requestedTags());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
-		boolean remove = requestedGroups.containsAll(categoryGroups);
+		boolean remove = !requestedTags.add(category);
+		if (remove) requestedTags.remove(category);
 		for (String groupId : categoryGroups) {
-			if (remove) requestedGroups.remove(groupId);
-			else requestedGroups.add(groupId);
+			requestedGroups.remove(groupId);
 			excludedGroups.remove(groupId);
 		}
-		return new SelectionIntent(requestedGroups, excludedGroups);
+		return new SelectionIntent(requestedGroups, requestedTags, excludedGroups);
 	}
 
 	public static boolean conflicts(GroupManifest manifest, String first, String second) {
@@ -174,6 +189,7 @@ public final class GroupSelectionResolver {
 						else if (forced) errors.add("Group '" + groupId + "' cannot be selected because dependency '" + dependencyId + "' is unavailable");
 						return Closure.failure(blocked, dependencyClosure.excluded());
 					}
+					relate(dependencyId, groupId);
 					closure.addAll(dependencyClosure.groups());
 				}
 				closure.add(groupId);

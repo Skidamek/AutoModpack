@@ -5,11 +5,11 @@ import java.nio.file.Path;
 import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdateExecutionException;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 public final class UpdateHelperMain {
 	private static final int MAX_ATTEMPTS = 8;
@@ -32,7 +32,7 @@ public final class UpdateHelperMain {
 			if (parentPid <= 0 || parentPid == ProcessHandle.current().pid()) throw new IOException("Invalid parent PID");
 			ProcessHandle.of(parentPid).ifPresent(parent -> parent.onExit().join());
 
-			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
 			Path persistedPath = storage.transactionFile();
 			UpdateTransaction transaction = ConfigTools.read(persistedPath, UpdateTransaction.class)
 					.orElseThrow(() -> new IOException("Persisted update transaction is missing"));
@@ -62,7 +62,7 @@ public final class UpdateHelperMain {
 				path = executionFailure.path() == null ? null : executionFailure.path().toString();
 			}
 			try {
-				ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+				ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
 				UpdateTransaction transaction = ConfigTools.read(storage.transactionFile(), UpdateTransaction.class).orElse(null);
 				if (transaction != null && expectedTransactionId.equals(transaction.transactionId)) recordFailure(storage, transaction, operation, path, failure.toString());
 			} catch (Exception ignored) {

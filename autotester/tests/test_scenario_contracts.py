@@ -118,6 +118,42 @@ def test_release_gate_cannot_duplicate_a_capability():
     )
 
 
+def test_release_gate_requires_real_server_maintenance_coverage():
+    scenario = load_scenarios()["all"]
+    scenario["flow"] = [
+        step for step in scenario["flow"]
+        if not isinstance(step, dict) or step.get("do") != "collect_server_objects"
+    ]
+
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+
+    assert any("server-object-gc" in problem for problem in problems)
+
+
+def test_release_gate_runs_server_maintenance_after_client_removal_and_in_order():
+    flow = load_scenarios()["all"]["flow"]
+    rollback = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "rollback_server_generation")
+    compact = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "compact_server_history")
+    collect = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "collect_server_objects")
+    removal = max(index for index, step in enumerate(flow) if isinstance(step, dict) and "Pack A removal" in str(step.get("name", "")))
+
+    assert removal < rollback < compact < collect
+
+
+def test_release_gate_exercises_content_history_from_management_settings():
+    flow = load_scenarios()["all"]["flow"]
+    history = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "click" and step.get("select", {}).get("text") == "History")
+    content_wait = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "wait_for" and (step.get("until", {}).get("screen") == "ContentHistoryScreen" or any(condition.get("screen") == "ContentHistoryScreen" for condition in step.get("until", {}).get("all", []))))
+    screenshot = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "screenshot" and step.get("file") == "all-content-history")
+    all_notes = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "click" and step.get("select", {}).get("text") == "View all patch notes" and index > screenshot)
+    notes_wait = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "wait_for" and (step.get("until", {}).get("screen") == "PatchNotesHistoryScreen" or any(condition.get("screen") == "PatchNotesHistoryScreen" for condition in step.get("until", {}).get("all", []))) and index > all_notes)
+    return_content = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "wait_for" and step.get("until", {}).get("screen") == "ContentHistoryScreen" and index > notes_wait)
+
+    assert history < content_wait < screenshot < all_notes < notes_wait < return_content
+    assert flow[content_wait]["until"].get("screen") == "ContentHistoryScreen"
+    assert flow[notes_wait]["until"].get("screen") == "PatchNotesHistoryScreen"
+
+
 def test_canonical_encoder_has_java_parity_vector():
     assert (
         CanonicalEncoder().string("parity").integer(7).long(11).boolean(True).digest()

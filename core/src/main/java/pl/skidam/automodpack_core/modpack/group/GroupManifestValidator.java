@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_core.modpack.group;
 
-import static pl.skidam.automodpack_core.Constants.modpackContentFileName;
+import static pl.skidam.automodpack_core.storage.StoragePaths.MODPACK_CONTENT_FILE;
 
 import java.text.Normalizer;
 import java.util.*;
@@ -8,11 +8,10 @@ import java.util.regex.Pattern;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class GroupManifestValidator {
 	private static final Pattern ID = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
-	private static final Pattern SHA1 = Pattern.compile("[0-9a-fA-F]{40}");
-	private static final Set<String> FILE_TYPES = Set.of("mod", "config", "shader", "resourcepack", "mc_options", "other");
 
 	private GroupManifestValidator() {}
 
@@ -78,11 +77,11 @@ public final class GroupManifestValidator {
 			} catch (RuntimeException e) {
 				errors.add("Group '" + groupId + "' file '" + path + "' has invalid size");
 			}
-			if (file.type == null || !FILE_TYPES.contains(file.type)) errors.add("Group '" + groupId + "' file '" + path + "' has invalid type");
+			if (file.type == null || !ModpackContentType.ALL.contains(file.type)) errors.add("Group '" + groupId + "' file '" + path + "' has invalid type");
 			else
 				if (!ModpackPathPolicy.isValidTypeAndPath(path, file.type))
 					errors.add("Group '" + groupId + "' file '" + path + "' has an invalid type/path combination: " + file.type);
-			if (file.sha1 == null || !SHA1.matcher(file.sha1).matches()) errors.add("Group '" + groupId + "' file '" + path + "' has invalid SHA-1");
+			if (!HashUtils.isSha1(file.sha1)) errors.add("Group '" + groupId + "' file '" + path + "' has invalid SHA-1");
 			if (file.overwriteEditable && !file.editable) errors.add("Group '" + groupId + "' file '" + path + "' overwrites edits but is not editable");
 			files.put(path, new GroupManifest.GroupFile(size, file.type, file.editable, file.overwriteEditable,
 					value(file.sha1).toLowerCase(Locale.ROOT), file.murmur));
@@ -97,7 +96,7 @@ public final class GroupManifestValidator {
 			errors.add("Group '" + groupId + "': " + e.getMessage());
 			return false;
 		}
-		if (path.equalsIgnoreCase(modpackContentFileName.toString())) {
+		if (path.equalsIgnoreCase(MODPACK_CONTENT_FILE.toString())) {
 			errors.add("Group '" + groupId + "' reserves AutoModpack metadata path: " + path);
 			return false;
 		}
@@ -115,7 +114,7 @@ public final class GroupManifestValidator {
 				for (String path : group.files().keySet()) {
 					if (platform == ClientPlatform.WINDOWS) validateWindowsPath(groupId, path, errors);
 					aliases.computeIfAbsent(platformPathKey(path, platform), ignored -> new ArrayList<>()).add(new PathOwner(groupId, path));
-					if ("mod".equals(group.files().get(path).type()))
+					if (ModpackPathPolicy.isActiveMod(path, group.files().get(path).type()))
 						modBasenameAliases.computeIfAbsent(platformPathKey(path.substring(path.lastIndexOf('/') + 1), platform), ignored -> new ArrayList<>())
 								.add(new PathOwner(groupId, path));
 				}

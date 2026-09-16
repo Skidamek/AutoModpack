@@ -13,6 +13,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** Provides an explicit, user-confirmed cleanup pass for client generation storage. */
 public final class ClientStorageMaintenanceScreen extends VersionedScreen {
@@ -70,6 +71,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	}
 
 	private void fail(Exception exception) {
+		new ScreenManager().report(exception, "Client storage cleanup failed");
 		if (closed) return;
 		busy = false;
 		error = exception.getMessage() == null || exception.getMessage().isBlank() ? exception.getClass().getSimpleName() : exception.getMessage();

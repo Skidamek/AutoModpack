@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_loader_core.utils;
 
-import static pl.skidam.automodpack_core.Constants.AM_VERSION;
 import static pl.skidam.automodpack_core.platforms.CurseForgeAPI.CDN_HOST;
 import static pl.skidam.automodpack_core.platforms.CurseForgeAPI.summonKey;
 
@@ -93,7 +92,7 @@ public class HttpFileDownloader {
 
 	private HttpResponse<InputStream> send(DownloadSource source, URI uri, boolean authenticate, HttpClient client, Path target)
 			throws IOException, InterruptedException {
-		HttpRequest.Builder request = HttpRequest.newBuilder().uri(uri).header("User-Agent", "github/skidamek/automodpack/" + AM_VERSION)
+		HttpRequest.Builder request = HttpRequest.newBuilder().uri(uri).header("User-Agent", NetUtils.USER_AGENT)
 				.header("Accept-Encoding", "gzip").timeout(Duration.ofSeconds(10)).GET();
 		if (authenticate) request.header("x-api-key", summonKey());
 

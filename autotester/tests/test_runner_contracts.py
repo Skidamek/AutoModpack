@@ -60,6 +60,103 @@ def test_server_history_compaction_uses_registered_command():
     )
 
 
+class _ExecResult:
+    def __init__(self, output=b"", exit_code=0):
+        self.output = output
+        self.exit_code = exit_code
+
+
+def test_rollback_server_generation_uses_retained_history_and_durable_receipt(make_ctx, monkeypatch):
+    ctx = make_ctx()
+    server_root = ctx.server_dir / "automodpack" / "server"
+    server_root.mkdir(parents=True)
+    target_id = "a" * 40
+    current_id = "b" * 40
+    rollback_id = "c" * 40
+    state_digest = "d" * 40
+    history = [
+        {"generationId": target_id, "parentGenerationId": "", "patchNotes": "root"},
+        {"generationId": current_id, "parentGenerationId": target_id, "patchNotes": "update"},
+    ]
+    projection = {
+        "generation": {"generationId": current_id, "parentGenerationId": target_id, "patchNotes": "update", "rollbackTargetGenerationId": "", "stateDigest": "e" * 40, "ledgerDigest": "f" * 40},
+        "patchNotesHistory": history,
+    }
+    (server_root / "current-projection.json").write_text(json.dumps(projection), encoding="utf-8")
+    (server_root / "current.json").write_text(json.dumps({"generationId": current_id}), encoding="utf-8")
+    (server_root / "commits").mkdir()
+    (server_root / "catalogues").mkdir()
+    (server_root / "commits" / f"{target_id}.json").write_text(json.dumps({"generationId": target_id, "stateDigest": state_digest, "ledgerDigest": "e" * 40}), encoding="utf-8")
+    (server_root / "catalogues" / f"{state_digest}.json").write_text("{}", encoding="utf-8")
+
+    class Container:
+        def __init__(self):
+            self.commands = []
+
+        def exec_run(self, command):
+            self.commands.append(command)
+            if command[0] == "rcon-cli":
+                updated = {
+                    "generation": {
+                        "generationId": rollback_id,
+                        "parentGenerationId": current_id,
+                        "patchNotes": "Release gate rollback verification.",
+                        "rollbackTargetGenerationId": target_id,
+                        "stateDigest": state_digest,
+                        "ledgerDigest": "e" * 40,
+                    },
+                    "patchNotesHistory": [*history, {"generationId": rollback_id, "parentGenerationId": current_id, "patchNotes": "Release gate rollback verification."}],
+                }
+                (server_root / "current-projection.json").write_text(json.dumps(updated), encoding="utf-8")
+                (server_root / "current.json").write_text(json.dumps({"generationId": rollback_id}), encoding="utf-8")
+                (server_root / "commits" / f"{rollback_id}.json").write_text(json.dumps({"parentGenerationId": current_id, "rollbackTargetGenerationId": target_id}), encoding="utf-8")
+            return _ExecResult()
+
+    container = Container()
+    monkeypatch.setattr(runner, "_container", lambda _name: container)
+
+    runner._v_rollback_server_generation(ctx, {})
+
+    assert container.commands[-1] == [
+        "rcon-cli", "automodpack", "generate", "revert", target_id, "confirm", "notes", "Release gate rollback verification."
+    ]
+    assert ctx.vars["server_rollback"]["targetGenerationId"] == target_id
+    assert ctx.vars["server_rollback"]["currentGenerationId"] == rollback_id
+
+
+def test_collect_server_objects_requires_real_transition_receipt(make_ctx, monkeypatch):
+    ctx = make_ctx()
+    marker = ctx.server_dir / "automodpack" / "data-root.json"
+    marker.parent.mkdir(parents=True)
+    marker.write_text(json.dumps({"root": "/data/.local/share/AutoModpack/data", "shared": False}), encoding="utf-8")
+
+    class Container:
+        def __init__(self):
+            self.commands = []
+            self.orphan_exists = True
+
+        def exec_run(self, command):
+            self.commands.append(command)
+            if command[0] == "sh" and "count=0" in command[2]:
+                return _ExecResult(b"2 47\n" if self.orphan_exists else b"1 23\n")
+            if command[0] == "sh" and "sha1sum" in command[2]:
+                return _ExecResult()
+            if command[0] == "rcon-cli":
+                self.orphan_exists = False
+                return _ExecResult(b"Generation objects collected\nObjects - 2 -> 1\nBytes - 47 -> 23\nDeleted - 1 objects, 24 bytes\n")
+            if command[0] == "test":
+                return _ExecResult(exit_code=0 if self.orphan_exists else 1)
+            raise AssertionError(command)
+
+    container = Container()
+    monkeypatch.setattr(runner, "_container", lambda _name: container)
+
+    runner._v_collect_server_objects(ctx, {})
+
+    assert container.commands[-1] == ["test", "-e", "/data/.local/share/AutoModpack/data/objects/d8e1759b948add3eb7d6cc6e6532a31f71292ecc"]
+    assert ctx.vars["server_object_collection"]["deletedCount"] == 1
+
+
 def test_seed_client_options_preserves_existing_settings(tmp_path):
     options_path = tmp_path / "options.txt"
     options_path.write_text(

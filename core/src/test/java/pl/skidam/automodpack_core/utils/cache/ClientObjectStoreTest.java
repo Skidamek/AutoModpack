@@ -77,7 +77,7 @@ class ClientObjectStoreTest {
 	}
 
 	@Test
-	void refusesToCollectObjectsRequiredByInstalledGenerationManifests() throws Exception {
+	void pinsCachedObjectsReferencedByInstalledGenerationCatalogues() throws Exception {
 		ClientStorage storage = storage();
 		byte[] activeBytes = "active-object".getBytes(StandardCharsets.UTF_8);
 		byte[] historicalBytes = "historical-object".getBytes(StandardCharsets.UTF_8);

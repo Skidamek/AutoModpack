@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.config;
 
 import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_CONFIG_FILE;
 
 import java.io.IOException;
 import java.util.*;
@@ -14,7 +15,7 @@ public class ConfigUtils {
 		normalizeServerConfig(config);
 		if (saveAfter) {
 			try {
-				ConfigTools.writeAtomic(serverConfigFile, config);
+				ConfigTools.writeAtomic(SERVER_CONFIG_FILE, config);
 			} catch (IOException e) {
 				throw new ConfigTools.ConfigException("Failed to save server configuration", e);
 			}
