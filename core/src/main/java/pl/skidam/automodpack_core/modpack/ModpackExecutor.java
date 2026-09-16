@@ -314,7 +314,7 @@ public class ModpackExecutor {
 		if (serverConfig == null || serverConfig.modpack == null || serverConfig.modpack.isEmpty())
 			throw new CandidateBuildException("Server group configuration is missing");
 		for (var categoryEntry : serverConfig.modpack.entrySet()) {
-			if (categoryEntry.getValue() == null) continue; // GroupManifestValidator reports the empty category.
+			if (categoryEntry.getValue() == null) continue; // A null category holds no group declarations to validate.
 			for (var entry : categoryEntry.getValue().entrySet()) {
 				try {
 					GroupManifestValidator.requireIdentifier(entry.getKey());

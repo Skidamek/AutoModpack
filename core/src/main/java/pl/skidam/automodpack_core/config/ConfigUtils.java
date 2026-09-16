@@ -64,7 +64,10 @@ public class ConfigUtils {
 		// Rules are group-directory-relative: no leading slash, no '/automodpack/host-modpack/<this group>' prefix (slash optional).
 		if (config.modpack == null) return;
 		for (var categoryEntry : config.modpack.entrySet()) {
-			if (categoryEntry.getValue() == null) continue;
+			if (categoryEntry.getValue() == null) {
+				LOGGER.warn("Ignored null category declaration '{}'.", categoryEntry.getKey());
+				continue;
+			}
 			for (var groupEntry : categoryEntry.getValue().entrySet()) {
 				var group = groupEntry.getValue();
 				if (group == null) {

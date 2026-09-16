@@ -24,7 +24,7 @@ public final class ModpackCandidateScanner {
 		Map<String, String> categoryByGroup = new LinkedHashMap<>();
 		Map<String, GroupRules> rulesByGroup = new LinkedHashMap<>();
 		for (var categoryEntry : request.modpack().entrySet()) {
-			if (categoryEntry.getValue() == null) continue; // GroupManifestValidator reports the empty category.
+			if (categoryEntry.getValue() == null) continue; // A null category holds no groups to scan.
 			for (var entry : categoryEntry.getValue().entrySet()) {
 				try {
 					GroupManifestValidator.requireIdentifier(entry.getKey());
