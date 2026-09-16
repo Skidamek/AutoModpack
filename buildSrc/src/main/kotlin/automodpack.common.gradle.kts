@@ -1,4 +1,5 @@
 import dev.luna5ama.jaroptimizer.OptimizeJarTask
+import org.gradle.api.plugins.BasePluginExtension
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.jvm.tasks.Jar
@@ -92,6 +93,11 @@ val optimizedLibsDirectory = layout.buildDirectory.dir("libs-optimized")
 
 // A per-target build ends at the optimized impl jar; assembling the one jar out of every target's
 // output is the root project's oneJar task, and merged/ is that one jar's output directory only.
+val modJarFileName =
+	extensions
+		.getByType(BasePluginExtension::class.java)
+		.archivesName
+		.zip(providers.provider { version.toString() }) { name, v -> "$name-$v.jar" }
 val optimizeModJar =
 	tasks.register<OptimizeJarTask>("optimizeModJar") {
 		// Resolved when the task joins the graph, after every plugin has applied. The chain's last
@@ -101,14 +107,13 @@ val optimizeModJar =
 				tasks.findByName("reobfJar") ?: tasks.findByName("remapJar") ?: tasks.named("jar").get()
 			},
 		)
-		jarFile.set(libsDirectory.map { dir -> dir.file(getModJarPath(dir.asFile).name) })
+		// The input is the producer's standard archive path, never a directory scan: on a clean CI
+		// build/libs is still empty when the task graph is built, and a scan there fails the graph
+		// before anything has produced the jar.
+		jarFile.set(modJarFileName.flatMap { fileName -> libsDirectory.map { dir -> dir.file(fileName) } })
 		keeps.add("pl.skidam")
 		destinationDirectory.set(optimizedLibsDirectory)
-		archiveFileName.set(
-			provider {
-				getModJarPath(libsDirectory.get().asFile).nameWithoutExtension + "-optimized.jar"
-			},
-		)
+		archiveFileName.set(modJarFileName.map { it.removeSuffix(".jar") + "-optimized.jar" })
 	}
 optimizeModJar.configure {
 	inputs.property("automodpackBuildMode", automodpackBuildMode)
