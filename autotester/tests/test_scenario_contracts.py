@@ -145,7 +145,7 @@ def test_release_gate_exercises_content_history_from_management_settings():
     history = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "click" and step.get("select", {}).get("text") == "History")
     content_wait = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "wait_for" and (step.get("until", {}).get("screen") == "ContentHistoryScreen" or any(condition.get("screen") == "ContentHistoryScreen" for condition in step.get("until", {}).get("all", []))))
     screenshot = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "screenshot" and step.get("file") == "all-content-history")
-    all_notes = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "click" and step.get("select", {}).get("text") == "View all patch notes" and index > screenshot)
+    all_notes = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "click" and step.get("select", {}).get("text") == "Patch notes" and index > screenshot)
     notes_wait = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "wait_for" and (step.get("until", {}).get("screen") == "PatchNotesHistoryScreen" or any(condition.get("screen") == "PatchNotesHistoryScreen" for condition in step.get("until", {}).get("all", []))) and index > all_notes)
     return_content = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "wait_for" and step.get("until", {}).get("screen") == "ContentHistoryScreen" and index > notes_wait)
 

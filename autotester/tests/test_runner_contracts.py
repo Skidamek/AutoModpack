@@ -45,13 +45,13 @@ def test_targets_command_uses_configured_defaults(monkeypatch, capsys):
 # ── validation ─────────────────────────────────────────────────────────────
 
 
-def test_server_history_compaction_uses_registered_command():
+def test_server_history_compaction_uses_registered_boundary_command():
     source = (Path(__file__).parents[1] / "automodpack_autotester/runner.py").read_text(
         encoding="utf-8"
     )
 
     assert (
-        '["rcon-cli", "automodpack", "generate", "storage", "compact", "confirm"]'
+        '["rcon-cli", "automodpack", "generate", "storage", "compact", "before", boundary_id, "confirm"]'
         in source
     )
     assert (
@@ -103,13 +103,13 @@ def test_rollback_server_generation_uses_retained_history_and_durable_receipt(ma
                         "patchNotes": "Release gate rollback verification.",
                         "rollbackTargetGenerationId": target_id,
                         "stateDigest": state_digest,
-                        "ledgerDigest": "e" * 40,
+                        "ledgerDigest": "0" * 40,
                     },
                     "patchNotesHistory": [*history, {"generationId": rollback_id, "parentGenerationId": current_id, "patchNotes": "Release gate rollback verification."}],
                 }
                 (server_root / "current-projection.json").write_text(json.dumps(updated), encoding="utf-8")
                 (server_root / "current.json").write_text(json.dumps({"generationId": rollback_id}), encoding="utf-8")
-                (server_root / "commits" / f"{rollback_id}.json").write_text(json.dumps({"parentGenerationId": current_id, "rollbackTargetGenerationId": target_id}), encoding="utf-8")
+                (server_root / "commits" / f"{rollback_id}.json").write_text(json.dumps({"parentGenerationId": current_id, "rollbackTargetGenerationId": target_id, "stateDigest": state_digest, "ledgerDigest": "0" * 40}), encoding="utf-8")
             return _ExecResult()
 
     container = Container()
@@ -302,7 +302,7 @@ def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeyp
 
     runner._launch_client(ctx)
     marker = ctx.game_dir / "automodpack/data-root.json"
-    before = json.loads(marker.read_text())
+    before = json.loads(marker.read_text(encoding="utf-8"))
 
     runner._v_stage_modpack(
         ctx,
@@ -315,7 +315,7 @@ def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeyp
     )
 
     assert before == {"root": "/work/game/automodpack/client/data", "shared": False}
-    assert json.loads(marker.read_text()) == before
+    assert json.loads(marker.read_text(encoding="utf-8")) == before
 
 
 def test_connect_screen_classifier_does_not_loop_on_first_connection():

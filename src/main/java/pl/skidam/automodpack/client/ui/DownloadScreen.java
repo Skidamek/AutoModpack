@@ -12,6 +12,7 @@ import net.minecraft.resources.Identifier;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -67,27 +68,29 @@ public class DownloadScreen extends VersionedScreen {
 	}
 
 	private void initWidgets() {
-		cancelButton = addRenderableWidget(
-				buttonWidget(centeredActionButtonX(310, 2, 1, 0), this.height - 28, actionButtonWidth(310, 2), 20, VersionedText.translatable("automodpack.cancel"), button -> {
+		cancelButton = addActionArea(310, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+				secondaryAction(VersionedText.translatable("automodpack.cancel"), button -> {
 					cancelButton.active = false;
 					cancelDownload();
 					AudioManager.stopMusic();
-				}));
+				}))).get(0);
 
-		int x = this.width - 28;
+		int x = panelLeft(310) + panelWidth(310) - 20;
 		int y = this.height - 28;
 
 		muteMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(x, y, 20, 8, button -> {
 			AudioManager.stopMusic();
 			clientConfig.playMusic = false;
 			saveClientConfig();
-		}, "music-note"));
+		}, "music-note", VersionedText.translatable("soundCategory.music")));
+		setTooltip(muteMusicButton, VersionedText.translatable("soundCategory.music"));
 
 		playMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(x, y, 20, 8, button -> {
 			AudioManager.playMusic();
 			clientConfig.playMusic = true;
 			saveClientConfig();
-		}, "mute-music-note"));
+		}, "mute-music-note", VersionedText.translatable("soundCategory.music")));
+		setTooltip(playMusicButton, VersionedText.translatable("soundCategory.music"));
 	}
 
 	private void updateUIState() {
@@ -153,7 +156,8 @@ public class DownloadScreen extends VersionedScreen {
 			int currentY = y + 15;
 			synchronized (downloadManager.downloadsInProgress) {
 				for (DownloadManager.DownloadData data : downloadManager.downloadsInProgress.values()) {
-					drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(data.getFileName()), (int) (((float) this.width / 2) * scale), currentY, TextColors.GRAY);
+					String fileName = truncateToWidth(this.font, data.getFileName(), Math.max(1, panelWidth(310) - 20));
+					drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(fileName), (int) (((float) this.width / 2) * scale), currentY, TextColors.GRAY);
 					currentY += 10;
 				}
 			}
@@ -171,7 +175,7 @@ public class DownloadScreen extends VersionedScreen {
 		int lineHeight = 12;
 
 		drawDownloadingFiles(matrices);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(header).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 110, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header, panelWidth(310))).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 110, TextColors.WHITE);
 
 		if (downloadManager != null && downloadManager.isRunning()) {
 			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getStage(), this.width / 2, this.height / 2 - 10, TextColors.WHITE);
@@ -229,7 +233,13 @@ public class DownloadScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		return false;
+		return handleBackOnEscape(() -> {
+			if (cancelButton != null && cancelButton.active) {
+				cancelButton.active = false;
+				cancelDownload();
+				AudioManager.stopMusic();
+			}
+		});
 	}
 
 	public void cancelDownload() {

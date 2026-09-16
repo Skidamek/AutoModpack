@@ -24,7 +24,6 @@ public record GenerationMetadata(
 	public static final int CURRENT_SCHEMA_VERSION = 1;
 	public static final String ROOT_PARENT = "";
 	public static final String NO_ROLLBACK_TARGET = "";
-	public static final int MAX_PATCH_NOTES_UTF8_BYTES = 16 * 1024;
 
 	public GenerationMetadata {
 		if (schemaVersion != CURRENT_SCHEMA_VERSION) throw new IllegalArgumentException("Unsupported generation schema version: " + schemaVersion);
@@ -45,11 +44,8 @@ public record GenerationMetadata(
 
 	public static String validateNotes(String notes) {
 		Objects.requireNonNull(notes, "Patch notes are missing");
-		byte[] original = encodeUtf8(notes);
-		if (original.length > MAX_PATCH_NOTES_UTF8_BYTES) throw new IllegalArgumentException("Patch notes exceed the 16 KiB UTF-8 limit");
 		String normalized = normalizeNotes(notes);
-		if (encodeUtf8(normalized).length > MAX_PATCH_NOTES_UTF8_BYTES)
-			throw new IllegalArgumentException("Patch notes exceed the 16 KiB UTF-8 limit");
+		encodeUtf8(normalized);
 		return normalized;
 	}
 

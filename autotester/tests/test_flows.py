@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 from automodpack_autotester.config import (
+    CLIENT_GENERATION_STATE_PATHS,
     load_macros,
     load_scenarios,
     parse_server_files,
@@ -83,7 +84,7 @@ def _seed_bootstrap(ctx, step):
     data = ctx.game_dir / "automodpack" / "client" / "data"
     (data / "packs" / "packaaa").mkdir(parents=True, exist_ok=True)
     (ctx.game_dir / "automodpack" / "client-config.json").write_text(
-        json.dumps({"selectedModpackId": "packaaa"})
+        json.dumps({"selectedModpackId": "packaaa"}), encoding="utf-8"
     )
     (data / "known-hosts.json").write_text(
         json.dumps(
@@ -97,7 +98,7 @@ def _seed_bootstrap(ctx, step):
                     }
                 }
             }
-        )
+        ), encoding="utf-8"
     )
     connection_path = data / "packs" / "packaaa" / "connection.json"
     previous_connection = {}
@@ -113,7 +114,7 @@ def _seed_bootstrap(ctx, step):
                 },
                 "secrets": previous_connection.get("secrets", {}),
             }
-        )
+        ), encoding="utf-8"
     )
     projection_root = ctx.server_dir / "automodpack" / "server"
     projection_root.mkdir(parents=True, exist_ok=True)
@@ -126,7 +127,7 @@ def _seed_bootstrap(ctx, step):
         sha1 = hashlib.sha1(payload).hexdigest()
         files[path] = {"sha1": sha1, "size": str(len(payload))}
     (projection_root / "current-projection.json").write_text(
-        json.dumps({"modpackId": "packaaa", "groups": {"main": {"files": files}}})
+        json.dumps({"modpackId": "packaaa", "groups": {"main": {"files": files}}}), encoding="utf-8"
     )
 
 
@@ -152,7 +153,7 @@ def _wait_exit(ctx, step):
 
 def _reset_client_generation(ctx, step):
     ctx.bridge._reset_client_generation()
-    for relative in ("records", "active", "active-state.json", "data/objects"):
+    for relative in CLIENT_GENERATION_STATE_PATHS:
         path = ctx.game_dir / "automodpack" / "client" / relative
         if path.is_dir():
             shutil.rmtree(path)

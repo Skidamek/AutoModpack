@@ -31,10 +31,7 @@ def test_legacy_forge_keeps_loader_classes_out_of_nested_mod():
         "ManifestFetchState connectionFailedState = ManifestFetchState.CONNECTION_FAILED;"
         in modpack_utils
     )
-    assert (
-        'LOGGER.error("Error while connecting to the server modpack host: {}", formatThrowable(cause));'
-        in modpack_utils
-    )
+    assert "return new ManifestFetchResult(connectionFailedState, null, null, cause);" in modpack_utils
     assert (
         'using the built-in fallback ({}: {})", t.getClass().getName(), t.getMessage())'
         in early_service_layer
@@ -45,7 +42,7 @@ def test_autotest_bridge_readiness_is_level_triggered():
     source = (
         Path(__file__).parents[2]
         / "src/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     start = source[
         source.index("public static void start()") : source.index(
             "public static void onClientReady()"
@@ -231,14 +228,17 @@ def test_error_screen_dispatch_requires_a_logged_throwable():
         for path in source_root.rglob("*.java")
     )
 
-    assert "public void error(Throwable throwable, String... args)" in screen_manager
-    assert 'report(throwable, "Displaying AutoModpack error screen: " + Arrays.toString(args));' in screen_manager
+    assert "public void failure(FailureRequest request)" in screen_manager
+    assert 'LOGGER.error("AutoModpack client failure [{}] while displaying {}", request.category().key(), request.messageKey(), request.cause());' in screen_manager
     assert screen_manager.count("LOGGER.error(") == 1
     assert "new ScreenManager().error(\"" not in dispatch_sources
+    assert "new ScreenManager().report(\"" not in dispatch_sources
+    assert "public void error(Throwable throwable, String... args)" not in screen_manager
+    assert "public void report(Throwable throwable, String context)" not in screen_manager
     assert "ScreenManager.INSTANCE" not in dispatch_sources
 
 
-def test_inline_storage_cleanup_failure_is_logged_with_its_throwable():
+def test_storage_cleanup_failure_uses_dedicated_error_screen():
     project_root = Path(__file__).parents[2]
     screen_manager = (
         project_root
@@ -249,6 +249,6 @@ def test_inline_storage_cleanup_failure_is_logged_with_its_throwable():
         / "src/main/java/pl/skidam/automodpack/client/ui/ClientStorageMaintenanceScreen.java"
     ).read_text(encoding="utf-8")
 
-    assert "public void report(Throwable throwable, String context)" in screen_manager
-    assert 'LOGGER.error("AutoModpack client failure: {}", context, throwable);' in screen_manager
-    assert 'new ScreenManager().report(exception, "Client storage cleanup failed");' in storage_screen
+    assert "public void failure(FailureRequest request)" in screen_manager
+    assert 'new ScreenManager().failure(FailureRequest.of(exception, "automodpack.error.storage"' in storage_screen
+    assert "new ScreenManager().report(" not in storage_screen

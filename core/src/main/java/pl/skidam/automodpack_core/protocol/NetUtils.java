@@ -7,6 +7,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.*;
@@ -143,7 +144,7 @@ public class NetUtils {
 	public static void saveCertificate(X509Certificate cert, Path path) throws Exception {
 		String certPem = "-----BEGIN CERTIFICATE-----\n" + formatBase64(cert.getEncoded()) + "-----END CERTIFICATE-----\n";
 		if (path.getParent() != null) Files.createDirectories(path.getParent());
-		Files.writeString(path, certPem);
+		Files.writeString(path, certPem, StandardCharsets.UTF_8);
 	}
 
 	public static X509Certificate loadCertificate(Path path) throws Exception {
@@ -158,7 +159,7 @@ public class NetUtils {
 		PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(key.getEncoded());
 		String keyPem = "-----BEGIN PRIVATE KEY-----\n" + formatBase64(keySpec.getEncoded()) + "-----END PRIVATE KEY-----\n";
 		if (path.getParent() != null) Files.createDirectories(path.getParent());
-		Files.writeString(path, keyPem);
+		Files.writeString(path, keyPem, StandardCharsets.UTF_8);
 	}
 
 	private static String formatBase64(byte[] derEncodedBytes) {

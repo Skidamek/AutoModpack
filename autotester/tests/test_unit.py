@@ -249,7 +249,7 @@ def test_condition_screen_none(make_ctx):
 
 def test_condition_file_and_gone(make_ctx):
     ctx = make_ctx()
-    (ctx.game_dir / "here.txt").write_text("x")
+    (ctx.game_dir / "here.txt").write_text("x", encoding="utf-8")
     assert conditions.evaluate(ctx, {"file": "here.txt"}) is True
     assert conditions.evaluate(ctx, {"file_gone": "nope.txt"}) is True
     assert conditions.evaluate(ctx, {"file": "nope.txt"}) is False
@@ -438,7 +438,7 @@ def test_log_file_target_reads_game_dir_artifact(make_ctx):
     ctx = make_ctx()
     debug = ctx.game_dir / "logs" / "debug.log"
     debug.parent.mkdir(parents=True, exist_ok=True)
-    debug.write_text("Mixin: Added class metadata for Workarounds$Reference\n")
+    debug.write_text("Mixin: Added class metadata for Workarounds$Reference\n", encoding="utf-8")
     cond = {"log": {"file": "logs/debug.log", "matches": r"Added class metadata for \S+Reference"}}
     assert conditions.evaluate(ctx, cond) is True
     # Missing file is empty, not an error.

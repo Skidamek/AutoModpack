@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.util.List;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
@@ -11,6 +13,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
@@ -51,26 +54,22 @@ public class SkipVerificationScreen extends VersionedScreen {
 	public void initWidgets() {
 		assert this.minecraft != null;
 
-		this.textField = new EditBox(this.font, this.width / 2 - 170, this.height / 2 + 15, 340, 20,
+		int fieldLeft = panelLeft(340);
+		int fieldWidth = Math.max(1, panelWidth(340) - 24);
+		this.textField = new EditBox(this.font, fieldLeft, this.height / 2 + 15, fieldWidth, 20,
 				VersionedText.literal("")
 		);
 		this.textField.setMaxLength(128);
 
-		this.backButton = buttonWidget(this.width / 2 - 155, this.height - 48, 150, 20,
-				VersionedText.translatable("automodpack.back"),
-				button -> {
-					assert this.minecraft != null;
-					ScreenImpl.setScreen(verificationScreen);
-				}
-		);
-
-		this.confirmButton = buttonWidget(this.width / 2 + 5, this.height - 48, 150, 20,
-				VersionedText.translatable("automodpack.skip"),
-				button -> confirmSkip());
+		List<Button> buttons = addActionArea(340, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(verificationScreen)),
+				primaryAction(VersionedText.translatable("automodpack.skip"), button -> confirmSkip())));
+		this.backButton = buttons.get(0);
+		this.confirmButton = buttons.get(1);
 		this.confirmButton.active = false;
 		updateButtonText();
 
-		this.wikiButton = iconButtonWidget(this.width / 2 + 22 + 150, this.height / 2 + 15, 20, 16,
+		this.wikiButton = iconButtonWidget(fieldLeft + panelWidth(340) - 20, this.height / 2 + 15, 20, 16,
 				button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"),
 				"link", VersionedText.translatable("automodpack.learnmore"));
 
@@ -158,7 +157,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 
 	@Override
 	public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
-		if (textField.isFocused() && keyCode == 257) { // Enter key (GLFW_KEY_ENTER = 257)
+		if (textField.isFocused() && isEnterKey(keyCode)) {
 			if (confirmButton.active) {
 				confirmSkip();
 				return true;
@@ -169,6 +168,6 @@ public class SkipVerificationScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		return false;
+		return handleBackOnEscape(() -> ScreenImpl.setScreen(verificationScreen));
 	}
 }

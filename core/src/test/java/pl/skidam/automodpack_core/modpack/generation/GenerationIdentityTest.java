@@ -63,11 +63,9 @@ class GenerationIdentityTest {
 	}
 
 	@Test
-	void generationRecordsRejectInvalidOrOversizedPatchNotes() {
+	void generationRecordsRejectInvalidPatchNotes() {
 		GroupManifest manifest = GroupManifestValidator.validate(catalogue("main", "notes"));
 		assertThrows(IllegalArgumentException.class, () -> GenerationRecord.create(manifest, null, Instant.parse("2026-01-01T00:00:00Z"), String.valueOf((char) 0xD800)));
-		assertThrows(IllegalArgumentException.class,
-				() -> GenerationRecord.create(manifest, null, Instant.parse("2026-01-01T00:00:00Z"), "x".repeat(GenerationMetadata.MAX_PATCH_NOTES_UTF8_BYTES + 1)));
 	}
 
 	@Test
@@ -78,11 +76,24 @@ class GenerationIdentityTest {
 	}
 
 	@Test
-	void groupTagChangesStateDigest() {
+	void groupCategoryChangesStateDigest() {
 		var firstFields = catalogue("main", "same");
 		var secondFields = catalogue("main", "same");
-		firstFields.groups.get("main").tag = "first-tag";
-		secondFields.groups.get("main").tag = "second-tag";
+		firstFields.groups.get("main").category = "first-category";
+		secondFields.groups.get("main").category = "second-category";
+
+		GroupManifest first = GroupManifestValidator.validate(firstFields);
+		GroupManifest second = GroupManifestValidator.validate(secondFields);
+
+		assertNotEquals(GenerationIdentity.stateDigest(first), GenerationIdentity.stateDigest(second));
+	}
+
+	@Test
+	void groupIconChangesStateDigest() {
+		var firstFields = catalogue("main", "same");
+		var secondFields = catalogue("main", "same");
+		firstFields.groups.get("main").icon = "minecraft:item/stone";
+		secondFields.groups.get("main").icon = "minecraft:item/diamond";
 
 		GroupManifest first = GroupManifestValidator.validate(firstFields);
 		GroupManifest second = GroupManifestValidator.validate(secondFields);

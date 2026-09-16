@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -14,18 +15,25 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.function.IntConsumer;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.CatalogueSnapshot;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 
@@ -76,31 +84,39 @@ public final class ClientGenerationStore {
 	}
 
 	public void write(GenerationRecord record) throws IOException {
-		write(record, GenerationPatchNoteHistory.forRecord(record));
+		write(record, GenerationPatchNoteHistory.forRecord(record), null);
 	}
 
 	public void write(GenerationRecord record, List<GenerationPatchNoteHistory.Entry> patchNotesHistory) throws IOException {
+		write(record, patchNotesHistory, null);
+	}
+
+	/** Persists the server's thin lineage index alongside the complete local generation record. */
+	public void write(GenerationRecord record, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, GenerationHistoryIndex historyIndex) throws IOException {
 		Objects.requireNonNull(record, "record");
 		Objects.requireNonNull(patchNotesHistory, "patchNotesHistory");
 		storage.ensureRoots();
 		Path path = storage.generationManifest(record.metadata().generationId());
 		ModpackJsons.CompleteModpackContentFields fields = record.toFields();
 		GenerationPatchNoteHistory.writeFields(fields, patchNotesHistory);
+		if (historyIndex != null) fields.generationHistory = historyIndex.toFields();
 		if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
 			ModpackJsons.CompleteModpackContentFields existingFields = readFields(path).orElseThrow(() -> new IOException("Stored client generation is invalid: " + path));
 			GenerationRecord existing = GenerationRecord.fromFields(existingFields);
 			if (!existing.equals(record)) throw new IOException("Client generation record already exists with different content: " + path);
-			if (!GenerationPatchNoteHistory.fromFields(existingFields).equals(patchNotesHistory)) {
+			boolean historyChanged = !Objects.equals(existingFields.generationHistory == null ? null : GenerationHistoryIndex.fromFields(existingFields.generationHistory), historyIndex);
+			if (!GenerationPatchNoteHistory.fromFields(existingFields).equals(patchNotesHistory) || historyChanged) {
 				if (existingFields.patchNotesHistory != null && !existingFields.patchNotesHistory.isEmpty())
-					throw new IOException("Client generation patch-note history already exists with different content: " + path);
+					if (!GenerationPatchNoteHistory.fromFields(existingFields).equals(patchNotesHistory))
+						throw new IOException("Client generation patch-note history already exists with different content: " + path);
 				ConfigTools.writeAtomic(path, fields);
-				verify(path, record, patchNotesHistory);
+				verify(path, record, patchNotesHistory, historyIndex);
 			}
 			return;
 		}
 		Files.createDirectories(path.getParent());
 		ConfigTools.writeAtomic(path, fields);
-		verify(path, record, patchNotesHistory);
+		verify(path, record, patchNotesHistory, historyIndex);
 	}
 
 	public Optional<GenerationRecord> read(String generationId) throws IOException {
@@ -109,6 +125,60 @@ public final class ClientGenerationStore {
 
 	public Optional<ModpackJsons.CompleteModpackContentFields> readFields(String generationId) throws IOException {
 		return readFields(storage.generationManifest(generationId));
+	}
+
+	public Optional<GenerationHistoryIndex> historyIndex(String generationId) throws IOException {
+		Optional<ModpackJsons.CompleteModpackContentFields> fields = readFields(generationId);
+		if (fields.isEmpty() || fields.orElseThrow().generationHistory == null) return Optional.empty();
+		return Optional.of(GenerationHistoryIndex.fromFields(fields.orElseThrow().generationHistory));
+	}
+
+	/** Retrieves one selected historical catalogue through the authenticated object-transfer session. */
+	public CompletableFuture<CatalogueSnapshot> downloadHistoricalCatalogue(DownloadClient client, GenerationHistoryIndex.Entry entry, Path destination,
+			IntConsumer chunkCallback) {
+		Objects.requireNonNull(client, "download client");
+		Objects.requireNonNull(entry, "history entry");
+		Objects.requireNonNull(destination, "destination");
+		if (!entry.detailsAvailable()) return CompletableFuture.failedFuture(new IOException("Historical catalogue details were compacted: " + entry.generationId()));
+		try {
+			Files.createDirectories(destination.toAbsolutePath().normalize().getParent());
+		} catch (IOException e) {
+			return CompletableFuture.failedFuture(e);
+		}
+		return client.downloadHistoricalCatalogue(entry.stateDigest(), destination, chunkCallback).thenApply(path -> readHistoricalCatalogue(path, entry)).handle((snapshot, failure) -> {
+			IOException cleanupFailure = null;
+			try {
+				Files.deleteIfExists(destination);
+			} catch (IOException e) {
+				cleanupFailure = e;
+			}
+			if (failure != null) {
+				if (cleanupFailure != null) failure.addSuppressed(cleanupFailure);
+				throw failure instanceof CompletionException completionException ? completionException : new CompletionException(failure);
+			}
+			if (cleanupFailure != null) throw new CompletionException(cleanupFailure);
+			return snapshot;
+		});
+	}
+
+	private static CatalogueSnapshot readHistoricalCatalogue(Path path, GenerationHistoryIndex.Entry entry) {
+		Throwable failure = null;
+		try {
+			GenerationJsons.CatalogueSnapshotFields catalogueFields = ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.CatalogueSnapshotFields.class);
+			CatalogueSnapshot snapshot = CatalogueSnapshot.fromFields(catalogueFields);
+			if (!snapshot.stateDigest().equals(entry.stateDigest())) throw new IOException("Historical catalogue identity does not match history index");
+			return snapshot;
+		} catch (IOException | RuntimeException e) {
+			failure = e;
+			throw new CompletionException("Historical catalogue is invalid", e);
+		} finally {
+			try {
+				Files.deleteIfExists(path);
+			} catch (IOException cleanupFailure) {
+				if (failure != null) failure.addSuppressed(cleanupFailure);
+				else throw new CompletionException("Historical catalogue temporary file could not be deleted", cleanupFailure);
+			}
+		}
 	}
 
 	/** Reconstructs the active target from one validated generation record and the persisted selection intent. */
@@ -335,9 +405,11 @@ public final class ClientGenerationStore {
 		}
 	}
 
-	private static void verify(Path path, GenerationRecord record, List<GenerationPatchNoteHistory.Entry> patchNotesHistory) throws IOException {
+	private static void verify(Path path, GenerationRecord record, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, GenerationHistoryIndex historyIndex) throws IOException {
 		ModpackJsons.CompleteModpackContentFields fields = readFields(path).orElseThrow(() -> new IOException("Stored client generation could not be verified: " + path));
 		if (!GenerationRecord.fromFields(fields).equals(record)) throw new IOException("Stored client generation verification failed: " + path);
 		if (!GenerationPatchNoteHistory.fromFields(fields).equals(patchNotesHistory)) throw new IOException("Stored client patch-note history verification failed: " + path);
+		GenerationHistoryIndex actualHistoryIndex = fields.generationHistory == null ? null : GenerationHistoryIndex.fromFields(fields.generationHistory);
+		if (!Objects.equals(actualHistoryIndex, historyIndex)) throw new IOException("Stored client generation history index verification failed: " + path);
 	}
 }

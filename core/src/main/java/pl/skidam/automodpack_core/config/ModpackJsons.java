@@ -18,6 +18,7 @@ public class ModpackJsons {
 		public GenerationJsons.OwnershipLedgerFields ownershipLedger = new GenerationJsons.OwnershipLedgerFields();
 		public GenerationFields generation;
 		public List<PatchNotesHistoryEntryFields> patchNotesHistory = List.of();
+		public GenerationJsons.GenerationHistoryIndexFields generationHistory;
 
 		public static class GenerationFields {
 			public int schemaVersion;
@@ -43,7 +44,8 @@ public class ModpackJsons {
 		public static class ModpackGroupFields {
 			public String displayName = "";
 			public String description = "";
-			public String tag = "";
+			public String category = "";
+			public String icon = "";
 			public boolean required;
 			public boolean defaultSelected;
 			public Set<String> breaksWith = Set.of();

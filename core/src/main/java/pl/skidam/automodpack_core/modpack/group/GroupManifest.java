@@ -31,7 +31,8 @@ public record GroupManifest(
 			ModpackJsons.CompleteModpackContentFields.ModpackGroupFields serialized = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 			serialized.displayName = group.displayName();
 			serialized.description = group.description();
-			serialized.tag = group.tag();
+			serialized.category = group.category();
+			serialized.icon = group.icon();
 			serialized.required = group.required();
 			serialized.defaultSelected = group.defaultSelected();
 			serialized.breaksWith = new LinkedHashSet<>(group.breaksWith());
@@ -72,7 +73,8 @@ public record GroupManifest(
 	public record Group(
 			String displayName,
 			String description,
-			String tag,
+			String category,
+			String icon,
 			boolean required,
 			boolean defaultSelected,
 			NavigableSet<String> breaksWith,
@@ -82,7 +84,8 @@ public record GroupManifest(
 		public Group {
 			displayName = displayName == null ? "" : displayName;
 			description = description == null ? "" : description;
-			tag = tag == null ? "" : tag;
+			category = category == null ? "" : category;
+			icon = icon == null ? "" : icon;
 			breaksWith = immutableSet(breaksWith);
 			requires = immutableSet(requires);
 			compatiblePlatforms = immutablePlatforms(compatiblePlatforms);

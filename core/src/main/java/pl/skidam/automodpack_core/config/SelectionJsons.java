@@ -13,7 +13,7 @@ public class SelectionJsons {
 
 		public static class ModpackSelection {
 			public Set<String> requestedGroups = new HashSet<>();
-			public Set<String> requestedTags = new HashSet<>();
+			public Set<String> requestedCategories = new HashSet<>();
 			public Set<String> excludedGroups = new HashSet<>();
 
 			public ModpackSelection() {}
@@ -26,9 +26,9 @@ public class SelectionJsons {
 				this(requestedGroups, Set.of(), excludedGroups);
 			}
 
-			public ModpackSelection(Set<String> requestedGroups, Set<String> requestedTags, Set<String> excludedGroups) {
+			public ModpackSelection(Set<String> requestedGroups, Set<String> requestedCategories, Set<String> excludedGroups) {
 				this.requestedGroups = requestedGroups;
-				this.requestedTags = requestedTags;
+				this.requestedCategories = requestedCategories;
 				this.excludedGroups = excludedGroups;
 			}
 		}

@@ -1,15 +1,26 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
+
 import pl.skidam.automodpack_core.update.UpdatePlan;
 
-final class UiFormat {
+public final class UiFormat {
+	private static final DateTimeFormatter HISTORY_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'", Locale.ROOT).withZone(ZoneOffset.UTC);
+
 	private UiFormat() {}
 
-	static String formatSize(long bytes) {
+	public static String formatSize(long bytes) {
 		if (bytes < 1024) return bytes + " B";
 		if (bytes < 1024L * 1024L) return (bytes / 1024) + " KiB";
 		if (bytes < 1024L * 1024L * 1024L) return (bytes / (1024L * 1024L)) + " MiB";
 		return (bytes / (1024L * 1024L * 1024L)) + " GiB";
+	}
+
+	public static String formatInstant(Instant instant) {
+		return HISTORY_TIME.format(instant);
 	}
 
 	static String filePath(UpdatePlan.FileKey file) {

@@ -1,7 +1,17 @@
 `/amp` is an alias for `/automodpack`.
 
 - `/automodpack` - Status of automodpack and general help.
-- `/automodpack generate` - Generate modpack.
+- `/automodpack generate` - Publish a generation when the content changed.
+- `/automodpack generate notes <text...>` - Publish a generation with patch notes.
+- `/automodpack generate preview [notes <text...>]` - Preview the next generation without publishing it.
+- `/automodpack generate if-state <digest> [notes <text...>]` - Publish only when the current state matches the digest.
+- `/automodpack generate history` - List the complete generation timeline and copyable generation IDs.
+- `/automodpack generate revert <generation-id>` - Preview a server rollback.
+- `/automodpack generate revert <generation-id> confirm [notes <text...>]` - Publish the selected old state as a new generation.
+- `/automodpack generate storage` - Show a storage receipt for catalogues, commits, deltas, and objects.
+- `/automodpack generate storage collect confirm` - Delete unreferenced immutable objects. The command keeps every rollback target and client-pinned object.
+- `/automodpack generate storage compact before <generation-id>` - Preview the exact rollback targets and bytes affected by history compaction.
+- `/automodpack generate storage compact before <generation-id> confirm` - Apply history compaction at the selected boundary.
 - `/automodpack host` - Status of modpack hosting.
 - `/automodpack host start` - Start modpack hosting.
 - `/automodpack host stop` - Stop modpack hosting.
@@ -11,3 +21,5 @@
 - `/automodpack host fingerprint dns <minecraft-hostname>` - Generate a DNSSEC record that lets clients authenticate the host's self-signed certificate automatically.
 - `/automodpack host fingerprint share <minecraft-address>` - Generate plain and pinned copyable addresses without storing the fingerprint in Minecraft's server list.
 - `/automodpack config reload` - Reload config files.
+
+History compaction keeps the thin timeline and patch-note state. It removes only detailed rollback data before the retained boundary.

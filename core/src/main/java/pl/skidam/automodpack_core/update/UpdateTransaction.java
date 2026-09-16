@@ -44,10 +44,10 @@ public final class UpdateTransaction {
 	public String overlayDigest;
 	public boolean expectedPriorSelectionPresent;
 	public List<String> expectedPriorRequestedGroups;
-	public List<String> expectedPriorRequestedTags;
+	public List<String> expectedPriorRequestedCategories;
 	public List<String> expectedPriorExcludedGroups;
 	public List<String> requestedGroups;
-	public List<String> requestedTags;
+	public List<String> requestedCategories;
 	public List<String> excludedGroups;
 	public List<Operation> operations;
 	public List<ProjectedFile> projectedFinalState;
@@ -77,10 +77,10 @@ public final class UpdateTransaction {
 		transaction.targetPlatform = target.platform().id();
 		transaction.expectedPriorSelectionPresent = target.expectedPriorIntent() != null;
 		transaction.expectedPriorRequestedGroups = intentValues(target.expectedPriorIntent(), IntentPart.GROUPS);
-		transaction.expectedPriorRequestedTags = intentValues(target.expectedPriorIntent(), IntentPart.TAGS);
+		transaction.expectedPriorRequestedCategories = intentValues(target.expectedPriorIntent(), IntentPart.CATEGORIES);
 		transaction.expectedPriorExcludedGroups = intentValues(target.expectedPriorIntent(), IntentPart.EXCLUDED);
 		transaction.requestedGroups = new ArrayList<>(target.selection().intent().requestedGroups());
-		transaction.requestedTags = new ArrayList<>(target.selection().intent().requestedTags());
+		transaction.requestedCategories = new ArrayList<>(target.selection().intent().requestedCategories());
 		transaction.excludedGroups = new ArrayList<>(target.selection().intent().excludedGroups());
 		transaction.selectionDigest = digest(target.selection().intent());
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
@@ -105,10 +105,10 @@ public final class UpdateTransaction {
 		transaction.targetPlatform = platform.id();
 		transaction.expectedPriorSelectionPresent = expectedPriorIntent != null;
 		transaction.expectedPriorRequestedGroups = intentValues(expectedPriorIntent, IntentPart.GROUPS);
-		transaction.expectedPriorRequestedTags = intentValues(expectedPriorIntent, IntentPart.TAGS);
+		transaction.expectedPriorRequestedCategories = intentValues(expectedPriorIntent, IntentPart.CATEGORIES);
 		transaction.expectedPriorExcludedGroups = intentValues(expectedPriorIntent, IntentPart.EXCLUDED);
 		transaction.requestedGroups = List.of();
-		transaction.requestedTags = List.of();
+		transaction.requestedCategories = List.of();
 		transaction.excludedGroups = List.of();
 		transaction.selectionDigest = digest(expectedPriorIntent);
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
@@ -171,14 +171,14 @@ public final class UpdateTransaction {
 	}
 
 	private enum IntentPart {
-		GROUPS, TAGS, EXCLUDED
+		GROUPS, CATEGORIES, EXCLUDED
 	}
 
 	private static List<String> intentValues(SelectionIntent intent, IntentPart part) {
 		if (intent == null) return List.of();
 		return switch (part) {
 			case GROUPS -> new ArrayList<>(intent.requestedGroups());
-			case TAGS -> new ArrayList<>(intent.requestedTags());
+			case CATEGORIES -> new ArrayList<>(intent.requestedCategories());
 			case EXCLUDED -> new ArrayList<>(intent.excludedGroups());
 		};
 	}
@@ -192,11 +192,11 @@ public final class UpdateTransaction {
 	}
 
 	public SelectionIntent expectedPriorIntent() {
-		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorRequestedGroups, expectedPriorRequestedTags, expectedPriorExcludedGroups) : null;
+		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorRequestedGroups, expectedPriorRequestedCategories, expectedPriorExcludedGroups) : null;
 	}
 
 	public SelectionIntent targetIntent() {
-		return new SelectionIntent(requestedGroups, requestedTags, excludedGroups);
+		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
 	}
 
 	public static String digest(SelectionIntent intent) {
@@ -204,7 +204,7 @@ public final class UpdateTransaction {
 		MessageDigest digest = HashUtils.newSha1Digest();
 		digest.update("automodpack-selection-v2\n".getBytes(StandardCharsets.UTF_8));
 		for (String value : intent.requestedGroups().stream().sorted().toList()) digest.update(("group=" + value + "\n").getBytes(StandardCharsets.UTF_8));
-		for (String value : intent.requestedTags().stream().sorted().toList()) digest.update(("tag=" + value + "\n").getBytes(StandardCharsets.UTF_8));
+		for (String value : intent.requestedCategories().stream().sorted().toList()) digest.update(("category=" + value + "\n").getBytes(StandardCharsets.UTF_8));
 		for (String value : intent.excludedGroups().stream().sorted().toList()) digest.update(("excluded=" + value + "\n").getBytes(StandardCharsets.UTF_8));
 		return HexFormat.of().formatHex(digest.digest());
 	}

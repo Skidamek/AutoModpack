@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
 import java.util.List;
+import java.util.ArrayList;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
@@ -10,8 +11,12 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
+import pl.skidam.automodpack_loader_core.screen.FailureCategory;
+import pl.skidam.automodpack_loader_core.screen.FailureDestination;
+import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public final class RecoveryArchiveScreen extends VersionedScreen {
@@ -41,7 +46,6 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		int navigationY = this.height - 28;
 		int left = panelLeft(310);
 		int rowWidth = panelWidth(310);
 		int gap = 10;
@@ -52,16 +56,24 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 		archivedTab.active = showAvailable;
 		this.addRenderableWidget(availableTab);
 		this.addRenderableWidget(archivedTab);
-		int actionWidth = actionButtonWidth(310, 3);
 		boolean hasPagination = pageCount() > 1;
-		this.previousButton = buttonWidget(actionButtonX(310, 3, 1), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.ui.previous"), button -> changePage(-1));
-		this.nextButton = buttonWidget(actionButtonX(310, 3, 2), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.ui.next"), button -> changePage(1));
-		updateNavigation();
+		List<ActionRow> rows = new ArrayList<>();
 		if (hasPagination) {
-			this.addRenderableWidget(this.previousButton);
-			this.addRenderableWidget(this.nextButton);
+			rows.add(actionRow(ActionAreaLayout.RowKind.NAVIGATION,
+					navigationAction(VersionedText.translatable("automodpack.ui.previous"), button -> changePage(-1)),
+					disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount())),
+					navigationAction(VersionedText.translatable("automodpack.ui.next"), button -> changePage(1))));
 		}
-		this.addRenderableWidget(buttonWidget(hasPagination ? actionButtonX(310, 3, 0) : centeredActionButtonX(310, 3, 1, 0), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.back"), button -> back()));
+		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
+		List<Button> buttons = addActionArea(310, this.height - 28, rows.toArray(ActionRow[]::new));
+		if (hasPagination) {
+			this.previousButton = buttons.get(0);
+			this.nextButton = buttons.get(2);
+		} else {
+			this.previousButton = null;
+			this.nextButton = null;
+		}
+		updateNavigation();
 		addFileButtons();
 	}
 
@@ -141,7 +153,7 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 				});
 			} catch (Exception e) {
 				this.minecraft.execute(() -> busy = false);
-				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			}
 		});
 	}
@@ -189,8 +201,6 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 			String empty = VersionedText.translatable(showAvailable ? "automodpack.recovery.emptyAvailable" : "automodpack.recovery.emptyArchived").getString();
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(empty).withStyle(ChatFormatting.GRAY), this.width / 2, 90, TextColors.WHITE);
 		}
-		if (pageCount() > 1) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.ui.page", page + 1, pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 40,
-				TextColors.WHITE);
 	}
 
 	private String displayPreservedAt(String preservedAt) {
@@ -199,7 +209,6 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		back();
-		return false;
+		return handleBackOnEscape(this::back);
 	}
 }

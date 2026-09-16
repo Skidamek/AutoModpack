@@ -23,7 +23,6 @@ import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -282,7 +281,6 @@ public class ModpackUtils {
 			return requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser).get();
 		} catch (Exception e) {
 			Throwable cause = DownloadClient.unwrap(e);
-			LOGGER.error("Error while getting server modpack content: {}", formatThrowable(cause));
 			return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, cause);
 		}
 	}
@@ -306,22 +304,13 @@ public class ModpackUtils {
 					if (error != null || content.isEmpty()) {
 						client.close();
 						Throwable cause = error == null ? new IOException("Server returned no usable modpack content") : DownloadClient.unwrap(error);
-						LOGGER.error("Error while getting server modpack content: {}", formatThrowable(cause));
 						return new ManifestFetchResult(ManifestFetchState.OPERATION_FAILED, null, null, cause);
 					}
 					return new ManifestFetchResult(ManifestFetchState.SUCCESS, content.get(), client, null);
 				})).exceptionally(error -> {
 					Throwable cause = DownloadClient.unwrap(error);
-					showPinMismatch(cause);
-					LOGGER.error("Error while connecting to the server modpack host: {}", formatThrowable(cause));
 					return new ManifestFetchResult(connectionFailedState, null, null, cause);
 				});
-	}
-
-	private static String formatThrowable(Throwable throwable) {
-		StringWriter trace = new StringWriter();
-		throwable.printStackTrace(new PrintWriter(trace));
-		return trace.toString();
 	}
 
 	private static CompletableFuture<Optional<ModpackJsons.CompleteModpackContentFields>> fetchModpackContentAsync(ClientStorage storage, DownloadClient client,
@@ -354,15 +343,6 @@ public class ModpackUtils {
 			}
 			return client;
 		});
-	}
-
-	private static void showPinMismatch(Throwable throwable) {
-		CertificatePinMismatchException mismatch = DownloadClient.findCause(throwable, CertificatePinMismatchException.class);
-		if (mismatch == null) return;
-
-		new ScreenManager().error(mismatch, "automodpack.pin.mismatch", "Origin: " + mismatch.getOrigin(),
-				"Expected: " + NetUtils.shortenFingerprint(mismatch.getExpectedFingerprint()),
-				"Presented: " + NetUtils.shortenFingerprint(mismatch.getPresentedFingerprint()), "automodpack.pin.mismatch.help");
 	}
 
 	public static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(ConnectionJsons.ConnectionInfo connectionInfo,

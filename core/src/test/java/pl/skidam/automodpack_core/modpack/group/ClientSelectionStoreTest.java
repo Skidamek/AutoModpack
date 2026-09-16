@@ -27,7 +27,7 @@ class ClientSelectionStoreTest {
 		SelectionJsons.ClientSelectionStoreFields fields = ConfigTools.read(path, SelectionJsons.ClientSelectionStoreFields.class).orElseThrow();
 		SelectionJsons.ClientSelectionStoreFields.ModpackSelection selection = fields.selections.get("abc1234");
 		assertEquals(Set.of("optional", "stale-group"), selection.requestedGroups);
-		assertEquals(Set.of("client"), selection.requestedTags);
+		assertEquals(Set.of("client"), selection.requestedCategories);
 		assertEquals(Set.of("variant"), selection.excludedGroups);
 	}
 

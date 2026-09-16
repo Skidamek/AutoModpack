@@ -1,7 +1,9 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
@@ -12,11 +14,8 @@ import java.util.Objects;
 
 import pl.skidam.automodpack_core.utils.HashUtils;
 
-/** Resolves the bounded, optional notes input for a generation operation. */
+/** Resolves the optional notes input for a generation operation and proves file reads were stable. */
 public final class GenerationPatchNotes {
-	public static final int MAX_UTF8_BYTES = GenerationMetadata.MAX_PATCH_NOTES_UTF8_BYTES;
-	private static final int STABLE_READ_ATTEMPTS = 3;
-
 	private GenerationPatchNotes() {}
 
 	public enum Source {
@@ -95,14 +94,11 @@ public final class GenerationPatchNotes {
 	}
 
 	private static RawFile readStable(Path path) throws IOException {
-		for (int attempt = 0; attempt < STABLE_READ_ATTEMPTS; attempt++) {
-			BasicFileAttributes before = attributes(path);
-			if (before.size() > MAX_UTF8_BYTES) throw new IOException("Patch notes exceed the 16 KiB UTF-8 limit");
-			byte[] bytes = readBytes(path, before.size());
-			BasicFileAttributes after = attributes(path);
-			if (same(before, after) && bytes.length == after.size()) return new RawFile(bytes, digest(bytes));
-		}
-		throw new IOException("Patch notes file changed while being read");
+		BasicFileAttributes before = attributes(path);
+		byte[] bytes = readBytes(path);
+		BasicFileAttributes after = attributes(path);
+		if (!same(before, after) || bytes.length != after.size()) throw new IOException("Patch notes file changed while being read");
+		return new RawFile(bytes, digest(bytes));
 	}
 
 	private static BasicFileAttributes attributes(Path path) throws IOException {
@@ -112,16 +108,13 @@ public final class GenerationPatchNotes {
 		return attributes;
 	}
 
-	private static byte[] readBytes(Path path, long expectedSize) throws IOException {
-		if (expectedSize > Integer.MAX_VALUE) throw new IOException("Patch notes are too large");
-		byte[] bytes = new byte[(int) expectedSize];
-		try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
-			ByteBuffer buffer = ByteBuffer.wrap(bytes);
-			while (buffer.hasRemaining() && channel.read(buffer) >= 0) {
-			}
-			if (buffer.hasRemaining()) throw new IOException("Patch notes file ended while being read");
+	private static byte[] readBytes(Path path) throws IOException {
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+		try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
+				var input = Channels.newInputStream(channel)) {
+			input.transferTo(bytes);
 		}
-		return bytes;
+		return bytes.toByteArray();
 	}
 
 	private static boolean same(BasicFileAttributes first, BasicFileAttributes second) {

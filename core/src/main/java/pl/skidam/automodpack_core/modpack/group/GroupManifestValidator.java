@@ -12,6 +12,8 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class GroupManifestValidator {
 	private static final Pattern ID = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
+	private static final Pattern RESOURCE_NAMESPACE = Pattern.compile("[a-z0-9._-]+");
+	private static final Pattern RESOURCE_PATH = Pattern.compile("[a-z0-9/._-]+");
 
 	private GroupManifestValidator() {}
 
@@ -34,10 +36,11 @@ public final class GroupManifestValidator {
 			}
 			Set<String> breaksWith = validateIds("Group '" + id + "' breaksWith", group.breaksWith, errors);
 			Set<String> requires = validateIds("Group '" + id + "' requires", group.requires, errors);
-			String tag = validateCategoryTag(id, group.tag, errors);
+			String category = validateCategory(id, group.category, errors);
+			String icon = validateIcon(id, group.icon, errors);
 			Set<ClientPlatform> platforms = validatePlatforms(id, group.compatiblePlatforms, errors);
 			Map<String, GroupManifest.GroupFile> files = validateFiles(id, group.files, errors);
-			groups.put(id, new GroupManifest.Group(group.displayName, group.description, tag, group.required, group.defaultSelected,
+			groups.put(id, new GroupManifest.Group(group.displayName, group.description, category, icon, group.required, group.defaultSelected,
 					new TreeSet<>(breaksWith), new TreeSet<>(requires), platforms, new TreeMap<>(files)));
 		}
 
@@ -217,7 +220,7 @@ public final class GroupManifestValidator {
 	private static boolean isOptionalUnavailable(GroupManifest manifest, String groupId, ResolvedSelection selection) {
 		GroupManifest.Group group = manifest.groups().get(groupId);
 		if (group == null || group.required()) return false;
-		GroupResolution resolution = selection.explanation(groupId);
+		GroupResolution resolution = selection.resolution(groupId);
 		return resolution != null && (resolution.status() == GroupResolution.Status.BLOCKED || resolution.status() == GroupResolution.Status.UNAVAILABLE);
 	}
 
@@ -311,9 +314,21 @@ public final class GroupManifestValidator {
 		}
 	}
 
-	private static String validateCategoryTag(String groupId, String input, List<String> errors) {
+	private static String validateCategory(String groupId, String input, List<String> errors) {
 		if (input == null || input.isEmpty()) return "";
-		if (!isValidIdentifier(input)) errors.add("Invalid Group '" + groupId + "' category tag ID: " + input);
+		if (!isValidIdentifier(input)) errors.add("Invalid Group '" + groupId + "' category ID: " + input);
+		return input;
+	}
+
+	private static String validateIcon(String groupId, String input, List<String> errors) {
+		if (input == null || input.isEmpty()) return "";
+		int separator = input.indexOf(':');
+		String namespace = separator < 0 ? "" : input.substring(0, separator);
+		String path = separator < 0 ? "" : input.substring(separator + 1);
+		boolean valid = separator > 0 && separator == input.lastIndexOf(':') && RESOURCE_NAMESPACE.matcher(namespace).matches()
+				&& RESOURCE_PATH.matcher(path).matches() && !path.startsWith("/") && !path.endsWith("/") && !path.contains("//")
+				&& Arrays.stream(path.split("/", -1)).noneMatch(component -> component.equals(".") || component.equals(".."));
+		if (!valid) errors.add("Group '" + groupId + "' has invalid icon resource location: " + input);
 		return input;
 	}
 

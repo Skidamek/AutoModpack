@@ -21,6 +21,23 @@ def _find_root() -> Path:
 ROOT = _find_root()
 REPO_ROOT = ROOT.parent
 
+# Paths owned by a client generation reset. Connection/trust data and ordinary
+# game files are deliberately outside this set.
+CLIENT_GENERATION_STATE_PATHS = (
+    "records",
+    "overlays",
+    "baselines",
+    "generated-copies",
+    "active",
+    "incoming",
+    "backup",
+    "active-state.json",
+    "transaction.json",
+    "recovery",
+    "quarantine",
+    "data/objects",
+)
+
 
 def load_yaml(path: Path) -> dict:
     with path.open() as f:

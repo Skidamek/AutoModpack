@@ -20,6 +20,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryEntry;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
@@ -65,7 +66,10 @@ public class Commands {
 		var generateStorageNode = literal("storage")
 				.executes(Commands::generationStorage)
 				.then(literal("compact")
-						.then(literal("confirm").executes(Commands::generationStorageCompact)))
+						.then(literal("before")
+								.then(argument("generation-id", StringArgumentType.word())
+										.executes(Commands::generationStorageCompactPreview)
+										.then(literal("confirm").executes(Commands::generationStorageCompact)))))
 				.then(literal("collect")
 						.then(literal("confirm").executes(Commands::generationStorageCollect)));
 		var generateNode = literal("generate")
@@ -425,7 +429,7 @@ public class Commands {
 		send(context, "/automodpack generate preview [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate if-state <digest> [notes <text...>]", ChatFormatting.YELLOW, false);
 			send(context, "/automodpack generate revert <generation-id> confirm [notes <text...>]", ChatFormatting.YELLOW, false);
-			send(context, "/automodpack generate history/storage [compact confirm|collect confirm]", ChatFormatting.YELLOW, false);
+			send(context, "/automodpack generate history/storage [compact before <generation-id> [confirm]|collect confirm]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack host start/stop/restart/connections/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
@@ -555,21 +559,22 @@ public class Commands {
 
 	private static int generationHistory(CommandContext<CommandSourceStack> context) {
 		try {
-			var history = modpackExecutor.technicalHistory();
-			if (history.isEmpty()) {
+			var history = modpackExecutor.historyIndex().orElse(null);
+			if (history == null || history.entries().isEmpty()) {
 				send(context, "No published generations.", ChatFormatting.YELLOW, false);
 				return Command.SINGLE_SUCCESS;
 			}
-			for (GenerationHistoryEntry entry : history) {
-				String operation = entry.metadata().rollbackTargetGenerationId().isEmpty() ? "PUBLISH" : "REVERT";
-				send(context, operation + " " + entry.metadata().createdAt(), ChatFormatting.WHITE, false);
-					send(context, "Generation", ChatFormatting.WHITE, copyable(entry.metadata().generationId()), ChatFormatting.YELLOW, false);
-					send(context, "Parent", ChatFormatting.WHITE, copyable(entry.metadata().parentGenerationId()), ChatFormatting.YELLOW, false);
-					send(context, "Content state", ChatFormatting.WHITE, copyable(entry.metadata().stateDigest()), ChatFormatting.YELLOW, false);
-					send(context, "Ledger", ChatFormatting.WHITE, copyable(entry.metadata().ledgerDigest()), ChatFormatting.YELLOW, false);
-				if (!entry.metadata().rollbackTargetGenerationId().isEmpty())
-					send(context, "Rollback target", ChatFormatting.WHITE, copyable(entry.metadata().rollbackTargetGenerationId()), ChatFormatting.YELLOW, false);
-				if (!entry.metadata().patchNotes().isBlank()) send(context, "Patch notes: " + entry.metadata().patchNotes(), ChatFormatting.GRAY, false);
+			for (GenerationHistoryIndex.Entry entry : history.entries()) {
+				send(context, "GENERATION " + entry.createdAt(), ChatFormatting.WHITE, false);
+				send(context, "Generation", ChatFormatting.WHITE, copyable(entry.generationId()), ChatFormatting.YELLOW, false);
+				send(context, "Parent", ChatFormatting.WHITE, copyable(entry.parentGenerationId()), ChatFormatting.YELLOW, false);
+				send(context, "Content state", ChatFormatting.WHITE, copyable(entry.stateDigest()), ChatFormatting.YELLOW, false);
+				send(context, "Changes", ChatFormatting.WHITE,
+						"+" + entry.diffSummary().addedFiles() + " ~" + entry.diffSummary().modifiedFiles() + " -" + entry.diffSummary().removedFiles()
+								+ " metadata " + entry.diffSummary().metadataChanges(), ChatFormatting.YELLOW, false);
+				if (!entry.detailsAvailable()) send(context, "Detailed catalogue", ChatFormatting.WHITE, "compacted", ChatFormatting.GRAY, false);
+				if (!entry.rollbackAvailable()) send(context, "Rollback", ChatFormatting.WHITE, "unavailable after compaction", ChatFormatting.GRAY, false);
+				if (!entry.patchNotes().isBlank()) send(context, "Patch notes: " + entry.patchNotes(), ChatFormatting.GRAY, false);
 			}
 			return Command.SINGLE_SUCCESS;
 		} catch (IOException e) {
@@ -599,7 +604,8 @@ public class Commands {
 		private static int generationStorageCollect(CommandContext<CommandSourceStack> context) {
 			try {
 				Set<String> retainedGenerationIds = new TreeSet<>();
-				for (GenerationHistoryEntry entry : modpackExecutor.technicalHistory()) retainedGenerationIds.add(entry.metadata().generationId());
+				modpackExecutor.historyIndex().ifPresent(index -> index.entries().stream().filter(GenerationHistoryIndex.Entry::rollbackAvailable)
+						.forEach(entry -> retainedGenerationIds.add(entry.generationId())));
 				Path gameDirectory = GameDirectory.current();
 				Path serverRoot = gameDirectory.resolve(StoragePaths.SERVER_DIR).normalize();
 				Path objectRoot = DataRootResolver.resolve(gameDirectory).layout().objectsDirectory();
@@ -618,20 +624,48 @@ public class Commands {
 			}
 		}
 
+		private static int generationStorageCompactPreview(CommandContext<CommandSourceStack> context) {
+			String boundary = StringArgumentType.getString(context, "generation-id");
+			try {
+				GenerationStore.CompactionPreview preview = modpackExecutor.previewCompactHistory(boundary);
+				sendCompactionPreview(context, preview);
+				send(context, "Run /automodpack generate storage compact before " + boundary + " confirm to apply this exact compaction", ChatFormatting.YELLOW, false);
+				return Command.SINGLE_SUCCESS;
+			} catch (IOException e) {
+				send(context, "Failed to preview generation-history compaction: " + e.getMessage(), ChatFormatting.RED, false);
+				return 0;
+			}
+		}
+
 		private static int generationStorageCompact(CommandContext<CommandSourceStack> context) {
+			String boundary = StringArgumentType.getString(context, "generation-id");
 			Util.backgroundExecutor().execute(() -> {
 				try {
-					GenerationStore.CompactionResult result = modpackExecutor.compactHistory();
-					send(context, "Generation history compacted; the deleted ancestry is no longer available", ChatFormatting.GREEN, false);
+					GenerationStore.CompactionResult result = modpackExecutor.compactHistoryBefore(boundary);
+					send(context, "Generation details compacted before the retained boundary", ChatFormatting.GREEN, false);
 					send(context, "Boundary generation", ChatFormatting.WHITE, copyable(result.boundaryGenerationId()), ChatFormatting.YELLOW, false);
 					send(context, "Deleted history", ChatFormatting.WHITE,
-						result.deletedCommitCount() + " commits, " + result.deletedDeltaCount() + " deltas, " + result.deletedCatalogueCount() + " catalogues", ChatFormatting.YELLOW, false);
+						result.deletedCommitCount() + " commits, " + result.deletedDeltaCount() + " deltas, " + result.deletedCatalogueCount() + " catalogues, "
+								+ result.deletedBytes() + " bytes", ChatFormatting.YELLOW, false);
 					send(context, "Superseded generations", ChatFormatting.WHITE, String.valueOf(result.supersededGenerationIds().size()), ChatFormatting.YELLOW, false);
 				} catch (IOException e) {
 					send(context, "Failed to compact generation history: " + e.getMessage(), ChatFormatting.RED, false);
 				}
 			});
-			return Command.SINGLE_SUCCESS;
+		return Command.SINGLE_SUCCESS;
+		}
+
+		private static void sendCompactionPreview(CommandContext<CommandSourceStack> context, GenerationStore.CompactionPreview preview) {
+			send(context, "Generation-history compaction preview", ChatFormatting.YELLOW, false);
+			send(context, "Retained boundary", ChatFormatting.WHITE, copyable(preview.boundaryGenerationId()), ChatFormatting.YELLOW, false);
+			send(context, "Rollback targets lost", ChatFormatting.WHITE, String.valueOf(preview.rollbackUnavailableGenerationIds().size()), ChatFormatting.YELLOW, false);
+			for (String generationId : preview.rollbackUnavailableGenerationIds())
+				send(context, "Loses rollback", ChatFormatting.WHITE, copyable(generationId), ChatFormatting.RED, false);
+			send(context, "Detailed files reclaimable", ChatFormatting.WHITE,
+					preview.supersededCatalogueStateDigests().size() + " catalogues, " + preview.reclaimableCatalogueBytes() + " bytes", ChatFormatting.YELLOW, false);
+			send(context, "Commit/delta files reclaimable", ChatFormatting.WHITE,
+					preview.reclaimableCommitBytes() + preview.reclaimableDeltaBytes() + " bytes", ChatFormatting.YELLOW, false);
+			send(context, "Total reclaimable", ChatFormatting.WHITE, preview.reclaimableBytes() + " bytes", ChatFormatting.YELLOW, false);
 		}
 
 		private static String optionalArgument(CommandContext<CommandSourceStack> context, String name) {

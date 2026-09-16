@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.networking.packet;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
+import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
@@ -20,10 +19,14 @@ import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
+import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
+import pl.skidam.automodpack_loader_core.screen.FailureCategory;
+import pl.skidam.automodpack_loader_core.screen.FailureDestination;
+import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** Coordinates the client-side work that follows the login data query. */
@@ -33,8 +36,11 @@ final class ClientLoginUpdateFlow {
 	static CompletableFuture<LoginUpdateResponse> reconcile(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo,
 			Secrets.Secret secret, ClientStorage storage) {
 		return ModpackUtils.requestServerModpackContentAsync(storage, connectionInfo, secret, true).thenApplyAsync(manifestResult -> {
-			if (manifestResult.state() == ModpackUtils.ManifestFetchState.OPERATION_FAILED) return LoginUpdateResponse.UPDATE_REQUIRED;
-			if (!manifestResult.successful()) return LoginUpdateResponse.HOST_ERROR;
+			if (!manifestResult.successful()) {
+				disconnectImmediately(handler);
+				presentManifestFailure(manifestResult);
+				return LoginUpdateResponse.HOST_ERROR;
+			}
 
 			DownloadClient downloadClient = manifestResult.client();
 			ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
@@ -45,7 +51,7 @@ final class ClientLoginUpdateFlow {
 				savedSelection = selections.get(record.manifest().modpackId()).orElse(null);
 			} catch (RuntimeException e) {
 				downloadClient.close();
-				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				presentFailure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
 				disconnectImmediately(handler);
 				return LoginUpdateResponse.UPDATE_REQUIRED;
 			}
@@ -65,28 +71,48 @@ final class ClientLoginUpdateFlow {
 								continueReconcile(handler, connectionInfo, secret, storage, downloadClient, repaired, true);
 							} catch (RuntimeException repairError) {
 								downloadClient.close();
-								new ScreenManager().error(repairError, "automodpack.error.critical", String.valueOf(repairError.getMessage()), "automodpack.error.logs");
+								presentFailure(repairError, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
 							}
 						});
 					}, downloadClient::close);
 					return LoginUpdateResponse.UPDATE_REQUIRED;
 				}
 				downloadClient.close();
-				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				presentFailure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
 				disconnectImmediately(handler);
 				return LoginUpdateResponse.UPDATE_REQUIRED;
 			} catch (RuntimeException e) {
 				downloadClient.close();
-				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				presentFailure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
 				disconnectImmediately(handler);
 				return LoginUpdateResponse.UPDATE_REQUIRED;
 			}
 
 			return continueReconcile(handler, connectionInfo, secret, storage, downloadClient, selectedTarget, false);
 		}, DownloadClient.NET_EXECUTOR).exceptionally(e -> {
-			LOGGER.error("Error while handling data packet", e);
+			disconnectImmediately(handler);
+			presentFailure(DownloadClient.unwrap(e), "automodpack.error.connection", FailureCategory.CONNECTION);
 			return LoginUpdateResponse.HOST_ERROR;
 		});
+	}
+
+	private static void presentManifestFailure(ModpackUtils.ManifestFetchResult result) {
+		Throwable failure = result.failure() == null ? new IOException("Modpack manifest fetch returned no failure cause") : result.failure();
+		CertificatePinMismatchException mismatch = DownloadClient.findCause(failure, CertificatePinMismatchException.class);
+		if (mismatch != null) {
+			FailureRequest request = FailureRequest.of(failure, "automodpack.pin.mismatch", FailureCategory.SECURITY, FailureDestination.MULTIPLAYER, null)
+					.withDiagnosticDetails("Origin: " + mismatch.getOrigin(), "Expected fingerprint: " + mismatch.getExpectedFingerprint(),
+							"Presented fingerprint: " + mismatch.getPresentedFingerprint());
+			new ScreenManager().failure(request);
+		} else if (result.state() == ModpackUtils.ManifestFetchState.OPERATION_FAILED) {
+			presentFailure(failure, "automodpack.error.hostContent", FailureCategory.HOST);
+		} else {
+			presentFailure(failure, "automodpack.error.connection", FailureCategory.CONNECTION);
+		}
+	}
+
+	private static void presentFailure(Throwable failure, String messageKey, FailureCategory category) {
+		new ScreenManager().failure(FailureRequest.of(failure, messageKey, category, FailureDestination.MULTIPLAYER, null));
 	}
 
 	private static boolean canRepair(ModpackJsons.CompleteModpackContentFields fields) {
@@ -107,7 +133,7 @@ final class ClientLoginUpdateFlow {
 			SecretsStore.saveClientSecret(storage, serverModpackContent.modpackId, connectionInfo.origin, secret);
 		} catch (Exception e) {
 			downloadClient.close();
-			new ScreenManager().error(e, "automodpack.error.critical", "Failed to persist client secret", "automodpack.error.logs");
+			presentFailure(e, "automodpack.error.storage", FailureCategory.STORAGE);
 			if (!alreadyDisconnected) disconnectImmediately(handler);
 			return LoginUpdateResponse.UPDATE_REQUIRED;
 		}
@@ -125,7 +151,7 @@ final class ClientLoginUpdateFlow {
 			return LoginUpdateResponse.UPDATE_REQUIRED;
 		} catch (Exception e) {
 			updater.close();
-			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			presentFailure(e, "automodpack.error.update", FailureCategory.UPDATE);
 			if (!alreadyDisconnected) disconnectImmediately(handler);
 			return LoginUpdateResponse.UPDATE_REQUIRED;
 		}

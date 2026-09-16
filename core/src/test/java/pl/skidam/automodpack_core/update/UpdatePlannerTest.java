@@ -307,6 +307,30 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void deselectedGroupFileRestoredFromBaselineIsNotAlsoPreserved() {
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of("config/connector.json", item("config/connector.json", OLD_HASH, 8, "config")),
+				ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
+		String baselineHash = "4444444444444444444444444444444444444444";
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
+		baseline.modpackId = installed.modpackId;
+		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
+		baselineEntry.logicalPath = "config/connector.json";
+		baselineEntry.objectHash = baselineHash;
+		baselineEntry.size = 8;
+		baseline.entries = List.of(baselineEntry);
+		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.modpackId, installed, Map.of(), baseline, Set.of(baselineHash));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target,
+				Map.of(new FileKey(Root.GAME_DIR, "config/connector.json"), new FileState(OLD_HASH, 8, true)), Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), selection,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertEquals(List.of(), plan.preservations());
+		assertEquals(baselineHash, plan.operations().stream().filter(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("config/connector.json"))
+				.findFirst().orElseThrow().expectedObjectHash());
+	}
+
+	@Test
 	void freshClientMayRemoveOnlyExactServerKnownTombstoneBytes() {
 		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("mods/removed.jar", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/removed.jar"), new FileState(OLD_HASH, 8, true),

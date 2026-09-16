@@ -20,34 +20,60 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
-	void validatesOptionalTagAndRoundTrips() {
+	void validatesOptionalCategoryAndRoundTrips() {
 		var fields = catalogue();
 		var group = group(file("a"));
-		group.tag = "visuals";
+		group.category = "visuals";
 		fields.groups = Map.of("main", group);
 
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 
-		assertEquals("visuals", manifest.groups().get("main").tag());
+		assertEquals("visuals", manifest.groups().get("main").category());
+		assertEquals("", manifest.groups().get("main").icon());
 		assertEquals(ConfigTools.GSON.toJson(manifest.toFields()), ConfigTools.GSON.toJson(GroupManifestValidator.validate(manifest.toFields()).toFields()));
 	}
 
 	@Test
-	void keepsUntaggedGroupsInTheGeneralSection() {
+	void keepsUncategorizedGroupsInTheGeneralSection() {
 		var fields = catalogue();
 		fields.groups = Map.of("main", group(file("a")));
 
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 
-		assertEquals("", manifest.groups().get("main").tag());
+		assertEquals("", manifest.groups().get("main").category());
 	}
 
 	@Test
-	void rejectsUnsafeOptionalTagValues() {
+	void rejectsUnsafeOptionalCategoryValues() {
 		for (String value : List.of("Visuals", "tag name", "../tag")) {
 			var fields = catalogue();
 			var group = group(file("a"));
-			group.tag = value;
+			group.category = value;
+			fields.groups = Map.of("main", group);
+			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), value);
+		}
+	}
+
+	@Test
+	void validatesOptionalIconResourceLocationAndRoundTrips() {
+		var fields = catalogue();
+		var group = group(file("a"));
+		group.icon = "minecraft:item/diamond";
+		fields.groups = Map.of("main", group);
+
+		GroupManifest manifest = GroupManifestValidator.validate(fields);
+
+		assertEquals("minecraft:item/diamond", manifest.groups().get("main").icon());
+		assertEquals("minecraft:item/diamond", manifest.toFields().groups.get("main").icon);
+	}
+
+	@Test
+	void rejectsUnsafeIconResourceLocations() {
+		for (String value : List.of("diamond", "minecraft:", "minecraft:/diamond", "minecraft:item//diamond", "minecraft:item/../diamond", "Minecraft:item/diamond",
+				"minecraft:item diamond", "minecraft:item#diamond")) {
+			var fields = catalogue();
+			var group = group(file("a"));
+			group.icon = value;
 			fields.groups = Map.of("main", group);
 			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), value);
 		}
@@ -262,22 +288,22 @@ class GroupManifestValidatorTest {
 	void acceptsConflictingGroupsInOneCategoryUntilRequestedTogether() {
 		var fields = catalogue();
 		var first = group(file("a"));
-		first.tag = "bundle";
+		first.category = "bundle";
 		first.breaksWith = Set.of("second");
 		var second = group(file("a"));
-		second.tag = "bundle";
+		second.category = "bundle";
 		fields.groups = linkedGroups("first", first, "second", second);
 
 		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
 
 	@Test
-	void rejectsDifferentSamePathContentInsideOneTagBundle() {
+	void rejectsDifferentSamePathContentInsideOneCategoryBundle() {
 		var fields = catalogue();
 		var first = group(file("a"));
-		first.tag = "bundle";
+		first.category = "bundle";
 		var second = group(file("b"));
-		second.tag = "bundle";
+		second.category = "bundle";
 		fields.groups = linkedGroups("first", first, "second", second);
 
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
@@ -288,10 +314,10 @@ class GroupManifestValidatorTest {
 		var fields = catalogue();
 		var dependency = group(file("a"));
 		var first = group(file("a"));
-		first.tag = "bundle";
+		first.category = "bundle";
 		first.requires = Set.of("dependency");
 		var second = group(file("a"));
-		second.tag = "bundle";
+		second.category = "bundle";
 		second.breaksWith = Set.of("dependency");
 		fields.groups = linkedGroups("dependency", dependency, "first", first, "second", second);
 

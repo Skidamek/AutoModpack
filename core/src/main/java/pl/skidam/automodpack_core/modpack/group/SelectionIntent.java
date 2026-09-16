@@ -2,7 +2,7 @@ package pl.skidam.automodpack_core.modpack.group;
 
 import java.util.*;
 
-public record SelectionIntent(NavigableSet<String> requestedGroups, NavigableSet<String> requestedTags, NavigableSet<String> excludedGroups) {
+public record SelectionIntent(NavigableSet<String> requestedGroups, NavigableSet<String> requestedCategories, NavigableSet<String> excludedGroups) {
 	public SelectionIntent(Collection<String> requestedGroups) {
 		this(requestedGroups, Set.of(), Set.of());
 	}
@@ -11,13 +11,13 @@ public record SelectionIntent(NavigableSet<String> requestedGroups, NavigableSet
 		this(requestedGroups, Set.of(), excludedGroups);
 	}
 
-	public SelectionIntent(Collection<String> requestedGroups, Collection<String> requestedTags, Collection<String> excludedGroups) {
-		this(toSortedSet(requestedGroups), toSortedSet(requestedTags), toSortedSet(excludedGroups));
+	public SelectionIntent(Collection<String> requestedGroups, Collection<String> requestedCategories, Collection<String> excludedGroups) {
+		this(toSortedSet(requestedGroups), toSortedSet(requestedCategories), toSortedSet(excludedGroups));
 	}
 
 	public SelectionIntent {
 		requestedGroups = toSortedSet(requestedGroups);
-		requestedTags = toSortedSet(requestedTags);
+		requestedCategories = toSortedSet(requestedCategories);
 		excludedGroups = toSortedSet(excludedGroups);
 	}
 

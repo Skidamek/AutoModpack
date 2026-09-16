@@ -16,6 +16,7 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.FileKey;
@@ -49,6 +50,17 @@ class UpdatePreviewTest {
 		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.ADDED && entry.relativePath().equals("config/new.json")));
 		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.CHANGED && entry.relativePath().equals("config/changed.json")));
 		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.REMOVED && entry.relativePath().equals("config/old.json")));
+		var changed = preview.changeSet().changes().stream().filter(change -> change.logicalPath().equals("config/changed.json")).findFirst().orElseThrow().primaryOccurrence();
+		assertEquals("config", changed.contentKind());
+		assertEquals(OTHER_HASH, changed.beforeHash());
+		assertEquals(TARGET_HASH, changed.afterHash());
+		assertEquals(List.of("main"), changed.featureIds());
+
+		GroupManifest.Group feature = new GroupManifest.Group("Main feature", "", "", "", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
+				new TreeMap<>(Map.of("config/changed.json", new GroupManifest.GroupFile(8, "config", false, false, TARGET_HASH, "0"))));
+		GroupManifest featureManifest = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("main", feature)));
+		UpdatePreview named = preview.withFeatureManifest(featureManifest);
+		assertEquals("Main feature", named.featureNames().get("main"));
 	}
 
 	@Test
@@ -130,7 +142,7 @@ class UpdatePreviewTest {
 				new UpdatePreview.GroupConsequences(Set.of("optional"), Set.of("main"), Set.of("stale")));
 
 		assertEquals(new UpdatePreview.Summary(1, 1, 1, 0, 1), preview.summary());
-		assertEquals(List.of(UpdatePreview.Kind.CHANGED, UpdatePreview.Kind.REMOVED, UpdatePreview.Kind.PRESERVED_CHANGED), preview.entries().stream().map(UpdatePreview.Entry::kind).toList());
+		assertEquals(List.of(UpdatePreview.Kind.REMOVED, UpdatePreview.Kind.CHANGED, UpdatePreview.Kind.PRESERVED_CHANGED), preview.entries().stream().map(UpdatePreview.Entry::kind).toList());
 	}
 
 	@Test

@@ -61,13 +61,12 @@ public class ListEntryWidget extends ObjectSelectionList<ListEntry> {
 
 	public final ListEntry getEntryAtPos(double x, double y) {
 		/*? if >= 1.21.9 {*/
-		int int_5 = Mth.floor(y - (double) getTop()) + (int) this.getScrollAmount() - 4;
-		int index = int_5 / this.defaultEntryHeight; // TODO: check if this is correct, not sure where itemHeight went
+		return super.getEntryAtPosition(x, y);
 		/*?} else {*/
 		/*int int_5 = Mth.floor(y - (double) getTop()) - this.headerHeight + (int) this.getScrollAmount() - 4;
 		int index = int_5 / this.itemHeight;
-		*//*?}*/
 		return x < (double) this.getScrollbarPosition() && x >= (double) getRowLeft() && x <= (double) (getRowLeft() + getRowWidth()) && index >= 0 && int_5 >= 0 && index < this.getItemCount() ? this.children().get(index) : null;
+		*//*?}*/
 	}
 
 	public int getTop() {
@@ -129,16 +128,8 @@ public class ListEntryWidget extends ObjectSelectionList<ListEntry> {
 	}
 	*//*?}*/
 
-	@Override
-	public void setSelected(ListEntry entry) {
-		super.setSelected(entry);
-		if (entry != null) {
-			this.centerScrollOn(entry);
-		}
-	}
-
 	protected int getScrollbarPosition() {
-		return this.width - 6;
+		return Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
 	}
 
 	@Override

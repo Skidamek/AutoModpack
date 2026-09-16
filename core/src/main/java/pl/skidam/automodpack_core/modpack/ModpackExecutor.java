@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
 import pl.skidam.automodpack_core.modpack.generation.GenerationDiff;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryEntry;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.GenerationIdentity;
 import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
@@ -136,15 +137,27 @@ public class ModpackExecutor {
 		return generationStore.currentHistory();
 	}
 
+	public Optional<GenerationHistoryIndex> historyIndex() throws IOException {
+		return generationStore.currentHistoryIndex();
+	}
+
 	public GenerationStore.StorageReport storageReport() throws IOException {
 		return generationStore.measureStorage();
 	}
 
-	public GenerationStore.CompactionResult compactHistory() throws IOException {
+	public GenerationStore.CompactionPreview previewCompactHistory(String boundaryGenerationId) throws IOException {
+		OperationLease operation = acquire(false);
+		if (operation == null) throw new IOException("Another modpack operation is already in progress");
+		try (operation) {
+			return generationStore.previewCompaction(boundaryGenerationId);
+		}
+	}
+
+	public GenerationStore.CompactionResult compactHistoryBefore(String boundaryGenerationId) throws IOException {
 		OperationLease operation = acquire(true);
 		if (operation == null) throw new IOException("Another modpack operation is already in progress");
 		try (operation) {
-			return generationStore.compact();
+			return generationStore.compactBefore(boundaryGenerationId);
 		}
 	}
 
