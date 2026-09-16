@@ -66,7 +66,7 @@ public class ModpackExecutor {
 		this.serverRoot = serverRoot.toAbsolutePath().normalize();
 		this.groupRoot = groupRoot.toAbsolutePath().normalize();
 		this.generationRoot = generationRoot.toAbsolutePath().normalize();
-		this.patchNotesFile = this.serverRoot.resolve(PATCH_NOTES_FILE).normalize();
+		this.patchNotesFile = this.groupRoot.resolve(PATCH_NOTES_FILE.getFileName()).normalize();
 		this.generationStore = Objects.requireNonNull(generationStore);
 		this.dataLayout = new DataRootResolver.Layout(this.generationStore.objectRoot().getParent());
 		this.candidateScan = Objects.requireNonNull(candidateScan);
@@ -299,9 +299,15 @@ public class ModpackExecutor {
 	}
 
 	private void consumePatchNotes(GenerationPatchNotes.Resolution notes) {
-		if (!notes.isFileSourced()) return;
-		GenerationPatchNotes.CleanupResult cleanup = notes.consumeIfUnchanged();
-		if (!cleanup.warning().isEmpty()) LOGGER.warn("Patch notes cleanup: {}", cleanup.warning());
+		if (notes.isFileSourced()) {
+			GenerationPatchNotes.CleanupResult cleanup = notes.consumeIfUnchanged();
+			if (!cleanup.warning().isEmpty()) LOGGER.warn("Patch notes cleanup: {}", cleanup.warning());
+		}
+		try {
+			GenerationPatchNotes.ensurePresent(patchNotesFile);
+		} catch (IOException e) {
+			LOGGER.warn("Patch notes file could not be kept present", e);
+		}
 	}
 
 	private static void validateConfiguration() throws CandidateBuildException {
@@ -327,6 +333,7 @@ public class ModpackExecutor {
 			groupDirectories.put(groupId, groupDirectory);
 		}
 		Files.createDirectories(groupRoot);
+		GenerationPatchNotes.ensurePresent(patchNotesFile);
 		for (Path groupDirectory : groupDirectories.values()) Files.createDirectories(groupDirectory);
 		Path main = groupDirectories.get("main");
 		if (main == null) return;

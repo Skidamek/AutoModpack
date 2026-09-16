@@ -8,7 +8,7 @@ A generation is one published state of the modpack. It consists of a manifest de
 
 With `generateModpackOnStart` on (the default), the server publishes on every start the same way: a generation appears only when the content changed.
 
-Patch notes travel with the generation. Pass them inline with `generate notes <text...>`, or write them to `automodpack/patch-notes.md`, which is read and consumed when a publish succeeds. A preview with `generate preview` shows the same diff a publish would produce, without publishing.
+Patch notes travel with the generation. Pass them inline with `generate notes <text...>`, or write them to `automodpack/host-modpack/patch-notes.md`, which is read and cleared when a publish succeeds. A preview with `generate preview` shows the same diff a publish would produce, without publishing.
 
 `generate if-content <content-token>` publishes only while the pack still matches a token you name. A script that copies files and then publishes can therefore never publish a state it has not seen: if someone changed the pack in between, the command reports the mismatch instead of racing it.
 

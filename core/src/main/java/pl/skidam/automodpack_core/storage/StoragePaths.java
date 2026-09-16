@@ -49,7 +49,6 @@ public final class StoragePaths {
 
 	/** The dedicated server's own cache: visible, deletable with the folder, never derived from HOME. */
 	public static final Path SERVER_DATA_DIR = SERVER_DIR.resolve("data");
-	public static final Path PATCH_NOTES_FILE = AUTOMODPACK_DIR.resolve("patch-notes.md");
 
 	public static final Path CREDENTIALS_DIR = AUTOMODPACK_DIR.resolve("credentials");
 	public static final Path SERVER_CERT_FILE = CREDENTIALS_DIR.resolve("certificate.crt");
@@ -59,6 +58,7 @@ public final class StoragePaths {
 
 	public static final Path HOST_MODPACK_DIR = AUTOMODPACK_DIR.resolve("host-modpack");
 	public static final Path HOST_CONTENT_MODPACK_DIR = HOST_MODPACK_DIR.resolve("main");
+	public static final Path PATCH_NOTES_FILE = HOST_MODPACK_DIR.resolve("patch-notes.md");
 	public static final Path MODPACK_CONTENT_FILE = Path.of("automodpack-content.json");
 	public static final Path SERVER_CONFIG_FILE = AUTOMODPACK_DIR.resolve("server-config.json");
 	public static final Path BOOTSTRAP_FILE = AUTOMODPACK_DIR.resolve("automodpack-bootstrap.json");

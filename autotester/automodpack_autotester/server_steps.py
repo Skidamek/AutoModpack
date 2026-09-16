@@ -93,7 +93,7 @@ def _write_server_generation(ctx: Context, index: int) -> None:
         else:
             f.write_text(str(item.get("content", "")), encoding="utf-8")
     patch_notes = generation.get("patchNotes", "")
-    patch_path = srv_dir / "automodpack" / "patch-notes.md"
+    patch_path = host_root / "patch-notes.md"
     patch_path.parent.mkdir(parents=True, exist_ok=True)
     patch_path.write_text(str(patch_notes), encoding="utf-8")
 

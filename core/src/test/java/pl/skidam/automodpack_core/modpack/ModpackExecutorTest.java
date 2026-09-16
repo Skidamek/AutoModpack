@@ -39,8 +39,7 @@ class ModpackExecutorTest {
 		Path source = groups.resolve("main/config/example.txt");
 		Files.createDirectories(source.getParent());
 		Files.writeString(source, "one", StandardCharsets.UTF_8);
-		Path notes = server.resolve("automodpack/patch-notes.md");
-		Files.createDirectories(notes.getParent());
+		Path notes = groups.resolve("patch-notes.md");
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();
@@ -59,6 +58,8 @@ class ModpackExecutorTest {
 			assertTrue(Files.notExists(generationRoot.resolve(StoragePaths.SERVER_PROJECTION_FILE.getFileName().toString())));
 			assertTrue(Files.notExists(generationRoot.resolve(StoragePaths.SERVER_STAGING_DIR.getFileName().toString())));
 			assertTrue(executor.currentDocument().isEmpty());
+			assertTrue(Files.exists(notes));
+			assertEquals("", Files.readString(notes, StandardCharsets.UTF_8));
 
 			ModpackExecutor.PublishResult root = executor.publish();
 			ModpackExecutor.Published publishedRoot = assertInstanceOf(ModpackExecutor.Published.class, root);
@@ -85,7 +86,8 @@ class ModpackExecutorTest {
 			assertEquals(nextToken, changed.state().contentToken());
 			assertEquals(rootToken, changed.state().parent().orElseThrow().contentToken());
 			assertEquals(nextToken, executor.currentDocument().orElseThrow().contentToken());
-			assertTrue(Files.notExists(notes));
+			assertTrue(Files.exists(notes));
+			assertEquals("", Files.readString(notes, StandardCharsets.UTF_8));
 
 			ModpackExecutor.Reverted reverted = assertInstanceOf(ModpackExecutor.Reverted.class, executor.revert(1, "back to first"));
 			assertEquals(rootToken, reverted.current().contentToken());

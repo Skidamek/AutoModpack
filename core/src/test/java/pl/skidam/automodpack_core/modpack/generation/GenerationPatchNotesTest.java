@@ -42,8 +42,9 @@ class GenerationPatchNotesTest {
 		Files.writeString(unchanged, "notes\r\n", StandardCharsets.UTF_8);
 		GenerationPatchNotes.Resolution first = GenerationPatchNotes.resolve(null, unchanged);
 		assertEquals("notes\n", first.text());
-		assertEquals(GenerationPatchNotes.CleanupStatus.DELETED, first.consumeIfUnchanged().status());
-		assertFalse(Files.exists(unchanged));
+		assertEquals(GenerationPatchNotes.CleanupStatus.CLEARED, first.consumeIfUnchanged().status());
+		assertTrue(Files.exists(unchanged));
+		assertEquals("", Files.readString(unchanged, StandardCharsets.UTF_8));
 
 		Path changed = tempDir.resolve("changed.md");
 		Files.writeString(changed, "before", StandardCharsets.UTF_8);
@@ -51,12 +52,21 @@ class GenerationPatchNotesTest {
 		Files.writeString(changed, "after", StandardCharsets.UTF_8);
 		GenerationPatchNotes.CleanupResult cleanup = second.consumeIfUnchanged();
 		assertEquals(GenerationPatchNotes.CleanupStatus.PRESERVED_CHANGED, cleanup.status());
-		assertTrue(Files.exists(changed));
+		assertEquals("after", Files.readString(changed, StandardCharsets.UTF_8));
 
 		Path absent = tempDir.resolve("absent.md");
 		Files.writeString(absent, "notes", StandardCharsets.UTF_8);
 		GenerationPatchNotes.Resolution absentResolution = GenerationPatchNotes.resolve(null, absent);
 		Files.delete(absent);
-		assertEquals(GenerationPatchNotes.CleanupStatus.NOT_PRESENT, absentResolution.consumeIfUnchanged().status());
+		assertEquals(GenerationPatchNotes.CleanupStatus.CREATED, absentResolution.consumeIfUnchanged().status());
+		assertTrue(Files.exists(absent));
+		assertEquals("", Files.readString(absent, StandardCharsets.UTF_8));
+
+		Path empty = tempDir.resolve("empty.md");
+		GenerationPatchNotes.ensurePresent(empty);
+		assertEquals(GenerationPatchNotes.Source.EMPTY, GenerationPatchNotes.resolve(null, empty).source());
+		Files.writeString(empty, "keep", StandardCharsets.UTF_8);
+		GenerationPatchNotes.ensurePresent(empty);
+		assertEquals("keep", Files.readString(empty, StandardCharsets.UTF_8));
 	}
 }
