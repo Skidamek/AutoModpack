@@ -66,7 +66,7 @@ public class ModpackExecutor {
 		this.serverRoot = serverRoot.toAbsolutePath().normalize();
 		this.groupRoot = groupRoot.toAbsolutePath().normalize();
 		this.generationRoot = generationRoot.toAbsolutePath().normalize();
-		this.patchNotesFile = this.groupRoot.resolve(PATCH_NOTES_FILE.getFileName()).normalize();
+		this.patchNotesFile = this.groupRoot.resolve(PATCH_NOTES_FILE).normalize();
 		this.generationStore = Objects.requireNonNull(generationStore);
 		this.dataLayout = new DataRootResolver.Layout(this.generationStore.objectRoot().getParent());
 		this.candidateScan = Objects.requireNonNull(candidateScan);
