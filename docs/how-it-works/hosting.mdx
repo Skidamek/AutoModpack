@@ -6,9 +6,9 @@ Players need a route from their game to your modpack files. AutoModpack ships a 
 
 | Mode | `bindPort: -1` | Explicit `bindPort` |
 | --- | --- | --- |
-| `HOLEPUNCH` | Takes over marked Minecraft login connections. `bindPort` goes unused. | Same behavior; the configured port stays dormant. |
-| `MAGIC` | Watches the Minecraft port: connections that speak the magic handshake serve the pack, everything else continues to Minecraft. | Starts a dedicated listener that requires the magic handshake. |
-| `DIRECT` | Starts no listener; the endpoint must be handled externally. | Starts a dedicated listener that expects TLS immediately. |
+| `HOLEPUNCH` | Serves the pack over your Minecraft server port. | `bindPort` is ignored; HOLEPUNCH always uses your Minecraft server port. |
+| `MAGIC` | Serves the pack over your Minecraft server port. | Serves the pack on `bindPort`. |
+| `DIRECT` | `bindPort` is ignored; DIRECT opens no port, so the pack endpoint must be handled by something else. | Serves the pack on `bindPort`. |
 
 `HOLEPUNCH` is the default and needs no open port beyond Minecraft's. The client sends a Minecraft Login Start whose UUID carries a marker, and the server claims that connection for AutoModpack before vanilla builds a login listener. Unmarked logins reach Minecraft unchanged. On Forge and NeoForge the holepunch handshake carries the same `\0FML3\0` hostname extra a normal modded client sends, so packed servers do not reject the connection as vanilla before the marker is read.
 
