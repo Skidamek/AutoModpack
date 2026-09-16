@@ -472,7 +472,10 @@ public class DownloadManager implements DownloadView {
 		LOGGER.info("Cancelling the download run: {} queued, {} in-flight", queuedDownloads.size(), downloadsInProgress.size());
 		queuedDownloads.clear();
 		downloadsInProgress.forEach((k, v) -> v.future.cancel(true));
-		activeTemporaryFiles.values().forEach(path -> {
+		// Only partials without a live writer are swept here; an in-flight attempt is interrupted first and deletes its
+		// own partial when its task ends, so the sweep never unlinks a file a writer still holds.
+		activeTemporaryFiles.forEach((key, path) -> {
+			if (downloadsInProgress.containsKey(key)) return;
 			try {
 				Files.deleteIfExists(path);
 			} catch (IOException ignored) {

@@ -8,9 +8,6 @@ import java.io.IOException;
  */
 public class StaleRangeException extends IOException {
 
-	/** The wire vocabulary both ends share: FileSend answers such a range with exactly this error text. */
-	public static final String WIRE_MESSAGE = "Invalid range";
-
 	public StaleRangeException() {
 		super("The stored partial starts past the end of the served object");
 	}

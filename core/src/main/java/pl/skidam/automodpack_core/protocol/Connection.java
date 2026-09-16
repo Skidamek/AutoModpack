@@ -158,6 +158,8 @@ class Connection implements AutoCloseable {
 			int errLen = headerWrap.getInt();
 			byte[] errBytes = new byte[errLen];
 			headerWrap.get(errBytes);
+			// The trailing code byte is the machine-readable half of the error; a frame without one is generic.
+			if (headerWrap.remaining() >= 1 && headerWrap.get() == ERROR_CODE_STALE_RANGE) throw new StaleRangeException();
 			throw new IOException("Server error: " + new String(errBytes, StandardCharsets.UTF_8));
 		}
 

@@ -138,7 +138,7 @@ public final class HttpContractClient implements PackTransport {
 				// A 304 only counts when we actually asked conditionally; the body hash decides over a 200.
 				String receivedSha1 = null;
 				if (status == 200) receivedSha1 = hashBody(connection, destination, false, progress);
-				else drain(connection);
+				else if (status == 304) drain(connection);
 				DocumentFetch fetch = switch (decideDocument(status, expectedSha1Hex, receivedSha1)) {
 					case UNCHANGED_FROM_LOCAL -> new DocumentFetch(null, true);
 					case UNCHANGED_FROM_BODY -> new DocumentFetch(destination, true);
@@ -163,9 +163,12 @@ public final class HttpContractClient implements PackTransport {
 				String range = rangeHeaderValue(offset);
 				if (range != null) connection.setRequestProperty("Range", range);
 				int status = connection.getResponseCode();
-				switch (decideObject(status)) {
+				switch (decideObject(status, range != null)) {
 					// A server that ignores Range answers 200 with the full body; the truncate is the correct result then.
-					case APPEND -> streamBody(connection, destination, true, progress);
+					case APPEND -> {
+						requireResumeStart(connection, offset);
+						streamBody(connection, destination, true, progress);
+					}
 					case REPLACE -> streamBody(connection, destination, false, progress);
 					case STALE_RANGE -> throw new StaleRangeException();
 					case FAILED -> throw new IOException("HTTP " + status);
@@ -179,10 +182,29 @@ public final class HttpContractClient implements PackTransport {
 		});
 	}
 
-	/** Reads the bodyless response (304) to its end so the JDK can return the connection to its keep-alive cache. */
+	/** Reads the bodyless 304 to its end so the JDK can return the connection to its keep-alive cache. */
 	private static void drain(HttpURLConnection connection) throws IOException {
 		try (InputStream ignored = connection.getInputStream()) {
 		}
+	}
+
+	/**
+	 * A 206 may only be appended behind the stored prefix when the server actually resumed at the requested offset;
+	 * anything else fails fast instead of splicing together bytes that promotion would only reject after the fact.
+	 */
+	private static void requireResumeStart(HttpURLConnection connection, long offset) throws IOException {
+		String contentRange = connection.getHeaderField("Content-Range");
+		if (contentRange == null) throw new IOException("HTTP 206 without a Content-Range header");
+		String spec = contentRange.trim();
+		if (!spec.startsWith("bytes ")) throw new IOException("Unparseable Content-Range: " + contentRange);
+		String first = spec.substring("bytes ".length(), spec.indexOf('-')).trim();
+		long start;
+		try {
+			start = Long.parseLong(first);
+		} catch (NumberFormatException e) {
+			throw new IOException("Unparseable Content-Range: " + contentRange);
+		}
+		if (start != offset) throw new IOException("Server resumed at byte " + start + " while the stored prefix ends at " + offset);
 	}
 
 	/**
@@ -214,10 +236,12 @@ public final class HttpContractClient implements PackTransport {
 	}
 
 	/** The object verdict: 206 appends behind the stored prefix, 200 replaces it, 416 means the prefix is beyond the object. */
-	static ObjectWriteMode decideObject(int statusCode) {
+	static ObjectWriteMode decideObject(int statusCode, boolean ranged) {
 		if (statusCode == 206) return ObjectWriteMode.APPEND;
 		if (statusCode == 200) return ObjectWriteMode.REPLACE;
-		if (statusCode == 416) return ObjectWriteMode.STALE_RANGE;
+		// Only a request that actually carried a Range can receive a meaningful "not satisfiable"; a 416 without one is
+		// just another failure, not a verdict about a stored prefix.
+		if (statusCode == 416 && ranged) return ObjectWriteMode.STALE_RANGE;
 		return ObjectWriteMode.FAILED;
 	}
 

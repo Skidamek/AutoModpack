@@ -37,10 +37,12 @@ class HttpContractClientTest {
 
 	@Test
 	void objectVerdictsSplitAppendReplaceAndStaleRange() {
-		assertEquals(ObjectWriteMode.APPEND, HttpContractClient.decideObject(206));
-		assertEquals(ObjectWriteMode.REPLACE, HttpContractClient.decideObject(200));
-		assertEquals(ObjectWriteMode.STALE_RANGE, HttpContractClient.decideObject(416));
-		assertEquals(ObjectWriteMode.FAILED, HttpContractClient.decideObject(404));
-		assertEquals(ObjectWriteMode.FAILED, HttpContractClient.decideObject(500));
+		assertEquals(ObjectWriteMode.APPEND, HttpContractClient.decideObject(206, true));
+		assertEquals(ObjectWriteMode.REPLACE, HttpContractClient.decideObject(200, true));
+		assertEquals(ObjectWriteMode.STALE_RANGE, HttpContractClient.decideObject(416, true));
+		assertEquals(ObjectWriteMode.FAILED, HttpContractClient.decideObject(404, true));
+		assertEquals(ObjectWriteMode.FAILED, HttpContractClient.decideObject(500, true));
+		// A 416 without a sent Range says nothing about a stored prefix; it is an ordinary failure like any other.
+		assertEquals(ObjectWriteMode.FAILED, HttpContractClient.decideObject(416, false));
 	}
 }

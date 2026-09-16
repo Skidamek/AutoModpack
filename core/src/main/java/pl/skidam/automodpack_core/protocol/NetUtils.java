@@ -85,6 +85,11 @@ public class NetUtils {
 	public static final byte END_OF_TRANSMISSION = 0x04;
 	public static final byte ERROR = 0x05;
 
+	// Machine-readable ERROR codes, the trailing byte of every ERROR frame this protocol version writes. The message
+	// stays for logs and humans; the code is what a client may branch on without parsing prose.
+	public static final byte ERROR_CODE_GENERIC = 0x00;
+	public static final byte ERROR_CODE_STALE_RANGE = 0x01;
+
 	// FILE_REQUEST trailing extension flags (protocol 0x02): a set bit means the field follows the flags byte, in bit order; the end offset requires the range offset.
 	public static final byte FILE_REQUEST_EXPECTED_SHA1_FLAG = 0x01;
 	public static final byte FILE_REQUEST_OFFSET_FLAG = 0x02;

@@ -300,7 +300,7 @@ class ConditionalFetchTest {
 
 			byte[] content = store.get(key);
 			if (content == null) {
-				writeFrame(out, codec, error(version, "File not found"));
+				writeFrame(out, codec, error(version, "File not found", ERROR_CODE_GENERIC));
 				return;
 			}
 			if (expected != null && cooperate.get() && HashUtils.sha1(content).equals(expected)) {
@@ -308,7 +308,7 @@ class ConditionalFetchTest {
 				return;
 			}
 			if (offset < 0 || offset > content.length) {
-				writeFrame(out, codec, error(version, StaleRangeException.WIRE_MESSAGE));
+				writeFrame(out, codec, error(version, "Invalid range", ERROR_CODE_STALE_RANGE));
 				return;
 			}
 
@@ -322,13 +322,14 @@ class ConditionalFetchTest {
 			writeFrame(out, codec, new byte[]{version, END_OF_TRANSMISSION});
 		}
 
-		private static byte[] error(byte version, String message) {
+		private static byte[] error(byte version, String message, byte errorCode) {
 			byte[] messageBytes = message.getBytes(StandardCharsets.UTF_8);
-			ByteBuffer buffer = ByteBuffer.allocate(2 + 4 + messageBytes.length);
+			ByteBuffer buffer = ByteBuffer.allocate(2 + 4 + messageBytes.length + 1);
 			buffer.put(version);
 			buffer.put(ERROR);
 			buffer.putInt(messageBytes.length);
 			buffer.put(messageBytes);
+			buffer.put(errorCode);
 			return buffer.array();
 		}
 
