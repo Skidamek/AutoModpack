@@ -5,11 +5,11 @@ import static pl.skidam.automodpack_core.Constants.*;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashSet;
+import java.util.Objects;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ServerConfigMigration;
-import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
@@ -33,23 +33,24 @@ public class Server {
 
 		modpackDir.toFile().mkdirs();
 
-		hostModpackContentFile = modpackDir.resolve("automodpack-content.json");
 		serverConfigFile = modpackDir.resolve("automodpack-server.json");
 		serverCoreConfigFile = modpackDir.resolve("automodpack-core.json");
 
 		ServerConfigMigration.migrateToLatest(serverConfigFile);
 
 		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV3.class, Jsons.ServerConfigFieldsV3::new);
-		if (serverConfig != null) {
-			// Standalone host serves only what is already in the modpack dir, so no group pulls in CWD files.
-			if (serverConfig.groups != null) serverConfig.groups.values().forEach(group -> group.syncedFiles = new HashSet<>());
-			serverConfig.validateSecrets = false;
-			ConfigTools.writeAtomic(serverConfigFile, serverConfig);
+		if (serverConfig == null) {
+			LOGGER.error("Failed to load standalone host configuration");
+			return;
+		}
+		// Standalone host serves only what is already in the modpack dir, so no group pulls in CWD files.
+		if (serverConfig.groups != null) serverConfig.groups.values().stream().filter(Objects::nonNull).forEach(group -> group.syncedFiles = new HashSet<>());
+		serverConfig.validateSecrets = false;
+		ConfigTools.writeAtomic(serverConfigFile, serverConfig);
 
-			if (serverConfig.bindPort == -1) {
-				LOGGER.error("Host port not set in config!");
-				return;
-			}
+		if (serverConfig.bindPort == -1) {
+			LOGGER.error("Host port not set in config!");
+			return;
 		}
 
 		Jsons.ServerCoreConfigFields serverCoreConfig = ConfigTools.readOrCreate(serverCoreConfigFile, Jsons.ServerCoreConfigFields.class,
@@ -62,21 +63,17 @@ public class Server {
 			ConfigTools.writeAtomic(serverCoreConfigFile, serverCoreConfig);
 		}
 
-		Path mainModpackDir = modpackDir.resolve("main");
-		mainModpackDir.toFile().mkdirs();
+		Path hostGenerations = modpackDir.resolve(hostGenerationsDir.getFileName());
+		modpackExecutor = new ModpackExecutor(modpackDir, modpackDir, hostGenerations);
+		var generation = modpackExecutor.publish();
 
-		ModpackExecutor modpackExecutor = new ModpackExecutor();
-		ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.groups,
-				modpackExecutor.getExecutor());
-		boolean generated = modpackExecutor.generateNew(modpackContent);
-
-		if (generated) {
-			LOGGER.info("Modpack generated!");
+		if (generation instanceof ModpackExecutor.Published || generation instanceof ModpackExecutor.NoChanges) {
+			LOGGER.info("Modpack generation completed!");
+		} else if (generation instanceof ModpackExecutor.PublishFailed failed) {
+			LOGGER.error("Failed to generate modpack", failed.failure());
 		} else {
-			LOGGER.error("Failed to generate modpack!");
+			LOGGER.error("Failed to generate modpack: operation was rejected");
 		}
-
-		modpackExecutor.stop();
 
 		LOGGER.info("Starting server on port {}", serverConfig.bindPort);
 		server.start();
@@ -88,5 +85,6 @@ public class Server {
 				LOGGER.error("Interrupted server thread", e);
 			}
 		}
+		modpackExecutor.stop();
 	}
 }

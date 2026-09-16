@@ -28,7 +28,6 @@ public class Jsons {
 		public boolean syncAutoModpackVersion = true;
 		public boolean syncLoaderVersion = true;
 		public boolean playMusic = true;
-		public boolean allowRemoteNonModpackDeletions = true;
 
 		public ClientConfigFieldsV3() {}
 
@@ -40,7 +39,6 @@ public class Jsons {
 			this.syncAutoModpackVersion = source.syncAutoModpackVersion;
 			this.syncLoaderVersion = source.syncLoaderVersion;
 			this.playMusic = source.playMusic;
-			this.allowRemoteNonModpackDeletions = source.allowRemoteNonModpackDeletions;
 		}
 	}
 
@@ -104,7 +102,6 @@ public class Jsons {
 		public Set<String> allowEditsInFiles = Set.of("/options.txt", "/config/**");
 		public Set<String> overwriteEditableFiles = Set.of();
 		public Set<String> forceCopyFilesToStandardLocation = Set.of();
-		public Map<String, String> nonModpackFilesToDelete = Map.of();
 		public boolean autoExcludeServerSideMods = true;
 		public boolean autoExcludeUnnecessaryFiles = true;
 		public boolean requireAutoModpackOnClient = true;
@@ -127,15 +124,6 @@ public class Jsons {
 		public boolean selfUpdater = false;
 		public Set<String> acceptedLoaders = new HashSet<>();
 
-		public static class FileToDelete { // Same as in ModpackContentFields.FileToDelete but without timestamp
-			public final String file;
-			public final String sha1;
-
-			public FileToDelete(String file, String sha1) {
-				this.file = file;
-				this.sha1 = sha1;
-			}
-		}
 	}
 
 	public static class ServerConfigFieldsV3 {
@@ -146,7 +134,7 @@ public class Jsons {
 		// Replaces V2's flat syncedFiles/allowEditsInFiles/overwriteEditableFiles/forceCopyFilesToStandardLocation.
 		// Key is the group id referenced by requires/breaksWith and by the client's saved selection.
 		public Map<String, GroupDeclaration> groups = Map.of("main", mainGroupDeclaration());
-		public Map<String, String> nonModpackFilesToDelete = Map.of();
+		public Map<String, SelectionTagDeclaration> selectionTags = Map.of();
 		public boolean autoExcludeServerSideMods = true;
 		public boolean autoExcludeUnnecessaryFiles = true;
 		public boolean requireAutoModpackOnClient = true;
@@ -193,15 +181,24 @@ public class Jsons {
 		public boolean required = false;
 		public boolean recommended = false;
 
-		// Group ids this one conflicts with / depends on.
+		// Group ids this one conflicts with / depends on and selection tags it belongs to.
 		public Set<String> breaksWith = Set.of();
 		public Set<String> requires = Set.of();
+		public Set<String> tags = Set.of();
+		public Set<String> compatiblePlatforms = Set.of();
 
 		// Per-group equivalents of the V2 flat file rules.
 		public Set<String> syncedFiles = Set.of();
 		public Set<String> allowEditsInFiles = Set.of();
 		public Set<String> overwriteEditableFiles = Set.of();
 		public Set<String> forceCopyFilesToStandardLocation = Set.of();
+	}
+
+	public static class SelectionTagDeclaration {
+		public String displayName = "";
+		public String description = "";
+		public boolean defaultSelected = false;
+		public boolean serverForced = false;
 	}
 
 	public static class ServerCoreConfigFields {
@@ -239,6 +236,105 @@ public class Jsons {
 		public ModpackConnectionMode connectionMode;
 	}
 
+	public static class GenerationPointerFields {
+		public int schemaVersion;
+		public String generationId = "";
+	}
+
+	public static class OwnershipLedgerFields {
+		public String modpackId = "";
+		public List<EntryFields> entries = List.of();
+		public String digest = "";
+
+		public static class EntryFields {
+			public String logicalPath = "";
+			public List<ContentFields> historicalHashes = List.of();
+			public Set<String> historicalGroupIds = Set.of();
+			public String firstPublishedGenerationId = "";
+			public String lastPublishedGenerationId = "";
+			public String currentStatus = "";
+		}
+
+		public static class ContentFields {
+			public String sha1 = "";
+			public long size;
+
+			public ContentFields() {}
+
+			public ContentFields(String sha1, long size) {
+				this.sha1 = sha1;
+				this.size = size;
+			}
+		}
+	}
+
+	public static class CompleteModpackContentFields {
+		public String modpackId = "";
+		public String modpackName = "";
+		public String automodpackVersion = "";
+		public String loader = "";
+		public String loaderVersion = "";
+		public String mcVersion = "";
+		public Map<String, ModpackGroupFields> groups = Map.of();
+		public Map<String, SelectionTagFields> selectionTags = Map.of();
+		public OwnershipLedgerFields ownershipLedger = new OwnershipLedgerFields();
+		public GenerationFields generation;
+
+		public static class GenerationFields {
+			public int schemaVersion;
+			public String generationId = "";
+			public String parentGenerationId = "";
+			public String createdAt = "";
+			public String stateDigest = "";
+			public String ledgerDigest = "";
+			public String patchNotes = "";
+			public String patchNotesDigest = "";
+			public String rollbackTargetGenerationId = "";
+		}
+
+		public static class ModpackGroupFields {
+			public String displayName = "";
+			public String description = "";
+			public String category = "";
+			public boolean required;
+			public boolean recommended;
+			public Set<String> breaksWith = Set.of();
+			public Set<String> requires = Set.of();
+			public Set<String> tags = Set.of();
+			public Set<String> compatiblePlatforms = Set.of();
+			public Map<String, GroupFileFields> files = Map.of();
+		}
+
+		public static class SelectionTagFields {
+			public String displayName = "";
+			public String description = "";
+			public boolean defaultSelected;
+			public boolean serverForced;
+		}
+
+		public static class GroupFileFields {
+			public String size = "";
+			public String type = "";
+			public boolean editable;
+			public boolean overwriteEditable;
+			public boolean forceCopy;
+			public String sha1 = "";
+			public String murmur;
+
+			public GroupFileFields() {}
+
+			public GroupFileFields(String size, String type, boolean editable, boolean overwriteEditable, boolean forceCopy, String sha1, String murmur) {
+				this.size = size;
+				this.type = type;
+				this.editable = editable;
+				this.overwriteEditable = overwriteEditable;
+				this.forceCopy = forceCopy;
+				this.sha1 = sha1;
+				this.murmur = murmur;
+			}
+		}
+	}
+
 	public static class ModpackContentFields {
 		public String modpackId = "";
 		public String modpackName = "";
@@ -247,10 +343,11 @@ public class Jsons {
 		public String loaderVersion = "";
 		public String mcVersion = "";
 		public Set<ModpackContentItem> list;
-		public Set<FileToDelete> nonModpackFilesToDelete = Set.of();
-		// Group id -> metadata. Each group's files are referenced by path into `list`, which stays the
-		// canonical flat file set so clients that ignore groups still see a complete modpack.
-		public Map<String, ModpackGroupFields> groups = Map.of();
+		public Set<String> selectedGroups = Set.of();
+		public OwnershipLedgerFields ownershipLedger = new OwnershipLedgerFields();
+		public String targetGenerationId = "";
+		public String parentGenerationId = "";
+		public String stateDigest = "";
 
 		public ModpackContentFields(Set<ModpackContentItem> list) {
 			this.list = list;
@@ -258,32 +355,6 @@ public class Jsons {
 
 		public ModpackContentFields() {
 			this.list = Set.of();
-		}
-
-		public static class ModpackGroupFields {
-			// Mirrors Jsons.GroupDeclaration, minus the server-only file globs.
-			public String displayName = "";
-			public String description = "";
-			public String category = "";
-			public boolean required;
-			public boolean recommended;
-			public Set<String> breaksWith = Set.of();
-			public Set<String> requires = Set.of();
-
-			// Populated by the scanner: relative paths of the ModpackContentItems in this group.
-			public Set<String> files = new HashSet<>();
-
-			public ModpackGroupFields() {}
-
-			public ModpackGroupFields(GroupDeclaration declaration) {
-				this.displayName = declaration.displayName;
-				this.description = declaration.description;
-				this.category = declaration.category;
-				this.required = declaration.required;
-				this.recommended = declaration.recommended;
-				this.breaksWith = declaration.breaksWith;
-				this.requires = declaration.requires;
-			}
 		}
 
 		public static class ModpackContentItem {
@@ -313,32 +384,22 @@ public class Jsons {
 						editable, forceCopy, sha1, murmur);
 			}
 
-			// if the relative file path is the same, we consider the items equal
 			@Override
 			public boolean equals(Object obj) {
 				if (this == obj) return true;
 				if (obj == null || getClass() != obj.getClass()) return false;
 				ModpackContentItem that = (ModpackContentItem) obj;
-				return Objects.equals(file, that.file);
+				return editable == that.editable && overwriteEditable == that.overwriteEditable && forceCopy == that.forceCopy
+						&& Objects.equals(file, that.file) && Objects.equals(size, that.size) && Objects.equals(type, that.type)
+						&& Objects.equals(sha1, that.sha1) && Objects.equals(murmur, that.murmur);
 			}
 
 			@Override
 			public int hashCode() {
-				return Objects.hash(file);
+				return Objects.hash(file, size, type, editable, overwriteEditable, forceCopy, sha1, murmur);
 			}
 		}
 
-		public static class FileToDelete {
-			public final String file;
-			public final String sha1;
-			public final String timestamp;
-
-			public FileToDelete(String file, String sha1, String timestamp) {
-				this.file = file;
-				this.sha1 = sha1;
-				this.timestamp = timestamp;
-			}
-		}
 	}
 
 	// seems kinda too verbose and it may take too much space for large modpack but lets keep it for now
@@ -364,25 +425,21 @@ public class Jsons {
 		public Set<String> files = ConcurrentHashMap.newKeySet();
 	}
 
-	public static class ClientDeletedNonModpackFilesTimestamps {
-		// Set of timestamps of the files to delete
-		public Set<String> timestamps = ConcurrentHashMap.newKeySet();
-	}
-
 	// Per-modpack record of which groups the player picked, so the selection screen is shown
 	// once and later launches reuse the answer. Keyed by modpack id, matching
 	// ClientConfigFieldsV3.modpackConnections, which already owns the connection details.
-	public static class ClientSelectionManagerFields {
+	public static class ClientSelectionStoreFields {
 		public int DO_NOT_CHANGE_IT = 1; // file version
 		public Map<String, ModpackSelection> selections = new HashMap<>();
 
 		public static class ModpackSelection {
-			public Set<String> selectedGroups = new HashSet<>();
+			@SerializedName(value = "requestedGroups", alternate = "selectedGroups")
+			public Set<String> requestedGroups = new HashSet<>();
 
 			public ModpackSelection() {}
 
-			public ModpackSelection(Set<String> selectedGroups) {
-				this.selectedGroups = selectedGroups;
+			public ModpackSelection(Set<String> requestedGroups) {
+				this.requestedGroups = requestedGroups;
 			}
 		}
 	}

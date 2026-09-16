@@ -18,6 +18,9 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ServerConfigMigration;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
+import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
@@ -151,13 +154,21 @@ public class Preload {
 		}
 
 		var manifestResult = ModpackUtils.requestServerModpackContent(connectionInfo, secret, false);
-		var latestModpackContent = ModpackContentTools.read(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
+		SelectedModpackTarget selectedTarget = loadStoredTarget(selectedModpackDir);
 		DownloadClient downloadClient = null;
 		if (manifestResult.successful()) {
-			latestModpackContent = manifestResult.content();
 			downloadClient = manifestResult.client();
+			try {
+				selectedTarget = SelectedModpackTarget.prepare(manifestResult.content(), new ClientSelectionStore(clientSelectionFile), ClientPlatform.current());
+			} catch (RuntimeException e) {
+				LOGGER.error("Failed to resolve the downloaded modpack catalogue and group selection", e);
+				downloadClient.close();
+				loadLocalModpack(connectionInfo, secret);
+				return;
+			}
+			Jsons.ModpackContentFields latestModpackContent = selectedTarget.flatTarget();
 			if (!Objects.equals(clientConfig.selectedModpackId, latestModpackContent.modpackId)) {
-				LOGGER.error("Selected modpack manifest changed ID from {} to {}", clientConfig.selectedModpackId, latestModpackContent.modpackId);
+				LOGGER.error("Selected modpack catalogue changed ID from {} to {}", clientConfig.selectedModpackId, latestModpackContent.modpackId);
 				downloadClient.close();
 				loadLocalModpack(connectionInfo, secret);
 				return;
@@ -168,16 +179,30 @@ public class Preload {
 				return;
 			}
 		}
+		if (selectedTarget == null) {
+			loadLocalModpack(connectionInfo, secret);
+			return;
+		}
 
-		new ModpackUpdater(latestModpackContent, connectionInfo, secret, selectedModpackDir, downloadClient).processModpackUpdate(null);
+		new ModpackUpdater(selectedTarget, connectionInfo, secret, selectedModpackDir, downloadClient).processModpackUpdate(null);
 	}
 
 	private void loadLocalModpack(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
-		var localModpackContent = ModpackContentTools.read(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 		try {
-			new ModpackUpdater(localModpackContent, connectionInfo, secret, selectedModpackDir).loadModpack();
+			new ModpackUpdater(connectionInfo, secret, selectedModpackDir).loadModpack();
 		} catch (Exception e) {
 			LOGGER.error("Failed to load local modpack", e);
+		}
+	}
+
+	private SelectedModpackTarget loadStoredTarget(Path modpackDirectory) {
+		try {
+			Jsons.CompleteModpackContentFields fields = ModpackContentTools.readCompleteFields(modpackDirectory.resolve(modpackCatalogueFileName));
+			if (fields == null) return null;
+			return SelectedModpackTarget.prepare(fields, new ClientSelectionStore(clientSelectionFile), ClientPlatform.current());
+		} catch (RuntimeException e) {
+			LOGGER.error("Failed to resolve the stored modpack catalogue and group selection", e);
+			return null;
 		}
 	}
 

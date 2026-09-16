@@ -18,7 +18,9 @@ import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.modpack.ClientSelectionManager;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
+import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
@@ -101,10 +103,18 @@ public class DataC2SPacket {
 			if (manifestResult.state() == ModpackUtils.ManifestFetchState.OPERATION_FAILED) return buildResponse(true);
 			if (!manifestResult.successful()) return buildResponse(null);
 
-			// Narrow the server manifest to the player's selected groups before any update check,
-			// otherwise unselected files read as missing and force an endless "please restart" loop.
-			Jsons.ModpackContentFields serverModpackContent = ClientSelectionManager.filterToSelection(manifestResult.content());
 			DownloadClient downloadClient = manifestResult.client();
+			SelectedModpackTarget selectedTarget;
+			try {
+				selectedTarget = SelectedModpackTarget.prepare(manifestResult.content(), new ClientSelectionStore(clientSelectionFile), ClientPlatform.current());
+			} catch (RuntimeException e) {
+				downloadClient.close();
+				LOGGER.error("Failed to resolve the server modpack catalogue and group selection", e);
+				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				disconnectImmediately(handler);
+				return buildResponse(true);
+			}
+			Jsons.ModpackContentFields serverModpackContent = selectedTarget.flatTarget();
 			Path modpackDir = ModpackUtils.getModpackPath(serverModpackContent.modpackId);
 			try {
 				SecretsStore.saveClientSecret(connectionInfo.origin, secret);
@@ -116,7 +126,7 @@ public class DataC2SPacket {
 				return buildResponse(true);
 			}
 
-			ModpackUpdater updater = new ModpackUpdater(serverModpackContent, connectionInfo, secret, modpackDir, downloadClient);
+			ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, modpackDir, downloadClient);
 			try {
 				ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
 				if (updateCheckResult.requiresUpdate()) {

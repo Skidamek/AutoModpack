@@ -5,10 +5,16 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
@@ -23,25 +29,46 @@ public final class UpdateTransaction {
 	public String transactionId;
 	public Purpose purpose;
 	public String modpackId;
+	public String targetGenerationId;
+	public String parentGenerationId;
+	public String stateDigest;
+	public String completeManifestJson;
 	public String targetManifestJson;
+	public String targetPlatform;
+	public boolean expectedPriorSelectionPresent;
+	public List<String> expectedPriorRequestedGroups;
+	public List<String> requestedGroups;
 	public String canonicalModpackDirectory;
 	public List<Operation> operations;
 	public List<ProjectedFile> projectedFinalState;
 	public Jsons.ClientConfigFieldsV3 plannedClientConfig;
-	public List<String> plannedDeletionTimestamps;
 	public List<RestartReason> restartReasons;
 
 	public UpdateTransaction() {}
 
-	public static UpdateTransaction create(UpdatePlan plan, Jsons.ModpackContentFields targetManifest, Path modpackDirectory) {
+	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, Path modpackDirectory) {
+		Objects.requireNonNull(plan, "plan");
+		Objects.requireNonNull(target, "target");
+		if (!plan.modpackId().equals(target.manifest().modpackId())) throw new IllegalArgumentException("Plan and selected target modpack IDs disagree");
+		if (!plan.generationTarget().equals(target.generationTarget())) throw new IllegalArgumentException("Plan and selected target generation identities disagree");
+		if (!plan.generationTarget().equals(GenerationTarget.fromFlat(target.flatTarget())))
+			throw new IllegalArgumentException("Plan and selected flat target generation identities disagree");
+
 		UpdateTransaction transaction = base(Purpose.MODPACK_UPDATE);
 		transaction.modpackId = plan.modpackId();
-		transaction.targetManifestJson = ConfigTools.GSON.toJson(targetManifest);
+		transaction.targetGenerationId = plan.generationTarget().targetGenerationId();
+		transaction.parentGenerationId = plan.generationTarget().parentGenerationId();
+		transaction.stateDigest = plan.generationTarget().stateDigest();
+		transaction.completeManifestJson = ConfigTools.GSON.toJson(target.completeFields());
+		transaction.targetManifestJson = ConfigTools.GSON.toJson(target.flatTarget());
+		transaction.targetPlatform = target.platform().id();
+		transaction.expectedPriorSelectionPresent = target.expectedPriorIntent() != null;
+		transaction.expectedPriorRequestedGroups = target.expectedPriorIntent() == null ? List.of() : new ArrayList<>(target.expectedPriorIntent().requestedGroups());
+		transaction.requestedGroups = new ArrayList<>(target.selection().intent().requestedGroups());
 		transaction.canonicalModpackDirectory = modpackDirectory.toAbsolutePath().normalize().toString();
 		transaction.operations = List.copyOf(plan.operations());
 		transaction.projectedFinalState = List.copyOf(plan.projectedFinalState());
 		transaction.plannedClientConfig = plan.plannedClientConfig();
-		transaction.plannedDeletionTimestamps = new ArrayList<>(plan.plannedDeletionTimestamps());
 		transaction.restartReasons = new ArrayList<>(new LinkedHashSet<>(plan.restartReasons()));
 		return transaction;
 	}
@@ -61,7 +88,6 @@ public final class UpdateTransaction {
 		finalState.sort(Comparator.comparing((ProjectedFile projected) -> projected.root().ordinal()).thenComparing(ProjectedFile::relativePath));
 		transaction.operations = List.copyOf(operations);
 		transaction.projectedFinalState = List.copyOf(finalState);
-		transaction.plannedDeletionTimestamps = List.of();
 		transaction.restartReasons = List.of();
 		return transaction;
 	}
@@ -74,7 +100,6 @@ public final class UpdateTransaction {
 				.toList();
 		transaction.projectedFinalState = targets.stream().map(target -> new ProjectedFile(target.root(), target.relativePath(), false, null, -1))
 				.sorted(Comparator.comparing((ProjectedFile projected) -> projected.root().ordinal()).thenComparing(ProjectedFile::relativePath)).toList();
-		transaction.plannedDeletionTimestamps = List.of();
 		transaction.restartReasons = List.of();
 		return transaction;
 	}
@@ -89,6 +114,26 @@ public final class UpdateTransaction {
 
 	public Jsons.ModpackContentFields targetManifest() {
 		return ConfigTools.parse(targetManifestJson, Jsons.ModpackContentFields.class);
+	}
+
+	public GenerationRecord completeGenerationRecord() {
+		return GenerationRecord.fromFields(ConfigTools.parse(completeManifestJson, Jsons.CompleteModpackContentFields.class));
+	}
+
+	public GenerationTarget generationTarget() {
+		return new GenerationTarget(targetGenerationId, parentGenerationId, stateDigest);
+	}
+
+	public ClientPlatform platform() {
+		return ClientPlatform.parse(targetPlatform);
+	}
+
+	public SelectionIntent expectedPriorIntent() {
+		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorRequestedGroups) : null;
+	}
+
+	public SelectionIntent targetIntent() {
+		return new SelectionIntent(requestedGroups);
 	}
 
 	public record LegacyDummyTarget(Root root, String relativePath) {}

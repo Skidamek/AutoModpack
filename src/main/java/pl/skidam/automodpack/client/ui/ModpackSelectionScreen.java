@@ -2,8 +2,10 @@ package pl.skidam.automodpack.client.ui;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.clientConfig;
-import static pl.skidam.automodpack_core.Constants.hostModpackContentFile;
+import static pl.skidam.automodpack_core.Constants.clientSelectionFile;
+import static pl.skidam.automodpack_core.Constants.modpackCatalogueFileName;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -15,10 +17,15 @@ import net.minecraft.network.chat.MutableComponent;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.modpack.ClientSelectionManager;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /**
  * Lets the player pick which optional groups of a modpack they want. Deliberately built out of
@@ -33,9 +40,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private static final int ROW_WIDTH = 280;
 
 	private final Screen parent;
+	private final GroupManifest manifest;
 	private final String modpackId;
 	private final String modpackName;
-	private final Map<String, Jsons.ModpackContentFields.ModpackGroupFields> groups;
+	private final Map<String, GroupManifest.Group> groups;
+	private final ClientSelectionStore selectionStore = new ClientSelectionStore(clientSelectionFile);
+	private final SelectionIntent expectedSelection;
 
 	// What the player has actually ticked; resolved is what that implies once required groups,
 	// dependencies and conflicts are applied.
@@ -47,18 +57,18 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private int rowsPerPage = 1;
 	private boolean saved = false;
 
-	public ModpackSelectionScreen(Screen parent, String modpackId, String modpackName,
-			Map<String, Jsons.ModpackContentFields.ModpackGroupFields> groups) {
+	public ModpackSelectionScreen(Screen parent, GroupManifest manifest) {
 		super(VersionedText.translatable("automodpack.selection.title"));
 		this.parent = parent;
-		this.modpackId = modpackId;
-		this.modpackName = modpackName == null ? "" : modpackName;
-		this.groups = groups == null ? Map.of() : groups;
+		this.manifest = Objects.requireNonNull(manifest);
+		this.modpackId = manifest.modpackId();
+		this.modpackName = manifest.modpackName();
+		this.groups = manifest.groups();
 
-		Set<String> saved = ClientSelectionManager.getManager().getSelection(modpackId).map(selection -> selection.selectedGroups)
-				.orElseGet(() -> ClientSelectionManager.defaultSelection(this.groups));
-		this.chosen.addAll(saved);
-		this.resolved = ClientSelectionManager.resolve(this.groups, this.chosen);
+		this.expectedSelection = selectionStore.get(modpackId).orElse(null);
+		SelectionIntent initial = expectedSelection == null ? GroupSelectionResolver.defaultIntent(manifest) : expectedSelection;
+		this.chosen.addAll(initial.requestedGroups());
+		this.resolved = GroupSelectionResolver.resolve(manifest, initial, ClientPlatform.current()).selectedGroups();
 		this.rows.addAll(this.groups.keySet());
 	}
 
@@ -70,82 +80,35 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return forModpackId(parent, clientConfig == null ? null : clientConfig.selectedModpackId);
 	}
 
-	/**
-	 * Builds the screen for the modpack belonging to a given Minecraft server address, or returns the
-	 * parent when that server is not a known AutoModpack modpack with optional groups.
-	 */
-	public static Screen forServerAddress(Screen parent, String serverAddress) {
-		return forModpackId(parent, modpackIdForServer(serverAddress));
-	}
-
 	private static Screen forModpackId(Screen parent, String modpackId) {
 		if (modpackId == null || modpackId.isBlank()) {
 			LOGGER.info("No modpack selected, nothing to configure");
 			return parent;
 		}
 
-		Path contentFile = ModpackUtils.getModpackPath(modpackId).resolve(hostModpackContentFile.getFileName());
-		Jsons.ModpackContentFields content = ModpackContentTools.read(contentFile);
-		if (content == null || content.groups == null || content.groups.isEmpty()) {
+		Path contentFile = ModpackUtils.getModpackPath(modpackId).resolve(modpackCatalogueFileName);
+		GroupManifest manifest = Optional.ofNullable(ModpackContentTools.readGenerationRecord(contentFile)).map(record -> record.manifest()).orElse(null);
+		if (manifest == null || manifest.groups().isEmpty()) {
 			LOGGER.info("Modpack {} declares no groups", modpackId);
 			return parent;
 		}
 
-		return new ModpackSelectionScreen(parent, modpackId, content.modpackName, content.groups);
+		return new ModpackSelectionScreen(parent, manifest);
 	}
 
 	public static boolean hasGroupsToConfigure() {
 		return modpackHasOptionalGroups(clientConfig == null ? null : clientConfig.selectedModpackId);
 	}
 
-	/** Whether the server at the given address is a known modpack the player can configure groups for. */
-	public static boolean serverHasGroupsToConfigure(String serverAddress) {
-		return modpackHasOptionalGroups(modpackIdForServer(serverAddress));
-	}
 
 	private static boolean modpackHasOptionalGroups(String modpackId) {
 		if (modpackId == null || modpackId.isBlank()) return false;
 
-		Jsons.ModpackContentFields content = ModpackContentTools.read(ModpackUtils.getModpackPath(modpackId).resolve(hostModpackContentFile.getFileName()));
-		if (content == null || content.groups == null) return false;
-		// Nothing worth showing a button for when every group is mandatory.
-		return content.groups.values().stream().anyMatch(group -> group != null && !group.required);
-	}
-
-	/**
-	 * Maps a Minecraft server address to the modpack the client installed from it. The client config
-	 * records each modpack's origin (the address the player connected to), so a match there means we
-	 * already downloaded that server's modpack and know its groups.
-	 */
-	private static String modpackIdForServer(String serverAddress) {
-		if (serverAddress == null || clientConfig == null || clientConfig.modpackConnections == null) return null;
-
-		String wanted = normalizeAddress(serverAddress);
-		// A bare host with no port is ambiguous between saved modpacks, so it may fall back to a
-		// host-only match; an address that specifies a port must match that port exactly, otherwise
-		// the button can open and save selections for the wrong modpack among several on one host.
-		boolean addressHasPort = serverAddress.lastIndexOf(':') > 0;
-		String wantedHost = normalizeAddress(hostOnly(serverAddress));
-		for (var entry : clientConfig.modpackConnections.entrySet()) {
-			var connection = entry.getValue();
-			if (connection == null || connection.origin == null) continue;
-			boolean exactMatch = normalizeAddress(connection.origin.getHostString() + ":" + connection.origin.getPort()).equals(wanted);
-			boolean hostOnlyMatch = !addressHasPort && normalizeAddress(connection.origin.getHostString()).equals(wantedHost);
-			if (exactMatch || hostOnlyMatch) {
-				return entry.getKey();
-			}
-		}
-		return null;
-	}
-
-	private static String normalizeAddress(String address) {
-		return address == null ? "" : address.trim().toLowerCase(Locale.ROOT);
-	}
-
-	private static String hostOnly(String address) {
-		if (address == null) return "";
-		int colon = address.lastIndexOf(':');
-		return colon > 0 ? address.substring(0, colon) : address;
+		GroupManifest manifest = Optional.ofNullable(ModpackContentTools.readGenerationRecord(ModpackUtils.getModpackPath(modpackId).resolve(modpackCatalogueFileName)))
+				.map(record -> record.manifest()).orElse(null);
+		if (manifest == null) return false;
+		// Nothing worth showing a button for when every available group is mandatory.
+		return manifest.groups().values().stream().anyMatch(group -> !isMandatory(manifest, group) && group.supports(ClientPlatform.current()));
 	}
 
 	@Override
@@ -179,7 +142,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 			Button button = buttonWidget(x, y, ROW_WIDTH, 20, rowLabel(groupId, group), press -> toggle(groupId));
 			// Required groups are shown so the player can see what they are getting, but not togglable.
-			button.active = group != null && !group.required;
+			button.active = group != null && !isMandatory(manifest, group) && group.supports(ClientPlatform.current());
 			MutableComponent tooltip = rowTooltip(group);
 			// A disabled button still shows its tooltip, so required groups keep their description on hover.
 			if (tooltip != null) setTooltip(button, tooltip);
@@ -204,7 +167,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height - 28, 100, 20, VersionedText.translatable("automodpack.selection.reset"),
 				press -> {
 					chosen.clear();
-					chosen.addAll(ClientSelectionManager.defaultSelection(groups));
+					chosen.addAll(GroupSelectionResolver.defaultIntent(manifest).requestedGroups());
 					reresolve();
 				}));
 
@@ -220,17 +183,24 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	 * a player expects from the click they just made. The resolver still has the final say.
 	 */
 	private void toggle(String groupId) {
-		if (resolved.contains(groupId)) {
-			chosen.remove(groupId);
-		} else {
-			groups.keySet().stream().filter(other -> ClientSelectionManager.conflicts(groups, other, groupId)).forEach(chosen::remove);
-			chosen.add(groupId);
+		SelectionIntent previous = new SelectionIntent(chosen);
+		Set<String> previousResolved = resolved;
+		SelectionIntent next = GroupSelectionResolver.prefer(manifest, previous, groupId, ClientPlatform.current());
+		chosen.clear();
+		chosen.addAll(next.requestedGroups());
+		try {
+			reresolve();
+		} catch (SelectionResolutionException e) {
+			chosen.clear();
+			chosen.addAll(previous.requestedGroups());
+			resolved = previousResolved;
+			rebuild();
+			LOGGER.warn("Could not apply group preference for {}: {}", groupId, e.getMessage());
 		}
-		reresolve();
 	}
 
 	private void reresolve() {
-		resolved = ClientSelectionManager.resolve(groups, chosen);
+		resolved = GroupSelectionResolver.resolve(manifest, new SelectionIntent(chosen), ClientPlatform.current()).selectedGroups();
 		rebuild();
 	}
 
@@ -244,26 +214,36 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void save() {
-		ClientSelectionManager.getManager().saveSelection(modpackId, resolved);
-		saved = true;
-		rebuild();
+		try {
+			selectionStore.compareAndSet(modpackId, expectedSelection, new SelectionIntent(chosen));
+			saved = true;
+			rebuild();
+		} catch (IOException e) {
+			LOGGER.error("Failed to save group selection for modpack {}", modpackId, e);
+			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+		}
 	}
 
 	/** The group's description, shown on hover. Null when the server set none, so no tooltip appears. */
-	private MutableComponent rowTooltip(Jsons.ModpackContentFields.ModpackGroupFields group) {
-		if (group == null || group.description == null || group.description.isBlank()) return null;
-		return VersionedText.literal(group.description).withStyle(ChatFormatting.GRAY);
+	private MutableComponent rowTooltip(GroupManifest.Group group) {
+		if (group == null || group.description().isBlank()) return null;
+		return VersionedText.literal(group.description()).withStyle(ChatFormatting.GRAY);
 	}
 
-	private MutableComponent rowLabel(String groupId, Jsons.ModpackContentFields.ModpackGroupFields group) {
+	private MutableComponent rowLabel(String groupId, GroupManifest.Group group) {
 		if (group == null) return VersionedText.literal(groupId);
 
-		String name = group.displayName == null || group.displayName.isBlank() ? groupId : group.displayName;
+		String name = group.displayName().isBlank() ? groupId : group.displayName();
 		boolean on = resolved.contains(groupId);
 
-		if (group.required) return VersionedText.literal("[#] " + name + " (required)").withStyle(ChatFormatting.GRAY);
+		if (isMandatory(manifest, group)) return VersionedText.literal("[#] " + name + " (required)").withStyle(ChatFormatting.GRAY);
 		if (on) return VersionedText.literal("[x] " + name).withStyle(ChatFormatting.GREEN);
 		return VersionedText.literal("[ ] " + name).withStyle(ChatFormatting.GRAY);
+	}
+
+	private static boolean isMandatory(GroupManifest manifest, GroupManifest.Group group) {
+		return group.required() || group.tags().stream().map(manifest.selectionTags()::get).filter(Objects::nonNull)
+				.anyMatch(GroupManifest.SelectionTag::serverForced);
 	}
 
 	@Override
