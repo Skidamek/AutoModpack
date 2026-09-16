@@ -39,13 +39,18 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		int y = this.height - 28;
-		this.previousButton = buttonWidget(this.width / 2 - 155, y, 70, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
-		this.nextButton = buttonWidget(this.width / 2 + 85, y, 70, 20, VersionedText.literal("Next >"), button -> changePage(1));
+		int buttonWidth = actionButtonWidth(310, 3);
+		boolean hasPagination = pageCount() > 1;
+		this.previousButton = buttonWidget(actionButtonX(310, 3, 1), y, buttonWidth, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
+		this.nextButton = buttonWidget(actionButtonX(310, 3, 2), y, buttonWidth, 20, VersionedText.literal("Next >"), button -> changePage(1));
 		this.previousButton.active = page > 0;
 		this.nextButton.active = page + 1 < pageCount();
-		this.addRenderableWidget(this.previousButton);
-		this.addRenderableWidget(this.nextButton);
-		this.addRenderableWidget(buttonWidget(this.width / 2 - 40, y, 80, 20, VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)));
+		if (hasPagination) {
+			this.addRenderableWidget(this.previousButton);
+			this.addRenderableWidget(this.nextButton);
+		}
+		this.addRenderableWidget(
+				buttonWidget(hasPagination ? actionButtonX(310, 3, 0) : centeredActionButtonX(310, 3, 1, 0), y, buttonWidth, 20, VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)));
 	}
 
 	private void changePage(int amount) {
@@ -73,7 +78,7 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Platforms: " + platforms(), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, metadataY + 26,
 				TextColors.WHITE);
 		int nextMetadataY = metadataY + 39;
-		String status = (group.required() ? "Required" : group.recommended() ? "Recommended" : "Optional") + "  |  " + files.size() + " files";
+		String status = (group.required() ? "Required" : group.defaultSelected() ? "Included by default" : "Optional") + "  |  " + files.size() + " files";
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(status).withStyle(ChatFormatting.YELLOW), this.width / 2, nextMetadataY, TextColors.WHITE);
 
 		int pageSize = rowsPerPage();
@@ -115,8 +120,17 @@ public final class GroupInspectorScreen extends VersionedScreen {
 
 	private String tagLabel() {
 		if (group.tag().isEmpty()) return "General";
-		GroupManifest.SelectionTag tag = manifest.selectionTags().get(group.tag());
-		return tag == null || tag.displayName().isBlank() ? group.tag() : tag.displayName();
+		return categoryLabel(group.tag());
+	}
+
+	private static String categoryLabel(String category) {
+		String[] words = category.replace('_', ' ').replace('-', ' ').split(" +");
+		StringBuilder result = new StringBuilder();
+		for (String word : words) {
+			if (result.length() > 0) result.append(' ');
+			if (!word.isEmpty()) result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+		}
+		return result.toString();
 	}
 
 	private String platforms() {
@@ -127,7 +141,8 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		StringBuilder result = new StringBuilder();
 		for (String value : values) {
 			if (result.length() > 0) result.append(", ");
-			result.append(value);
+			GroupManifest.Group related = manifest.groups().get(value);
+			result.append(related == null || related.displayName().isBlank() ? value : related.displayName());
 		}
 		return result.length() == 0 ? "none" : truncateToWidth(this.font, result.toString(), Math.max(1, this.width - 20));
 	}
@@ -135,7 +150,6 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	private static String fileFlags(GroupManifest.GroupFile file) {
 		StringBuilder flags = new StringBuilder();
 		if (file.editable()) flags.append(" editable");
-		if (file.forceCopy()) flags.append(" copied");
 		return flags.toString();
 	}
 

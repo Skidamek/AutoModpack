@@ -250,7 +250,7 @@ public class ModpackExecutor {
 		try (FileMetadataCache fileMetadataCache = FileMetadataCache.open(cacheRoot.resolve("file-metadata"));
 				ModFileCache modFileCache = ModFileCache.open(cacheRoot.resolve("mod-metadata"))) {
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
-					LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups, serverConfig.selectionTags,
+					LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups,
 					serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(serverStagingDir.getFileName()), creationExecutor,
 					generationStore.objectRoot(), fileMetadataCache, modFileCache);
 			return candidateScan.scan(request);

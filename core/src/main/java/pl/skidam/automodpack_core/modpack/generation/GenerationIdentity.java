@@ -23,7 +23,7 @@ public final class GenerationIdentity {
 		for (var groupEntry : manifest.groups().entrySet()) {
 			GroupManifest.Group group = groupEntry.getValue();
 			encoder.string(groupEntry.getKey()).string(group.displayName()).string(group.description()).string(group.tag())
-					.bool(group.required()).bool(group.recommended());
+					.bool(group.required()).bool(group.defaultSelected());
 			writeStrings(encoder, group.breaksWith());
 			writeStrings(encoder, group.requires());
 			encoder.integer(group.compatiblePlatforms().size());
@@ -32,13 +32,8 @@ public final class GenerationIdentity {
 			for (var fileEntry : group.files().entrySet()) {
 				GroupManifest.GroupFile file = fileEntry.getValue();
 				encoder.string(fileEntry.getKey()).longValue(file.size()).string(file.type()).bool(file.editable()).bool(file.overwriteEditable())
-						.bool(file.forceCopy()).string(file.sha1()).nullableString(file.murmur());
+						.string(file.sha1()).nullableString(file.murmur());
 			}
-		}
-		encoder.integer(manifest.selectionTags().size());
-		for (var tagEntry : manifest.selectionTags().entrySet()) {
-			GroupManifest.SelectionTag tag = tagEntry.getValue();
-			encoder.string(tagEntry.getKey()).string(tag.displayName()).string(tag.description()).bool(tag.defaultSelected()).bool(tag.serverForced());
 		}
 		return sha1(encoder.bytes());
 	}

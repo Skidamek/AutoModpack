@@ -24,4 +24,4 @@ The selected generation is materialized into one fixed active projection for thr
 2. We can update modpack without requiring restart all the time, if there's a pending update while you were not in game, on launch early, automodpack can update modpack and load it afterward thanks to that you don't need to reboot the game to apply updates.
 3. The active projection is independent of generation identity, so switching or recovering a generation changes one well-defined tree instead of maintaining one physical tree per modpack.
 
-Some loader services cannot be discovered from the projection. AutoModpack copies those files to standard `mods/` only when the loader-specific placement rule requires it; `forceCopyFilesToStandardLocation` can request the same placement explicitly.
+Some loader services cannot be discovered from the projection. AutoModpack copies those files to standard `mods/` only when the loader-specific placement rule requires it.

@@ -83,9 +83,6 @@ class GenerationIdentityTest {
 		var secondFields = catalogue("main", "same");
 		firstFields.groups.get("main").tag = "first-tag";
 		secondFields.groups.get("main").tag = "second-tag";
-		firstFields.selectionTags = Map.of("first-tag", new Jsons.CompleteModpackContentFields.SelectionTagFields(),
-				"second-tag", new Jsons.CompleteModpackContentFields.SelectionTagFields());
-		secondFields.selectionTags = firstFields.selectionTags;
 
 		GroupManifest first = GroupManifestValidator.validate(firstFields);
 		GroupManifest second = GroupManifestValidator.validate(secondFields);
@@ -106,7 +103,6 @@ class GenerationIdentityTest {
 	private static Jsons.CompleteModpackContentFields catalogue(String mainId, String description) {
 		var fields = new Jsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
-		fields.selectionTags = Map.of();
 		var main = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
 		main.description = description;
 		main.files = Map.of();

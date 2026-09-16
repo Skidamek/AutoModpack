@@ -95,13 +95,13 @@ public record GenerationMetadata(
 				fields.patchNotes, fields.patchNotesDigest, fields.rollbackTargetGenerationId);
 	}
 
-	private static String requireDigest(String value, String name) {
+	static String requireDigest(String value, String name) {
 		if (value == null || !DIGEST.matcher(value).matches() || !value.equals(value.toLowerCase(Locale.ROOT)))
 			throw new IllegalArgumentException("Invalid canonical " + name);
 		return value;
 	}
 
-	private static String requireOptionalDigest(String value, String name) {
+	static String requireOptionalDigest(String value, String name) {
 		if (value == null) throw new IllegalArgumentException("Missing " + name);
 		if (value.isEmpty()) return ROOT_PARENT;
 		return requireDigest(value, name);

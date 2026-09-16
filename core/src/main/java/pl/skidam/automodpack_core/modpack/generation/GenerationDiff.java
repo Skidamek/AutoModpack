@@ -9,8 +9,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 public record GenerationDiff(
 		List<FileChange> files,
 		MetadataSummary packMetadata,
-		MetadataSummary groupMetadata,
-		MetadataSummary selectionTagMetadata) {
+		MetadataSummary groupMetadata) {
 	public GenerationDiff {
 		files = files == null
 				? List.of()
@@ -19,7 +18,6 @@ public record GenerationDiff(
 						.thenComparing(change -> Objects.toString(change.after(), ""))).toList();
 		packMetadata = Objects.requireNonNull(packMetadata);
 		groupMetadata = Objects.requireNonNull(groupMetadata);
-		selectionTagMetadata = Objects.requireNonNull(selectionTagMetadata);
 	}
 
 	public static GenerationDiff between(GroupManifest parent, GroupManifest child) {
@@ -41,28 +39,19 @@ public record GenerationDiff(
 			else continue;
 			changes.add(new FileChange(key.groupId(), key.logicalPath(), classification, oldFile, newFile));
 		}
-		return new GenerationDiff(changes, packSummary(parent, child), groupSummary(parent, child), tagSummary(parent, child));
+		return new GenerationDiff(changes, packSummary(parent, child), groupSummary(parent, child));
 	}
 
 	public boolean isEmpty() {
-		return files.isEmpty() && packMetadata.isEmpty() && groupMetadata.isEmpty() && selectionTagMetadata.isEmpty();
+		return files.isEmpty() && packMetadata.isEmpty() && groupMetadata.isEmpty();
 	}
 
 	public Summary summary() {
-		int added = 0;
-		int modified = 0;
-		int removed = 0;
-		int metadataOnly = 0;
-		for (FileChange change : files) {
-			switch (change.classification()) {
-				case ADDED -> added++;
-				case MODIFIED -> modified++;
-				case REMOVED -> removed++;
-				case METADATA_ONLY -> metadataOnly++;
-			}
-		}
-		return new Summary(added, modified, removed, metadataOnly, packMetadata.changedCount() + groupMetadata.changedCount()
-				+ selectionTagMetadata.changedCount());
+		EnumMap<FileClassification, Set<String>> paths = new EnumMap<>(FileClassification.class);
+		for (FileClassification classification : FileClassification.values()) paths.put(classification, new TreeSet<>());
+		for (FileChange change : files) paths.get(change.classification()).add(change.logicalPath());
+		return new Summary(paths.get(FileClassification.ADDED).size(), paths.get(FileClassification.MODIFIED).size(), paths.get(FileClassification.REMOVED).size(),
+				paths.get(FileClassification.METADATA_ONLY).size(), packMetadata.changedCount() + groupMetadata.changedCount());
 	}
 
 	/** Returns deterministic text for an operator-facing generation change summary. */
@@ -70,15 +59,8 @@ public record GenerationDiff(
 		List<String> changes = new ArrayList<>();
 		appendMetadataChanges(changes, "pack metadata", packMetadata);
 		appendMetadataChanges(changes, "group", groupMetadata);
-		appendMetadataChanges(changes, "tag", selectionTagMetadata);
 		for (FileChange change : files) {
-			String action = switch (change.classification()) {
-				case ADDED -> "Added";
-				case MODIFIED -> "Changed";
-				case REMOVED -> "Removed";
-				case METADATA_ONLY -> "Changed metadata for";
-			};
-			changes.add(action + " file '" + change.groupId() + "/" + change.logicalPath() + "'");
+			changes.add(change.classification().action() + " file '" + change.groupId() + "/" + change.logicalPath() + "'");
 		}
 		return changes.isEmpty() ? List.of("No catalogue changes.") : List.copyOf(changes);
 	}
@@ -90,7 +72,34 @@ public record GenerationDiff(
 	}
 
 	public enum FileClassification {
-		ADDED, MODIFIED, REMOVED, METADATA_ONLY
+		ADDED("Added", false, true, "Added file change endpoints do not match classification"),
+		MODIFIED("Changed", true, true, "Changed file endpoints are incomplete"),
+		REMOVED("Removed", true, false, "Removed file change endpoints do not match classification"),
+		METADATA_ONLY("Changed metadata for", true, true, "Changed file endpoints are incomplete");
+
+		private final String action;
+		private final boolean beforeRequired;
+		private final boolean afterRequired;
+		private final String endpointError;
+
+		FileClassification(String action, boolean beforeRequired, boolean afterRequired, String endpointError) {
+			this.action = action;
+			this.beforeRequired = beforeRequired;
+			this.afterRequired = afterRequired;
+			this.endpointError = endpointError;
+		}
+
+		private String action() {
+			return action;
+		}
+
+		private boolean validEndpoints(GroupManifest.GroupFile before, GroupManifest.GroupFile after) {
+			return (before != null) == beforeRequired && (after != null) == afterRequired;
+		}
+
+		private String endpointError() {
+			return endpointError;
+		}
 	}
 
 	public record FileChange(String groupId, String logicalPath, FileClassification classification, GroupManifest.GroupFile before,
@@ -99,17 +108,7 @@ public record GenerationDiff(
 			groupId = Objects.requireNonNull(groupId);
 			logicalPath = Objects.requireNonNull(logicalPath);
 			classification = Objects.requireNonNull(classification);
-			switch (classification) {
-				case ADDED -> {
-					if (before != null || after == null) throw new IllegalArgumentException("Added file change endpoints do not match classification");
-				}
-				case REMOVED -> {
-					if (before == null || after != null) throw new IllegalArgumentException("Removed file change endpoints do not match classification");
-				}
-				case MODIFIED, METADATA_ONLY -> {
-					if (before == null || after == null) throw new IllegalArgumentException("Changed file endpoints are incomplete");
-				}
-			}
+			if (!classification.validEndpoints(before, after)) throw new IllegalArgumentException(classification.endpointError());
 		}
 	}
 
@@ -148,11 +147,6 @@ public record GenerationDiff(
 		return compareKeys(before, child.groups(), GenerationDiff::sameGroupMetadata);
 	}
 
-	private static MetadataSummary tagSummary(GroupManifest parent, GroupManifest child) {
-		Map<String, GroupManifest.SelectionTag> before = parent == null ? Map.of() : parent.selectionTags();
-		return compareKeys(before, child.selectionTags(), Objects::equals);
-	}
-
 	private static <T> MetadataSummary compareKeys(Map<String, T> before, Map<String, T> after, BiPredicate<T, T> equal) {
 		List<String> added = new ArrayList<>();
 		List<String> modified = new ArrayList<>();
@@ -170,7 +164,7 @@ public record GenerationDiff(
 
 	private static boolean sameGroupMetadata(GroupManifest.Group before, GroupManifest.Group after) {
 		return Objects.equals(before.displayName(), after.displayName()) && Objects.equals(before.description(), after.description())
-				&& Objects.equals(before.tag(), after.tag()) && before.required() == after.required() && before.recommended() == after.recommended()
+				&& Objects.equals(before.tag(), after.tag()) && before.required() == after.required() && before.defaultSelected() == after.defaultSelected()
 				&& Objects.equals(before.breaksWith(), after.breaksWith()) && Objects.equals(before.requires(), after.requires())
 				&& Objects.equals(before.compatiblePlatforms(), after.compatiblePlatforms());
 	}

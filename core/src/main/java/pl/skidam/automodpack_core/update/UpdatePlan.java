@@ -3,10 +3,13 @@ package pl.skidam.automodpack_core.update;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 
@@ -18,7 +21,8 @@ public record UpdatePlan(
 		Jsons.ClientConfigFieldsV3 plannedClientConfig,
 		Set<RestartReason> restartReasons,
 		List<Preservation> preservations,
-		List<BaselineCapture> baselineCaptures) {
+		List<BaselineCapture> baselineCaptures,
+		List<Conflict> conflicts) {
 
 	public UpdatePlan {
 		generationTarget = Objects.requireNonNull(generationTarget, "generationTarget");
@@ -27,6 +31,7 @@ public record UpdatePlan(
 		restartReasons = stableSet(restartReasons);
 		preservations = List.copyOf(preservations);
 		baselineCaptures = List.copyOf(baselineCaptures);
+		conflicts = List.copyOf(conflicts);
 	}
 
 	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
@@ -37,6 +42,12 @@ public record UpdatePlan(
 	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
 			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons, List<Preservation> preservations) {
 		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, preservations, List.of());
+	}
+
+	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
+			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons, List<Preservation> preservations,
+			List<BaselineCapture> baselineCaptures) {
+		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, preservations, baselineCaptures, List.of());
 	}
 
 	private static <T> Set<T> stableSet(Set<T> values) {
@@ -69,9 +80,45 @@ public record UpdatePlan(
 		SELECTED_MODPACK
 	}
 
-	public record Preservation(Root root, String relativePath, String expectedHash, long expectedSize) {}
+	public enum PreservationProof {
+		ACTIVE_LEDGER,
+		SERVER_LEDGER
+	}
+
+	public record Preservation(Root root, String relativePath, String expectedHash, long expectedSize, PreservationProof proof) {
+		public Preservation(Root root, String relativePath, String expectedHash, long expectedSize) {
+			this(root, relativePath, expectedHash, expectedSize, PreservationProof.ACTIVE_LEDGER);
+		}
+	}
 
 	public record BaselineCapture(Root root, String relativePath, String expectedHash, long expectedSize, boolean absent) {}
+
+	public enum ConflictAction {
+		QUARANTINE,
+		REMOVE_OWNED
+	}
+
+	public record Conflict(String modpackId, String conflictId, Set<String> modIds, String sourcePath, String sourceHash, long sourceSize,
+			String targetPath, String targetHash, long targetSize, ConflictAction action) {
+		public Conflict {
+			ModpackId.requireValid(modpackId);
+			if (conflictId == null || !conflictId.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid conflict ID");
+			TreeSet<String> normalizedIds = new TreeSet<>();
+			if (modIds != null) for (String modId : modIds) {
+				if (modId == null || modId.isBlank()) throw new IllegalArgumentException("Conflict mod ID is missing");
+				normalizedIds.add(modId.toLowerCase(Locale.ROOT));
+			}
+			if (normalizedIds.isEmpty()) throw new IllegalArgumentException("Conflict has no mod IDs");
+			modIds = Collections.unmodifiableSet(new LinkedHashSet<>(normalizedIds));
+			sourcePath = LogicalPath.requireCanonical(sourcePath);
+			targetPath = LogicalPath.requireCanonical(targetPath);
+			if (sourceHash == null || !sourceHash.matches("[0-9a-fA-F]{40}") || sourceSize < 0)
+				throw new IllegalArgumentException("Conflict source content is invalid");
+			if (targetHash == null || !targetHash.matches("[0-9a-fA-F]{40}") || targetSize < 0)
+				throw new IllegalArgumentException("Conflict target content is invalid");
+			action = Objects.requireNonNull(action, "conflict action");
+		}
+	}
 
 	public record Operation(
 			Root root,
@@ -89,8 +136,8 @@ public record UpdatePlan(
 
 	public record ModInfo(String relativePath, String sha1, long size, Set<String> ids, Set<String> dependencies) {
 		public ModInfo {
-			ids = stableSet(ids);
-			dependencies = stableSet(dependencies);
+			ids = normalizedSet(ids);
+			dependencies = normalizedSet(dependencies);
 		}
 	}
 
@@ -99,5 +146,11 @@ public record UpdatePlan(
 			relativePath = LogicalPath.normalize(relativePath);
 			ids = stableSet(ids);
 		}
+	}
+
+	private static Set<String> normalizedSet(Set<String> values) {
+		LinkedHashSet<String> normalized = new LinkedHashSet<>();
+		if (values != null) for (String value : values) if (value != null && !value.isBlank()) normalized.add(value.toLowerCase(Locale.ROOT));
+		return Collections.unmodifiableSet(normalized);
 	}
 }

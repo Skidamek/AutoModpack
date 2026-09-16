@@ -96,16 +96,6 @@ public class ListEntry extends ObjectSelectionList.Entry<ListEntry> {
 
 		VersionedScreen.drawCenteredTextWithShadow(versionedMatrices, client.font, text, centeredX, centeredY, TextColors.WHITE);
 
-		// if (mainPageUrls != null) {
-		//     int badgeX = x - 42;
-		//     int badgeY = y + 2;
-		//     if (mainPageUrls.contains("modrinth")) {
-		//         Badge.renderModrinthBadge(versionedMatrices, badgeX, badgeY);
-		//     } else if (mainPageUrls.contains("curseforge")) {
-		//         Badge.renderCurseForgeBadge(versionedMatrices, badgeX, badgeY);
-		//     }
-		// }
-
 		versionedMatrices.popPose();
 	}
 

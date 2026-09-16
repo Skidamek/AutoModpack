@@ -16,9 +16,9 @@ public class RestartScreen extends VersionedScreen {
 
 	private final UpdateType updateType;
 	private final Changelogs changelogs;
-	private static Button cancelButton;
-	private static Button restartButton;
-	private static Button changelogsButton;
+	private Button cancelButton;
+	private Button restartButton;
+	private Button changelogsButton;
 
 	public RestartScreen(UpdateType updateType, Changelogs changelogs) {
 		super(VersionedText.literal("RestartScreen"));
@@ -38,17 +38,18 @@ public class RestartScreen extends VersionedScreen {
 		this.addRenderableWidget(restartButton);
 		this.addRenderableWidget(changelogsButton);
 
-		if (changelogs == null || (changelogs.changesAddedList.isEmpty() && changelogs.changesDeletedList.isEmpty())) changelogsButton.active = false;
+		if (changelogs == null || (changelogs.changedFiles().isEmpty() && changelogs.removedFiles().isEmpty() && changelogs.latestPatchNotes().isBlank())) changelogsButton.active = false;
 	}
 
 	public void initWidgets() {
 		assert this.minecraft != null;
 
-		cancelButton = buttonWidget(this.width / 2 - 155, this.height - 74, 150, 20, VersionedText.translatable("automodpack.restart.cancel"), button -> {
+		int buttonWidth = actionButtonWidth(310, 2);
+		cancelButton = buttonWidget(actionButtonX(310, 2, 0), this.height - 74, buttonWidth, 20, VersionedText.translatable("automodpack.restart.cancel"), button -> {
 			ScreenImpl.setScreen(null);
 		});
 
-		restartButton = buttonWidget(this.width / 2 + 5, this.height - 74, 150, 20,
+		restartButton = buttonWidget(actionButtonX(310, 2, 1), this.height - 74, buttonWidth, 20,
 				VersionedText.translatable("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> {
 					minecraft.stop();
 				});
@@ -63,24 +64,33 @@ public class RestartScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		int lineHeight = 12; // Consistent line spacing
 
-		// Title
 		drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.translatable("automodpack.restart." + updateType.toString()).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 60,
+				VersionedText.translatable("automodpack.restart." + updateType.toString()).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 88,
 				TextColors.WHITE);
 
-		// Description line 1
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.restart.description"), this.width / 2,
-				this.height / 2 - 60 + lineHeight * 3, TextColors.WHITE);
+				this.height / 2 - 88 + lineHeight * 3, TextColors.WHITE);
 
-		// Description line 2
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.restart.secDescription"), this.width / 2,
-				this.height / 2 - 60 + lineHeight * 4, TextColors.WHITE);
+				this.height / 2 - 88 + lineHeight * 4, TextColors.WHITE);
 
-		int added = changelogs == null ? 0 : changelogs.changesAddedList.size();
-		int removed = changelogs == null ? 0 : changelogs.changesDeletedList.size();
-		String summary = "Changes: +" + added + " added  -" + removed + " removed";
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, summary, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2,
-				this.height / 2 + 12, TextColors.WHITE);
+		int changed = changelogs == null ? 0 : changelogs.changedFiles().size();
+		int removed = changelogs == null ? 0 : changelogs.removedFiles().size();
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.summary.filesChanged", changed).withStyle(ChatFormatting.GRAY), this.width / 2,
+				this.height / 2 - 28, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.summary.filesRemoved", removed).withStyle(ChatFormatting.GRAY), this.width / 2,
+				this.height / 2 - 16, TextColors.WHITE);
+		String reason = changelogs == null || changelogs.restartReasons().isEmpty()
+				? VersionedText.translatable("automodpack.summary.restartRequired").getString()
+				: VersionedText.translatable("automodpack.summary.restartReason", String.join(", ", changelogs.restartReasons())).getString();
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, reason, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2,
+				this.height / 2 - 4, TextColors.WHITE);
+		String notes = changelogs == null ? "" : changelogs.latestPatchNotes();
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.patchNotes.latest").withStyle(ChatFormatting.YELLOW), this.width / 2,
+				this.height / 2 + 10, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font,
+				notes.isBlank() ? VersionedText.translatable("automodpack.patchNotes.none").getString() : notes, this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2,
+				this.height / 2 + 22, TextColors.WHITE);
 	}
 
 	@Override

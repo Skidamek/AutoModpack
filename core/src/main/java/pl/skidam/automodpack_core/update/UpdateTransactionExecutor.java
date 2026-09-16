@@ -37,10 +37,13 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectedTreeComposer;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
+import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
+import pl.skidam.automodpack_core.update.UpdatePlan.ConflictAction;
 import pl.skidam.automodpack_core.update.UpdatePlan.FileKey;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
+import pl.skidam.automodpack_core.update.UpdatePlan.PreservationProof;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -76,9 +79,13 @@ public final class UpdateTransactionExecutor {
 	}
 
 	public Execution commit(UpdatePlan plan, SelectedModpackTarget target) throws IOException {
+		return commit(plan, target, context.storage().overlayDigest(plan.modpackId()));
+	}
+
+	public Execution commit(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest) throws IOException {
 		ClientStorage storage = context.storage();
 		ensureNoActiveTransaction(storage);
-		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(plan.modpackId()));
+		UpdateTransaction transaction = UpdateTransaction.create(plan, target, overlayDigest);
 		new ClientGenerationStore(storage).write(target.generationRecord(), target.patchNotesHistory());
 		return commit(transaction);
 	}
@@ -126,7 +133,7 @@ public final class UpdateTransactionExecutor {
 		}
 		if (transaction.purpose == null || transaction.phase == null) throw new IOException("Transaction purpose or phase is missing");
 		if (transaction.operations == null || transaction.projectedFinalState == null || transaction.restartReasons == null
-				|| transaction.plannedPreservations == null || transaction.plannedBaselineCaptures == null)
+				|| transaction.plannedPreservations == null || transaction.plannedBaselineCaptures == null || transaction.plannedConflicts == null)
 			throw new IOException("Transaction fields are incomplete");
 
 		Jsons.ModpackContentFields target = null;
@@ -168,6 +175,7 @@ public final class UpdateTransactionExecutor {
 			}
 		}
 		validateBaselineCaptures(transaction);
+		validateConflicts(transaction, finalState, target);
 		validatePreservations(transaction, finalState, target);
 		if (transaction.purpose == UpdateTransaction.Purpose.SELF_UPDATE && !operationKeys.equals(finalState.keySet()))
 			throw new IOException("Special-purpose transaction operations and projected final state must match exactly");
@@ -186,12 +194,11 @@ public final class UpdateTransactionExecutor {
 	private SelectedModpackTarget resolvedTarget(UpdateTransaction transaction, GenerationRecord record) throws IOException {
 		try {
 			SelectionIntent expected = transaction.expectedPriorIntent();
-			SelectionIntent intent = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
-					? transaction.targetIntent()
-					: expected == null ? GroupSelectionResolver.defaultIntent(record.manifest()) : expected;
 			Jsons.CompleteModpackContentFields fields = new ClientGenerationStore(context.storage()).readFields(transaction.targetGenerationId)
 					.orElseThrow(() -> new IOException("Client generation record is missing: " + transaction.targetGenerationId));
-			return SelectedModpackTarget.prepare(fields, expected, intent, transaction.platform());
+			if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && expected == null)
+				return SelectedModpackTarget.prepareDefault(fields, transaction.platform());
+			return SelectedModpackTarget.prepare(fields, expected, transaction.targetIntent(), transaction.platform());
 		} catch (RuntimeException e) {
 			throw new IOException("Client generation selection is invalid", e);
 		}
@@ -231,11 +238,11 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateSelectionMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.targetPlatform == null || transaction.expectedPriorRequestedTags == null || transaction.expectedPriorRequestedGroups == null
-				|| transaction.expectedPriorExcludedGroups == null || transaction.requestedTags == null || transaction.requestedGroups == null || transaction.excludedGroups == null)
+		if (transaction.targetPlatform == null || transaction.expectedPriorRequestedGroups == null || transaction.expectedPriorExcludedGroups == null
+				|| transaction.requestedGroups == null || transaction.excludedGroups == null)
 			throw new IOException("Selection metadata is incomplete");
-		if (!isCanonicalIntentList(transaction.expectedPriorRequestedTags) || !isCanonicalIntentList(transaction.expectedPriorRequestedGroups)
-				|| !isCanonicalIntentList(transaction.expectedPriorExcludedGroups) || !isCanonicalIntentList(transaction.requestedTags)
+		if (!isCanonicalIntentList(transaction.expectedPriorRequestedGroups)
+				|| !isCanonicalIntentList(transaction.expectedPriorExcludedGroups)
 				|| !isCanonicalIntentList(transaction.requestedGroups) || !isCanonicalIntentList(transaction.excludedGroups))
 			throw new IOException("Selection metadata is not canonical");
 		try {
@@ -264,9 +271,10 @@ public final class UpdateTransactionExecutor {
 	private static void validateSelfUpdateMetadata(UpdateTransaction transaction) throws IOException {
 		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null
 				|| transaction.ledgerDigest != null || transaction.targetPlatform != null || transaction.selectionDigest != null || transaction.overlayDigest != null
-				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedTags != null || transaction.expectedPriorRequestedGroups != null
-				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedTags != null || transaction.requestedGroups != null || transaction.excludedGroups != null
-				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty() || !transaction.plannedBaselineCaptures.isEmpty())
+				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null
+				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedGroups != null || transaction.excludedGroups != null
+				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty()
+				|| !transaction.plannedBaselineCaptures.isEmpty() || !transaction.plannedConflicts.isEmpty())
 			throw new IOException("Self-update transaction contains modpack metadata");
 		long installs = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.INSTALL_OBJECT).count();
 		long deletions = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.DELETE).count();
@@ -366,7 +374,9 @@ public final class UpdateTransactionExecutor {
 			return;
 		}
 		if (target == null) throw new IOException("Preservation validation has no target");
-		OwnershipLedger ledger = OwnershipLedger.fromFields(target.ownershipLedger);
+		if (transaction.plannedPreservations.isEmpty()) return;
+		OwnershipLedger activeLedger = cleanupLedger();
+		OwnershipLedger targetLedger = OwnershipLedger.fromFields(target.ownershipLedger);
 		Set<String> targetPaths = new HashSet<>();
 		for (var item : target.list) targetPaths.add(normalizeManifestPath(item.file));
 		List<Preservation> sorted = transaction.plannedPreservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal())
@@ -376,18 +386,81 @@ public final class UpdateTransactionExecutor {
 		for (Preservation preservation : sorted) {
 			if (preservation == null || preservation.root() != Root.GAME_DIR)
 				throw new IOException("Invalid preservation root");
+			if (preservation.proof() == null) throw new IOException("Preservation proof is missing");
 			String relative = normalizeOperationPath(preservation.relativePath());
 			validateRootAndPath(preservation.root(), relative, transaction.modpackId, transaction.purpose);
 			if (!preservationKeys.add(new FileKey(preservation.root(), relative))) throw new IOException("Duplicate preservation target");
 			validateHash(preservation.expectedHash(), "preservation SHA-1");
 			String logicalPath = relative;
 			if (!removal && targetPaths.contains(logicalPath)) throw new IOException("Preservation target remains in the selected target");
+			OwnershipLedger ledger = preservation.proof() == PreservationProof.ACTIVE_LEDGER ? activeLedger : targetLedger;
+			if (ledger == null) throw new IOException("Preservation has no active ownership ledger");
 			OwnershipLedger.Entry ledgerEntry = ledger.entries().get(logicalPath);
-			if (ledgerEntry == null || !ledgerEntry.historicalHashes().contains(new OwnershipLedger.Content(preservation.expectedHash().toLowerCase(Locale.ROOT), preservation.expectedSize())))
+			if (ledgerEntry == null) throw new IOException("Preservation path is not present in the ownership ledger");
+			if (preservation.proof() == PreservationProof.SERVER_LEDGER && ledgerEntry.currentStatus() != OwnershipLedger.Status.TOMBSTONE)
+				throw new IOException("Server-ledger preservation is not a tombstone");
+			if (!ledgerEntry.historicalHashes().contains(new OwnershipLedger.Content(preservation.expectedHash().toLowerCase(Locale.ROOT), preservation.expectedSize())))
 				throw new IOException("Preservation target is not owned by the target ledger");
 			ProjectedFile projected = finalState.get(new FileKey(preservation.root(), relative));
 			if (projected == null || projected.present()) throw new IOException("Preservation target is not absent from projected final state");
 		}
+	}
+
+	private void validateConflicts(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, Jsons.ModpackContentFields target) throws IOException {
+		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE) {
+			if (!transaction.plannedConflicts.isEmpty()) throw new IOException("Only modpack updates may contain conflicts");
+			return;
+		}
+		if (target == null) throw new IOException("Conflict validation has no target");
+		List<Conflict> sorted = transaction.plannedConflicts.stream().sorted(Comparator.comparing(Conflict::conflictId)).toList();
+		if (!transaction.plannedConflicts.equals(sorted)) throw new IOException("Conflicts are not deterministically ordered");
+		OwnershipLedger activeLedger = cleanupLedger();
+		QuarantineArchive.read(context.storage(), transaction.modpackId);
+		Set<String> targetPaths = new HashSet<>();
+		for (var item : target.list) targetPaths.add(normalizeManifestPath(item.file));
+		Set<String> conflictIds = new HashSet<>();
+		for (Conflict conflict : sorted) {
+			if (conflict == null || conflict.action() == null || !transaction.modpackId.equals(conflict.modpackId()) || !conflictIds.add(conflict.conflictId()))
+				throw new IOException("Conflict identity is invalid");
+			if (!conflict.sourcePath().startsWith("mods/") || !conflict.targetPath().startsWith("mods/") || !targetPaths.contains(conflict.targetPath()))
+				throw new IOException("Conflict path is outside the selected target mods");
+			validateHash(conflict.sourceHash(), "conflict source SHA-1");
+			validateHash(conflict.targetHash(), "conflict target SHA-1");
+			if (conflict.sourceSize() < 0 || conflict.targetSize() < 0 || conflict.modIds().isEmpty()) throw new IOException("Conflict content metadata is invalid");
+			FileKey sourceKey = new FileKey(Root.GAME_DIR, conflict.sourcePath());
+			Operation sourceOperation = null;
+			for (Operation operation : transaction.operations)
+				if (operation.root() == Root.GAME_DIR && conflict.sourcePath().equals(normalizeOperationPath(operation.relativePath()))) {
+					sourceOperation = operation;
+					break;
+				}
+			if (sourceOperation == null || (sourceOperation.operation() == OperationType.DELETE && sourceOperation.expectedExistingHash() == null)
+					|| (sourceOperation.operation() == OperationType.INSTALL_OBJECT && (!conflict.sourcePath().equals(conflict.targetPath()) || sourceOperation.expectedExistingHash() == null)))
+				throw new IOException("Conflict has no ownership-safe source operation");
+			if (sourceOperation.expectedExistingHash() != null && !sourceOperation.expectedExistingHash().equalsIgnoreCase(conflict.sourceHash()))
+				throw new IOException("Conflict source operation hash disagrees with metadata");
+			if (sourceOperation.operation() == OperationType.DELETE && sourceOperation.expectedExistingHash() != null
+					&& !sourceOperation.expectedExistingHash().equalsIgnoreCase(conflict.sourceHash()))
+				throw new IOException("Conflict deletion hash disagrees with metadata");
+			boolean owned = activeLedger != null && activeLedger.entries().get(conflict.sourcePath()) != null
+					&& activeLedger.entries().get(conflict.sourcePath()).historicalHashes().contains(new OwnershipLedger.Content(conflict.sourceHash().toLowerCase(Locale.ROOT), conflict.sourceSize()));
+			if (conflict.action() == ConflictAction.REMOVE_OWNED && !owned) throw new IOException("Conflict claims ownership without ledger proof");
+			if (conflict.action() == ConflictAction.QUARANTINE && owned) throw new IOException("Conflict quarantines a ledger-owned file");
+			if (conflict.action() == ConflictAction.QUARANTINE && sourceOperation.expectedExistingHash() == null)
+				throw new IOException("Quarantine conflict does not pin the source hash");
+			if (conflict.action() == ConflictAction.QUARANTINE && !sourceOperation.expectedExistingHash().equalsIgnoreCase(conflict.sourceHash()))
+				throw new IOException("Quarantine conflict source hash is not pinned");
+			ProjectedFile projected = finalState.get(sourceKey);
+			if (projected == null) throw new IOException("Conflict source is missing from projected final state");
+		}
+	}
+
+	private OwnershipLedger cleanupLedger() throws IOException {
+		Jsons.ClientGenerationStateFields state = context.storage().readActiveState();
+		if (state == null) return null;
+		GenerationRecord active = new ClientGenerationStore(context.storage()).read(state.generationId)
+				.orElseThrow(() -> new IOException("Active client generation record is missing: " + state.generationId));
+		return active.ownershipLedger();
 	}
 
 	private void validateInstall(Operation operation, ProjectedFile projected) throws IOException {
@@ -439,14 +512,19 @@ public final class UpdateTransactionExecutor {
 			setPhase(transaction, UpdateTransaction.Phase.PREPARING);
 			if (isModpackTransaction(transaction)) {
 				captureBaselines(transaction);
+				quarantineConflicts(transaction);
 				preserveBeforeMutation(transaction);
 				applyOperations(transaction, current);
 				current.set(null);
 				verifyManagedFinalState(transaction);
-				buildIncomingProjection(transaction);
-				setPhase(transaction, UpdateTransaction.Phase.PROJECTED);
-				setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
-				swapProjection(transaction);
+				if (transaction.operations.isEmpty()) {
+					verifyProjection(context.storage().activeDirectory(), transaction.projectedFinalState);
+				} else {
+					buildIncomingProjection(transaction);
+					setPhase(transaction, UpdateTransaction.Phase.PROJECTED);
+					setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
+					swapProjection(transaction);
+				}
 				Jsons.ModpackContentFields target = resolvedTarget(transaction, storedRecord(transaction)).flatTarget();
 				if (transaction.plannedClientConfig != null) ConfigTools.writeAtomic(context.storage().clientConfigFile(), transaction.plannedClientConfig);
 				if (context.beforeManifestAction() != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
@@ -551,6 +629,11 @@ public final class UpdateTransactionExecutor {
 			if (!SmartFileUtils.isValidFile(object, preservation.expectedSize(), preservation.expectedHash()))
 				throw new IOException("Preserved object verification failed: " + object);
 		}
+	}
+
+	private void quarantineConflicts(UpdateTransaction transaction) throws IOException {
+		for (Conflict conflict : transaction.plannedConflicts)
+			if (conflict.action() == ConflictAction.QUARANTINE) QuarantineArchive.archive(context.storage(), transaction.targetGenerationId, conflict);
 	}
 
 	private void verifyManagedFinalState(UpdateTransaction transaction) throws IOException {

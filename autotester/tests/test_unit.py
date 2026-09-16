@@ -215,6 +215,19 @@ def test_condition_log_captures_variable(make_ctx):
     assert ctx.vars["fp"] == "AB:CD:EF"
 
 
+def test_screenshot_verb_records_artifact(make_ctx):
+    from automodpack_autotester.engine.steps_ui import screenshot
+    from .conftest import FakeBridge
+
+    ctx = make_ctx()
+    ctx.bridge = FakeBridge(ctx)
+    screenshot(ctx, {"name": "capture prompt", "file": "first-connect"})
+
+    assert ctx.bridge.screenshots == ["first-connect"]
+    assert (ctx.game_dir / "automodpack/autotest/screenshots/first-connect.png").is_file()
+    assert ctx.vars["screenshot"].endswith("first-connect.png")
+
+
 # ── executor ──────────────────────────────────────────────────────────────
 
 

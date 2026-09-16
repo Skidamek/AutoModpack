@@ -67,6 +67,14 @@ def _cmd_validate(scenario_name: str | None) -> int:
     macros = load_macros()
     scenarios = load_scenarios()
     targets = load_targets()
+    settings = load_settings()
+    if scenario_name in (None, "all"):
+        if "all" not in scenarios:
+            print("FAIL release gate: scenarios/all.yaml is missing")
+            return 1
+        if str(settings.get("run", {}).get("scenario", "")) != "all":
+            print("FAIL release gate: settings.yaml run.scenario must be 'all'")
+            return 1
     if scenario_name:
         if scenario_name not in scenarios:
             print(f"No such scenario: {scenario_name}", file=sys.stderr)
@@ -92,7 +100,7 @@ def _select_targets(targets: dict, target_name: str, scenario: dict) -> tuple[li
 
 def _selection_defaults(settings: dict) -> tuple[str, str]:
     run = settings.get("run", {})
-    return str(run.get("scenario", "sync")), str(run.get("target", "all"))
+    return str(run.get("scenario", "all")), str(run.get("target", "all"))
 
 
 def _cmd_targets(scenario_name: str | None, target_name: str | None) -> int:

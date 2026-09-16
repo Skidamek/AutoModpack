@@ -6,6 +6,8 @@ exercised end to end without Docker, HeadlessMC, or a real Minecraft server.
 from __future__ import annotations
 
 import types
+import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -57,7 +59,7 @@ class FakeBridge:
     """A tiny GUI state machine that mimics the real client over the file bridge.
 
     Screens: title -> cert -> preparing -> first connection -> preview -> restart -> (relaunch) -> ingame.
-    Clicking the final preview button writes the active projection files into the game dir, so
+    Clicking the update button writes the active projection files into the game dir, so
     the filesystem verbs see real files appear exactly as they would in Docker.
     """
 
@@ -69,11 +71,20 @@ class FakeBridge:
         self.exited = False
         self.clicks: list[int] = []
         self.typed: dict[int, str] = {}
+        self.screenshots: list[str] = []
+        self.secondary_pack = False
+        self.selected_pack = "A"
+        self.pending_pack: str | None = None
+        self.pack_b_files: list[tuple[Path, bytes | str]] = []
+        self.update_available = False
+        self.history_parent = "restart"
+        self.dependency = False
+        self.conflict = False
 
     # --- snapshot ---------------------------------------------------------
     def gui(self, timeout: float = 30) -> dict:
         snapshots = {
-            "title": {"screenClass": "TitleScreen", "buttons": [], "textFields": []},
+            "title": {"screenClass": "TitleScreen", "buttons": [{"id": 8, "text": "Multiplayer", "enabled": True, "visible": True}], "textFields": []},
             "cert": {
                 "screenClass": "CertScreen",
                 "buttons": [{"id": 2, "text": "Verify", "enabled": True, "visible": True}],
@@ -82,12 +93,42 @@ class FakeBridge:
             "preparing": {"screenClass": "PreparingScreen", "buttons": [], "textFields": []},
             "first_connection": {
                 "screenClass": "FirstConnectScreen",
-                "buttons": [{"id": 3, "text": "Continue", "enabled": True, "visible": True}],
+                "buttons": [{"id": 3, "text": "Continue", "enabled": True, "visible": True},
+                            {"id": 18, "text": "Customize groups", "enabled": True, "visible": True},
+                            {"id": 26, "text": "Do not download", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
+            "group0": {
+                "screenClass": "ModpackSelectionScreen",
+                "buttons": [{"id": 27, "text": "Core", "enabled": False, "visible": True},
+                            {"id": 28, "text": "Client", "enabled": True, "visible": True},
+                            {"id": 29, "text": "Visuals", "enabled": True, "visible": True},
+                            {"id": 30, "text": "Next >", "enabled": True, "visible": True},
+                            {"id": 31, "text": "Preview target", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
+            "group1": {
+                "screenClass": "ModpackSelectionScreen",
+                "buttons": [{"id": 32, "text": "Extras", "enabled": True, "visible": True},
+                            {"id": 33, "text": ("Addon (required by selection)" if self.dependency else "Addon"), "enabled": True, "visible": True},
+                            {"id": 34, "text": ("Alternative (conflict)" if self.conflict else "Alternative"), "enabled": True, "visible": True},
+                            {"id": 35, "text": "Platform", "enabled": True, "visible": True},
+                            {"id": 36, "text": "Next >", "enabled": True, "visible": True},
+                            {"id": 37, "text": "Defaults", "enabled": True, "visible": True},
+                            {"id": 31, "text": "Preview target", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
+            "group2": {
+                "screenClass": "ModpackSelectionScreen",
+                "buttons": [{"id": 38, "text": "Windows-only (unavailable)", "enabled": False, "visible": True},
+                            {"id": 37, "text": "Defaults", "enabled": True, "visible": True},
+                            {"id": 31, "text": "Preview target", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "preview": {
                 "screenClass": "UpdatePreviewScreen",
-                "buttons": [{"id": 5, "text": "Continue", "enabled": True, "visible": True}],
+                "buttons": [{"id": 5, "text": "Update", "enabled": True, "visible": True},
+                            {"id": 17, "text": "View all patch notes", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "restart": {
@@ -95,7 +136,43 @@ class FakeBridge:
                 "buttons": [
                     {"id": 6, "text": "Cancel", "enabled": True, "visible": True},
                     {"id": 4, "text": "Restart", "enabled": True, "visible": True},
+                    {"id": 40, "text": "View changelogs", "enabled": True, "visible": True},
                 ],
+                "textFields": [],
+            },
+            "multiplayer": {
+                "screenClass": "JoinMultiplayerScreen",
+                "title": "Play Multiplayer",
+                "buttons": [{"id": 7, "text": "Modpack settings", "enabled": True, "visible": True},
+                            {"id": 8, "text": "Multiplayer", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
+            "manager": {
+                "screenClass": "InstalledModpacksScreen",
+                "buttons": self._manager_buttons(),
+                "textFields": [],
+            },
+            "settings": {
+                "screenClass": "ModpackSelectionScreen",
+                "buttons": [{"id": 10, "text": "Pack manager", "enabled": True, "visible": True},
+                            {"id": 13, "text": "Save", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
+            "selection": {
+                "screenClass": "ModpackSelectionScreen",
+                "buttons": [{"id": 12, "text": "Review pack switch", "enabled": True, "visible": True},
+                            {"id": 13, "text": "Back", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
+            "patch_history": {
+                "screenClass": "PatchNotesHistoryScreen",
+                "buttons": [{"id": 14, "text": "Back", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
+            "changelog": {
+                "screenClass": "ChangelogScreen",
+                "buttons": [{"id": 15, "text": "View all patch notes", "enabled": True, "visible": True},
+                            {"id": 16, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "ingame": {"screenClass": None, "buttons": [], "textFields": []},
@@ -118,18 +195,77 @@ class FakeBridge:
             self.screen = "preparing"
         elif element_id == 3:
             self.screen = "preview"
+        elif element_id == 18:
+            self.screen = "group0"
+        elif element_id == 19 or element_id == 28:
+            self.screen = "group0"
+        elif element_id == 20 or element_id == 30 or element_id == 36:
+            self.screen = "group1" if self.screen == "group0" else "group2"
+        elif element_id == 21 or element_id == 31:
+            self.screen = "preview"
+        elif element_id == 22:
+            self.screen = "group1"
+        elif element_id == 23:
+            self.screen = "group1"
+        elif element_id == 24 or element_id == 32:
+            self.screen = "group1"
+        elif element_id == 33:
+            self.dependency = True
+            self.screen = "group1"
+        elif element_id == 34:
+            self.conflict = True
+            self.screen = "group1"
+        elif element_id == 25 or element_id == 35:
+            self.screen = "group1" if self.screen == "group2" else self.screen
         elif element_id == 5:
             if self.screen == "preview":
+                if self.pending_pack is not None:
+                    self.selected_pack = self.pending_pack
+                    self.pending_pack = None
                 self._write_modpack()
                 self.screen = "restart"
         elif element_id == 4:
             self.exited = True
+        elif element_id == 40:
+            self.history_parent = "restart"
+            self.screen = "changelog"
+        elif element_id == 7:
+            self.screen = "settings"
+        elif element_id == 8:
+            self.screen = "multiplayer"
+        elif element_id == 9 or element_id == 11:
+            self.pending_pack = "A" if element_id == 9 else "B"
+            self.screen = "selection"
+        elif element_id == 10:
+            self.screen = "manager"
+        elif element_id == 12:
+            self.screen = "preview"
+        elif element_id == 13:
+            self.screen = "manager"
+        elif element_id == 14:
+            self.screen = self.history_parent
+        elif element_id == 17:
+            self.history_parent = "preview"
+            self.screen = "patch_history"
+        elif element_id == 15:
+            self.history_parent = "changelog"
+            self.screen = "patch_history"
+        elif element_id == 16:
+            self.screen = "restart"
         return {"ok": True}
 
     def connect(self, host: str, port: int = 25565, timeout: float = 30) -> dict:
         # Already-synced clients drop straight in-game; first contact hits the cert prompt.
-        self.screen = "ingame" if self.synced else "cert"
+        self.screen = "preview" if self.update_available else ("ingame" if self.synced else "cert")
         return {"ok": True}
+
+    def screenshot(self, name: str, timeout: float = 30) -> dict:
+        relative = Path("automodpack") / "autotest" / "screenshots" / f"{name}.png"
+        path = self.ctx.game_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"png")
+        self.screenshots.append(name)
+        return {"ok": True, "path": str(relative), "width": 640, "height": 480}
 
     def request(self, op: str, timeout: float = 30, **payload) -> dict:
         if op == "disconnect":
@@ -141,11 +277,69 @@ class FakeBridge:
     # --- helpers ----------------------------------------------------------
     def _write_modpack(self) -> None:
         root = self.ctx.game_dir / "automodpack" / "client" / "active"
+        if root.exists():
+            shutil.rmtree(root)
+        root.mkdir(parents=True, exist_ok=True)
         marker = root / self.ctx.marker_rel
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text("{}")
-        for rel, content in self.ctx.scenario_files:
+        files = self.ctx.scenario_files
+        if self.selected_pack == "B":
+            files = self.pack_b_files
+        elif self.update_available:
+            files = [(Path("config/amp-autotest-alpha.txt"), "amp-autotest-alpha-v2\n"),
+                     (Path("config/amp-autotest-beta.json"), '{"id":"beta","value":43}'),
+                     (Path("config/amp-autotest-visual.txt"), "visual-v2\n"),
+                     (Path("config/amp-autotest-delta.txt"), "delta-v2\n"),
+                     (Path("config/pack-a-only.txt"), "pack-a-v2\n")]
+            (root / "config/amp-autotest-gamma.cfg").unlink(missing_ok=True)
+        for rel, content in files:
             f = root / rel
             f.parent.mkdir(parents=True, exist_ok=True)
-            f.write_text(content)
+            if isinstance(content, bytes):
+                f.write_bytes(content)
+            else:
+                f.write_text(content)
         self.synced = True
+        self.update_available = False
+        if self.selected_pack == "B" and self.ctx.vars.get("same_path_conflict_fixture"):
+            from automodpack_autotester.mod_fixtures import valid_mod_jar_bytes
+
+            payload = self.ctx.game_dir / "automodpack" / "client" / "quarantine" / "packbbb" / "conflicts" / "fake-conflict" / "payload"
+            payload.parent.mkdir(parents=True, exist_ok=True)
+            payload.write_bytes(valid_mod_jar_bytes(self.ctx.vars["same_path_conflict_fixture"]))
+            source = self.ctx.path(self.ctx.vars["same_path_conflict_path"])
+            source.unlink(missing_ok=True)
+        self._write_manifest()
+
+    def _manager_buttons(self) -> list[dict]:
+        if not self.secondary_pack:
+            state = "active" if self.selected_pack == "A" else "switch"
+            return [{"id": 9, "text": f"Pack A  [{state}]  connected", "enabled": True, "visible": True}]
+        a_state = "active" if self.selected_pack == "A" else "switch"
+        b_state = "active" if self.selected_pack == "B" else "switch"
+        return [{"id": 9, "text": f"Pack A  [{a_state}]  connected", "enabled": True, "visible": True},
+                {"id": 10, "text": "Pack manager", "enabled": True, "visible": True},
+                {"id": 11, "text": f"Pack B  [{b_state}]  local record", "enabled": True, "visible": True}]
+
+    def _write_manifest(self) -> None:
+        groups = self.ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}).get("config", {}).get("groups", {})
+        generation_id = "a" * 40 if not self.ctx.vars.get("published_server_generation") else "b" * 40
+        notes = "Initial release: core content and optional client groups." if generation_id[0] == "a" else "Update 2: changed alpha, added delta, and removed gamma."
+        manifest_groups = {}
+        for group_id, declaration in groups.items():
+            manifest_groups[group_id] = dict(declaration)
+            manifest_groups[group_id].setdefault("required", False)
+            manifest_groups[group_id].setdefault("defaultSelected", False)
+            manifest_groups[group_id].setdefault("tag", "")
+            manifest_groups[group_id].setdefault("breaksWith", [])
+            manifest_groups[group_id].setdefault("requires", [])
+            manifest_groups[group_id].setdefault("compatiblePlatforms", [])
+        client = self.ctx.game_dir / "automodpack" / "client"
+        record = client / "records" / generation_id
+        record.mkdir(parents=True, exist_ok=True)
+        (record / "manifest.json").write_text(json.dumps({
+            "modpackName": "Pack A", "modpackId": "packaaa", "groups": manifest_groups,
+            "generation": {"patchNotes": notes},
+        }))
+        (client / "active-state.json").write_text(json.dumps({"modpackId": "packaaa", "generationId": generation_id}))

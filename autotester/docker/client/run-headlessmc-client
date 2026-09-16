@@ -12,6 +12,7 @@ game_dir="${AM_AUTOTEST_GAME_DIR:-/work/game}"
 cache_dir="${AM_AUTOTEST_HMC_CACHE_DIR:-/work/hmc-cache}"
 bridge_token="${AM_AUTOTEST_BRIDGE_TOKEN:?bridge token required}"
 client_timeout="${AM_AUTOTEST_CLIENT_TIMEOUT_SECONDS:-600}"
+render_client="${AM_AUTOTEST_RENDER_CLIENT:-false}"
 
 mkdir -p "$game_dir" "$cache_dir"
 
@@ -53,8 +54,13 @@ export JAVA_HOME="${java_bin%/bin/java}"
 export PATH="$JAVA_HOME/bin:$PATH"
 
 # ── Build JVM arguments ───────────────────────────────────────────
-jvmargs="-Dautomodpack.autotest.gamedir=${game_dir} -Dautomodpack.autotest.token=${bridge_token} -Dcom.mojang.text2speech=false -Djava.awt.headless=true"
-gameargs="--width 854 --height 480"
+jvmargs="-Dautomodpack.autotest.gamedir=${game_dir} -Dautomodpack.autotest.token=${bridge_token} -Dautomodpack.autotest.render=${render_client} -Dcom.mojang.text2speech=false -Djava.awt.headless=true"
+viewport_width=854
+if [ "$render_client" = "true" ]; then
+    # GUI scale 2 turns this into Minecraft's 320x240 minimum logical canvas.
+    viewport_width=640
+fi
+gameargs="--width ${viewport_width} --height 480"
 
 # ── Write HMC config ──────────────────────────────────────────────
 cat > /work/HeadlessMC/config.properties <<EOF
@@ -67,6 +73,7 @@ hmc.java.versions=$JAVA_HOME/bin/java
 hmc.java.require.exact=false
 hmc.crash.report.watcher=true
 hmc.exit.on.failed.command=true
+hmc.check.xvfb=$render_client
 hmc.gameargs=$gameargs
 EOF
 
@@ -135,5 +142,10 @@ timeout 20 hmc --command "download ${minecraft}" 2>/dev/null || true
 hmc --command "config -refresh" 2>/dev/null || true
 
 # ── Launch ─────────────────────────────────────────────────────────
+if [ "$render_client" = "true" ]; then
+    exec timeout "$client_timeout" xvfb-run -a -s "-screen 0 ${viewport_width}x480x24 +extension GLX +render -noreset" hmc \
+      --command "launch ${launch_target} -offline --jvm \"${jvmargs}\" ${gameargs}"
+fi
+
 exec timeout "$client_timeout" hmc \
   --command "launch ${launch_target} -lwjgl -offline --jvm \"${jvmargs}\" ${gameargs}"

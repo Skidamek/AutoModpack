@@ -130,8 +130,13 @@ public class Json {
 		JsonObject jsonObject = new JsonObject();
 		Gson gson = new Gson().newBuilder().setPrettyPrinting().create();
 		jsonObject.add("fingerprints", gson.toJsonTree(listOfMurmur));
+		return fromCurseForgeUrl(requestUrl, jsonObject);
+	}
 
-		final String body = jsonObject.toString();
+	public static JsonObject fromCurseForgeUrl(final String requestUrl, JsonObject requestBody) throws IOException {
+		if (requestBody == null) return null;
+
+		final String body = requestBody.toString();
 
 		HttpURLConnection connection;
 		URL url = new URL(requestUrl);

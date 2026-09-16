@@ -7,11 +7,14 @@ no Docker, HeadlessMC, or Minecraft server involved.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from automodpack_autotester.config import load_macros, load_scenarios, parse_server_files
 from automodpack_autotester.engine import run_flow
 from automodpack_autotester.engine.registry import temporary, verb
+from automodpack_autotester.mod_fixtures import assert_valid_mod_fixture, valid_mod_jar_bytes
 
 from .conftest import FakeBridge
 
@@ -26,6 +29,8 @@ def _noop(ctx, step):
 
 @verb("launch_client")
 def _launch_client(ctx, step):
+    if ctx.bridge.exited:
+        ctx.bridge.screen = "title"
     ctx.bridge.exited = False  # a fresh client process is running
 
 
@@ -61,7 +66,19 @@ def _wait_exit(ctx, step):
 
 @verb("stage_modpack")
 def _stage_modpack(ctx, step):
-    pass
+    if step.get("recordOnly") and ctx.bridge is not None:
+        ctx.bridge.secondary_pack = True
+        ctx.bridge.pack_b_files = [
+            (Path(entry["path"]), valid_mod_jar_bytes(entry["fixture"]) if "fixture" in entry else str(entry.get("content", "")))
+            for entry in step.get("files", [])
+        ]
+
+
+@verb("publish_server_generation")
+def _publish_server_generation(ctx, step):
+    ctx.vars["published_server_generation"] = int(step.get("generation", 1))
+    if ctx.bridge is not None:
+        ctx.bridge.update_available = True
 
 
 @verb("wait_join")
@@ -78,7 +95,7 @@ _STUBS = {
     "launch_client": _launch_client, "wait_bridge": _wait_bridge,
     "connect": _connect, "quit": _quit, "disconnect": _disconnect,
     "wait_client_exit": _wait_client_exit, "wait_exit": _wait_exit,
-    "stage_modpack": _stage_modpack, "wait_join": _wait_join,
+    "stage_modpack": _stage_modpack, "publish_server_generation": _publish_server_generation, "wait_join": _wait_join,
 }
 
 
@@ -137,6 +154,29 @@ def test_sync_flow_round_trip(make_ctx):
     assert any("relaunch" in n for n in names), names
     assert any("in-game" in n for n in names), names
     assert ctx.bridge.exited  # final quit
+
+
+def test_release_gate_flow(make_ctx):
+    scenario = load_scenarios()["all"]
+    ctx = _ctx_for(make_ctx, scenario)
+
+    results = run_flow(ctx, scenario, lib=load_macros())
+
+    assert all(r["ok"] for r in results), [r for r in results if not r["ok"]]
+    assert ctx.bridge.exited
+    assert ctx.bridge.secondary_pack
+    assert ctx.bridge.screenshots, "release gate must exercise render screenshots"
+    active = ctx.game_dir / ctx.active_projection_dir()
+    assert ctx.bridge.selected_pack == "A"
+    assert (active / "config/pack-a-only.txt").read_text(encoding="utf-8") == "pack-a-v2\n"
+    assert not (active / "config/pack-b.txt").exists()
+    assert (ctx.game_dir / "mods/local-unowned.jar").read_text(encoding="utf-8") == "not-a-pack-owned-file"
+    quarantine = ctx.game_dir / "automodpack/client/quarantine/packbbb/conflicts/fake-conflict/payload"
+    assert_valid_mod_fixture(
+        quarantine.read_bytes(),
+        {"modId": "amp_autotest_conflict", "version": "1.0.0-local", "marker": "local"},
+    )
+    assert not (ctx.game_dir / "mods/amp-autotest-conflict.jar").exists()
 
 
 def test_scenarios_only_reference_known_verbs():

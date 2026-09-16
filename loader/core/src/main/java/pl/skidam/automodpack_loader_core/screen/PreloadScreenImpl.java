@@ -15,9 +15,6 @@ public class PreloadScreenImpl implements ScreenService {
 	public void restart(Object... args) {}
 
 	@Override
-	public void danger(Object... args) {}
-
-	@Override
 	public void welcome(Object... args) {}
 
 	@Override

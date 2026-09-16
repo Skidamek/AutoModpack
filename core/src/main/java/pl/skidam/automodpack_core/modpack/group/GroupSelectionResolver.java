@@ -7,18 +7,23 @@ public final class GroupSelectionResolver {
 
 	public static SelectionIntent defaultIntent(GroupManifest manifest) {
 		Objects.requireNonNull(manifest);
-		Set<String> requestedTags = new TreeSet<>();
 		Set<String> requestedGroups = new TreeSet<>();
-		for (var entry : manifest.selectionTags().entrySet()) if (entry.getValue().defaultSelected()) requestedTags.add(entry.getKey());
 		for (var entry : manifest.groups().entrySet()) {
 			GroupManifest.Group group = entry.getValue();
-			boolean forcedByTag = !group.tag().isEmpty() && Optional.ofNullable(manifest.selectionTags().get(group.tag())).map(GroupManifest.SelectionTag::serverForced).orElse(false);
-			if (group.recommended() && !group.required() && !forcedByTag) requestedGroups.add(entry.getKey());
+			if (group.defaultSelected() && !group.required()) requestedGroups.add(entry.getKey());
 		}
-		return new SelectionIntent(requestedTags, requestedGroups);
+		return new SelectionIntent(requestedGroups);
+	}
+
+	public static ResolvedSelection resolveDefault(GroupManifest manifest, ClientPlatform platform) {
+		return resolveInternal(manifest, defaultIntent(manifest), platform, true);
 	}
 
 	public static ResolvedSelection resolve(GroupManifest manifest, SelectionIntent intent, ClientPlatform platform) {
+		return resolveInternal(manifest, intent, platform, false);
+	}
+
+	private static ResolvedSelection resolveInternal(GroupManifest manifest, SelectionIntent intent, ClientPlatform platform, boolean defaultSelection) {
 		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(intent);
 		Objects.requireNonNull(platform);
@@ -27,16 +32,10 @@ public final class GroupSelectionResolver {
 		state.collectStaleChoices();
 
 		for (String groupId : state.requiredGroups) state.resolveRoot(groupId, Source.REQUIRED, true);
-		for (String groupId : state.forcedTagGroups()) state.resolveRoot(groupId, Source.FORCED, true);
-
-		for (String tagId : intent.requestedTags()) {
-			if (!manifest.selectionTags().containsKey(tagId)) continue;
-			for (var entry : manifest.groups().entrySet()) {
-				if (!tagId.equals(entry.getValue().tag())) continue;
-				state.resolveRoot(entry.getKey(), Source.TAG, false);
-			}
+		for (String groupId : intent.requestedGroups()) if (manifest.groups().containsKey(groupId)) {
+			GroupManifest.Group group = manifest.groups().get(groupId);
+			state.resolveRoot(groupId, defaultSelection && group.defaultSelected() ? Source.DEFAULT_SELECTED : Source.EXPLICIT, false);
 		}
-		for (String groupId : intent.requestedGroups()) if (manifest.groups().containsKey(groupId)) state.resolveRoot(groupId, Source.EXPLICIT, false);
 
 		state.checkConflicts();
 		ResolvedSelection resolved = state.result();
@@ -47,25 +46,30 @@ public final class GroupSelectionResolver {
 	public static SelectionIntent prefer(SelectionIntent current, String clicked) {
 		Objects.requireNonNull(current);
 		Objects.requireNonNull(clicked);
-		Set<String> requestedTags = new TreeSet<>(current.requestedTags());
 		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
 		if (!requestedGroups.add(clicked)) requestedGroups.remove(clicked);
 		excludedGroups.remove(clicked);
-		return new SelectionIntent(requestedTags, requestedGroups, excludedGroups);
+		return new SelectionIntent(requestedGroups, excludedGroups);
 	}
 
-	public static SelectionIntent preferTag(SelectionIntent current, String tagId) {
+	/** Toggles every optional group in a category using the same persisted group intent as individual choices. */
+	public static SelectionIntent preferCategory(GroupManifest manifest, SelectionIntent current, String category, ClientPlatform platform) {
+		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(current);
-		Objects.requireNonNull(tagId);
-		Set<String> requestedTags = new TreeSet<>(current.requestedTags());
+		Objects.requireNonNull(category);
+		Objects.requireNonNull(platform);
+		Set<String> categoryGroups = new TreeSet<>();
+		for (var entry : manifest.groups().entrySet()) if (category.equals(entry.getValue().tag()) && !entry.getValue().required() && entry.getValue().supports(platform)) categoryGroups.add(entry.getKey());
 		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
-		if (!requestedTags.add(tagId)) {
-			requestedTags.remove(tagId);
-			return new SelectionIntent(requestedTags, requestedGroups, excludedGroups);
+		boolean remove = requestedGroups.containsAll(categoryGroups);
+		for (String groupId : categoryGroups) {
+			if (remove) requestedGroups.remove(groupId);
+			else requestedGroups.add(groupId);
+			excludedGroups.remove(groupId);
 		}
-		return new SelectionIntent(requestedTags, requestedGroups, excludedGroups);
+		return new SelectionIntent(requestedGroups, excludedGroups);
 	}
 
 	public static boolean conflicts(GroupManifest manifest, String first, String second) {
@@ -77,8 +81,7 @@ public final class GroupSelectionResolver {
 
 	private enum Source {
 		REQUIRED,
-		FORCED,
-		TAG,
+		DEFAULT_SELECTED,
 		EXPLICIT
 	}
 
@@ -88,12 +91,11 @@ public final class GroupSelectionResolver {
 		private final ClientPlatform platform;
 		private final NavigableSet<String> selected = new TreeSet<>();
 		private final NavigableSet<String> staleGroups = new TreeSet<>();
-		private final NavigableSet<String> staleTags = new TreeSet<>();
 		private final NavigableSet<String> requiredGroups = new TreeSet<>();
 		private final NavigableSet<String> forcedGroups = new TreeSet<>();
 		private final NavigableSet<String> dependencyGroups = new TreeSet<>();
-		private final NavigableSet<String> tagSelectedGroups = new TreeSet<>();
 		private final NavigableSet<String> unavailableGroups = new TreeSet<>();
+		private final NavigableSet<String> requestedUnavailableGroups = new TreeSet<>();
 		private final NavigableSet<String> blockedGroups = new TreeSet<>();
 		private final NavigableSet<String> excludedGroups = new TreeSet<>();
 		private final NavigableSet<String> conflictGroups = new TreeSet<>();
@@ -108,44 +110,29 @@ public final class GroupSelectionResolver {
 		}
 
 		private void initializeMandatoryGroups() {
-			for (var entry : manifest.groups().entrySet()) {
-				GroupManifest.Group group = entry.getValue();
-				if (group.required()) {
-					requiredGroups.add(entry.getKey());
-					forcedGroups.add(entry.getKey());
-					addReason(entry.getKey(), GroupResolution.Reason.REQUIRED);
-					addReason(entry.getKey(), GroupResolution.Reason.FORCED);
-				}
-				if (isForcedByTag(group)) {
-					forcedGroups.add(entry.getKey());
-					addReason(entry.getKey(), GroupResolution.Reason.FORCED);
-				}
+			for (var entry : manifest.groups().entrySet()) if (entry.getValue().required()) {
+				requiredGroups.add(entry.getKey());
+				forcedGroups.add(entry.getKey());
+				addReason(entry.getKey(), GroupResolution.Reason.REQUIRED);
+				addReason(entry.getKey(), GroupResolution.Reason.FORCED);
 			}
 		}
 
 		private void collectStaleChoices() {
-			for (String tagId : intent.requestedTags()) if (!manifest.selectionTags().containsKey(tagId)) staleTags.add(tagId);
 			for (String groupId : intent.requestedGroups()) if (!manifest.groups().containsKey(groupId)) staleGroups.add(groupId);
-		}
-
-		private boolean isForcedByTag(GroupManifest.Group group) {
-			return !group.tag().isEmpty() && Optional.ofNullable(manifest.selectionTags().get(group.tag())).map(GroupManifest.SelectionTag::serverForced).orElse(false);
-		}
-
-		private Set<String> forcedTagGroups() {
-			Set<String> forced = new TreeSet<>();
-			for (var entry : manifest.groups().entrySet()) if (isForcedByTag(entry.getValue())) forced.add(entry.getKey());
-			return forced;
 		}
 
 		private void resolveRoot(String groupId, Source source, boolean forced) {
 			Closure closure = resolveClosure(groupId, source, forced, false, new LinkedHashSet<>());
-			if (closure.success()) {
-				selected.addAll(closure.groups());
-				if (source == Source.TAG) tagSelectedGroups.add(groupId);
-				if (source == Source.EXPLICIT && manifest.groups().get(groupId).recommended()) addReason(groupId, GroupResolution.Reason.RECOMMENDED);
-			} else if (source == Source.TAG && manifest.groups().containsKey(groupId) && manifest.groups().get(groupId).supports(platform)) {
-				blockedGroups.add(groupId);
+			if (closure.success()) selected.addAll(closure.groups());
+			else if (source == Source.EXPLICIT) {
+				if (unavailableGroups.stream().anyMatch(closure.groups()::contains)) {
+					requestedUnavailableGroups.add(groupId);
+					addReason(groupId, GroupResolution.Reason.EXPLICIT_REQUEST_UNAVAILABLE);
+					errors.add("Group '" + groupId + "' was explicitly requested but is unavailable on " + platform.id());
+				} else if (!closure.excluded()) {
+					errors.add("Group '" + groupId + "' was explicitly requested but could not be selected");
+				}
 			}
 		}
 
@@ -209,12 +196,8 @@ public final class GroupSelectionResolver {
 				requiredGroups.add(groupId);
 				addReason(groupId, GroupResolution.Reason.REQUIRED);
 			}
-			switch (source) {
-				case EXPLICIT -> addReason(groupId, GroupResolution.Reason.EXPLICIT_GROUP);
-				case TAG -> addReason(groupId, GroupResolution.Reason.SELECTED_BY_TAG);
-				case REQUIRED, FORCED -> {
-				}
-			}
+			if (source == Source.DEFAULT_SELECTED) addReason(groupId, GroupResolution.Reason.DEFAULT_SELECTED);
+			if (source == Source.EXPLICIT) addReason(groupId, GroupResolution.Reason.EXPLICIT_GROUP);
 		}
 
 		private void checkConflicts() {
@@ -253,9 +236,7 @@ public final class GroupSelectionResolver {
 				explanations.put(groupId, new GroupResolution(groupId, status, groupReasons, relatedGroups.get(groupId), explanation(status, groupReasons, relatedGroups.get(groupId))));
 			}
 			dependencyGroups.retainAll(selected);
-			tagSelectedGroups.retainAll(selected);
-			return new ResolvedSelection(intent, selected, staleGroups, staleTags, requiredGroups, forcedGroups, dependencyGroups, tagSelectedGroups,
-					unavailableGroups, explanations);
+			return new ResolvedSelection(intent, selected, staleGroups, requiredGroups, forcedGroups, dependencyGroups, unavailableGroups, requestedUnavailableGroups, explanations);
 		}
 
 		private String explanation(GroupResolution.Status status, Set<GroupResolution.Reason> groupReasons, Set<String> related) {
@@ -272,11 +253,10 @@ public final class GroupSelectionResolver {
 
 		private String selectedExplanation(Set<GroupResolution.Reason> groupReasons) {
 			if (groupReasons.contains(GroupResolution.Reason.REQUIRED)) return "Required by the server";
-			if (groupReasons.contains(GroupResolution.Reason.FORCED)) return "Forced by the server";
-			if (groupReasons.contains(GroupResolution.Reason.SELECTED_BY_TAG)) return "Selected by tag";
+			if (groupReasons.contains(GroupResolution.Reason.FORCED)) return "Required by the server";
 			if (groupReasons.contains(GroupResolution.Reason.DEPENDENCY)) return "Required by another selected group";
 			if (groupReasons.contains(GroupResolution.Reason.EXPLICIT_GROUP)) return "Explicitly selected";
-			if (groupReasons.contains(GroupResolution.Reason.RECOMMENDED)) return "Recommended default";
+			if (groupReasons.contains(GroupResolution.Reason.DEFAULT_SELECTED)) return "Included by default";
 			return "Selected";
 		}
 

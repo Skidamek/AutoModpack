@@ -265,6 +265,13 @@ public class ModpackUtils {
 		return updatedConfig;
 	}
 
+	public static Jsons.ClientConfigFieldsV3 planCachedModpackSelection(String modpackId) {
+		ModpackId.requireValid(modpackId);
+		Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
+		updatedConfig.selectedModpackId = modpackId;
+		return updatedConfig;
+	}
+
 	public static ManifestFetchResult requestServerModpackContent(ClientStorage storage, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean allowAskingUser) {
 		try {
 			return requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser).get();

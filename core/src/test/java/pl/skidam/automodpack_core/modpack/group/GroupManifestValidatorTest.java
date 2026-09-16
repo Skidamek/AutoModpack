@@ -24,7 +24,6 @@ class GroupManifestValidatorTest {
 		var fields = catalogue();
 		var group = group(file("a"));
 		group.tag = "visuals";
-		fields.selectionTags = Map.of("visuals", new Jsons.CompleteModpackContentFields.SelectionTagFields());
 		fields.groups = Map.of("main", group);
 
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
@@ -72,12 +71,12 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
-	void rejectsConflictingRecommendedDefaults() {
+	void rejectsConflictingDefaultSelections() {
 		var fields = catalogue();
 		var first = group(file("a"));
 		var second = group(file("b"));
-		first.recommended = true;
-		second.recommended = true;
+		first.defaultSelected = true;
+		second.defaultSelected = true;
 		first.breaksWith = Set.of("second");
 		fields.groups = linkedGroups("first", first, "second", second);
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
@@ -121,11 +120,8 @@ class GroupManifestValidatorTest {
 		var forcedDependency = group(file("a"));
 		forcedDependency.compatiblePlatforms = Set.of("windows");
 		var forced = group(file("a"));
-		forced.tag = "forced";
+		forced.required = true;
 		forced.requires = Set.of("dependency");
-		var forcedTag = new Jsons.CompleteModpackContentFields.SelectionTagFields();
-		forcedTag.serverForced = true;
-		forcedFields.selectionTags = Map.of("forced", forcedTag);
 		forcedFields.groups = linkedGroups("dependency", forcedDependency, "forced", forced);
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(forcedFields));
 	}
@@ -222,17 +218,16 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
-	void rejectsConflictingGroupsInsideOneTagBundle() {
+	void acceptsConflictingGroupsInOneCategoryUntilRequestedTogether() {
 		var fields = catalogue();
 		var first = group(file("a"));
 		first.tag = "bundle";
 		first.breaksWith = Set.of("second");
 		var second = group(file("a"));
 		second.tag = "bundle";
-		fields.selectionTags = Map.of("bundle", new Jsons.CompleteModpackContentFields.SelectionTagFields());
 		fields.groups = linkedGroups("first", first, "second", second);
 
-		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
 
 	@Test
@@ -242,14 +237,13 @@ class GroupManifestValidatorTest {
 		first.tag = "bundle";
 		var second = group(file("b"));
 		second.tag = "bundle";
-		fields.selectionTags = Map.of("bundle", new Jsons.CompleteModpackContentFields.SelectionTagFields());
 		fields.groups = linkedGroups("first", first, "second", second);
 
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
 	@Test
-	void rejectsTagWhoseDependencyClosureConflicts() {
+	void acceptsCategoryWithDependencyConflictUntilRequestedTogether() {
 		var fields = catalogue();
 		var dependency = group(file("a"));
 		var first = group(file("a"));
@@ -258,17 +252,15 @@ class GroupManifestValidatorTest {
 		var second = group(file("a"));
 		second.tag = "bundle";
 		second.breaksWith = Set.of("dependency");
-		fields.selectionTags = Map.of("bundle", new Jsons.CompleteModpackContentFields.SelectionTagFields());
 		fields.groups = linkedGroups("dependency", dependency, "first", first, "second", second);
 
-		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
 
 	private static Jsons.CompleteModpackContentFields catalogue() {
 		var fields = new Jsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		fields.groups = Map.of();
-		fields.selectionTags = Map.of();
 		return fields;
 	}
 
@@ -292,7 +284,7 @@ class GroupManifestValidatorTest {
 	}
 
 	private static Jsons.CompleteModpackContentFields.GroupFileFields fileOfType(String type, String hash) {
-		return new Jsons.CompleteModpackContentFields.GroupFileFields("1", type, false, false, false, hash, null);
+		return new Jsons.CompleteModpackContentFields.GroupFileFields("1", type, false, false, hash, null);
 	}
 
 	private static Map<String, Jsons.CompleteModpackContentFields.ModpackGroupFields> linkedGroups(Object... values) {

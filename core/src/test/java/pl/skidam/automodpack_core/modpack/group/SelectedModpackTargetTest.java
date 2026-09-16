@@ -19,7 +19,7 @@ class SelectedModpackTargetTest {
 	void invalidPersistedIntentIsReportedWithStructuredResolution() throws Exception {
 		GroupManifest.Group first = group(Set.of());
 		GroupManifest.Group second = new GroupManifest.Group("", "", "", false, true, new TreeSet<>(Set.of("first")), new TreeSet<>(), Set.of(), new TreeMap<>());
-		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("first", first, "second", second)), new TreeMap<>());
+		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("first", first, "second", second)));
 		GenerationRecord record = GenerationRecord.create(manifest, null, Instant.parse("2026-01-01T00:00:00Z"), "");
 		ClientSelectionStore store = new ClientSelectionStore(temporaryDirectory.resolve("selection.json"));
 		SelectionIntent persisted = new SelectionIntent(Set.of("first", "second"));

@@ -9,7 +9,7 @@ images:
 
 run:
   target: all
-  scenario: sync
+  scenario: all
   jobs: 3
 
 server:
@@ -64,7 +64,6 @@ automodpack:
     allowEditsInFiles:
       - "/config/**"
     overwriteEditableFiles: []
-    forceCopyFilesToStandardLocation: []
     autoExcludeServerSideMods: true
     autoExcludeUnnecessaryFiles: true
     requireAutoModpackOnClient: true

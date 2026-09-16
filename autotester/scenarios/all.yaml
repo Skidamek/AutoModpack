@@ -1,0 +1,436 @@
+id: all
+description: |
+  The release gate: exercise the real client bootstrap, advanced group review,
+  patch-note history, cached pack switching, and a published changed/removed
+  generation in one flow. The focused scenarios remain available for faster
+  diagnosis; this is the default confidence path.
+renderClient: true
+
+releaseGate:
+  covers:
+    - bootstrap
+    - groups
+    - patch-notes
+    - multiplayer-settings
+    - pack-switching
+    - generation-update
+    - conflict-preservation
+
+flow:
+  - use: boot
+  - use: accept_certificate
+  - do: wait_for
+    name: wait for first connection review
+    timeout: 90s
+    until: { screen: FirstConnectScreen }
+  - do: click
+    name: open advanced group selection
+    select: { text: customize groups }
+  - do: wait_for
+    name: show group selection
+    until:
+      all:
+        - screen: ModpackSelectionScreen
+        - element: { text: Core }
+        - element: { text: Visuals }
+        - element: { text: Client }
+  - do: screenshot
+    name: capture group selection at the supported 320x240 logical size
+    file: all-groups-page-one
+  - do: click
+    name: toggle the derived client category
+    select: { text: client }
+  - do: click
+    name: show dependency and conflict groups
+    select: { text: Next > }
+  - do: wait_for
+    name: show extras and platform groups
+    until:
+      all:
+        - element: { text: Addon }
+        - element: { text: Alternative }
+        - element: { text: Platform }
+  - do: click
+    name: select a group with a dependency
+    select: { text: Addon }
+  - do: wait_for
+    name: show the dependency explanation
+    until: { element: { text: required by selection } }
+  - do: click
+    name: select the conflicting alternative
+    select: { text: Alternative }
+  - do: wait_for
+    name: show the conflict explanation
+    until: { element: { text: conflict } }
+  - do: click
+    name: inspect unavailable platform filtering
+    select: { text: Next > }
+  - do: wait_for
+    name: show the unavailable platform group
+    until:
+      all:
+        - element: { text: Windows-only }
+        - element: { text: unavailable }
+  - do: screenshot
+    name: capture unavailable and conflict group states
+    file: all-groups-platform
+  - do: click
+    name: restore default group selection
+    select: { text: Defaults }
+  - do: click
+    name: preview the default target
+    select: { text: preview target }
+  - do: wait_for
+    name: show the first update preview
+    timeout: 90s
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: Update, enabled: true }
+        - element: { text: View all patch notes, enabled: true }
+  - do: screenshot
+    name: capture first review with latest patch notes
+    file: all-first-review
+  - do: click
+    name: open connected generation patch-note history from review
+    select: { text: View all patch notes }
+  - do: wait_for
+    name: show patch-note history from review
+    until: { screen: PatchNotesHistoryScreen }
+  - do: screenshot
+    name: capture connected patch-note history
+    file: all-first-patch-history
+  - do: click
+    name: return to first review
+    select: { text: Back }
+  - do: click
+    name: accept the complete bootstrap
+    select: { text: Update }
+  - do: wait_file
+    name: wait for the bootstrapped marker
+    path: "${active_dir}/${marker}"
+    timeout: 300s
+  - do: assert_generation
+    name: verify advanced group metadata and latest notes were installed
+    groups:
+      main: { required: true, defaultSelected: true }
+      visual: { required: false, defaultSelected: true, tag: client, requires: [main] }
+      addon: { required: false, defaultSelected: false, tag: extras, requires: [visual] }
+      alternative: { required: false, defaultSelected: false, tag: extras, breaksWith: [visual] }
+      windows: { required: false, compatiblePlatforms: [windows], tag: platform }
+    patchNotes: "Initial release: core content and optional client groups."
+  - do: wait_for
+    name: wait for restart review
+    until: { screen: RestartScreen }
+  - do: screenshot
+    name: capture completed bootstrap summary
+    file: all-bootstrap-complete
+  - do: click
+    name: open connected changelog
+    select: { text: view changelogs }
+  - do: wait_for
+    name: show connected generation history
+    until: { screen: ChangelogScreen }
+  - do: screenshot
+    name: capture connected generation history
+    file: all-connected-history
+  - do: click
+    name: open all connected patch notes
+    select: { text: View all patch notes }
+  - do: wait_for
+    name: show all connected patch notes
+    until: { screen: PatchNotesHistoryScreen }
+  - do: screenshot
+    name: capture all connected patch notes
+    file: all-connected-patch-history
+  - do: click
+    name: return to connected changelog
+    select: { text: Back }
+  - do: click
+    name: return to completed update
+    select: { text: Back }
+  - do: click
+    name: restart after bootstrap
+    select: { text: restart }
+  - do: wait_client_exit
+    name: wait for bootstrap restart
+  - use: rejoin
+
+  - do: seed_unowned_local_file
+    name: seed an unowned local file for preservation coverage
+    path: mods/local-unowned.jar
+    content: "not-a-pack-owned-file"
+  # A second complete record is cached while A is active. The manager path
+  # below proves that selecting a row does not activate it before review.
+  - do: stage_modpack
+    name: stage a second complete cached pack record
+    recordOnly: true
+    packId: packbbb
+    packName: Pack B
+    patchNotes: "Cached Pack B fixture."
+    files:
+      - { path: config/pack-b.txt, content: "pack-b\n" }
+      # This is a real metadata-only archive with the same mod ID as the local
+      # seed below. It carries Fabric, Forge, and NeoForge metadata so the
+      # FileInspection planner recognizes it on every supported loader.
+      - path: mods/amp-autotest-conflict.jar
+        fixture: { modId: amp_autotest_conflict, version: "2.0.0-server", marker: server }
+  - do: seed_same_path_conflict
+    name: seed the local payload at the server-owned mods path
+    path: mods/amp-autotest-conflict.jar
+    fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
+  - do: disconnect
+    name: leave the active pack without changing it
+  - use: open_multiplayer
+  - use: open_pack_manager
+  - do: wait_for
+    name: show both installed packs without activating the row
+    until:
+      all:
+        - element: { text: Pack A }
+        - element: { text: Pack B }
+        - element: { text: active }
+  - do: click
+    name: open Pack B for review only
+    select: { text: Pack B }
+  - do: wait_for
+    name: show Pack B review settings
+    until:
+      all:
+        - screen: ModpackSelectionScreen
+        - element: { text: Review pack switch }
+  - do: click
+    name: review the A to B cached switch
+    select: { text: Review pack switch }
+  - do: wait_for
+    name: show cached switch preview
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: Update, enabled: true }
+  - do: screenshot
+    name: capture A to B switch review
+    file: all-switch-a-to-b
+  - do: click
+    name: accept the A to B switch
+    select: { text: Update }
+  - do: wait_for
+    name: wait for A to B restart
+    until: { screen: RestartScreen }
+  - do: click
+    name: restart into Pack B
+    select: { text: restart }
+  - do: wait_client_exit
+    name: wait for Pack B restart
+  - do: launch_client
+    name: relaunch after Pack B switch
+  - do: wait_bridge
+    name: wait for Pack B bridge
+  - do: assert_file_content
+    name: verify the unowned local file survived A to B
+    path: mods/local-unowned.jar
+    content: "not-a-pack-owned-file"
+  - do: assert_file_content
+    name: verify Pack B payload is active after accepting the switch
+    path: "${active_dir}/config/pack-b.txt"
+    content: "pack-b\n"
+  - do: assert_mod_fixture
+    name: verify the server-owned valid mod is active for Pack B
+    path: "${active_dir}/mods/amp-autotest-conflict.jar"
+    fixture: { modId: amp_autotest_conflict, version: "2.0.0-server", marker: server }
+  - do: assert_quarantine_payload
+    name: verify the local collision payload was preserved in quarantine
+    packId: packbbb
+    fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
+  - do: assert
+    name: verify the local same-ID source was moved out of mods
+    that: { file_gone: mods/amp-autotest-conflict.jar }
+  - do: assert
+    name: verify Pack A only payload is gone while Pack B is active
+    that: { file_gone: "${active_dir}/config/pack-a-only.txt" }
+  - use: open_multiplayer
+  - use: open_pack_manager
+  - do: click
+    name: open Pack A for the reverse switch
+    select: { text: Pack A }
+  - do: wait_for
+    name: show Pack A review settings
+    until: { element: { text: Review pack switch } }
+  - do: click
+    name: review the B to A cached switch
+    select: { text: Review pack switch }
+  - do: wait_for
+    name: show reverse cached switch preview
+    until: { element: { text: Update, enabled: true } }
+  - do: screenshot
+    name: capture B to A switch review
+    file: all-switch-b-to-a
+  - do: click
+    name: accept the B to A switch
+    select: { text: Update }
+  - do: wait_for
+    name: wait for B to A restart
+    until: { screen: RestartScreen }
+  - do: click
+    name: restart into Pack A
+    select: { text: restart }
+  - do: wait_client_exit
+    name: wait for reverse switch restart
+  - use: rejoin
+  - do: assert_file_content
+    name: verify the unowned local file survived B to A
+    path: mods/local-unowned.jar
+    content: "not-a-pack-owned-file"
+  - do: assert_file_content
+    name: verify the Pack A only payload is restored after the reverse switch
+    path: "${active_dir}/config/pack-a-only.txt"
+    content: "pack-a\n"
+  - do: assert
+    name: verify Pack B payload is gone after returning to Pack A
+    that: { file_gone: "${active_dir}/config/pack-b.txt" }
+
+  - do: publish_server_generation
+    name: publish changed and removed files with new patch notes
+    generation: 1
+  - do: disconnect
+    name: leave the game for the published update
+  - do: connect
+    name: connect to the published generation
+  - do: wait_for
+    name: show changed and removed generation review
+    timeout: 90s
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: Update, enabled: true }
+        - element: { text: View all patch notes, enabled: true }
+  - do: screenshot
+    name: capture changed and removed generation review
+    file: all-generation-update
+  - do: click
+    name: open latest update patch-note history
+    select: { text: View all patch notes }
+  - do: wait_for
+    name: show latest and previous patch notes
+    until: { screen: PatchNotesHistoryScreen }
+  - do: screenshot
+    name: capture latest and previous patch notes
+    file: all-generation-patch-history
+  - do: click
+    name: return to changed and removed review
+    select: { text: Back }
+  - do: click
+    name: accept changed and removed generation
+    select: { text: Update }
+  - do: wait_file
+    name: wait for the changed file
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    timeout: 300s
+  - do: assert_file_content
+    name: verify changed file contents
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha-v2\n"
+  - do: assert_file_content
+    name: verify the new file contents
+    path: "${active_dir}/config/amp-autotest-delta.txt"
+    content: "delta-v2\n"
+  - do: assert
+    name: verify removed file is gone
+    that: { file_gone: "${active_dir}/config/amp-autotest-gamma.cfg" }
+  - do: assert_generation
+    name: verify the published generation and latest patch notes
+    patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
+  - do: wait_for
+    name: wait for changed generation restart
+    until: { screen: RestartScreen }
+  - do: click
+    name: open changed generation changelog
+    select: { text: view changelogs }
+  - do: wait_for
+    name: show changed generation history
+    until: { screen: ChangelogScreen }
+  - do: screenshot
+    name: capture changed generation changelog
+    file: all-generation-changelog
+  - do: click
+    name: return from changed generation changelog
+    select: { text: back }
+  - do: click
+    name: restart after changed generation
+    select: { text: restart }
+  - do: wait_client_exit
+    name: wait for final restart
+  - use: rejoin
+  - do: quit
+    name: quit the release-gate client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+    automodpack:
+      config:
+        groups:
+          main:
+            displayName: Core
+            description: Required core files
+            required: true
+            defaultSelected: true
+            syncedFiles: ["/config/amp-autotest-alpha.txt", "/config/amp-autotest-beta.json", "/config/amp-autotest-gamma.cfg", "/config/amp-autotest-delta.txt", "/config/amp-autotest-marker.json", "/config/pack-a-only.txt"]
+          visual:
+            displayName: Visuals
+            description: Default client visuals
+            tag: client
+            defaultSelected: true
+            requires: [main]
+            syncedFiles: ["/config/amp-autotest-visual.txt"]
+          addon:
+            displayName: Addon
+            description: Optional addon depending on visuals
+            tag: extras
+            requires: [visual]
+            syncedFiles: ["/config/amp-autotest-addon.txt"]
+          alternative:
+            displayName: Alternative
+            description: Mutually exclusive alternative
+            tag: extras
+            breaksWith: [visual]
+            syncedFiles: ["/config/amp-autotest-alternative.txt"]
+          windows:
+            displayName: Windows-only
+            description: Platform-filtered fixture
+            tag: platform
+            compatiblePlatforms: [windows]
+            syncedFiles: ["/config/amp-autotest-windows.txt"]
+
+serverFiles:
+  modpackName: Pack A
+  marker: config/amp-autotest-marker.json
+  files:
+    - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha\n" }
+    - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":42}' }
+    - { path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
+    - { path: config/amp-autotest-visual.txt, content: "visual-v1\n" }
+    - { path: config/pack-a-only.txt, content: "pack-a\n" }
+  generations:
+    - patchNotes: "Initial release: core content and optional client groups."
+      files:
+        - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha\n" }
+        - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":42}' }
+        - { path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
+        - { path: config/amp-autotest-visual.txt, content: "visual-v1\n" }
+        - { path: config/amp-autotest-addon.txt, content: "addon-v1\n" }
+        - { path: config/amp-autotest-alternative.txt, content: "alternative-v1\n" }
+        - { path: config/amp-autotest-windows.txt, content: "windows-v1\n" }
+        - { path: config/pack-a-only.txt, content: "pack-a\n" }
+    - patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
+      files:
+        - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha-v2\n" }
+        - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":43}' }
+        - { path: config/amp-autotest-visual.txt, content: "visual-v2\n" }
+        - { path: config/amp-autotest-delta.txt, content: "delta-v2\n" }
+        - { path: config/amp-autotest-addon.txt, content: "addon-v2\n" }
+        - { path: config/amp-autotest-alternative.txt, content: "alternative-v2\n" }
+        - { path: config/amp-autotest-windows.txt, content: "windows-v2\n" }
+        - { path: config/pack-a-only.txt, content: "pack-a-v2\n" }

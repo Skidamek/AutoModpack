@@ -17,6 +17,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
+import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
@@ -41,10 +42,8 @@ public final class UpdateTransaction {
 	public String selectionDigest;
 	public String overlayDigest;
 	public boolean expectedPriorSelectionPresent;
-	public List<String> expectedPriorRequestedTags;
 	public List<String> expectedPriorRequestedGroups;
 	public List<String> expectedPriorExcludedGroups;
-	public List<String> requestedTags;
 	public List<String> requestedGroups;
 	public List<String> excludedGroups;
 	public List<Operation> operations;
@@ -53,6 +52,7 @@ public final class UpdateTransaction {
 	public List<RestartReason> restartReasons;
 	public List<Preservation> plannedPreservations;
 	public List<BaselineCapture> plannedBaselineCaptures;
+	public List<Conflict> plannedConflicts;
 	public Status resultStatus;
 	public String resultOperation;
 	public String resultPath;
@@ -72,10 +72,8 @@ public final class UpdateTransaction {
 		fillGeneration(transaction, plan.generationTarget());
 		transaction.targetPlatform = target.platform().id();
 		transaction.expectedPriorSelectionPresent = target.expectedPriorIntent() != null;
-		transaction.expectedPriorRequestedTags = intentValues(target.expectedPriorIntent(), IntentPart.TAGS);
 		transaction.expectedPriorRequestedGroups = intentValues(target.expectedPriorIntent(), IntentPart.GROUPS);
 		transaction.expectedPriorExcludedGroups = intentValues(target.expectedPriorIntent(), IntentPart.EXCLUDED);
-		transaction.requestedTags = new ArrayList<>(target.selection().intent().requestedTags());
 		transaction.requestedGroups = new ArrayList<>(target.selection().intent().requestedGroups());
 		transaction.excludedGroups = new ArrayList<>(target.selection().intent().excludedGroups());
 		transaction.selectionDigest = digest(target.selection().intent());
@@ -91,10 +89,8 @@ public final class UpdateTransaction {
 		fillGeneration(transaction, plan.generationTarget());
 		transaction.targetPlatform = platform.id();
 		transaction.expectedPriorSelectionPresent = expectedPriorIntent != null;
-		transaction.expectedPriorRequestedTags = intentValues(expectedPriorIntent, IntentPart.TAGS);
 		transaction.expectedPriorRequestedGroups = intentValues(expectedPriorIntent, IntentPart.GROUPS);
 		transaction.expectedPriorExcludedGroups = intentValues(expectedPriorIntent, IntentPart.EXCLUDED);
-		transaction.requestedTags = List.of();
 		transaction.requestedGroups = List.of();
 		transaction.excludedGroups = List.of();
 		transaction.selectionDigest = digest(expectedPriorIntent);
@@ -136,6 +132,7 @@ public final class UpdateTransaction {
 		transaction.restartReasons = new ArrayList<>(new LinkedHashSet<>(plan.restartReasons()));
 		transaction.plannedPreservations = List.copyOf(plan.preservations());
 		transaction.plannedBaselineCaptures = List.copyOf(plan.baselineCaptures());
+		transaction.plannedConflicts = List.copyOf(plan.conflicts());
 	}
 
 	private static UpdateTransaction base(Purpose purpose) {
@@ -146,6 +143,7 @@ public final class UpdateTransaction {
 		transaction.phase = Phase.PLANNED;
 		transaction.plannedPreservations = new ArrayList<>();
 		transaction.plannedBaselineCaptures = new ArrayList<>();
+		transaction.plannedConflicts = new ArrayList<>();
 		return transaction;
 	}
 
@@ -155,13 +153,12 @@ public final class UpdateTransaction {
 	}
 
 	private enum IntentPart {
-		TAGS, GROUPS, EXCLUDED
+		GROUPS, EXCLUDED
 	}
 
 	private static List<String> intentValues(SelectionIntent intent, IntentPart part) {
 		if (intent == null) return List.of();
 		return switch (part) {
-			case TAGS -> new ArrayList<>(intent.requestedTags());
 			case GROUPS -> new ArrayList<>(intent.requestedGroups());
 			case EXCLUDED -> new ArrayList<>(intent.excludedGroups());
 		};
@@ -176,11 +173,11 @@ public final class UpdateTransaction {
 	}
 
 	public SelectionIntent expectedPriorIntent() {
-		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorRequestedTags, expectedPriorRequestedGroups, expectedPriorExcludedGroups) : null;
+		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorRequestedGroups, expectedPriorExcludedGroups) : null;
 	}
 
 	public SelectionIntent targetIntent() {
-		return new SelectionIntent(requestedTags, requestedGroups, excludedGroups);
+		return new SelectionIntent(requestedGroups, excludedGroups);
 	}
 
 	public static String digest(SelectionIntent intent) {
@@ -188,7 +185,6 @@ public final class UpdateTransaction {
 		try {
 			MessageDigest digest = MessageDigest.getInstance("SHA-1");
 			digest.update("automodpack-selection-v1\n".getBytes(StandardCharsets.UTF_8));
-			for (String value : intent.requestedTags().stream().sorted().toList()) digest.update(("tag=" + value + "\n").getBytes(StandardCharsets.UTF_8));
 			for (String value : intent.requestedGroups().stream().sorted().toList()) digest.update(("group=" + value + "\n").getBytes(StandardCharsets.UTF_8));
 			for (String value : intent.excludedGroups().stream().sorted().toList()) digest.update(("excluded=" + value + "\n").getBytes(StandardCharsets.UTF_8));
 			return HexFormat.of().formatHex(digest.digest());

@@ -1,3 +1,3 @@
 package pl.skidam.automodpack_core.modpack.candidate;
 
-public record CandidateProvenance(CandidateSource selectedSource, String editableRule, String overwriteEditableRule, String forceCopyRule) {}
+public record CandidateProvenance(CandidateSource selectedSource, String editableRule, String overwriteEditableRule) {}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import types
+from pathlib import Path
 
 import pytest
 
@@ -17,6 +18,7 @@ from automodpack_autotester.config import (
 )
 from automodpack_autotester.generation_identity import CanonicalEncoder
 from automodpack_autotester.engine.registry import describe, names
+from automodpack_autotester.mod_fixtures import assert_valid_mod_fixture, valid_mod_jar_bytes
 from automodpack_autotester.validate import validate_scenario
 
 
@@ -47,6 +49,13 @@ def test_shipped_scenarios_validate():
     targets = load_targets()
     for name, scenario in load_scenarios().items():
         assert validate_scenario(scenario, macros, targets) == [], name
+
+
+def test_release_gate_cannot_drop_a_required_capability():
+    scenario = load_scenarios()["all"]
+    scenario["releaseGate"]["covers"] = list(scenario["releaseGate"]["covers"][:-1])
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+    assert any("release-gate scenario must declare exactly" in problem for problem in problems)
 
 
 def test_canonical_encoder_has_java_parity_vector():
@@ -197,6 +206,49 @@ def test_staged_generation_uses_actual_file_metadata(make_ctx):
     assert by_path["mods/fixture.jar"]["sha1"] == hashlib.sha1(b"fixture").hexdigest()
     assert by_path["mods/fixture.jar"]["editable"] is False
     assert by_path["config/amp-autotest-marker.json"]["editable"] is True
+
+
+def test_record_only_staging_does_not_replace_active_state(make_ctx):
+    ctx = make_ctx(
+        modpack_name="Pack A",
+        marker_rel=Path("config/marker.json"),
+        scenario_files=[(Path("config/a.txt"), "a")],
+    )
+    active_state = ctx.game_dir / "automodpack/client/active-state.json"
+    active_state.parent.mkdir(parents=True, exist_ok=True)
+    active_state.write_text('{"modpackId":"packaaa"}')
+
+    runner._v_stage_modpack(ctx, {
+        "recordOnly": True,
+        "packId": "packbbb",
+        "packName": "Pack B",
+        "files": [{"path": "config/b.txt", "content": "b"}],
+    })
+
+    assert json.loads(active_state.read_text())["modpackId"] == "packaaa"
+    records = list((ctx.game_dir / "automodpack/client/records").glob("*/manifest.json"))
+    assert len(records) == 1
+    assert json.loads(records[0].read_text())["modpackName"] == "Pack B"
+
+
+def test_record_only_stages_a_valid_cross_loader_mod_fixture(make_ctx):
+    ctx = make_ctx()
+    local = {"modId": "amp_autotest_conflict", "version": "1.0.0-local", "marker": "local"}
+    server = {"modId": "amp_autotest_conflict", "version": "2.0.0-server", "marker": "server"}
+
+    assert valid_mod_jar_bytes(local) != valid_mod_jar_bytes(server)
+    runner._v_stage_modpack(ctx, {
+        "recordOnly": True,
+        "packId": "packbbb",
+        "files": [{"path": "mods/amp-autotest-conflict.jar", "fixture": server}],
+    })
+
+    records = list((ctx.game_dir / "automodpack/client/records").glob("*/manifest.json"))
+    assert len(records) == 1
+    manifest = json.loads(records[0].read_text())
+    metadata = manifest["groups"]["main"]["files"]["mods/amp-autotest-conflict.jar"]
+    object_path = ctx.game_dir / "automodpack/client/data/objects" / metadata["sha1"]
+    assert_valid_mod_fixture(object_path.read_bytes(), server)
 
 
 # ── wait_exit (Docker calls stubbed) ─────────────────────────────────────────

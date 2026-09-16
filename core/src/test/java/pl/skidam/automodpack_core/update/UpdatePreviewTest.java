@@ -29,8 +29,8 @@ class UpdatePreviewTest {
 	@Test
 	void reportsAddsChangesRemovalsAndCasPreservation() {
 		Jsons.ModpackContentFields target = manifest(
-				new Jsons.ModpackContentFields.ModpackContentItem("config/new.json", "4", "config", false, false, false, TARGET_HASH, "0"),
-				new Jsons.ModpackContentFields.ModpackContentItem("config/changed.json", "8", "config", false, false, false, TARGET_HASH, "0"),
+				new Jsons.ModpackContentFields.ModpackContentItem("config/new.json", "4", "config", false, false, TARGET_HASH, "0"),
+				new Jsons.ModpackContentFields.ModpackContentItem("config/changed.json", "8", "config", false, false, TARGET_HASH, "0"),
 				entry("config/new.json", TARGET_HASH, 4, OwnershipLedger.Status.PRESENT),
 				entry("config/changed.json", TARGET_HASH, 8, OwnershipLedger.Status.PRESENT),
 				entry("config/old.json", OLD_HASH, 7, OwnershipLedger.Status.TOMBSTONE));
@@ -51,7 +51,7 @@ class UpdatePreviewTest {
 	@Test
 	void exposesAcquisitionBytesAndPlanRestartReasons() {
 		Jsons.ModpackContentFields target = manifest(
-				new Jsons.ModpackContentFields.ModpackContentItem("config/new.json", "4", "config", false, false, false, TARGET_HASH, "0"),
+				new Jsons.ModpackContentFields.ModpackContentItem("config/new.json", "4", "config", false, false, TARGET_HASH, "0"),
 				entry("config/new.json", TARGET_HASH, 4, OwnershipLedger.Status.PRESENT));
 		Map<FileKey, FileState> files = Map.of();
 		UpdatePlan planned = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), null, new Jsons.ClientConfigFieldsV3()));
@@ -65,9 +65,24 @@ class UpdatePreviewTest {
 	}
 
 	@Test
+	void summaryDeduplicatesLogicalPathsAndLabelsOtherEffects() {
+		Jsons.ModpackContentFields target = manifest();
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(), Set.of(), List.of(), List.of(), List.of(), null,
+				new Jsons.ClientConfigFieldsV3()));
+		UpdatePreview preview = new UpdatePreview(plan, List.of(
+				new UpdatePreview.Entry(UpdatePreview.Kind.PRESERVED_CAS, Root.GAME_DIR, "config/shared.json", 1),
+				new UpdatePreview.Entry(UpdatePreview.Kind.CHANGED, Root.PROJECTION, "config/shared.json", 2),
+				new UpdatePreview.Entry(UpdatePreview.Kind.REMOVED, Root.GAME_DIR, "config/removed.json", 3)),
+				new UpdatePreview.GroupConsequences(Set.of("optional"), Set.of("main"), Set.of("stale")));
+
+		assertEquals(new UpdatePreview.Summary(1, 1, 1, 0, 1), preview.summary());
+		assertEquals(List.of(UpdatePreview.Kind.CHANGED, UpdatePreview.Kind.REMOVED, UpdatePreview.Kind.PRESERVED_CAS), preview.displayEntries().stream().map(UpdatePreview.Entry::kind).toList());
+	}
+
+	@Test
 	void normalizesTargetPathsBeforeLedgerComparison() {
 		Jsons.ModpackContentFields target = manifest(
-				new Jsons.ModpackContentFields.ModpackContentItem("/config/kept.json", "8", "config", false, false, false, OLD_HASH, "0"),
+				new Jsons.ModpackContentFields.ModpackContentItem("/config/kept.json", "8", "config", false, false, OLD_HASH, "0"),
 				entry("config/kept.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OLD_HASH, 8, true, false));
 
@@ -95,7 +110,7 @@ class UpdatePreviewTest {
 	@Test
 	void removalPreviewShowsDeletionAndCasPreservation() {
 		Jsons.ModpackContentFields installed = manifest(
-				new Jsons.ModpackContentFields.ModpackContentItem("config/removed.json", "7", "config", false, false, false, OLD_HASH, "0"),
+				new Jsons.ModpackContentFields.ModpackContentItem("config/removed.json", "7", "config", false, false, OLD_HASH, "0"),
 				entry("config/removed.json", OLD_HASH, 7, OwnershipLedger.Status.PRESENT));
 		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
 		baseline.modpackId = installed.modpackId;
@@ -119,7 +134,7 @@ class UpdatePreviewTest {
 	@Test
 	void removalPreviewHidesFilesAlreadyMatchingBaseline() {
 		Jsons.ModpackContentFields installed = manifest(
-				new Jsons.ModpackContentFields.ModpackContentItem("config/kept.json", "7", "config", false, false, false, OLD_HASH, "0"),
+				new Jsons.ModpackContentFields.ModpackContentItem("config/kept.json", "7", "config", false, false, OLD_HASH, "0"),
 				entry("config/kept.json", OLD_HASH, 7, OwnershipLedger.Status.PRESENT));
 		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
 		baseline.modpackId = installed.modpackId;
@@ -150,7 +165,6 @@ class UpdatePreviewTest {
 		UpdatePreview preview = UpdatePreview.create(plan, files, target, selection, false, "Patch notes");
 
 		assertEquals("Patch notes", preview.patchNotes());
-		assertEquals(Set.of(), preview.groupConsequences().explicitTags());
 		assertEquals(Set.of("optional"), preview.groupConsequences().explicitGroups());
 		assertEquals(Set.of("main", "optional"), preview.groupConsequences().resolvedGroups());
 		assertEquals(Set.of("stale"), preview.groupConsequences().staleGroups());

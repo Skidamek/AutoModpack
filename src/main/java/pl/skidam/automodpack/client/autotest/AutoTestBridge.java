@@ -4,7 +4,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.Screenshot;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -33,6 +35,7 @@ import net.minecraft.network.chat.Component;
 *//*?}*/
 
 import java.io.IOException;
+import java.awt.image.BufferedImage;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -50,6 +53,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import javax.imageio.ImageIO;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
@@ -159,6 +164,7 @@ public final class AutoTestBridge {
 			case "gui" -> onMain(() -> gui().toString());
 			case "click" -> onMain(() -> click(req));
 			case "text" -> onMain(() -> text(req));
+			case "screenshot" -> screenshot(req);
 			case "connect" -> onMain(() -> connect(req));
 			case "disconnect" -> onMain(AutoTestBridge::disconnect);
 			case "quit" -> onMain(AutoTestBridge::quit);
@@ -228,6 +234,62 @@ public final class AutoTestBridge {
 
 		editBox.setValue(optString(req, "text"));
 		return ok();
+	}
+
+	private static String screenshot(JsonObject req) throws Exception {
+		if (!Boolean.getBoolean("automodpack.autotest.render")) {
+			throw new IOException("screenshots require a scenario with renderClient: true");
+		}
+		Path dir = bridgeDir;
+		if (dir == null) throw new IOException("bridge directory is unavailable");
+		String name = screenshotName(optString(req, "name"));
+		Path screenshots = dir.resolve("screenshots");
+		Files.createDirectories(screenshots);
+		Path path = screenshots.resolve(name + ".png");
+		CompletableFuture<String> captured = new CompletableFuture<>();
+		Minecraft minecraft = Minecraft.getInstance();
+		minecraft.execute(() -> {
+			try {
+				/*? if >=26.2 {*/
+				Screenshot.takeScreenshot(minecraft.gameRenderer.mainRenderTarget(), 1, image -> completeScreenshot(captured, path, image));
+			/*?} else if >=1.21.6 {*/
+			/*Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), 1, image -> completeScreenshot(captured, path, image));
+			*//*?} else if >=1.21.5 {*/
+			/*Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), image -> completeScreenshot(captured, path, image));
+			*//*?} else {*/
+				/*completeScreenshot(captured, path, Screenshot.takeScreenshot(minecraft.getMainRenderTarget()));
+				*//*?}*/
+			} catch (Exception e) {
+				captured.completeExceptionally(e);
+			}
+		});
+		return captured.get();
+	}
+
+	private static void completeScreenshot(CompletableFuture<String> captured, Path path, NativeImage source) {
+		try (source) {
+			BufferedImage image = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+			image.setRGB(0, 0, source.getWidth(), source.getHeight(), source.makePixelArray(), 0, source.getWidth());
+			if (!ImageIO.write(image, "png", path.toFile())) throw new IOException("Java PNG encoder is unavailable");
+			JsonObject response = base();
+			response.addProperty("path", "automodpack/autotest/screenshots/" + path.getFileName());
+			response.addProperty("width", source.getWidth());
+			response.addProperty("height", source.getHeight());
+			captured.complete(response.toString());
+		} catch (Exception e) {
+			captured.completeExceptionally(e);
+		}
+	}
+
+	private static String screenshotName(String requested) {
+		String source = requested.isBlank() ? "screen" : requested;
+		StringBuilder safe = new StringBuilder();
+		for (int index = 0; index < source.length(); index++) {
+			char character = source.charAt(index);
+			if (Character.isLetterOrDigit(character) || character == '-' || character == '_') safe.append(character);
+			else if (safe.length() > 0 && safe.charAt(safe.length() - 1) != '-') safe.append('-');
+		}
+		return safe.length() == 0 ? "screen" : safe.toString();
 	}
 
 	private static String connect(JsonObject req) {

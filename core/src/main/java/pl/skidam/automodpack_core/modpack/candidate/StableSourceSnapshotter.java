@@ -74,7 +74,7 @@ public final class StableSourceSnapshotter {
 				}
 				if (fileMetadataCache != null) fileMetadataCache.overwriteCache(source.sourcePath(), sha1);
 				if (fileMetadataCache != null) fileMetadataCache.overwriteCache(staged, sha1);
-				return new Snapshot(new GroupManifest.GroupFile(size, type, false, false, false, sha1, murmur), null,
+				return new Snapshot(new GroupManifest.GroupFile(size, type, false, false, sha1, murmur), null,
 						new StagedObject(sha1, size, staged));
 			} catch (CandidateBuildException e) {
 				delete(staged, e);
@@ -120,7 +120,7 @@ public final class StableSourceSnapshotter {
 			}
 			String type = fileType(staged, source.logicalPath(), mod);
 			String murmur = type.equals("mod") || type.equals("shader") || type.equals("resourcepack") ? HashUtils.getCurseforgeMurmurHash(staged) : null;
-			return new Snapshot(new GroupManifest.GroupFile(before.size(), type, false, false, false, sha1, murmur), null, new StagedObject(sha1, before.size(), staged));
+			return new Snapshot(new GroupManifest.GroupFile(before.size(), type, false, false, sha1, murmur), null, new StagedObject(sha1, before.size(), staged));
 		} catch (IOException e) {
 			Files.deleteIfExists(staged);
 			throw e;

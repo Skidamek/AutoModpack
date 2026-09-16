@@ -301,10 +301,9 @@ class GenerationStoreTest {
 	private static GroupManifest manifest(String description, String hash, long size) {
 		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
-		fields.selectionTags = Map.of();
 		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.description = description;
-		group.files = Map.of("config/example.txt", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(size), "config", false, false, false, hash, null));
+		group.files = Map.of("config/example.txt", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(size), "config", false, false, hash, null));
 		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);
 	}

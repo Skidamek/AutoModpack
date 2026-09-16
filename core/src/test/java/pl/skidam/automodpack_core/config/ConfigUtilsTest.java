@@ -20,7 +20,6 @@ class ConfigUtilsTest {
 		group.syncedFiles = new LinkedHashSet<>(List.of("/third", "/first", "/second"));
 		group.allowEditsInFiles = new LinkedHashSet<>(List.of("third", "first", "second"));
 		group.overwriteEditableFiles = new LinkedHashSet<>(List.of("third", "first", "second"));
-		group.forceCopyFilesToStandardLocation = new LinkedHashSet<>(List.of("third", "first", "second"));
 		config.groups = new LinkedHashMap<>(Map.of("main", group));
 
 		ConfigUtils.normalizeServerConfig(config);
@@ -28,7 +27,6 @@ class ConfigUtilsTest {
 		assertEquals(List.of("/third", "/first", "/second"), List.copyOf(group.syncedFiles));
 		assertEquals(List.of("/third", "/first", "/second"), List.copyOf(group.allowEditsInFiles));
 		assertEquals(List.of("/third", "/first", "/second"), List.copyOf(group.overwriteEditableFiles));
-		assertEquals(List.of("/third", "/first", "/second"), List.copyOf(group.forceCopyFilesToStandardLocation));
 	}
 
 	@Test

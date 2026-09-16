@@ -28,7 +28,7 @@ public final class SelectedTreeComposer {
 		for (var entry : files.entrySet()) {
 			GroupManifest.GroupFile file = entry.getValue();
 			selectedFiles.add(new Jsons.ModpackContentFields.ModpackContentItem(entry.getKey(), String.valueOf(file.size()), file.type(), file.editable(),
-					file.overwriteEditable(), file.forceCopy(), file.sha1(), file.murmur()));
+					file.overwriteEditable(), file.sha1(), file.murmur()));
 		}
 
 		Jsons.ModpackContentFields target = new Jsons.ModpackContentFields(selectedFiles);
