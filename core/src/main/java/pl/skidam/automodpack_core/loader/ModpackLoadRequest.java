@@ -23,4 +23,11 @@ public record ModpackLoadRequest(Path activeModsDirectory, List<Path> modpackMod
 			return normalized;
 		}).distinct().sorted().toList();
 	}
+
+	/** True for jars outside the active projection, and for projection jars that this request asked to load. */
+	public boolean allowsProjectionJar(Path jar) {
+		Path path = Objects.requireNonNull(jar, "jar").toAbsolutePath().normalize();
+		if (!path.startsWith(activeModsDirectory) || path.equals(activeModsDirectory)) return true;
+		return modpackMods.contains(path);
+	}
 }

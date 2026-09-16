@@ -9,10 +9,17 @@ public final class LogicalPath {
 		if (path == null || path.indexOf('\0') >= 0) throw new IllegalArgumentException("Invalid logical path");
 		String normalized = path.replace('\\', '/');
 		while (normalized.startsWith("/")) normalized = normalized.substring(1);
-		if (normalized.matches("^[A-Za-z]:.*")) throw new IllegalArgumentException("Unsafe logical path: " + path);
+		if (hasDrivePrefix(normalized)) throw new IllegalArgumentException("Unsafe logical path: " + path);
 		Path value = Path.of(normalized).normalize();
 		if (value.isAbsolute() || normalized.isBlank() || value.startsWith("..")) throw new IllegalArgumentException("Unsafe logical path: " + path);
 		return value.toString().replace('\\', '/');
+	}
+
+	/** ASCII letters only, matching the old {@code ^[A-Za-z]:.*} regex exactly; {@link Character#isLetter} would wrongly admit non-ASCII letters. */
+	private static boolean hasDrivePrefix(String normalized) {
+		if (normalized.length() < 2) return false;
+		char first = normalized.charAt(0);
+		return ((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z')) && normalized.charAt(1) == ':';
 	}
 
 	public static String requireCanonical(String path) {

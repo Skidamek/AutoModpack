@@ -1,0 +1,116 @@
+# Security
+
+AutoModpack delivers executable files to players. Mods can read files and run code on every client, so a player connecting to your server is trusting you with their machine. Two mechanisms back that trust: clients verify the server's identity before accepting anything, and the server decides who may download the pack.
+
+## How clients verify a server
+
+The server's identity is the Minecraft hostname the player typed, for example `play.example.com`. SRV records, server transfers, and the advertised modpack endpoint only route the TCP connection; they never change the identity a certificate is checked against.
+
+The methods differ in how the client learns what to expect: a certificate authority vouches for the hostname, a DNSSEC-signed DNS record publishes the certificate's SHA-256 fingerprint, and a pin demands one exact certificate.
+
+| Method | Best for | Client stores | Certificate rotation |
+| --- | --- | --- | --- |
+| CA-signed certificate | Public servers with a domain; recommended default | Nothing | Renew through the CA as usual |
+| DNSSEC AMP1 | Self-signed certificates on a DNSSEC-enabled domain | Nothing | Update the DNS record and wait out the TTL |
+| Pinned join address | Private communities that can share one address | A pin for the address | Distribute a new pinned address |
+| Manual verification | Setups with none of the above | A pin for the address, after the player accepts | Remove the old pin, accept the new certificate |
+
+The client tries in this order:
+
+1. A saved pin is mandatory. A mismatch always fails; there is no bypass for a pinned origin.
+2. Standard CA verification against the Java trust store.
+3. For a self-signed certificate, a DNSSEC fingerprint lookup (AMP1).
+4. Otherwise, a prompt asks the player to verify or skip.
+
+### CA-signed certificate
+
+Let a certificate authority vouch for the hostname, and clients verify with no prompts and no stored state. AutoModpack uses the standard Java trust store, checks the validity period, and matches the certificate against the Minecraft hostname. The hostname on the certificate must be the one players type into their server list; a different modpack endpoint hostname is only a TCP route.
+
+Put the full chain in `automodpack/credentials/certificate.crt` and the private key in `automodpack/credentials/private-key.pem` in [PKCS#8 PEM format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html). Without these files, AutoModpack generates a self-signed certificate on first start.
+
+One way to obtain a certificate is [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html):
+
+```bash
+certbot certonly --manual --preferred-challenges dns -d <minecraft-server-domain>
+```
+
+<Callout variant="warning">
+Read the documentation of any tool before running its commands. Use `fullchain.pem` as `certificate.crt` and `privkey.pem` as `private-key.pem`, and protect the private key: anyone holding it can impersonate your server.
+</Callout>
+
+### DNSSEC AMP1
+
+If you keep a self-signed certificate and control a DNSSEC-signed domain, publish its fingerprint in DNS. Clients look the fingerprint up and verify on their own, with no stored pin and no first-connection prompt.
+
+Run:
+
+```
+/automodpack host fingerprint dns <minecraft-hostname>
+```
+
+Use the hostname players type into Minecraft, including the public name that owns any SRV record. The command prints a record like:
+
+```dns
+_automodpack.play.example.com. IN TXT "v=amp1;fp=<certificate-sha256>"
+```
+
+Publish exactly one AMP1 record in the DNSSEC-signed zone. Any DNSSEC-capable provider works; [deSEC](https://desec.io/) is a free managed option if yours has none.
+
+Clients resolve the record over DNS-over-HTTPS through Cloudflare and Mullvad. The certificate is accepted only when both resolvers confirm DNSSEC validation, agree on the record, and the fingerprint matches a currently valid certificate. A mismatch or a malformed record fails. A missing or unreachable record falls back to the manual prompt.
+
+When the certificate changes, update the `fp` value and wait out DNS caching before deploying it.
+
+### Pinned join addresses
+
+For a copy-paste flow, generate an authenticated join address:
+
+```
+/automodpack host fingerprint share <minecraft-address>
+```
+
+The pinned form appends the fingerprint to a normal address:
+
+```
+play.example.com:25565#amp1=<certificate-sha256>
+```
+
+A client that imports this address saves the fingerprint as a pin for the origin and the plain address in its server list, so removing AutoModpack leaves a working vanilla entry. The pin is exact: the presented leaf certificate must match, even when another certificate would pass CA or DNSSEC verification, and a mismatch has no bypass. Rotating the certificate means distributing a new pinned address.
+
+The pin protects only as far as the channel you distribute it through. Metadata from other mods can coexist as further `#key=value` segments in any order; AutoModpack removes only its own `amp1` segment:
+
+```
+play.example.com:25565#amp1=<fingerprint>#othermod1=<value>
+play.example.com:25565#othermod1=<value>#amp1=<fingerprint>
+```
+
+### Manual verification
+
+When no automatic method applies, the client shows the fingerprint the server presents. Players compare it against a fingerprint you share out of band, then accept. Skipping is possible and is marked as the risky choice; an accepted or skipped decision is saved as a pin for that `host:port` and enforced from then on.
+
+Print the current fingerprint with:
+
+```
+/automodpack host fingerprint
+```
+
+A fingerprint is public verification data, closer to a serial number than to a password. Sharing it lets players verify you; it grants no access to anything.
+
+### Why this matters
+
+An attacker who controls the modpack connection chooses which files every connecting player downloads. Certificate verification is what turns "some server on this address" into "the server that owns this name or this fingerprint". It complements, and does not replace, normal server administration: strong passwords, restricted file permissions, current software, and careful private-key handling.
+
+## Certificate mismatch
+
+A saved pin says: this address serves exactly this certificate. When the server presents any other certificate, the client stops the connection and shows the certificate mismatch screen with both fingerprints. There is no bypass on that screen, and no modpack is downloaded.
+
+Only two things can cause a mismatch: the certificate on the server changed, or something else answers on that address. A renewal, a move to a new host, or a new proxy changes the certificate; so does an impostor. The two fingerprints on the screen cannot tell you which happened — the server operator can.
+
+Ask the operator about the change through a channel you trust. If the change is real, they can give you a new pinned address to import, or you can remove the pin yourself: in the multiplayer menu select the server, press Edit, press the Certificate pin button twice, and reconnect. The client then verifies the new certificate like a first connection. Until the operator confirms the change, leave the pin in place — it is what stops an impostor from serving you mods from that address.
+
+## Download authorization
+
+Verification proves the server to the player. Authorization is the reverse: the server proving a downloader is a real player.
+
+When a player connects and `validateSecrets` is on, the server issues a random download secret through the login handshake. Downloads require that secret, so only players who passed the Minecraft login, the whitelist, and any bans can pull the pack. Each connection invalidates the previous secret, and `secretLifetime` caps how long one stays valid.
+
+A standalone host process (running outside a Minecraft server) has no login to issue secrets, so a fresh standalone config defaults `validateSecrets` to `false` and holds a provisioning secret in `automodpack/credentials/provisioning-secret` for bootstrap installs instead. Both settings are described in the [server config](configuration/server-config#network-and-hosting); the provisioning secret is described with the [bootstrap files](how-it-works/files-on-disk#bootstrap).

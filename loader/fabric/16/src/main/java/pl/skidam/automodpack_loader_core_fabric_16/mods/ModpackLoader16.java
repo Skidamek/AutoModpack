@@ -1,7 +1,7 @@
 package pl.skidam.automodpack_loader_core_fabric_16.mods;
 
 import static pl.skidam.automodpack_core.Constants.*;
-import static pl.skidam.automodpack_loader_core_fabric.FabricLoaderImplAccessor.*;
+import static pl.skidam.automodpack_loader_fabric_shared.FabricLoaderImplAccessor.*;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,10 +21,11 @@ import net.fabricmc.loader.impl.util.SystemProperties;
 
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
+import pl.skidam.automodpack_core.loader.RequestedCandidates;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
-import pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
+import pl.skidam.automodpack_loader_fabric_shared.FabricLoaderMods;
 
 @SuppressWarnings({"unchecked", "unused"})
 public class ModpackLoader16 implements ModpackLoaderService {
@@ -40,6 +41,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
 
 			List<ModCandidateImpl> candidates;
 			candidates = (List<ModCandidateImpl>) discoverMods(activeModsDirectory);
+			candidates = RequestedCandidates.keep(candidates, ACCESSOR, request::allowsProjectionJar);
 			candidates = (List<ModCandidateImpl>) resolveMods(candidates);
 
 			METHOD_DUMP_MOD_LIST.invoke(FabricLoaderImpl.INSTANCE, candidates);
@@ -52,7 +54,12 @@ public class ModpackLoader16 implements ModpackLoaderService {
 	}
 
 	@Override
-	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileMetadataCache cache) {
+	public boolean discoversNestedConflicts() {
+		return true;
+	}
+
+	@Override
+	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileCache cache) {
 		Path activeModsDirectory = activeProjectionDirectory.resolve(ModpackPathPolicy.MODS_ROOT);
 
 		List<ModCandidateImpl> modpackNestedMods = new ArrayList<>();
@@ -79,7 +86,6 @@ public class ModpackLoader16 implements ModpackLoaderService {
 			e.printStackTrace();
 		}
 
-		// Remove older versions of the same mods
 		modpackNestedMods = getOnlyNewestMods(modpackNestedMods);
 		standardNestedMods = getOnlyNewestMods(standardNestedMods);
 
@@ -93,12 +99,10 @@ public class ModpackLoader16 implements ModpackLoaderService {
 			}
 		}
 
-		// Remove older versions of the same mods
 		conflictingNestedModsImpl = getOnlyNewestMods(conflictingNestedModsImpl);
 
 		List<ModCandidateImpl> modsNestedDeps = new ArrayList<>();
 
-		// Add nested dependencies
 		for (ModCandidateImpl modCandidate : conflictingNestedModsImpl) {
 			List<ModCandidateImpl> nestedDeps = getNestedDeps(modCandidate);
 			for (ModCandidateImpl nestedDep : nestedDeps) {
@@ -186,7 +190,6 @@ public class ModpackLoader16 implements ModpackLoaderService {
 		List<ModCandidateImpl> latestMods = new ArrayList<>();
 
 		for (ModCandidateImpl standardNestedMod : allMods) {
-			// add mod to the standardLatestNestedMods if its id doesnt already exist or if it has a greater version then also delete the lower version
 			boolean alreadyExists = latestMods.stream().anyMatch(existingMod -> {
 				boolean hasSameId = existingMod.getId().equals(standardNestedMod.getId());
 				boolean hasGreaterOrEqualVersion = existingMod.getVersion().compareTo(standardNestedMod.getVersion()) >= 0;
@@ -204,10 +207,27 @@ public class ModpackLoader16 implements ModpackLoaderService {
 		return latestMods;
 	}
 
+	private static final RequestedCandidates.Accessor<ModCandidateImpl> ACCESSOR = new RequestedCandidates.Accessor<>() {
+		@Override
+		public boolean isRoot(ModCandidateImpl candidate) {
+			return candidate.isRoot();
+		}
+
+		@Override
+		public List<Path> paths(ModCandidateImpl candidate) {
+			return candidate.getPaths();
+		}
+
+		@Override
+		public Collection<ModCandidateImpl> nestedMods(ModCandidateImpl candidate) {
+			return candidate.getNestedMods();
+		}
+	};
+
 	private Collection<ModCandidateImpl> discoverMods(Path modsDirectory) throws ModResolutionException, IllegalAccessException {
 		ModDiscoverer discoverer = new ModDiscoverer(new VersionOverrides(), new DependencyOverrides(FabricLoaderImpl.INSTANCE.getConfigDir()));
 
-		List<?> candidateFinders = List.of(new ModContainerModCandidateFinder((List<ModContainer>) FabricLanguageAdapter.getAllMods().stream().toList()),
+		List<?> candidateFinders = List.of(new ModContainerModCandidateFinder((List<ModContainer>) FabricLoaderMods.getAllMods().stream().toList()),
 				new DirectoryModCandidateFinder(modsDirectory, FabricLoaderImpl.INSTANCE.isDevelopmentEnvironment()));
 
 		FIELD_CANDIDATE_FINDERS.set(discoverer, candidateFinders);
@@ -217,7 +237,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
 
 	private Collection<ModCandidateImpl> resolveMods(Collection<ModCandidateImpl> modCandidates) throws ModResolutionException {
 		Set<String> modIds = new HashSet<>();
-		for (var mod : FabricLanguageAdapter.getAllMods().stream().toList()) {
+		for (var mod : FabricLoaderMods.getAllMods().stream().toList()) {
 			ModContainerImpl container = (ModContainerImpl) mod;
 			modIds.add(container.getMetadata().getId());
 		}
@@ -241,7 +261,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
 
 	public void addMod(ModCandidateImpl candidate) throws IllegalAccessException {
 		ModContainerImpl container = new ModContainerImpl(candidate);
-		FabricLanguageAdapter.addMod(container);
+		FabricLoaderMods.addMod(container);
 
 		var modMap = (Map<String, ModContainerImpl>) FIELD_MOD_MAP.get(FabricLoaderImpl.INSTANCE);
 

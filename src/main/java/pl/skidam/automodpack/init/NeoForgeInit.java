@@ -9,7 +9,7 @@ import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.modpack.Commands;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -22,7 +22,6 @@ import static pl.skidam.automodpack_core.Constants.*;
 public class NeoForgeInit {
 	public NeoForgeInit(IEventBus eventBus) {
 		preload = false;
-		ScreenManager.install(new ScreenImpl());
 
 		long start = System.currentTimeMillis();
 		LOGGER.info("Launching AutoModpack...");
@@ -32,6 +31,7 @@ public class NeoForgeInit {
 		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
 			Common.serverInit();
 		} else {
+			ScreenManager.install(new ScreenImpl());
 			ModPackets.registerC2SPackets();
 			new AudioManager(eventBus);
 		}

@@ -19,11 +19,11 @@ public final class GenerationPatchNotes {
 	private GenerationPatchNotes() {}
 
 	public enum Source {
-		INLINE, FILE, EMPTY
+		INLINE, FILE, EMPTY, INHERITED
 	}
 
 	public enum CleanupStatus {
-		NOT_APPLICABLE, NOT_PRESENT, DELETED, PRESERVED_CHANGED, PRESERVED_FAILURE
+		NOT_APPLICABLE, CLEARED, CREATED, PRESERVED_CHANGED, PRESERVED_FAILURE
 	}
 
 	public record CleanupResult(CleanupStatus status, String warning) {
@@ -63,15 +63,37 @@ public final class GenerationPatchNotes {
 			try {
 				RawFile current = readStable(sourcePath);
 				if (!rawDigest.equals(current.digest()))
-					return new CleanupResult(CleanupStatus.PRESERVED_CHANGED,
-							"Patch notes file changed during publication and was preserved");
-				Files.delete(sourcePath);
-				return new CleanupResult(CleanupStatus.DELETED, "");
+					return new CleanupResult(CleanupStatus.PRESERVED_CHANGED, "Patch notes file changed during publication and was preserved");
+				clear(sourcePath);
+				return new CleanupResult(CleanupStatus.CLEARED, "");
 			} catch (NoSuchFileException e) {
-				return new CleanupResult(CleanupStatus.NOT_PRESENT, "");
+				try {
+					ensurePresent(sourcePath);
+					return new CleanupResult(CleanupStatus.CREATED, "");
+				} catch (Exception create) {
+					return new CleanupResult(CleanupStatus.PRESERVED_FAILURE, "Patch notes file could not be consumed and was preserved");
+				}
 			} catch (Exception e) {
 				return new CleanupResult(CleanupStatus.PRESERVED_FAILURE, "Patch notes file could not be consumed and was preserved");
 			}
+		}
+	}
+
+	public static void ensurePresent(Path notesFile) throws IOException {
+		Objects.requireNonNull(notesFile, "notesFile");
+		Path normalized = notesFile.toAbsolutePath().normalize();
+		if (Files.isSymbolicLink(normalized)) throw new IOException("Patch notes must be a regular non-symlink file");
+		if (Files.exists(normalized, LinkOption.NOFOLLOW_LINKS)) {
+			if (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Patch notes must be a regular non-symlink file");
+			return;
+		}
+		Path parent = normalized.getParent();
+		if (parent != null) Files.createDirectories(parent);
+		try {
+			Files.createFile(normalized);
+		} catch (FileAlreadyExistsException e) {
+			if (Files.isSymbolicLink(normalized) || !Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS))
+				throw new IOException("Patch notes must be a regular non-symlink file");
 		}
 	}
 
@@ -82,15 +104,19 @@ public final class GenerationPatchNotes {
 		if (Files.isSymbolicLink(normalized)) throw new IOException("Patch notes must be a regular non-symlink file");
 		if (!Files.exists(normalized, LinkOption.NOFOLLOW_LINKS)) return new Resolution("", Source.EMPTY, "", null);
 		RawFile raw = readStable(normalized);
-		return new Resolution(normalizeAndValidate(decode(raw.bytes())), Source.FILE, raw.digest(), normalized);
+		String text = normalizeAndValidate(decode(raw.bytes()));
+		if (text.isEmpty()) return new Resolution("", Source.EMPTY, "", null);
+		return new Resolution(text, Source.FILE, raw.digest(), normalized);
 	}
 
-	private static String normalizeAndValidate(String notes) throws IOException {
-		try {
-			return GenerationMetadata.validateNotes(notes);
-		} catch (IllegalArgumentException e) {
-			throw new IOException(e.getMessage(), e);
+	private static void clear(Path path) throws IOException {
+		try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, LinkOption.NOFOLLOW_LINKS)) {
+			channel.truncate(0);
 		}
+	}
+
+	private static String normalizeAndValidate(String notes) {
+		return notes.replace("\r\n", "\n").replace('\r', '\n');
 	}
 
 	private static RawFile readStable(Path path) throws IOException {

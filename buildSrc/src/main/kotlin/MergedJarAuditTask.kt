@@ -19,6 +19,9 @@ abstract class MergedJarAuditTask : DefaultTask() {
     @get:Input
     abstract val maxJarBytes: Property<Long>
 
+	@get:Input
+	abstract val enforceReleaseSizeBudget: Property<Boolean>
+
     @get:Input
     abstract val maxMusicBytes: Property<Long>
 
@@ -26,7 +29,7 @@ abstract class MergedJarAuditTask : DefaultTask() {
     fun audit() {
         val jarFile = mergedJar.get().asFile
         if (!jarFile.isFile) throw GradleException("Merged jar not found: ${jarFile.absolutePath}")
-        if (jarFile.length() > maxJarBytes.get()) {
+		if (enforceReleaseSizeBudget.get() && jarFile.length() > maxJarBytes.get()) {
             throw GradleException("${jarFile.name} is ${jarFile.length()} bytes, exceeding the ${maxJarBytes.get()} byte merged-jar budget")
         }
 

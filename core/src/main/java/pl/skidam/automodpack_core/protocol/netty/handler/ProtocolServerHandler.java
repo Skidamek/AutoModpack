@@ -11,13 +11,11 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.codec.haproxy.HAProxyMessage;
-import io.netty.handler.ssl.SslContext;
 import io.netty.util.ReferenceCountUtil;
 
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.ProtocolPipeline;
-import pl.skidam.automodpack_core.protocol.netty.TrafficShaper;
 import pl.skidam.automodpack_core.protocol.netty.detectors.AMMHDetector;
 import pl.skidam.automodpack_core.protocol.netty.detectors.HAProxyDetector;
 import pl.skidam.automodpack_core.protocol.netty.detectors.MatchResult;
@@ -25,23 +23,23 @@ import pl.skidam.automodpack_core.protocol.netty.detectors.MatchResult;
 public class ProtocolServerHandler extends ByteToMessageDecoder {
 
 	private final NettyServer server;
-	private final SslContext sslCtx;
 	private final ModpackConnectionMode connectionMode;
 	private final boolean sharedMinecraftSocket;
 	private boolean proxyCheckFinished;
 	private SocketAddress remoteAddress;
 
-	public ProtocolServerHandler(NettyServer server, ModpackConnectionMode connectionMode, boolean sharedMinecraftSocket) {
+	public ProtocolServerHandler(NettyServer server, ModpackConnectionMode connectionMode, boolean sharedMinecraftSocket, boolean acceptProxyProtocol) {
 		if (connectionMode == ModpackConnectionMode.HOLEPUNCH) throw new IllegalArgumentException("HOLEPUNCH does not use ProtocolServerHandler");
-		if (sharedMinecraftSocket && connectionMode != ModpackConnectionMode.MAGIC_PACKET) {
-			throw new IllegalArgumentException("Only MAGIC_PACKET can use a shared Minecraft socket");
+		if (sharedMinecraftSocket && connectionMode != ModpackConnectionMode.MAGIC) {
+			throw new IllegalArgumentException("Only MAGIC can use a shared Minecraft socket");
 		}
 
 		this.server = server;
-		this.sslCtx = server.getSslCtx();
 		this.connectionMode = connectionMode;
 		this.sharedMinecraftSocket = sharedMinecraftSocket;
-		this.proxyCheckFinished = sharedMinecraftSocket;
+		// A PROXY header claims a source address that feeds IP bans and audit logs, so only a listener whose operator
+		// opted in (a trusted proxy is in front) may consume one.
+		this.proxyCheckFinished = sharedMinecraftSocket || !acceptProxyProtocol;
 	}
 
 	@Override
@@ -135,21 +133,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 			if (handler != this) ctx.pipeline().remove(handler);
 		});
 
-		setupPipeline(ctx);
+		ProtocolPipeline.installServer(ctx.channel(), server, remoteAddress);
 		if (ctx.pipeline().context(this) != null) ctx.pipeline().remove(this);
-	}
-
-	private void setupPipeline(ChannelHandlerContext ctx) {
-		ctx.pipeline().addLast("error-printer-first", new ErrorPrinter());
-		ctx.pipeline().addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler());
-
-		if (sslCtx != null) {
-			ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));
-			LOGGER.debug("Pipeline: TLS Enabled");
-		} else {
-			LOGGER.debug("Pipeline: TLS termination handled externally");
-		}
-
-		ProtocolPipeline.install(ctx.channel(), server, remoteAddress);
 	}
 }

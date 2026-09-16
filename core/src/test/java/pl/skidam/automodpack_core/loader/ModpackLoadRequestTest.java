@@ -1,7 +1,9 @@
 package pl.skidam.automodpack_core.loader;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -27,5 +29,18 @@ class ModpackLoadRequestTest {
 
 		assertThrows(IllegalArgumentException.class, () -> new ModpackLoadRequest(root, List.of(root.resolveSibling("escape.jar"))));
 		assertThrows(IllegalArgumentException.class, () -> new ModpackLoadRequest(root, List.of(root)));
+	}
+
+	@Test
+	void allowsJarsOutsideTheProjectionAndOnlyRequestedProjectionJars() {
+		Path root = Path.of("build", "active", "mods");
+		Path requested = root.resolve("keep.jar");
+		Path skipped = root.resolve("skip.jar");
+		Path live = root.resolveSibling("live.jar");
+		ModpackLoadRequest request = new ModpackLoadRequest(root, List.of(requested));
+
+		assertTrue(request.allowsProjectionJar(requested));
+		assertFalse(request.allowsProjectionJar(skipped));
+		assertTrue(request.allowsProjectionJar(live));
 	}
 }

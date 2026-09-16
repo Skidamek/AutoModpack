@@ -2,7 +2,6 @@ package pl.skidam.automodpack_loader_core_neoforge;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,11 +12,10 @@ import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
 import pl.skidam.automodpack_core.Constants;
-import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
-import pl.skidam.automodpack_core.storage.GameDirectory;
-import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.utils.EarlyServiceScan;
-import pl.skidam.automodpack_loader_core.Preload;
+import pl.skidam.automodpack_core.Preload;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_loader_core_neoforge.loader.LoaderManager;
+import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
 
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
@@ -40,24 +38,26 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
 	@Override
 	public void bootstrap(String[] arguments) {
+		EARLY_MC_VERSION = argValue(arguments, "--fml.mcVersion");
+		EARLY_NEOFORGE_VERSION = argValue(arguments, "--fml.neoForgeVersion");
+		String launchTarget = argValue(arguments, "--launchTarget");
+		if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
+
+		// Run the update/reconcile step first: it decides what this launch loads, and the
+		// early-service hosting below hosts only jars from that decision. Preload failures must crash
+		// the launch; swallowing them would boot without the pack.
+		ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
+		new Preload(new LoaderManager(), new ModpackLoader());
+		progress.complete();
+
 		try {
-			EARLY_MC_VERSION = argValue(arguments, "--fml.mcVersion");
-			EARLY_NEOFORGE_VERSION = argValue(arguments, "--fml.neoForgeVersion");
-			String launchTarget = argValue(arguments, "--launchTarget");
-			if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
+			// Early-service hosting serves the client's active projection; a dedicated server has none.
+			if (Constants.LOADER_MANAGER.getEnvironmentType() != LoaderManagerService.EnvironmentType.CLIENT) return;
 
-			// Run the update/reconcile step before anything below reads the active projection, so an
-			// update that changes which mods are early-service mods is reflected in the same boot.
-			ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
-			new Preload();
-			progress.complete();
-
-			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
-			Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT);
-			if (!Files.isDirectory(activeModsDirectory)) return;
-
-			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);
-
+			// Preload owns what this launch loads; host early services only for jars on that list, so a
+			// projection that was skipped (no active state, pinned conflicts, standard-mods duplicates)
+			// is never half-bootstrapped.
+			List<Path> earlyServiceJars = ModpackLoader.modsToLoad.stream().filter(EarlyServiceLayer::eligibleForInPlace).toList();
 			if (earlyServiceJars.isEmpty()) return;
 
 			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
@@ -95,6 +95,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			}
 		} catch (Throwable t) {
 			Constants.LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
+			throw new RuntimeException("AutoModpack early-service bootstrap failed", t);
 		}
 	}
 

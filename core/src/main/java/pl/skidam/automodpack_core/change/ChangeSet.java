@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -37,12 +38,37 @@ public final class ChangeSet {
 			.thenComparing(Occurrence::contentKind)
 			.thenComparing(occurrence -> String.join("\u0000", occurrence.featureIds()));
 
-	private final List<Change> changes;
-	private final List<Effect> effects;
+	private List<Change> changes;
+	private List<Effect> effects;
 
-	private ChangeSet(List<Change> changes, List<Effect> effects) {
+	public ChangeSet() {}
+
+	public ChangeSet(List<Change> changes, List<Effect> effects) {
 		this.changes = List.copyOf(changes);
 		this.effects = List.copyOf(effects);
+	}
+
+	public List<Change> changes() {
+		return changes;
+	}
+
+	public List<Effect> effects() {
+		return effects;
+	}
+
+	public ChangeSet validated() {
+		if (changes == null || effects == null) throw new IllegalArgumentException("Change set fields are incomplete");
+		List<Change> validatedChanges = new ArrayList<>();
+		for (Change change : changes) {
+			if (change == null) throw new IllegalArgumentException("Change set contains an incomplete change");
+			validatedChanges.add(change.validated());
+		}
+		List<Effect> validatedEffects = new ArrayList<>();
+		for (Effect effect : effects) {
+			if (effect == null) throw new IllegalArgumentException("Change set contains an incomplete effect");
+			validatedEffects.add(effect.validated());
+		}
+		return of(validatedChanges, validatedEffects);
 	}
 
 	public static ChangeSet empty() {
@@ -76,22 +102,26 @@ public final class ChangeSet {
 
 	/** Creates the canonical current-state view of a complete modpack catalogue. */
 	public static ChangeSet catalogue(GroupManifest manifest) {
+		return catalogue(manifest, Kind.PRESERVED);
+	}
+
+	/** Creates a catalogue of the given kind. First-install review uses {@link Kind#ADDED}. */
+	public static ChangeSet catalogue(GroupManifest manifest, Kind kind) {
+		return catalogue(manifest, kind, null);
+	}
+
+	public static ChangeSet catalogue(GroupManifest manifest, Kind kind, Set<String> groupIds) {
 		Objects.requireNonNull(manifest, "catalogue manifest");
+		Objects.requireNonNull(kind, "catalogue kind");
 		List<Change> changes = new ArrayList<>();
-		for (var group : manifest.groups().entrySet()) for (var file : group.getValue().files().entrySet()) {
-			GroupManifest.GroupFile value = file.getValue();
-			changes.add(new Change(file.getKey(), Kind.PRESERVED,
-					List.of(new Occurrence("catalogue", file.getKey(), value.size(), null, value.sha1(), value.type(), List.of(group.getKey()), List.of()))));
+		for (var group : manifest.groups().entrySet()) {
+			if (groupIds != null && !groupIds.contains(group.getKey())) continue;
+			for (var file : group.getValue().files().entrySet()) {
+				GroupManifest.GroupFile value = file.getValue();
+				changes.add(new Change(file.getKey(), kind, List.of(new Occurrence("catalogue", file.getKey(), value.size(), null, null, value.sha1(), value.type(), List.of(group.getKey()), List.of()))));
+			}
 		}
 		return of(changes);
-	}
-
-	public List<Change> changes() {
-		return changes;
-	}
-
-	public List<Effect> effects() {
-		return effects;
 	}
 
 	/** Returns a copy with references supplied for each physical occurrence. */
@@ -203,75 +233,205 @@ public final class ChangeSet {
 		}
 	}
 
-	public record Change(String logicalPath, Kind kind, List<Occurrence> occurrences) {
-		public Change {
-			logicalPath = LogicalPath.requireCanonical(logicalPath);
-			kind = Objects.requireNonNull(kind, "change kind");
+	public static final class Change {
+		private String logicalPath;
+		private Kind kind;
+		private List<Occurrence> occurrences;
+
+		public Change() {}
+
+		public Change(String logicalPath, Kind kind, List<Occurrence> occurrences) {
+			this.logicalPath = LogicalPath.requireCanonical(logicalPath);
+			this.kind = Objects.requireNonNull(kind, "change kind");
 			if (occurrences == null || occurrences.isEmpty()) throw new IllegalArgumentException("Change has no physical occurrences");
 			List<Occurrence> normalized = new ArrayList<>(occurrences.size());
 			for (Occurrence occurrence : occurrences) {
 				Objects.requireNonNull(occurrence, "change occurrence");
-				if (!logicalPath.equals(occurrence.logicalPath())) throw new IllegalArgumentException("Change occurrence path does not match logical path");
-				normalized.add(occurrence);
+				if (!this.logicalPath.equals(occurrence.logicalPath())) throw new IllegalArgumentException("Change occurrence path does not match logical path");
+				normalized.add(occurrence.validated());
 			}
-			occurrences = List.copyOf(normalized);
+			this.occurrences = List.copyOf(normalized);
+		}
+
+		public Change validated() {
+			return new Change(logicalPath, kind, occurrences);
+		}
+
+		public String logicalPath() {
+			return logicalPath;
+		}
+
+		public Kind kind() {
+			return kind;
+		}
+
+		public List<Occurrence> occurrences() {
+			return occurrences;
 		}
 
 		public Occurrence primaryOccurrence() {
 			return occurrences.get(0);
 		}
+
+		@Override
+		public boolean equals(Object object) {
+			if (this == object) return true;
+			if (!(object instanceof Change other)) return false;
+			return kind == other.kind && Objects.equals(logicalPath, other.logicalPath) && Objects.equals(occurrences, other.occurrences);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(logicalPath, kind, occurrences);
+		}
 	}
 
-	public record Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash, String contentKind, List<String> featureIds, List<String> references) {
+	public static final class Occurrence {
+		private String location;
+		private String logicalPath;
+		private long size;
+		private Long beforeSize;
+		private String beforeHash;
+		private String afterHash;
+		private String contentKind;
+		private List<String> featureIds;
+		private List<String> references;
+
+		public Occurrence() {}
+
 		public Occurrence(String location, String logicalPath, long size) {
-			this(location, logicalPath, size, null, null, null, List.of(), List.of());
+			this(location, logicalPath, size, null, null, null, null, List.of(), List.of());
 		}
 
 		public Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash) {
-			this(location, logicalPath, size, beforeHash, afterHash, null, List.of(), List.of());
+			this(location, logicalPath, size, null, beforeHash, afterHash, null, List.of(), List.of());
 		}
 
 		public Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash, List<String> references) {
-			this(location, logicalPath, size, beforeHash, afterHash, null, List.of(), references);
+			this(location, logicalPath, size, null, beforeHash, afterHash, null, List.of(), references);
 		}
 
 		public Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash, String contentKind, List<String> references) {
-			this(location, logicalPath, size, beforeHash, afterHash, contentKind, List.of(), references);
+			this(location, logicalPath, size, null, beforeHash, afterHash, contentKind, List.of(), references);
 		}
 
-		public Occurrence {
+		public Occurrence(String location, String logicalPath, long size, Long beforeSize, String beforeHash, String afterHash, String contentKind, List<String> featureIds,
+				List<String> references) {
 			if (location == null || location.isBlank()) throw new IllegalArgumentException("Change occurrence location is missing");
-			location = location.trim();
-			logicalPath = LogicalPath.requireCanonical(logicalPath);
+			this.location = location.trim();
+			this.logicalPath = LogicalPath.requireCanonical(logicalPath);
 			if (size < 0) throw new IllegalArgumentException("Change occurrence size is negative");
-			beforeHash = normalizeHash(beforeHash, "before hash");
-			afterHash = normalizeHash(afterHash, "after hash");
-			contentKind = normalizeContentKind(contentKind, logicalPath);
-			featureIds = normalizedValues(featureIds);
+			this.size = size;
+			if (beforeSize != null && beforeSize < 0) throw new IllegalArgumentException("Change occurrence before size is negative");
+			this.beforeSize = beforeSize;
+			this.beforeHash = normalizeHash(beforeHash, "before hash");
+			this.afterHash = normalizeHash(afterHash, "after hash");
+			this.contentKind = normalizeContentKind(contentKind, this.logicalPath);
+			this.featureIds = normalizedValues(featureIds);
 			List<String> normalizedReferences = new ArrayList<>();
 			if (references != null) for (String reference : references) if (reference != null && !reference.isBlank() && !normalizedReferences.contains(reference)) normalizedReferences.add(reference);
-			references = List.copyOf(normalizedReferences);
+			this.references = List.copyOf(normalizedReferences);
+		}
+
+		public Occurrence validated() {
+			return new Occurrence(location, logicalPath, size, beforeSize, beforeHash, afterHash, contentKind, featureIds, references);
+		}
+
+		public String location() {
+			return location;
+		}
+
+		public String logicalPath() {
+			return logicalPath;
+		}
+
+		public long size() {
+			return size;
+		}
+
+		public Long beforeSize() {
+			return beforeSize;
+		}
+
+		public String beforeHash() {
+			return beforeHash;
+		}
+
+		public String afterHash() {
+			return afterHash;
+		}
+
+		public String contentKind() {
+			return contentKind;
+		}
+
+		public List<String> featureIds() {
+			return featureIds;
+		}
+
+		public List<String> references() {
+			return references;
 		}
 
 		public Occurrence withReferences(List<String> newReferences) {
-			return new Occurrence(location, logicalPath, size, beforeHash, afterHash, contentKind, featureIds, newReferences);
+			return new Occurrence(location, logicalPath, size, beforeSize, beforeHash, afterHash, contentKind, featureIds, newReferences);
 		}
 
-		public Occurrence withFeatureIds(Collection<String> newFeatureIds) {
-			return new Occurrence(location, logicalPath, size, beforeHash, afterHash, contentKind, newFeatureIds == null ? List.of() : List.copyOf(newFeatureIds), references);
+		@Override
+		public boolean equals(Object object) {
+			if (this == object) return true;
+			if (!(object instanceof Occurrence other)) return false;
+			return size == other.size && Objects.equals(location, other.location) && Objects.equals(logicalPath, other.logicalPath) && Objects.equals(beforeSize, other.beforeSize)
+					&& Objects.equals(beforeHash, other.beforeHash) && Objects.equals(afterHash, other.afterHash) && Objects.equals(contentKind, other.contentKind)
+					&& Objects.equals(featureIds, other.featureIds) && Objects.equals(references, other.references);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(location, logicalPath, size, beforeSize, beforeHash, afterHash, contentKind, featureIds, references);
 		}
 	}
 
-	public record Effect(String category, String value) {
-		public Effect {
+	public static final class Effect {
+		private String category;
+		private String value;
+
+		public Effect() {}
+
+		public Effect(String category, String value) {
 			if (category == null || category.isBlank()) throw new IllegalArgumentException("Change effect category is missing");
 			if (value == null || value.isBlank()) throw new IllegalArgumentException("Change effect value is missing");
-			category = category.trim();
-			value = value.trim();
+			this.category = category.trim();
+			this.value = value.trim();
 		}
 
-		public static Effect named(String value) {
-			return new Effect("general", value);
+		/** The effect marking that applying the change requires a launch restart, reasoned by the named restart reason. */
+		public static Effect restart(String reason) {
+			return new Effect("restart", reason);
+		}
+
+		public Effect validated() {
+			return new Effect(category, value);
+		}
+
+		public String category() {
+			return category;
+		}
+
+		public String value() {
+			return value;
+		}
+
+		@Override
+		public boolean equals(Object object) {
+			if (this == object) return true;
+			if (!(object instanceof Effect other)) return false;
+			return Objects.equals(category, other.category) && Objects.equals(value, other.value);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(category, value);
 		}
 	}
 
@@ -295,4 +455,5 @@ public final class ChangeSet {
 		normalized.sort(String::compareTo);
 		return List.copyOf(normalized);
 	}
+
 }

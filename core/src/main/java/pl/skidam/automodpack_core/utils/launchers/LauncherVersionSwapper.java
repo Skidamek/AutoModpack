@@ -15,8 +15,15 @@ public class LauncherVersionSwapper {
 
 	public static boolean requiresLoaderVersionSwap(String serverLoaderType, String serverLoaderVersion, boolean syncLoaderVersion, String loaderType) {
 		if (!syncLoaderVersion) return false;
-		if (serverLoaderType == null || serverLoaderVersion == null || !serverLoaderType.equalsIgnoreCase(loaderType)) return false;
-		return MultiMCMeta.requiresLoaderVersionUpdate(serverLoaderType, serverLoaderVersion) || PandoraMeta.requiresLoaderVersionUpdate(serverLoaderVersion);
+		if (serverLoaderType == null || !serverLoaderType.equalsIgnoreCase(loaderType)) return false;
+		if (serverLoaderVersion == null || serverLoaderVersion.isBlank()) return false;
+		boolean applicable = MultiMCMeta.requiresLoaderVersionUpdate(serverLoaderType, serverLoaderVersion) || PandoraMeta.requiresLoaderVersionUpdate(serverLoaderVersion);
+		if (!applicable) return false;
+		if (!PrismMeta.isVersionResolvable(serverLoaderType, serverLoaderVersion)) {
+			LOGGER.warn("Loader version {} is not available in the launcher meta server, skipping loader version sync", serverLoaderVersion);
+			return false;
+		}
+		return true;
 	}
 
 	public static boolean requiresLoaderVersionSwap(String serverLoaderType, String serverLoaderVersion) {
@@ -24,7 +31,14 @@ public class LauncherVersionSwapper {
 	}
 
 	public static boolean swapLoaderVersion(String serverLoaderType, String serverLoaderVersion) throws IOException {
-		if (!clientConfig.syncLoaderVersion || serverLoaderType == null || serverLoaderVersion == null || !serverLoaderType.equalsIgnoreCase(LOADER)) return false;
+		return swapLoaderVersion(serverLoaderType, serverLoaderVersion, clientConfig.syncLoaderVersion, LOADER);
+	}
+
+	/** The explicit form for callers whose client session state does not live in the boot constants, e.g. the helper process. */
+	public static boolean swapLoaderVersion(String serverLoaderType, String serverLoaderVersion, boolean syncLoaderVersion, String clientLoader) throws IOException {
+		if (!syncLoaderVersion || serverLoaderType == null || serverLoaderVersion == null || serverLoaderVersion.isBlank()
+				|| clientLoader == null || !serverLoaderType.equalsIgnoreCase(clientLoader))
+			return false;
 		boolean multiMcApplicable = MultiMCMeta.updateLoaderVersion(serverLoaderType, serverLoaderVersion);
 		boolean pandoraApplicable = PandoraMeta.updateLoaderVersion(serverLoaderVersion);
 		return multiMcApplicable || pandoraApplicable;

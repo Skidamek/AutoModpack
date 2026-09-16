@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public class ModpackLoader implements ModpackLoaderService {
 	public static String CONNECTOR_MODS_PROPERTY = "connector.additionalModLocations";
@@ -36,7 +36,7 @@ public class ModpackLoader implements ModpackLoaderService {
 	}
 
 	@Override
-	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileMetadataCache cache) {
+	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileCache cache) {
 		return new ArrayList<>();
 	}
 }

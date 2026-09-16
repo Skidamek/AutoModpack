@@ -4,8 +4,6 @@ import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_CONFIG_FILE;
 
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Objects;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
@@ -20,15 +18,11 @@ public class Server {
 		NettyServer server = new NettyServer();
 		hostServer = server;
 
-		serverConfig = ConfigTools.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
+		serverConfig = ConfigTools.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons::standalone);
 		if (serverConfig == null) {
 			LOGGER.error("Failed to load standalone host configuration");
 			return;
 		}
-		// Standalone host serves only what is already in host-modpack, so no group pulls in CWD files.
-		if (serverConfig.groups != null) serverConfig.groups.values().stream().filter(Objects::nonNull).forEach(group -> group.syncedFiles = new HashSet<>());
-		serverConfig.validateSecrets = false;
-		ConfigTools.writeAtomic(SERVER_CONFIG_FILE, serverConfig);
 
 		if (serverConfig.bindPort == -1) {
 			LOGGER.error("Host port not set in config!");
@@ -40,15 +34,12 @@ public class Server {
 
 		if (generation instanceof ModpackExecutor.Published || generation instanceof ModpackExecutor.NoChanges) {
 			LOGGER.info("Modpack generation completed!");
-		} else if (generation instanceof ModpackExecutor.PublishFailed failed) {
-			LOGGER.error("Failed to generate modpack", failed.failure());
-		} else {
-			LOGGER.error("Failed to generate modpack: operation was rejected");
+		} else if (generation instanceof ModpackExecutor.PublishResult.Rejected rejected) {
+			LOGGER.error("Failed to generate modpack: {}", rejected.detail(), rejected.cause());
 		}
 
 		LOGGER.info("Starting server on port {}", serverConfig.bindPort);
 		server.start();
-		// wait for server to stop
 		while (server.isRunning()) {
 			try {
 				Thread.sleep(1000);

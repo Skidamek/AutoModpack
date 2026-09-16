@@ -4,10 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -16,7 +17,6 @@ import org.junit.jupiter.api.Test;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -82,13 +82,7 @@ class UpdatePreviewTest {
 	void removalDoesNotReportLiveFileAlreadyMatchingBaseline() {
 		ModpackJsons.ModpackContentFields installed = manifest(item("config/kept.json", OLD_HASH, 7, "config"),
 				entry("config/kept.json", OLD_HASH, 7, OwnershipLedger.Status.PRESENT));
-		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
-		baseline.modpackId = installed.modpackId;
-		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
-		baselineEntry.logicalPath = "config/kept.json";
-		baselineEntry.objectHash = OLD_HASH;
-		baselineEntry.size = 7;
-		baseline.entries = new ArrayList<>(List.of(baselineEntry));
+		ClientBaseline baseline = new ClientBaseline(installed.modpackId, List.of(new ClientBaseline.Entry("config/kept.json", OLD_HASH, 7, false, "")));
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, "config/kept.json"), new FileState(OLD_HASH, 7, true),
 				new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OLD_HASH, 7, true));
@@ -105,8 +99,8 @@ class UpdatePreviewTest {
 		ModpackJsons.ModpackContentFields target = manifest(item("mods/example.jar", TARGET_HASH, 9, "mod"),
 				entry("mods/example.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT));
 		UpdatePreview preview = UpdatePreview.create(plan(target, Map.of()), null, UpdatePreview.Mode.UPDATE);
-		GroupManifest.Group feature = new GroupManifest.Group("Main feature", "", "", "", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
-				new TreeMap<>(Map.of("mods/example.jar", new GroupManifest.GroupFile(9, "mod", false, false, TARGET_HASH, "0"))));
+		GroupManifest.Group feature = new GroupManifest.Group("Main feature", "", "General", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
+				new TreeMap<>(Map.of("mods/example.jar", new GroupManifest.GroupFile(9, "mod", false, TARGET_HASH, "0"))));
 		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("main", feature)));
 
 		UpdatePreview named = preview.withFeatureManifest(manifest);
@@ -129,12 +123,12 @@ class UpdatePreviewTest {
 	}
 
 	private static UpdatePlan plan(ModpackJsons.ModpackContentFields target, Map<FileKey, FileState> files) {
-		return UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+		return UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				new ClientConfigJsons.ClientConfigFieldsV3()));
 	}
 
 	private static ModpackJsons.ModpackContentFields.ModpackContentItem item(String path, String hash, long size, String type) {
-		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, Long.toString(size), type, false, false, hash, "0");
+		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, size, type, false, hash, "0");
 	}
 
 	private static ModpackJsons.ModpackContentFields manifest(Object... values) {
@@ -145,14 +139,15 @@ class UpdatePreviewTest {
 			if (value instanceof OwnershipLedger.Entry entry) ledgerEntries.put(entry.logicalPath(), entry);
 		}
 		target.modpackId = "abc1234";
-		target.targetGenerationId = "1".repeat(40);
-		target.parentGenerationId = "";
-		target.stateDigest = "2".repeat(40);
+		target.contentToken = "1".repeat(40);
+		target.policySha1 = "2".repeat(40);
 		target.ownershipLedger = new OwnershipLedger("abc1234", ledgerEntries).toFields();
 		return target;
 	}
 
 	private static OwnershipLedger.Entry entry(String path, String hash, long size, OwnershipLedger.Status status) {
-		return new OwnershipLedger.Entry(path, Set.of(new OwnershipLedger.Content(hash, size)), Set.of("main"), "a".repeat(40), "b".repeat(40), status);
+		NavigableSet<OwnershipLedger.Content> hashes = new TreeSet<>(Comparator.comparing(OwnershipLedger.Content::sha1).thenComparingLong(OwnershipLedger.Content::size));
+		hashes.add(new OwnershipLedger.Content(hash, size));
+		return new OwnershipLedger.Entry(path, hashes, new TreeSet<>(Set.of("main")), status);
 	}
 }

@@ -1,0 +1,35 @@
+# Hosting and connections
+
+Players need a route from their game to your modpack files. AutoModpack ships a built-in host that can carry that route over the Minecraft connection itself, over a dedicated port, or over infrastructure you provide. What the client actually dials is the advertised endpoint: `advertisedEndpointHost` and `advertisedEndpointPort` when set, otherwise the address the player connected to. `modpackHost` decides whether this server process handles the connection, and `connectionMode` decides how.
+
+## Connection modes and ports
+
+| Mode | `bindPort: -1` | Explicit `bindPort` |
+| --- | --- | --- |
+| `HOLEPUNCH` | Serves the pack over your Minecraft server port. | `bindPort` is ignored; HOLEPUNCH always uses your Minecraft server port. |
+| `MAGIC` | Serves the pack over your Minecraft server port. | Serves the pack on `bindPort`. |
+| `DIRECT` | `bindPort` is ignored; DIRECT opens no port, so the pack endpoint must be handled by something else. | Serves the pack on `bindPort`. |
+
+`HOLEPUNCH` is the default and needs no open port beyond Minecraft's. The client sends a Minecraft Login Start whose UUID carries a marker, and the server claims that connection for AutoModpack before vanilla builds a login listener. Unmarked logins reach Minecraft unchanged. On Forge and NeoForge the holepunch handshake carries the same `\0FML3\0` hostname extra a normal modded client sends, so packed servers do not reject the connection as vanilla before the marker is read.
+
+`MAGIC` marks its connections with the bytes `AMMH` followed by an `AMOK` confirmation before any TLS. On the shared Minecraft port, traffic without the marker passes through to Minecraft untouched. On a dedicated listener, non-magic traffic is rejected.
+
+The advertised mode is strict: the client uses the one mode the server advertises and does not fall back to another after a failure.
+
+## TLS
+
+Clients always start TLS 1.3, on every mode. The certificate and its verification are described in [security](../security); the built-in host loads `automodpack/credentials/certificate.crt` and `private-key.pem`, generating a self-signed pair on first start when they are missing.
+
+`disableInternalTLS` moves termination out of AutoModpack: the server expects traffic to arrive already decrypted, and some component in front of it must hold the certificate and terminate TLS. Clients behave identically either way, so this only pairs with an external terminator and never allows plaintext.
+
+## Proxy protocol
+
+PROXY protocol headers are honored on dedicated `MAGIC` and `DIRECT` listeners while `acceptProxyProtocol` is on, so the proxied client address is used. The shared Minecraft listener never consumes them. Enable the option only behind a trusted proxy: a claimed source address feeds IP bans and audit logs, and a forged one lets a banned player past the ban.
+
+## Reverse proxies and external endpoints
+
+Setting `modpackHost` to `false` turns off every built-in listener and holepunch handler. Clients still receive connection information, which can point at a proxy or a separate host. AutoModpack cannot validate that routing from the Minecraft server process, so the endpoint must speak the advertised mode exactly. Known-good proxy setups, including the Velocity plugin and Gate Lite, are described on the [proxies page](../compatibility/proxies).
+
+## Bandwidth
+
+`bandwidthLimit` caps upload speed per client in MiB/s; `0` disables the cap. Much of the typical download never touches your server in the first place, because clients fetch files from Modrinth and CurseForge where possible, as described in [client updates](client-updates#where-files-come-from).

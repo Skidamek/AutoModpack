@@ -36,8 +36,7 @@ public record GroupResolution(String groupId, Status status, NavigableSet<Reason
 		UNAVAILABLE,
 		BLOCKED,
 		EXCLUDED,
-		CONFLICT,
-		STALE
+		CONFLICT
 	}
 
 	public enum Reason {
@@ -50,7 +49,6 @@ public record GroupResolution(String groupId, Status status, NavigableSet<Reason
 		PLATFORM_INCOMPATIBLE,
 		EXPLICIT_REQUEST_UNAVAILABLE,
 		BLOCKED_BY_DEPENDENCY,
-		CONFLICTING_GROUP,
-		STALE_SELECTION
+		CONFLICTING_GROUP
 	}
 }

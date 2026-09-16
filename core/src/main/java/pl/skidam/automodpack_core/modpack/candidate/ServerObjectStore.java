@@ -1,11 +1,17 @@
 package pl.skidam.automodpack_core.modpack.candidate;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
-import java.nio.channels.FileChannel;
 import java.nio.file.*;
 import java.util.*;
 
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.FileTrees;
+import pl.skidam.automodpack_core.utils.ImmutableFilePublisher;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Promotes verified candidate snapshots into the immutable server object directory. */
 public final class ServerObjectStore {
@@ -19,73 +25,44 @@ public final class ServerObjectStore {
 			throw new IllegalArgumentException("Managed object and staging directories must be separate");
 	}
 
-	public NavigableMap<String, Path> promoteAll(NavigableMap<String, StagedObject> objects) throws IOException {
-		ensureManagedDirectory(objectsDirectory, "immutable object");
-		ensureManagedDirectory(stagingDirectory, "staging");
+	public NavigableMap<String, Path> promoteAll(NavigableMap<String, StagedObject> objects, FileCache cache) throws IOException {
+		FileTrees.createManagedDirectory(objectsDirectory, "immutable object directory");
+		FileTrees.createManagedDirectory(stagingDirectory, "staging directory");
 		TreeMap<String, Path> promoted = new TreeMap<>();
 		for (StagedObject object : objects.values()) {
 			validateStaged(object);
 			Path destination = destination(object.sha1());
-			promote(object, destination);
+			promote(object, destination, cache);
 			promoted.put(object.sha1(), destination);
 		}
 		return Collections.unmodifiableNavigableMap(promoted);
 	}
 
-	private void promote(StagedObject object, Path destination) throws IOException {
+	private void promote(StagedObject object, Path destination, FileCache cache) throws IOException {
 		if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
-			verifyExisting(destination, object);
-			object.delete();
-			return;
-		}
-		verifyStaged(object);
-		try {
-			/*
-			 * A hard link is the no-clobber commit: createLink fails if another object
-			 * wins the destination race, unlike an atomic rename which may replace it.
-			 * The source is our private staged snapshot, never the mutable operator file;
-			 * deleting its name after linking therefore leaves the verified immutable inode.
-			 */
-			Files.createLink(destination, object.stagedPath());
-			forceDirectory(objectsDirectory);
-			object.delete();
-		} catch (FileAlreadyExistsException e) {
-			verifyExisting(destination, object);
-			object.delete();
-		} catch (UnsupportedOperationException | FileSystemException e) {
-			promoteByCopy(object, destination, e);
-		}
-	}
-
-	private void promoteByCopy(StagedObject object, Path destination, Exception linkFailure) throws IOException {
-		Path temporary = Files.createTempFile(objectsDirectory, ".object-", ".tmp");
-		try {
-			Files.copy(object.stagedPath(), temporary, StandardCopyOption.REPLACE_EXISTING);
-			force(temporary);
-			if (!valid(temporary, object)) throw new IOException("Copied object failed size/SHA-1 verification: " + temporary);
-			try {
-				try {
-					Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE);
-				} catch (AtomicMoveNotSupportedException e) {
-					Files.move(temporary, destination);
-				}
-			} catch (FileAlreadyExistsException e) {
-				verifyExisting(destination, object);
+			ImmutableFiles.protect(destination);
+			if (FileIntegrity.matchesNamed(destination, object.size(), object.sha1(), cache)) {
+				object.delete();
+				if (cache != null) cache.overwriteCache(destination, object.sha1());
+				return;
 			}
-			forceDirectory(objectsDirectory);
-			object.delete();
-		} catch (IOException e) {
-			e.addSuppressed(linkFailure);
-			throw e;
-		} finally {
-			Files.deleteIfExists(temporary);
+			LOGGER.warn("Immutable object {} no longer matches its Git-stat tripwire; replacing from a fresh source snapshot", destination);
+			ImmutableFiles.deleteIfExists(destination);
 		}
+		requireStagedSize(object);
+		FileTrees.forceFile(object.stagedPath());
+		ImmutableFilePublisher.publishFile(object.stagedPath(), destination, path -> requireSize(path, object));
+		ImmutableFiles.protect(destination);
+		object.delete();
+		if (cache != null) cache.overwriteCache(destination, object.sha1());
 	}
 
 	private Path destination(String sha1) throws IOException {
-		Path destination = objectsDirectory.resolve(sha1).normalize();
-		if (!destination.startsWith(objectsDirectory)) throw new IOException("Object path escapes immutable store: " + sha1);
-		return destination;
+		try {
+			return DataRootResolver.objectFile(objectsDirectory, sha1);
+		} catch (IllegalArgumentException e) {
+			throw new IOException("Object path escapes immutable store: " + sha1, e);
+		}
 	}
 
 	private void validateStaged(StagedObject object) throws IOException {
@@ -100,41 +77,12 @@ public final class ServerObjectStore {
 			throw new IOException("Staged object resolves outside the managed staging directory: " + staged);
 	}
 
-	private void verifyStaged(StagedObject object) throws IOException {
-		force(object.stagedPath());
-		if (!valid(object.stagedPath(), object)) throw new IOException("Staged object failed size/SHA-1 verification: " + object.stagedPath());
+	private static void requireStagedSize(StagedObject object) throws IOException {
+		requireSize(object.stagedPath(), object);
 	}
 
-	private static void verifyExisting(Path objectPath, StagedObject advertised) throws IOException {
-		if (!valid(objectPath, advertised))
-			throw new IOException("Refusing to replace corrupt immutable object " + objectPath + " for SHA-1 " + advertised.sha1());
-	}
-
-	private static boolean valid(Path path, StagedObject object) {
-		return FileIntegrity.matches(path, object.size(), object.sha1());
-	}
-
-	private static void ensureManagedDirectory(Path directory, String description) throws IOException {
-		if (Files.isSymbolicLink(directory)) throw new IOException("Managed " + description + " directory cannot be a symbolic link: " + directory);
-		Files.createDirectories(directory);
-		if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS))
-			throw new IOException("Managed " + description + " directory is not a regular directory: " + directory);
-	}
-
-	private static void force(Path path) throws IOException {
-		try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
-			channel.force(true);
-		}
-	}
-
-	private static void forceDirectory(Path directory) throws IOException {
-		try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
-			channel.force(true);
-		} catch (UnsupportedOperationException ignored) {
-			// Some providers cannot expose directories as channels.
-		} catch (IOException e) {
-			if (directory.getFileSystem().supportedFileAttributeViews().contains("posix")) throw e;
-			// Windows rejects opening directories as FileChannels even though the link is committed.
-		}
+	private static void requireSize(Path path, StagedObject object) throws IOException {
+		if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.size(path) != object.size())
+			throw new IOException("Staged object failed size verification: " + path);
 	}
 }

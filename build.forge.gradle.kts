@@ -15,10 +15,18 @@ val minecraftVersion = property("deps.minecraft") as String
 val selectedForgeVersion = property("deps.forge") as String
 val mixinExtrasVersion = versionProperty("versionMixinExtras")
 val mixinVersion = versionProperty("versionMixin")
+val mcholepunchVersion = versionProperty("versionMcholepunch")
 
 version = "${property("mod_version")}"
 group = "${property("mod.group")}"
 base.archivesName.set("${property("mod_name")}-mc$targetName".lowercase(Locale.ROOT))
+
+repositories {
+	flatDir {
+		name = "mcholepunchLibs"
+		dirs(rootProject.file("libs"))
+	}
+}
 
 legacyForge {
 	validateAccessTransformers = true
@@ -33,10 +41,12 @@ dependencies {
 	// gives legacy Forge one classloader owner for the loader package; its SERVICE module otherwise
 	// loads ModpackUtils while the duplicate nested package can hide ManifestFetchState.
 	compileOnly(project(":core")) { isTransitive = false }
-	compileOnly(project(":loader-core")) { isTransitive = false }
+	compileOnly(":mcholepunch-core:$mcholepunchVersion") { isTransitive = false }
+	compileOnly(":mcholepunch-server-netty:$mcholepunchVersion") { isTransitive = false }
 
 	compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:$mixinExtrasVersion")!!)
-	implementation(jarJar("io.github.llamalad7:mixinextras-forge:$mixinExtrasVersion")!!)
+	implementation("io.github.llamalad7:mixinextras-forge:$mixinExtrasVersion")
+	jarJar(dependencyFactory.create("io.github.llamalad7", "mixinextras-forge", mixinExtrasVersion, "slim", "jar"))
 
 	annotationProcessor("org.spongepowered:mixin:$mixinVersion:processor") // Required to generate refmaps
 }

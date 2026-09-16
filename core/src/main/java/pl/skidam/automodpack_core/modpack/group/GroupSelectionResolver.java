@@ -26,7 +26,6 @@ public final class GroupSelectionResolver {
 	private static ResolvedSelection resolveInternal(GroupManifest manifest, SelectionIntent intent, ClientPlatform platform, boolean defaultSelection) {
 		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(intent);
-		Objects.requireNonNull(platform);
 		ResolutionState state = new ResolutionState(manifest, intent, platform);
 		state.initializeMandatoryGroups();
 		state.collectStaleChoices();
@@ -51,12 +50,11 @@ public final class GroupSelectionResolver {
 		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(current);
 		Objects.requireNonNull(clicked);
-		Objects.requireNonNull(platform);
 		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
 		Set<String> requestedCategories = new TreeSet<>(current.requestedCategories());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
 		GroupManifest.Group clickedGroup = manifest.groups().get(clicked);
-		if (clickedGroup != null && !clickedGroup.category().isEmpty() && requestedCategories.remove(clickedGroup.category())) {
+		if (clickedGroup != null && requestedCategories.remove(clickedGroup.category())) {
 			for (var entry : manifest.groups().entrySet()) {
 				GroupManifest.Group group = entry.getValue();
 				if (clickedGroup.category().equals(group.category()) && !group.required() && group.supports(platform)) requestedGroups.add(entry.getKey());
@@ -67,24 +65,45 @@ public final class GroupSelectionResolver {
 		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
 	}
 
-	/** Toggles one persisted category intent without pretending that its groups were clicked individually. */
+	/** Persists a category request and clears the per-group choices inside it, so the category speaks with one voice. */
 	public static SelectionIntent preferCategory(GroupManifest manifest, SelectionIntent current, String category, ClientPlatform platform) {
 		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(current);
 		Objects.requireNonNull(category);
-		Objects.requireNonNull(platform);
-		Set<String> categoryGroups = new TreeSet<>();
-		for (var entry : manifest.groups().entrySet()) if (category.equals(entry.getValue().category()) && !entry.getValue().required() && entry.getValue().supports(platform)) categoryGroups.add(entry.getKey());
 		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
 		Set<String> requestedCategories = new TreeSet<>(current.requestedCategories());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
-		boolean remove = !requestedCategories.add(category);
-		if (remove) requestedCategories.remove(category);
+		requestedCategories.add(category);
+		clearCategoryChoices(categoryGroups(manifest, category, platform), requestedGroups, excludedGroups);
+		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
+	}
+
+	/** Excludes every optional group in the category and drops the category request, so one click turns the whole category off — even groups that are on by default. */
+	public static SelectionIntent excludeCategory(GroupManifest manifest, SelectionIntent current, String category, ClientPlatform platform) {
+		Objects.requireNonNull(manifest);
+		Objects.requireNonNull(current);
+		Objects.requireNonNull(category);
+		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
+		Set<String> requestedCategories = new TreeSet<>(current.requestedCategories());
+		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
+		requestedCategories.remove(category);
+		Set<String> categoryGroups = categoryGroups(manifest, category, platform);
+		clearCategoryChoices(categoryGroups, requestedGroups, excludedGroups);
+		excludedGroups.addAll(categoryGroups);
+		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
+	}
+
+	private static Set<String> categoryGroups(GroupManifest manifest, String category, ClientPlatform platform) {
+		Set<String> categoryGroups = new TreeSet<>();
+		for (var entry : manifest.groups().entrySet()) if (category.equals(entry.getValue().category()) && !entry.getValue().required() && entry.getValue().supports(platform)) categoryGroups.add(entry.getKey());
+		return categoryGroups;
+	}
+
+	private static void clearCategoryChoices(Set<String> categoryGroups, Set<String> requestedGroups, Set<String> excludedGroups) {
 		for (String groupId : categoryGroups) {
 			requestedGroups.remove(groupId);
 			excludedGroups.remove(groupId);
 		}
-		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
 	}
 
 	public static boolean conflicts(GroupManifest manifest, String first, String second) {
@@ -100,7 +119,6 @@ public final class GroupSelectionResolver {
 		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(candidate);
 		Objects.requireNonNull(preferredGroups);
-		Objects.requireNonNull(platform);
 		if (preferredGroups.isEmpty() || partial == null) return Optional.empty();
 		Set<String> conflicts = new TreeSet<>();
 		for (String preferred : preferredGroups) {
@@ -146,6 +164,11 @@ public final class GroupSelectionResolver {
 			intent = Objects.requireNonNull(intent);
 			conflictingGroups = Set.copyOf(new TreeSet<>(conflictingGroups));
 		}
+	}
+
+	/** Names the resolution context in messages: the platform id, or the plain fact that nothing is known about the platform. */
+	private static String platformName(ClientPlatform platform) {
+		return platform == null ? "no platform detected" : "platform " + platform.id();
 	}
 
 	private enum Source {
@@ -198,7 +221,7 @@ public final class GroupSelectionResolver {
 				if (unavailableGroups.stream().anyMatch(closure.groups()::contains)) {
 					requestedUnavailableGroups.add(groupId);
 					addReason(groupId, GroupResolution.Reason.EXPLICIT_REQUEST_UNAVAILABLE);
-					errors.add("Group '" + groupId + "' was explicitly requested but is unavailable on " + platform.id());
+					errors.add("Group '" + groupId + "' was explicitly requested but is unavailable on " + platformName(platform));
 				} else if (!closure.excluded()) {
 					errors.add("Group '" + groupId + "' was explicitly requested but could not be selected");
 				}
@@ -221,7 +244,7 @@ public final class GroupSelectionResolver {
 			if (!group.supports(platform)) {
 				unavailableGroups.add(groupId);
 				addReason(groupId, GroupResolution.Reason.PLATFORM_INCOMPATIBLE);
-				if (forced) errors.add("Group '" + groupId + "' is unavailable on " + platform.id());
+				if (forced) errors.add("Group '" + groupId + "' is unavailable on " + platformName(platform));
 				return Closure.failure(Set.of(groupId));
 			}
 			if (selected.contains(groupId)) return Closure.success(Set.of(groupId));

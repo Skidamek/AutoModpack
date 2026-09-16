@@ -50,7 +50,7 @@ def describe() -> list[dict]:
     """One entry per handler: its name aliases and first docstring line.
 
     Drives ``autotester verbs`` so the available verbs are discoverable without
-    grepping ``@verb(`` across the engine and runner.
+    grepping ``@verb(`` across the engine and the runner's step modules.
     """
     by_fn: dict[Callable, list[str]] = {}
     for name, fn in VERBS.items():

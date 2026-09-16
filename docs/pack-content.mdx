@@ -1,0 +1,119 @@
+# Building the modpack
+
+The server builds a candidate generation from two sources. Both map onto the client's game directory, laid out like a `.minecraft` folder.
+
+- The group directory `automodpack/host-modpack/<group>/` is included in full. Files go here when the server itself has no use for them, for example client-side mods.
+- The group's `syncedFiles` rules pull files out of the server root. This is how the pack picks up the mods, configs, and scripts that already live on the server.
+
+The default group id is `main`. After changing files or rules, publish a new generation with `/automodpack generate`; clients pick it up on their next connection. Publishing is described in [generations](how-it-works/generations).
+
+## Example
+
+A server with this layout:
+
+```
+├── automodpack
+│   ├── server-config.json
+│   └── host-modpack
+│       └── main
+│           ├── config
+│           │   ├── my-super.conf
+│           │   └── shadow.txt
+│           ├── mods
+│           │   ├── fabric-api.jar
+│           │   └── herobrine-mod.jar
+│           ├── options.txt
+│           └── shaderpacks
+│               └── the-ultimate-shader.zip
+├── config
+│   ├── ferritecore.mixin.properties
+│   └── invisible-radio.json
+├── kubejs
+│   ├── client_scripts
+│   │   └── welcome.js
+│   ├── common_scripts
+│   │   └── recipes.js
+│   └── server_scripts
+│       └── datapack_loader.js
+└── mods
+    ├── automodpack.jar
+    ├── fabric-api.jar
+    ├── ferritecore.jar
+    ├── modmenu.jar
+    └── sodium-fabric.jar
+```
+
+and this group declared in `server-config.json`:
+
+```json
+"modpack": {
+  "General": {
+    "main": {
+      "syncedFiles": ["mods/*.jar", "kubejs/**", "emotes/*"],
+      "excludedFiles": ["kubejs/server_scripts/**"],
+      "allowEditsInFiles": ["options.txt", "config/**"]
+    }
+  }
+}
+```
+
+produces this pack for clients:
+
+```
+├── config
+│   ├── my-super.conf      (editable)
+│   └── shadow.txt         (editable)
+├── kubejs
+│   ├── client_scripts
+│   │   └── welcome.js
+│   └── common_scripts
+│       └── recipes.js
+├── mods
+│   ├── fabric-api.jar     (the host-modpack copy)
+│   ├── ferritecore.jar
+│   ├── herobrine-mod.jar  (from host-modpack)
+│   ├── modmenu.jar
+│   └── sodium-fabric.jar
+├── options.txt            (editable)
+└── shaderpacks
+    └── the-ultimate-shader.zip
+```
+
+What the example shows:
+
+- `mods/*.jar` matches every jar in the server's `mods` folder. The AutoModpack jar itself stays out: clients update it through Modrinth to match the version the server runs, never through the pack. See [AutoModpack's own updates](how-it-works/client-updates#automodpacks-own-updates).
+- Both sources contained `mods/fabric-api.jar` with different versions, and the host-modpack copy won. When the same path exists in both sources, the group directory decides.
+- `kubejs/server_scripts/**` is excluded, so the server's scripts stay on the server.
+- `options.txt` and everything under `config` in the pack is editable because `allowEditsInFiles` says so.
+- `config/ferritecore.mixin.properties` and `config/invisible-radio.json` exist on the server but not in the pack. `allowEditsInFiles` marks files that are already in the pack; it does not pull files in.
+
+## File rules
+
+`syncedFiles`, `excludedFiles`, and `allowEditsInFiles` live on each group and are documented with the [group settings](configuration/server-config#groups). All three lists speak the same glob language, described in [globbing](configuration/server-config#globbing-wildcards).
+
+One rule worth knowing early: the group directory is included in full, so `excludedFiles` is the only way to keep a file there from reaching clients. Inside `syncedFiles`, a `!` rule skips a path only for that list; the group directory may still provide it.
+
+## Deleting content
+
+Remove the file from the server, or keep it on the server and add it to `excludedFiles`. On the next update, clients delete their copy when the path, hash, and size prove the file belongs to the pack, so player-created or player-modified files survive. The full rules are in [client updates](how-it-works/client-updates#deletions-are-measured).
+
+## What never ships
+
+- AutoModpack's own jar. `/automodpack generate` never packs it and never publishes its updates: clients follow the AutoModpack version the server runs and pick the matching release up from Modrinth. To update players, update the jar on the server, restart, and clients sync to it on their next connection. The details, including `syncAutoModpackVersion` and `selfUpdater`, are in [AutoModpack's own updates](how-it-works/client-updates#automodpacks-own-updates).
+- Mods whose metadata declares them server-side, when `autoExcludeServerSideMods` is on (default).
+- Empty, hidden, `.tmp`, `.disabled`, and `.bak` files, when `autoExcludeUnnecessaryFiles` is on (default). The `automodpack/` namespace and Windows-reserved device names are always left out.
+- The paths `saves/`, `screenshots/`, `logs/`, and `automodpack/` can never be claimed by the pack.
+
+<Callout>
+Do not put cache directories in `host-modpack/`, for example a connector's `.connector` directory. Caches change constantly, which turns every publish into a full redownload and breaks restart-free updates.
+</Callout>
+
+## Groups
+
+Groups split a modpack into parts. `main` is the required core; extra groups become optional entries that players pick in the in-game "Group Selection" screen, and the choice sticks across updates. Every group is declared under a category, whose name is the section header the group is listed under. A shader bundle or a platform-specific mod set is a typical use.
+
+The [group settings](configuration/server-config#groups) document every field: display metadata, `required`, `defaultSelected`, `requires` and `breaksWith` relations, and `compatiblePlatforms`.
+
+Groups may include the same path in any number. Identical copies are fine: the file is stored once on the server, and a client selecting any combination of those groups receives a single copy. Identical means the same bytes and the same `allowEditsInFiles` verdict, so give the path the same editability everywhere.
+
+Different content under one path is allowed only between groups that can never be selected together, meaning groups that `breaksWith` each other or groups limited to different `compatiblePlatforms`. That is how you ship variants, for example a Windows-only file alongside a generic one. When two groups that could be selected together disagree about a path, `/automodpack generate` fails with an error naming the path and both groups, and nothing is published until you separate the paths or make the groups mutually exclusive.

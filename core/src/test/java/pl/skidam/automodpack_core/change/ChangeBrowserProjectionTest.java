@@ -21,7 +21,7 @@ class ChangeBrowserProjectionTest {
 		ChangeSet changes = changes();
 
 		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.TREE,
-				new ChangeBrowserProjection.Filter("SUB", Set.of("CONFIG"), Set.of("main")));
+				new ChangeBrowserProjection.Filter("SUB", Set.of("CONFIG"), Set.of("main"), null));
 
 		assertEquals(List.of("config", "config/sub", "config/sub/changed.json"), projection.rows().stream().map(ChangeBrowserProjection.Row::path).toList());
 		ChangeBrowserProjection.FolderRow folder = projection.folders().get(1);
@@ -34,7 +34,7 @@ class ChangeBrowserProjectionTest {
 	@Test
 	void listUsesTheSameFilterAndDoesNotExposeTreeAncestors() {
 		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes(), ChangeBrowserProjection.Mode.LIST,
-				new ChangeBrowserProjection.Filter("", Set.of(), Set.of("optional")));
+				new ChangeBrowserProjection.Filter("", Set.of(), Set.of("optional"), null));
 
 		assertEquals(List.of("mods/removed.jar"), projection.files().stream().map(ChangeBrowserProjection.FileRow::path).toList());
 		assertEquals(0, projection.files().get(0).depth());
@@ -45,8 +45,8 @@ class ChangeBrowserProjectionTest {
 
 	@Test
 	void catalogueChangesUseTheSameProjectionAsDiffChanges() {
-		GroupManifest.GroupFile file = new GroupManifest.GroupFile(5, "mod", false, false, HASH, null);
-		GroupManifest.Group group = new GroupManifest.Group("Main", "", "", "", false, true, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/example.jar", file)));
+		GroupManifest.GroupFile file = new GroupManifest.GroupFile(5, "mod", false, HASH, null);
+		GroupManifest.Group group = new GroupManifest.Group("Main", "", "General", false, true, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/example.jar", file)));
 
 		ChangeSet catalogue = ChangeSet.catalogue(new GroupManifest("pack", "Pack", "1", "fabric", "1", "1.21", new TreeMap<>(Map.of("main", group))));
 
@@ -94,6 +94,22 @@ class ChangeBrowserProjectionTest {
 		assertEquals(1, projection.rows().size());
 	}
 
+	@Test
+	void sourceFilterSeparatesPublishedOccurrencesFromUnreferencedJars() {
+		ChangeSet changes = ChangeSet.of(List.of(
+				change("mods/published.jar", ChangeSet.Kind.PRESERVED, "mod", List.of("https://modrinth.com/mod/example")),
+				change("mods/custom.jar", ChangeSet.Kind.PRESERVED, "mod", List.of()),
+				change("config/kept.cfg", ChangeSet.Kind.PRESERVED, "config", List.of())));
+
+		ChangeBrowserProjection.Projection published = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.LIST,
+				new ChangeBrowserProjection.Filter("", Set.of(), Set.of(), Boolean.TRUE));
+		assertEquals(List.of("mods/published.jar"), published.files().stream().map(ChangeBrowserProjection.FileRow::path).toList());
+
+		ChangeBrowserProjection.Projection custom = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.LIST,
+				new ChangeBrowserProjection.Filter("", Set.of(), Set.of(), Boolean.FALSE));
+		assertEquals(List.of("mods/custom.jar"), custom.files().stream().map(ChangeBrowserProjection.FileRow::path).toList());
+	}
+
 	private static ChangeSet changes() {
 		return ChangeSet.of(List.of(
 				change("config/sub/changed.json", ChangeSet.Kind.MODIFIED, "main", 8, "config"),
@@ -103,6 +119,10 @@ class ChangeBrowserProjectionTest {
 	}
 
 	private static ChangeSet.Change change(String path, ChangeSet.Kind kind, String group, long size, String contentKind) {
-		return new ChangeSet.Change(path, kind, List.of(new ChangeSet.Occurrence("catalogue", path, size, null, HASH, contentKind, List.of(group), List.of())));
+		return new ChangeSet.Change(path, kind, List.of(new ChangeSet.Occurrence("catalogue", path, size, null, null, HASH, contentKind, List.of(group), List.of())));
+	}
+
+	private static ChangeSet.Change change(String path, ChangeSet.Kind kind, String contentKind, List<String> references) {
+		return new ChangeSet.Change(path, kind, List.of(new ChangeSet.Occurrence("catalogue", path, 8, null, null, HASH, contentKind, List.of("main"), references)));
 	}
 }

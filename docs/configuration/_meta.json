@@ -1,14 +1,10 @@
 {
   "server-config.mdx": {
-    "name": "Server Configuration",
+    "name": "Server configuration",
     "icon": null
   },
   "client-config.mdx": {
-      "name": "Client Configuration",
-      "icon": null
-  },
-  "troubleshooting.mdx": {
-    "name": "Troubleshooting",
+    "name": "Client configuration",
     "icon": null
   }
 }

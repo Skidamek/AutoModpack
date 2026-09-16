@@ -8,6 +8,8 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworkAddon;
 
 @Mixin(value = ServerLoginPacketListenerImpl.class, priority = 300)
@@ -42,15 +44,9 @@ public abstract class ServerLoginNetworkHandlerMixin {
 		this.automodpack$addon = new ServerLoginNetworkAddon((ServerLoginPacketListenerImpl) (Object) this);
 	}
 
-	@Inject(method = "handleCustomQueryPacket", at = @At("HEAD"), cancellable = true)
-	private void handleCustomPayload(ServerboundCustomQueryAnswerPacket packet, CallbackInfo ci) {
-		if (this.automodpack$addon == null) {
-			return;
-		}
-
-		if (this.automodpack$addon.handle(packet)) {
-			ci.cancel();
-		}
+	@WrapMethod(method = "handleCustomQueryPacket")
+	private void handleCustomPayload(ServerboundCustomQueryAnswerPacket packet, Operation<Void> original) {
+		if (this.automodpack$addon == null || !this.automodpack$addon.handle(packet)) original.call(packet);
 	}
 
 	/*
@@ -89,27 +85,30 @@ public abstract class ServerLoginNetworkHandlerMixin {
 	 * before the connection is ready for custom queries, and tick() does
 	 * non-trivial work in those states.
 	 */
-	@Inject(method = "tick", at = @At("HEAD"), cancellable = true)
-	private void sendOurPackets(CallbackInfo ci) {
+	@WrapMethod(method = "tick")
+	private void sendOurPackets(Operation<Void> original) {
 		if (this.automodpack$addon == null) {
+			original.call();
 			return;
 		}
 
 		/*? if <= 1.20.1 {*/
 		/*if (this.state != ServerLoginPacketListenerImpl.State.NEGOTIATING && this.state != ServerLoginPacketListenerImpl.State.READY_TO_ACCEPT) {
+			original.call();
 			return;
 		}
 		*//*?} else {*/
 		if (this.state != ServerLoginPacketListenerImpl.State.NEGOTIATING && this.state != ServerLoginPacketListenerImpl.State.VERIFYING) {
+			original.call();
 			return;
 		}
 		/*?}*/
 
 		if (!this.automodpack$addon.queryTick()) {
-			ci.cancel();
 			return;
 		}
 
 		this.automodpack$addon = null;
+		original.call();
 	}
 }

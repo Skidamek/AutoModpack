@@ -1,0 +1,211 @@
+package pl.skidam.automodpack_core.client;
+
+import static pl.skidam.automodpack_core.Constants.*;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+
+import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
+import pl.skidam.automodpack_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.screen.ScreenManager;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
+import pl.skidam.automodpack_core.update.SelfUpdateSwap;
+import pl.skidam.automodpack_core.utils.DownloadSource;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.SemanticVersion;
+import pl.skidam.automodpack_core.utils.cache.PlatformCache;
+
+public class SelfUpdater {
+
+	public static final String AUTOMODPACK_ID = "k68glP2e"; // AutoModpack modrinth id
+
+	/** The shared-CAS ownership component pinning an in-flight self-update download. */
+	private static final String SELF_UPDATE_OWNER = "selfupdate";
+
+	// Hardcoded floor: 5.0.0 Stable.
+	// Logic: 5.0.0-beta1 < 5.0.0 Stable. This prevents downgrading to unsafe betas.
+	private static final SemanticVersion MINIMUM_SAFE_VERSION = new SemanticVersion(5, 0, 0, "release", Integer.MAX_VALUE);
+
+	public static boolean update() {
+		return update(null);
+	}
+
+	public static boolean update(ModpackJsons.ModpackContentFields serverModpackContent) {
+		if (LOADER_MANAGER.isDevelopmentEnvironment()) return false;
+
+		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER && !serverConfig.selfUpdater) {
+			LOGGER.info("AutoModpack self-updater is disabled in server config.");
+			return false;
+		}
+
+		boolean gettingServerVersion = serverModpackContent != null && serverModpackContent.automodpackVersion != null
+				&& !serverModpackContent.automodpackVersion.isBlank();
+
+		if (!gettingServerVersion && LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT && !clientConfig.selfUpdater) {
+			LOGGER.info("AutoModpack self-updater is disabled in client config.");
+			return false;
+		}
+
+		SemanticVersion currentVersion;
+		try {
+			currentVersion = SemanticVersion.parse(AM_VERSION);
+		} catch (IllegalArgumentException e) {
+			LOGGER.error("Current installed AutoModpack version is corrupt/invalid: " + AM_VERSION);
+			return false;
+		}
+
+		List<ModrinthAPI> modrinthAPIList = new ArrayList<>();
+
+		if (gettingServerVersion) {
+			if (serverModpackContent.automodpackVersion.equals(AM_VERSION)) {
+				LOGGER.info("AutoModpack is up-to-date with server version: {}", serverModpackContent.automodpackVersion);
+				return false;
+			}
+
+			if (!clientConfig.syncAutoModpackVersion) {
+				LOGGER.warn("Version syncing disabled. Cannot sync to server version: {}", serverModpackContent.automodpackVersion);
+				return false;
+			}
+
+			LOGGER.info("Syncing AutoModpack to server version: {}", serverModpackContent.automodpackVersion);
+			modrinthAPIList.add(ModrinthAPI.getModSpecificVersion(AUTOMODPACK_ID, serverModpackContent.automodpackVersion, serverModpackContent.mcVersion));
+		} else {
+			LOGGER.info("Checking if AutoModpack is up-to-date...");
+			modrinthAPIList = ModrinthAPI.getModInfosFromID(AUTOMODPACK_ID);
+		}
+
+		if (modrinthAPIList == null || modrinthAPIList.isEmpty()) {
+			LOGGER.warn("Couldn't get version info from Modrinth API.");
+			return false;
+		}
+
+		for (ModrinthAPI automodpack : modrinthAPIList) {
+			if (automodpack == null || automodpack.fileVersion() == null) continue;
+
+			String rawRemoteVersion = automodpack.fileVersion();
+			SemanticVersion remoteVersion;
+
+			try {
+				remoteVersion = SemanticVersion.parse(rawRemoteVersion);
+			} catch (IllegalArgumentException e) {
+				continue; // Skip malformed remote versions
+			}
+
+			// Exact Hash Match (Fastest check)
+			if (automodpack.SHA1Hash().equals(FileIntegrity.identityHash(THIS_MOD_JAR, null))) {
+				LOGGER.info("Already on the target version (Hash match): {}", AM_VERSION);
+				return false;
+			}
+
+			int comparison = remoteVersion.compareTo(currentVersion);
+
+			// If we are NOT forced to sync to server, and remote is older or equal
+			if (!gettingServerVersion && comparison <= 0) {
+				if (comparison == 0) {
+					LOGGER.info("No updates found. You are on the latest version: {}", rawRemoteVersion);
+				} else {
+					LOGGER.info("Development check: Installed version {} is newer/different than release {}.", AM_VERSION, rawRemoteVersion);
+				}
+				// Since Modrinth lists are usually sorted latest-first, if the first is older, no newer exists.
+				return false;
+			}
+
+			// Stable -> Beta Protection
+			// If checking for updates (not syncing), do not update FROM Stable TO Beta.
+			if (!gettingServerVersion && currentVersion.isStable() && !remoteVersion.isStable()) {
+				LOGGER.info("Skipping update: You are on Stable ({}) and latest is Pre-release ({}).", AM_VERSION, rawRemoteVersion);
+				continue; // Skip this beta, keep looking for a newer Stable version in the list
+			}
+
+			// Safety / Downgrade Check
+			if (!validUpdate(remoteVersion)) {
+				// If the specific version requested by server is unsafe, we abort.
+				// If we are just scanning the list, we skip this invalid entry.
+				if (gettingServerVersion) return false;
+				continue;
+			}
+
+			LOGGER.info("Update found! Updating from {} to {}", AM_VERSION, rawRemoteVersion);
+			installModVersion(automodpack);
+			return true;
+		}
+
+		if (!gettingServerVersion) LOGGER.info("No suitable updates found.");
+		return false;
+	}
+
+	/**
+	 * Checks if the target update is safe.
+	 * Prevents downgrading below 5.0.0 Stable.
+	 * * Logic:
+	 * 5.0.0 (Stable) is SAFE.
+	 * 5.1.0 (Stable) is SAFE.
+	 * 5.0.0-betaX is UNSAFE (because it is < 5.0.0 Stable).
+	 */
+	public static boolean validUpdate(SemanticVersion remoteVersion) {
+		if (remoteVersion.compareTo(MINIMUM_SAFE_VERSION) < 0) {
+			LOGGER.error("Downgrading AutoModpack to version {} is strongly discouraged/disabled due to security concerns (Target is older than 5.0.0 Stable).",
+					remoteVersion);
+			return false;
+		}
+		return true;
+	}
+
+	public static void installModVersion(ModrinthAPI automodpack) {
+		Path gameDirectory = GameDirectory.current();
+		DataRootResolver.Location dataLocation = DataRootResolver.resolve(gameDirectory);
+		try {
+			SharedObjectOwnership.publish(dataLocation, SELF_UPDATE_OWNER, Set.of(automodpack.SHA1Hash()));
+			Path modsDirectory = gameDirectory.resolve(ModpackPathPolicy.MODS_ROOT).toAbsolutePath().normalize();
+			Path currentJar = THIS_MOD_JAR.toAbsolutePath().normalize();
+			if (!currentJar.getParent().equals(modsDirectory)) throw new IllegalStateException("Loaded AutoModpack JAR is not a direct child of the mods directory");
+			Path targetJar = modsDirectory.resolve(Path.of(automodpack.fileName()).getFileName()).normalize();
+
+			try (PlatformCache platformCache = PlatformCache.open(dataLocation.layout().platformCacheDirectory())) {
+				DownloadManager downloadManager = new DownloadManager(0, dataLocation.layout(), platformCache);
+				ScreenManager.download(downloadManager, "AutoModpack " + automodpack.fileVersion());
+				downloadManager.download(targetJar, automodpack.SHA1Hash(), null, ModpackContentType.MOD,
+						List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
+						() -> LOGGER.info("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));
+				downloadManager.joinAll();
+				downloadManager.finish();
+			}
+
+			Path storeObject = dataLocation.layout().objectFile(automodpack.SHA1Hash());
+			if (!FileIntegrity.matches(storeObject, automodpack.fileSize(), automodpack.SHA1Hash()))
+				throw new IllegalStateException("Downloaded official AutoModpack JAR failed verification");
+			String currentHash = FileIntegrity.identityHash(currentJar, null);
+			if (currentHash == null || !Files.isRegularFile(currentJar)) throw new IllegalStateException("Loaded AutoModpack JAR cannot be verified");
+
+			String currentPath = LogicalPath.normalize(gameDirectory.relativize(currentJar).toString());
+			String targetPath = LogicalPath.normalize(gameDirectory.relativize(targetJar).toString());
+			try {
+				SelfUpdateSwap.commit(gameDirectory, dataLocation, currentPath, targetPath, automodpack.SHA1Hash(), automodpack.fileSize(), currentHash);
+			} catch (IOException e) {
+				// The running jar stays locked on Windows until this process exits; the helper finishes the swap then.
+				LOGGER.info("AutoModpack self-update swap is staged and will finish after this process exits", e);
+				DetachedUpdateHelper.launch();
+			}
+			LOGGER.info("AutoModpack update is ready; restart required");
+			new ReLauncher(UpdateType.AUTOMODPACK).restart(true);
+		} catch (Exception e) {
+			LOGGER.error("Failed to update AutoModpack", e);
+		} finally {
+			try {
+				SharedObjectOwnership.publish(dataLocation, SELF_UPDATE_OWNER, Set.of());
+			} catch (IOException e) {
+				LOGGER.warn("Could not release the self-update CAS pin; the next startup will refresh it", e);
+			}
+		}
+	}
+}

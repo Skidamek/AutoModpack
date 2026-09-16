@@ -36,15 +36,14 @@ output/
 .metadata
 
 .architectury-transformer
-/Merged/
 /merged/
 /core/automodpack/
-
-dupes
 
 # python
 
 __pycache__/
 *.egg-info/
 autotester/out/
+autotester/out-*/
 autotester/.hmc-cache/
+

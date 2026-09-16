@@ -18,6 +18,12 @@ import pl.skidam.automodpack_core.protocol.netty.message.configuration.UnknownCo
 
 public class ConfigurationHandler extends ByteToMessageDecoder {
 
+	private final ConnectionLifetimeHandler lifetime;
+
+	public ConfigurationHandler(ConnectionLifetimeHandler lifetime) {
+		this.lifetime = lifetime;
+	}
+
 	@Override
 	protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
 		LOGGER.debug("Received a message (checking for configuration) with {} readable bytes", in.readableBytes());
@@ -43,7 +49,12 @@ public class ConfigurationHandler extends ByteToMessageDecoder {
 			ctx.channel().attr(NettyServer.PROTOCOL_VERSION).set(version);
 			LOGGER.debug("Negotiated {} protocol version with the client", version);
 			ctx.pipeline().remove(this);
+			lifetime.configurationComplete(ctx);
 			LOGGER.debug("Removed ConfigurationHandler from pipeline after receiving echo configuration message.");
+		} else if (type == CONFIGURATION_KEEPALIVE_TYPE) {
+			// A client parked on its certificate-trust decision heartbeats these to keep the transport warm; absorbing
+			// them must never complete the configuration handshake nor elicit a reply.
+			LOGGER.debug("Absorbed a pre-configuration keepalive from the client");
 		} else if (type == CONFIGURATION_COMPRESSION_TYPE) {
 			if (in.readableBytes() < 1) {
 				in.resetReaderIndex();
@@ -60,7 +71,7 @@ public class ConfigurationHandler extends ByteToMessageDecoder {
 			}
 
 			CompressionType selected = CompressionFactory.isAvailable(requested) ? requested : CompressionType.GZIP;
-			ctx.channel().attr(NettyServer.COMPRESSION_TYPE).set(selected);
+			NettyServer.setCompression(ctx.channel(), selected);
 			ctx.writeAndFlush(new ConfigurationCompressionMessage(LATEST_SUPPORTED_PROTOCOL_VERSION, selected).toByteBuf());
 			LOGGER.debug("Negotiated configuration: compression {}", selected);
 		} else if (type == CONFIGURATION_CHUNK_SIZE_TYPE) {

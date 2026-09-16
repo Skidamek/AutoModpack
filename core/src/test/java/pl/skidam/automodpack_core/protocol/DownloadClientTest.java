@@ -4,8 +4,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_CHUNK_SIZE_TYPE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_COMPRESSION_TYPE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_ECHO_TYPE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_KEEPALIVE_TYPE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.END_OF_TRANSMISSION;
 import static pl.skidam.automodpack_core.protocol.NetUtils.FILE_REQUEST_TYPE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.MAX_CHUNK_SIZE;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -17,6 +19,7 @@ import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
@@ -24,6 +27,7 @@ import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
@@ -60,6 +64,15 @@ import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 class DownloadClientTest {
 
 	@Test
+	void fileFrameCopyDoesNotOverflowForSizesAbove2GiB() {
+		long remaining = 2230765895L; // Above 2 GiB, so any int-cast remainder would silently wrap negative.
+		assertEquals(1024, ProtocolFrameCodec.writableFrameBytes(1024, remaining));
+		assertEquals(MAX_CHUNK_SIZE, ProtocolFrameCodec.writableFrameBytes(MAX_CHUNK_SIZE, remaining));
+		assertEquals(100, ProtocolFrameCodec.writableFrameBytes(1024, 100L));
+		assertEquals(0, ProtocolFrameCodec.writableFrameBytes(1024, 0L));
+	}
+
+	@Test
 	void localDestinationOpenFailureHasTypedStorageBoundary(@TempDir Path directory) throws Exception {
 		Path destination = Files.createDirectory(directory.resolve("destination"));
 
@@ -74,8 +87,8 @@ class DownloadClientTest {
 		X509Certificate issued = issueCertificate(new X500Name(issuer.getSubjectX500Principal().getName()), new X500Name("CN=Issued"), null,
 				NetUtils.generateKeyPair(), issuerKeyPair, Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600));
 
-		assertTrue(DownloadClient.isSelfSigned(selfSigned));
-		assertFalse(DownloadClient.isSelfSigned(issued));
+		assertTrue(CustomizableTrustManager.isSelfSigned(selfSigned));
+		assertFalse(CustomizableTrustManager.isSelfSigned(issued));
 	}
 
 	@Test
@@ -85,7 +98,7 @@ class DownloadClientTest {
 		X509Certificate certificate = issueCertificate(subject, subject, null, keyPair, keyPair, Instant.now().minusSeconds(7200),
 				Instant.now().minusSeconds(3600));
 
-		assertTrue(DownloadClient.isSelfSigned(certificate));
+		assertTrue(CustomizableTrustManager.isSelfSigned(certificate));
 	}
 
 	@Test
@@ -148,6 +161,52 @@ class DownloadClientTest {
 	}
 
 	@Test
+	void trustWaitKeepsTransportWarmAndStopsAfterConfiguration() throws Exception {
+		KeyPair keyPair = NetUtils.generateKeyPair();
+		X509Certificate certificate = NetUtils.selfSign(keyPair);
+		CompletableFuture<Boolean> decision = new CompletableFuture<>();
+
+		try (TransferServer server = new TransferServer(keyPair, certificate)) {
+			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, null, null);
+			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> decision, Duration.ofMillis(100));
+
+			long deadline = System.currentTimeMillis() + 5000;
+			while (server.keepalivesAbsorbed() < 2 && System.currentTimeMillis() < deadline)
+				Thread.sleep(20);
+			assertTrue(server.keepalivesAbsorbed() >= 2, "the client parked on the trust decision must heartbeat periodically");
+			assertFalse(clientFuture.isDone());
+
+			decision.complete(true);
+			try (DownloadClient ignored = clientFuture.get(5, TimeUnit.SECONDS)) {
+				server.configured().get(5, TimeUnit.SECONDS);
+				// The heartbeat retires with the trust decision: the configured connection hears only silence.
+				assertEquals(-1, server.postConfigurationByte().get(5, TimeUnit.SECONDS));
+			}
+			assertEquals(1, server.acceptedConnections());
+		}
+	}
+
+	@Test
+	void abortTransfersFailsInFlightDownloadAndAllowsARetry(@TempDir Path directory) throws Exception {
+		KeyPair keyPair = NetUtils.generateKeyPair();
+		X509Certificate certificate = NetUtils.selfSign(keyPair);
+		String fingerprint = NetUtils.getFingerprint(certificate);
+		try (LeasingServer server = new LeasingServer(keyPair, certificate)) {
+			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, fingerprint, null);
+			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(5, TimeUnit.SECONDS)) {
+				CompletableFuture<Path> first = client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("first"), null);
+				assertTrue(server.receivedRequest().await(5, TimeUnit.SECONDS));
+				client.abortTransfers();
+				assertThrows(Exception.class, () -> first.get(5, TimeUnit.SECONDS));
+				server.allowResponses(2);
+				assertEquals(directory.resolve("second"), client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("second"), null).get(5, TimeUnit.SECONDS));
+			}
+		}
+	}
+
+	@Test
 	void lazyPoolCapsAtFiveAndQueuesSixthRequest(@TempDir Path directory) throws Exception {
 		KeyPair keyPair = NetUtils.generateKeyPair();
 		X509Certificate certificate = NetUtils.selfSign(keyPair);
@@ -202,6 +261,7 @@ class DownloadClientTest {
 		private final ExecutorService executor = Executors.newCachedThreadPool();
 		private final List<SSLSocket> sockets = new CopyOnWriteArrayList<>();
 		private final AtomicInteger acceptedConnections = new AtomicInteger();
+		private final CountDownLatch receivedRequest = new CountDownLatch(1);
 		private final CountDownLatch firstFiveRequests = new CountDownLatch(5);
 		private final CompletableFuture<Void> sixthRequest = new CompletableFuture<>();
 		private final Semaphore responsePermits = new Semaphore(0);
@@ -220,6 +280,10 @@ class DownloadClientTest {
 
 		int acceptedConnections() {
 			return acceptedConnections.get();
+		}
+
+		CountDownLatch receivedRequest() {
+			return receivedRequest;
 		}
 
 		CountDownLatch firstFiveRequests() {
@@ -277,6 +341,7 @@ class DownloadClientTest {
 				while (!closed && !socket.isClosed()) {
 					byte[] request = readFrame(in, codec);
 					if (request.length < 2 || request[1] != FILE_REQUEST_TYPE) throw new IOException("Unexpected file request");
+					receivedRequest.countDown();
 					if (firstFiveRequests.getCount() > 0) {
 						firstFiveRequests.countDown();
 					} else {
@@ -321,7 +386,9 @@ class DownloadClientTest {
 		private final SSLServerSocket server;
 		private final ExecutorService executor = Executors.newSingleThreadExecutor();
 		private final AtomicInteger acceptedConnections = new AtomicInteger();
+		private final AtomicInteger keepalivesAbsorbed = new AtomicInteger();
 		private final CompletableFuture<Integer> earlyApplicationByte = new CompletableFuture<>();
+		private final CompletableFuture<Integer> postConfigurationByte = new CompletableFuture<>();
 		private final CompletableFuture<Void> configured = new CompletableFuture<>();
 		private volatile SSLSocket socket;
 
@@ -340,8 +407,16 @@ class DownloadClientTest {
 			return acceptedConnections.get();
 		}
 
+		int keepalivesAbsorbed() {
+			return keepalivesAbsorbed.get();
+		}
+
 		CompletableFuture<Integer> earlyApplicationByte() {
 			return earlyApplicationByte;
+		}
+
+		CompletableFuture<Integer> postConfigurationByte() {
+			return postConfigurationByte;
 		}
 
 		CompletableFuture<Void> configured() {
@@ -358,19 +433,34 @@ class DownloadClientTest {
 				DataOutputStream out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 
 				socket.setSoTimeout(300);
+				int early;
 				try {
-					earlyApplicationByte.complete(in.readUnsignedByte());
+					early = in.readUnsignedByte();
 				} catch (SocketTimeoutException e) {
-					earlyApplicationByte.complete(-1);
+					early = -1;
 				}
+				earlyApplicationByte.complete(early);
 
 				socket.setSoTimeout(5000);
-				int version = in.readUnsignedByte();
-				int compressionType = in.readUnsignedByte();
+				int version;
+				int type;
+				if (early >= 0) {
+					// The early probe consumed the version byte of the first frame on the wire.
+					version = early;
+					type = in.readUnsignedByte();
+				} else {
+					version = in.readUnsignedByte();
+					type = in.readUnsignedByte();
+				}
+				while (type == CONFIGURATION_KEEPALIVE_TYPE) {
+					keepalivesAbsorbed.incrementAndGet();
+					version = in.readUnsignedByte();
+					type = in.readUnsignedByte();
+				}
+				if (type != CONFIGURATION_COMPRESSION_TYPE) throw new IOException("Unexpected compression request");
 				int compression = in.readUnsignedByte();
-				if (compressionType != CONFIGURATION_COMPRESSION_TYPE) throw new IOException("Unexpected compression request");
 				out.writeByte(version);
-				out.writeByte(compressionType);
+				out.writeByte(CONFIGURATION_COMPRESSION_TYPE);
 				out.writeByte(compression);
 				out.flush();
 
@@ -386,9 +476,17 @@ class DownloadClientTest {
 				in.readUnsignedByte();
 				if (in.readUnsignedByte() != CONFIGURATION_ECHO_TYPE) throw new IOException("Unexpected echo request");
 				configured.complete(null);
+
+				socket.setSoTimeout(400);
+				try {
+					postConfigurationByte.complete(in.readUnsignedByte());
+				} catch (SocketTimeoutException e) {
+					postConfigurationByte.complete(-1);
+				}
 			} catch (Exception e) {
 				if (!earlyApplicationByte.isDone()) earlyApplicationByte.completeExceptionally(e);
 				if (!configured.isDone()) configured.completeExceptionally(e);
+				if (!postConfigurationByte.isDone()) postConfigurationByte.completeExceptionally(e);
 			}
 		}
 

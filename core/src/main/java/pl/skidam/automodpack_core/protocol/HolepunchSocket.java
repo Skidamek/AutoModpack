@@ -1,5 +1,9 @@
 package pl.skidam.automodpack_core.protocol;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.protocol.NetUtils.MAX_CHUNK_SIZE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.NETWORK_TIMEOUT;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -9,24 +13,35 @@ import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import javax.net.ssl.SSLKeyException;
+
+import io.netty.buffer.ByteBuf;
 
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchFailure;
 import pl.skidam.mcholepunch.HolepunchHandler;
 
 public class HolepunchSocket extends Socket {
+	// Tripwire: one max protocol chunk. File requests never reach this; only a stalled consumer does.
+	static final int MAX_QUEUED_READ_BYTES = MAX_CHUNK_SIZE;
 	private volatile HolepunchConnection connection;
 	private final HolepunchInputStream in;
 	private volatile HolepunchOutputStream out;
 	private volatile boolean closed;
 	private volatile int soTimeoutMillis;
+	private volatile TlsRecordCamouflage.Pair trafficCamouflage;
+	private final Object writeLock = new Object();
 
 	public HolepunchSocket(HolepunchConnection connection) {
 		this.connection = Objects.requireNonNull(connection, "connection");
 		this.in = new HolepunchInputStream();
-		this.out = new HolepunchOutputStream(connection);
+		this.out = new HolepunchOutputStream();
 	}
 
 	public HolepunchSocket() {
@@ -36,24 +51,44 @@ public class HolepunchSocket extends Socket {
 	public synchronized void setConnection(HolepunchConnection connection) {
 		if (closed) throw new IllegalStateException("HolepunchSocket is closed");
 		this.connection = Objects.requireNonNull(connection, "connection");
-		this.out = new HolepunchOutputStream(connection);
+		this.trafficCamouflage = null;
+		this.out = new HolepunchOutputStream();
 	}
 
 	public HolepunchHandler handler() {
 		return new HolepunchHandler() {
 			@Override
 			public void onRead(ByteBuffer data) {
-				byte[] bytes = new byte[data.remaining()];
-				data.get(bytes);
-				in.feed(bytes);
+				in.feed(data);
+			}
+
+			@Override
+			public void onRawRead(ByteBuffer data) {
+				feedCamouflagedReadData(data);
 			}
 
 			@Override
 			public void onClosed(HolepunchFailure failure) {
+				boolean localClose = closed;
 				closed = true;
 				in.feedEnd();
+				if (!localClose) LOGGER.info("Holepunch transport closed unexpectedly: [{}] {}", failure.kind(), failure.getMessage());
 			}
 		};
+	}
+
+	CompletionStage<Void> commitTransportUpgrade() {
+		HolepunchConnection activeConnection = connection;
+		if (activeConnection == null) {
+			return CompletableFuture.failedFuture(new IllegalStateException("HolepunchSocket is not connected"));
+		}
+		return activeConnection.commitTransportUpgrade();
+	}
+
+	void enableTlsTrafficCamouflage(boolean client) throws SSLKeyException {
+		HolepunchConnection activeConnection = connection;
+		if (activeConnection == null) throw new IllegalStateException("HolepunchSocket is not connected");
+		trafficCamouflage = TlsRecordCamouflage.create(activeConnection.transportSecret(), client);
 	}
 
 	@Override
@@ -66,6 +101,21 @@ public class HolepunchSocket extends Socket {
 		HolepunchOutputStream output = out;
 		if (output == null) throw new IllegalStateException("HolepunchSocket is not connected");
 		return output;
+	}
+
+	void writeBuffer(ByteBuf buffer) throws IOException {
+		int readerIndex = buffer.readerIndex();
+		int readableBytes = buffer.readableBytes();
+		if (readableBytes == 0) return;
+		if (buffer.nioBufferCount() == 1) {
+			writeConnection(buffer.nioBuffer(readerIndex, readableBytes));
+		} else if (buffer.nioBufferCount() > 1) {
+			for (ByteBuffer nioBuffer : buffer.nioBuffers(readerIndex, readableBytes)) writeConnection(nioBuffer);
+		} else {
+			byte[] bytes = new byte[readableBytes];
+			buffer.getBytes(readerIndex, bytes);
+			writeConnection(ByteBuffer.wrap(bytes));
+		}
 	}
 
 	@Override
@@ -85,10 +135,19 @@ public class HolepunchSocket extends Socket {
 		return closed;
 	}
 
+	// java.net.Socket semantics: connectedness survives close, so JDK callers probing the socket never get lied to.
+
 	@Override
 	public boolean isConnected() {
-		return connection != null && !closed;
+		return connection != null;
 	}
+
+	/** There is no file descriptor to half-close; the SSL layer's EOF handling calls this on a peer close and expects it to succeed. */
+	@Override
+	public void shutdownInput() {}
+
+	@Override
+	public void shutdownOutput() {}
 
 	@Override
 	public synchronized void close() {
@@ -104,14 +163,33 @@ public class HolepunchSocket extends Socket {
 		}
 	}
 
-	void feedReadData(byte[] data) {
+	void feedCamouflagedReadData(ByteBuffer data) {
+		TlsRecordCamouflage.Pair camouflage = trafficCamouflage;
+		if (camouflage != null && data.hasRemaining()) {
+			try {
+				// The decoder keeps state across dispatches: this dispatch can complete a record
+				// started by an earlier one and decode up to one full pending record more than
+				// its own wire bytes, so the pending record sizes the output buffer.
+				ByteBuffer decoded = ByteBuffer.allocate(data.remaining() + camouflage.inbound().pendingRecordLength());
+				camouflage.inbound().decode(data, decoded);
+				decoded.flip();
+				in.feed(decoded);
+				return;
+			} catch (IOException exception) {
+				close();
+				throw new IllegalStateException("Invalid camouflaged TLS record stream", exception);
+			}
+		}
 		in.feed(data);
 	}
 
-	private static class HolepunchInputStream extends InputStream {
-		private final BlockingQueue<byte[]> queue = new LinkedBlockingQueue<>();
-		private byte[] current;
-		private int offset;
+	private class HolepunchInputStream extends InputStream {
+		// The dispatched buffers are already private copies made by the connection, so the queue holds
+		// them directly: one less copy and one less allocation per byte on the read path.
+		private final BlockingQueue<ByteBuffer> queue = new LinkedBlockingQueue<>();
+		private final AtomicInteger queuedBytes = new AtomicInteger();
+		private volatile boolean readsPaused;
+		private ByteBuffer current;
 		private volatile boolean end;
 		private volatile int readTimeoutMillis;
 
@@ -119,12 +197,28 @@ public class HolepunchSocket extends Socket {
 			readTimeoutMillis = timeout;
 		}
 
-		void feed(byte[] data) {
-			if (data.length != 0 && !end) queue.offer(data);
+		void feed(ByteBuffer data) {
+			if (!data.hasRemaining() || end) return;
+			queuedBytes.addAndGet(data.remaining());
+			queue.offer(data);
+			updateReadPause();
 		}
 
 		void feedEnd() {
 			end = true;
+		}
+
+		private synchronized void updateReadPause() {
+			HolepunchConnection activeConnection = connection;
+			if (activeConnection == null) return;
+			int queued = queuedBytes.get();
+			if (queued >= MAX_QUEUED_READ_BYTES && !readsPaused) {
+				readsPaused = true;
+				activeConnection.pauseReads();
+			} else if (queued <= MAX_QUEUED_READ_BYTES / 2 && readsPaused) {
+				readsPaused = false;
+				activeConnection.resumeReads();
+			}
 		}
 
 		@Override
@@ -139,7 +233,7 @@ public class HolepunchSocket extends Socket {
 			Objects.checkFromIndexSize(off, len, b.length);
 			if (len == 0) return 0;
 
-			while (current == null || offset >= current.length) {
+			while (current == null || !current.hasRemaining()) {
 				current = null;
 				if (end && queue.isEmpty()) return -1;
 
@@ -149,29 +243,33 @@ public class HolepunchSocket extends Socket {
 						current = queue.poll(100, TimeUnit.MILLISECONDS);
 						if (current == null) continue;
 					} else {
-						current = queue.poll(timeout, TimeUnit.MILLISECONDS);
-						if (current == null) {
+						// The end flag must interrupt a pending wait: a server-initiated close
+						// surfaces here, and polling the full window would ignore it until expiry.
+						long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout);
+						while (current == null) {
 							if (end && queue.isEmpty()) return -1;
-							throw new SocketTimeoutException("Holepunch read timed out");
+							long remaining = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
+							if (remaining <= 0) throw new SocketTimeoutException("Holepunch read timed out");
+							current = queue.poll(Math.min(remaining, 100), TimeUnit.MILLISECONDS);
 						}
 					}
 				} catch (InterruptedException e) {
 					Thread.currentThread().interrupt();
 					throw new IOException("read interrupted", e);
 				}
-				offset = 0;
 			}
 
-			int n = Math.min(len, current.length - offset);
-			System.arraycopy(current, offset, b, off, n);
-			offset += n;
+			int n = Math.min(len, current.remaining());
+			current.get(b, off, n);
+			queuedBytes.addAndGet(-n);
+			updateReadPause();
 			return n;
 		}
 
 		@Override
 		public int available() {
-			int available = current == null ? 0 : current.length - offset;
-			for (byte[] queued : queue) available += queued.length;
+			int available = current == null ? 0 : current.remaining();
+			for (ByteBuffer queued : queue) available += queued.remaining();
 			return available;
 		}
 
@@ -181,13 +279,7 @@ public class HolepunchSocket extends Socket {
 		}
 	}
 
-	private static class HolepunchOutputStream extends OutputStream {
-		private final HolepunchConnection connection;
-
-		HolepunchOutputStream(HolepunchConnection connection) {
-			this.connection = connection;
-		}
-
+	private class HolepunchOutputStream extends OutputStream {
 		@Override
 		public void write(int b) throws IOException {
 			write(new byte[]{(byte) b}, 0, 1);
@@ -197,19 +289,46 @@ public class HolepunchSocket extends Socket {
 		public void write(byte[] b, int off, int len) throws IOException {
 			Objects.checkFromIndexSize(off, len, b.length);
 			if (len == 0) return;
-			try {
-				connection.write(ByteBuffer.wrap(b, off, len))
-						.toCompletableFuture()
-						.get(30, TimeUnit.SECONDS);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				throw new IOException("write interrupted", e);
-			} catch (Exception e) {
-				throw new IOException("write failed", e);
-			}
+			HolepunchSocket.this.writeConnection(ByteBuffer.wrap(b, off, len));
 		}
 
 		@Override
 		public void close() {}
 	}
+
+	private void writeConnection(ByteBuffer data) throws IOException {
+		synchronized (writeLock) {
+			HolepunchConnection activeConnection = connection;
+			if (activeConnection == null) throw new IOException("HolepunchSocket is not connected");
+			// The camouflage applies exactly to the raw post-handoff stream era: bytes written
+			// before the transport handoff completes stay plain TLS, bytes written after it are
+			// framed with encrypted record headers. isRaw() flips once and never back, so the
+			// sender-side decision matches the receiver's onRead/onRawRead split byte for byte.
+			TlsRecordCamouflage.Pair camouflage = activeConnection.isRaw() ? trafficCamouflage : null;
+			ByteBuffer outbound = data.duplicate();
+			if (camouflage != null && outbound.hasRemaining()) {
+				// Mirrors the decode side: completing a record pending from an earlier write can
+				// emit up to one full record plus its frame VarInt beyond this write's own bytes.
+				ByteBuffer encoded = ByteBuffer.allocate(outbound.remaining() + camouflage.outbound().pendingRecordLength() + TlsRecordCamouflage.FRAME_HEADER_LENGTH);
+				camouflage.outbound().encode(outbound, encoded);
+				encoded.flip();
+				outbound = encoded;
+			}
+			writeToConnection(activeConnection, outbound);
+		}
+	}
+
+	private static void writeToConnection(HolepunchConnection connection, ByteBuffer data) throws IOException {
+		try {
+			// A write can only stall here if the peer stops draining the socket; surface that inside
+			// the same network window every other wait in the protocol uses.
+			connection.write(data).toCompletableFuture().get(NETWORK_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IOException("write interrupted", e);
+		} catch (Exception e) {
+			throw new IOException("write failed", e);
+		}
+	}
+
 }

@@ -130,7 +130,7 @@ val mergeJarTask =
 		)
 
 		// Hash the shadow jars where they exist: they're what this task actually merges and
-		// the only outputs that change when a shared subproject (core, loader-core, an
+		// the only outputs that change when a shared subproject (core, an
 		// earlyservices module) changes. The plain `jar` outputs don't contain those classes.
 		val filesToHash = mutableListOf<Any>()
 		(tasks.findByName("shadowJar") ?: tasks.findByName("jar"))?.let { projectJar ->
@@ -194,8 +194,11 @@ val auditMergedJarTask =
 	tasks.register<MergedJarAuditTask>("auditMergedJar") {
 		mergedJar.set(optimizedMergedJar.flatMap { it.archiveFile })
 		inputs.property("automodpackBuildMode", automodpackBuildMode)
-		maxJarBytes.set(3L * 1024 * 1024)
-		maxMusicBytes.set(64L * 1024)
+		// Merged jar measured 3732574 bytes with the bossa nova waiting loop; 4 MiB leaves headroom and still trips on dependency bloat.
+		maxJarBytes.set(4L * 1024 * 1024)
+		enforceReleaseSizeBudget.set(!isAutotestBuild)
+		// The waiting loop is the transcribed note-block bossa nova, 550322 bytes as packaged; 1 MiB leaves it headroom and still trips on accidental full songs.
+		maxMusicBytes.set(1024L * 1024)
 	}
 
 mergeJarTask.configure {

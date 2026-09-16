@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.change;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
@@ -34,5 +35,15 @@ class ChangeSetTest {
 		assertEquals(List.of(), original.changes().get(0).occurrences().get(0).references());
 		assertEquals(List.of("https://example.invalid"), enriched.changes().get(0).occurrences().get(0).references());
 		assertThrows(UnsupportedOperationException.class, () -> enriched.changes().add(null));
+	}
+
+	@Test
+	void normalizesOccurrenceBeforeSize() {
+		ChangeSet.Occurrence absent = new ChangeSet.Occurrence("GAME_DIR", "mods/example.jar", 12, OLD_HASH, NEW_HASH);
+		assertNull(absent.beforeSize());
+		ChangeSet.Occurrence known = new ChangeSet.Occurrence("GAME_DIR", "mods/example.jar", 12, 12L, null, OLD_HASH, NEW_HASH, List.of(), List.of());
+		assertEquals(12L, known.beforeSize());
+		assertEquals(List.of("https://example.invalid"), known.withReferences(List.of("https://example.invalid")).references());
+		assertThrows(IllegalArgumentException.class, () -> new ChangeSet.Occurrence("GAME_DIR", "mods/example.jar", 12, -1L, null, OLD_HASH, NEW_HASH, List.of(), List.of()));
 	}
 }

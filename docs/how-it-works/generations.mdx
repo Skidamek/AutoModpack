@@ -1,0 +1,25 @@
+# Generations and publishing
+
+A generation is one published state of the modpack. It consists of a manifest describing every file, the content token that identifies the state, and the file bytes in the server's object store. Publishing is how changes reach players.
+
+## Publishing
+
+`/automodpack generate` scans the pack sources described in [building the modpack](../pack-content) and computes a content token from the result. When the token matches the current generation, nothing changed and nothing is published. Otherwise the scan becomes a new generation, appended to the journal, and connecting clients receive it.
+
+With `generateModpackOnStart` on (the default), the server publishes on every start the same way: a generation appears only when the content changed.
+
+Patch notes travel with the generation. Pass them inline with `generate notes <text...>`, or write them to `automodpack/host-modpack/patch-notes.md`, which is read and cleared when a publish succeeds. A preview with `generate preview` shows the same diff a publish would produce, without publishing.
+
+`generate if-content <content-token>` publishes only while the pack still matches a token you name. A script that copies files and then publishes can therefore never publish a state it has not seen: if someone changed the pack in between, the command reports the mismatch instead of racing it.
+
+## The journal
+
+The server keeps every published generation in an append-only journal at `automodpack/server/journal.jsonl`. Entries never disappear, so the full history of the pack, with patch notes, stays visible in `generate history` and restorable in principle.
+
+`generate revert <seq>` previews a rollback; `generate revert <seq> confirm` publishes the old state as a new generation. Rolling back produces a forward entry in the journal, so the previous head is never rewritten.
+
+`generate storage collect confirm` is the only deletion. It removes object bytes that the current generation does not reference. Older generations remain listed in the journal but their bytes are gone, and they can no longer be restored; the command prints exactly what it deleted.
+
+## What clients keep
+
+Each generation's manifest includes a cumulative ownership ledger: every historical hash and size each managed path ever had. Clients use it to prove that a local file belongs to the pack before deleting it, which is why [client deletions are safe](client-updates#deletions-are-measured) even after content moved around across many updates.

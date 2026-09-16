@@ -20,7 +20,6 @@ val earlyServicesModule =
 // configuration-on-demand does not always reach in time otherwise (surfaces when this project is
 // built standalone, e.g. `gradlew :loader-neoforge-fml4:build`, rather than as part of a full build).
 evaluationDependsOn(":core")
-evaluationDependsOn(":loader-core")
 evaluationDependsOn(":$earlyServicesModule")
 
 plugins {
@@ -61,7 +60,6 @@ neoForge {
 
 dependencies {
 	compileOnly(project(":core"))
-	compileOnly(project(":loader-core"))
 	compileOnly(project(":$earlyServicesModule"))
 
 	// External provided deps to compile this
@@ -99,7 +97,7 @@ tasks.named<ShadowJar>("shadowJar") {
 	}
 
 	// Combine all subproject outputs efficiently
-	val subprojects = listOf(":core", ":loader-core", ":$earlyServicesModule")
+	val subprojects = listOf(":core", ":$earlyServicesModule")
 	subprojects.forEach {
 		from(
 			project(it)
@@ -120,14 +118,7 @@ tasks.named<ShadowJar>("shadowJar") {
 	relocate("org.bouncycastle", "$reloc.org.bouncycastle")
 	relocate("io.netty.handler.codec.haproxy", "$reloc.io.netty.handler.codec.haproxy")
 
-	// Project internal relocations
-	relocate("pl.skidam.automodpack_loader_core_neoforge", "pl.skidam.automodpack_loader_core")
-	// Only present for fml4 (:loader-modlauncher-earlyservices); harmless no-op relocate otherwise.
-	relocate("pl.skidam.automodpack_loader_core_modlauncher", "pl.skidam.automodpack_loader_core")
-
 	// Cleanup
-	exclude("pl/skidam/automodpack_loader_core/loader/LoaderManager.class")
-	exclude("pl/skidam/automodpack_loader_core/mods/ModpackLoader.class")
 
 	exclude("kotlin/**", "log4j2.xml")
 	exclude("META-INF/maven/**", "META-INF/native-image/**", "META-INF/io.netty.versions.properties")

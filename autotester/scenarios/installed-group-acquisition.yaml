@@ -19,23 +19,41 @@ flow:
     name: return to the title screen
   - use: open_multiplayer
   - do: click
-    name: open the installed modpack settings
-    select: { text: Modpack settings }
+    name: open the installed pack manager
+    select: { text: Modpacks }
+  - do: wait_for
+    name: show the installed pack row
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Installed Group Acquisition, enabled: true }
+  - do: click
+    name: open the installed pack details
+    select: { text: Installed Group Acquisition }
+  - do: wait_for
+    name: show the pack details actions
+    until:
+      all:
+        - screen: ModpackSettingsScreen
+        - element: { key: automodpack.management.groups, enabled: true }
+  - do: click
+    name: open the installed group selection
+    select: { key: automodpack.management.groups }
   - do: wait_for
     name: show the unchanged required-only selection
     until:
       all:
-        - screen: ModpackSelectionScreen
-        - element: { text: "[ ] Optional Feature" }
+        - screen: GroupSelectionScreen
+        - element: { text: "Optional Feature (", checked: false }
         - element: { text: Save, enabled: false }
   - do: click
     name: select the never-cached optional group
-    select: { text: Optional Feature }
+    select: { text: "Optional Feature (" }
   - do: wait_for
     name: enable save for the changed selection
     until:
       all:
-        - element: { text: "[x] Optional Feature" }
+        - element: { text: "Optional Feature (", checked: true }
         - element: { text: Save, enabled: true }
   - do: click
     name: save the changed installed selection
@@ -58,6 +76,21 @@ flow:
     name: verify the never-cached optional file was installed
     path: config/amp-installed-optional.txt
     content: "downloaded on selection\n"
+  - do: click
+    name: return to multiplayer without restarting
+    select: { key: automodpack.restart.cancel }
+  - do: wait_for
+    name: land on the multiplayer hub after skipping restart
+    until: { screen: Play Multiplayer }
+  - do: connect
+    name: fail a join before a world exists so the restart nudge can fire
+    host: 127.0.0.1:1
+    expect: disconnect
+    timeout: 60s
+  - do: wait_for
+    name: show the restart nudge toast on the pre-world disconnect
+    timeout: 30s
+    until: { toast: Modpack updated }
   - do: quit
     name: stop after the installed group switch succeeded
 
@@ -68,15 +101,16 @@ topology:
       ENABLE_ROLLING_LOGS: "false"
     automodpack:
       config:
-        groups:
-          main:
-            displayName: Core
-            required: true
-            defaultSelected: true
-            syncedFiles: ["/config/amp-installed-base.txt"]
-          optional:
-            displayName: Optional Feature
-            syncedFiles: ["/config/amp-installed-optional.txt"]
+        modpack:
+          General:
+            main:
+              displayName: Core
+              required: true
+              defaultSelected: true
+              syncedFiles: ["/config/amp-installed-base.txt"]
+            optional:
+              displayName: Optional Feature
+              syncedFiles: ["/config/amp-installed-optional.txt"]
 
 serverFiles:
   modpackName: Installed Group Acquisition

@@ -46,7 +46,7 @@ import re
 
 from . import selectors
 
-_GUI_KEYS = {"screen", "screen_not", "screen_none", "element", "no_element"}
+_GUI_KEYS = {"screen", "screen_not", "screen_none", "element", "no_element", "toast"}
 
 # Every valid top-level condition key (used by `do`/`until`/`when`/`that`). Kept
 # in sync with `_check`; consumed by the scenario validator.
@@ -107,6 +107,12 @@ def _check(ctx, key, val, gui) -> bool:
         return selectors.find_one(gui, ctx.resolve(val)) is not None
     if key == "no_element":
         return selectors.find_one(gui, ctx.resolve(val)) is None
+    if key == "toast":
+        needle = ctx.resolve(val) if hasattr(ctx, "resolve") else val
+        for toast in gui.get("toasts") or []:
+            if needle in str(toast.get("title") or "") or needle in str(toast.get("description") or ""):
+                return True
+        return False
     if key == "file":
         return ctx.path(val).exists()
     if key == "file_gone":
