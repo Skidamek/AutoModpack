@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
+import hashlib
 import tomllib
 
 import yaml
@@ -22,10 +23,21 @@ def _find_root() -> Path:
 ROOT = _find_root()
 REPO_ROOT = ROOT.parent
 
+
+@lru_cache(maxsize=1)
+def checkout_tag() -> str:
+    """Short stable tag of this checkout, so concurrent checkouts never share named docker resources."""
+    return hashlib.sha256(str(REPO_ROOT.resolve()).encode()).hexdigest()[:8]
+
+
+def server_cache_volume(target_id: str, prefix: str) -> str:
+    """Per-checkout server cache volume: reuses the modpack cache within one checkout, never across two."""
+    return f"{prefix}-{checkout_tag()}-{target_id}"
+
 # Paths owned by a client generation reset. Connection/trust data and ordinary
 # game files are deliberately outside this set.
 CLIENT_GENERATION_STATE_PATHS = (
-    "records",
+    "history",
     "overlays",
     "baselines",
     "generated-copies",
@@ -35,11 +47,11 @@ CLIENT_GENERATION_STATE_PATHS = (
     "active-state.json",
     "update-transaction.json",
     "repair.json",
-    "compaction.json",
     "preservation",
     "selections.json",
     "restart-state.json",
-    "incoming-content.json.temp",
+    "incoming-manifest.json.temp",
+    "helper",
 )
 
 

@@ -40,12 +40,16 @@ def _run_steps(ctx, steps, macros, results, depth=0):
             raise ValueError(f"invalid step: {raw!r}")
 
         # `when` and `repeat` apply uniformly to every step kind (verb, use, group).
+        # `when` is re-checked before each repeat iteration and stops the loop
+        # once it no longer holds, so a step can loop "until" a condition turns
+        # false (e.g. click Next while a row is not yet visible).
         when = step.get("when")
-        if when is not None and not conditions.evaluate(ctx, ctx.resolve(when)):
-            logger.info("[%s] skip (when not met): %s", _tid(ctx), _label(step))
-            continue
-
-        for _ in range(int(step.get("repeat", 1))):
+        iterations = int(step.get("repeat", 1))
+        ran = False
+        for _ in range(iterations):
+            if when is not None and not conditions.evaluate(ctx, ctx.resolve(when)):
+                break
+            ran = True
             if "use" in step:
                 name = step["use"]
                 if name not in macros:
@@ -55,6 +59,8 @@ def _run_steps(ctx, steps, macros, results, depth=0):
                 _run_steps(ctx, step.get("steps", []), macros, results, depth + 1)
             else:
                 _run_one(ctx, step, results)
+        if not ran:
+            logger.info("[%s] skip (when not met): %s", _tid(ctx), _label(step))
 
 
 def _run_one(ctx, step, results):

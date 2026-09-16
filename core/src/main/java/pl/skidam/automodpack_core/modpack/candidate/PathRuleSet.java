@@ -1,59 +1,60 @@
 package pl.skidam.automodpack_core.modpack.candidate;
 
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
-import java.nio.file.Path;
-import java.nio.file.PathMatcher;
 import java.util.*;
+import java.util.regex.Pattern;
 
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 
+/**
+ * A set of glob path rules. A path is matched when a positive rule matches it and no '!'-negated rule does - one
+ * primitive each field points at its own posture: syncedFiles includes, excludedFiles excludes (where a '!' rule
+ * un-excludes), allowEditsInFiles marks editable.
+ */
 public final class PathRuleSet {
-	private final FileSystem fileSystem;
-	private final List<CompiledRule> includes;
-	private final List<CompiledRule> excludes;
+	private final List<CompiledRule> positive;
+	private final List<CompiledRule> negated;
 
+	/** Matching is a case-sensitive {@code /}-only glob so the default filesystem cannot fold it. */
 	public PathRuleSet(Collection<String> rules) {
-		this(rules, FileSystems.getDefault());
-	}
-
-	PathRuleSet(Collection<String> rules, FileSystem fileSystem) {
-		this.fileSystem = fileSystem;
-		List<CompiledRule> includes = new ArrayList<>();
-		List<CompiledRule> excludes = new ArrayList<>();
+		List<CompiledRule> positive = new ArrayList<>();
+		List<CompiledRule> negated = new ArrayList<>();
 		if (rules != null) for (String raw : new TreeSet<>(rules)) {
 			if (raw == null || raw.isBlank()) throw new IllegalArgumentException("Path rule is null or blank");
-			boolean excluded = raw.startsWith("!");
-			String pattern = excluded ? raw.substring(1) : raw;
+			boolean negation = raw.startsWith("!");
+			String pattern = negation ? raw.substring(1) : raw;
+			pattern = pattern.replace('\\', '/');
 			while (pattern.startsWith("/")) pattern = pattern.substring(1);
 			while (pattern.contains("**/**")) pattern = pattern.replace("**/**", "**");
 			if (pattern.isBlank()) throw new IllegalArgumentException("Path rule is empty: " + raw);
-			CompiledRule compiled = new CompiledRule(raw, compile(pattern));
-			(excluded ? excludes : includes).add(compiled);
+			(negation ? negated : positive).add(new CompiledRule(raw, compile(pattern)));
 		}
-		this.includes = List.copyOf(includes);
-		this.excludes = List.copyOf(excludes);
+		this.positive = List.copyOf(positive);
+		this.negated = List.copyOf(negated);
 	}
 
 	public Decision evaluate(String path) {
 		String logicalPath = LogicalPath.normalize(path);
-		Path value = fileSystem.getPath(logicalPath);
-		CompiledRule include = firstMatch(includes, value);
-		if (include == null) return Decision.unmatched();
-		CompiledRule exclude = firstMatch(excludes, value);
-		return exclude == null ? new Decision(true, true, include.raw()) : new Decision(true, false, exclude.raw());
+		CompiledRule match = firstMatch(positive, logicalPath);
+		if (match == null) return Decision.UNMATCHED;
+		CompiledRule veto = firstMatch(negated, logicalPath);
+		return veto == null ? new Decision(true, match.raw()) : new Decision(false, veto.raw());
+	}
+
+	/** Whether a positive rule matches and no {@code !} rule vetoes it. Posture (include / exclude / editable) belongs to the caller. */
+	public boolean matches(String path) {
+		return evaluate(path).matched();
 	}
 
 	public boolean isEmpty() {
-		return includes.isEmpty();
+		return positive.isEmpty();
 	}
 
-	/** Returns the narrowest filesystem prefixes that can contain an included path. */
+	/** Returns the narrowest filesystem prefixes that can contain a matched path. */
 	public Set<String> safeScanRoots() {
-		if (includes.isEmpty()) return Set.of();
+		if (positive.isEmpty()) return Set.of();
 		Set<String> roots = new TreeSet<>();
-		for (CompiledRule rule : includes) {
-			String pattern = rule.raw();
+		for (CompiledRule rule : positive) {
+			String pattern = rule.raw().replace('\\', '/');
 			while (pattern.startsWith("!")) pattern = pattern.substring(1);
 			while (pattern.startsWith("/")) pattern = pattern.substring(1);
 			StringBuilder literal = new StringBuilder();
@@ -71,31 +72,79 @@ public final class PathRuleSet {
 		return component.indexOf('*') >= 0 || component.indexOf('?') >= 0 || component.indexOf('[') >= 0 || component.indexOf('{') >= 0;
 	}
 
-	private List<PathMatcher> compile(String pattern) {
+	private static List<Pattern> compile(String pattern) {
 		try {
-			List<PathMatcher> matchers = new ArrayList<>();
-			matchers.add(fileSystem.getPathMatcher("glob:" + pattern));
-			if (pattern.contains("/**/")) matchers.add(fileSystem.getPathMatcher("glob:" + pattern.replace("/**/", "/")));
+			List<Pattern> matchers = new ArrayList<>();
+			matchers.add(globToRegex(pattern));
+			if (pattern.contains("/**/")) matchers.add(globToRegex(pattern.replace("/**/", "/")));
 			return List.copyOf(matchers);
 		} catch (RuntimeException e) {
 			throw new IllegalArgumentException("Invalid path rule: " + pattern, e);
 		}
 	}
 
-	private static CompiledRule firstMatch(List<CompiledRule> rules, Path path) {
+	/** Unix glob, case-sensitive, {@code /} is the only separator. {@code *} stays in one segment; {@code **} may cross; {@code [!...]} negates the class. */
+	private static Pattern globToRegex(String glob) {
+		return Pattern.compile('^' + globToRegexBody(glob) + '$');
+	}
+
+	private static String globToRegexBody(String glob) {
+		StringBuilder regex = new StringBuilder();
+		for (int i = 0; i < glob.length(); i++) {
+			char c = glob.charAt(i);
+			if (c == '*') {
+				if (i + 1 < glob.length() && glob.charAt(i + 1) == '*') {
+					regex.append(".*");
+					i++;
+				} else regex.append("[^/]*");
+			} else if (c == '?') regex.append("[^/]");
+			else if (c == '[') {
+				int close = glob.indexOf(']', i + 1);
+				if (close < 0) regex.append("\\[");
+				else {
+					regex.append('[');
+					int body = i + 1;
+					if (body < close && glob.charAt(body) == '!') {
+						regex.append('^');
+						body++;
+					}
+					regex.append(glob, body, close).append(']');
+					i = close;
+				}
+			} else if (c == '{') {
+				int close = glob.indexOf('}', i + 1);
+				if (close < 0) regex.append("\\{");
+				else {
+					regex.append("(?:");
+					boolean first = true;
+					for (String alternative : glob.substring(i + 1, close).split(",", -1)) {
+						if (!first) regex.append('|');
+						first = false;
+						regex.append(globToRegexBody(alternative));
+					}
+					regex.append(')');
+					i = close;
+				}
+			} else {
+				if (".^$+()|\\".indexOf(c) >= 0) regex.append('\\');
+				regex.append(c);
+			}
+		}
+		return regex.toString();
+	}
+
+	private static CompiledRule firstMatch(List<CompiledRule> rules, String path) {
 		for (CompiledRule rule : rules) if (rule.matches(path)) return rule;
 		return null;
 	}
 
-	private record CompiledRule(String raw, List<PathMatcher> matchers) {
-		private boolean matches(Path path) {
-			return matchers.stream().anyMatch(matcher -> matcher.matches(path));
+	private record CompiledRule(String raw, List<Pattern> matchers) {
+		private boolean matches(String path) {
+			return matchers.stream().anyMatch(matcher -> matcher.matcher(path).matches());
 		}
 	}
 
-	public record Decision(boolean matched, boolean included, String decisiveRule) {
-		private static Decision unmatched() {
-			return new Decision(false, false, null);
-		}
+	public record Decision(boolean matched, String decisiveRule) {
+		private static final Decision UNMATCHED = new Decision(false, null);
 	}
 }

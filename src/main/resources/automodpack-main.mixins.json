@@ -16,6 +16,7 @@
   ],
   "client": [
     "core.ClientConnectionAccessor",
+    "core.DisconnectedScreenMixin",
     "core.ClientLoginNetworkHandlerAccessor",
     "core.ClientLoginNetworkHandlerMixin",
     "core.ConnectScreenMixin",

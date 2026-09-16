@@ -10,7 +10,7 @@ network: host
 mode: client-only
 
 timeouts:
-  clientRunSeconds: 1200
+  clientStartSeconds: 1200
 
 targets:
   - 26.1-neoforge

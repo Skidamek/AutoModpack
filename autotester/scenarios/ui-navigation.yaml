@@ -10,99 +10,162 @@ flow:
   - do: wait_for
     name: wait for the first-connection prompt
     timeout: 90s
-    until: { screen: FirstConnectScreen }
+    until: { screen: PackConfirmScreen }
+  - do: screenshot
+    name: capture the first-connection confirm with its acknowledge checkbox
+    file: ui-navigation-first-connect
   - do: click
     name: open group customization
-    select: { text: customize groups }
+    select: { text: Customize }
   - do: wait_for
     name: wait for group customization
     until:
       all:
         - screen: ModpackSelectionScreen
-        - element: { text: "< Prev", enabled: false }
-        - element: { text: "Next >", enabled: true }
+        - element: { text: "Visuals (", checked: false }
+        - element: { text: "Category: Visuals", checked: false }
+  - do: screenshot
+    name: capture the rows before the OS menu
+    file: ui-navigation-os-baseline
   - do: click
-    name: open the next group page
-    select: { text: "Next >" }
-  - do: click
-    name: open the final category page
-    select: { text: "Next >" }
+    name: open the OS dropdown
+    select: { text: "OS: " }
   - do: wait_for
-    name: disable next at the last page and show the category separately from its group
+    name: show the platform menu with every option
     until:
       all:
-        - element: { text: "< Prev", enabled: true }
-        - element: { text: "Next >", enabled: false }
-        - element: { text: "[ ] Category: Visuals" }
-        - element: { text: "[ ] Visuals" }
+        - element: { text: "Windows" }
+        - element: { text: "Linux (" }
+        - element: { text: "macOS" }
+  - do: screenshot
+    name: capture the OS dropdown
+    file: ui-navigation-os-dropdown
+  - do: click
+    name: close the OS dropdown
+    select: { text: "OS: " }
+  - do: screenshot
+    name: capture the rows after the OS menu closed
+    file: ui-navigation-os-closed
   - do: click
     name: select only the child group
-    select: { text: "[ ] Visuals" }
+    select: { text: "Visuals (", checked: false }
   - do: wait_for
-    name: keep the single-child tag explicitly unselected
+    name: show the category header reflecting its selected child
     until:
       all:
-        - element: { text: "[x] Visuals" }
-        - element: { text: "[ ] Category: Visuals" }
+        - element: { text: "Visuals (", checked: true }
+        - element: { text: "Category: Visuals", checked: true }
   - do: screenshot
-    name: capture explicit child selection and pagination bounds
+    name: capture explicit child selection
     file: ui-navigation-explicit-child
   - do: click
-    name: select the tag explicitly
-    select: { text: "[ ] Category: Visuals" }
+    name: open the group file browser from the row Files button
+    select: { key: automodpack.selection.groupFiles }
   - do: wait_for
-    name: show the explicit category and its selected child
+    name: wait for the group file browser
     until:
       all:
-        - element: { text: "[x] Category: Visuals" }
-        - element: { text: "[+] Visuals" }
+        - screen: ChangeBrowserScreen
+        # The fixed details rail stays in place and just waits disabled until a file is picked.
+        - element: { text: "Copy hash", enabled: false }
+  - do: screenshot
+    name: capture the group file browser
+    file: ui-navigation-group-files
+  - do: click
+    name: open the group filter dropdown
+    select: { text: "Group: " }
+  - do: wait_for
+    name: show the group filter menu with the browser's groups
+    until:
+      all:
+        - element: { text: All groups }
+        - element: { text: Extra One }
+  - do: screenshot
+    name: capture the group filter dropdown
+    file: ui-navigation-group-dropdown
+  - do: click
+    name: widen the browser to every group
+    select: { text: All groups }
+  - do: wait_for
+    name: show the filter applied on the dropdown label
+    until: { element: { text: "Group: All groups" } }
+  - do: screenshot
+    name: capture the widened group browser
+    file: ui-navigation-group-filtered
+  - do: click
+    name: return from the group file browser
+    select: { text: Back }
+  - do: wait_for
+    name: verify group customization is still usable after the file browser
+    until:
+      all:
+        - screen: ModpackSelectionScreen
+        - element: { text: continue, enabled: true }
+  - do: click
+    name: turn the whole category off through its header
+    select: { text: "Category: Visuals", checked: true }
+  - do: wait_for
+    name: show the header exclusion reaching the child
+    until:
+      all:
+        - element: { text: "Category: Visuals", checked: false }
+        - element: { text: "Visuals (", checked: false }
+  - do: click
+    name: select the category explicitly
+    select: { text: "Category: Visuals", checked: false }
+  - do: wait_for
+    name: show the category carrying its child again
+    until:
+      all:
+        - element: { text: "Category: Visuals", checked: true }
+        - element: { text: "Visuals (", checked: true }
   - do: click
     name: restore defaults before checking a named dependency
     select: { text: Defaults }
   - do: click
-    name: return to the dependency group page
-    select: { text: "< Prev" }
-  - do: click
     name: select a group that requires Visuals
-    select: { text: Extra Five }
-  - do: click
-    name: open the dependency explanation page
-    select: { text: "Next >" }
+    select: { text: "Extra Five (" }
   - do: wait_for
     name: name the group that requires Visuals
-    until: { element: { text: "[+] Visuals (required by Extra Five)" } }
+    until: { element: { text: "Visuals (", checked: true } }
   - do: screenshot
     name: capture the named dependency selection
     file: ui-navigation-named-dependency
   - do: click
     name: preview the customized selection
-    select: { text: preview target }
+    select: { text: continue }
   - do: wait_for
-    name: wait for the first update preview
+    name: wait for the first unverified write confirm
     timeout: 90s
-    until: { screen: UpdatePreviewScreen }
+    until:
+      all:
+        - screen: PackConfirmScreen
+        - element: { text: do not download, enabled: true }
   - do: click
     name: return to group customization
-    select: { text: back }
+    select: { text: Customize }
   - do: wait_for
     name: verify group customization is reusable
     until:
       all:
         - screen: ModpackSelectionScreen
-        - element: { text: preview target, enabled: true }
+        - element: { text: continue, enabled: true }
   - do: click
     name: preview the selection again
-    select: { text: preview target }
+    select: { text: continue }
   - do: wait_for
-    name: verify the second update preview opens
+    name: verify the second unverified write confirm opens
     timeout: 90s
     until:
       all:
-        - screen: UpdatePreviewScreen
-        - element: { text: update, enabled: true }
+        - screen: PackConfirmScreen
+        - element: { text: download, enabled: false }
+  - do: screenshot
+    name: capture the unverified write confirm
+    file: ui-navigation-write-confirm
   - do: click
-    name: return from the second preview
-    select: { text: back }
+    name: return from the second confirm
+    select: { text: Customize }
   - do: wait_for
     name: return from customization to first connection
     until: { screen: ModpackSelectionScreen }
@@ -113,7 +176,7 @@ flow:
     name: verify first connection is still usable
     until:
       all:
-        - screen: FirstConnectScreen
+        - screen: PackConfirmScreen
         - element: { text: do not download, enabled: true }
   - do: click
     name: cancel first connection
@@ -122,6 +185,9 @@ flow:
     name: verify cancellation returns to multiplayer
     timeout: 20s
     until: { screen: Play Multiplayer }
+  - do: screenshot
+    name: capture the multiplayer screen with the modpack button
+    file: ui-navigation-multiplayer
   - do: quit
     name: quit the client
 
@@ -157,7 +223,7 @@ topology:
           visual:
             displayName: Visuals
             category: visuals
-            syncedFiles: ["/config/amp-navigation-visual.txt"]
+            syncedFiles: ["/config/amp-navigation-visual.txt", "/mods/amp-autotest-navigation-visual.jar"]
 
 serverFiles:
   modpackName: amp-autotest
@@ -171,3 +237,6 @@ serverFiles:
         - { group: extra4, path: config/amp-navigation-extra-4.txt, content: "extra-4\n" }
         - { group: extra5, path: config/amp-navigation-extra-5.txt, content: "extra-5\n" }
         - { group: visual, path: config/amp-navigation-visual.txt, content: "visual\n" }
+        # A metadata-only jar keeps the write confirm unverified, so its honesty lock
+        # and acknowledgement are exercised on every preview.
+        - { group: visual, path: mods/amp-autotest-navigation-visual.jar, fixture: { modId: amp_autotest_navigation_visual, version: "1.0.0-navigation", marker: navigation } }

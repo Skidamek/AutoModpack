@@ -6,15 +6,14 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.security.GeneralSecurityException;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -28,7 +27,10 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 
@@ -40,30 +42,34 @@ import javax.net.ssl.TrustManager;
 
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
-import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
-import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
-import pl.skidam.automodpack_core.protocol.compression.CompressionType;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
+import pl.skidam.automodpack_core.utils.Throwables;
 import pl.skidam.mcholepunch.HolepunchClient;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchOptions;
 import pl.skidam.mcholepunch.HolepunchRoute;
-import pl.skidam.mcholepunch.MinecraftProtocol;
 
 public class DownloadClient implements AutoCloseable {
 
+	/** The transport's own async callbacks (connection IO, manifest and platform fetches); app work belongs to the app's executor. */
 	public static final ExecutorService NET_EXECUTOR = Executors.newCachedThreadPool(r -> {
 		Thread t = new Thread(r, "automodpack-net");
 		t.setDaemon(true);
 		return t;
 	});
 
+	/** One daemon thread heartbeats every candidate parked on a certificate-trust decision. */
+	private static final ScheduledExecutorService PRE_CONFIGURATION_KEEPALIVE_EXECUTOR = Executors.newSingleThreadScheduledExecutor(
+			new CustomThreadFactoryBuilder().setNameFormat("AutoModpack PreConfigurationKeepalive #%d").setDaemon(true).build());
+
 	private static final int MAX_CONNECTIONS = 5;
 
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
 	private final byte[] secretBytes;
 	private final Function<X509Certificate, CompletableFuture<Boolean>> trustCallback;
+	private final Duration preConfigurationKeepaliveInterval;
 	private final CustomizableTrustManager.SessionTrust sessionTrust;
 	private final TransportRoute route;
 	private final Object poolLock = new Object();
@@ -71,28 +77,35 @@ public class DownloadClient implements AutoCloseable {
 	private final Deque<CompletableFuture<Connection>> connectionWaiters = new ArrayDeque<>();
 	private final Set<Connection> allConnections = Collections.newSetFromMap(new IdentityHashMap<>());
 	private int openingConnections;
-	private boolean closed;
+	private volatile boolean closed;
 
 	private record TransportRoute(InetSocketAddress directAddress, HolepunchRoute holepunchRoute) {}
 
-	private record TlsCandidate(SSLSocket socket, CustomizableTrustManager trustManager) {}
+	private record TlsCandidate(SSLSocket socket, Socket transport, CustomizableTrustManager trustManager) {}
 
 	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback,
-			TransportRoute route) {
+			Duration preConfigurationKeepaliveInterval, TransportRoute route) {
 		this.connectionInfo = connectionInfo;
 		this.secretBytes = secretBytes == null ? null : secretBytes.clone();
 		this.trustCallback = trustCallback;
+		this.preConfigurationKeepaliveInterval = preConfigurationKeepaliveInterval;
 		this.route = route;
 		this.sessionTrust = new CustomizableTrustManager.SessionTrust(AddressHelpers.formatAddress(connectionInfo.origin), connectionInfo.expectedFingerprint);
 	}
 
 	public static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
+		return createAsync(connectionInfo, secretBytes, trustCallback, PRE_CONFIGURATION_KEEPALIVE_INTERVAL);
+	}
+
+	/** The keepalive interval is injectable so tests can observe heartbeats at a fast cadence; production runs at {@link NetUtils#PRE_CONFIGURATION_KEEPALIVE_INTERVAL}. */
+	static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes,
+			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, Duration preConfigurationKeepaliveInterval) {
 		if (connectionInfo == null || !connectionInfo.isComplete())
 			return CompletableFuture.failedFuture(new IllegalArgumentException("Connection origin or endpoint is missing"));
 
 		return resolveRouteAsync(connectionInfo).thenCompose(route -> {
-			DownloadClient client = new DownloadClient(connectionInfo, secretBytes, trustCallback, route);
+			DownloadClient client = new DownloadClient(connectionInfo, secretBytes, trustCallback, preConfigurationKeepaliveInterval, route);
 			return client.openConnectionAsync().thenApply(connection -> {
 				synchronized (client.poolLock) {
 					client.allConnections.add(connection);
@@ -116,7 +129,7 @@ public class DownloadClient implements AutoCloseable {
 			InetSocketAddress address = new InetSocketAddress(host, connectionInfo.endpoint.getPort());
 			if (address.isUnresolved()) throw new CompletionException(new IOException("Failed to resolve endpoint host: " + host));
 			return new TransportRoute(address, null);
-		}, NET_EXECUTOR);
+		}, DownloadClient.NET_EXECUTOR);
 	}
 
 	private CompletableFuture<Connection> openConnectionAsync() {
@@ -128,12 +141,11 @@ public class DownloadClient implements AutoCloseable {
 			}
 		}, NET_EXECUTOR).thenCompose(this::validateCandidate).thenApplyAsync(candidate -> {
 			try {
-				return new Connection(candidate.socket(), secretBytes);
+				return configuredConnection(candidate);
 			} catch (IOException e) {
-				closeQuietly(candidate.socket());
 				throw new CompletionException(e);
 			}
-		}, NET_EXECUTOR);
+		}, DownloadClient.NET_EXECUTOR);
 	}
 
 	private TlsCandidate openTlsCandidate() throws IOException {
@@ -147,33 +159,57 @@ public class DownloadClient implements AutoCloseable {
 		Socket plainSocket = connectTransport();
 
 		try {
-			plainSocket.setSoTimeout(10000);
-			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC_PACKET) performMagicHandshake(plainSocket);
-			return new TlsCandidate(wrapWithTls(plainSocket, context), trustManager);
+			plainSocket.setSoTimeout(NETWORK_TIMEOUT_MILLIS);
+			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC) performMagicHandshake(plainSocket);
+			SSLSocket tlsSocket = wrapWithTls(plainSocket, context);
+			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket);
+			tlsSocket.setSoTimeout(0);
+			return new TlsCandidate(tlsSocket, plainSocket, trustManager);
 		} catch (IOException e) {
 			closeQuietly(plainSocket);
 			throw e;
 		}
 	}
 
+	private void awaitTransportUpgrade(HolepunchSocket socket) throws IOException {
+		try {
+			socket.enableTlsTrafficCamouflage(true);
+			socket.commitTransportUpgrade().toCompletableFuture().get(NETWORK_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IOException("Holepunch transport upgrade interrupted", e);
+		} catch (ExecutionException e) {
+			Throwable cause = e.getCause() == null ? e : e.getCause();
+			throw new IOException("Holepunch transport handoff failed", cause);
+		} catch (TimeoutException e) {
+			throw new IOException("Holepunch transport handoff timed out", e);
+		}
+	}
+
+	private static HolepunchOptions holepunchOptions() {
+		HolepunchOptions.Builder builder = HolepunchOptions.builder().connectTimeout(NETWORK_TIMEOUT).negotiationTimeout(NETWORK_TIMEOUT);
+		LoaderManagerService.ModPlatform platform = LOADER_MANAGER.getPlatformType();
+		if (platform == LoaderManagerService.ModPlatform.FORGE || platform == LoaderManagerService.ModPlatform.NEOFORGE) {
+			builder.handshakeHostSuffix(HolepunchOptions.FORGE_FML3_HANDSHAKE_HOST_SUFFIX);
+		}
+		return builder.build();
+	}
+
 	private Socket connectTransport() throws IOException {
 		if (connectionInfo.connectionMode != ModpackConnectionMode.HOLEPUNCH) {
 			Socket socket = new Socket();
-			socket.connect(route.directAddress(), 15000);
+			socket.connect(route.directAddress(), NETWORK_TIMEOUT_MILLIS);
+			// Helps plain TCP NAT mappings survive the parked trust decision; zero protocol impact.
+			socket.setKeepAlive(true);
 			return socket;
 		}
 
-		MinecraftProtocol minecraftProtocol;
-		try {
-			minecraftProtocol = MinecraftProtocol.forMinecraftVersion(MC_VERSION);
-		} catch (IllegalArgumentException e) {
-			throw new IOException("No mcholepunch protocol for Minecraft " + MC_VERSION, e);
-		}
+		int protocolVersion = MinecraftProtocols.forVersion(MC_VERSION);
 
 		try {
 			HolepunchSocket socket = new HolepunchSocket();
-			HolepunchConnection connection = HolepunchClient.connect(route.holepunchRoute(), minecraftProtocol, socket.handler(), HolepunchOptions.builder().build())
-					.toCompletableFuture().get(15, TimeUnit.SECONDS);
+			HolepunchConnection connection = HolepunchClient.connect(route.holepunchRoute(), protocolVersion, socket.handler(), holepunchOptions())
+					.toCompletableFuture().get(NETWORK_TIMEOUT.plus(NETWORK_TIMEOUT).toSeconds(), TimeUnit.SECONDS);
 			socket.setConnection(connection);
 			return socket;
 		} catch (InterruptedException e) {
@@ -272,10 +308,17 @@ public class DownloadClient implements AutoCloseable {
 			return rejectCandidate(candidate, new IOException("Certificate trust callback failed", e));
 		}
 
+		BooleanSupplier clientAlive = () -> !closed;
+		PreConfigurationKeepalive keepalive = new PreConfigurationKeepalive(candidate.socket(), preConfigurationKeepaliveInterval, PRE_CONFIGURATION_KEEPALIVE_EXECUTOR, clientAlive);
 		return decision.handle((trusted, error) -> {
+			// The heartbeat must be gone before the negotiation writes start, so a straggler keepalive record can
+			// never land after the configuration echo and misframe the configured connection.
+			keepalive.retire();
 			if (error != null) {
 				closeQuietly(candidate.socket());
-				throw new CompletionException(new IOException("Certificate trust decision failed", unwrap(error)));
+				Throwable cause = Throwables.unwrap(error);
+				if (cause instanceof CertificateTrustCancelledException cancelled) throw new CompletionException(cancelled);
+				throw new CompletionException(new IOException("Certificate trust decision failed", cause));
 			}
 			if (!trusted) {
 				closeQuietly(candidate.socket());
@@ -289,6 +332,17 @@ public class DownloadClient implements AutoCloseable {
 				throw new CompletionException(e);
 			}
 		});
+	}
+
+	/** Turns a validated candidate into a configured connection, releasing the socket when the negotiation fails. */
+	private Connection configuredConnection(TlsCandidate candidate) throws IOException {
+		try {
+			candidate.socket().setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
+			return new Connection(candidate.socket(), candidate.transport(), secretBytes, NET_EXECUTOR);
+		} catch (IOException e) {
+			closeQuietly(candidate.socket());
+			throw e;
+		}
 	}
 
 	private static <T> CompletableFuture<T> rejectCandidate(TlsCandidate candidate, Throwable error) {
@@ -341,7 +395,7 @@ public class DownloadClient implements AutoCloseable {
 						if (connection != null) closeQuietly(connection);
 						waiter.completeExceptionally(new IOException("Download client is closed"));
 					} else if (error != null) {
-						waiter.completeExceptionally(unwrap(error));
+						waiter.completeExceptionally(Throwables.unwrap(error));
 					} else {
 						allConnections.add(connection);
 						waiter.complete(connection);
@@ -381,38 +435,19 @@ public class DownloadClient implements AutoCloseable {
 		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback));
 	}
 
-	/** Downloads one authenticated historical catalogue advertised by the current generation index. */
-	public CompletableFuture<Path> downloadHistoricalCatalogue(String stateDigest, Path destination, IntConsumer chunkCallback) {
-		String requestKey = GenerationHistoryIndex.catalogueRequestKey(stateDigest);
-		return downloadFile(requestKey.getBytes(StandardCharsets.UTF_8), destination, chunkCallback);
-	}
-
-	static boolean isSelfSigned(X509Certificate certificate) {
-		if (certificate == null || !certificate.getSubjectX500Principal().equals(certificate.getIssuerX500Principal())) return false;
-
-		try {
-			certificate.verify(certificate.getPublicKey());
-			return true;
-		} catch (GeneralSecurityException e) {
-			return false;
+	/** Drops every pooled and in-flight transfer connection so a cancelled run cannot poison the next one. */
+	public void abortTransfers() {
+		List<Connection> connections;
+		synchronized (poolLock) {
+			if (closed) return;
+			connections = new ArrayList<>(allConnections);
+			allConnections.clear();
+			availableConnections.clear();
 		}
-	}
-
-	public static <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
-		Throwable current = throwable;
-		while (current != null) {
-			if (type.isInstance(current)) return type.cast(current);
-			current = current.getCause();
+		connections.forEach(DownloadClient::closeQuietly);
+		synchronized (poolLock) {
+			if (!closed) pumpPool();
 		}
-		return null;
-	}
-
-	public static Throwable unwrap(Throwable throwable) {
-		Throwable current = throwable;
-		while ((current instanceof CompletionException || current instanceof ExecutionException) && current.getCause() != null) {
-			current = current.getCause();
-		}
-		return current;
 	}
 
 	static void closeQuietly(AutoCloseable closeable) {
@@ -439,192 +474,5 @@ public class DownloadClient implements AutoCloseable {
 		IOException closedError = new IOException("Download client is closed");
 		waiters.forEach(waiter -> waiter.completeExceptionally(closedError));
 		connections.forEach(DownloadClient::closeQuietly);
-	}
-}
-
-class Connection implements AutoCloseable {
-
-	private byte protocolVersion = LATEST_SUPPORTED_PROTOCOL_VERSION;
-	private CompressionType compressionType = CompressionType.ZSTD;
-	private int chunkSize = DEFAULT_CHUNK_SIZE;
-	private final byte[] secretBytes;
-	private final SSLSocket socket;
-	private final DataInputStream in;
-	private final DataOutputStream out;
-	private final ExecutorService executor = Executors.newSingleThreadExecutor();
-	private CompressionCodec compressionCodec;
-	private byte[] networkInputBuffer;
-
-	public Connection(SSLSocket socket, byte[] secretBytes) throws IOException {
-		if (socket == null || socket.isClosed()) throw new IOException("Server connection is closed");
-		this.socket = socket;
-		this.secretBytes = secretBytes;
-
-		this.in = new DataInputStream(new BufferedInputStream(this.socket.getInputStream()));
-		this.out = new DataOutputStream(new BufferedOutputStream(this.socket.getOutputStream()));
-
-		try {
-			if (!CompressionFactory.isAvailable(compressionType)) compressionType = CompressionType.GZIP;
-			compressionType = sendCompressionConfig(compressionType);
-			compressionCodec = CompressionFactory.createCodec(compressionType);
-			chunkSize = sendChunkSizeConfig(DEFAULT_CHUNK_SIZE);
-			networkInputBuffer = new byte[compressionCodec.maxCompressedLength(chunkSize)];
-			sendEchoConfig();
-		} catch (IOException e) {
-			LOGGER.error("Failed to configure connection", e);
-			throw e;
-		}
-	}
-
-	public boolean isActive() {
-		return !socket.isClosed();
-	}
-
-	private CompressionCodec getCompressionCodec() {
-		return compressionCodec;
-	}
-
-	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
-		if (destination == null) throw new IllegalArgumentException("Destination cannot be null");
-
-		return CompletableFuture.supplyAsync(() -> {
-			Exception exception = null;
-			try {
-				ByteArrayOutputStream baos = new ByteArrayOutputStream(64 + fileHash.length);
-				DataOutputStream dos = new DataOutputStream(baos);
-				dos.writeByte(protocolVersion);
-				dos.writeByte(FILE_REQUEST_TYPE);
-				dos.write(secretBytes);
-				dos.writeInt(fileHash.length);
-				dos.write(fileHash);
-
-				writeProtocolMessage(baos.toByteArray());
-				return readFileResponse(destination, chunkCallback);
-			} catch (Exception e) {
-				exception = e;
-				throw new CompletionException(e);
-			} finally {
-				finalBlock(exception);
-			}
-		}, executor);
-	}
-
-	private void finalBlock(Exception exception) {
-		try {
-			int available;
-			while ((available = in.available()) > 0) {
-				in.skipBytes(available);
-			}
-		} catch (IOException e) {
-			if (exception == null) throw new CompletionException(e);
-		}
-	}
-
-	private void writeProtocolMessage(byte[] payload) throws IOException {
-		ProtocolFrameCodec.write(out, getCompressionCodec(), payload, chunkSize);
-	}
-
-	private byte[] readProtocolMessageFrame() throws IOException {
-		return ProtocolFrameCodec.read(in, getCompressionCodec(), chunkSize, networkInputBuffer);
-	}
-
-	private Path readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {
-		byte[] headerData = readProtocolMessageFrame();
-		ByteBuffer headerWrap = ByteBuffer.wrap(headerData);
-
-		byte version = headerWrap.get();
-		byte messageType = headerWrap.get();
-
-		if (messageType == ERROR) {
-			int errLen = headerWrap.getInt();
-			byte[] errBytes = new byte[errLen];
-			headerWrap.get(errBytes);
-			throw new IOException("Server error: " + new String(errBytes, StandardCharsets.UTF_8));
-		}
-
-		if (messageType == END_OF_TRANSMISSION) return destination;
-
-		if (messageType != FILE_RESPONSE_TYPE) throw new IOException("Unexpected message type: " + messageType);
-
-		long expectedFileSize = headerWrap.getLong();
-		long receivedBytes = 0;
-
-		try (OutputStream fos = LocalFileWriter.open(destination)) {
-			while (receivedBytes < expectedFileSize) {
-				byte[] dataFrame = readProtocolMessageFrame();
-				int toWrite = Math.min(dataFrame.length, (int) (expectedFileSize - receivedBytes));
-				fos.write(dataFrame, 0, toWrite);
-				receivedBytes += toWrite;
-				if (chunkCallback != null) chunkCallback.accept(toWrite);
-			}
-		}
-
-		byte[] eotData = readProtocolMessageFrame();
-		if (eotData.length < 2 || eotData[0] != version || eotData[1] != END_OF_TRANSMISSION) throw new IOException("Invalid EOT frame");
-		return destination;
-	}
-
-	private CompressionType sendCompressionConfig(CompressionType desiredCompression) throws IOException {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		DataOutputStream dos = new DataOutputStream(baos);
-		dos.writeByte(protocolVersion);
-		dos.writeByte(CONFIGURATION_COMPRESSION_TYPE);
-		dos.writeByte(desiredCompression.wireId());
-
-		out.write(baos.toByteArray());
-		out.flush();
-
-		byte version = in.readByte();
-		if (version >= 1 && version < protocolVersion) protocolVersion = version;
-
-		byte type = in.readByte();
-		if (type != CONFIGURATION_COMPRESSION_TYPE) throw new IOException("Unexpected response: " + type);
-
-		CompressionType negotiated;
-		try {
-			negotiated = CompressionType.fromWireId(in.readByte());
-		} catch (IllegalArgumentException e) {
-			throw new IOException("Unsupported compression response", e);
-		}
-		return negotiated;
-	}
-
-	private int sendChunkSizeConfig(int desiredChunkSize) throws IOException {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		DataOutputStream dos = new DataOutputStream(baos);
-		dos.writeByte(protocolVersion);
-		dos.writeByte(CONFIGURATION_CHUNK_SIZE_TYPE);
-		dos.writeInt(desiredChunkSize);
-
-		out.write(baos.toByteArray());
-		out.flush();
-
-		byte version = in.readByte();
-		if (version >= 1 && version < protocolVersion) protocolVersion = version;
-
-		byte type = in.readByte();
-		if (type != CONFIGURATION_CHUNK_SIZE_TYPE) throw new IOException("Unexpected response: " + type);
-
-		int negotiated = in.readInt();
-		if (negotiated < MIN_CHUNK_SIZE || negotiated > MAX_CHUNK_SIZE) throw new IOException("Chunk size out of bounds: " + negotiated);
-		return negotiated;
-	}
-
-	private void sendEchoConfig() throws IOException {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		DataOutputStream dos = new DataOutputStream(baos);
-		dos.writeByte(protocolVersion);
-		dos.writeByte(CONFIGURATION_ECHO_TYPE);
-		out.write(baos.toByteArray());
-		out.flush();
-	}
-
-	@Override
-	public void close() {
-		try {
-			socket.close();
-		} catch (Exception ignored) {
-		}
-		executor.shutdownNow();
 	}
 }

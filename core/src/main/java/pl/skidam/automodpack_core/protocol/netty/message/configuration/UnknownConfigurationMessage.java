@@ -12,8 +12,6 @@ public class UnknownConfigurationMessage extends ConfigurationMessage {
 	}
 
 	public ByteBuf toByteBuf() {
-		ByteBuf buf = Unpooled.buffer(2);
-		super.toByteBuf(buf);
-		return buf;
+		return Unpooled.wrappedBuffer(toBytes());
 	}
 }

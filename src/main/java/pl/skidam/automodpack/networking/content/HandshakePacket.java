@@ -2,7 +2,7 @@ package pl.skidam.automodpack.networking.content;
 
 import java.util.Set;
 
-import com.google.gson.Gson;
+import pl.skidam.automodpack_core.config.ConfigTools;
 
 public class HandshakePacket {
 	public Set<String> loaders;
@@ -16,12 +16,10 @@ public class HandshakePacket {
 	}
 
 	public String toJson() {
-		Gson gson = new Gson();
-		return gson.toJson(this);
+		return ConfigTools.GSON.toJson(this);
 	}
 
 	public static HandshakePacket fromJson(String json) {
-		Gson gson = new Gson();
-		return gson.fromJson(json, HandshakePacket.class);
+		return ConfigTools.parse(json, HandshakePacket.class);
 	}
 }

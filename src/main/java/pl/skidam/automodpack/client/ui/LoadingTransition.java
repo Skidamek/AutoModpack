@@ -8,9 +8,14 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-/** Delays short loading states and prevents a visible loading state from flashing away. */
+/**
+ * Owns the loading beat between screens: the loading state shows the moment a flow asks for it, and the screen
+ * that ends the flow waits until the loading state has been visible for {@link #MINIMUM_VISIBLE_MILLIS}. A fast
+ * result therefore holds the loading screen briefly instead of flashing it for a frame, which reads as a glitch.
+ * Material's loading guidance puts indicator-worthy processes at a few hundred milliseconds and up, and spinner
+ * guidance keeps a shown indicator on screen for roughly half a second; the dwell below sits between the two.
+ */
 public final class LoadingTransition {
-	static final long SHOW_DELAY_MILLIS = 300;
 	static final long MINIMUM_VISIBLE_MILLIS = 400;
 
 	private static final ScheduledExecutorService TIMER = Executors.newSingleThreadScheduledExecutor(new LoadingThreadFactory());
@@ -29,11 +34,11 @@ public final class LoadingTransition {
 		Objects.requireNonNull(displayLoading, "loading display");
 		synchronized (this) {
 			cancelScheduled();
-			long token = ++generation;
+			++generation;
 			active = true;
-			visibleAtNanos = 0;
-			scheduled = TIMER.schedule(() -> clientExecutor.accept(() -> show(token, displayLoading)), SHOW_DELAY_MILLIS, TimeUnit.MILLISECONDS);
+			visibleAtNanos = System.nanoTime();
 		}
+		clientExecutor.accept(displayLoading);
 	}
 
 	public void complete(Runnable displayNext) {
@@ -44,9 +49,7 @@ public final class LoadingTransition {
 		synchronized (this) {
 			token = ++generation;
 			cancelScheduled();
-			if (!active || visibleAtNanos == 0) {
-				active = false;
-				visibleAtNanos = 0;
+			if (!active) {
 				displayImmediately = true;
 				delayNanos = 0;
 			} else {
@@ -61,13 +64,13 @@ public final class LoadingTransition {
 		if (displayImmediately) clientExecutor.accept(displayNext);
 	}
 
-	private void show(long token, Runnable displayLoading) {
+	public void cancel() {
 		synchronized (this) {
-			if (!active || generation != token) return;
-			visibleAtNanos = System.nanoTime();
-			scheduled = null;
+			++generation;
+			cancelScheduled();
+			active = false;
+			visibleAtNanos = 0;
 		}
-		displayLoading.run();
 	}
 
 	private void finish(long token, Runnable displayNext) {

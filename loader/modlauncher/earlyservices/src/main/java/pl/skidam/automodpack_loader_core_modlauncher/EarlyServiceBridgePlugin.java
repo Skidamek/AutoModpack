@@ -27,12 +27,12 @@ public class EarlyServiceBridgePlugin implements ILaunchPluginService {
 		return NAME;
 	}
 
-	public static void ensureRunsFirst(Runnable bridgeEarlyServicesToGameLayer) {
+	public static void registerFirst(Runnable bridgeEarlyServicesToGameLayer) {
 		onInitializeLaunch = bridgeEarlyServicesToGameLayer;
-		ensureRunsFirst();
+		registerFirst();
 	}
 
-	private static void ensureRunsFirst() {
+	private static void registerFirst() {
 		try {
 			Object launcher = ModuleClassLoaderAccess.launcherInstance();
 			if (launcher == null) return;
@@ -78,7 +78,7 @@ public class EarlyServiceBridgePlugin implements ILaunchPluginService {
 
 	@Override
 	public void addResources(List<SecureJar> resources) {
-		ensureRunsFirst();
+		registerFirst();
 	}
 
 	@Override

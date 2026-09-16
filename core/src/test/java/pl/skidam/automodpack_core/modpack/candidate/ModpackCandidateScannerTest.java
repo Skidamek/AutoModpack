@@ -17,6 +17,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 class ModpackCandidateScannerTest {
 	@TempDir
@@ -55,11 +58,6 @@ class ModpackCandidateScannerTest {
 
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
 
-		assertEquals(1, candidate.shadows().size());
-		ShadowedCandidate shadow = candidate.shadows().get(0);
-		assertEquals(CandidateSource.SourceKind.GROUP_DIRECTORY, shadow.selected().kind());
-		assertEquals(CandidateSource.SourceKind.SYNCED_ROOT, shadow.shadowed().kind());
-		assertEquals(ShadowedCandidate.Relationship.NOT_COMPARED, shadow.relationship());
 		CandidateProvenance provenance = candidate.provenance().get(ModpackCandidate.provenanceKey("main", "config/example.txt"));
 		assertNotNull(provenance);
 		assertEquals(CandidateSource.SourceKind.GROUP_DIRECTORY, provenance.selectedSource().kind());
@@ -121,7 +119,6 @@ class ModpackCandidateScannerTest {
 		assertEquals(ExcludedCandidate.Reason.DISABLED_FILE, exclusion.reason());
 		assertEquals("config/example.disabled", exclusion.source().logicalPath());
 		assertFalse(exclusion.message().isBlank());
-		assertEquals(1, candidate.shadows().size());
 	}
 
 	@Test
@@ -173,9 +170,10 @@ class ModpackCandidateScannerTest {
 			copies.incrementAndGet();
 			Files.copy(sourceFile, staged, StandardCopyOption.REPLACE_EXISTING);
 			Files.writeString(sourceFile, Files.readString(sourceFile, StandardCharsets.UTF_8) + "x", StandardCharsets.UTF_8);
+			return HashUtils.getHash(staged);
 		});
 
-		CandidateBuildException failure = assertThrows(CandidateBuildException.class, () -> reader.snapshot(source, false, false, staging));
+		CandidateBuildException failure = assertThrows(CandidateBuildException.class, () -> reader.snapshot(source, false, false, staging, null, null, null, true));
 
 		assertTrue(failure.getMessage().contains("changed while being snapshotted"));
 		assertEquals(1, copies.get());
@@ -195,15 +193,65 @@ class ModpackCandidateScannerTest {
 		StableSourceSnapshotter snapshotter = new StableSourceSnapshotter((sourceFile, staged) -> {
 			byte[] bytes = Files.readAllBytes(sourceFile);
 			Files.write(staged, Arrays.copyOf(bytes, bytes.length - 1));
+			return HashUtils.getHash(staged);
 		});
 
-		CandidateBuildException failure = assertThrows(CandidateBuildException.class, () -> snapshotter.snapshot(source, false, false, staging));
+		CandidateBuildException failure = assertThrows(CandidateBuildException.class, () -> snapshotter.snapshot(source, false, false, staging, null, null, null, true));
 
 		assertTrue(failure.getMessage().contains("snapshot"));
 		assertEquals(original, Files.readString(sourcePath, StandardCharsets.UTF_8));
 		assertTrue(Files.isDirectory(staging, LinkOption.NOFOLLOW_LINKS));
 		try (var files = Files.list(staging)) {
 			assertEquals(0, files.count());
+		}
+	}
+
+	@Test
+	void identityOnlySnapshotDoesNotCopy() throws Exception {
+		Path pack = tempDir.resolve("resourcepacks/pack.zip");
+		Files.createDirectories(pack.getParent());
+		Files.write(pack, new byte[4096]);
+		AtomicInteger copies = new AtomicInteger();
+		CandidateSource source = new CandidateSource("main", "resourcepacks/pack.zip", CandidateSource.SourceKind.GROUP_DIRECTORY, pack, null);
+		StableSourceSnapshotter snapshotter = new StableSourceSnapshotter((sourceFile, staged) -> {
+			copies.incrementAndGet();
+			return HashUtils.copyAndSha1(sourceFile, staged);
+		});
+		try (FileCache cache = FileCache.open(tempDir.resolve("file-cache"))) {
+			StableSourceSnapshotter.Snapshot first = snapshotter.snapshot(source, false, false, tempDir.resolve("staging"), cache, null, tempDir.resolve("objects"), false);
+			StableSourceSnapshotter.Snapshot second = snapshotter.snapshot(source, false, false, tempDir.resolve("staging"), cache, null, tempDir.resolve("objects"), false);
+			assertNotNull(first.file().sha1());
+			assertNotNull(first.file().murmur());
+			assertNull(first.object());
+			assertEquals(first.file().sha1(), second.file().sha1());
+			assertEquals(first.file().murmur(), second.file().murmur());
+			assertEquals(0, copies.get());
+		}
+	}
+
+	@Test
+	void trustedCasObjectIsNotRestaged() throws Exception {
+		Path pack = tempDir.resolve("resourcepacks/pack.zip");
+		Files.createDirectories(pack.getParent());
+		Files.write(pack, new byte[4096]);
+		Path staging = tempDir.resolve("staging");
+		Path objects = tempDir.resolve("objects");
+		AtomicInteger copies = new AtomicInteger();
+		CandidateSource source = new CandidateSource("main", "resourcepacks/pack.zip", CandidateSource.SourceKind.GROUP_DIRECTORY, pack, null);
+		StableSourceSnapshotter snapshotter = new StableSourceSnapshotter((sourceFile, staged) -> {
+			copies.incrementAndGet();
+			return HashUtils.copyAndSha1(sourceFile, staged);
+		});
+		try (FileCache cache = FileCache.open(tempDir.resolve("file-cache"))) {
+			StableSourceSnapshotter.Snapshot first = snapshotter.snapshot(source, false, false, staging, cache, null, objects, true);
+			assertNotNull(first.object());
+			Path object = DataRootResolver.objectFile(objects, first.file().sha1());
+			Files.createDirectories(object.getParent());
+			Files.move(first.object().stagedPath(), object);
+			StableSourceSnapshotter.Snapshot second = snapshotter.snapshot(source, false, false, staging, cache, null, objects, true);
+			assertNull(second.object());
+			assertEquals(first.file().sha1(), second.file().sha1());
+			assertEquals(1, copies.get());
 		}
 	}
 
@@ -220,14 +268,33 @@ class ModpackCandidateScannerTest {
 		Path staging = tempDir.resolve("staging");
 		CandidateSource source = new CandidateSource("main", "config/source.txt", CandidateSource.SourceKind.GROUP_DIRECTORY, sourcePath, null);
 
-		assertThrows(CandidateBuildException.class, () -> new StableSourceSnapshotter().snapshot(source, false, false, staging));
+		assertThrows(CandidateBuildException.class, () -> new StableSourceSnapshotter().snapshot(source, false, false, staging, null, null, null, true));
 		assertFalse(Files.exists(staging, LinkOption.NOFOLLOW_LINKS));
+	}
+
+	@Test
+	void reservedWindowsNamesAreExcludedWhereverTheyAppear() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main/config/CON"));
+		Files.writeString(groups.resolve("main/config/CON/nested.txt"), "under a reserved directory name", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/aux.tar.gz"), "reserved file stem", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/kept.txt"), "kept", StandardCharsets.UTF_8);
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", group("/config/**")), true);
+
+		assertTrue(candidate.manifest().groups().get("main").files().containsKey("config/kept.txt"));
+		assertEquals(2, candidate.exclusions().size());
+		for (ExcludedCandidate exclusion : candidate.exclusions()) {
+			assertEquals(ExcludedCandidate.Reason.RESERVED_WINDOWS_NAME, exclusion.reason());
+			assertTrue(exclusion.message().contains("Windows clients"));
+		}
 	}
 
 	private ModpackCandidate scan(Path server, Path groups, Map<String, ServerConfigJsons.GroupDeclaration> declarations, boolean autoExclude) throws Exception {
 		Executor direct = Runnable::run;
 		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, declarations,
-				autoExclude, false, tempDir.resolve("staging"), direct);
+				autoExclude, false, tempDir.resolve("staging"), direct, null, null, null, true);
 		return new ModpackCandidateScanner().scan(request);
 	}
 
@@ -235,6 +302,120 @@ class ModpackCandidateScannerTest {
 		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
 		group.syncedFiles = new LinkedHashSet<>(List.of(rules));
 		return group;
+	}
+
+	@Test
+	void excludedFilesLeaveGroupDirectoryContentOutOfThePack() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.writeString(groups.resolve("main/config/kept.txt"), "kept", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/pakku-params.json"), "params", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/pakku-cache.json"), "cache", StandardCharsets.UTF_8);
+		ServerConfigJsons.GroupDeclaration main = group();
+		main.excludedFiles = new LinkedHashSet<>(List.of("pakku-*.json"));
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
+		var files = candidate.manifest().groups().get("main").files();
+
+		assertTrue(files.containsKey("config/kept.txt"));
+		assertFalse(files.containsKey("pakku-params.json"));
+		assertFalse(files.containsKey("pakku-cache.json"));
+		assertEquals(2, candidate.exclusions().size());
+		for (ExcludedCandidate exclusion : candidate.exclusions()) {
+			assertEquals(ExcludedCandidate.Reason.EXCLUDED_BY_RULE, exclusion.reason());
+			assertEquals("excluded by pakku-*.json", exclusion.message());
+		}
+	}
+
+	@Test
+	void excludedFilesCarveExceptionsOutOfSyncedRules() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(server.resolve("kubejs/server_scripts"));
+		Files.writeString(server.resolve("kubejs/main.js"), "script", StandardCharsets.UTF_8);
+		Files.writeString(server.resolve("kubejs/server_scripts/secret.js"), "secret", StandardCharsets.UTF_8);
+		ServerConfigJsons.GroupDeclaration main = group("kubejs/**");
+		main.excludedFiles = new LinkedHashSet<>(List.of("kubejs/server_scripts/**"));
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
+		var files = candidate.manifest().groups().get("main").files();
+
+		assertTrue(files.containsKey("kubejs/main.js"));
+		assertFalse(files.containsKey("kubejs/server_scripts/secret.js"));
+		assertEquals(1, candidate.exclusions().size());
+		assertEquals(ExcludedCandidate.Reason.EXCLUDED_BY_RULE, candidate.exclusions().get(0).reason());
+	}
+
+	@Test
+	void negatedSyncedRuleSparesOnlyTheSyncedCopy() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(server.resolve("config"));
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.writeString(server.resolve("config/dup.txt"), "server build", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/dup.txt"), "client build", StandardCharsets.UTF_8);
+		ServerConfigJsons.GroupDeclaration main = group("config/**", "!config/dup.txt");
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
+		var files = candidate.manifest().groups().get("main").files();
+
+		// The synced copy is skipped, but the group directory still provides the path - only excludedFiles could remove it entirely.
+		assertTrue(files.containsKey("config/dup.txt"));
+		assertEquals(0, candidate.exclusions().size());
+	}
+
+	@Test
+	void negatedExclusionRulesSparePathsFromTheExclusionSet() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main"));
+		Files.writeString(groups.resolve("main/pakku-params.json"), "params", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/pakku-keep.json"), "keep", StandardCharsets.UTF_8);
+		ServerConfigJsons.GroupDeclaration main = group();
+		main.excludedFiles = new LinkedHashSet<>(List.of("pakku-*.json", "!pakku-keep.json"));
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
+		var files = candidate.manifest().groups().get("main").files();
+
+		assertTrue(files.containsKey("pakku-keep.json"));
+		assertFalse(files.containsKey("pakku-params.json"));
+		assertEquals(1, candidate.exclusions().size());
+		assertEquals("excluded by pakku-*.json", candidate.exclusions().get(0).message());
+	}
+
+	@Test
+	void negatedEditRulesKeepServerOwnedPaths() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main/config/fancymenu"));
+		Files.writeString(groups.resolve("main/config/options.txt"), "options", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/fancymenu/theme.txt"), "theme", StandardCharsets.UTF_8);
+		ServerConfigJsons.GroupDeclaration main = group();
+		main.allowEditsInFiles = new LinkedHashSet<>(List.of("config/**", "!config/fancymenu/**"));
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
+		var files = candidate.manifest().groups().get("main").files();
+
+		assertTrue(files.get("config/options.txt").editable());
+		assertFalse(files.get("config/fancymenu/theme.txt").editable());
+	}
+
+	@Test
+	void reservedWindowsNamesStayExcludedWhenConvenienceExclusionsAreOff() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.writeString(groups.resolve("main/config/aux.tar.gz"), "reserved", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/old.bak"), "backup", StandardCharsets.UTF_8);
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()), false);
+		var files = candidate.manifest().groups().get("main").files();
+
+		assertFalse(files.containsKey("config/aux.tar.gz"));
+		assertTrue(files.containsKey("config/old.bak"));
+		assertEquals(1, candidate.exclusions().size());
+		assertEquals(ExcludedCandidate.Reason.RESERVED_WINDOWS_NAME, candidate.exclusions().get(0).reason());
 	}
 
 	private static void writeModJar(Path path) throws IOException {

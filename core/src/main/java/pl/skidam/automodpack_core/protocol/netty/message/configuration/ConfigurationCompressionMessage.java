@@ -2,6 +2,10 @@ package pl.skidam.automodpack_core.protocol.netty.message.configuration;
 
 import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_COMPRESSION_TYPE;
 
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
@@ -21,10 +25,21 @@ public class ConfigurationCompressionMessage extends ConfigurationMessage {
 		return compressionType;
 	}
 
+	@Override
+	public byte[] toBytes() {
+		return ByteBuffer.allocate(3).put(super.toBytes()).put(compressionType.wireId()).array();
+	}
+
+	/** Rebuilds the message from the payload half of a compression exchange; the [version][type] header is already consumed. */
+	public static ConfigurationCompressionMessage readFrom(byte version, DataInputStream in) throws IOException {
+		try {
+			return new ConfigurationCompressionMessage(version, CompressionType.fromWireId(in.readByte()));
+		} catch (IllegalArgumentException e) {
+			throw new IOException("Unsupported compression response", e);
+		}
+	}
+
 	public ByteBuf toByteBuf() {
-		ByteBuf buf = Unpooled.buffer(3);
-		super.toByteBuf(buf);
-		buf.writeByte(compressionType.wireId());
-		return buf;
+		return Unpooled.wrappedBuffer(toBytes());
 	}
 }

@@ -10,6 +10,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 
 import net.minecraft.client.Minecraft;
@@ -38,14 +40,9 @@ public class ClientLoginNetworkHandlerMixin implements IntentionalDisconnectCont
 		this.autoModpack$addon = new ClientLoginNetworkAddon((ClientHandshakePacketListenerImpl) (Object) this, this.minecraft);
 	}
 
-	@Inject(method = "handleCustomQuery", at = @At(value = "HEAD"), cancellable = true)
-	private void handleQueryRequest(ClientboundCustomQueryPacket packet, CallbackInfo ci) {
-		if (this.autoModpack$addon == null) return;
-
-		if (this.autoModpack$addon.handlePacket(packet)) {
-			// We have handled it, cancel vanilla behavior
-			ci.cancel();
-		}
+	@WrapMethod(method = "handleCustomQuery")
+	private void handleQueryRequest(ClientboundCustomQueryPacket packet, Operation<Void> original) {
+		if (this.autoModpack$addon == null || !this.autoModpack$addon.handlePacket(packet)) original.call(packet);
 	}
 
 	@Override

@@ -18,7 +18,6 @@ public class HAProxyDetector {
 		boolean v1Possible = true;
 		boolean v2Possible = true;
 
-		// Check V2
 		for (int i = 0; i < V2_SIG.length; i++) {
 			if (readable <= i) break;
 			if (in.getByte(start + i) != V2_SIG[i]) {
@@ -28,7 +27,6 @@ public class HAProxyDetector {
 			if (i == V2_SIG.length - 1) return MatchResult.MATCHED;
 		}
 
-		// Check V1
 		for (int i = 0; i < V1_SIG.length; i++) {
 			if (readable <= i) break;
 			if (in.getByte(start + i) != V1_SIG[i]) {

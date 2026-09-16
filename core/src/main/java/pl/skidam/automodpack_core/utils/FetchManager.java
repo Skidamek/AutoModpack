@@ -8,30 +8,35 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
 public class FetchManager {
 
-	// Throw all the sha1 and murmurs
-	// Send request to Modrinth with sha1s
-	// Send request to CurseForge with murmurs
-	// Return the results i guess
-
-	public record FetchData(String file, String sha1, String murmur, String fileSize, String fileType) {}
-	public record FetchedData(List<DownloadSource> sources, List<String> mainPageUrls) {}
-	public record Datas(FetchData fetchData, FetchedData fetchedData) {}
+	public record FetchData(String file, String sha1, String murmur, String fileType) {}
+	private record FetchedData(List<DownloadSource> sources, List<String> mainPageUrls) {}
+	private record Datas(FetchData fetchData, FetchedData fetchedData) {}
+	private record DeadLink(String murmur, String fileType) {}
 	private final Map<String, Datas> fetchDatas = new HashMap<>();
+	private final PlatformCache platformCache;
 
-	public FetchManager(List<FetchData> fetchDatas) {
+	private final Object metadataRefetchLock = new Object();
+	private final Map<String, DeadLink> pendingMetadataRefetch = new HashMap<>();
+	private final Map<String, List<DownloadSource>> resolvedMetadataRefetches = new HashMap<>();
+	private final Set<String> refetchedSha1s = new HashSet<>();
+
+	public FetchManager(List<FetchData> fetchDatas, PlatformCache platformCache) {
+		this.platformCache = platformCache;
 		for (FetchData fetchData : fetchDatas) {
 			this.fetchDatas.put(fetchData.sha1,
 					new Datas(fetchData, new FetchedData(Collections.synchronizedList(new ArrayList<>(2)), Collections.synchronizedList(new ArrayList<>(2)))));
 		}
 	}
 
-	// Matrices for screen
 	public final AtomicInteger fetchesDone = new AtomicInteger(0);
 	private volatile CompletableFuture<Void> completableFuture;
 	private volatile boolean complete;
@@ -56,8 +61,8 @@ public class FetchManager {
 				moHashes.add(data.fetchData.sha1);
 			}
 
-			CompletableFuture<Void> cfFuture = CompletableFuture.runAsync(() -> fetchByMurmur(cfHashes));
-			CompletableFuture<Void> moFuture = CompletableFuture.runAsync(() -> fetchBySha1(moHashes));
+			CompletableFuture<Void> cfFuture = CompletableFuture.runAsync(() -> fetchByMurmur(cfHashes), DownloadClient.NET_EXECUTOR);
+			CompletableFuture<Void> moFuture = CompletableFuture.runAsync(() -> fetchBySha1(moHashes), DownloadClient.NET_EXECUTOR);
 			completableFuture = CompletableFuture.allOf(cfFuture, moFuture).whenComplete((ignored, failure) -> {
 				if (failure == null && !cancelled) randomizeFinalOrder();
 				complete = true;
@@ -66,13 +71,26 @@ public class FetchManager {
 		}
 	}
 
-	public void fetch() {
+	/**
+	 * Joins the lookup until it settles or is aborted. A cancelled lookup is an abort, not a completed miss: callers
+	 * must not present an unverified verdict from it.
+	 */
+	public void fetch() throws InterruptedException {
 		try {
 			fetchAsync().join();
 		} catch (CancellationException e) {
-			LOGGER.warn("Fetch canceled");
+			Thread.currentThread().interrupt();
+			throw new InterruptedException("Third-party source lookup was cancelled");
 		} catch (CompletionException e) {
+			if (cancelled) {
+				Thread.currentThread().interrupt();
+				throw new InterruptedException("Third-party source lookup was cancelled");
+			}
 			LOGGER.warn("Third-party source lookup failed", e.getCause() == null ? e : e.getCause());
+		}
+		if (cancelled) {
+			Thread.currentThread().interrupt();
+			throw new InterruptedException("Third-party source lookup was cancelled");
 		}
 	}
 
@@ -103,42 +121,135 @@ public class FetchManager {
 		for (Datas data : fetchDatas.values()) {
 			List<DownloadSource> sources = data.fetchedData().sources();
 
-			// Coin filp order
-			if (sources.size() == 2 && rng.nextBoolean()) {
-				DownloadSource first = sources.get(0);
-				sources.set(0, sources.get(1));
-				sources.set(1, first);
+			synchronized (sources) {
+				if (sources.size() == 2 && rng.nextBoolean()) {
+					DownloadSource first = sources.get(0);
+					sources.set(0, sources.get(1));
+					sources.set(1, first);
+				}
 			}
 		}
 	}
 
 	private void fetchBySha1(List<String> sha1s) {
-		List<ModrinthAPI> results = ModrinthAPI.getModsInfosFromListOfSHA1(sha1s);
+		Map<String, PlatformCache.Record> cached = platformCache.getAll(sha1s);
+		List<String> missing = new ArrayList<>();
+		for (String sha1 : sha1s) {
+			PlatformCache.Record record = cached.get(sha1);
+			if (record != null && record.modrinth() != null) applyModrinth(fetchDatas.get(sha1), record.modrinth());
+			else missing.add(sha1);
+		}
+		if (missing.isEmpty()) return;
+
+		List<ModrinthAPI> results = ModrinthAPI.getModsInfosFromListOfSHA1(missing);
 		if (results == null) return;
 
+		Map<String, String> slugs = ModrinthAPI.getProjectSlugs(results.stream().map(ModrinthAPI::modrinthID).collect(Collectors.toSet()));
 		for (ModrinthAPI info : results) {
 			Datas datas = fetchDatas.get(info.SHA1Hash());
-			if (datas != null) {
-				datas.fetchedData().sources().add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.MODRINTH));
-				String mainPageUrl = ModrinthAPI.getMainPageUrl(info.modrinthID(), datas.fetchData.fileType);
-				addMainPageUrl(datas, mainPageUrl, true);
-				fetchesDone.incrementAndGet();
-			}
+			String slug = slugs.get(info.modrinthID());
+			if (datas == null || slug == null || slug.isBlank()) continue;
+			String mainPageUrl = ModrinthAPI.getMainPageUrl(datas.fetchData.fileType, slug);
+			platformCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
+			applyModrinth(datas, info.downloadUrl(), mainPageUrl);
 		}
 	}
 
 	private void fetchByMurmur(Map<String, String> hashes) {
-		List<CurseForgeAPI> results = CurseForgeAPI.getModInfosFromFingerPrints(hashes);
+		Map<String, PlatformCache.Record> cached = platformCache.getAll(hashes.keySet());
+		Map<String, String> missing = new LinkedHashMap<>();
+		for (Map.Entry<String, String> hash : hashes.entrySet()) {
+			PlatformCache.Record record = cached.get(hash.getKey());
+			if (record != null && record.curseforge() != null) {
+				applyCurseForge(fetchDatas.get(hash.getKey()), record.curseforge().downloadUrl(), record.curseforge().projectPageUrl());
+			} else {
+				missing.put(hash.getKey(), hash.getValue());
+			}
+		}
+		if (missing.isEmpty()) return;
+
+		List<CurseForgeAPI> results = CurseForgeAPI.getModInfosFromFingerPrints(missing);
 		if (results == null) return;
 
 		for (CurseForgeAPI info : results) {
 			Datas datas = fetchDatas.get(info.sha1Hash());
 			if (datas != null) {
-				datas.fetchedData().sources().add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.CURSEFORGE));
-				addMainPageUrl(datas, info.projectPageUrl(), false);
-				fetchesDone.incrementAndGet();
+				platformCache.putCurseForge(info.sha1Hash(), info);
+				applyCurseForge(datas, info.downloadUrl(), info.projectPageUrl());
 			}
 		}
+	}
+
+	/** Evicts the cached metadata of a dead platform link and schedules its refetch; reports whether this sha1 joined the pending batch. */
+	public boolean markDeadPlatformLink(String sha1, String murmur, String fileType) {
+		String normalizedSha1 = sha1.toLowerCase(Locale.ROOT);
+		synchronized (metadataRefetchLock) {
+			platformCache.evict(normalizedSha1);
+			if (!refetchedSha1s.add(normalizedSha1)) return false;
+			pendingMetadataRefetch.put(normalizedSha1, new DeadLink(murmur, fileType));
+			return true;
+		}
+	}
+
+	/** Waits for one batched refetch covering every sha1 whose platform link died, so concurrent dead links share the bulk calls. */
+	public List<DownloadSource> awaitMetadataRefetch(String sha1) {
+		String normalizedSha1 = sha1.toLowerCase(Locale.ROOT);
+		synchronized (metadataRefetchLock) {
+			List<DownloadSource> resolved = resolvedMetadataRefetches.remove(normalizedSha1);
+			if (resolved != null) return resolved;
+			if (!pendingMetadataRefetch.containsKey(normalizedSha1)) return List.of();
+			Map<String, DeadLink> batch = new LinkedHashMap<>(pendingMetadataRefetch);
+			pendingMetadataRefetch.clear();
+			resolvedMetadataRefetches.putAll(refetchPlatformMetadata(batch));
+			List<DownloadSource> fresh = resolvedMetadataRefetches.remove(normalizedSha1);
+			return fresh == null ? List.of() : fresh;
+		}
+	}
+
+	private Map<String, List<DownloadSource>> refetchPlatformMetadata(Map<String, DeadLink> batch) {
+		Map<String, List<DownloadSource>> fresh = new HashMap<>();
+		List<ModrinthAPI> modrinthInfos = ModrinthAPI.getModsInfosFromListOfSHA1(new ArrayList<>(batch.keySet()));
+		if (modrinthInfos != null) {
+			Map<String, String> slugs = ModrinthAPI.getProjectSlugs(modrinthInfos.stream().map(ModrinthAPI::modrinthID).collect(Collectors.toSet()));
+			for (ModrinthAPI info : modrinthInfos) {
+				String slug = slugs.get(info.modrinthID());
+				if (slug == null || slug.isBlank()) continue;
+				String sha1 = info.SHA1Hash().toLowerCase(Locale.ROOT);
+				DeadLink deadLink = batch.get(sha1);
+				String mainPageUrl = deadLink == null ? null : ModrinthAPI.getMainPageUrl(deadLink.fileType(), slug);
+				platformCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
+				fresh.computeIfAbsent(sha1, key -> new ArrayList<>()).add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.MODRINTH));
+			}
+		}
+		Map<String, String> murmurs = new HashMap<>();
+		for (Map.Entry<String, DeadLink> entry : batch.entrySet()) if (entry.getValue().murmur() != null && !entry.getValue().murmur().isBlank()) murmurs.put(entry.getKey(), entry.getValue().murmur());
+		if (!murmurs.isEmpty()) {
+			List<CurseForgeAPI> curseForgeInfos = CurseForgeAPI.getModInfosFromFingerPrints(murmurs);
+			if (curseForgeInfos != null) for (CurseForgeAPI info : curseForgeInfos) {
+				String sha1 = info.sha1Hash().toLowerCase(Locale.ROOT);
+				platformCache.putCurseForge(info.sha1Hash(), info);
+				fresh.computeIfAbsent(sha1, key -> new ArrayList<>()).add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.CURSEFORGE));
+			}
+		}
+		return fresh;
+	}
+
+	private void applyModrinth(Datas datas, PlatformCache.ModrinthEntry entry) {
+		applyModrinth(datas, entry.downloadUrl(), entry.mainPageUrl());
+	}
+
+	private void applyModrinth(Datas datas, String downloadUrl, String mainPageUrl) {
+		if (datas == null) return;
+		datas.fetchedData().sources().add(new DownloadSource(downloadUrl, DownloadSource.Provider.MODRINTH));
+		addMainPageUrl(datas, mainPageUrl, true);
+		fetchesDone.incrementAndGet();
+	}
+
+	private void applyCurseForge(Datas datas, String downloadUrl, String projectPageUrl) {
+		if (datas == null) return;
+		datas.fetchedData().sources().add(new DownloadSource(downloadUrl, DownloadSource.Provider.CURSEFORGE));
+		addMainPageUrl(datas, projectPageUrl, false);
+		fetchesDone.incrementAndGet();
 	}
 
 	private static void addMainPageUrl(Datas datas, String url, boolean preferred) {
@@ -151,7 +262,39 @@ public class FetchManager {
 		}
 	}
 
-	public Map<String, Datas> getFetchDatas() {
-		return fetchDatas;
+	// Lookups accept the hash in any case because plan hashes and manifest hashes may differ in case
+	private Datas dataFor(String sha1) {
+		if (sha1 == null) return null;
+		Datas data = fetchDatas.get(sha1);
+		return data != null ? data : fetchDatas.get(sha1.toLowerCase(Locale.ROOT));
+	}
+
+	private static <T> List<T> snapshot(List<T> list) {
+		synchronized (list) {
+			return List.copyOf(list);
+		}
+	}
+
+	/** Whether the third-party lookup produced at least one source for this sha1. */
+	public boolean hasSource(String sha1) {
+		Datas data = dataFor(sha1);
+		return data != null && !snapshot(data.fetchedData().sources()).isEmpty();
+	}
+
+	/** Whether this sha1 takes part in the third-party lookup at all. */
+	public boolean tracks(String sha1) {
+		return dataFor(sha1) != null;
+	}
+
+	/** Snapshot of the lookup sources for this sha1; empty when unknown. */
+	public List<DownloadSource> sourcesFor(String sha1) {
+		Datas data = dataFor(sha1);
+		return data == null ? List.of() : snapshot(data.fetchedData().sources());
+	}
+
+	/** Snapshot of the Modrinth/CurseForge page urls for this sha1; empty when unknown. */
+	public List<String> mainPageUrlsFor(String sha1) {
+		Datas data = dataFor(sha1);
+		return data == null ? List.of() : snapshot(data.fetchedData().mainPageUrls());
 	}
 }

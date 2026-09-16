@@ -27,6 +27,8 @@ import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
+import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
 
 public class HandshakeS2CPacket {
 
@@ -44,34 +46,34 @@ public class HandshakeS2CPacket {
 		if (playerName == null) throw new IllegalStateException("Player name is null");
 
 		if (GameHelpers.getPlayerUUID(profile) == null) {
-//            if (server.isOnlineMode()) { This may happen with mods like 'easyauth', its possible to have an offline mode player join an online server
-//                throw new IllegalStateException("Player: " + playerName + " doesn't have UUID");
-//            }
-
-			// Generate profile with offline uuid
+			// May happen with mods like 'easyauth': an offline-mode player can join an online server, so a missing UUID is not an error here.
 			UUID offlineUUID = UUID.nameUUIDFromBytes(("OfflinePlayer:" + playerName).getBytes(StandardCharsets.UTF_8));
 			profile = new GameProfile(offlineUUID, playerName);
 		}
 
-//        if (!connection.isEncrypted()) {
-//            LOGGER.warn("Connection is not encrypted for player: {}", playerName);
-//        }
-
-		if (!GameHelpers.isPlayerAuthorized(connection.getRemoteAddress(), profile)) return;
-
 		if (!understood) {
 			Common.players.put(playerName, false);
 			LOGGER.warn("{} has not installed AutoModpack.", playerName);
-			if (serverConfig.requireAutoModpackOnClient) {
+			if (serverConfig.requireModpack) {
 				Component reason = VersionedText.literal(
 						"AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT) + " modloader is required to play on this server!");
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);
+				return;
 			}
-		} else {
-			Common.players.put(playerName, true);
-			handleHandshake(connection, profile, buf, sender);
 		}
+
+		if (!GameHelpers.isPlayerAuthorized(connection.getRemoteAddress(), GameHelpers.getPlayerUUID(profile), playerName)) {
+			Component reason = VersionedText.literal("You are not authorized to join this server!");
+			connection.send(new ClientboundLoginDisconnectPacket(reason));
+			connection.disconnect(reason);
+			return;
+		}
+
+		if (!understood) return;
+
+		Common.players.put(playerName, true);
+		handleHandshake(connection, profile, buf, sender);
 	}
 
 	private static void handleHandshake(Connection connection, GameProfile profile, FriendlyByteBuf buf, PacketSender sender) {
@@ -108,16 +110,27 @@ public class HandshakeS2CPacket {
 				return;
 			}
 
+			// Advertising a HOLEPUNCH endpoint while the holepunch bridge never registered would send
+			// clients into a vanilla login that swallows their holepunch connection with a cryptic
+			// error; reject them here where an honest reason can be given.
+			if (serverConfig.connectionMode == ModpackConnectionMode.HOLEPUNCH && !ServerHolepunchBridge.isRegistered()) {
+				Component reason = VersionedText.literal("AutoModpack modpack hosting is unavailable on the server. Ask the admin to check the server log and try again later.");
+				LOGGER.error("Modpack hosting is not running while the connection mode is HOLEPUNCH; rejecting {} instead of advertising a dead endpoint", GameHelpers.getPlayerName(profile));
+				connection.send(new ClientboundLoginDisconnectPacket(reason));
+				connection.disconnect(reason);
+				return;
+			}
+
 			// now we know player is authenticated, packets are encrypted and player is whitelisted
-			// regenerate unique secret
+			// regenerate unique secret, bound to the exact identity the login presented
 			Secrets.Secret secret = Secrets.generateSecret();
-			SecretsStore.saveHostSecret(GameHelpers.getPlayerUUID(profile).toString(), secret);
+			SecretsStore.saveHostSecret(GameHelpers.getPlayerUUID(profile).toString(), secret, GameHelpers.getPlayerName(profile));
 
 			String advertisedEndpointHost = serverConfig.advertisedEndpointHost;
 			int advertisedEndpointPort = serverConfig.advertisedEndpointPort;
 			LOGGER.info("Sending {} AutoModpack endpoint: {}:{} ({})", GameHelpers.getPlayerName(profile), advertisedEndpointHost, advertisedEndpointPort, serverConfig.connectionMode);
 
-			DataPacket dataPacket = new DataPacket(advertisedEndpointHost, advertisedEndpointPort, secret, serverConfig.connectionMode);
+			DataPacket dataPacket = new DataPacket(advertisedEndpointHost, advertisedEndpointPort, secret, serverConfig.connectionMode, serverConfig.requireModpack);
 			String packetContentJson = dataPacket.toJson();
 
 			FriendlyByteBuf outBuf = new FriendlyByteBuf(Unpooled.buffer());

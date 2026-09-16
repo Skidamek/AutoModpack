@@ -21,7 +21,7 @@ val fabricLoaderVersion = loaderVersion()
 
 dependencies {
 	compileOnly(project(":core"))
-	compileOnly(project(":loader-core"))
+	compileOnly(project(":loader-fabric-shared"))
 
 	compileOnly("com.google.code.gson:gson:$gsonVersion")
 	compileOnly("org.apache.logging.log4j:log4j-core:$log4jVersion")

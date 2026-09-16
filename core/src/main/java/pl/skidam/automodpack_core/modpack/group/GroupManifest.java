@@ -16,6 +16,13 @@ public record GroupManifest(
 		groups = immutableMap(groups);
 	}
 
+	/** The platforms this manifest's groups declare, in id order; most groups declare none. */
+	public Set<ClientPlatform> declaredPlatforms() {
+		Set<ClientPlatform> platforms = new TreeSet<>();
+		for (Group group : groups.values()) platforms.addAll(group.compatiblePlatforms());
+		return platforms;
+	}
+
 	public ModpackJsons.CompleteModpackContentFields toFields() {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = modpackId;
@@ -32,7 +39,6 @@ public record GroupManifest(
 			serialized.displayName = group.displayName();
 			serialized.description = group.description();
 			serialized.category = group.category();
-			serialized.icon = group.icon();
 			serialized.required = group.required();
 			serialized.defaultSelected = group.defaultSelected();
 			serialized.breaksWith = new LinkedHashSet<>(group.breaksWith());
@@ -43,7 +49,7 @@ public record GroupManifest(
 			for (var fileEntry : group.files().entrySet()) {
 				GroupFile file = fileEntry.getValue();
 				files.put(fileEntry.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(file.size()), file.type(), file.editable(),
-						file.overwriteEditable(), file.sha1(), file.murmur()));
+						file.sha1(), file.murmur()));
 			}
 			serialized.files = files;
 			serializedGroups.put(entry.getKey(), serialized);
@@ -67,14 +73,15 @@ public record GroupManifest(
 
 	private static Set<ClientPlatform> immutablePlatforms(Collection<ClientPlatform> input) {
 		if (input == null || input.isEmpty()) return Set.of();
-		return Collections.unmodifiableSet(EnumSet.copyOf(input));
+		Set<ClientPlatform> platforms = new TreeSet<>();
+		platforms.addAll(input);
+		return Collections.unmodifiableSet(platforms);
 	}
 
 	public record Group(
 			String displayName,
 			String description,
 			String category,
-			String icon,
 			boolean required,
 			boolean defaultSelected,
 			NavigableSet<String> breaksWith,
@@ -85,20 +92,27 @@ public record GroupManifest(
 			displayName = displayName == null ? "" : displayName;
 			description = description == null ? "" : description;
 			category = category == null ? "" : category;
-			icon = icon == null ? "" : icon;
 			breaksWith = immutableSet(breaksWith);
 			requires = immutableSet(requires);
 			compatiblePlatforms = immutablePlatforms(compatiblePlatforms);
 			files = immutableMap(files);
 		}
 
+		/** Platform-agnostic groups support everything; platform-specific ones need a matching detected or chosen platform. */
 		public boolean supports(ClientPlatform platform) {
-			return compatiblePlatforms.isEmpty() || compatiblePlatforms.contains(platform);
+			return compatiblePlatforms.isEmpty() || (platform != null && compatiblePlatforms.contains(platform));
+		}
+
+		public boolean hasSameMetadata(Group other) {
+			return other != null && Objects.equals(displayName, other.displayName) && Objects.equals(description, other.description)
+					&& Objects.equals(category, other.category) && required == other.required
+					&& defaultSelected == other.defaultSelected && Objects.equals(breaksWith, other.breaksWith) && Objects.equals(requires, other.requires)
+					&& Objects.equals(compatiblePlatforms, other.compatiblePlatforms);
 		}
 	}
-	public record GroupFile(long size, String type, boolean editable, boolean overwriteEditable, String sha1, String murmur) {
+	public record GroupFile(long size, String type, boolean editable, String sha1, String murmur) {
 		public boolean sameEffectiveState(GroupFile other) {
-			return other != null && size == other.size && editable == other.editable && overwriteEditable == other.overwriteEditable
+			return other != null && size == other.size && editable == other.editable
 					&& Objects.equals(type, other.type) && sha1.equalsIgnoreCase(other.sha1);
 		}
 	}

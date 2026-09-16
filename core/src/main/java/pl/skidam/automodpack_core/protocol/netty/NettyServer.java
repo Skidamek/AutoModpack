@@ -12,6 +12,8 @@ import java.security.KeyPair;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
@@ -24,44 +26,80 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
+import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import io.netty.util.AttributeKey;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
+import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
+import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
+import pl.skidam.automodpack_core.protocol.netty.handler.ConnectionLifetimeHandler;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
-import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 public class NettyServer {
 
 	public static final AttributeKey<SocketAddress> REAL_REMOTE_ADDR = AttributeKey.valueOf("REAL_REMOTE_ADDR");
-	public static final AttributeKey<CompressionType> COMPRESSION_TYPE = AttributeKey.valueOf("COMPRESSION_TYPE");
+	public static final AttributeKey<CompressionCodec> COMPRESSION_CODEC = AttributeKey.valueOf("COMPRESSION_CODEC");
 	public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
 	public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
 	private final Map<Channel, String> connections = new ConcurrentHashMap<>();
+	private volatile TrafficShaper trafficShaper;
 	private volatile Map<String, Path> paths = Map.of();
 	private MultithreadEventLoopGroup eventLoopGroup;
+	private ExecutorService senderExecutor;
 	private ChannelFuture serverChannel;
 	private volatile boolean sharedMagicEnabled;
+	private volatile boolean holepunchActive;
 	private String certificateFingerprint;
 	private SslContext sslCtx;
 
-	public void addConnection(Channel channel, String secret) {
-		synchronized (connections) {
-			connections.put(channel, secret);
+	// The map is already a concurrent one and every access is a single atomic operation, so no external
+	// lock adds anything - readers get the live map and see per-entry updates immediately.
+
+	public static void setCompression(Channel channel, CompressionType type) {
+		channel.attr(COMPRESSION_CODEC).set(CompressionFactory.createCodec(type));
+	}
+
+	public static CompressionCodec compressionCodec(Channel channel) {
+		CompressionCodec codec = channel.attr(COMPRESSION_CODEC).get();
+		if (codec == null) throw new IllegalStateException("Compression codec has not been configured");
+		return codec;
+	}
+
+	public GlobalTrafficShapingHandler trafficHandler() {
+		TrafficShaper shaper = trafficShaper;
+		if (shaper == null) throw new IllegalStateException("Traffic shaper is not running");
+		return shaper.handler();
+	}
+
+	public void startSharedTraffic() {
+		closeTraffic();
+		trafficShaper = TrafficShaper.owned();
+	}
+
+	private void startEventLoopTraffic() {
+		closeTraffic();
+		trafficShaper = TrafficShaper.on(eventLoopGroup);
+	}
+
+	private void closeTraffic() {
+		if (trafficShaper != null) {
+			trafficShaper.close();
+			trafficShaper = null;
 		}
 	}
 
+	public void addConnection(Channel channel, String secret) {
+		connections.put(channel, secret);
+	}
+
 	public void removeConnection(Channel channel) {
-		synchronized (connections) {
-			connections.remove(channel);
-		}
+		connections.remove(channel);
 	}
 
 	public Map<Channel, String> getConnections() {
@@ -80,18 +118,9 @@ public class NettyServer {
 		this.paths = hosting.asMap();
 	}
 
-	public Map<String, Path> getPathsSnapshot() {
-		return paths;
-	}
-
 	public Optional<Path> getPath(String requestKey) {
 		if (requestKey == null) return Optional.empty();
-		if (requestKey.isEmpty()) return regularPath(paths.get(""));
-		if (requestKey.startsWith(GenerationHistoryIndex.CATALOGUE_REQUEST_PREFIX)) {
-			String stateDigest = requestKey.substring(GenerationHistoryIndex.CATALOGUE_REQUEST_PREFIX.length());
-			if (!HashUtils.isCanonicalSha1(stateDigest)) return Optional.empty();
-			return regularPath(paths.get(GenerationHistoryIndex.catalogueRequestKey(stateDigest)));
-		}
+		if (requestKey.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || requestKey.equals(GenerationHosting.JOURNAL_KEY)) return regularPath(paths.get(requestKey));
 		if (!HashUtils.isSha1(requestKey)) return Optional.empty();
 
 		return regularPath(paths.get(HashUtils.normalizeSha1(requestKey)));
@@ -117,8 +146,6 @@ public class NettyServer {
 			return Optional.empty();
 		}
 
-		updateAdvertisedAddress();
-
 		ModpackConnectionMode connectionMode = serverConfig.connectionMode;
 		if (connectionMode == ModpackConnectionMode.DIRECT && serverConfig.bindPort == -1) {
 			LOGGER.info("DIRECT is advertised without a built-in listener; expecting the endpoint to be handled externally");
@@ -126,17 +153,24 @@ public class NettyServer {
 		}
 
 		try {
+			senderExecutor = Executors.newCachedThreadPool(r -> {
+				Thread t = new Thread(r, "automodpack-sender");
+				t.setDaemon(true);
+				return t;
+			});
+
 			prepareTls();
 
 			if (connectionMode == ModpackConnectionMode.HOLEPUNCH) {
 				LOGGER.info("Hosting modpack through Minecraft Login holepunch; bindPort is not used");
-				ServerHolepunchBridge.register(this);
+				startSharedTraffic();
+				holepunchActive = ServerHolepunchBridge.register(this);
 				return Optional.empty();
 			}
 
-			if (connectionMode == ModpackConnectionMode.MAGIC_PACKET && serverConfig.bindPort == -1) {
+			if (connectionMode == ModpackConnectionMode.MAGIC && serverConfig.bindPort == -1) {
 				LOGGER.info("Hosting modpack through magic packet routing on the Minecraft port");
-				new TrafficShaper(null);
+				startSharedTraffic();
 				sharedMagicEnabled = true;
 				return Optional.empty();
 			}
@@ -170,13 +204,16 @@ public class NettyServer {
 			eventLoopGroup = new NioEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Server IO #%d").setDaemon(true).build());
 		}
 
-		new TrafficShaper(eventLoopGroup);
+		startEventLoopTraffic();
 
 		serverChannel = new ServerBootstrap().channel(socketChannelClass).childOption(ChannelOption.TCP_NODELAY, true)
 				.childHandler(new ChannelInitializer<SocketChannel>() {
 					@Override
 					protected void initChannel(SocketChannel ch) {
-						ch.pipeline().addLast(MOD_ID, new ProtocolServerHandler(NettyServer.this, connectionMode, false));
+						// Nothing vanilla owns this socket, so the connection lifetime timer must exist from
+						// the first accepted byte: a connection that never sends its magic cannot pin the listener.
+						ch.pipeline().addLast(MOD_ID + "-connection-lifetime", new ConnectionLifetimeHandler());
+						ch.pipeline().addLast(MOD_ID, new ProtocolServerHandler(NettyServer.this, connectionMode, false, serverConfig.acceptProxyProtocol));
 					}
 				}).group(eventLoopGroup).localAddress(bindAddress).bind().syncUninterruptibly();
 		return Optional.of(serverChannel);
@@ -207,24 +244,6 @@ public class NettyServer {
 		if (certificateFingerprint != null) LOGGER.warn("Certificate fingerprint: {}", certificateFingerprint);
 	}
 
-	private void updateAdvertisedAddress() {
-		if (!serverConfig.updateIpsOnEveryStart) return;
-
-		String publicIp = AddressHelpers.getPublicIp();
-		if (publicIp != null) {
-			serverConfig.advertisedEndpointHost = publicIp;
-			LOGGER.warn("Setting Host IP to {}", serverConfig.advertisedEndpointHost);
-		} else {
-			LOGGER.error("Couldn't get public IP, please change it manually!");
-		}
-
-		try {
-			ConfigTools.writeAtomic(SERVER_CONFIG_FILE, serverConfig);
-		} catch (Exception e) {
-			LOGGER.error("Failed to save updated advertised endpoint", e);
-		}
-	}
-
 	public boolean isSharedMagicEnabled() {
 		return sharedMagicEnabled;
 	}
@@ -232,6 +251,7 @@ public class NettyServer {
 	public synchronized boolean stop() {
 		boolean stopped = true;
 		sharedMagicEnabled = false;
+		holepunchActive = false;
 		ServerHolepunchBridge.close();
 
 		try {
@@ -244,7 +264,7 @@ public class NettyServer {
 			serverChannel = null;
 		}
 
-		TrafficShaper.close();
+		closeTraffic();
 
 		try {
 			if (eventLoopGroup != null) eventLoopGroup.shutdownGracefully().sync();
@@ -256,16 +276,24 @@ public class NettyServer {
 			eventLoopGroup = null;
 		}
 
+		if (senderExecutor != null) senderExecutor.shutdownNow();
+		senderExecutor = null;
+
 		sslCtx = null;
 		certificateFingerprint = null;
 		return stopped;
 	}
 
 	public boolean isRunning() {
-		return sharedMagicEnabled || ServerHolepunchBridge.isRegistered() || serverChannel != null && serverChannel.channel().isOpen();
+		return sharedMagicEnabled || holepunchActive || serverChannel != null && serverChannel.channel().isOpen();
 	}
 
 	public SslContext getSslCtx() {
 		return sslCtx;
+	}
+
+	/** The pool file-send workers run on: one worker per in-flight transfer, each holding one FileChannel and one reusable chunk buffer off the event loop. */
+	public ExecutorService senderExecutor() {
+		return senderExecutor;
 	}
 }

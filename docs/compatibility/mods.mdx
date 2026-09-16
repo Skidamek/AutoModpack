@@ -1,5 +1,7 @@
-AutoModpack should work with all minecraft modifications (it would be a bit bad modpack updater if it didn't). However, there are some exceptions and limitations that you should be aware of:
+AutoModpack ships whole files, so it works with any mod, resource pack, config, or shader that you put in the pack. The known exceptions are about mods that modify the same loading machinery AutoModpack touches:
 
-- Majrusz's Mods: Requires a modified Majrusz Library to work with AutoModpack. [Github Issue](https://github.com/Skidamek/AutoModpack/issues/268).
-- [CITResewnNeoPatcher](https://modrinth.com/mod/cit-resewn-neopatcher): Requires a Fabric version of CITResewn, such as `/mods/citresewn-1.2.1+1.21.jar`.
-- [ModSets](https://modrinth.com/mod/mod-sets): It's currently broken due to similarities in mod loading modification process.
+- Majrusz's Mods needs a modified Majrusz Library to work alongside AutoModpack. See the [GitHub issue](https://github.com/Skidamek/AutoModpack/issues/268).
+- [CITResewnNeoPatcher](https://modrinth.com/mod/cit-resewn-neopatcher) needs a Fabric version of CIT Resewn, for example `citresewn-1.2.1+1.21.jar`.
+- [ModSets](https://modrinth.com/mod/mod-sets) is currently broken together with AutoModpack, because both modify the mod loading process.
+
+Found another one? Report it on the [issue tracker](https://github.com/Skidamek/AutoModpack/issues) and it will be listed here.

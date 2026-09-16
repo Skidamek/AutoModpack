@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_core.config;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -9,59 +9,52 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import pl.skidam.automodpack_core.Constants;
-import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
-
 class ConfigUtilsTest {
 	@Test
 	void preservesPathRuleOrder() {
 		ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
 		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
-		group.syncedFiles = new LinkedHashSet<>(List.of("/third", "/first", "/second"));
+		group.syncedFiles = new LinkedHashSet<>(List.of("third", "first", "second"));
 		group.allowEditsInFiles = new LinkedHashSet<>(List.of("third", "first", "second"));
-		group.overwriteEditableFiles = new LinkedHashSet<>(List.of("third", "first", "second"));
 		config.groups = new LinkedHashMap<>(Map.of("main", group));
 
 		ConfigUtils.normalizeServerConfig(config);
 
-		assertEquals(List.of("/third", "/first", "/second"), List.copyOf(group.syncedFiles));
-		assertEquals(List.of("/third", "/first", "/second"), List.copyOf(group.allowEditsInFiles));
-		assertEquals(List.of("/third", "/first", "/second"), List.copyOf(group.overwriteEditableFiles));
+		assertEquals(List.of("third", "first", "second"), List.copyOf(group.syncedFiles));
+		assertEquals(List.of("third", "first", "second"), List.copyOf(group.allowEditsInFiles));
 	}
 
 	@Test
-	void holepunchAvailabilityStartsAt1201OnFabric() {
-		String previousVersion = Constants.MC_VERSION;
-		String previousLoader = Constants.LOADER;
-		try {
-			ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
-			config.bindPort = 24444;
+	void normalizesRulePathsAndKeepsSetLocalNegations() {
+		ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
+		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
+		group.syncedFiles = new LinkedHashSet<>(List.of("/mods/*.jar", "/automodpack/host-modpack/main/extra", "!kubejs/server_scripts/**", "!/kubejs/assets/**"));
+		group.excludedFiles = new LinkedHashSet<>(List.of("/automodpack/host-modpack/main/secret.bin", "!/automodpack/host-modpack/main/keep.bin"));
+		group.allowEditsInFiles = new LinkedHashSet<>(List.of("//config/**"));
+		config.groups = new LinkedHashMap<>(Map.of("main", group));
 
-			Constants.MC_VERSION = "1.20.1";
-			Constants.LOADER = "fabric";
+		ConfigUtils.normalizeServerConfig(config);
 
-			config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
-			ConfigUtils.normalizeServerConfig(config);
-			assertEquals(config.connectionMode, ModpackConnectionMode.HOLEPUNCH);
-			assertEquals(24444, config.bindPort);
+		assertEquals(List.of("mods/*.jar", "!kubejs/server_scripts/**", "!kubejs/assets/**"), List.copyOf(group.syncedFiles));
+		assertEquals(List.of("secret.bin", "!keep.bin"), List.copyOf(group.excludedFiles));
+		assertEquals(List.of("config/**"), List.copyOf(group.allowEditsInFiles));
+	}
 
-			Constants.LOADER = "forge";
+	@Test
+	void hostModpackRulesStripOnlyTheirOwnGroupPrefix() {
+		ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
+		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
+		group.syncedFiles = new LinkedHashSet<>(List.of("automodpack/host-modpack/main/extra", "!automodpack/host-modpack/main/skip/**"));
+		group.excludedFiles = new LinkedHashSet<>(
+				List.of("automodpack/host-modpack/main/**", "automodpack/host-modpack/other/**", "/automodpack/host-modpack/main", "automodpack/host-modpack/main/**/**", "automodpack/host-modpack/main/**/*"));
+		config.groups = new LinkedHashMap<>(Map.of("main", group));
 
-			config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
-			ConfigUtils.normalizeServerConfig(config);
-			assertEquals(config.connectionMode, ModpackConnectionMode.MAGIC_PACKET);
-			assertEquals(24444, config.bindPort);
+		ConfigUtils.normalizeServerConfig(config);
 
-			Constants.MC_VERSION = "1.19.2";
-			Constants.LOADER = "fabric";
-
-			config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
-			ConfigUtils.normalizeServerConfig(config);
-			assertEquals(config.connectionMode, ModpackConnectionMode.MAGIC_PACKET);
-			assertEquals(24444, config.bindPort);
-		} finally {
-			Constants.MC_VERSION = previousVersion;
-			Constants.LOADER = previousLoader;
-		}
+		// Own-group synced rules are dropped entirely: the group directory is included in full, so they are redundant.
+		assertEquals(List.of(), List.copyOf(group.syncedFiles));
+		// Whole-directory remainders (empty, `**`, `**/*`, collapsed `**/**`) are dropped: excludedFiles also matches synced paths.
+		// A foreign group's rule is kept verbatim instead of being rewritten into this group's space.
+		assertEquals(List.of("automodpack/host-modpack/other/**"), List.copyOf(group.excludedFiles));
 	}
 }

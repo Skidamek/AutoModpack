@@ -21,7 +21,6 @@ neoForge {
 
 dependencies {
 	compileOnly(project(":core"))
-	compileOnly(project(":loader-core"))
 }
 
 java {

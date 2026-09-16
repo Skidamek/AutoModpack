@@ -80,8 +80,8 @@ public class DataC2SPacket {
 			return CompletableFuture.completedFuture(buildResponse(LoginUpdateResponse.HOST_ERROR));
 		}
 
-		ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
-		return ClientLoginUpdateFlow.reconcile(handler, connectionInfo, secret, storage).thenApply(DataC2SPacket::buildResponse);
+		ClientStorage storage = ClientStorage.open(GameDirectory.current());
+		return ClientLoginUpdateFlow.reconcile(handler, connectionInfo, secret, storage, dataPacket.requireModpack).thenApply(DataC2SPacket::buildResponse);
 	}
 
 	private static FriendlyByteBuf buildResponse(LoginUpdateResponse result) {

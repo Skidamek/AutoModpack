@@ -45,13 +45,14 @@ class ProtocolFrameCodecTest {
 		byte[] payload = "partial frames must be accumulated before decompression".getBytes(StandardCharsets.UTF_8);
 		ByteBuf encoded = Unpooled.buffer();
 		ByteBuf inbound = Unpooled.buffer();
+		ProtocolFrameCodec.FrameScratch readScratch = new ProtocolFrameCodec.FrameScratch();
 		try {
 			ProtocolFrameCodec.write(encoded, codec, payload, DEFAULT_CHUNK_SIZE);
 			int split = ProtocolFrameCodec.HEADER_BYTES + 1;
 			inbound.writeBytes(encoded, 0, split);
-			assertNull(ProtocolFrameCodec.read(inbound, UnpooledByteBufAllocator.DEFAULT, codec, DEFAULT_CHUNK_SIZE));
+			assertNull(ProtocolFrameCodec.read(inbound, UnpooledByteBufAllocator.DEFAULT, codec, DEFAULT_CHUNK_SIZE, readScratch));
 			inbound.writeBytes(encoded, split, encoded.readableBytes() - split);
-			ByteBuf decoded = ProtocolFrameCodec.read(inbound, UnpooledByteBufAllocator.DEFAULT, codec, DEFAULT_CHUNK_SIZE);
+			ByteBuf decoded = ProtocolFrameCodec.read(inbound, UnpooledByteBufAllocator.DEFAULT, codec, DEFAULT_CHUNK_SIZE, readScratch);
 			try {
 				byte[] actual = new byte[decoded.readableBytes()];
 				decoded.readBytes(actual);
@@ -75,8 +76,9 @@ class ProtocolFrameCodecTest {
 		try {
 			ProtocolFrameCodec.write(encoded, codec, payload, DEFAULT_CHUNK_SIZE);
 			ByteArrayOutputStream decoded = new ByteArrayOutputStream();
+			ProtocolFrameCodec.FrameScratch readScratch = new ProtocolFrameCodec.FrameScratch();
 			while (encoded.isReadable()) {
-				ByteBuf frame = ProtocolFrameCodec.read(encoded, UnpooledByteBufAllocator.DEFAULT, codec, DEFAULT_CHUNK_SIZE);
+				ByteBuf frame = ProtocolFrameCodec.read(encoded, UnpooledByteBufAllocator.DEFAULT, codec, DEFAULT_CHUNK_SIZE, readScratch);
 				try {
 					byte[] bytes = new byte[frame.readableBytes()];
 					frame.readBytes(bytes);
@@ -87,6 +89,36 @@ class ProtocolFrameCodecTest {
 			}
 			assertArrayEquals(payload, decoded.toByteArray());
 		} finally {
+			encoded.release();
+		}
+	}
+
+	@Test
+	void nettyWriterAndReaderHandleDirectPayloadsWithReusableScratch() throws Exception {
+		CompressionCodec codec = CompressionFactory.createCodec(CompressionType.ZSTD);
+		byte[] payload = new byte[DEFAULT_CHUNK_SIZE + 37];
+		for (int i = 0; i < payload.length; i++) payload[i] = (byte) (i * 17);
+
+		ByteBuf source = Unpooled.directBuffer(payload.length).writeBytes(payload);
+		ByteBuf encoded = Unpooled.buffer();
+		ProtocolFrameCodec.FrameScratch writeScratch = new ProtocolFrameCodec.FrameScratch();
+		ProtocolFrameCodec.FrameScratch readScratch = new ProtocolFrameCodec.FrameScratch();
+		try {
+			ProtocolFrameCodec.write(encoded, codec, source, DEFAULT_CHUNK_SIZE, writeScratch);
+			ByteArrayOutputStream decoded = new ByteArrayOutputStream(payload.length);
+			while (encoded.isReadable()) {
+				ByteBuf frame = ProtocolFrameCodec.read(encoded, UnpooledByteBufAllocator.DEFAULT, codec, DEFAULT_CHUNK_SIZE, readScratch);
+				try {
+					byte[] bytes = new byte[frame.readableBytes()];
+					frame.readBytes(bytes);
+					decoded.write(bytes);
+				} finally {
+					frame.release();
+				}
+			}
+			assertArrayEquals(payload, decoded.toByteArray());
+		} finally {
+			source.release();
 			encoded.release();
 		}
 	}

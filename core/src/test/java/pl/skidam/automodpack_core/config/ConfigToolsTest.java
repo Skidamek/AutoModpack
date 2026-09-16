@@ -2,14 +2,17 @@ package pl.skidam.automodpack_core.config;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
+import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 class ConfigToolsTest {
@@ -77,7 +80,7 @@ class ConfigToolsTest {
 				    "pack": {
 				      "serverAddress": "Play.Example.com",
 				      "hostAddress": "[2001:0DB8:0:0:0:0:0:1]:24444",
-				      "connectionMode": "MAGIC_PACKET"
+				      "connectionMode": "MAGIC"
 				    }
 				  }
 				}
@@ -112,5 +115,171 @@ class ConfigToolsTest {
 	void connectionSchemaRejectsEndpointWithoutPort() {
 		String invalid = "{\"origin\":\"play.example.com\",\"endpoint\":\"downloads.example.com\"}";
 		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse(invalid, ConnectionJsons.ConnectionInfo.class));
+	}
+
+	@Test
+	void unknownEnumNamesFailLoudlyInsteadOfYieldingNulls() {
+		String json = "{\"reasons\":[\"GONE_REASON\",\"REPLACED_BY_UPSTREAM\"]}";
+
+		ConfigTools.ConfigException failure = assertThrows(ConfigTools.ConfigException.class,
+				() -> ConfigTools.parse(json, EnumHolder.class));
+
+		assertTrue(String.valueOf(failure.getCause().getMessage()).contains("Unknown RestartReason value 'GONE_REASON'"), failure.getMessage());
+	}
+
+	@Test
+	void validEnumNamesStillParseIntoLists() {
+		EnumHolder holder = ConfigTools.parse("{\"reasons\":[\"SELECTED_MODPACK\",\"CHANGED_GROUP_SELECTION\"]}", EnumHolder.class);
+
+		assertEquals(List.of(UpdatePlan.RestartReason.SELECTED_MODPACK, UpdatePlan.RestartReason.CHANGED_GROUP_SELECTION), holder.reasons);
+	}
+
+	@Test
+	void unknownTopLevelAndNestedKeysAreCollected() {
+		String json = """
+				{
+				  "syncedfile": "typo",
+				  "groups": {
+				    "main": {"syncedfile": "typo"},
+				    "extra": {"displayName": "Extra", "bogus": true}
+				  }
+				}
+				""";
+
+		assertEquals(List.of("syncedfile", "groups.main.syncedfile", "groups.extra.bogus"), ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class));
+	}
+
+	@Test
+	void repeatedUnknownKeyScansAgreeDespiteTheCachedFieldMaps() {
+		String json = """
+				{
+				  "syncedfile": "typo",
+				  "groups": {
+				    "main": {"syncedfile": "typo"},
+				    "extra": {"displayName": "Extra", "bogus": true}
+				  }
+				}
+				""";
+
+		List<String> first = ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class);
+		List<String> second = ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class);
+		assertEquals(List.of("syncedfile", "groups.main.syncedfile", "groups.extra.bogus"), first);
+		assertEquals(first, second);
+	}
+
+	@Test
+	void validSerializedConfigurationsHaveNoUnknownKeys() {
+		assertTrue(ConfigTools.unknownKeys(ConfigTools.GSON.toJson(new ServerConfigJsons.ServerConfigFieldsV3()), ServerConfigJsons.ServerConfigFieldsV3.class).isEmpty());
+		assertTrue(ConfigTools.unknownKeys(ConfigTools.GSON.toJson(new ClientConfigJsons.ClientConfigFieldsV3()), ClientConfigJsons.ClientConfigFieldsV3.class).isEmpty());
+	}
+
+	@Test
+	void wrongTypedValueFailsLoudlyWithoutTouchingTheFile() throws Exception {
+		Path config = temporaryDirectory.resolve("server-config.json");
+		String json = "{\"bindPort\": \"x\"}";
+		Files.writeString(config, json, StandardCharsets.UTF_8);
+
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.readOrCreate(config, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new));
+		assertEquals(json, Files.readString(config, StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void integralFieldsRejectLiteralsTheStreamReaderRejects() {
+		// The tree reader Gson 2.8.9 ships would silently narrow these through a double; a corrupt config must fail loudly instead.
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"value\": 1.5}", IntHolder.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"value\": 2147483648}", IntHolder.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"value\": 99999999999}", IntHolder.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"value\": NaN}", IntHolder.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"value\": 1.5}", LongHolder.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"value\": true}", IntHolder.class));
+
+		assertEquals(3, ConfigTools.parse("{\"value\": 3}", IntHolder.class).value);
+		assertEquals(1, ConfigTools.parse("{\"value\": 1.0}", IntHolder.class).value);
+		assertEquals(100, ConfigTools.parse("{\"value\": 1e2}", IntHolder.class).value);
+		assertEquals(5, ConfigTools.parse("{\"value\": \"5\"}", IntHolder.class).value);
+		assertEquals(9007199254740993L, ConfigTools.parse("{\"value\": 9007199254740993}", LongHolder.class).value);
+	}
+
+	@Test
+	void readStateTreatsUnusableContentAsAbsentAndSetsItAside() throws Exception {
+		Path missing = temporaryDirectory.resolve("missing.json");
+		assertTrue(ConfigTools.readState(missing, StateDocument.class, "Test state", StateDocument::validated).isEmpty());
+		assertFalse(Files.exists(missing));
+
+		Path unusable = temporaryDirectory.resolve("state.json");
+		Files.writeString(unusable, "{\"value\": -1}", StandardCharsets.UTF_8);
+		assertTrue(ConfigTools.readState(unusable, StateDocument.class, "Test state", StateDocument::validated).isEmpty());
+		assertFalse(Files.exists(unusable));
+		try (var leftovers = Files.list(temporaryDirectory)) {
+			List<Path> aside = leftovers.filter(path -> path.getFileName().toString().startsWith("state.json.corrupt-")).toList();
+			assertEquals(1, aside.size());
+			assertEquals("{\"value\": -1}", Files.readString(aside.get(0)));
+		}
+
+		Files.writeString(unusable, "{\"value\": 3}", StandardCharsets.UTF_8);
+		assertEquals(3, ConfigTools.readState(unusable, StateDocument.class, "Test state", StateDocument::validated).orElseThrow().value);
+	}
+
+	@Test
+	void readStateSetsANonRegularPathAsideAsUnusableContent() throws Exception {
+		Path directory = temporaryDirectory.resolve("state.json");
+		Files.createDirectory(directory);
+
+		assertTrue(ConfigTools.readState(directory, StateDocument.class, "Test state", StateDocument::validated).isEmpty());
+		assertFalse(Files.exists(directory));
+		try (var leftovers = Files.list(temporaryDirectory)) {
+			assertEquals(1, leftovers.filter(path -> path.getFileName().toString().startsWith("state.json.corrupt-")).count());
+		}
+	}
+
+	@Test
+	void readUniqueFailsEveryBootInPlaceUntilAHumanMovesTheHistory() throws Exception {
+		Path unusable = temporaryDirectory.resolve("history.json");
+		Files.writeString(unusable, "{\"value\": -1}", StandardCharsets.UTF_8);
+
+		assertThrows(IOException.class, () -> ConfigTools.readUnique(unusable, StateDocument.class, "Test history", StateDocument::validated));
+		// The evidence stays where the owner wrote it, so the next boot fails with the same cause instead of reading empty history.
+		assertEquals("{\"value\": -1}", Files.readString(unusable, StandardCharsets.UTF_8));
+		try (var leftovers = Files.list(temporaryDirectory)) {
+			assertEquals(0, leftovers.filter(path -> path.getFileName().toString().startsWith("history.json.corrupt-")).count());
+		}
+		assertThrows(IOException.class, () -> ConfigTools.readUnique(unusable, StateDocument.class, "Test history", StateDocument::validated));
+
+		// Deleting the file is the explicit human decision; only then does the path read as never written.
+		Files.delete(unusable);
+		assertTrue(ConfigTools.readUnique(unusable, StateDocument.class, "Test history", StateDocument::validated).isEmpty());
+	}
+
+	@Test
+	void readUniqueFailsInPlaceOnANonRegularPathWithoutTouchingIt() throws Exception {
+		Path directory = temporaryDirectory.resolve("history.json");
+		Files.createDirectory(directory);
+
+		assertThrows(IOException.class, () -> ConfigTools.readUnique(directory, StateDocument.class, "Test history", StateDocument::validated));
+		assertTrue(Files.isDirectory(directory));
+		try (var leftovers = Files.list(temporaryDirectory)) {
+			assertEquals(0, leftovers.filter(path -> path.getFileName().toString().startsWith("history.json.corrupt-")).count());
+		}
+	}
+
+	public static class StateDocument {
+		public int value;
+
+		public static StateDocument validated(StateDocument document) {
+			if (document.value < 0) throw new IllegalArgumentException("Test state value is invalid");
+			return document;
+		}
+	}
+
+	public static class EnumHolder {
+		public List<UpdatePlan.RestartReason> reasons;
+	}
+
+	public static class IntHolder {
+		public int value;
+	}
+
+	public static class LongHolder {
+		public long value;
 	}
 }

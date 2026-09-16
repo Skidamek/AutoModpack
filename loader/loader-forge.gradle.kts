@@ -6,7 +6,6 @@ import org.gradle.api.file.DuplicatesStrategy
 // configuration-on-demand does not always reach in time otherwise (surfaces when this project is
 // built standalone, e.g. `gradlew :loader-forge-fml47:build`, rather than as part of a full build).
 evaluationDependsOn(":core")
-evaluationDependsOn(":loader-core")
 evaluationDependsOn(":loader-forge-earlyservices")
 evaluationDependsOn(":loader-modlauncher-earlyservices")
 
@@ -48,7 +47,6 @@ legacyForge {
 
 dependencies {
 	compileOnly(project(":core"))
-	compileOnly(project(":loader-core"))
 	compileOnly(project(":loader-forge-earlyservices"))
 	compileOnly(project(":loader-modlauncher-earlyservices"))
 
@@ -87,7 +85,7 @@ tasks.named<ShadowJar>("shadowJar") {
 	}
 
 	// Combine all subproject outputs efficiently
-	val subprojects = listOf(":core", ":loader-core", ":loader-forge-earlyservices", ":loader-modlauncher-earlyservices")
+	val subprojects = listOf(":core", ":loader-forge-earlyservices", ":loader-modlauncher-earlyservices")
 	subprojects.forEach {
 		from(
 			project(it)
@@ -108,13 +106,7 @@ tasks.named<ShadowJar>("shadowJar") {
 	relocate("org.bouncycastle", "$reloc.org.bouncycastle")
 	relocate("io.netty.handler.codec.haproxy", "$reloc.io.netty.handler.codec.haproxy")
 
-	// Project internal relocations
-	relocate("pl.skidam.automodpack_loader_core_forge", "pl.skidam.automodpack_loader_core")
-	relocate("pl.skidam.automodpack_loader_core_modlauncher", "pl.skidam.automodpack_loader_core")
-
 	// Cleanup
-	exclude("pl/skidam/automodpack_loader_core/loader/LoaderManager.class")
-	exclude("pl/skidam/automodpack_loader_core/mods/ModpackLoader.class")
 
 	exclude("kotlin/**", "log4j2.xml")
 	exclude("META-INF/maven/**", "META-INF/native-image/**", "META-INF/io.netty.versions.properties")

@@ -1,34 +1,34 @@
 {
   "quick-start.mdx": {
-    "name": "🚀 Quick Start",
+    "name": "Quick start",
     "icon": null
   },
-  "usage": {
-    "name": "Usage",
+  "pack-content.mdx": {
+    "name": "Building the modpack",
     "icon": null
   },
   "configuration": {
-    "name": "\uD83D\uDEE0\uFE0F Configuration",
+    "name": "Configuration",
     "icon": null
   },
-  "commands": {
-    "name": "⌨\uFE0F Commands",
+  "commands.mdx": {
+    "name": "Commands",
     "icon": null
   },
-  "examples": {
-    "name": "\uD83D\uDCF7 Examples",
+  "security.mdx": {
+    "name": "Security",
     "icon": null
   },
-  "technicals": {
-    "name": "\uD83D\uDC68\u200D\uD83D\uDCBB Technical Details",
+  "how-it-works": {
+    "name": "How it works",
     "icon": null
   },
   "compatibility": {
-    "name": "\uD83D\uDCDA Compatibility",
+    "name": "Compatibility",
     "icon": null
   },
   "faq.mdx": {
-    "name": "❔ FAQ",
+    "name": "FAQ",
     "icon": null
   }
 }

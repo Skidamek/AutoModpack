@@ -1,0 +1,41 @@
+# Client updates and edits
+
+This page follows one pack through a client: when updates apply, where the bytes come from, and what happens to files players have touched.
+
+## When updates apply
+
+With `updateSelectedModpackOnLaunch` on (the default), every launch fetches the server's current generation and applies it before the game loads anything. Projection-only work, such as config and resource pack changes, needs no restart at all: the game reads those files from the managed projection.
+
+When the plan touches files in the standard `mods` folder or the loader version, AutoModpack stops and asks for a relaunch, so the loader reads the real file tree. Fabric enumerates `mods/` early in boot and Forge and NeoForge later, but the restart rule is the same for every loader.
+
+Joining a server while in-game goes through a review screen instead: it shows what the update would change, asks for consent when your own extra mods would be touched, and applies group selections. A first install always waits for this review. A pack installed through a [trusted bootstrap](files-on-disk#bootstrap) is the exception and applies on that launch.
+
+With `updateSelectedModpackOnLaunch` off, launch loads the current state without contacting the server, and updates happen only when you join.
+
+## Where files come from
+
+The client first asks the platform APIs. Files found on Modrinth or CurseForge download straight from their CDNs through direct links, so mod authors get the download credit and your server ships less traffic. The client matches files by SHA-1 on Modrinth and by content fingerprint on CurseForge.
+
+Everything else downloads from the modpack host over its TLS connection. Those transfers are compressed, with pure-Java Zstandard as the default codec; the peers negotiate one codec for the connection from the supported set. When a platform link fails, the client falls back to your server automatically.
+
+## Editable files
+
+`allowEditsInFiles` marks pack files players may change, such as `options.txt` and `config/**` by default. The client records the player's copy in an overlay that shadows the pack version, so ordinary edits survive every update.
+
+The comparison that matters is between the server's new generation and the generation currently installed. When the server changes an editable file:
+
+1. The player's edited copy is preserved and shown in the "Preserved files" screen.
+2. The new server version is applied, exactly once.
+3. Edits made after that are preserved again until the server changes the file once more.
+
+An operator who wants a file's edits to never be replaced simply never changes that file on the server. Every editable file follows the same rule; there is no second list.
+
+The same preservation protects the server in the other direction: a file that is *not* editable but no longer matches the pack is treated as player data, preserved, and replaced by the pack version.
+
+## Deletions are measured
+
+When a file leaves the pack, clients remove their copy only when the generation's [ownership ledger](generations#what-clients-keep) proves the file is AutoModpack's: the path is a managed location, and the local hash and size match a historical entry. Anything the player created or changed survives, and so does everything under `saves/`, `screenshots/`, `logs/`, and `automodpack/`. Before a deletion, the file's bytes are kept in the client's own store.
+
+## AutoModpack's own updates
+
+Clients follow the AutoModpack version the server runs when `syncAutoModpackVersion` is on, updating or downgrading through Modrinth. A client with `selfUpdater` on also checks Modrinth for newer releases on its own. Updates stage a version swap and apply it on restart, and the mod never downgrades a client below version 4.0.0. Both settings are in the [client config](../configuration/client-config).

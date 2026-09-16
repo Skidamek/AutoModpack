@@ -29,7 +29,6 @@ class GroupManifestValidatorTest {
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 
 		assertEquals("visuals", manifest.groups().get("main").category());
-		assertEquals("", manifest.groups().get("main").icon());
 		assertEquals(ConfigTools.GSON.toJson(manifest.toFields()), ConfigTools.GSON.toJson(GroupManifestValidator.validate(manifest.toFields()).toFields()));
 	}
 
@@ -49,31 +48,6 @@ class GroupManifestValidatorTest {
 			var fields = catalogue();
 			var group = group(file("a"));
 			group.category = value;
-			fields.groups = Map.of("main", group);
-			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), value);
-		}
-	}
-
-	@Test
-	void validatesOptionalIconResourceLocationAndRoundTrips() {
-		var fields = catalogue();
-		var group = group(file("a"));
-		group.icon = "minecraft:item/diamond";
-		fields.groups = Map.of("main", group);
-
-		GroupManifest manifest = GroupManifestValidator.validate(fields);
-
-		assertEquals("minecraft:item/diamond", manifest.groups().get("main").icon());
-		assertEquals("minecraft:item/diamond", manifest.toFields().groups.get("main").icon);
-	}
-
-	@Test
-	void rejectsUnsafeIconResourceLocations() {
-		for (String value : List.of("diamond", "minecraft:", "minecraft:/diamond", "minecraft:item//diamond", "minecraft:item/../diamond", "Minecraft:item/diamond",
-				"minecraft:item diamond", "minecraft:item#diamond")) {
-			var fields = catalogue();
-			var group = group(file("a"));
-			group.icon = value;
 			fields.groups = Map.of("main", group);
 			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), value);
 		}
@@ -190,12 +164,11 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
-	void rejectsPlayerLocalRootsAndInvalidTypePathCombinations() {
+	void rejectsReservedRootsAndInvalidTypePathCombinations() {
 		for (var invalid : List.of(
 				Map.entry("saves/world.dat", "other"),
 				Map.entry("logs/latest.log", "other"),
 				Map.entry("screenshots/image.png", "other"),
-				Map.entry("server-resource-packs/pack.zip", "other"),
 				Map.entry("config/settings.json", "other"),
 				Map.entry("shaderpacks/shader.zip", "other"),
 				Map.entry("resourcepacks/pack.zip", "other"),
@@ -207,7 +180,7 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
-	void acceptsModFilesAtAnyNonPlayerLocalNonReservedPath() {
+	void acceptsModFilesAtAnyNonReservedPath() {
 		for (String path : List.of("mods/example.jar", "resourcepacks/example.jar", "shaderpacks/example.jar", "config/example.jar", "outside/example.jar")) {
 			var fields = catalogue();
 			fields.groups = Map.of("main", groupAt(path, fileOfType("mod")));
@@ -234,18 +207,68 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
-	void onlyTreatsModsUnderModsAsActive() {
-		assertTrue(ModpackPathPolicy.isActiveMod("mods/example.jar", "mod"));
-		assertFalse(ModpackPathPolicy.isActiveMod("resourcepacks/example.jar", "mod"));
-		assertFalse(ModpackPathPolicy.isActiveMod("mods/example.jar", "other"));
-	}
-
-	@Test
 	void rejectsCoSelectableModsThatShareALiveBasename() {
 		var fields = catalogue();
 		fields.groups = linkedGroups("main", groupAt("mods/main.jar", fileOfType("mod")), "visuals", groupAt("mods/nested/main.jar", fileOfType("mod")));
 
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void rejectsFileDirectoryConflictWithinOneGroup() {
+		var fields = catalogue();
+		var group = group(fileOfType("mod"));
+		group.files = Map.of("outside", fileOfType("mod"), "outside/nested.jar", fileOfType("mod"));
+		fields.groups = Map.of("main", group);
+
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void rejectsCoSelectableFileDirectoryConflict() {
+		var fields = catalogue();
+		fields.groups = linkedGroups("main", groupAt("outside", fileOfType("mod")), "visuals", groupAt("outside/nested.jar", fileOfType("mod")));
+
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void prefixWalkReportsEveryAncestorConflictOfANestedAndAliasedCatalogue() {
+		var fields = catalogue();
+		var trunk = group(fileOfType("mod"));
+		trunk.compatiblePlatforms = Set.of("linux");
+		trunk.files = Map.of("outside/t", fileOfType("mod"), "outside/t/u", fileOfType("mod"), "outside/t/u/v.jar", fileOfType("mod"));
+		var fork1 = groupAt("outside/k", fileOfType("mod"));
+		fork1.compatiblePlatforms = Set.of("linux");
+		var fork2 = groupAt("outside/k", fileOfType("mod"));
+		fork2.compatiblePlatforms = Set.of("linux");
+		var fork3 = groupAt("outside/k/z.jar", fileOfType("mod"));
+		fork3.compatiblePlatforms = Set.of("linux");
+		var exclusive = groupAt("outside/e", fileOfType("mod"));
+		exclusive.compatiblePlatforms = Set.of("linux");
+		exclusive.breaksWith = Set.of("leaf");
+		var leaf = groupAt("outside/e/f.jar", fileOfType("mod"));
+		leaf.compatiblePlatforms = Set.of("linux");
+		fields.groups = linkedGroups("trunk", trunk, "fork1", fork1, "fork2", fork2, "fork3", fork3, "exclusive", exclusive, "leaf", leaf);
+
+		// The aliased key 'outside/k' (two owners) pairs with the descendant once per owner, the chain pairs every
+		// ancestor depth once, and the mutually exclusive pair is silent: exactly the pairwise scan's conflict set.
+		GroupValidationException failure = assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+		assertEquals(List.of("linux: file path 'outside/k' cannot be an ancestor of 'outside/k/z.jar' in co-selectable groups 'fork1' and 'fork3'",
+				"linux: file path 'outside/k' cannot be an ancestor of 'outside/k/z.jar' in co-selectable groups 'fork2' and 'fork3'",
+				"linux: file path 'outside/t' cannot be an ancestor of 'outside/t/u' in group 'trunk'",
+				"linux: file path 'outside/t' cannot be an ancestor of 'outside/t/u/v.jar' in group 'trunk'",
+				"linux: file path 'outside/t/u' cannot be an ancestor of 'outside/t/u/v.jar' in group 'trunk'"), failure.errors());
+	}
+
+	@Test
+	void acceptsFileDirectoryPathsForMutuallyExclusiveGroups() {
+		var fields = catalogue();
+		var first = groupAt("outside", fileOfType("mod"));
+		first.breaksWith = Set.of("second");
+		fields.groups = linkedGroups("first", first, "second", groupAt("outside/nested.jar", fileOfType("mod")));
+
+		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
 
 	@Test
@@ -324,6 +347,41 @@ class GroupManifestValidatorTest {
 		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
 
+	@Test
+	void acceptsAdminDeclaredPlatformAndRejectsBlankNames() {
+		var fields = catalogue();
+		var group = group(file("a"));
+		group.compatiblePlatforms = Set.of("Android");
+		fields.groups = Map.of("main", group);
+
+		GroupManifest manifest = GroupManifestValidator.validate(fields);
+
+		assertTrue(manifest.groups().get("main").supports(ClientPlatform.parse("android")));
+		assertFalse(manifest.groups().get("main").supports(ClientPlatform.LINUX));
+
+		var blank = catalogue();
+		var blankGroup = group(file("a"));
+		blankGroup.compatiblePlatforms = Set.of("   ");
+		blank.groups = Map.of("main", blankGroup);
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(blank));
+	}
+
+	@Test
+	void validatesRulesForDeclaredOnlyPlatforms() {
+		var fields = catalogue();
+		var app = group(file("a"));
+		app.required = true;
+		app.compatiblePlatforms = Set.of("android");
+		app.requires = Set.of("win-lib");
+		var winLib = group(file("a"));
+		winLib.compatiblePlatforms = Set.of("windows");
+		fields.groups = linkedGroups("app", app, "win-lib", winLib);
+
+		// No detectable platform can see this graph, so only the declared android coverage can reject the impossible requirement.
+		GroupValidationException failure = assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+		assertTrue(failure.getMessage().contains("android"), failure.getMessage());
+	}
+
 	private static ModpackJsons.CompleteModpackContentFields catalogue() {
 		var fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
@@ -351,7 +409,7 @@ class GroupManifestValidatorTest {
 	}
 
 	private static ModpackJsons.CompleteModpackContentFields.GroupFileFields fileOfType(String type, String hash) {
-		return new ModpackJsons.CompleteModpackContentFields.GroupFileFields("1", type, false, false, hash, null);
+		return new ModpackJsons.CompleteModpackContentFields.GroupFileFields("1", type, false, hash, null);
 	}
 
 	private static Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> linkedGroups(Object... values) {

@@ -11,7 +11,7 @@ import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 public final class ModpackCandidateScanner {
@@ -38,11 +38,18 @@ public final class ModpackCandidateScanner {
 		for (var entry : declarations.entrySet()) {
 			String groupId = entry.getKey();
 			ServerConfigJsons.GroupDeclaration declaration = entry.getValue();
-			PathRuleSet syncedRules = rulesByGroup.get(groupId).syncedFiles();
+			GroupRules groupRules = rulesByGroup.get(groupId);
 			Path groupDirectory = request.groupRoot().resolve(groupId).normalize();
 			if (!groupDirectory.startsWith(request.groupRoot().toAbsolutePath().normalize()))
 				throw new CandidateBuildException("Group directory escapes host-modpack: " + groupId);
 			for (var file : walk(groupDirectory).entrySet()) {
+				// The group directory is included in full; excludedFiles is the only way to leave content out of it.
+				PathRuleSet.Decision excluded = groupRules.excluded(file.getKey());
+				if (excluded.matched()) {
+					ruleExclusions.add(new ExcludedCandidate(new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.GROUP_DIRECTORY, file.getValue(), null),
+							ExcludedCandidate.Reason.EXCLUDED_BY_RULE, "excluded by " + excluded.decisiveRule()));
+					continue;
+				}
 				CandidateSource source = new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.GROUP_DIRECTORY, file.getValue(), null);
 				sources.computeIfAbsent(ModpackCandidate.provenanceKey(groupId, file.getKey()), ignored -> new SourcePair()).explicit = source;
 			}
@@ -52,21 +59,23 @@ public final class ModpackCandidateScanner {
 		if (!synchronizedGroups.isEmpty()) {
 			Set<String> scanRoots = new TreeSet<>();
 			for (GroupRules rules : synchronizedGroups) scanRoots.addAll(rules.syncedFiles().safeScanRoots());
-			for (String scanRoot : minimalScanRoots(scanRoots)) {
+			Set<String> minimalRoots = minimalScanRoots(scanRoots);
+			Map<String, List<String>> groupsByScanRoot = indexGroupsByScanRoot(minimalRoots, rulesByGroup);
+			for (String scanRoot : minimalRoots) {
 				Path root = (scanRoot.isEmpty() ? request.serverRoot() : request.serverRoot().resolve(scanRoot)).normalize();
 				if (!root.startsWith(request.serverRoot())) throw new CandidateBuildException("Synchronized scan root escapes server root: " + scanRoot);
 				for (var file : walk(root, request.serverRoot()).entrySet()) {
-					for (var entry : declarations.entrySet()) {
-						String groupId = entry.getKey();
-						PathRuleSet syncedRules = rulesByGroup.get(groupId).syncedFiles();
-						if (syncedRules.isEmpty()) continue;
-						PathRuleSet.Decision decision = syncedRules.evaluate(file.getKey());
-						if (!decision.matched()) continue;
-						CandidateSource source = new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.SYNCED_ROOT, file.getValue(), decision.decisiveRule());
-						if (!decision.included()) {
-							ruleExclusions.add(new ExcludedCandidate(source, ExcludedCandidate.Reason.EXCLUDED_BY_RULE, "excluded by " + decision.decisiveRule()));
+					for (String groupId : groupsByScanRoot.get(scanRoot)) {
+						GroupRules groupRules = rulesByGroup.get(groupId);
+						PathRuleSet.Decision included = groupRules.synced(file.getKey());
+						if (!included.matched()) continue;
+						PathRuleSet.Decision excluded = groupRules.excluded(file.getKey());
+						if (excluded.matched()) {
+							ruleExclusions.add(new ExcludedCandidate(new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.SYNCED_ROOT, file.getValue(), included.decisiveRule()),
+									ExcludedCandidate.Reason.EXCLUDED_BY_RULE, "excluded by " + excluded.decisiveRule()));
 							continue;
 						}
+						CandidateSource source = new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.SYNCED_ROOT, file.getValue(), included.decisiveRule());
 						SourcePair pair = sources.computeIfAbsent(ModpackCandidate.provenanceKey(groupId, file.getKey()), ignored -> new SourcePair());
 						if (pair.synced != null && !pair.synced.sourcePath().equals(source.sourcePath()))
 							throw new CandidateBuildException("Multiple synchronized sources resolve to group '" + groupId + "' path '" + file.getKey() + "'");
@@ -107,18 +116,17 @@ public final class ModpackCandidateScanner {
 		Map<String, StagedObject> objects = new TreeMap<>();
 		Map<String, CandidateProvenance> provenance = new TreeMap<>();
 		List<ExcludedCandidate> exclusions = new ArrayList<>(ruleExclusions);
-		List<ShadowedCandidate> shadows = new ArrayList<>();
 		try {
 			for (PathResult result : results) {
 				exclusions.addAll(result.exclusions);
-				if (result.shadow != null) shadows.add(result.shadow);
 				if (result.selected == null || result.file == null) continue;
 				GroupManifest.GroupFile file = result.file;
-				if (result.object == null) throw new CandidateBuildException("Selected source has no staged object: " + result.selected.sourcePath());
 				filesByGroup.get(result.selected.groupId()).put(result.selected.logicalPath(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(
-						String.valueOf(file.size()), file.type(), file.editable(), file.overwriteEditable(), file.sha1(), file.murmur()));
-				StagedObject redundant = objects.putIfAbsent(file.sha1().toLowerCase(Locale.ROOT), result.object);
-				if (redundant != null) result.object.delete();
+						String.valueOf(file.size()), file.type(), file.editable(), file.sha1(), file.murmur()));
+				if (result.object != null) {
+					StagedObject redundant = objects.putIfAbsent(file.sha1().toLowerCase(Locale.ROOT), result.object);
+					if (redundant != null) result.object.delete();
+				}
 				provenance.put(ModpackCandidate.provenanceKey(result.selected.groupId(), result.selected.logicalPath()), result.provenance);
 			}
 
@@ -136,7 +144,6 @@ public final class ModpackCandidateScanner {
 				group.displayName = declaration.displayName;
 				group.description = declaration.description;
 				group.category = declaration.category == null ? "" : declaration.category;
-				group.icon = declaration.icon == null ? "" : declaration.icon;
 				group.required = declaration.required;
 				group.defaultSelected = declaration.defaultSelected;
 				group.breaksWith = sortedSet(declaration.breaksWith);
@@ -149,7 +156,7 @@ public final class ModpackCandidateScanner {
 			GroupManifest manifest = GroupManifestValidator.validate(fields);
 			if (manifest.groups().values().stream().allMatch(group -> group.files().isEmpty()))
 				throw new CandidateBuildException("Candidate contains no published files");
-			return new ModpackCandidate(manifest, new TreeMap<>(objects), new TreeMap<>(provenance), exclusions, shadows);
+			return new ModpackCandidate(manifest, new TreeMap<>(objects), new TreeMap<>(provenance), exclusions);
 		} catch (Exception e) {
 			cleanup(results, e);
 			if (e instanceof CandidateBuildException candidateBuildException) throw candidateBuildException;
@@ -165,31 +172,27 @@ public final class ModpackCandidateScanner {
 		StagedObject object = null;
 		if (candidate != null) {
 			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(candidate, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(),
-					request.stagingDirectory(), request.fileMetadataCache(), request.modFileCache(), request.objectStoreDirectory());
-			if (snapshot.exclusion() == null) {
+					request.stagingDirectory(), request.fileCache(), request.modFileCache(), request.objectStoreDirectory(), request.materializeMissingObjects());
+			if (snapshot.exclusion() != null) {
+				exclusions.add(excluded(candidate, snapshot.exclusion()));
+			} else if (snapshot.file() != null) {
 				selected = candidate;
 				file = snapshot.file();
 				object = snapshot.object();
-			} else exclusions.add(excluded(candidate, snapshot.exclusion()));
+			}
 		}
-		ShadowedCandidate shadow = pair.explicit != null && pair.synced != null
-				? new ShadowedCandidate(pair.explicit, pair.synced, ShadowedCandidate.Relationship.NOT_COMPARED)
-				: null;
 		CandidateProvenance provenance = null;
 		if (selected != null && file != null) {
-			PathRuleSet.Decision editable = rules.allowEditsInFiles().evaluate(selected.logicalPath());
-			PathRuleSet.Decision overwrite = rules.overwriteEditableFiles().evaluate(selected.logicalPath());
-			boolean isEditable = editable.included();
-			file = new GroupManifest.GroupFile(file.size(), file.type(), isEditable, isEditable && overwrite.included(), file.sha1(), file.murmur());
-			provenance = new CandidateProvenance(selected, editable.decisiveRule(), overwrite.decisiveRule());
+			PathRuleSet.Decision editable = rules.editable(selected.logicalPath());
+			file = new GroupManifest.GroupFile(file.size(), file.type(), editable.matched(), file.sha1(), file.murmur());
+			provenance = new CandidateProvenance(selected, editable.decisiveRule());
 		}
-		return new PathResult(selected, file, object, provenance, exclusions, shadow, pair.explicit != null ? pair.explicit : pair.synced);
+		return new PathResult(selected, file, object, provenance, exclusions, pair.explicit != null ? pair.explicit : pair.synced);
 	}
 
 	private static GroupRules compileRules(String groupId, ServerConfigJsons.GroupDeclaration declaration) throws CandidateBuildException {
-		return new GroupRules(compileRuleSet(declaration.syncedFiles, groupId, "syncedFiles"),
-				compileRuleSet(declaration.allowEditsInFiles, groupId, "allowEditsInFiles"),
-				compileRuleSet(declaration.overwriteEditableFiles, groupId, "overwriteEditableFiles"));
+		return new GroupRules(compileRuleSet(declaration.syncedFiles, groupId, "syncedFiles"), compileRuleSet(declaration.excludedFiles, groupId, "excludedFiles"),
+				compileRuleSet(declaration.allowEditsInFiles, groupId, "allowEditsInFiles"));
 	}
 
 	private static PathRuleSet compileRuleSet(Set<String> rules, String groupId, String name) throws CandidateBuildException {
@@ -245,6 +248,21 @@ public final class ModpackCandidateScanner {
 		return minimal;
 	}
 
+	private static Map<String, List<String>> indexGroupsByScanRoot(Set<String> scanRoots, Map<String, GroupRules> rulesByGroup) {
+		Map<String, List<String>> result = new TreeMap<>();
+		for (String scanRoot : scanRoots) {
+			List<String> groups = new ArrayList<>();
+			for (var entry : rulesByGroup.entrySet()) {
+				Set<String> groupRoots = entry.getValue().syncedFiles().safeScanRoots();
+				if (groupRoots.stream().anyMatch(groupRoot -> groupRoot.isEmpty() || scanRoot.isEmpty() || scanRoot.equals(groupRoot)
+						|| scanRoot.startsWith(groupRoot + "/") || groupRoot.startsWith(scanRoot + "/")))
+					groups.add(entry.getKey());
+			}
+			result.put(scanRoot, List.copyOf(groups));
+		}
+		return Map.copyOf(result);
+	}
+
 	private static NavigableMap<String, Path> walk(Path root) throws CandidateBuildException {
 		return walk(root, root);
 	}
@@ -279,10 +297,19 @@ public final class ModpackCandidateScanner {
 		return values == null ? Set.of() : new LinkedHashSet<>(new TreeSet<>(values));
 	}
 
-	private record GroupRules(
-			PathRuleSet syncedFiles,
-			PathRuleSet allowEditsInFiles,
-			PathRuleSet overwriteEditableFiles) {}
+	private record GroupRules(PathRuleSet syncedFiles, PathRuleSet excludedFiles, PathRuleSet allowEditsInFiles) {
+		private PathRuleSet.Decision synced(String path) {
+			return syncedFiles.evaluate(path);
+		}
+
+		private PathRuleSet.Decision excluded(String path) {
+			return excludedFiles.evaluate(path);
+		}
+
+		private PathRuleSet.Decision editable(String path) {
+			return allowEditsInFiles.evaluate(path);
+		}
+	}
 
 	private static final class SourcePair {
 		private CandidateSource explicit;
@@ -299,7 +326,6 @@ public final class ModpackCandidateScanner {
 			StagedObject object,
 			CandidateProvenance provenance,
 			List<ExcludedCandidate> exclusions,
-			ShadowedCandidate shadow,
 			CandidateSource sourceForOrdering) {}
 
 	public record Request(
@@ -317,15 +343,9 @@ public final class ModpackCandidateScanner {
 			Path stagingDirectory,
 			Executor executor,
 			Path objectStoreDirectory,
-			FileMetadataCache fileMetadataCache,
-			ModFileCache modFileCache) {
-		public Request(String modpackId, String modpackName, String automodpackVersion, String loader, String loaderVersion, String mcVersion, Path serverRoot,
-				Path groupRoot, Map<String, ServerConfigJsons.GroupDeclaration> groups, boolean autoExcludeUnnecessaryFiles,
-				boolean autoExcludeServerSideMods, Path stagingDirectory, Executor executor) {
-			this(modpackId, modpackName, automodpackVersion, loader, loaderVersion, mcVersion, serverRoot, groupRoot, groups, autoExcludeUnnecessaryFiles,
-					autoExcludeServerSideMods, stagingDirectory, executor, null, null, null);
-		}
-
+			FileCache fileCache,
+			ModFileCache modFileCache,
+			boolean materializeMissingObjects) {
 		public Request {
 			serverRoot = serverRoot.toAbsolutePath().normalize();
 			groupRoot = groupRoot.toAbsolutePath().normalize();

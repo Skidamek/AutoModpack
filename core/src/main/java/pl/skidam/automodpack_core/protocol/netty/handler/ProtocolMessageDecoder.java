@@ -31,7 +31,7 @@ public class ProtocolMessageDecoder extends ByteToMessageDecoder {
 					in.resetReaderIndex();
 					return;
 				}
-				int dataLength = readFieldLength(in);
+				int dataLength = readFieldLength(in, MAX_ECHO_PAYLOAD_BYTES);
 				if (in.readableBytes() < dataLength) {
 					in.resetReaderIndex();
 					return;
@@ -45,7 +45,7 @@ public class ProtocolMessageDecoder extends ByteToMessageDecoder {
 					in.resetReaderIndex();
 					return;
 				}
-				int fileHashLength = readFieldLength(in);
+				int fileHashLength = readFieldLength(in, MAX_FILE_HASH_BYTES);
 				if (in.readableBytes() < fileHashLength) {
 					in.resetReaderIndex();
 					return;
@@ -59,9 +59,10 @@ public class ProtocolMessageDecoder extends ByteToMessageDecoder {
 		}
 	}
 
-	private static int readFieldLength(ByteBuf in) {
+	/** Reads one length-prefixed field bounded by its per-field tripwire; the decoder runs pre-authentication, so no field may approach the frame sizes. */
+	private static int readFieldLength(ByteBuf in, int maxLength) {
 		int length = in.readInt();
-		if (length < 0 || length > MAX_CHUNK_SIZE) throw new IllegalArgumentException("Protocol message field is too large: " + length);
+		if (length < 0 || length > maxLength) throw new IllegalArgumentException("Protocol message field is too large: " + length);
 		return length;
 	}
 }

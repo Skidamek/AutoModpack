@@ -34,6 +34,7 @@ class Context:
     # Address the client uses to reach the server. On bridge networking this is
     # the server container name; on host networking it's localhost.
     server_host: str | None = None
+    resource_scope: str = ""
     vars: dict = field(default_factory=dict)
     bridge: BridgeClient | None = None
     # Injected by the runner so the engine stays decoupled from Docker.
@@ -43,9 +44,13 @@ class Context:
     # --- variables / templating -------------------------------------------
 
     def namespace(self) -> dict:
+        endpoint_port = self.vars.get("server_endpoint_port", 25565)
         return {
             "target": self.target,
-            "server": {"host": f"{self.server_host or self.srv_name}:25565"},
+            "server": {
+                "host": f"{self.server_host or self.srv_name}:25565",
+                "endpoint": f"{self.server_host or self.srv_name}:{endpoint_port}",
+            },
             "client": {"game_dir": str(self.game_dir)},
             "modpack": self.modpack_name,
             "active_dir": self.active_projection_dir(),

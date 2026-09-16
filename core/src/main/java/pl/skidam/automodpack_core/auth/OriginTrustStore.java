@@ -2,12 +2,9 @@ package pl.skidam.automodpack_core.auth;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Objects;
 
@@ -15,6 +12,8 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.FileLocks;
+import pl.skidam.automodpack_core.utils.FileTrees;
 
 /** Shared exact certificate trust keyed by the original Minecraft server address. */
 public final class OriginTrustStore {
@@ -22,13 +21,13 @@ public final class OriginTrustStore {
 
 	public static ConnectionJsons.CertificateTrustEntry get(ClientStorage storage, InetSocketAddress origin) throws IOException {
 		if (origin == null) return null;
-		return withLock(storage, () -> readUnlocked(storage.knownHostsFile()).hosts.get(AddressHelpers.formatAddress(origin)));
+		return FileLocks.withLock(storage.knownHostsLockFile(), () -> readUnlocked(storage.knownHostsFile()).hosts.get(AddressHelpers.formatAddress(origin)));
 	}
 
 	public static void save(ClientStorage storage, InetSocketAddress origin, ConnectionJsons.CertificateTrustEntry trust) throws IOException {
 		if (origin == null || trust == null) throw new IllegalArgumentException("Origin and trust entry are required");
 		String key = AddressHelpers.formatAddress(origin);
-		withLock(storage, () -> {
+		FileLocks.withLock(storage.knownHostsLockFile(), () -> {
 			Path file = storage.knownHostsFile();
 			ConnectionJsons.KnownHostsFields fields = readUnlocked(file);
 			ConnectionJsons.CertificateTrustEntry existing = fields.hosts.put(key, trust);
@@ -42,7 +41,7 @@ public final class OriginTrustStore {
 
 	public static void remove(ClientStorage storage, InetSocketAddress origin) throws IOException {
 		if (origin == null) return;
-		withLock(storage, () -> {
+		FileLocks.withLock(storage.knownHostsLockFile(), () -> {
 			Path file = storage.knownHostsFile();
 			ConnectionJsons.KnownHostsFields fields = readUnlocked(file);
 			if (fields.hosts.remove(AddressHelpers.formatAddress(origin)) != null) {
@@ -55,23 +54,10 @@ public final class OriginTrustStore {
 
 	private static ConnectionJsons.KnownHostsFields readUnlocked(Path file) throws IOException {
 		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return new ConnectionJsons.KnownHostsFields();
-		if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Known-hosts file is not a regular file: " + file);
+		FileTrees.requireRegularFile(file, "Known-hosts file");
 		ConnectionJsons.KnownHostsFields fields = ConfigTools.read(file, ConnectionJsons.KnownHostsFields.class)
 				.orElseThrow(() -> new IOException("Known-hosts file is empty: " + file));
 		if (fields.hosts == null) fields.hosts = new HashMap<>();
 		return fields;
-	}
-
-	private static <T> T withLock(ClientStorage storage, LockedOperation<T> operation) throws IOException {
-		Path lockPath = storage.knownHostsLockFile();
-		Files.createDirectories(lockPath.getParent());
-		try (FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE); FileLock ignored = channel.lock()) {
-			return operation.get();
-		}
-	}
-
-	@FunctionalInterface
-	private interface LockedOperation<T> {
-		T get() throws IOException;
 	}
 }

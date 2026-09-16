@@ -6,27 +6,24 @@ import java.util.UUID;
 
 /*? if >= 1.21.9 {*/
 import net.minecraft.server.players.NameAndId;
-import net.minecraft.server.players.UserNameToIdResolver;
-/*?} else {*/
-/*import net.minecraft.server.players.GameProfileCache;
-*//*?}*/
+/*?}*/
 
 import static pl.skidam.automodpack.init.Common.server;
 
 public class GameHelpers {
 
-	// Simpler version of `PlayerManager.checkCanJoin`
-	public static boolean isPlayerAuthorized(SocketAddress address, GameProfile profile) {
+	// Simpler version of `PlayerManager.checkCanJoin`; always runs against the exact identity the login presented
+	public static boolean isPlayerAuthorized(SocketAddress address, UUID playerUuid, String playerName) {
 		if (server.isSameThread()) {
-			return checkPlayerAuthorizedInternal(address, profile);
+			return checkPlayerAuthorizedInternal(address, playerUuid, playerName);
 		}
 
-		return server.submit(() -> checkPlayerAuthorizedInternal(address, profile)).join();
+		return server.submit(() -> checkPlayerAuthorizedInternal(address, playerUuid, playerName)).join();
 	}
 
-	private static boolean checkPlayerAuthorizedInternal(SocketAddress address, GameProfile profile) {
+	private static boolean checkPlayerAuthorizedInternal(SocketAddress address, UUID playerUuid, String playerName) {
 		var playerManager = server.getPlayerList();
-		var playerId = /*? if >= 1.21.9 {*/new NameAndId(profile);/*?} else {*//*profile;*//*?}*/
+		var playerId = /*? if >= 1.21.9 {*/new NameAndId(playerUuid, playerName);/*?} else {*//*new GameProfile(playerUuid, playerName);*//*?}*/
 		if (playerManager.getBans().isBanned(playerId)) {
 			return false;
 		}
@@ -38,31 +35,6 @@ public class GameHelpers {
 		}
 
 		return true;
-	}
-
-	// Method to get GameProfile from UUID with accounting for a fact that this player may not be on the server right now
-	public static GameProfile getPlayerProfile(String id) {
-		UUID uuid = UUID.fromString(id);
-		String playerName = "Player"; // mock name, name matters less than UUID anyway
-		if (server.isSameThread()) {
-			return getProfile(uuid, playerName);
-		}
-
-		return server.submit(() -> getProfile(uuid, playerName)).join();
-	}
-
-	private static GameProfile getProfile(UUID uuid, String playerName) {
-		/*? if >= 1.21.9 {*/
-		NameAndId nameAndId = new NameAndId(uuid, playerName);
-		UserNameToIdResolver userCache = server.services().nameToIdCache();
-		nameAndId = userCache.get(uuid).orElse(nameAndId);
-		return new GameProfile(nameAndId.id(), nameAndId.name());
-		/*?} else {*/
-		/*GameProfile profile = new GameProfile(uuid, playerName);
-		GameProfileCache userCache = server.getProfileCache();
-		if (userCache != null) profile = userCache.get(uuid).orElse(profile);
-		return profile;
-		*//*?}*/
 	}
 
 	public static String getPlayerName(GameProfile profile) {

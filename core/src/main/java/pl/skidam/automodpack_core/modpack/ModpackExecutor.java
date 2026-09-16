@@ -11,24 +11,24 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
+import pl.skidam.automodpack_core.modpack.candidate.ExcludedCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
+import pl.skidam.automodpack_core.modpack.generation.ContentTree;
 import pl.skidam.automodpack_core.modpack.generation.GenerationDiff;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryEntry;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
-import pl.skidam.automodpack_core.modpack.generation.GenerationIdentity;
-import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNotes;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
+import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.Throwables;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 public class ModpackExecutor {
@@ -42,6 +42,7 @@ public class ModpackExecutor {
 	private final GenerationStore generationStore;
 	private final DataRootResolver.Layout dataLayout;
 	private final CandidateScan candidateScan;
+	private final HostingBinder hostingBinder;
 
 	public ModpackExecutor() {
 		this(GameDirectory.current(), HOST_MODPACK_DIR, GameDirectory.current().resolve(SERVER_DIR));
@@ -55,19 +56,32 @@ public class ModpackExecutor {
 
 	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, GenerationStore generationStore, CandidateScan candidateScan,
 			ThreadPoolExecutor creationExecutor) {
+		this(serverRoot, groupRoot, generationRoot, generationStore, candidateScan, creationExecutor, hosting -> {
+			if (hostServer != null) hostServer.replacePaths(hosting);
+		});
+	}
+
+	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, GenerationStore generationStore, CandidateScan candidateScan,
+			ThreadPoolExecutor creationExecutor, HostingBinder hostingBinder) {
 		this.serverRoot = serverRoot.toAbsolutePath().normalize();
 		this.groupRoot = groupRoot.toAbsolutePath().normalize();
 		this.generationRoot = generationRoot.toAbsolutePath().normalize();
-		this.patchNotesFile = this.generationRoot.resolve(SERVER_PATCH_NOTES_FILE.getFileName()).normalize();
+		this.patchNotesFile = this.serverRoot.resolve(PATCH_NOTES_FILE).normalize();
 		this.generationStore = Objects.requireNonNull(generationStore);
 		this.dataLayout = new DataRootResolver.Layout(this.generationStore.objectRoot().getParent());
 		this.candidateScan = Objects.requireNonNull(candidateScan);
 		this.creationExecutor = Objects.requireNonNull(creationExecutor);
+		this.hostingBinder = Objects.requireNonNull(hostingBinder);
 	}
 
 	@FunctionalInterface
 	interface CandidateScan {
 		ModpackCandidate scan(ModpackCandidateScanner.Request request) throws CandidateBuildException;
+	}
+
+	@FunctionalInterface
+	interface HostingBinder {
+		void bind(GenerationHosting hosting) throws Exception;
 	}
 
 	public PreviewResult preview() {
@@ -76,18 +90,18 @@ public class ModpackExecutor {
 
 	public PreviewResult preview(String inlineNotes) {
 		OperationLease operation = acquire(false);
-		if (operation == null) return new PreviewBusy("Another modpack operation is already in progress");
+		if (operation == null) return new PreviewResult.Rejected("Another modpack operation is already in progress", null);
 		try (operation) {
-			Optional<GenerationStore.CurrentSnapshot> previous = generationStore.loadCurrent();
-			try (ModpackCandidate candidate = buildCandidate(previous)) {
-				GenerationDiff diff = GenerationDiff.between(previous.map(snapshot -> snapshot.record().manifest()).orElse(null), candidate.manifest());
-				String stateDigest = GenerationIdentity.stateDigest(candidate.manifest());
+			GenerationStore.Current current = generationStore.loadCurrent().orElse(null);
+			try (ModpackCandidate candidate = buildCandidate(current, false)) {
+				GenerationDiff diff = GenerationDiff.between(current == null ? null : current.manifest(), candidate.manifest());
+				String token = ContentTree.tokenOf(candidate.manifest());
 				GenerationPatchNotes.Resolution notes = GenerationPatchNotes.resolve(inlineNotes, patchNotesFile);
-				return new PreviewReady(candidateState(previous, candidate, stateDigest, diff, notes.source()));
+				return new PreviewReady(candidateState(current, candidate, token, diff, Optional.of(notes.source())));
 			}
 		} catch (Exception e) {
 			LOGGER.error("Failed to preview modpack generation", e);
-			return new PreviewFailed(e);
+			return new PreviewResult.Rejected(Throwables.detail(e), e);
 		}
 	}
 
@@ -99,186 +113,145 @@ public class ModpackExecutor {
 		return publishInternal(null, inlineNotes);
 	}
 
-	public PublishResult publishIfState(String expectedStateDigest) {
-		return publishIfState(expectedStateDigest, null);
+	public PublishResult publishIfContent(String expectedContentToken) {
+		return publishIfContent(expectedContentToken, null);
 	}
 
-	public PublishResult publishIfState(String expectedStateDigest, String inlineNotes) {
-		if (!HashUtils.isCanonicalSha1(expectedStateDigest))
-			return new PublishInvalidGuard("Guard digest must be a canonical 40-character lowercase SHA-1");
-		return publishInternal(expectedStateDigest, inlineNotes);
+	public PublishResult publishIfContent(String expectedContentToken, String inlineNotes) {
+		if (!HashUtils.isCanonicalSha1(expectedContentToken))
+			return new PublishResult.Rejected("Guard token must be a canonical 40-character lowercase SHA-1", null);
+		return publishInternal(expectedContentToken, inlineNotes);
 	}
 
-	public RevertResult revert(String targetGenerationId) {
-		return revert(targetGenerationId, null);
-	}
-
-	public RevertResult revert(String targetGenerationId, String inlineNotes) {
-		if (!HashUtils.isCanonicalSha1(targetGenerationId))
-			return new RevertInvalidTarget("Rollback target must be a canonical 40-character lowercase SHA-1");
+	public RevertResult revert(long targetSeq, String inlineNotes) {
+		if (targetSeq < 1) return new RevertResult.Rejected("Rollback target must be a positive journal sequence", null);
 		OperationLease operation = acquire(true);
-		if (operation == null) return new RevertBusy("Another modpack operation is already in progress");
-		GenerationStore.Publication publication = null;
+		if (operation == null) return new RevertResult.Rejected("Another modpack operation is already in progress", null);
 		try (operation) {
-			Optional<GenerationStore.CurrentSnapshot> previous = generationStore.loadCurrent();
-			GenerationPatchNotes.Resolution notes = GenerationPatchNotes.resolve(inlineNotes, patchNotesFile);
-			publication = generationStore.publishRevert(targetGenerationId, previous, notes.text());
-			List<String> warnings = new ArrayList<>();
-			postPublication(publication, notes, warnings);
-			return new Reverted(publication.record(), targetGenerationId, warnings);
+			return bindHosting(revertLocked(targetSeq, inlineNotes));
+		} catch (IllegalArgumentException e) {
+			return new RevertResult.Rejected(e.getMessage() == null ? "Invalid rollback target" : e.getMessage(), e);
 		} catch (Exception e) {
-			if (publication != null) return new Reverted(publication.record(), targetGenerationId, List.of("Revert published, but post-publication cleanup was incomplete"));
 			LOGGER.error("Failed to publish modpack revert", e);
-			return new RevertFailed(e);
+			return new RevertResult.Rejected(Throwables.detail(e), e);
 		}
 	}
 
-	public List<GenerationHistoryEntry> technicalHistory() throws IOException {
-		return generationStore.currentHistory();
+	private RevertResult revertLocked(long targetSeq, String inlineNotes) throws Exception {
+		GenerationStore.Publication publication = null;
+		try {
+			GenerationPatchNotes.Resolution notes = GenerationPatchNotes.resolve(inlineNotes, patchNotesFile);
+			publication = generationStore.publishRestore(targetSeq, notes.text());
+			consumePatchNotes(notes);
+			PackDocument document = new PackDocument(publication.manifest(), publication.entry().contentToken(), publication.entry().policySha1(),
+					publication.entry().createdAt(), publication.ledger());
+			return new Reverted(document, targetSeq, List.of(), publication.hostingPaths());
+		} catch (Exception e) {
+			if (publication == null) throw e;
+			return new Reverted(currentDocument(publication), targetSeq, List.of("Revert published, but post-publication cleanup was incomplete"), publication.hostingPaths());
+		}
 	}
 
-	public Optional<GenerationHistoryIndex> historyIndex() throws IOException {
-		return generationStore.currentHistoryIndex();
+	public List<JournalEntry> technicalHistory(int limit) throws IOException {
+		return generationStore.history(limit);
 	}
 
 	public GenerationStore.StorageReport storageReport() throws IOException {
 		return generationStore.measureStorage();
 	}
 
-	public GenerationStore.CompactionPreview previewCompactHistory(String boundaryGenerationId) throws IOException {
-		OperationLease operation = acquire(false);
-		if (operation == null) throw new IOException("Another modpack operation is already in progress");
-		try (operation) {
-			return generationStore.previewCompaction(boundaryGenerationId);
-		}
-	}
-
-	public GenerationStore.CompactionResult compactHistoryBefore(String boundaryGenerationId) throws IOException {
+	public GenerationStore.CollectionSummary collectUnreachableObjects() throws IOException {
 		OperationLease operation = acquire(true);
 		if (operation == null) throw new IOException("Another modpack operation is already in progress");
 		try (operation) {
-			return generationStore.compactBefore(boundaryGenerationId);
+			return generationStore.collectUnreachable();
 		}
 	}
 
-	private PublishResult publishInternal(String expectedStateDigest, String inlineNotes) {
+	private PublishResult publishInternal(String expectedContentToken, String inlineNotes) {
 		OperationLease operation = acquire(true);
-		if (operation == null) return new PublishBusy("Another modpack operation is already in progress");
+		if (operation == null) return new PublishResult.Rejected("Another modpack operation is already in progress", null);
+		try (operation) {
+			return bindHosting(publishLocked(expectedContentToken, inlineNotes));
+		} catch (Exception e) {
+			LOGGER.error("Failed to publish modpack generation", e);
+			return new PublishResult.Rejected(Throwables.detail(e), e);
+		}
+	}
+
+	private PublishResult publishLocked(String expectedContentToken, String inlineNotes) throws Exception {
 		GenerationStore.Publication publication = null;
-		PublishResult committedResult = null;
 		CandidateState committedState = null;
-		try (operation) {
-			Optional<GenerationStore.CurrentSnapshot> previous = generationStore.loadCurrent();
-			if (expectedStateDigest != null && previous.isEmpty())
-				return new PublishGuardUnsupported("A state guard is unavailable before the root generation is published");
-			try (ModpackCandidate candidate = buildCandidate(previous)) {
-				GenerationRecord parent = previous.map(GenerationStore.CurrentSnapshot::record).orElse(null);
-				GenerationDiff diff = GenerationDiff.between(parent == null ? null : parent.manifest(), candidate.manifest());
-				String stateDigest = GenerationIdentity.stateDigest(candidate.manifest());
-				CandidateSummary summary = CandidateSummary.from(candidate, diff);
-				CandidateState candidateState = new CandidateState(previous.map(GenerationStore.CurrentSnapshot::record), stateDigest, diff, summary, Optional.empty());
-				if (expectedStateDigest != null && !expectedStateDigest.equals(stateDigest))
-					return new PublishGuardMismatch(candidateState, "Fresh candidate state does not match the requested guard");
+		try {
+			GenerationStore.Current current = generationStore.loadCurrent().orElse(null);
+			if (expectedContentToken != null && current == null)
+				return new PublishResult.Rejected("A state guard is unavailable before the root generation is published", null);
+			try (ModpackCandidate candidate = buildCandidate(current, true)) {
+				GenerationDiff diff = GenerationDiff.between(current == null ? null : current.manifest(), candidate.manifest());
+				String token = ContentTree.tokenOf(candidate.manifest());
+				CandidateState candidateState = candidateState(current, candidate, token, diff, Optional.empty());
+				if (expectedContentToken != null && !expectedContentToken.equals(token))
+					return new PublishResult.Rejected("Fresh candidate content does not match the requested guard", null);
+
+				if (current != null && current.contentToken().equals(token))
+					return new NoChanges(candidateState.withoutPatchNotesSource(), currentDocument(current), List.of(), generationStore.hosting());
 
 				GenerationPatchNotes.Resolution notes = GenerationPatchNotes.resolve(inlineNotes, patchNotesFile);
-				if (parent != null && parent.metadata().stateDigest().equals(stateDigest)) {
-					if (notes.source() == GenerationPatchNotes.Source.EMPTY) {
-						publication = generationStore.publish(candidate, previous, parent.metadata().patchNotes());
-						committedState = candidateState;
-						committedResult = finishPublication(publication, committedState, null);
-						return committedResult;
-					}
-					candidateState = candidateState.withPatchNotesSource(notes.source());
-					publication = generationStore.publish(candidate, previous, notes.text());
-					committedState = candidateState;
-					committedResult = finishPublication(publication, committedState, notes);
-					return committedResult;
-				}
-
 				candidateState = candidateState.withPatchNotesSource(notes.source());
-				publication = generationStore.publish(candidate, previous, notes.text());
+				publication = generationStore.publish(candidate, notes.text());
 				committedState = candidateState;
-				committedResult = finishPublication(publication, committedState, notes);
-				return committedResult;
+				consumePatchNotes(notes);
+				return new Published(candidateState, currentDocument(publication), List.of(), publication.hostingPaths());
 			}
 		} catch (Exception e) {
-			if (publication != null && publication.status() == GenerationStore.PublicationStatus.PUBLISHED && committedState != null) {
-				List<String> warnings = new ArrayList<>();
-				if (committedResult instanceof Published published) warnings.addAll(published.warnings());
-				warnings.add("Publication committed, but candidate staging cleanup was incomplete");
-				return new Published(committedState, publication.record(), warnings);
-			}
-			LOGGER.error("Failed to publish modpack generation", e);
-			return new PublishFailed(e);
-		}
-	}
-
-	private PublishResult finishPublication(GenerationStore.Publication publication, CandidateState state, GenerationPatchNotes.Resolution notes) {
-		List<String> warnings = new ArrayList<>();
-		postPublication(publication, notes, warnings);
-		if (publication.status() == GenerationStore.PublicationStatus.PUBLISHED)
-			return new Published(state, publication.record(), warnings);
-		return new NoChanges(state.withoutPatchNotesSource(), publication.record(), warnings);
-	}
-
-	private void postPublication(GenerationStore.Publication publication, GenerationPatchNotes.Resolution notes, List<String> warnings) {
-		try {
-			replaceHosting(publication.hostingPaths());
-		} catch (Exception e) {
-			warnings.add("Published generation could not fully replace the active hosting map");
-			LOGGER.warn("Published generation is current but hosting replacement failed", e);
-		}
-		try {
-			cleanupLegacyCatalogue();
-		} catch (Exception e) {
-			warnings.add("Published generation is current but legacy catalogue cleanup failed");
-			LOGGER.warn("Published generation is current but legacy catalogue cleanup failed", e);
-		}
-		if (publication.status() == GenerationStore.PublicationStatus.PUBLISHED && notes != null && notes.isFileSourced()) {
-			GenerationPatchNotes.CleanupResult cleanup = notes.consumeIfUnchanged();
-			if (!cleanup.warning().isEmpty()) warnings.add(cleanup.warning());
+			if (publication == null || committedState == null) throw e;
+			return new Published(committedState, currentDocument(publication), List.of("Publication committed, but candidate staging cleanup was incomplete"), publication.hostingPaths());
 		}
 	}
 
 	public LoadResult loadLast() {
 		OperationLease operation = acquire(false);
-		if (operation == null) return new LoadBusy("Another modpack operation is already in progress");
+		if (operation == null) return new LoadResult.Rejected("Another modpack operation is already in progress", null);
 		try (operation) {
-			GenerationStore.CurrentSnapshot current = generationStore.loadCurrentAndRepair().orElseThrow(() -> new IOException("No current generation pointer exists"));
-			try {
-				replaceHosting(current.hostingPaths());
-				cleanupLegacyCatalogue();
-				return new Loaded(current.record());
-			} catch (Exception e) {
-				LOGGER.error("Failed to activate the current modpack generation", e);
-				return new LoadFailed(e);
-			}
+			GenerationStore.Current current = generationStore.loadCurrent().orElseThrow(() -> new IOException("No modpack journal exists"));
+			return bindHosting(new Loaded(currentDocument(current), generationStore.hosting()));
 		} catch (Exception e) {
 			LOGGER.error("Failed to load the current modpack generation", e);
-			return new LoadFailed(e);
+			return new LoadResult.Rejected(Throwables.detail(e), e);
 		}
 	}
 
-	public Optional<GenerationRecord> currentRecord() throws IOException {
-		return generationStore.loadCurrent().map(GenerationStore.CurrentSnapshot::record);
+	public Optional<PackDocument> currentDocument() throws IOException {
+		return generationStore.loadCurrent().map(this::currentDocument);
 	}
 
-	private CandidateState candidateState(Optional<GenerationStore.CurrentSnapshot> previous, ModpackCandidate candidate, String stateDigest,
-			GenerationDiff diff, GenerationPatchNotes.Source source) {
-		return new CandidateState(previous.map(GenerationStore.CurrentSnapshot::record), stateDigest, diff, CandidateSummary.from(candidate, diff), Optional.of(source));
+	private PackDocument currentDocument(GenerationStore.Current current) {
+		return new PackDocument(current.manifest(), current.contentToken(), current.policySha1(), current.createdAt(), current.ledger());
 	}
 
-	private ModpackCandidate buildCandidate(Optional<GenerationStore.CurrentSnapshot> previous) throws IOException, CandidateBuildException {
+	private PackDocument currentDocument(GenerationStore.Publication publication) {
+		return new PackDocument(publication.manifest(), publication.entry().contentToken(), publication.entry().policySha1(), publication.entry().createdAt(), publication.ledger());
+	}
+
+	private CandidateState candidateState(GenerationStore.Current current, ModpackCandidate candidate, String token, GenerationDiff diff, Optional<GenerationPatchNotes.Source> source) {
+		return new CandidateState(Optional.ofNullable(current).map(this::currentDocument), token, diff, CandidateSummary.from(candidate, diff), source);
+	}
+
+	private ModpackCandidate buildCandidate(GenerationStore.Current previous, boolean materializeMissingObjects) throws IOException, CandidateBuildException {
 		validateConfiguration();
 		prepareDirectories();
-		String modpackId = previous.map(snapshot -> ModpackId.requireValid(snapshot.record().manifest().modpackId())).orElseGet(ModpackId::generate);
-		try (FileMetadataCache fileMetadataCache = FileMetadataCache.open(dataLayout.fileMetadataDirectory());
-				ModFileCache modFileCache = ModFileCache.open(dataLayout.modMetadataDirectory())) {
+		String modpackId = previous == null ? ModpackId.generate() : ModpackId.requireValid(previous.manifest().modpackId());
+		try (FileCache fileCache = FileCache.open(dataLayout.fileCacheDirectory());
+				ModFileCache modFileCache = ModFileCache.open(dataLayout.modCacheDirectory())) {
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
-					LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups,
+					serverConfig.syncLoaderVersion ? LOADER_VERSION : null, MC_VERSION, serverRoot, groupRoot, serverConfig.groups,
 					serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()), creationExecutor,
-					generationStore.objectRoot(), fileMetadataCache, modFileCache);
-			return candidateScan.scan(request);
+					generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects);
+			ModpackCandidate candidate = candidateScan.scan(request);
+			for (ExcludedCandidate exclusion : candidate.exclusions())
+				LOGGER.info("Excluded from the modpack: {}/{} - {} ({})", exclusion.source().groupId(), exclusion.source().logicalPath(),
+						exclusion.reason().name().toLowerCase(Locale.ROOT), exclusion.message());
+			return candidate;
 		}
 	}
 
@@ -308,15 +281,27 @@ public class ModpackExecutor {
 		}
 	}
 
-	private void replaceHosting(GenerationHosting paths) {
-		if (hostServer != null) {
-			hostServer.replacePaths(paths);
+	/**
+	 * Hosting follows the committed generation of every outcome that carries one, bound once here inside the operation lease instead of remembered per code path; a failed swap is reported on the committed outcome, never
+	 * as a rejection of a durable commit.
+	 */
+	private <R extends HostingOutcome> R bindHosting(R result) {
+		if (!(result instanceof CommittedOutcome committed)) return result;
+		try {
+			hostingBinder.bind(committed.hosting());
+		} catch (Exception e) {
+			LOGGER.error("The generation committed, but the hosting swap failed", e);
+			@SuppressWarnings("unchecked")
+			R failed = (R) committed.withHostingFailure(e);
+			return failed;
 		}
+		return result;
 	}
 
-	private void cleanupLegacyCatalogue() throws IOException {
-		Path legacyCatalogue = groupRoot.resolve(MODPACK_CONTENT_FILE).normalize();
-		if (Files.deleteIfExists(legacyCatalogue)) LOGGER.debug("Removed stale generated catalogue");
+	private void consumePatchNotes(GenerationPatchNotes.Resolution notes) {
+		if (!notes.isFileSourced()) return;
+		GenerationPatchNotes.CleanupResult cleanup = notes.consumeIfUnchanged();
+		if (!cleanup.warning().isEmpty()) LOGGER.warn("Patch notes cleanup: {}", cleanup.warning());
 	}
 
 	private static void validateConfiguration() throws CandidateBuildException {
@@ -359,170 +344,167 @@ public class ModpackExecutor {
 		creationExecutor.shutdown();
 	}
 
-	public record CandidateSummary(int groups, int files, int objects, int exclusions, int shadows, GenerationDiff.Summary diff) {
+	public record CandidateSummary(int groups, int files, int objects, List<ExcludedCandidate> excluded, GenerationDiff.Summary diff) {
 		public CandidateSummary {
-			if (groups < 0 || files < 0 || objects < 0 || exclusions < 0 || shadows < 0) throw new IllegalArgumentException("Negative generation summary count");
-			diff = Objects.requireNonNull(diff);
+			if (groups < 0 || files < 0 || objects < 0) throw new IllegalArgumentException("Negative generation summary count");
+			Objects.requireNonNull(excluded, "excluded");
+			excluded = List.copyOf(excluded);
+			Objects.requireNonNull(diff, "diff");
+		}
+
+		public int exclusions() {
+			return excluded.size();
 		}
 
 		static CandidateSummary from(ModpackCandidate candidate, GenerationDiff diff) {
 			int files = candidate.manifest().groups().values().stream().mapToInt(group -> group.files().size()).sum();
-			return new CandidateSummary(candidate.manifest().groups().size(), files, candidate.objects().size(), candidate.exclusions().size(), candidate.shadows().size(), diff.summary());
+			return new CandidateSummary(candidate.manifest().groups().size(), files, candidate.objects().size(), candidate.exclusions(), diff.summary());
 		}
 
 		static CandidateSummary empty() {
-			return new CandidateSummary(0, 0, 0, 0, 0, new GenerationDiff.Summary(0, 0, 0, 0, 0));
+			return new CandidateSummary(0, 0, 0, List.of(), new GenerationDiff.Summary(0, 0, 0, 0, 0));
 		}
 	}
 
-	public record CandidateState(Optional<GenerationRecord> parent, String candidateStateDigest, GenerationDiff diff, CandidateSummary summary,
+	public record CandidateState(Optional<PackDocument> parent, String contentToken, GenerationDiff diff, CandidateSummary summary,
 			Optional<GenerationPatchNotes.Source> patchNotesSource) {
 		public CandidateState {
-			parent = parent == null ? Optional.empty() : parent;
-			if (!HashUtils.isCanonicalSha1(candidateStateDigest)) throw new IllegalArgumentException("Invalid candidate state digest");
-			diff = Objects.requireNonNull(diff);
-			summary = Objects.requireNonNull(summary);
-			patchNotesSource = patchNotesSource == null ? Optional.empty() : patchNotesSource;
+			Objects.requireNonNull(parent, "parent");
+			if (!HashUtils.isCanonicalSha1(contentToken)) throw new IllegalArgumentException("Invalid candidate content token");
+			Objects.requireNonNull(diff, "diff");
+			Objects.requireNonNull(summary, "summary");
+			Objects.requireNonNull(patchNotesSource, "patch notes source");
 		}
 
 		CandidateState withPatchNotesSource(GenerationPatchNotes.Source source) {
-			return new CandidateState(parent, candidateStateDigest, diff, summary, Optional.of(source));
+			return new CandidateState(parent, contentToken, diff, summary, Optional.of(source));
 		}
 
 		CandidateState withoutPatchNotesSource() {
-			return new CandidateState(parent, candidateStateDigest, diff, summary, Optional.empty());
+			return new CandidateState(parent, contentToken, diff, summary, Optional.empty());
 		}
 	}
 
-	public sealed interface PreviewResult permits PreviewReady, PreviewBusy, PreviewFailed {}
+	public sealed interface PreviewResult permits PreviewReady, PreviewResult.Rejected {
+
+		/** The preview produced no generation; the detail explains the refusal or failure. */
+		record Rejected(String detail, Throwable cause) implements PreviewResult {
+			public Rejected {
+				detail = Objects.requireNonNull(detail);
+			}
+		}
+	}
 
 	public record PreviewReady(CandidateState state) implements PreviewResult {
 		public PreviewReady {
-			state = Objects.requireNonNull(state);
+			Objects.requireNonNull(state, "state");
 			if (state.patchNotesSource().isEmpty()) throw new IllegalArgumentException("Preview result requires a resolved patch-note source");
 		}
 	}
 
-	public record PreviewBusy(String detail) implements PreviewResult {
-		public PreviewBusy {
-			detail = Objects.requireNonNull(detail);
+	public sealed interface RevertResult extends HostingOutcome permits Reverted, RevertResult.Rejected {
+
+		/** The revert produced no generation; the detail explains the refusal or failure. */
+		record Rejected(String detail, Throwable cause) implements RevertResult {
+			public Rejected {
+				detail = Objects.requireNonNull(detail);
+			}
 		}
 	}
 
-	public record PreviewFailed(Throwable failure) implements PreviewResult {
-		public PreviewFailed {
-			failure = Objects.requireNonNull(failure);
-		}
-	}
-
-	public sealed interface RevertResult permits Reverted, RevertBusy, RevertInvalidTarget, RevertFailed {}
-
-	public record Reverted(GenerationRecord current, String targetGenerationId, List<String> warnings) implements RevertResult {
+	public record Reverted(PackDocument current, long targetSeq, List<String> warnings, GenerationHosting hosting, Throwable hostingSwapFailure) implements RevertResult, CommittedOutcome {
 		public Reverted {
-			current = Objects.requireNonNull(current);
-			if (!HashUtils.isCanonicalSha1(targetGenerationId)) throw new IllegalArgumentException("Invalid rollback target generation ID");
+			Objects.requireNonNull(current, "current");
+			if (targetSeq < 1) throw new IllegalArgumentException("Invalid rollback target sequence");
 			warnings = warnings == null ? List.of() : List.copyOf(warnings);
-			if (!targetGenerationId.equals(current.metadata().rollbackTargetGenerationId())) throw new IllegalArgumentException("Revert result target does not match current metadata");
+			Objects.requireNonNull(hosting, "hosting");
+		}
+
+		public Reverted(PackDocument current, long targetSeq, List<String> warnings, GenerationHosting hosting) {
+			this(current, targetSeq, warnings, hosting, null);
+		}
+
+		@Override
+		public Reverted withHostingFailure(Throwable failure) {
+			return new Reverted(current, targetSeq, warnings, hosting, failure);
 		}
 	}
 
-	public record RevertBusy(String detail) implements RevertResult {
-		public RevertBusy {
-			detail = Objects.requireNonNull(detail);
+	public sealed interface PublishResult extends HostingOutcome permits Published, NoChanges, PublishResult.Rejected {
+
+		/** The publication produced no generation; the detail explains the refusal or failure. */
+		record Rejected(String detail, Throwable cause) implements PublishResult {
+			public Rejected {
+				detail = Objects.requireNonNull(detail);
+			}
 		}
 	}
 
-	public record RevertInvalidTarget(String detail) implements RevertResult {
-		public RevertInvalidTarget {
-			detail = Objects.requireNonNull(detail);
-		}
-	}
-
-	public record RevertFailed(Throwable failure) implements RevertResult {
-		public RevertFailed {
-			failure = Objects.requireNonNull(failure);
-		}
-	}
-
-	public sealed interface PublishResult permits Published, NoChanges, PublishBusy, PublishInvalidGuard, PublishGuardUnsupported, PublishGuardMismatch, PublishFailed {}
-
-	public record Published(CandidateState state, GenerationRecord current, List<String> warnings) implements PublishResult {
+	public record Published(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting, Throwable hostingSwapFailure) implements PublishResult, CommittedOutcome {
 		public Published {
-			state = Objects.requireNonNull(state);
-			current = Objects.requireNonNull(current);
+			Objects.requireNonNull(state, "state");
+			Objects.requireNonNull(current, "current");
 			warnings = warnings == null ? List.of() : List.copyOf(warnings);
-			if (!current.metadata().stateDigest().equals(state.candidateStateDigest()))
-				throw new IllegalArgumentException("Published generation state does not match the candidate");
-			String parentId = state.parent().map(record -> record.metadata().generationId()).orElse(GenerationMetadata.ROOT_PARENT);
-			if (!current.metadata().parentGenerationId().equals(parentId))
-				throw new IllegalArgumentException("Published generation parent does not match the candidate base");
+			Objects.requireNonNull(hosting, "hosting");
+			if (!current.contentToken().equals(state.contentToken()))
+				throw new IllegalArgumentException("Published generation content does not match the candidate");
 			if (state.patchNotesSource().isEmpty()) throw new IllegalArgumentException("Published generation requires a resolved patch-note source");
 		}
+
+		public Published(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting) {
+			this(state, current, warnings, hosting, null);
+		}
+
+		@Override
+		public Published withHostingFailure(Throwable failure) {
+			return new Published(state, current, warnings, hosting, failure);
+		}
 	}
 
-	public record NoChanges(CandidateState state, GenerationRecord current, List<String> warnings) implements PublishResult {
+	public record NoChanges(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting, Throwable hostingSwapFailure) implements PublishResult, CommittedOutcome {
 		public NoChanges {
-			state = Objects.requireNonNull(state);
-			current = Objects.requireNonNull(current);
+			Objects.requireNonNull(state, "state");
+			Objects.requireNonNull(current, "current");
 			warnings = warnings == null ? List.of() : List.copyOf(warnings);
-			if (!state.diff().isEmpty()) throw new IllegalArgumentException("No-change result must have an empty diff");
-			if (!current.metadata().stateDigest().equals(state.candidateStateDigest()))
-				throw new IllegalArgumentException("Current generation state does not match the unchanged candidate");
-			if (state.parent().isEmpty() || !state.parent().orElseThrow().equals(current))
-				throw new IllegalArgumentException("No-change result must retain the current generation as its candidate base");
+			Objects.requireNonNull(hosting, "hosting");
+			if (!current.contentToken().equals(state.contentToken()))
+				throw new IllegalArgumentException("Current generation content does not match the unchanged candidate");
 			if (state.patchNotesSource().isPresent()) throw new IllegalArgumentException("No-change result cannot resolve patch notes");
 		}
-	}
 
-	public record PublishBusy(String detail) implements PublishResult {
-		public PublishBusy {
-			detail = Objects.requireNonNull(detail);
+		public NoChanges(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting) {
+			this(state, current, warnings, hosting, null);
+		}
+
+		@Override
+		public NoChanges withHostingFailure(Throwable failure) {
+			return new NoChanges(state, current, warnings, hosting, failure);
 		}
 	}
 
-	public record PublishInvalidGuard(String detail) implements PublishResult {
-		public PublishInvalidGuard {
-			detail = Objects.requireNonNull(detail);
+	public sealed interface LoadResult extends HostingOutcome permits Loaded, LoadResult.Rejected {
+
+		/** The load produced no generation; the detail explains the refusal or failure. */
+		record Rejected(String detail, Throwable cause) implements LoadResult {
+			public Rejected {
+				detail = Objects.requireNonNull(detail);
+			}
 		}
 	}
 
-	public record PublishGuardUnsupported(String detail) implements PublishResult {
-		public PublishGuardUnsupported {
-			detail = Objects.requireNonNull(detail);
-		}
-	}
-
-	public record PublishGuardMismatch(CandidateState state, String detail) implements PublishResult {
-		public PublishGuardMismatch {
-			state = Objects.requireNonNull(state);
-			detail = Objects.requireNonNull(detail);
-			if (state.patchNotesSource().isPresent()) throw new IllegalArgumentException("Guard mismatch cannot resolve patch notes");
-		}
-	}
-
-	public record PublishFailed(Throwable failure) implements PublishResult {
-		public PublishFailed {
-			failure = Objects.requireNonNull(failure);
-		}
-	}
-
-	public sealed interface LoadResult permits Loaded, LoadBusy, LoadFailed {}
-
-	public record Loaded(GenerationRecord current) implements LoadResult {
+	public record Loaded(PackDocument current, GenerationHosting hosting, Throwable hostingSwapFailure) implements LoadResult, CommittedOutcome {
 		public Loaded {
-			current = Objects.requireNonNull(current);
+			Objects.requireNonNull(current, "current");
+			Objects.requireNonNull(hosting, "hosting");
 		}
-	}
 
-	public record LoadBusy(String detail) implements LoadResult {
-		public LoadBusy {
-			detail = Objects.requireNonNull(detail);
+		public Loaded(PackDocument current, GenerationHosting hosting) {
+			this(current, hosting, null);
 		}
-	}
 
-	public record LoadFailed(Throwable failure) implements LoadResult {
-		public LoadFailed {
-			failure = Objects.requireNonNull(failure);
+		@Override
+		public Loaded withHostingFailure(Throwable failure) {
+			return new Loaded(current, hosting, failure);
 		}
 	}
 }

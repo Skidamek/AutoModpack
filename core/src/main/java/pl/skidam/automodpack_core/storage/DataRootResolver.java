@@ -1,18 +1,25 @@
 package pl.skidam.automodpack_core.storage;
 
+import static pl.skidam.automodpack_core.Constants.LOADER_MANAGER;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.util.Locale;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.StorageJsons;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.utils.DurableFiles;
+import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 /** Resolves the one shared-or-local AutoModpack data root for an instance. */
 public final class DataRootResolver {
+	private static final AtomicReference<Path> loggedRoot = new AtomicReference<>();
 	public record Layout(Path root) {
 		public Layout {
 			root = Objects.requireNonNull(root, "data root").toAbsolutePath().normalize();
@@ -22,12 +29,25 @@ public final class DataRootResolver {
 			return root.resolve("objects").normalize();
 		}
 
-		public Path fileMetadataDirectory() {
-			return root.resolve("file-metadata").normalize();
+		public Path objectFile(String sha1) {
+			return DataRootResolver.objectFile(objectsDirectory(), sha1);
 		}
 
-		public Path modMetadataDirectory() {
-			return root.resolve("mod-metadata").normalize();
+		/** In-flight downloads stage here before verified promotion into the object store. */
+		public Path stagingDirectory() {
+			return root.resolve("staging").normalize();
+		}
+
+		public Path fileCacheDirectory() {
+			return root.resolve("file-cache").normalize();
+		}
+
+		public Path modCacheDirectory() {
+			return root.resolve("mod-cache").normalize();
+		}
+
+		public Path platformCacheDirectory() {
+			return root.resolve("platform-cache").normalize();
 		}
 
 		public Path packsDirectory() {
@@ -41,11 +61,21 @@ public final class DataRootResolver {
 		public Path knownHostsLockFile() {
 			return root.resolve("known-hosts.json.lock").normalize();
 		}
+
+		public Path objectOwnersDirectory() {
+			return root.resolve("object-owners").normalize();
+		}
+
+		public Path objectOwnershipLockFile() {
+			return root.resolve("object-owners.lock").normalize();
+		}
 	}
 
-	public record Location(Path root, boolean shared) {
+	public record Location(Path root, String ownerId, Path ownerPath) {
 		public Location {
 			root = Objects.requireNonNull(root, "root").toAbsolutePath().normalize();
+			ownerId = HashUtils.normalizeSha1(Objects.requireNonNull(ownerId, "owner ID"));
+			ownerPath = Objects.requireNonNull(ownerPath, "owner path").toAbsolutePath().normalize();
 		}
 
 		public Layout layout() {
@@ -55,73 +85,140 @@ public final class DataRootResolver {
 
 	private DataRootResolver() {}
 
+	/** Resolves with the running process's role; detached helpers and tests without a loader default to the client selection. */
 	public static Location resolve(Path gameDirectory) {
-		Path gameRoot = Objects.requireNonNull(gameDirectory, "game directory").toAbsolutePath().normalize();
-		Path automodpackDirectory = gameRoot.resolve(StoragePaths.AUTOMODPACK_DIR).normalize();
-		Path marker = automodpackDirectory.resolve("data-root.json").normalize();
+		return resolve(gameDirectory, LOADER_MANAGER == null ? null : LOADER_MANAGER.getEnvironmentType());
+	}
+
+	/**
+	 * Resolves the one AutoModpack data root for an instance: the content-addressed bytes, their coordination state,
+	 * and the host trust. Dedicated servers own their cache at {@code automodpack/server/data}; every other process
+	 * shares the platform data root, so instances on one machine reuse downloaded bytes; an explicit
+	 * {@code AUTOMODPACK_DATA_ROOT} always wins. The instance's own answer to "what is installed here" never lives here.
+	 */
+	public static Location resolve(Path gameDirectory, LoaderManagerService.EnvironmentType environment) {
+		Path requestedRoot = Objects.requireNonNull(gameDirectory, "game directory").toAbsolutePath().normalize();
 		try {
-			if (Files.exists(marker, LinkOption.NOFOLLOW_LINKS)) return loadPinned(marker);
-			Files.createDirectories(automodpackDirectory);
-			Path sharedRoot = platformDataRoot();
-			if (probe(sharedRoot)) {
-				Location location = new Location(sharedRoot, true);
-				writePinned(marker, location);
-				return location;
-			}
-			Path fallback = automodpackDirectory.resolve("data").normalize();
-			if (!probe(fallback)) throw new IOException("Neither shared nor local AutoModpack data storage is writable");
-			Location location = new Location(fallback, false);
-			writePinned(marker, location);
-			return location;
+			Path gameRoot = canonicalGameRoot(requestedRoot);
+			Path automodpackDirectory = gameRoot.resolve(StoragePaths.AUTOMODPACK_DIR).normalize();
+			createLocalDataDirectory(gameRoot, automodpackDirectory);
+			Path root = selectRoot(gameRoot, environment);
+			String localFailure = probe(root);
+			if (localFailure != null) throw new IOException("AutoModpack data storage is not writable: " + localFailure);
+			return new Location(root, computeOwnerIdentity(gameRoot), gameRoot);
 		} catch (IOException e) {
-			throw new IllegalStateException("Cannot resolve AutoModpack data storage for " + gameRoot, e);
+			throw new IllegalStateException("Cannot resolve AutoModpack data storage for " + requestedRoot, e);
 		}
 	}
 
-	private static Location loadPinned(Path marker) throws IOException {
-		if (Files.isSymbolicLink(marker) || !Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS))
-			throw new IOException("AutoModpack data-root marker is not a regular file: " + marker);
-		StorageJsons.DataRootFields fields = ConfigTools.read(marker, StorageJsons.DataRootFields.class).orElseThrow(() -> new IOException("AutoModpack data-root marker is empty"));
-		if (fields.root == null || fields.root.isBlank()) throw new IOException("AutoModpack data-root marker has no root");
-		Path root = Path.of(fields.root).toAbsolutePath().normalize();
-		if (!probe(root)) throw new IOException("Pinned AutoModpack data root is unavailable: " + root);
-		return new Location(root, fields.shared);
+	/** Git-style content-addressed path {@code objects/<aa>/<rest-of-sha1>}. */
+	public static Path objectFile(Path objectsDirectory, String sha1) {
+		String hash = HashUtils.normalizeSha1(sha1);
+		Path root = Objects.requireNonNull(objectsDirectory, "objects directory").toAbsolutePath().normalize();
+		Path file = root.resolve(hash.substring(0, 2)).resolve(hash.substring(2)).normalize();
+		if (!file.startsWith(root) || !root.equals(file.getParent().getParent())) throw new IllegalArgumentException("Object path escaped the object store: " + sha1);
+		return file;
 	}
 
-	private static void writePinned(Path marker, Location location) throws IOException {
-		StorageJsons.DataRootFields fields = new StorageJsons.DataRootFields();
-		fields.root = location.root().toString();
-		fields.shared = location.shared();
-		ConfigTools.writeAtomic(marker, fields);
+	public static boolean isObjectFile(Path objectsDirectory, Path file) {
+		return objectHash(objectsDirectory, file) != null;
 	}
 
-	private static boolean probe(Path root) {
+	/** Reconstructs the SHA-1 from a Git-style object path, or {@code null} if the path is not an object file. */
+	public static String objectHash(Path objectsDirectory, Path file) {
+		if (file == null) return null;
+		Path root = Objects.requireNonNull(objectsDirectory, "objects directory").toAbsolutePath().normalize();
+		Path normalized = file.toAbsolutePath().normalize();
+		Path shard = normalized.getParent();
+		if (shard == null || !root.equals(shard.getParent())) return null;
+		String prefix = shard.getFileName().toString();
+		String rest = normalized.getFileName().toString();
+		if (prefix.length() != 2 || rest.length() != HashUtils.SHA1_HEX_LENGTH - 2) return null;
+		String hash = prefix + rest;
+		if (!HashUtils.isCanonicalSha1(hash)) return null;
+		return objectFile(root, hash).equals(normalized) ? hash : null;
+	}
+
+	private static Path canonicalGameRoot(Path requestedRoot) throws IOException {
+		Files.createDirectories(requestedRoot);
+		Path realRoot = requestedRoot.toRealPath();
+		if (!Files.isDirectory(realRoot, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Game directory is not a directory: " + requestedRoot);
+		return realRoot;
+	}
+
+	private static void createLocalDataDirectory(Path gameRoot, Path directory) throws IOException {
+		Files.createDirectories(directory);
+		if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) throw new IOException("AutoModpack data directory is not a regular directory: " + directory);
+		Path realDirectory = directory.toRealPath();
+		if (!gameRoot.equals(realDirectory.getParent())) throw new IOException("AutoModpack data directory resolves outside the game directory: " + directory);
+	}
+
+	private static Path selectRoot(Path gameRoot, LoaderManagerService.EnvironmentType environment) throws IOException {
+		Path configured = configuredRoot(gameRoot);
+		if (configured != null) {
+			String failure = probe(configured);
+			if (failure != null) throw new IOException("Configured AutoModpack data root is unusable: " + failure);
+			logRootOnce("Using the configured AutoModpack data root: {}", configured);
+			return configured;
+		}
+		if (environment == LoaderManagerService.EnvironmentType.SERVER) {
+			Path serverRoot = gameRoot.resolve(StoragePaths.SERVER_DATA_DIR).normalize();
+			logRootOnce("AutoModpack server data root: {}", serverRoot);
+			return serverRoot;
+		}
+		Path sharedRoot = platformDataRoot();
+		String sharedFailure = probe(sharedRoot);
+		if (sharedFailure == null) {
+			logRootOnce("AutoModpack shared data root: {}", sharedRoot);
+			return sharedRoot;
+		}
+		Path clientRoot = gameRoot.resolve(StoragePaths.CLIENT_DATA_DIR).normalize();
+		LOGGER.warn("Shared AutoModpack data root {} is unusable ({}); falling back to instance-local {}", sharedRoot, sharedFailure, clientRoot);
+		return clientRoot;
+	}
+
+	private static void logRootOnce(String message, Path root) {
+		Path previous = loggedRoot.getAndSet(root);
+		if (!root.equals(previous)) LOGGER.info(message, root);
+	}
+
+	private static Path configuredRoot(Path gameRoot) {
+		String value = firstNonBlank(System.getProperty(StoragePaths.DATA_ROOT_PROPERTY), System.getenv(StoragePaths.DATA_ROOT_ENV));
+		if (value == null) return null;
+		Path configured = Path.of(value);
+		return (configured.isAbsolute() ? configured : gameRoot.resolve(configured)).toAbsolutePath().normalize();
+	}
+
+	private static String firstNonBlank(String property, String env) {
+		if (property != null && !property.isBlank()) return property;
+		if (env != null && !env.isBlank()) return env;
+		return null;
+	}
+
+	/** Identifies a game installation across symlink aliases without trusting a user-controlled path string. */
+	private static String computeOwnerIdentity(Path gameRoot) throws IOException {
+		Path realRoot = gameRoot.toRealPath();
+		Object fileKey = Files.readAttributes(realRoot, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS).fileKey();
+		return HashUtils.sha1(fileKey == null ? "real-path\n" + realRoot : "file-key\n" + fileKey);
+	}
+
+	/** Returns null when the root is usable, otherwise a one-line reason it is not. */
+	private static String probe(Path root) {
+		Path normalized = root.toAbsolutePath().normalize();
+		if (Files.exists(normalized, LinkOption.NOFOLLOW_LINKS) && Files.isSymbolicLink(normalized)) return "symbolic link";
 		try {
-			Path normalized = root.toAbsolutePath().normalize();
-			if (Files.exists(normalized, LinkOption.NOFOLLOW_LINKS) && Files.isSymbolicLink(normalized)) return false;
 			Files.createDirectories(normalized);
-			if (!Files.isDirectory(normalized, LinkOption.NOFOLLOW_LINKS)) return false;
-			Path probe = Files.createTempFile(normalized, ".write-probe-", ".tmp");
+			if (!Files.isDirectory(normalized, LinkOption.NOFOLLOW_LINKS)) return "not a directory";
+			Path probe = Files.createTempFile(normalized, ".write-probe-", DurableFiles.TEMPORARY_SUFFIX);
 			Files.writeString(probe, "AutoModpack\n", StandardCharsets.UTF_8);
 			Files.deleteIfExists(probe);
-			return true;
+			return null;
 		} catch (IOException | RuntimeException e) {
-			return false;
+			return e.toString();
 		}
 	}
 
 	private static Path platformDataRoot() {
-		String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-		Path base;
-		if (os.contains("win")) {
-			String localAppData = System.getenv("LOCALAPPDATA");
-			base = localAppData == null || localAppData.isBlank() ? Path.of(System.getProperty("user.home"), "AppData", "Local") : Path.of(localAppData);
-		} else if (os.contains("mac") || os.contains("darwin")) {
-			base = Path.of(System.getProperty("user.home"), "Library", "Application Support");
-		} else {
-			String xdgDataHome = System.getenv("XDG_DATA_HOME");
-			base = xdgDataHome == null || xdgDataHome.isBlank() ? Path.of(System.getProperty("user.home"), ".local", "share") : Path.of(xdgDataHome);
-		}
-		return base.resolve("AutoModpack").resolve("data").toAbsolutePath().normalize();
+		return PlatformUtils.userDataDirectory().resolve("automodpack").resolve("data").toAbsolutePath().normalize();
 	}
 }
