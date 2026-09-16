@@ -44,9 +44,10 @@ public class ScreenImpl implements ScreenService {
 	public static void updatePendingRestartToast() {
 		if (!SessionUpdateState.hasAppliedContentNotLoaded()) return;
 		executeOnClient(() -> {
-			Toast toast = new SystemToast(SystemToast.SystemToastId.PACK_LOAD_FAILURE, VersionedText.translatable("automodpack.restart.toast.title"),
-					VersionedText.translatable("automodpack.restart.toast.description"));
-			VersionedToasts.add(toast);
+			var title = VersionedText.translatable("automodpack.restart.toast.title");
+			var description = VersionedText.translatable("automodpack.restart.toast.description");
+			Toast toast = new SystemToast(SystemToast.SystemToastId.PACK_LOAD_FAILURE, title, description);
+			VersionedToasts.add(toast, title, description);
 		});
 	}
 

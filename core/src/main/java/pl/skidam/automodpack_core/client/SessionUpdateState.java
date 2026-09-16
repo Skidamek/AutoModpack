@@ -11,6 +11,11 @@ public final class SessionUpdateState {
 		appliedContentNotLoaded = true;
 	}
 
+	/** This process entered a world, so a later disconnect is not a failed join of unloaded content. */
+	public static void worldEntered() {
+		appliedContentNotLoaded = false;
+	}
+
 	public static boolean hasAppliedContentNotLoaded() {
 		return appliedContentNotLoaded;
 	}

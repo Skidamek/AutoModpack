@@ -492,6 +492,18 @@ def _client_start_timeout(ctx: Context, step):
 def _v_connect(ctx: Context, step):
     host = ctx.resolve(step.get("host") or "${server.host}")
     timeout = parse_duration(step.get("timeout"), default=90)
+    if str(step.get("expect") or "") == "disconnect":
+        ctx.bridge.connect(host)
+        deadline = time.monotonic() + timeout
+        last_screen = "<not observed>"
+        while time.monotonic() < deadline:
+            _assert_running(ctx.cli_name)
+            screen = str(ctx.bridge.gui().get("screenClass") or "")
+            last_screen = screen or "<none>"
+            if _is_connection_failure_screen(screen):
+                return
+            _jitter_sleep(0.5)
+        raise TimeoutError(f"Did not reach a disconnect screen joining {host}; last_screen={last_screen!r}")
     deadline = time.monotonic() + timeout
     _TITLE = ("TitleScreen", "class_442")
     last_screen = "<not observed>"

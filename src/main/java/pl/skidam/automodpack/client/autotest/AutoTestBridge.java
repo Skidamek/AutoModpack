@@ -24,6 +24,7 @@ import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
+import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
 import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack.client.ui.widget.RowViewport;
@@ -210,6 +211,14 @@ public final class AutoTestBridge {
 		o.add("textFields", elementsJson(elements.textFields()));
 		o.add("other", elementsJson(elements.other()));
 		o.add("elements", elementsJson(elements.all()));
+		JsonArray toasts = new JsonArray();
+		for (VersionedToasts.Shown toast : VersionedToasts.shown()) {
+			JsonObject shown = new JsonObject();
+			shown.addProperty("title", toast.title());
+			shown.addProperty("description", toast.description());
+			toasts.add(shown);
+		}
+		o.add("toasts", toasts);
 		return o;
 	}
 

@@ -76,6 +76,21 @@ flow:
     name: verify the never-cached optional file was installed
     path: config/amp-installed-optional.txt
     content: "downloaded on selection\n"
+  - do: click
+    name: return to multiplayer without restarting
+    select: { key: automodpack.restart.cancel }
+  - do: wait_for
+    name: land on the multiplayer hub after skipping restart
+    until: { screen: Play Multiplayer }
+  - do: connect
+    name: fail a join before a world exists so the restart nudge can fire
+    host: 127.0.0.1:1
+    expect: disconnect
+    timeout: 60s
+  - do: wait_for
+    name: show the restart nudge toast on the pre-world disconnect
+    timeout: 30s
+    until: { toast: Modpack updated }
   - do: quit
     name: stop after the installed group switch succeeded
 

@@ -10,10 +10,9 @@ import net.minecraft.client.gui.screens.DisconnectedScreen;
 import pl.skidam.automodpack.client.ScreenImpl;
 
 /**
- * Reminds about a pending restart whenever the game builds a disconnect screen: a server kick in any
- * phase is the one moment the reminder answers, and a voluntary quit never constructs one. Injecting
- * the screen instead of the per-phase disconnect listeners keeps one target that resolves on every
- * supported version, including the ones without a configuration phase.
+ * Reminds about a pending restart when a join dies before a world exists. Login, configuration, and
+ * the first play packet all build this screen; a voluntary quit does not. The pending flag is cleared
+ * when a world is entered, so an in-world kick stays quiet.
  */
 @Mixin(DisconnectedScreen.class)
 public class DisconnectedScreenMixin {
