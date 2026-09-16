@@ -79,7 +79,7 @@ produces this pack for clients:
 
 What the example shows:
 
-- `mods/*.jar` matches every jar in the server's `mods` folder. The AutoModpack jar itself stays out; clients receive it through its own update flow.
+- `mods/*.jar` matches every jar in the server's `mods` folder. The AutoModpack jar itself stays out: clients update it through Modrinth to match the version the server runs, never through the pack. See [AutoModpack's own updates](how-it-works/client-updates#automodpacks-own-updates).
 - Both sources contained `mods/fabric-api.jar` with different versions, and the host-modpack copy won. When the same path exists in both sources, the group directory decides.
 - `kubejs/server_scripts/**` is excluded, so the server's scripts stay on the server.
 - `options.txt` and everything under `config` in the pack is editable because `allowEditsInFiles` says so.
@@ -97,7 +97,7 @@ Remove the file from the server, or keep it on the server and add it to `exclude
 
 ## What never ships
 
-- AutoModpack's own jar. Clients update it separately from the pack.
+- AutoModpack's own jar. `/automodpack generate` never packs it and never publishes its updates: clients follow the AutoModpack version the server runs and pick the matching release up from Modrinth. To update players, update the jar on the server, restart, and clients sync to it on their next connection. The details, including `syncAutoModpackVersion` and `selfUpdater`, are in [AutoModpack's own updates](how-it-works/client-updates#automodpacks-own-updates).
 - Mods whose metadata declares them server-side, when `autoExcludeServerSideMods` is on (default).
 - Empty, hidden, `.tmp`, `.disabled`, and `.bak` files, when `autoExcludeUnnecessaryFiles` is on (default). The `automodpack/` namespace and Windows-reserved device names are always left out.
 - The paths `saves/`, `screenshots/`, `logs/`, and `automodpack/` can never be claimed by the pack.

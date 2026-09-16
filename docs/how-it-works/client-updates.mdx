@@ -38,4 +38,4 @@ When a file leaves the pack, clients remove their copy only when the generation'
 
 ## AutoModpack's own updates
 
-Clients follow the AutoModpack version the server runs when `syncAutoModpackVersion` is on, updating or downgrading through Modrinth. A client with `selfUpdater` on also checks Modrinth for newer releases on its own. Updates stage a version swap and apply it on restart, and the mod never downgrades a client below version 4.0.0. Both settings are in the [client config](../configuration/client-config).
+Clients follow the AutoModpack version the server runs when `syncAutoModpackVersion` is on, updating or downgrading through Modrinth. This flow never runs through the pack: `/automodpack generate` excludes the AutoModpack jar, so the jar a client loads depends only on the server's version, not on pack content. A client with `selfUpdater` on also checks Modrinth for newer releases on its own. Updates stage a version swap and apply it on restart, and the mod never downgrades a client below version 5.0.0. Both settings are in the [client config](../configuration/client-config).

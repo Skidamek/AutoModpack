@@ -32,9 +32,9 @@ public class SelfUpdater {
 	/** The shared-CAS ownership component pinning an in-flight self-update download. */
 	private static final String SELF_UPDATE_OWNER = "selfupdate";
 
-	// Hardcoded floor: 4.0.0 Stable.
-	// Logic: 4.0.0-beta1 < 4.0.0 Stable. This prevents downgrading to unsafe betas.
-	private static final SemanticVersion MINIMUM_SAFE_VERSION = new SemanticVersion(4, 0, 0, "release", Integer.MAX_VALUE);
+	// Hardcoded floor: 5.0.0 Stable.
+	// Logic: 5.0.0-beta1 < 5.0.0 Stable. This prevents downgrading to unsafe betas.
+	private static final SemanticVersion MINIMUM_SAFE_VERSION = new SemanticVersion(5, 0, 0, "release", Integer.MAX_VALUE);
 
 	public static boolean update() {
 		return update(null);
@@ -146,15 +146,15 @@ public class SelfUpdater {
 
 	/**
 	 * Checks if the target update is safe.
-	 * Prevents downgrading below 4.0.0 Stable.
+	 * Prevents downgrading below 5.0.0 Stable.
 	 * * Logic:
-	 * 4.0.0 (Stable) is SAFE.
-	 * 4.1.0 (Stable) is SAFE.
-	 * 4.0.0-betaX is UNSAFE (because it is < 4.0.0 Stable).
+	 * 5.0.0 (Stable) is SAFE.
+	 * 5.1.0 (Stable) is SAFE.
+	 * 5.0.0-betaX is UNSAFE (because it is < 5.0.0 Stable).
 	 */
 	public static boolean validUpdate(SemanticVersion remoteVersion) {
 		if (remoteVersion.compareTo(MINIMUM_SAFE_VERSION) < 0) {
-			LOGGER.error("Downgrading AutoModpack to version {} is strongly discouraged/disabled due to security concerns (Target is older than 4.0.0 Stable).",
+			LOGGER.error("Downgrading AutoModpack to version {} is strongly discouraged/disabled due to security concerns (Target is older than 5.0.0 Stable).",
 					remoteVersion);
 			return false;
 		}
