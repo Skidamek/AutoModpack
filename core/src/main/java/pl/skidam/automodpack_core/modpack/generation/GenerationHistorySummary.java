@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,7 +16,7 @@ public final class GenerationHistorySummary {
 		Objects.requireNonNull(patchNotesHistory, "patch notes history");
 		Map<String, String> notesByGeneration = new HashMap<>();
 		for (GenerationPatchNoteHistory.Entry entry : patchNotesHistory) notesByGeneration.put(entry.generationId(), entry.patchNotes());
-		List<Entry> summaries = new java.util.ArrayList<>(generations.size());
+		List<Entry> summaries = new ArrayList<>(generations.size());
 		for (int index = 0; index < generations.size(); index++) {
 			GenerationRecord generation = Objects.requireNonNull(generations.get(index), "generation history entry");
 			GenerationRecord predecessor = index == 0 ? null : generations.get(index - 1);

@@ -39,6 +39,24 @@ class ModFileCacheTest {
 		}
 	}
 
+	@Test
+	void inspectsAnExtensionlessContentAddressedArchive() throws Exception {
+		Path source = temporaryDirectory.resolve("source.jar");
+		Path contentAddressedObject = temporaryDirectory.resolve("objects").resolve("content-hash");
+		writeMod(source);
+		Files.createDirectories(contentAddressedObject.getParent());
+		Files.copy(source, contentAddressedObject);
+
+		try (FileMetadataCache hashCache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"));
+				ModFileCache modCache = ModFileCache.open(temporaryDirectory.resolve("mod-metadata"))) {
+			FileInspection.Mod mod = modCache.getOrComputeMod(contentAddressedObject, hashCache);
+
+			assertNotNull(mod);
+			assertEquals(contentAddressedObject.toAbsolutePath().normalize(), mod.path());
+			assertEquals("example", mod.IDs().iterator().next());
+		}
+	}
+
 	private static void writeMod(Path path) throws Exception {
 		try (OutputStream output = Files.newOutputStream(path); JarOutputStream jar = new JarOutputStream(output)) {
 			jar.putNextEntry(new JarEntry("fabric.mod.json"));

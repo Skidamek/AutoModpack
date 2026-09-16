@@ -711,21 +711,41 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 		String name = group.displayName().isBlank() ? groupId : group.displayName();
 		GroupResolution explanation = resolution.explanation(groupId);
-		String suffix = " (" + group.files().size() + " files, " + UiFormat.formatSize(groupBytes(group)) + ")";
-		if (isMandatory(manifest, group)) return rowLabel("[#] " + name + suffix + " (required)", ChatFormatting.GRAY);
+		String metrics = "(" + group.files().size() + " files, " + UiFormat.formatSize(groupBytes(group)) + ")";
+		if (isMandatory(manifest, group)) return rowLabel(formatRowLabel("[#] ", name, metrics, "(required)"), ChatFormatting.GRAY);
 		if (explanation != null && explanation.reasons().contains(GroupResolution.Reason.EXPLICIT_REQUEST_UNAVAILABLE))
-			return rowLabel("[-] " + name + suffix + " (requested unavailable)", ChatFormatting.RED);
-		if (explanation != null && explanation.status() == GroupResolution.Status.UNAVAILABLE) return rowLabel("[-] " + name + suffix + " (unavailable)", ChatFormatting.RED);
-		if (explanation != null && explanation.status() == GroupResolution.Status.BLOCKED) return rowLabel("[-] " + name + suffix + " (dependency unavailable)", ChatFormatting.RED);
-		if (explanation != null && explanation.status() == GroupResolution.Status.CONFLICT) return rowLabel("[!] " + name + suffix + " (conflict)", ChatFormatting.RED);
-		if (excluded.contains(groupId)) return rowLabel("[-] " + name + suffix + " (excluded)", ChatFormatting.YELLOW);
+			return rowLabel(formatRowLabel("[-] ", name, metrics, "(requested unavailable)"), ChatFormatting.RED);
+		if (explanation != null && explanation.status() == GroupResolution.Status.UNAVAILABLE)
+			return rowLabel(formatRowLabel("[-] ", name, metrics, "(unavailable)"), ChatFormatting.RED);
+		if (explanation != null && explanation.status() == GroupResolution.Status.BLOCKED)
+			return rowLabel(formatRowLabel("[-] ", name, metrics, "(dependency unavailable)"), ChatFormatting.RED);
+		if (explanation != null && explanation.status() == GroupResolution.Status.CONFLICT)
+			return rowLabel(formatRowLabel("[!] ", name, metrics, "(conflict)"), ChatFormatting.RED);
+		if (excluded.contains(groupId)) return rowLabel(formatRowLabel("[-] ", name, metrics, "(excluded)"), ChatFormatting.YELLOW);
 		if (resolution.selectedGroups().contains(groupId)) {
-			if (chosen.contains(groupId)) return rowLabel("[x] " + name + suffix + " (selected)", ChatFormatting.GREEN);
-			if (resolution.dependencyGroups().contains(groupId)) return rowLabel("[+] " + name + suffix + " (required by selection)", ChatFormatting.AQUA);
-			return rowLabel("[+] " + name + suffix, ChatFormatting.AQUA);
+			if (chosen.contains(groupId)) return rowLabel(formatRowLabel("[x] ", name, metrics, "(selected)"), ChatFormatting.GREEN);
+			if (resolution.dependencyGroups().contains(groupId))
+				return rowLabel(formatRowLabel("[+] ", name, metrics, "(required by selection)"), ChatFormatting.AQUA);
+			return rowLabel(formatRowLabel("[+] ", name, metrics, null), ChatFormatting.AQUA);
 		}
-		if (resolution.forcedGroups().contains(groupId)) return rowLabel("[>] " + name + suffix + " (forced)", ChatFormatting.AQUA);
-		return group.defaultSelected() ? rowLabel("[ ] " + name + suffix + " (included by default)", ChatFormatting.YELLOW) : rowLabel("[ ] " + name + suffix, ChatFormatting.GRAY);
+		if (resolution.forcedGroups().contains(groupId)) return rowLabel(formatRowLabel("[>] ", name, metrics, "(forced)"), ChatFormatting.AQUA);
+		return group.defaultSelected()
+				? rowLabel(formatRowLabel("[ ] ", name, metrics, "(included by default)"), ChatFormatting.YELLOW)
+				: rowLabel(formatRowLabel("[ ] ", name, metrics, null), ChatFormatting.GRAY);
+	}
+
+	/** Keeps a row's state explanation visible when the optional file metrics do not fit. */
+	private String formatRowLabel(String marker, String name, String metrics, String status) {
+		int maxWidth = panelWidth(ROW_WIDTH) - 76;
+		String full = marker + name + " " + metrics + (status == null ? "" : " " + status);
+		if (status == null || this.font.width(full) <= maxWidth) return truncateToWidth(this.font, full, maxWidth);
+
+		String stateOnly = marker + name + " " + status;
+		if (this.font.width(stateOnly) <= maxWidth) return stateOnly;
+
+		int nameWidth = maxWidth - this.font.width(marker) - this.font.width(" ") - this.font.width(status);
+		if (nameWidth <= 0) return truncateToWidth(this.font, marker + status, maxWidth);
+		return marker + truncateToWidth(this.font, name, nameWidth) + " " + status;
 	}
 
 	private MutableComponent rowLabel(String text, ChatFormatting color) {

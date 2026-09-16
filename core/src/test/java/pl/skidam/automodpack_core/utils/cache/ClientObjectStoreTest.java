@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -90,7 +91,7 @@ class ClientObjectStoreTest {
 		generations.write(historical);
 		storage.writeActiveState(MODPACK_ID, active.metadata().generationId());
 
-		assertThrows(java.io.IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(active.metadata().generationId()), Set.of()));
+		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(active.metadata().generationId()), Set.of()));
 		assertTrue(Files.exists(storage.objectsDirectory().resolve(historicalHash)));
 		assertTrue(Files.exists(storage.objectsDirectory().resolve(orphanHash)));
 
@@ -111,7 +112,7 @@ class ClientObjectStoreTest {
 		Files.createDirectories(storage.generationDirectory(malformed));
 		Files.writeString(storage.generationManifest(malformed), "{}", StandardCharsets.UTF_8);
 
-		assertThrows(java.io.IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of()));
+		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of()));
 		assertTrue(Files.exists(storage.objectsDirectory().resolve(orphan)));
 	}
 
@@ -122,8 +123,8 @@ class ClientObjectStoreTest {
 		Files.writeString(target, "outside", StandardCharsets.UTF_8);
 		Files.createSymbolicLink(storage.objectsDirectory().resolve("not-an-object"), target);
 
-		assertThrows(java.io.IOException.class, () -> ClientObjectStore.measure(storage));
-		assertThrows(java.io.IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of()));
+		assertThrows(IOException.class, () -> ClientObjectStore.measure(storage));
+		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of()));
 		assertTrue(Files.exists(target));
 	}
 
@@ -132,7 +133,7 @@ class ClientObjectStoreTest {
 		assertEquals("0123456789abcdef0123456789abcdef01234567", ClientObjectStore.normalizeHash("0123456789ABCDEF0123456789ABCDEF01234567"));
 		assertThrows(IllegalArgumentException.class, () -> ClientObjectStore.normalizeHash("not-a-sha1"));
 		ClientStorage storage = storage();
-		assertThrows(java.io.IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of("not-a-sha1")));
+		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of("not-a-sha1")));
 	}
 
 	private ClientStorage storage() throws Exception {

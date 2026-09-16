@@ -157,7 +157,17 @@ public class FileInspection {
 	}
 
 	private static boolean isJarInvalid(Path file) {
-		return file == null || !Files.exists(file) || !file.getFileName().toString().endsWith(".jar");
+		if (file == null || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return true;
+		if (file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar")) return false;
+		try (InputStream input = Files.newInputStream(file)) {
+			int first = input.read();
+			int second = input.read();
+			int third = input.read();
+			int fourth = input.read();
+			return !(first == 'P' && second == 'K' && ((third == 3 && fourth == 4) || (third == 5 && fourth == 6) || (third == 7 && fourth == 8)));
+		} catch (IOException e) {
+			return true;
+		}
 	}
 
 	private static <T> T extractBasicInfo(Path file, Function<ModMetadata, T> extractor) {

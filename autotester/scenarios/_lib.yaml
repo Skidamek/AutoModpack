@@ -20,6 +20,24 @@ boot:
     name: wait for the client test bridge
   - use: connect_to_server
 
+# The release gate deliberately exercises the file-based bootstrap path. The
+# server must publish first so the fixture can write the actual modpack ID and
+# live TLS fingerprint before the client starts its Preload phase.
+boot_with_bootstrap:
+  - do: launch_server
+    name: start server for bootstrap-file import
+  - do: wait_server
+    name: wait for server generation and TLS
+  - use: read_server_fingerprint
+  - do: seed_bootstrap
+    name: write live automodpack-bootstrap.json before client preload
+  - do: launch_client
+    name: start client with bootstrap file present
+  - do: wait_bridge
+    name: wait for client preload and test bridge
+  - do: assert_bootstrap_import
+    name: verify Preload imported and deleted bootstrap state
+
 # Scrape the one-time certificate fingerprint out of the server log into a var.
 read_server_fingerprint:
   - do: wait_for
@@ -157,9 +175,15 @@ open_pack_manager:
   - do: wait_for
     name: wait for modpack settings
     until: { screen: ModpackSelectionScreen }
+  - do: screenshot
+    name: capture modpack settings before manager action
+    file: all-pack-settings
   - do: click
     name: open installed pack manager
     select: { text: pack manager }
   - do: wait_for
     name: wait for installed pack manager
     until: { screen: InstalledModpacksScreen }
+  - do: screenshot
+    name: capture installed pack manager
+    file: all-installed-pack-manager

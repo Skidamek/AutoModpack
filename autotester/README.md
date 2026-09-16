@@ -52,10 +52,12 @@ uv --project autotester run autotester clean
 The default `all` scenario performs one release-confidence flow:
 
 1. Start a server and client container and trust the certificate.
-2. Review advanced groups, including categories, dependencies, conflicts, defaults, and platform filtering.
-3. Bootstrap the complete pack, verify generation metadata, and open the latest patch notes and connected history.
-4. Cache a second installed record and switch A to B to A through the pack manager's review/accept flow.
-5. Publish a real second server generation, review its changed/removed files and patch notes, and verify final contents.
+2. Import and delete a bootstrap file, seed TLS trust, and prove that secure mode rejects anonymous pre-login catalogue access.
+3. Complete authenticated login, verify the issued secret is persisted by both client and server, then download and restart the pack.
+4. Relaunch with the saved secret and verify the complete catalogue preloads before reconnecting.
+5. Review advanced groups, including categories, dependencies, conflicts, defaults, and platform filtering.
+6. Cache a second installed record and switch A to B to A through the pack manager's review/accept flow.
+7. Publish a real second server generation, review its changed/removed files and patch notes, and verify final contents.
 
 `sync` and the other focused scenarios remain available for faster diagnosis.
 

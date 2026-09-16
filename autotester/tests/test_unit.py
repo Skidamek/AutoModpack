@@ -111,6 +111,17 @@ def test_wait_for_passes_on_marker_in_final_logs_at_exit(make_ctx):
     wait_for(ctx, _log_step("READY", timeout="30s"))  # must not raise
 
 
+def test_wait_for_server_log_does_not_require_client(make_ctx):
+    """Server readiness can be checked before the bootstrap client is launched."""
+    from automodpack_autotester.engine.steps_ui import wait_for
+
+    ctx = make_ctx()
+    ctx.logs_provider = lambda which, tail=None: "Certificate fingerprint: AB:CD:EF" if which == "server" else ""
+    ctx.running_provider = lambda: (_ for _ in ()).throw(ClientExited("client not launched yet"))
+
+    wait_for(ctx, {"until": {"log": {"container": "server", "matches": "fingerprint"}}, "timeout": "30s"})
+
+
 # ── selectors ─────────────────────────────────────────────────────────────
 
 
@@ -148,6 +159,29 @@ def test_selector_index_negative():
 
 def test_selector_no_match():
     assert selectors.find_one(GUI, {"text": "nope"}) is None
+
+
+def test_click_timeout_reports_disabled_gui_state(make_ctx, monkeypatch):
+    from automodpack_autotester.engine import steps_ui
+
+    ctx = make_ctx()
+
+    class SnapshotBridge:
+        def gui(self, timeout=30):
+            return {
+                "screenClass": "TitleScreen",
+                "title": "Minecraft",
+                "buttons": [{"id": 8, "text": "multiplayer", "enabled": False, "visible": True}],
+            }
+
+        def click(self, element_id, **payload):
+            raise AssertionError("click must not be sent for a disabled element")
+
+    ctx.bridge = SnapshotBridge()
+    monkeypatch.setattr(steps_ui, "await_condition", lambda *args, **kwargs: (_ for _ in ()).throw(TimeoutError("no element matched")))
+
+    with pytest.raises(TimeoutError, match=r"current screen: 'TitleScreen'.*multiplayer.*enabled.*False"):
+        steps_ui.click(ctx, {"select": {"text": "multiplayer"}})
 
 
 # ── templating ────────────────────────────────────────────────────────────

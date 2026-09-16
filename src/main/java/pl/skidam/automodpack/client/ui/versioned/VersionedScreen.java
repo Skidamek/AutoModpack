@@ -213,13 +213,23 @@ public class VersionedScreen extends Screen {
 
 	/*? if >= 1.20.2 {*/
 	public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath) {
-		Button button = SpriteIconButton.builder(Component.empty(), onPress, true).sprite(Common.id(spritePath), spriteWidth, spriteWidth).size(buttonWidth, buttonWidth).build();
+		return iconButtonWidget(x, y, buttonWidth, spriteWidth, onPress, spritePath, VersionedText.literal(""));
+	}
+
+	public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath, Component message) {
+		Button button = SpriteIconButton.builder(message, onPress, true).sprite(Common.id(spritePath), spriteWidth, spriteWidth).size(buttonWidth, buttonWidth).build();
 		button.setPosition(x, y);
 		return button;
 	}
 	/*?} else {*/
 	/*public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath) {
-		return new ImageButton(x, y, buttonWidth, buttonWidth, 0, 0, 0, Common.id("textures/gui/sprites/" + spritePath + ".png"), buttonWidth, buttonWidth, onPress);
+		return iconButtonWidget(x, y, buttonWidth, spriteWidth, onPress, spritePath, VersionedText.literal(""));
+	}
+
+	public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath, Component message) {
+		ImageButton button = new ImageButton(x, y, buttonWidth, buttonWidth, 0, 0, 0, Common.id("textures/gui/sprites/" + spritePath + ".png"), buttonWidth, buttonWidth, onPress);
+		button.setMessage(message);
+		return button;
 	}
 	*//*?}*/
 
@@ -229,7 +239,7 @@ public class VersionedScreen extends Screen {
 	}
 	/*?} else {*/
 	/*public static void setTooltip(Button button, Component tooltip) {
-		button.setMessage(tooltip);
+		// Legacy buttons have no tooltip API. Keep their existing message unchanged.
 	}
 	*//*?}*/
 

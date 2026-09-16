@@ -115,6 +115,23 @@ class GenerationStoreStorageTest {
 	}
 
 	@Test
+	void collectorUsesCheckpointLedgerAfterCompaction() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
+		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
+		store.publish(candidate("second"), Optional.of(current), "");
+		store.compact();
+		String historicalHash = first.record().manifest().groups().get("main").files().get("config/example.txt").sha1();
+		String orphanHash = createObject("orphan-after-compaction");
+
+		GenerationStore.CollectionResult result = store.collectUnreachableObjects(Set.of(), Set.of());
+
+		assertEquals(1, result.deletedObjectCount());
+		assertFalse(Files.exists(store.objectRoot().resolve(orphanHash)));
+		assertTrue(Files.exists(store.objectRoot().resolve(historicalHash)));
+	}
+
+	@Test
 	void collectorRequiresCurrentGeneration() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		store.publish(candidate("current"), Optional.empty(), "");

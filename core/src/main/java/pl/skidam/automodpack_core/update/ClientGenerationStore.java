@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -25,10 +26,50 @@ import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 
 /** Persistent immutable client copies of complete server generation records. */
 public final class ClientGenerationStore {
 	private final ClientStorage storage;
+
+	/** A deterministic receipt for one explicit client generation compaction pass. */
+	public record CompactionResult(
+			List<String> retainedGenerationIds,
+			List<String> removedGenerationIds,
+			long generationRecordCountBefore,
+			long generationRecordBytesBefore,
+			long generationRecordCountAfter,
+			long generationRecordBytesAfter,
+			long generatedCopyCountBefore,
+			long generatedCopyBytesBefore,
+			long generatedCopyCountAfter,
+			long generatedCopyBytesAfter,
+			ClientObjectStore.CollectionResult objectCollection) {
+		public CompactionResult {
+			retainedGenerationIds = sortedIds(retainedGenerationIds, "retained generation IDs");
+			removedGenerationIds = sortedIds(removedGenerationIds, "removed generation IDs");
+			if (List.of(generationRecordCountBefore, generationRecordBytesBefore, generationRecordCountAfter, generationRecordBytesAfter, generatedCopyCountBefore,
+					generatedCopyBytesBefore, generatedCopyCountAfter, generatedCopyBytesAfter).stream().anyMatch(value -> value < 0))
+				throw new IllegalArgumentException("Compaction receipt values cannot be negative");
+			if (!Collections.disjoint(retainedGenerationIds, removedGenerationIds)) throw new IllegalArgumentException("Compaction retained and removed IDs overlap");
+			objectCollection = Objects.requireNonNull(objectCollection, "object collection receipt");
+		}
+
+		private static List<String> sortedIds(List<String> ids, String description) {
+			Objects.requireNonNull(ids, description);
+			return ids.stream().map(id -> {
+				try {
+					return ClientObjectStore.normalizeHash(id);
+				} catch (IllegalArgumentException e) {
+					throw new IllegalArgumentException("Invalid " + description + ": " + id, e);
+				}
+			}).distinct().sorted().toList();
+		}
+	}
+
+	private record GenerationSnapshot(Map<String, GenerationRecord> records, Set<String> retainedGenerationIds, Set<String> removedGenerationIds) {}
+	private record FileTotals(long count, long bytes) {}
 
 	public ClientGenerationStore(ClientStorage storage) {
 		this.storage = Objects.requireNonNull(storage);
@@ -98,6 +139,32 @@ public final class ClientGenerationStore {
 	}
 
 	/**
+	 * Explicitly compacts stale client generation records and their generated-copy state.
+	 *
+	 * <p>
+	 * The newest record for each installed modpack is retained, together with the record
+	 * selected by active-state.json when it is older. No arbitrary count or age limit is used.
+	 * All validation completes before the first deletion. The existing CAS collector then validates
+	 * and collects objects using the records that remain.
+	 * </p>
+	 */
+	public CompactionResult compact() throws IOException {
+		GenerationSnapshot snapshot = validateCompactionSnapshot();
+		ClientObjectStore.validate(storage);
+		FileTotals recordsBefore = generationTotals(snapshot.records().keySet());
+		ClientObjectStore.GeneratedCopyReport generatedBefore = ClientObjectStore.measureGeneratedCopies(storage);
+
+		for (String generationId : snapshot.removedGenerationIds()) SmartFileUtils.deleteTree(storage.generationDirectory(generationId));
+		removeGeneratedCopies(snapshot.removedGenerationIds());
+
+		ClientObjectStore.CollectionResult objectCollection = ClientObjectStore.collectUnreachableObjects(storage, snapshot.retainedGenerationIds(), Set.of());
+		FileTotals recordsAfter = generationTotals(snapshot.retainedGenerationIds());
+		ClientObjectStore.GeneratedCopyReport generatedAfter = ClientObjectStore.measureGeneratedCopies(storage);
+		return new CompactionResult(List.copyOf(snapshot.retainedGenerationIds()), List.copyOf(snapshot.removedGenerationIds()), recordsBefore.count(), recordsBefore.bytes(),
+				recordsAfter.count(), recordsAfter.bytes(), generatedBefore.count(), generatedBefore.bytes(), generatedAfter.count(), generatedAfter.bytes(), objectCollection);
+	}
+
+	/**
 	 * Returns the newest valid locally stored generation for each installed modpack.
 	 *
 	 * <p>
@@ -157,6 +224,77 @@ public final class ClientGenerationStore {
 		}
 		Collections.reverse(reverse);
 		return List.copyOf(reverse);
+	}
+
+	private GenerationSnapshot validateCompactionSnapshot() throws IOException {
+		TreeMap<String, GenerationRecord> records = new TreeMap<>();
+		for (String generationId : generationIds()) {
+			try {
+				if (!ClientObjectStore.normalizeHash(generationId).equals(generationId)) throw new IOException("Client generation directory is not canonical: " + generationId);
+				GenerationRecord record = read(generationId).orElseThrow(() -> new IOException("Client generation record is missing: " + generationId));
+				if (!generationId.equals(record.metadata().generationId())) throw new IOException("Client generation directory and record IDs disagree: " + generationId);
+				records.put(generationId, record);
+			} catch (RuntimeException e) {
+				throw new IOException("Client generation record is invalid: " + generationId, e);
+			}
+		}
+
+		TreeMap<String, String> newest = new TreeMap<>();
+		for (Map.Entry<String, GenerationRecord> entry : records.entrySet()) {
+			String modpackId = entry.getValue().manifest().modpackId();
+			String previousId = newest.get(modpackId);
+			if (previousId == null || newer(entry.getValue(), records.get(previousId))) newest.put(modpackId, entry.getKey());
+		}
+		Set<String> retained = new HashSet<>(newest.values());
+		Jsons.ClientGenerationStateFields activeState = storage.readActiveState();
+		if (activeState != null) {
+			GenerationRecord active = records.get(activeState.generationId);
+			if (active == null) throw new IOException("Active client generation record is missing: " + activeState.generationId);
+			if (!active.manifest().modpackId().equals(activeState.modpackId)) throw new IOException("Active client generation identity is inconsistent");
+			retained.add(activeState.generationId);
+		}
+		Set<String> removed = new TreeSet<>(records.keySet());
+		removed.removeAll(retained);
+		return new GenerationSnapshot(Map.copyOf(records), Set.copyOf(new TreeSet<>(retained)), Set.copyOf(removed));
+	}
+
+	private void removeGeneratedCopies(Set<String> removedGenerationIds) throws IOException {
+		if (removedGenerationIds.isEmpty() || !Files.exists(storage.generatedCopiesDirectory(), LinkOption.NOFOLLOW_LINKS)) return;
+		try (Stream<Path> packs = Files.list(storage.generatedCopiesDirectory())) {
+			for (Path pack : packs.sorted().toList()) {
+				if (Files.isSymbolicLink(pack) || !Files.isDirectory(pack, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + pack);
+				ModpackId.requireValid(pack.getFileName().toString());
+				try (Stream<Path> generations = Files.list(pack)) {
+					for (Path generation : generations.sorted().toList()) {
+						if (Files.isSymbolicLink(generation) || !Files.isDirectory(generation, LinkOption.NOFOLLOW_LINKS))
+							throw new IOException("Client generated-copy state contains an unsupported entry: " + generation);
+						String generationId = generation.getFileName().toString();
+						if (removedGenerationIds.contains(generationId)) SmartFileUtils.deleteTree(storage.generatedCopiesGenerationDirectory(pack.getFileName().toString(), generationId));
+					}
+				}
+			}
+		}
+	}
+
+	private FileTotals generationTotals(Set<String> generationIds) throws IOException {
+		long bytes = 0;
+		for (String generationId : generationIds) {
+			Path directory = storage.generationDirectory(generationId);
+			if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generation directory is missing: " + generationId);
+			try (Stream<Path> paths = Files.walk(directory)) {
+				for (Path path : paths.filter(candidate -> !candidate.equals(directory)).toList()) {
+					if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
+					bytes = Math.addExact(bytes, Files.size(path));
+				}
+			}
+		}
+		return new FileTotals(generationIds.size(), bytes);
+	}
+
+	private static boolean newer(GenerationRecord candidate, GenerationRecord current) {
+		return candidate.metadata().createdAt().compareTo(current.metadata().createdAt()) > 0
+				|| candidate.metadata().createdAt().equals(current.metadata().createdAt())
+						&& candidate.metadata().generationId().compareTo(current.metadata().generationId()) > 0;
 	}
 
 	private static Optional<Jsons.CompleteModpackContentFields> readFields(Path path) throws IOException {

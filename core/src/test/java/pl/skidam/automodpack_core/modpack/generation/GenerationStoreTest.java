@@ -16,6 +16,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -35,7 +36,7 @@ class GenerationStoreTest {
 	@Test
 	void publishesRootThenParentAndReturnsNoChanges() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
-		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "ignored");
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "First generation notes\r\n");
 		assertEquals(GenerationStore.PublicationStatus.PUBLISHED, first.status());
 		assertEquals("", first.record().metadata().parentGenerationId());
 		assertTrue(Files.exists(tempDir.resolve("catalogues").resolve(first.record().metadata().stateDigest() + ".json")));
@@ -44,7 +45,7 @@ class GenerationStoreTest {
 		String pointer = Files.readString(tempDir.resolve("current.json"), StandardCharsets.UTF_8);
 
 		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
-		GenerationStore.Publication unchanged = store.publish(candidate("first"), Optional.of(current), "different notes");
+		GenerationStore.Publication unchanged = store.publish(candidate("first"), Optional.of(current), "First generation notes\n");
 		assertEquals(GenerationStore.PublicationStatus.NO_CHANGES, unchanged.status());
 		assertEquals(pointer, Files.readString(tempDir.resolve("current.json"), StandardCharsets.UTF_8));
 		assertFalse(Files.exists(tempDir.resolve("records")));
@@ -53,6 +54,30 @@ class GenerationStoreTest {
 		assertEquals(GenerationStore.PublicationStatus.PUBLISHED, second.status());
 		assertEquals(first.record().metadata().generationId(), second.record().metadata().parentGenerationId());
 		assertEquals(second.record(), store.loadCurrent().orElseThrow().record());
+	}
+
+	@Test
+	void publishesMetadataOnlyGenerationForChangedPatchNotes() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "First generation notes");
+		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
+
+		GenerationStore.Publication changedNotes = store.publish(candidate("first"), Optional.of(current), "Updated generation notes");
+		assertEquals(GenerationStore.PublicationStatus.PUBLISHED, changedNotes.status());
+		assertNotEquals(first.record().metadata().generationId(), changedNotes.record().metadata().generationId());
+		assertEquals(first.record().metadata().generationId(), changedNotes.record().metadata().parentGenerationId());
+		assertEquals(first.record().metadata().stateDigest(), changedNotes.record().metadata().stateDigest());
+		assertEquals(first.record().metadata().ledgerDigest(), changedNotes.record().metadata().ledgerDigest());
+		assertEquals("Updated generation notes", changedNotes.record().metadata().patchNotes());
+		assertEquals(changedNotes.record(), store.loadCurrent().orElseThrow().record());
+
+		List<GenerationHistoryEntry> history = store.currentHistory();
+		assertEquals(List.of(first.record().metadata().generationId(), changedNotes.record().metadata().generationId()), history.stream()
+				.map(entry -> entry.metadata().generationId()).toList());
+		assertEquals(List.of("First generation notes", "Updated generation notes"), history.stream().map(entry -> entry.metadata().patchNotes()).toList());
+		Jsons.CompleteModpackContentFields fields = ConfigTools.read(tempDir.resolve("current-projection.json"), Jsons.CompleteModpackContentFields.class).orElseThrow();
+		assertEquals(List.of("First generation notes", "Updated generation notes"), GenerationPatchNoteHistory.fromFields(fields).stream()
+				.map(GenerationPatchNoteHistory.Entry::patchNotes).toList());
 	}
 
 	@Test
@@ -283,6 +308,145 @@ class GenerationStoreTest {
 		assertTrue(reverted.record().ownershipLedger().entries().get("config/example.txt").historicalHashes().size() >= 2);
 	}
 
+	@Test
+	void compactionCheckpointReloadsCurrentAndTruncatesHistory() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "first notes");
+		GenerationStore.CurrentSnapshot firstCurrent = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(firstCurrent), "second notes");
+		GenerationStore.CurrentSnapshot secondCurrent = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication third = store.publish(candidate("third"), Optional.of(secondCurrent), "third notes");
+
+		GenerationStore.CompactionResult result = store.compact();
+
+		assertEquals(third.record().metadata().generationId(), result.boundaryGenerationId());
+		assertEquals(List.of(first.record().metadata().generationId(), second.record().metadata().generationId()).stream().sorted().toList(), result.supersededGenerationIds());
+		assertEquals(2, result.deletedCommitCount());
+		assertEquals(2, result.deletedDeltaCount());
+		assertEquals(2, result.deletedCatalogueCount());
+		assertTrue(Files.exists(tempDir.resolve("checkpoint.json")));
+		assertTrue(Files.exists(tempDir.resolve("commits").resolve(third.record().metadata().generationId() + ".json")));
+		assertFalse(Files.exists(tempDir.resolve("commits").resolve(first.record().metadata().generationId() + ".json")));
+		GenerationStore.CompactionResult retry = store.compact();
+		assertEquals(result.supersededGenerationIds(), retry.supersededGenerationIds());
+		assertEquals(0, retry.deletedCommitCount());
+		assertEquals(0, retry.deletedDeltaCount());
+		assertEquals(0, retry.deletedCatalogueCount());
+
+		Files.delete(tempDir.resolve("current-projection.json"));
+		GenerationStore reloaded = store(Instant.parse("2026-01-02T00:00:00Z"));
+		assertEquals(third.record(), reloaded.loadCurrentDeep().orElseThrow().record());
+		assertEquals(List.of(third.record().metadata().generationId()), reloaded.currentHistory().stream().map(entry -> entry.metadata().generationId()).toList());
+		assertEquals("third notes", reloaded.loadCurrent().orElseThrow().record().metadata().patchNotes());
+	}
+
+	@Test
+	void compactionPreservesTombstoneAndHistoricalHash() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
+		String historicalHash = first.record().manifest().groups().get("main").files().get("config/example.txt").sha1();
+		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication removed = store.publish(emptyCandidate("removed"), Optional.of(current), "removed notes");
+
+		store.compact();
+		GenerationRecord reloaded = store.loadCurrentDeep().orElseThrow().record();
+		OwnershipLedger.Entry entry = reloaded.ownershipLedger().entries().get("config/example.txt");
+		assertEquals(OwnershipLedger.Status.TOMBSTONE, entry.currentStatus());
+		assertTrue(entry.historicalHashes().stream().anyMatch(content -> content.sha1().equals(historicalHash)));
+		assertEquals(removed.record(), reloaded);
+	}
+
+	@Test
+	void publishAfterCompactionUsesCheckpointLedgerAndBoundary() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
+		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(current), "");
+		store.compact();
+
+		GenerationStore reloaded = store(Instant.parse("2026-01-02T00:00:00Z"));
+		GenerationStore.CurrentSnapshot compacted = reloaded.loadCurrent().orElseThrow();
+		GenerationStore.Publication third = reloaded.publish(candidate("third"), Optional.of(compacted), "after compact");
+
+		assertEquals(second.record().metadata().generationId(), third.record().metadata().parentGenerationId());
+		assertEquals(List.of(second.record().metadata().generationId(), third.record().metadata().generationId()), reloaded.currentHistory().stream()
+				.map(entry -> entry.metadata().generationId()).toList());
+		assertEquals(third.record(), reloaded.loadCurrentDeep().orElseThrow().record());
+		assertTrue(third.record().ownershipLedger().entries().get("config/example.txt").historicalHashes().size() >= 3);
+		assertFalse(reloaded.currentHistory().stream().anyMatch(entry -> entry.metadata().generationId().equals(first.record().metadata().generationId())));
+	}
+
+	@Test
+	void revertCanTargetTheCompactionBoundary() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		store.publish(candidate("first"), Optional.empty(), "");
+		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(current), "");
+		store.compact();
+
+		GenerationStore.CurrentSnapshot compacted = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication reverted = store.publishRevert(second.record().metadata().generationId(), Optional.of(compacted), "revert after compact");
+
+		assertEquals(second.record().metadata().generationId(), reverted.record().metadata().rollbackTargetGenerationId());
+		assertEquals(second.record().manifest(), reverted.record().manifest());
+		assertEquals(List.of(second.record().metadata().generationId(), reverted.record().metadata().generationId()), store.currentHistory().stream()
+				.map(entry -> entry.metadata().generationId()).toList());
+	}
+
+	@Test
+	void malformedCheckpointRefusesCompactionWithoutMutation() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
+		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(current), "");
+		Path oldCommit = tempDir.resolve("commits").resolve(first.record().metadata().generationId() + ".json");
+		Path oldDelta = tempDir.resolve("deltas").resolve(first.record().metadata().generationId() + ".json");
+		Path checkpoint = tempDir.resolve("checkpoint.json");
+		byte[] commitBefore = Files.readAllBytes(oldCommit);
+		byte[] deltaBefore = Files.readAllBytes(oldDelta);
+		Files.writeString(checkpoint, "not-json", StandardCharsets.UTF_8);
+
+		assertThrows(IOException.class, store::compact);
+		assertArrayEquals(commitBefore, Files.readAllBytes(oldCommit));
+		assertArrayEquals(deltaBefore, Files.readAllBytes(oldDelta));
+		assertEquals("not-json", Files.readString(checkpoint, StandardCharsets.UTF_8));
+		assertThrows(IOException.class, store::loadCurrent);
+	}
+
+	@Test
+	void compactionRetryUsesCheckpointReceiptAfterDeletionInterruption() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
+		GenerationStore.CurrentSnapshot firstCurrent = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(firstCurrent), "");
+		GenerationStore.CurrentSnapshot secondCurrent = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication third = store.publish(candidate("third"), Optional.of(secondCurrent), "");
+		AtomicBoolean interrupt = new AtomicBoolean(true);
+		GenerationStore interrupted = new GenerationStore(tempDir, Clock.fixed(Instant.parse("2026-01-02T00:00:00Z"), ZoneOffset.UTC), () -> {}, path -> {
+			if (interrupt.getAndSet(false)) throw new IOException("injected compaction interruption");
+		});
+
+		assertThrows(IOException.class, interrupted::compact);
+		assertTrue(Files.exists(tempDir.resolve("checkpoint.json")));
+		assertTrue(Files.exists(tempDir.resolve("commits").resolve(first.record().metadata().generationId() + ".json")));
+		assertTrue(Files.exists(tempDir.resolve("deltas").resolve(first.record().metadata().generationId() + ".json")));
+		assertTrue(Files.exists(tempDir.resolve("catalogues").resolve(first.record().metadata().stateDigest() + ".json")));
+
+		GenerationStore.CompactionResult retry = interrupted.compact();
+		assertEquals(List.of(first.record().metadata().generationId(), second.record().metadata().generationId()).stream().sorted().toList(), retry.supersededGenerationIds());
+		assertTrue(retry.deletedCommitCount() >= 2);
+		assertTrue(retry.deletedDeltaCount() >= 2);
+		assertTrue(retry.deletedCatalogueCount() >= 2);
+		assertFalse(Files.exists(tempDir.resolve("commits").resolve(first.record().metadata().generationId() + ".json")));
+		assertFalse(Files.exists(tempDir.resolve("deltas").resolve(first.record().metadata().generationId() + ".json")));
+		assertFalse(Files.exists(tempDir.resolve("catalogues").resolve(first.record().metadata().stateDigest() + ".json")));
+		assertEquals(third.record(), interrupted.loadCurrentDeep().orElseThrow().record());
+
+		GenerationStore.CurrentSnapshot current = interrupted.loadCurrent().orElseThrow();
+		GenerationStore.Publication published = interrupted.publish(candidate("after-retry"), Optional.of(current), "");
+		assertEquals(published.record(), interrupted.loadCurrentDeep().orElseThrow().record());
+	}
+
 	private GenerationStore store(Instant instant) {
 		return new GenerationStore(tempDir, Clock.fixed(instant, ZoneOffset.UTC), () -> {});
 	}
@@ -298,12 +462,26 @@ class GenerationStoreTest {
 		return new ModpackCandidate(manifest, new TreeMap<>(Map.of(hash, new StagedObject(hash, bytes.length, staged))), new TreeMap<>(), List.of(), List.of());
 	}
 
+	private static ModpackCandidate emptyCandidate(String description) {
+		return new ModpackCandidate(emptyManifest(description), new TreeMap<>(), new TreeMap<>(), List.of(), List.of());
+	}
+
 	private static GroupManifest manifest(String description, String hash, long size) {
 		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.description = description;
 		group.files = Map.of("config/example.txt", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(size), "config", false, false, hash, null));
+		fields.groups = Map.of("main", group);
+		return GroupManifestValidator.validate(fields);
+	}
+
+	private static GroupManifest emptyManifest(String description) {
+		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+		fields.modpackId = "abc1234";
+		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.description = description;
+		group.files = Map.of();
 		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);
 	}

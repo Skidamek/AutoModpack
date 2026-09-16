@@ -3,8 +3,12 @@ transport/mode selection, and verb discovery."""
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import threading
+import time
 import types
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -14,11 +18,13 @@ from automodpack_autotester.config import (
     load_macros,
     load_scenarios,
     load_targets,
+    parse_server_files,
     scenario_matches_target,
 )
 from automodpack_autotester.generation_identity import CanonicalEncoder
 from automodpack_autotester.engine.registry import describe, names
-from automodpack_autotester.mod_fixtures import assert_valid_mod_fixture, valid_mod_jar_bytes
+from automodpack_autotester.engine.steps_io import seed_unowned_local_file, wait_file_content, write_file
+from automodpack_autotester.mod_fixtures import assert_valid_mod_fixture, pack_metadata_for, valid_mod_jar_bytes
 from automodpack_autotester.validate import validate_scenario
 
 
@@ -49,6 +55,203 @@ def test_shipped_scenarios_validate():
     targets = load_targets()
     for name, scenario in load_scenarios().items():
         assert validate_scenario(scenario, macros, targets) == [], name
+
+
+def test_legacy_forge_keeps_loader_classes_out_of_nested_mod():
+    project_root = Path(__file__).parents[2]
+    build_script = (project_root / "build.forge.gradle.kts").read_text(encoding="utf-8")
+    modpack_utils = (project_root / "loader/core/src/main/java/pl/skidam/automodpack_loader_core/client/ModpackUtils.java").read_text(encoding="utf-8")
+    early_service_layer = (project_root / "loader/forge/earlyservices/src/main/java/pl/skidam/automodpack_loader_core_forge/EarlyServiceLayer.java").read_text(encoding="utf-8")
+
+    assert 'compileOnly(project(":core")) { isTransitive = false }' in build_script
+    assert 'compileOnly(project(":loader-core")) { isTransitive = false }' in build_script
+    assert 'implementation(project(":loader-core")) { isTransitive = false }' not in build_script
+    assert "ManifestFetchState connectionFailedState = ManifestFetchState.CONNECTION_FAILED;" in modpack_utils
+    assert 'LOGGER.error("Error while connecting to the server modpack host: {}", formatThrowable(cause));' in modpack_utils
+    assert 'using the built-in fallback ({}: {})", t.getClass().getName(), t.getMessage())' in early_service_layer
+
+
+def test_release_fixture_uses_server_config_and_declared_group_directories(make_ctx):
+    scenario = load_scenarios()["all"]
+    assert scenario["topology"]["server"]["automodpack"]["config"]["validateSecrets"] is True
+    server_files = parse_server_files(scenario)
+    ctx = make_ctx(scenario=scenario, modpack_name=server_files.modpack_name, marker_rel=server_files.marker,
+                   scenario_files=server_files.files)
+    ctx.artifact.write_bytes(b"autotest-artifact")
+    runner._prepare_server(ctx)
+
+    config_path = ctx.server_dir / "automodpack" / "server-config.json"
+    assert config_path.is_file()
+    assert not (ctx.server_dir / "automodpack" / "automodpack-server.json").exists()
+    assert set(json.loads(config_path.read_text())["groups"]) == {"main", "visual", "addon", "alternative", "windows"}
+
+    host_root = ctx.server_dir / "automodpack" / "host-modpack"
+    assert (host_root / "main" / "config/amp-autotest-alpha.txt").is_file()
+    assert (host_root / "visual" / "config/amp-autotest-visual.txt").is_file()
+    assert (host_root / "addon" / "config/amp-autotest-addon.txt").is_file()
+    assert (host_root / "alternative" / "config/amp-autotest-alternative.txt").is_file()
+    assert (host_root / "windows" / "config/amp-autotest-windows.txt").is_file()
+    assert_valid_mod_fixture(
+        (host_root / "main" / "mods/amp-autotest-removed.jar").read_bytes(),
+        {"modId": "amp_autotest_removed", "version": "1.0.0-published", "marker": "published"},
+        ctx.target.minecraft,
+    )
+    assert not (host_root / "main" / "config/amp-autotest-visual.txt").exists()
+
+
+def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
+    ctx = make_ctx()
+    client = ctx.game_dir / "automodpack/client"
+    (client / "records/old").mkdir(parents=True)
+    (client / "records/old/manifest.json").write_text("{}")
+    (client / "active/config").mkdir(parents=True)
+    (client / "active/config/old.txt").write_text("old")
+    (client / "data/objects").mkdir(parents=True)
+    (client / "data/objects" / ("a" * 40)).write_bytes(b"cached")
+    (client / "data/known-hosts.json").write_text('{"hosts": {}}')
+    (client / "data/packs/packaaa").mkdir(parents=True)
+    (client / "data/packs/packaaa/connection.json").write_text('{"connection": {}}')
+    (client / "active-state.json").write_text("{}")
+    (ctx.game_dir / "automodpack/client-config.json").write_text('{"selectedModpackId": "packaaa"}')
+    fixture = {"modId": "amp_autotest_removed", "version": "1.0.0-published", "marker": "published"}
+    (ctx.game_dir / "mods/old.jar").write_bytes(valid_mod_jar_bytes(fixture))
+    runner._v_reset_client_generation(ctx, {})
+
+    assert not (client / "records").exists()
+    assert not (client / "active").exists()
+    assert not (client / "data/objects").exists()
+    assert not (client / "active-state.json").exists()
+    assert_valid_mod_fixture((ctx.game_dir / "mods/old.jar").read_bytes(), fixture)
+    assert (client / "data/known-hosts.json").read_text() == '{"hosts": {}}'
+    assert (client / "data/packs/packaaa/connection.json").read_text() == '{"connection": {}}'
+    assert (ctx.game_dir / "automodpack/client-config.json").read_text() == '{"selectedModpackId": "packaaa"}'
+
+
+def test_validation_rejects_generation_fixture_on_non_jar_path():
+    scenario = {
+        "id": "fixture-validation",
+        "serverFiles": {"generations": [{"files": [{"path": "config/old.txt", "fixture": {"modId": "old", "version": "1", "marker": "old"}}]}]},
+        "flow": [{"do": "quit"}],
+    }
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+    assert any("valid mod fixtures must use a .jar path" in problem for problem in problems)
+
+
+def test_validation_requires_seed_mod_fixture_payload():
+    scenario = {"id": "missing-fixture", "flow": [{"do": "seed_mod_fixture", "path": "mods/old.jar"}]}
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+    assert any("seed_mod_fixture.fixture" in problem for problem in problems)
+
+
+def test_unowned_local_fixture_writes_a_valid_cross_loader_archive(make_ctx):
+    fixture = {"modId": "amp_autotest_unowned", "version": "1.0.0-local-unowned", "marker": "unowned-local"}
+    ctx = make_ctx()
+
+    seed_unowned_local_file(ctx, {"path": "mods/local-unowned.jar", "fixture": fixture})
+
+    assert_valid_mod_fixture((ctx.game_dir / "mods/local-unowned.jar").read_bytes(), fixture, ctx.target.minecraft)
+
+
+def test_write_file_writes_local_edit(make_ctx):
+    ctx = make_ctx()
+
+    write_file(ctx, {"path": "config/editable.txt", "content": "local edit\n"})
+
+    assert (ctx.game_dir / "config/editable.txt").read_text(encoding="utf-8") == "local edit\n"
+
+
+def test_write_file_rejects_path_escape(make_ctx):
+    ctx = make_ctx()
+
+    with pytest.raises(ValueError, match="escapes the client game directory"):
+        write_file(ctx, {"path": "../outside.txt", "content": "must not escape\n"})
+
+
+def test_validation_requires_write_file_content_string():
+    scenario = {"id": "write-file-validation", "flow": [{"do": "write_file", "path": "config/editable.txt", "content": 7}]}
+
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+
+    assert any("write_file.content: expected a string" in problem for problem in problems)
+
+
+def test_metadata_only_fixture_uses_no_code_loader_metadata():
+    fixture = {"modId": "amp_autotest_metadata", "version": "1.0.0", "marker": "metadata"}
+
+    with zipfile.ZipFile(io.BytesIO(valid_mod_jar_bytes(fixture))) as archive:
+        forge = archive.read("META-INF/mods.toml").decode("utf-8")
+        neoforge = archive.read("META-INF/neoforge.mods.toml").decode("utf-8")
+        pack = json.loads(archive.read("pack.mcmeta"))
+        names = archive.namelist()
+
+    for metadata in (forge, neoforge):
+        assert 'modLoader = "lowcodefml"' in metadata
+        assert 'loaderVersion = "[1,)"' in metadata
+        assert "amp_autotest_metadata" in metadata
+    assert pack["pack"]["pack_format"] == 15
+    assert not any(name.endswith(".class") for name in names)
+
+
+@pytest.mark.parametrize(
+    ("minecraft_version", "format_fields"),
+    [
+        ("1.18.2", {"pack_format": 8}),
+        ("1.20.1", {"pack_format": 15}),
+        ("1.21.8", {"pack_format": 64}),
+        ("1.21.10", {"min_format": 69, "max_format": 69}),
+    ],
+)
+def test_fixture_pack_metadata_matches_target_receipts(minecraft_version, format_fields):
+    fixture = {"modId": "amp_autotest_metadata", "version": "1.0.0", "marker": "metadata"}
+    payload = valid_mod_jar_bytes(fixture, minecraft_version)
+
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        pack = json.loads(archive.read("pack.mcmeta"))
+
+    assert pack == pack_metadata_for(minecraft_version)
+    assert pack["pack"] == {"description": "AutoModpack autotest fixture", **format_fields}
+    assert_valid_mod_fixture(payload, fixture, minecraft_version)
+
+
+def test_fixture_pack_metadata_covers_configured_targets():
+    for target in load_targets().values():
+        pack_metadata_for(target.minecraft)
+
+
+def test_autotest_bridge_readiness_is_level_triggered():
+    source = (Path(__file__).parents[2] / "src/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java").read_text()
+    start = source[source.index("public static void start()") : source.index("public static void onClientReady()")]
+    mark_reload = source[source.index("public static void markReloadFinished()") : source.index("public static void start()")]
+    on_ready = source[source.index("public static void onClientReady()") : source.index("private static void run(")]
+    publish = source[source.index("private static void publishReadyState()") : source.index("private static void run(")]
+    run = source[source.index("private static void run(") : source.index("private static String handle(")]
+
+    assert "if (currentScreen() instanceof TitleScreen && hasReloadFinished())" in start
+    assert "RELOAD_FINISHED.set(true);" in mark_reload
+    assert mark_reload.index("RELOAD_FINISHED.set(true);") < mark_reload.index("onClientReady();")
+    assert "onClientReady();" in mark_reload
+    assert "CLIENT_READY.set(true);" in on_ready
+    assert "CLIENT_READY.compareAndSet(false, true)" not in on_ready
+    assert "publishReadyState();" in on_ready
+    assert "private static void publishReadyState()" in source
+    assert "READY_STATE_PUBLISHED" in source
+    assert "synchronized (READY_STATE_LOCK)" in publish
+    assert "if (READY_STATE_PUBLISHED.get()) return;" in publish
+    assert publish.index("writeFile(") < publish.index("READY_STATE_PUBLISHED.set(true);")
+    assert "READY_STATE_WRITE_FAILED.compareAndSet(false, true)" in publish
+    assert 'writeFile(dir.resolve("bridge-state.json"), "{\\"status\\":\\"ready\\"}");' in source
+    assert run.index("Files.createDirectories(dir)") < run.index("bridgeDir = dir;")
+    assert run.count("publishReadyState();") >= 2
+
+
+def test_validation_rejects_plain_text_unowned_jar_seed():
+    scenario = load_scenarios()["all"]
+    seed = next(step for step in scenario["flow"] if isinstance(step, dict) and step.get("do") == "seed_unowned_local_file")
+    seed.pop("fixture")
+
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+
+    assert any(".jar paths require a valid mod fixture mapping" in problem for problem in problems)
 
 
 def test_release_gate_cannot_drop_a_required_capability():
@@ -163,6 +366,33 @@ def test_scenario_mode():
     assert runner.scenario_mode({"mode": "client-only"}) == "client-only"
 
 
+def test_seed_client_options_preserves_existing_settings(tmp_path):
+    options_path = tmp_path / "options.txt"
+    options_path.write_text("narrator:0\nfoo:bar\nskipMultiplayerWarning:false\n", encoding="utf-8")
+
+    runner._seed_client_options(tmp_path)
+
+    assert options_path.read_text(encoding="utf-8") == "narrator:0\nfoo:bar\nskipMultiplayerWarning:true\n"
+
+
+def test_wait_file_content_waits_for_replaced_payload(make_ctx):
+    ctx = make_ctx()
+    path = ctx.game_dir / "automodpack/client/active/config/update.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("old\n", encoding="utf-8")
+
+    def replace_payload():
+        time.sleep(0.05)
+        path.write_text("new\n", encoding="utf-8")
+
+    writer = threading.Thread(target=replace_payload)
+    writer.start()
+    try:
+        wait_file_content(ctx, {"path": "automodpack/client/active/config/update.txt", "content": "new\n", "timeout": "1s", "poll": "10ms"})
+    finally:
+        writer.join()
+
+
 # ── artifact and staged manifest handling ────────────────────────────────────
 
 
@@ -208,6 +438,20 @@ def test_staged_generation_uses_actual_file_metadata(make_ctx):
     assert by_path["config/amp-autotest-marker.json"]["editable"] is True
 
 
+def test_staged_generation_preserves_explicit_editable_file_metadata(make_ctx):
+    ctx = make_ctx()
+    root = ctx.game_dir / "staged"
+    path = root / "config/editable.txt"
+    path.parent.mkdir(parents=True)
+    path.write_text("server default\n", encoding="utf-8")
+
+    data_root = root.parent / "data"
+    generation = runner._write_staged_generation(ctx, root, "fixture8", data_root, editable_paths={"config/editable.txt"})
+
+    manifest = json.loads((root.parent / "records" / generation["generationId"] / "manifest.json").read_text())
+    assert manifest["groups"]["main"]["files"]["config/editable.txt"]["editable"] is True
+
+
 def test_record_only_staging_does_not_replace_active_state(make_ctx):
     ctx = make_ctx(
         modpack_name="Pack A",
@@ -231,6 +475,145 @@ def test_record_only_staging_does_not_replace_active_state(make_ctx):
     assert json.loads(records[0].read_text())["modpackName"] == "Pack B"
 
 
+def test_wait_generation_requires_committed_state_and_matching_record(make_ctx):
+    from automodpack_autotester.engine.steps_io import wait_generation
+
+    ctx = make_ctx()
+    marker = ctx.game_dir / "automodpack/client/active/config/amp-autotest-marker.json"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("projected\n", encoding="utf-8")
+
+    with pytest.raises(TimeoutError, match="active generation state was not committed"):
+        wait_generation(ctx, {"timeout": "1ms", "poll": "1ms"})
+
+    generation_id = "a" * 40
+    record = ctx.game_dir / "automodpack/client/records" / generation_id / "manifest.json"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(json.dumps({"modpackId": "packaaa", "generation": {"generationId": generation_id}}), encoding="utf-8")
+    state = ctx.game_dir / "automodpack/client/active-state.json"
+    state.write_text(json.dumps({"modpackId": "packaaa", "generationId": generation_id, "status": "ACTIVE"}), encoding="utf-8")
+
+    wait_generation(ctx, {"timeout": "1s", "poll": "1ms"})
+
+
+def test_wait_generation_requires_expected_patch_notes(make_ctx):
+    from automodpack_autotester.engine.steps_io import wait_generation
+
+    ctx = make_ctx()
+    generation_id = "b" * 40
+    record = ctx.game_dir / "automodpack/client/records" / generation_id / "manifest.json"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(json.dumps({"modpackId": "packaaa", "generation": {"generationId": generation_id, "patchNotes": "stale"}}), encoding="utf-8")
+    state = ctx.game_dir / "automodpack/client/active-state.json"
+    state.write_text(json.dumps({"modpackId": "packaaa", "generationId": generation_id, "status": "ACTIVE"}), encoding="utf-8")
+
+    with pytest.raises(TimeoutError, match="active generation state was not committed"):
+        wait_generation(ctx, {"patchNotes": "expected", "timeout": "1ms", "poll": "1ms"})
+
+    record.write_text(json.dumps({"modpackId": "packaaa", "generation": {"generationId": generation_id, "patchNotes": "expected"}}), encoding="utf-8")
+    wait_generation(ctx, {"patchNotes": "expected", "timeout": "1s", "poll": "1ms"})
+
+
+def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeypatch):
+    ctx = make_ctx()
+    ctx.artifact.write_bytes(b"autotest-artifact")
+    monkeypatch.setattr(runner, "_run_container", lambda **_kwargs: None)
+    monkeypatch.setattr(runner, "_assert_running", lambda _name: None)
+    monkeypatch.setattr(runner, "_jitter_sleep", lambda *_args, **_kwargs: None)
+
+    runner._launch_client(ctx)
+    marker = ctx.game_dir / "automodpack/data-root.json"
+    before = json.loads(marker.read_text())
+
+    runner._v_stage_modpack(ctx, {
+        "recordOnly": True,
+        "packId": "packbbb",
+        "packName": "Pack B",
+        "files": [{"path": "config/b.txt", "content": "b"}],
+    })
+
+    assert before == {"root": "/work/game/automodpack/client/data", "shared": False}
+    assert json.loads(marker.read_text()) == before
+
+
+def test_seed_bootstrap_writes_live_fields(make_ctx):
+    ctx = make_ctx()
+    server_state = ctx.server_dir / "automodpack" / "server"
+    server_state.mkdir(parents=True, exist_ok=True)
+    (server_state / "current-projection.json").write_text(json.dumps({"modpackId": "packaaa"}), encoding="utf-8")
+    (ctx.server_dir / "automodpack" / "server-config.json").write_text(json.dumps({"connectionMode": "HOLEPUNCH"}), encoding="utf-8")
+    ctx.server_host = "amp-server"
+    ctx.vars["fingerprint"] = "01:23:45"
+
+    runner._v_seed_bootstrap(ctx, {})
+
+    assert json.loads((ctx.game_dir / "automodpack-bootstrap.json").read_text(encoding="utf-8")) == {
+        "origin": "amp-server:25565",
+        "fingerprint": "01:23:45",
+        "modpackId": "packaaa",
+        "endpoint": "amp-server:25565",
+        "connectionMode": "HOLEPUNCH",
+    }
+    assert ctx.vars["bootstrap_modpack_id"] == "packaaa"
+
+
+def test_connect_screen_classifier_does_not_loop_on_first_connection():
+    assert runner._is_connecting_screen("net.minecraft.client.gui.screens.ConnectScreen")
+    assert runner._is_connecting_screen("net.minecraft.client.gui.screens.class_412")
+    assert not runner._is_connecting_screen("pl.skidam.automodpack.client.ui.FirstConnectScreen")
+
+
+def test_connection_failure_screen_is_retried_instead_of_reported_as_connected():
+    assert runner._is_connection_failure_screen("net.minecraft.class_419")
+    assert runner._is_connection_failure_screen("net.minecraft.client.gui.screens.DisconnectedScreen")
+    assert not runner._is_connection_failure_screen("pl.skidam.automodpack.client.ui.FirstConnectScreen")
+
+
+def test_legacy_bridge_disconnect_uses_full_client_lifecycle():
+    source = (Path(__file__).parents[2] / "src/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java").read_text(encoding="utf-8")
+
+    assert "/*minecraft.disconnect(new TitleScreen());" in source
+    assert "minecraft.clearLevel(new TitleScreen());" in source
+    assert "/*minecraft.level.disconnect();" in source
+    assert source.index("/*minecraft.level.disconnect();") < source.index("minecraft.clearLevel(new TitleScreen());")
+
+
+def test_versioned_screen_legacy_tooltip_fallback_preserves_control_message():
+    source = (Path(__file__).parents[2] / "src/main/java/pl/skidam/automodpack/client/ui/versioned/VersionedScreen.java").read_text(encoding="utf-8")
+    modern_start = source.index("/*? > 1.19.2 {*/")
+    legacy_start = source.index("/*?} else {*/", modern_start)
+    legacy_end = source.index("*//*?}*/", legacy_start)
+    modern = source[modern_start:legacy_start]
+    legacy = source[legacy_start:legacy_end]
+
+    assert "button.setTooltip(Tooltip.create(tooltip));" in modern
+    assert "public static void setTooltip(Button button, Component tooltip)" in legacy
+    assert "setMessage(tooltip)" not in legacy
+    assert "Keep their existing message unchanged" in legacy
+
+
+def test_assert_preload_acquired_checks_complete_projection(make_ctx):
+    ctx = make_ctx()
+    payloads = {"a" * 40: b"first", "b" * 40: b"second"}
+    projection = {"groups": {"main": {"files": {
+        "config/a.txt": {"sha1": hashlib.sha1(payloads["a" * 40]).hexdigest(), "size": str(len(payloads["a" * 40]))},
+        "config/b.txt": {"sha1": hashlib.sha1(payloads["b" * 40]).hexdigest(), "size": str(len(payloads["b" * 40]))},
+        "config/a-copy.txt": {"sha1": hashlib.sha1(payloads["a" * 40]).hexdigest(), "size": str(len(payloads["a" * 40]))},
+    }}}}
+    projection_path = ctx.server_dir / "automodpack" / "server" / "current-projection.json"
+    projection_path.parent.mkdir(parents=True, exist_ok=True)
+    projection_path.write_text(json.dumps(projection), encoding="utf-8")
+    objects = runner._ensure_client_data_root(ctx.game_dir) / "objects"
+    objects.mkdir(parents=True, exist_ok=True)
+    for payload in payloads.values():
+        (objects / hashlib.sha1(payload).hexdigest()).write_bytes(payload)
+    ctx.logs_provider = lambda _which, _tail=None: "Preloaded 2 complete modpack objects in 1ms"
+
+    runner._v_assert_preload_acquired(ctx, {})
+
+    assert ctx.vars["preloaded_object_count"] == 2
+
+
 def test_record_only_stages_a_valid_cross_loader_mod_fixture(make_ctx):
     ctx = make_ctx()
     local = {"modId": "amp_autotest_conflict", "version": "1.0.0-local", "marker": "local"}
@@ -248,7 +631,39 @@ def test_record_only_stages_a_valid_cross_loader_mod_fixture(make_ctx):
     manifest = json.loads(records[0].read_text())
     metadata = manifest["groups"]["main"]["files"]["mods/amp-autotest-conflict.jar"]
     object_path = ctx.game_dir / "automodpack/client/data/objects" / metadata["sha1"]
-    assert_valid_mod_fixture(object_path.read_bytes(), server)
+    assert_valid_mod_fixture(object_path.read_bytes(), server, ctx.target.minecraft)
+
+
+def test_record_only_generation_state_digest_matches_its_manifest(make_ctx):
+    ctx = make_ctx(modpack_name="Pack B", marker_rel=Path("config/marker.json"))
+    runner._v_stage_modpack(ctx, {
+        "recordOnly": True,
+        "packId": "packbbb",
+        "packName": "Pack B",
+        "files": [{"path": "config/b.txt", "content": "b"}],
+    })
+
+    manifest_path = next((ctx.game_dir / "automodpack/client/records").glob("*/manifest.json"))
+    manifest = json.loads(manifest_path.read_text())
+    encoder = (CanonicalEncoder().string("automodpack-state-v1").string(manifest["modpackId"]).string(manifest["modpackName"])
+               .string(manifest["automodpackVersion"]).string(manifest["loader"]).string(manifest["loaderVersion"])
+               .string(manifest["mcVersion"]).integer(len(manifest["groups"])))
+    for group_id, group in sorted(manifest["groups"].items()):
+        encoder.string(group_id).string(group["displayName"]).string(group["description"]).string(group["tag"])
+        encoder.boolean(group["required"]).boolean(group["defaultSelected"])
+        for values in (group["breaksWith"], group["requires"]):
+            encoder.integer(len(values))
+            for value in sorted(values):
+                encoder.string(value)
+        encoder.integer(len(group["compatiblePlatforms"]))
+        for platform in sorted(group["compatiblePlatforms"]):
+            encoder.string(platform)
+        encoder.integer(len(group["files"]))
+        for logical_path, file in sorted(group["files"].items()):
+            encoder.string(logical_path).long(int(file["size"])).string(file["type"]).boolean(file["editable"])
+            encoder.boolean(file["overwriteEditable"]).string(file["sha1"]).string(file["murmur"])
+
+    assert manifest["generation"]["stateDigest"] == encoder.digest()
 
 
 # ── wait_exit (Docker calls stubbed) ─────────────────────────────────────────

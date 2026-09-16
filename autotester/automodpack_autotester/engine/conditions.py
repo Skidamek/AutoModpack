@@ -76,6 +76,20 @@ def _needs_gui(cond: dict) -> bool:
     return False
 
 
+def requires_client(cond: dict) -> bool:
+    """Return whether evaluating this condition needs a live client/game directory."""
+    for key, value in cond.items():
+        if key in _GUI_KEYS or key in {"file", "file_gone", "only_files"}:
+            return True
+        if key == "log" and str(value.get("container", "client")) != "server":
+            return True
+        if key in ("all", "any") and any(requires_client(item) for item in value):
+            return True
+        if key == "not" and requires_client(value):
+            return True
+    return False
+
+
 def _check(ctx, key, val, gui) -> bool:
     if key == "all":
         return all(evaluate(ctx, sub, gui) for sub in val)

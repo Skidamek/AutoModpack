@@ -277,7 +277,7 @@ public class ModpackUtils {
 			return requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser).get();
 		} catch (Exception e) {
 			Throwable cause = DownloadClient.unwrap(e);
-			LOGGER.error("Error while getting server modpack content", cause);
+			LOGGER.error("Error while getting server modpack content: {}", formatThrowable(cause));
 			return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, cause);
 		}
 	}
@@ -286,12 +286,13 @@ public class ModpackUtils {
 
 	public static CompletableFuture<ManifestFetchResult> requestServerModpackContentAsync(ClientStorage storage, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
 			boolean allowAskingUser) {
+		ManifestFetchState connectionFailedState = ManifestFetchState.CONNECTION_FAILED;
 		if (secret == null) {
 			return CompletableFuture.completedFuture(
-					new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, new IllegalArgumentException("Secret is missing")));
+					new ManifestFetchResult(connectionFailedState, null, null, new IllegalArgumentException("Secret is missing")));
 		}
 		if (!connectionInfo.isComplete()) {
-			return CompletableFuture.completedFuture(new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null,
+			return CompletableFuture.completedFuture(new ManifestFetchResult(connectionFailedState, null, null,
 					new IllegalArgumentException("Connection origin or endpoint is missing")));
 		}
 
@@ -300,16 +301,22 @@ public class ModpackUtils {
 					if (error != null || content.isEmpty()) {
 						client.close();
 						Throwable cause = error == null ? new IOException("Server returned no usable modpack content") : DownloadClient.unwrap(error);
-						LOGGER.error("Error while getting server modpack content", cause);
+						LOGGER.error("Error while getting server modpack content: {}", formatThrowable(cause));
 						return new ManifestFetchResult(ManifestFetchState.OPERATION_FAILED, null, null, cause);
 					}
 					return new ManifestFetchResult(ManifestFetchState.SUCCESS, content.get(), client, null);
 				})).exceptionally(error -> {
 					Throwable cause = DownloadClient.unwrap(error);
 					showPinMismatch(cause);
-					LOGGER.error("Error while connecting to the server modpack host", cause);
-					return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, cause);
+					LOGGER.error("Error while connecting to the server modpack host: {}", formatThrowable(cause));
+					return new ManifestFetchResult(connectionFailedState, null, null, cause);
 				});
+	}
+
+	private static String formatThrowable(Throwable throwable) {
+		StringWriter trace = new StringWriter();
+		throwable.printStackTrace(new PrintWriter(trace));
+		return trace.toString();
 	}
 
 	private static CompletableFuture<Optional<Jsons.CompleteModpackContentFields>> fetchModpackContentAsync(ClientStorage storage, DownloadClient client,

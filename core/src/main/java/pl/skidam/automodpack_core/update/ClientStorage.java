@@ -7,6 +7,7 @@ import static pl.skidam.automodpack_core.Constants.clientBaselinesDir;
 import static pl.skidam.automodpack_core.Constants.clientConfigFile;
 import static pl.skidam.automodpack_core.Constants.clientContentTempFile;
 import static pl.skidam.automodpack_core.Constants.clientDir;
+import static pl.skidam.automodpack_core.Constants.clientGeneratedCopiesDir;
 import static pl.skidam.automodpack_core.Constants.clientHelperDir;
 import static pl.skidam.automodpack_core.Constants.clientIncomingDir;
 import static pl.skidam.automodpack_core.Constants.clientOverlaysDir;
@@ -60,6 +61,7 @@ public final class ClientStorage {
 	private final Path recordsDirectory;
 	private final Path overlaysDirectory;
 	private final Path baselinesDirectory;
+	private final Path generatedCopiesDirectory;
 	private final Path activeDirectory;
 	private final Path incomingDirectory;
 	private final Path backupDirectory;
@@ -90,6 +92,7 @@ public final class ClientStorage {
 		this.recordsDirectory = this.clientDirectory.resolve(clientRecordsDir.getFileName()).normalize();
 		this.overlaysDirectory = this.clientDirectory.resolve(clientOverlaysDir.getFileName()).normalize();
 		this.baselinesDirectory = this.clientDirectory.resolve(clientBaselinesDir.getFileName()).normalize();
+		this.generatedCopiesDirectory = this.clientDirectory.resolve(clientGeneratedCopiesDir.getFileName()).normalize();
 		this.activeDirectory = this.clientDirectory.resolve(clientActiveDir.getFileName()).normalize();
 		this.incomingDirectory = this.clientDirectory.resolve(clientIncomingDir.getFileName()).normalize();
 		this.backupDirectory = this.clientDirectory.resolve(clientBackupDir.getFileName()).normalize();
@@ -153,6 +156,24 @@ public final class ClientStorage {
 
 	public Path baselinesDirectory() {
 		return baselinesDirectory;
+	}
+
+	public Path generatedCopiesDirectory() {
+		return generatedCopiesDirectory;
+	}
+
+	public Path generatedCopiesFile(String modpackId, String generationId, String selectionDigest) {
+		Path packRoot = generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
+		Path generationRoot = packRoot.resolve(requireDigest(generationId, "generation ID")).normalize();
+		Path file = generationRoot.resolve(requireDigest(selectionDigest, "generated-copy selection digest") + ".json").normalize();
+		if (!file.startsWith(generationRoot)) throw new IllegalArgumentException("Generated-copy state escaped its generation root");
+		return file;
+	}
+
+	public Path generatedCopiesGenerationDirectory(String modpackId, String generationId) {
+		Path root = generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).resolve(requireDigest(generationId, "generation ID")).normalize();
+		if (!root.startsWith(generatedCopiesDirectory)) throw new IllegalArgumentException("Generated-copy state escaped its root");
+		return root;
 	}
 
 	public Path activeDirectory() {
@@ -351,6 +372,7 @@ public final class ClientStorage {
 		ensureDirectory(recordsDirectory, "client generation records");
 		ensureDirectory(overlaysDirectory, "client overlays");
 		ensureDirectory(baselinesDirectory, "client baselines");
+		ensureDirectory(generatedCopiesDirectory, "client generated-copy state");
 		ensureDirectory(incomingDirectory, "client transaction incoming root");
 		ensureDirectory(backupDirectory, "client transaction backup root");
 		ensureDirectory(helperDirectory, "client update helper");
@@ -384,7 +406,7 @@ public final class ClientStorage {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile);
 		validateWithin(gameDirectory, bootstrapFile);
-		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, activeDirectory, incomingDirectory, backupDirectory, recoveryDirectory, quarantineDirectory,
+		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, recoveryDirectory, quarantineDirectory,
 				stateFile, transactionFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory);
 		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
 	}

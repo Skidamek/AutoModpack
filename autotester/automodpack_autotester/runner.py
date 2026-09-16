@@ -110,6 +110,16 @@ def _assert_running(name):
         )
 
 
+def _is_connecting_screen(screen: str) -> bool:
+    # Fabric 1.20.1's generated intermediary mapping names ConnectScreen class_412.
+    return "FirstConnectScreen" not in screen and any(name in screen for name in ("ConnectScreen", "class_397", "class_412"))
+
+
+def _is_connection_failure_screen(screen: str) -> bool:
+    # Fabric 1.20.1's generated intermediary mapping names DisconnectedScreen class_419.
+    return "DisconnectedScreen" in screen or "class_419" in screen
+
+
 def _inspect_container(name):
     return _container(name).attrs
 
@@ -157,6 +167,23 @@ def _bridge_state(ctx: Context) -> Path:
     return ctx.game_dir / "automodpack" / "autotest" / "bridge-state.json"
 
 
+_CLIENT_DATA_ROOT = Path("automodpack/client/data")
+_CLIENT_DATA_ROOT_IN_CONTAINER = "/work/game/automodpack/client/data"
+
+
+def _ensure_client_data_root(game_dir: Path) -> Path:
+    """Create the one local data root used by every client lifecycle step."""
+    automodpack_dir = game_dir / "automodpack"
+    marker = automodpack_dir / "data-root.json"
+    data_root = game_dir / _CLIENT_DATA_ROOT
+    if not marker.exists():
+        data_root.mkdir(parents=True, exist_ok=True)
+        marker.write_text(json.dumps({"root": _CLIENT_DATA_ROOT_IN_CONTAINER, "shared": False}, indent=2) + "\n")
+    else:
+        data_root.mkdir(parents=True, exist_ok=True)
+    return data_root
+
+
 def _exit_code(name) -> int | None:
     try:
         return _inspect_container(name).get("State", {}).get("ExitCode")
@@ -196,7 +223,7 @@ def _prepare_server(ctx: Context):
     cfg["modpackName"] = ctx.modpack_name
     cfg["acceptedLoaders"] = [ctx.target.loader]
     (srv_dir / "automodpack").mkdir(parents=True, exist_ok=True)
-    (srv_dir / "automodpack" / "automodpack-server.json").write_text(json.dumps(cfg, indent=2))
+    (srv_dir / "automodpack" / "server-config.json").write_text(json.dumps(cfg, indent=2))
     _write_server_generation(ctx, 0)
 
 
@@ -217,21 +244,37 @@ def _server_generation(ctx: Context, index: int) -> dict:
 def _write_server_generation(ctx: Context, index: int) -> None:
     generation = _server_generation(ctx, index)
     srv_dir = ctx.server_dir
-    host_root = srv_dir / "automodpack" / "host-modpack" / "main"
+    host_root = srv_dir / "automodpack" / "host-modpack"
     if host_root.exists():
         shutil.rmtree(host_root)
     host_root.mkdir(parents=True, exist_ok=True)
-    (host_root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
-    (host_root / ctx.marker_rel).write_text(json.dumps({"marker": ctx.modpack_name}) + "\n")
+    main_root = host_root / "main"
+    (main_root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
+    (main_root / ctx.marker_rel).write_text(json.dumps({"marker": ctx.modpack_name}) + "\n")
+    configured_groups = {
+        str(group_id)
+        for group_id in ((ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}) or {}).get("config", {}).get("groups", {}) or {})
+    }
     for item in generation.get("files", []):
         if not isinstance(item, dict) or "path" not in item:
             raise ValueError(f"serverFiles.generations[{index}].files entries need path/content")
         rel = Path(str(item["path"]))
         if rel.is_absolute() or ".." in rel.parts:
             raise ValueError(f"server generation path escapes the host modpack: {rel}")
-        f = host_root / rel
+        group_id = str(item.get("group", "main"))
+        if configured_groups and group_id not in configured_groups:
+            raise ValueError(f"server generation file {rel} refers to undeclared group {group_id!r}")
+        if Path(group_id).is_absolute() or ".." in Path(group_id).parts or len(Path(group_id).parts) != 1:
+            raise ValueError(f"server generation group is not a single safe identifier: {group_id!r}")
+        f = host_root / group_id / rel
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(str(item.get("content", "")))
+        fixture = item.get("fixture")
+        if fixture is not None:
+            if not isinstance(fixture, dict):
+                raise ValueError(f"server generation fixture for {rel} must be a mapping")
+            write_valid_mod_fixture(f, fixture, ctx.target.minecraft)
+        else:
+            f.write_text(str(item.get("content", "")))
     patch_notes = generation.get("patchNotes", "")
     patch_path = srv_dir / "automodpack" / "server" / "patch-notes.md"
     patch_path.parent.mkdir(parents=True, exist_ok=True)
@@ -306,17 +349,39 @@ def _launch_server(ctx: Context):
     _run_container(name=ctx.srv_name, image=img, network=ctx.net_name, env=env, mounts=mounts)
 
 
+def _seed_client_options(game_dir: Path) -> None:
+    """Keep the client's options and suppress the one-time vanilla warning."""
+    options_path = game_dir / "options.txt"
+    if options_path.exists():
+        content = options_path.read_text(encoding="utf-8")
+    else:
+        content = "narrator:0\n"
+
+    lines = content.splitlines(keepends=True)
+    updated = []
+    found = False
+    for line in lines:
+        body = line.rstrip("\r\n")
+        key, separator, _value = body.partition(":")
+        if separator and key == "skipMultiplayerWarning":
+            newline = line[len(body):]
+            updated.append(f"skipMultiplayerWarning:true{newline}")
+            found = True
+        else:
+            updated.append(line)
+    if not found:
+        if updated and not updated[-1].endswith(("\n", "\r")):
+            updated[-1] += "\n"
+        updated.append("skipMultiplayerWarning:true\n")
+    options_path.write_text("".join(updated), encoding="utf-8")
+
+
 def _launch_client(ctx: Context):
     game_dir = ctx.game_dir
     (game_dir / "mods").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ctx.artifact, game_dir / "mods" / "automodpack.jar")
-    (game_dir / "options.txt").write_text("narrator:0\n")
-    automodpack_dir = game_dir / "automodpack"
-    data_root_marker = automodpack_dir / "data-root.json"
-    if not data_root_marker.exists():
-        data_root = automodpack_dir / "data"
-        data_root.mkdir(parents=True, exist_ok=True)
-        data_root_marker.write_text(json.dumps({"root": "/work/game/automodpack/data", "shared": False}, indent=2) + "\n")
+    _seed_client_options(game_dir)
+    _ensure_client_data_root(game_dir)
     _bridge_state(ctx).unlink(missing_ok=True)
 
     # Per-target HMC cache (isolated to prevent concurrent NeoForge installer corruption)
@@ -412,6 +477,135 @@ def _v_launch_client(ctx: Context, step):
     _launch_client(ctx)
 
 
+@verb("reset_client_generation")
+def _v_reset_client_generation(ctx: Context, _step):
+    """Reset only records, active projection, active state, and object CAS for a fresh-client test.
+
+    Trust and connection data remain in place deliberately, as do all ordinary game files such as mods/.
+    """
+    client = ctx.game_dir / "automodpack" / "client"
+    for relative in ("records", "active", "active-state.json", "data/objects"):
+        path = client / relative
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink(missing_ok=True)
+    ctx.vars["client_generation_reset"] = True
+
+
+@verb("assert_client_objects_absent")
+def _v_assert_client_objects_absent(ctx: Context, _step):
+    objects = _ensure_client_data_root(ctx.game_dir) / "objects"
+    if objects.exists():
+        raise AssertionError(f"fresh-client CAS was not removed: {objects}")
+
+
+@verb("seed_bootstrap")
+def _v_seed_bootstrap(ctx: Context, step):
+    """Write a real game-root bootstrap file from the live server state."""
+    fingerprint = str(ctx.vars.get("fingerprint", "")).strip()
+    if not fingerprint:
+        raise RuntimeError("seed_bootstrap requires read_server_fingerprint first")
+    projection_path = ctx.server_dir / "automodpack" / "server" / "current-projection.json"
+    config_path = ctx.server_dir / "automodpack" / "server-config.json"
+    try:
+        projection = json.loads(projection_path.read_text(encoding="utf-8"))
+        server_config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"live server bootstrap state is not readable: {error}") from error
+    modpack_id = str(projection.get("modpackId", "")).strip()
+    if not modpack_id:
+        raise RuntimeError(f"live server projection has no modpackId: {projection_path}")
+    origin = str(ctx.resolve(step.get("origin", "${server.host}"))).strip()
+    endpoint = str(ctx.resolve(step.get("endpoint", "${server.host}"))).strip()
+    connection_mode = str(step.get("connectionMode") or server_config.get("connectionMode") or "").strip().upper()
+    if not origin or not endpoint or not connection_mode:
+        raise RuntimeError("bootstrap requires origin, endpoint, and connectionMode")
+    fields = {
+        "origin": origin,
+        "fingerprint": fingerprint,
+        "modpackId": modpack_id,
+        "endpoint": endpoint,
+        "connectionMode": connection_mode,
+    }
+    bootstrap_path = ctx.game_dir / "automodpack-bootstrap.json"
+    bootstrap_path.write_text(json.dumps(fields, indent=2) + "\n", encoding="utf-8")
+    ctx.vars.update({
+        "bootstrap_origin": origin,
+        "bootstrap_endpoint": endpoint,
+        "bootstrap_fingerprint": fingerprint,
+        "bootstrap_modpack_id": modpack_id,
+        "bootstrap_connection_mode": connection_mode,
+        "bootstrap_path": "automodpack-bootstrap.json",
+    })
+
+
+def _published_objects(ctx: Context) -> dict[str, int]:
+    projection_path = ctx.server_dir / "automodpack" / "server" / "current-projection.json"
+    try:
+        projection = json.loads(projection_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AssertionError(f"published projection is not readable: {error}") from error
+    expected = {}
+    for group in (projection.get("groups", {}) or {}).values():
+        for file in (group.get("files", {}) or {}).values():
+            sha1 = str(file.get("sha1", "")).strip().lower()
+            if not sha1:
+                continue
+            size = int(file["size"])
+            previous_size = expected.setdefault(sha1, size)
+            if previous_size != size:
+                raise AssertionError(f"published projection gives object {sha1} conflicting sizes: {previous_size} and {size}")
+    return expected
+
+
+@verb("assert_preload_rejected")
+def _v_assert_preload_rejected(ctx: Context, _step):
+    """Assert that bootstrap import ran without letting an anonymous secret preload the catalogue."""
+    expected = _published_objects(ctx)
+    if not expected:
+        raise AssertionError("published projection contains no object hashes")
+    objects = _ensure_client_data_root(ctx.game_dir) / "objects"
+    present = [sha1 for sha1 in expected if (objects / sha1).is_file()]
+    if present:
+        raise AssertionError(f"anonymous bootstrap preload acquired catalogue objects: count={len(present)}")
+    connection_path = ctx.game_dir / "automodpack" / "client" / "data" / "packs" / str(ctx.vars["bootstrap_modpack_id"]) / "connection.json"
+    try:
+        connection = json.loads(connection_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AssertionError(f"bootstrap connection state is not readable: {error}") from error
+    secrets = connection.get("secrets", {})
+    if isinstance(secrets, dict) and secrets.get(str(ctx.vars["bootstrap_origin"])):
+        raise AssertionError("anonymous bootstrap preload unexpectedly persisted a client secret")
+
+
+@verb("assert_preload_acquired")
+def _v_assert_preload_acquired(ctx: Context, _step):
+    """Assert that Preload acquired every object in the published catalogue into CAS."""
+    expected = _published_objects(ctx)
+    if not expected:
+        raise AssertionError("published projection contains no object hashes")
+    objects = _ensure_client_data_root(ctx.game_dir) / "objects"
+    missing = []
+    invalid = []
+    for sha1, size in expected.items():
+        object_path = objects / sha1
+        try:
+            if not object_path.is_file() or object_path.stat().st_size != size:
+                missing.append(sha1)
+            elif hashlib.sha1(object_path.read_bytes()).hexdigest() != sha1:
+                invalid.append(sha1)
+        except OSError:
+            missing.append(sha1)
+    if missing or invalid:
+        raise AssertionError(f"preload CAS is incomplete: missing={missing}, invalid={invalid}")
+    log = ctx.container_logs("client")
+    marker = f"Preloaded {len(expected)} complete modpack objects"
+    if marker not in log:
+        raise AssertionError(f"client log did not prove fresh complete preload: {marker!r}")
+    ctx.vars["preloaded_object_count"] = len(expected)
+
+
 @verb("wait_bridge")
 def _v_wait_bridge(ctx: Context, step):
     if ctx.bridge is None:
@@ -449,21 +643,25 @@ def _v_connect(ctx: Context, step):
     timeout = parse_duration(step.get("timeout"), default=90)
     deadline = time.monotonic() + timeout
     _TITLE = ("TitleScreen", "class_442")
-    _CONNECT = ("ConnectScreen", "class_397")
+    last_screen = "<not observed>"
     while time.monotonic() < deadline:
         _assert_running(ctx.cli_name)
         ctx.bridge.connect(host)
         poll_dl = time.monotonic() + min(deadline - time.monotonic(), 45)
         while time.monotonic() < poll_dl:
             screen = str(ctx.bridge.gui().get("screenClass") or "")
+            last_screen = screen or "<none>"
             if any(n in screen for n in _TITLE):
                 break
-            if not any(n in screen for n in _CONNECT):
+            if _is_connection_failure_screen(screen):
+                break
+            if not _is_connecting_screen(screen):
                 return
             _jitter_sleep(0.5)
         ctx.bridge.request("disconnect")
         _jitter_sleep(1)
-    raise RuntimeError(f"Could not connect to {host} after multiple attempts")
+    log_tail = "\n".join(ctx.container_logs("client").splitlines()[-20:])
+    raise RuntimeError(f"Could not connect to {host} after multiple attempts; last_screen={last_screen!r}\n--- client log tail ---\n{log_tail}")
 
 
 @verb("disconnect")
@@ -593,8 +791,8 @@ def _staged_state_digest(ctx: Context, modpack_id: str, files: list[dict], modpa
     encoder.integer(0).integer(len(files))
     for entry in files:
         encoder.string(entry["logicalPath"]).long(int(entry["size"])).string(entry["type"])
-        encoder.boolean(entry["editable"]).boolean(False).boolean(False).string(entry["sha1"]).string("")
-    return encoder.integer(0).digest()
+        encoder.boolean(entry["editable"]).boolean(False).string(entry["sha1"]).string("")
+    return encoder.digest()
 
 
 def _write_staged_generation(
@@ -606,6 +804,7 @@ def _write_staged_generation(
     client_root: Path | None = None,
     modpack_name: str | None = None,
     patch_notes: str = "",
+    editable_paths: set[str] | frozenset[str] = frozenset(),
 ) -> dict:
     files = []
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
@@ -616,7 +815,7 @@ def _write_staged_generation(
             "logicalPath": rel.as_posix(),
             "size": str(path.stat().st_size),
             "type": "mod" if rel.parts and rel.parts[0] == "mods" else "config",
-            "editable": rel == ctx.marker_rel,
+            "editable": rel == ctx.marker_rel or rel.as_posix() in editable_paths,
             "sha1": _sha1(path),
         })
 
@@ -722,16 +921,13 @@ def _v_stage_modpack(ctx: Context, step):
     modpack_name = str(step.get("packName") or ctx.modpack_name)
     automodpack = game / "automodpack"
     client_root = automodpack / "client"
-    data_root = client_root / "data"
+    data_root = _ensure_client_data_root(game)
     root = client_root / "staging" / modpack_id if record_only else client_root / "active"
     if root.exists():
         shutil.rmtree(root)
     if not record_only:
         ctx.vars["active_dir"] = "automodpack/client/active"
     root.mkdir(parents=True, exist_ok=True)
-    data_root.mkdir(parents=True, exist_ok=True)
-    (automodpack / "data-root.json").write_text(json.dumps({"root": "/work/game/automodpack/client/data", "shared": False}, indent=2) + "\n")
-
     src = step.get("from")
     if src:
         src_path = Path(ctx.resolve(str(src)))
@@ -745,6 +941,11 @@ def _v_stage_modpack(ctx: Context, step):
     declared_files = step.get("files")
     if declared_files is None:
         declared_files = [{"path": str(rel), "content": content} for rel, content in ctx.scenario_files]
+    editable_paths = {
+        Path(str(item["path"])).as_posix()
+        for item in declared_files
+        if isinstance(item, dict) and item.get("editable") is True
+    }
     (root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
     (root / ctx.marker_rel).write_text(json.dumps({"marker": modpack_name}) + "\n")
     for item in declared_files:
@@ -758,7 +959,7 @@ def _v_stage_modpack(ctx: Context, step):
             fixture = item["fixture"]
             if not isinstance(fixture, dict):
                 raise ValueError("stage_modpack fixture must be a mapping")
-            write_valid_mod_fixture(f, fixture)
+            write_valid_mod_fixture(f, fixture, ctx.target.minecraft)
         else:
             f.parent.mkdir(parents=True, exist_ok=True)
             f.write_text(content)
@@ -790,6 +991,7 @@ def _v_stage_modpack(ctx: Context, step):
         client_root=client_root,
         modpack_name=modpack_name,
         patch_notes=str(step.get("patchNotes", "")),
+        editable_paths=editable_paths,
     )
     if record_only:
         shutil.rmtree(root)
@@ -837,8 +1039,7 @@ def _v_stage_modpack(ctx: Context, step):
 @verb("seed_cas")
 def _v_seed_cas(ctx: Context, _step):
     """Put the scenario's server files in the client CAS without installing them."""
-    automodpack = ctx.game_dir / "automodpack"
-    objects = automodpack / "data" / "objects"
+    objects = _ensure_client_data_root(ctx.game_dir) / "objects"
     objects.mkdir(parents=True, exist_ok=True)
     payloads = [json.dumps({"marker": ctx.modpack_name}).encode("utf-8") + b"\n"]
     payloads.extend(content.encode("utf-8") for _, content in ctx.scenario_files)

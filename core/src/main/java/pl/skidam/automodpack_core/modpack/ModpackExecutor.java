@@ -139,6 +139,16 @@ public class ModpackExecutor {
 		return generationStore.measureStorage();
 	}
 
+	public GenerationStore.CompactionResult compactHistory() throws IOException {
+		if (!acquire(true)) throw new IOException("Another modpack operation is already in progress");
+		try {
+			return generationStore.compact();
+		} finally {
+			publicationActive.set(false);
+			scanActive.set(false);
+		}
+	}
+
 	private PublishResult publishInternal(String expectedStateDigest, String inlineNotes) {
 		if (!acquire(true)) return new PublishBusy("Another modpack operation is already in progress");
 		GenerationStore.Publication publication = null;
