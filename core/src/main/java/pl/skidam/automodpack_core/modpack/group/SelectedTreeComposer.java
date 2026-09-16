@@ -2,27 +2,27 @@ package pl.skidam.automodpack_core.modpack.group;
 
 import java.util.*;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 
 public final class SelectedTreeComposer {
 	private SelectedTreeComposer() {}
 
-	public static Jsons.ModpackContentFields compose(GroupManifest manifest, ResolvedSelection selection) {
+	public static ModpackJsons.ModpackContentFields compose(GroupManifest manifest, ResolvedSelection selection) {
 		return compose(manifest, selection, null);
 	}
 
-	public static Jsons.ModpackContentFields compose(GroupManifest manifest, ResolvedSelection selection, GenerationTarget generationTarget) {
+	public static ModpackJsons.ModpackContentFields compose(GroupManifest manifest, ResolvedSelection selection, GenerationTarget generationTarget) {
 		return compose(manifest, selection.selectedGroups(), generationTarget, true);
 	}
 
-	public static Jsons.ModpackContentFields composeAll(GroupManifest manifest, GenerationTarget generationTarget) {
+	public static ModpackJsons.ModpackContentFields composeAll(GroupManifest manifest, GenerationTarget generationTarget) {
 		return compose(manifest, new TreeSet<>(manifest.groups().keySet()), generationTarget, false);
 	}
 
-	private static Jsons.ModpackContentFields compose(GroupManifest manifest, Collection<String> groupIds, GenerationTarget generationTarget, boolean resolvePaths) {
+	private static ModpackJsons.ModpackContentFields compose(GroupManifest manifest, Collection<String> groupIds, GenerationTarget generationTarget, boolean resolvePaths) {
 		Map<String, GroupManifest.GroupFile> files = new TreeMap<>();
-		Set<Jsons.ModpackContentFields.ModpackContentItem> selectedFiles = new LinkedHashSet<>();
+		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> selectedFiles = new LinkedHashSet<>();
 		for (String groupId : groupIds) {
 			GroupManifest.Group group = manifest.groups().get(groupId);
 			if (group == null) throw new IllegalArgumentException("Selected group is absent from the catalogue: " + groupId);
@@ -33,7 +33,7 @@ public final class SelectedTreeComposer {
 						throw new IllegalArgumentException("Selected groups produce conflicting path: " + entry.getKey());
 				} else {
 					GroupManifest.GroupFile file = entry.getValue();
-					selectedFiles.add(new Jsons.ModpackContentFields.ModpackContentItem(entry.getKey(), String.valueOf(file.size()), file.type(), file.editable(),
+					selectedFiles.add(new ModpackJsons.ModpackContentFields.ModpackContentItem(entry.getKey(), String.valueOf(file.size()), file.type(), file.editable(),
 							file.overwriteEditable(), file.sha1(), file.murmur()));
 				}
 			}
@@ -42,12 +42,12 @@ public final class SelectedTreeComposer {
 		if (resolvePaths) {
 			for (var entry : files.entrySet()) {
 				GroupManifest.GroupFile file = entry.getValue();
-				selectedFiles.add(new Jsons.ModpackContentFields.ModpackContentItem(entry.getKey(), String.valueOf(file.size()), file.type(), file.editable(),
+				selectedFiles.add(new ModpackJsons.ModpackContentFields.ModpackContentItem(entry.getKey(), String.valueOf(file.size()), file.type(), file.editable(),
 						file.overwriteEditable(), file.sha1(), file.murmur()));
 			}
 		}
 
-		Jsons.ModpackContentFields target = new Jsons.ModpackContentFields(selectedFiles);
+		ModpackJsons.ModpackContentFields target = new ModpackJsons.ModpackContentFields(selectedFiles);
 		target.modpackId = manifest.modpackId();
 		target.modpackName = manifest.modpackName();
 		target.automodpackVersion = manifest.automodpackVersion();

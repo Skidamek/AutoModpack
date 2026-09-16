@@ -470,6 +470,93 @@ def _v_publish_server_generation(ctx: Context, step):
     ctx.vars["published_server_generation"] = index
 
 
+@verb("compact_server_history")
+def _v_compact_server_history(ctx: Context, step):
+    """Compact the live server lineage and verify its durable receipt and projection."""
+    server_root = ctx.server_dir / "automodpack" / "server"
+    projection_path = server_root / "current-projection.json"
+    checkpoint_path = server_root / "checkpoint.json"
+    before_checkpoint_bytes = checkpoint_path.read_bytes() if checkpoint_path.is_file() else None
+    before_projection_bytes = projection_path.read_bytes()
+    before_projection = json.loads(projection_path.read_text(encoding="utf-8"))
+    before_history = list(before_projection.get("patchNotesHistory") or [])
+    if len(before_history) < 2:
+        raise AssertionError("server compaction scenario needs at least two patch-note history entries")
+    expected_ids = [str(entry.get("generationId", "")) for entry in before_history]
+    expected_notes = [str(entry.get("patchNotes", "")) for entry in before_history]
+    expected_superseded_ids = set(expected_ids[:-1])
+    before_counts = {
+        name: len(list((server_root / name).glob("*.json")))
+        for name in ("catalogues", "commits", "deltas")
+    }
+    before_deletion_paths = {
+        server_root / "commits" / f"{generation_id}.json"
+        for generation_id in expected_superseded_ids
+    } | {
+        server_root / "deltas" / f"{generation_id}.json"
+        for generation_id in expected_superseded_ids
+    }
+    result = _container(ctx.srv_name).exec_run(["rcon-cli", "automodpack", "generate", "storage", "compact", "confirm"])
+    output = result.output.decode("utf-8", errors="replace") if result.output else ""
+    if result.exit_code != 0:
+        raise RuntimeError(f"server history compaction command failed ({result.exit_code}): {output}")
+    if "incorrect argument for command" in output.lower() or "unknown command" in output.lower():
+        raise RuntimeError(f"server history compaction command was rejected: {output}")
+
+    def completed_state():
+        if not checkpoint_path.is_file() or not projection_path.is_file():
+            return None
+        try:
+            checkpoint_bytes = checkpoint_path.read_bytes()
+            checkpoint = json.loads(checkpoint_bytes)
+            after_projection = json.loads(projection_path.read_text(encoding="utf-8"))
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return None
+        checkpoint_history = list(checkpoint.get("patchNotesHistory") or [])
+        projection_history = list(after_projection.get("patchNotesHistory") or [])
+        checkpoint_ids = [str(entry.get("generationId", "")) for entry in checkpoint_history]
+        projection_ids = [str(entry.get("generationId", "")) for entry in projection_history]
+        if checkpoint_ids != expected_ids or projection_ids != expected_ids:
+            return None
+        if [str(entry.get("patchNotes", "")) for entry in checkpoint_history] != expected_notes:
+            return None
+        if [str(entry.get("patchNotes", "")) for entry in projection_history] != expected_notes:
+            return None
+        boundary_id = str(checkpoint.get("boundaryGenerationId", ""))
+        if boundary_id != expected_ids[-1] or str(checkpoint.get("record", {}).get("generation", {}).get("generationId", "")) != boundary_id:
+            return None
+        superseded_ids = set(checkpoint.get("supersededGenerationIds") or [])
+        if superseded_ids != expected_superseded_ids:
+            return None
+        superseded_states = set(checkpoint.get("supersededCatalogueStateDigests") or [])
+        current_state = str(checkpoint.get("record", {}).get("generation", {}).get("stateDigest", ""))
+        if current_state in superseded_states:
+            return None
+        if any(path.exists() for path in before_deletion_paths):
+            return None
+        for state_digest in superseded_states:
+            if (server_root / "catalogues" / f"{state_digest}.json").exists():
+                return None
+        after_counts = {
+            name: len(list((server_root / name).glob("*.json")))
+            for name in ("catalogues", "commits", "deltas")
+        }
+        if not any(after_counts[name] < before_counts[name] for name in before_counts):
+            return None
+        if checkpoint_bytes == before_checkpoint_bytes and projection_path.read_bytes() == before_projection_bytes:
+            return None
+        return checkpoint, after_projection, after_counts
+
+    checkpoint, after_projection, after_counts = await_condition(
+        completed_state,
+        parse_duration(step.get("timeout"), default=120),
+        step.get("poll"),
+        "server generation compaction did not publish a new validated receipt, projection, and deletion state",
+    )
+    checkpoint_history = list(checkpoint.get("patchNotesHistory") or [])
+    ctx.vars["server_compaction"] = {"before": before_counts, "after": after_counts, "historyEntries": len(checkpoint_history)}
+
+
 @verb("launch_client")
 def _v_launch_client(ctx: Context, step):
     _remove_container(ctx.cli_name)

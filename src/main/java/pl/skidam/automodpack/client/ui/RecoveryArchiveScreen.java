@@ -30,7 +30,7 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 	private Button nextButton;
 
 	public RecoveryArchiveScreen(Screen parent, ModpackUpdater updater, ModpackUpdater.RecoverySnapshot snapshot, String modpackName, Runnable closedCallback) {
-		super(VersionedText.literal("RecoveryArchiveScreen"));
+		super(VersionedText.translatable("automodpack.recovery.title"));
 		this.parent = parent;
 		this.updater = updater;
 		this.snapshot = snapshot;
@@ -46,16 +46,16 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 		int rowWidth = panelWidth(310);
 		int gap = 10;
 		int tabWidth = (rowWidth - gap) / 2;
-		Button availableTab = buttonWidget(left, 50, tabWidth, 20, VersionedText.literal("Files to preserve"), button -> selectAvailable());
-		Button archivedTab = buttonWidget(left + tabWidth + gap, 50, tabWidth, 20, VersionedText.literal("Preserved files"), button -> selectArchived());
+		Button availableTab = buttonWidget(left, 50, tabWidth, 20, VersionedText.translatable("automodpack.recovery.availableTab"), button -> selectAvailable());
+		Button archivedTab = buttonWidget(left + tabWidth + gap, 50, tabWidth, 20, VersionedText.translatable("automodpack.recovery.archivedTab"), button -> selectArchived());
 		availableTab.active = !showAvailable;
 		archivedTab.active = showAvailable;
 		this.addRenderableWidget(availableTab);
 		this.addRenderableWidget(archivedTab);
 		int actionWidth = actionButtonWidth(310, 3);
 		boolean hasPagination = pageCount() > 1;
-		this.previousButton = buttonWidget(actionButtonX(310, 3, 1), navigationY, actionWidth, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
-		this.nextButton = buttonWidget(actionButtonX(310, 3, 2), navigationY, actionWidth, 20, VersionedText.literal("Next >"), button -> changePage(1));
+		this.previousButton = buttonWidget(actionButtonX(310, 3, 1), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.ui.previous"), button -> changePage(-1));
+		this.nextButton = buttonWidget(actionButtonX(310, 3, 2), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.ui.next"), button -> changePage(1));
 		updateNavigation();
 		if (hasPagination) {
 			this.addRenderableWidget(this.previousButton);
@@ -76,7 +76,7 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 			int y = 72 + (index - start) * 22;
 			int rowWidth = panelWidth(310);
 			Button button = buttonWidget(panelLeft(310), y, rowWidth, 20,
-					VersionedText.literal(truncateToWidth(this.font, "Preserve " + file.logicalPath() + " (" + UiFormat.formatSize(file.size()) + ")", rowWidth - 20)), press -> archive(file));
+					VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.recovery.preserveFile", file.logicalPath(), UiFormat.formatSize(file.size())).getString(), rowWidth - 20)), press -> archive(file));
 			button.active = !busy;
 			this.addRenderableWidget(button);
 		}
@@ -165,11 +165,11 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		String title = modpackName.isBlank() ? "Recovery archive" : modpackName + " recovery archive";
+		String title = VersionedText.translatable(modpackName.isBlank() ? "automodpack.recovery.title" : "automodpack.recovery.titleNamed", modpackName).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Preserve files removed by newer modpack versions.", this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, 30,
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.recovery.description").withStyle(ChatFormatting.GRAY), this.width / 2, 30,
 				TextColors.WHITE);
-		String counts = busy ? "Preserving file..." : "Available: " + snapshot.available().size() + "  Preserved: " + snapshot.archived().size();
+		String counts = busy ? VersionedText.translatable("automodpack.recovery.busy").getString() : VersionedText.translatable("automodpack.recovery.counts", snapshot.available().size(), snapshot.archived().size()).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(counts).withStyle(ChatFormatting.YELLOW), this.width / 2, 42, TextColors.WHITE);
 		List<ModpackUpdater.RecoveryFile> files = files();
 		int pageSize = rowsPerPage();
@@ -178,23 +178,23 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 		if (!showAvailable) for (int index = start; index < end; index++) {
 			ModpackUpdater.RecoveryFile file = files.get(index);
 			int y = 76 + (index - start) * ARCHIVED_ROW_HEIGHT;
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Path: " + file.logicalPath(), this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y,
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.recovery.path", file.logicalPath()).getString(), this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y,
 					TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Size: " + UiFormat.formatSize(file.size())).withStyle(ChatFormatting.GREEN), this.width / 2, y + 12, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.recovery.size", UiFormat.formatSize(file.size())).withStyle(ChatFormatting.GREEN), this.width / 2, y + 12, TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.literal(truncateToWidth(this.font, "Preserved at: " + displayPreservedAt(file.preservedAt()), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, y + 24, TextColors.WHITE);
+				VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.recovery.preservedAt", displayPreservedAt(file.preservedAt())).getString(), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, y + 24, TextColors.WHITE);
 		}
 
 		if (files.isEmpty()) {
-			String empty = showAvailable ? "No deleted modpack files are available." : "No files have been preserved.";
+			String empty = VersionedText.translatable(showAvailable ? "automodpack.recovery.emptyAvailable" : "automodpack.recovery.emptyArchived").getString();
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(empty).withStyle(ChatFormatting.GRAY), this.width / 2, 90, TextColors.WHITE);
 		}
-		if (pageCount() > 1) drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal((page + 1) + " / " + pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 40,
+		if (pageCount() > 1) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.ui.page", page + 1, pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 40,
 				TextColors.WHITE);
 	}
 
 	private String displayPreservedAt(String preservedAt) {
-		return preservedAt == null || preservedAt.isEmpty() ? "Unknown" : truncateToWidth(this.font, preservedAt, Math.max(1, this.width - 20));
+		return preservedAt == null || preservedAt.isEmpty() ? VersionedText.translatable("automodpack.recovery.unknown").getString() : truncateToWidth(this.font, preservedAt, Math.max(1, this.width - 20));
 	}
 
 	@Override

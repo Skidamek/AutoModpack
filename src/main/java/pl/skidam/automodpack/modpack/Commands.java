@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.modpack;
 
+import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -15,7 +17,6 @@ import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.auth.ServerAddressPin;
 import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryEntry;
@@ -50,36 +51,39 @@ import static pl.skidam.automodpack_core.Constants.*;
 public class Commands {
 
 	public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+		var generateIfStateNode = literal("if-state")
+				.then(argument("state-digest", StringArgumentType.word()).executes(Commands::guardedGenerateModpack)
+						.then(literal("notes")
+								.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::guardedGenerateModpack))));
+		var generateRevertNode = literal("revert")
+				.then(argument("generation-id", StringArgumentType.word()).executes(Commands::previewRevertGeneration)
+						.then(literal("confirm")
+								.executes(Commands::revertGeneration)
+								.then(literal("notes")
+										.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::revertGeneration)))));
+		var generateStorageNode = literal("storage")
+				.executes(Commands::generationStorage)
+				.then(literal("compact")
+						.then(literal("confirm").executes(Commands::generationStorageCompact)))
+				.then(literal("collect")
+						.then(literal("confirm").executes(Commands::generationStorageCollect)));
+		var generateNode = literal("generate")
+				.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+				.executes(Commands::generateModpack)
+				.then(literal("notes")
+						.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::generateModpack)))
+				.then(literal("preview")
+						.executes(Commands::previewModpack)
+						.then(literal("notes")
+								.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::previewModpack))))
+				.then(generateIfStateNode)
+				.then(generateRevertNode)
+				.then(literal("history").executes(Commands::generationHistory))
+				.then(generateStorageNode);
 		var automodpackNode = dispatcher.register(
 				literal("automodpack")
 						.executes(Commands::about)
-						.then(literal("generate")
-								.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-								.executes(Commands::generateModpack)
-								.then(literal("notes")
-										.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::generateModpack)))
-								.then(literal("preview")
-										.executes(Commands::previewModpack)
-										.then(literal("notes")
-												.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::previewModpack))))
-								.then(literal("if-state")
-										.then(argument("state-digest", StringArgumentType.word()).executes(Commands::guardedGenerateModpack)
-															.then(literal("notes")
-																	.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::guardedGenerateModpack))))
-					.then(literal("revert")
-						.then(argument("generation-id", StringArgumentType.word()).executes(Commands::previewRevertGeneration)
-								.then(literal("confirm")
-										.executes(Commands::revertGeneration)
-										.then(literal("notes")
-												.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::revertGeneration)))))
-					.then(literal("history").executes(Commands::generationHistory))
-						.then(literal("storage")
-								.executes(Commands::generationStorage)
-								.then(literal("compact")
-										.then(literal("confirm").executes(Commands::generationStorageCompact)))
-								.then(literal("collect")
-										.then(literal("confirm").executes(Commands::generationStorageCollect))))
-						)))
+						.then(generateNode)
 						.then(literal("host")
 								.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
 								.executes(Commands::modpackHostAbout)
@@ -270,7 +274,7 @@ public class Commands {
 		}
 	}
 
-	private static int writeBootstrap(CommandContext<CommandSourceStack> context, Jsons.KnownHostsBootstrapFields fields, boolean install) {
+	private static int writeBootstrap(CommandContext<CommandSourceStack> context, ConnectionJsons.KnownHostsBootstrapFields fields, boolean install) {
 		try {
 			ConfigTools.writeAtomic(bootstrapFile, fields);
 		} catch (IOException e) {
@@ -281,7 +285,7 @@ public class Commands {
 
 		String absolutePath = bootstrapFile.toAbsolutePath().normalize().toString();
 		send(context, "Bootstrap file exported", ChatFormatting.GREEN, copyable(absolutePath), ChatFormatting.YELLOW, false);
-		send(context, "Package it on clients at", ChatFormatting.WHITE, copyable("automodpack/automodpack-bootstrap.json"), ChatFormatting.YELLOW, false);
+		send(context, "Package it on clients at", ChatFormatting.WHITE, copyable("automodpack-bootstrap.json"), ChatFormatting.YELLOW, false);
 		if (install && serverConfig.validateSecrets) {
 			send(context,
 					"WARNING: validateSecrets=true. Fresh clients without an existing secret for this origin will fail preload download; disable validation or provision a normal login first.",
@@ -326,7 +330,7 @@ public class Commands {
 
 	private static int reload(CommandContext<CommandSourceStack> context) {
 		Util.backgroundExecutor().execute(() -> {
-			var tempServerConfig = ConfigTools.read(serverConfigFile, Jsons.ServerConfigFieldsV3.class).orElse(null);
+			var tempServerConfig = ConfigTools.read(serverConfigFile, ServerConfigJsons.ServerConfigFieldsV3.class).orElse(null);
 			if (tempServerConfig != null) {
 				ConfigUtils.normalizeServerConfig(tempServerConfig, true);
 				boolean restartRequired = connectionRuntimeChanged(serverConfig, tempServerConfig);
@@ -399,7 +403,7 @@ public class Commands {
 		}
 	}
 
-	private static boolean connectionRuntimeChanged(Jsons.ServerConfigFieldsV3 previous, Jsons.ServerConfigFieldsV3 current) {
+	private static boolean connectionRuntimeChanged(ServerConfigJsons.ServerConfigFieldsV3 previous, ServerConfigJsons.ServerConfigFieldsV3 current) {
 		return previous.connectionMode != current.connectionMode || previous.bindPort != current.bindPort || previous.modpackHost != current.modpackHost
 				|| previous.disableInternalTLS != current.disableInternalTLS || previous.bandwidthLimit != current.bandwidthLimit
 				|| previous.updateIpsOnEveryStart != current.updateIpsOnEveryStart || !Objects.equals(previous.bindAddress, current.bindAddress);
@@ -594,7 +598,7 @@ public class Commands {
 				Set<String> retainedGenerationIds = new TreeSet<>();
 				for (GenerationHistoryEntry entry : modpackExecutor.technicalHistory()) retainedGenerationIds.add(entry.metadata().generationId());
 				Path serverRoot = SmartFileUtils.CWD.resolve(serverDir).normalize();
-				Path objectRoot = DataRootResolver.resolve(SmartFileUtils.CWD).root().resolve("objects").normalize();
+				Path objectRoot = DataRootResolver.resolve(SmartFileUtils.CWD).layout().objectsDirectory();
 				Set<String> clientObjectPins = ClientObjectStore.existingReferencedHashes(ClientStorage.fromGameDirectory(SmartFileUtils.CWD));
 				GenerationStore.CollectionResult result = new GenerationStore(serverRoot, objectRoot).collectUnreachableObjects(retainedGenerationIds, clientObjectPins);
 				send(context, "Generation objects collected", ChatFormatting.GREEN, false);

@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 
 /** The immutable generation identity carried by a selected flat client target. */
@@ -19,7 +19,7 @@ public record GenerationTarget(String modpackId, String targetGenerationId, Stri
 				record.metadata().stateDigest(), record.metadata().ledgerDigest());
 	}
 
-	public static GenerationTarget fromFlat(Jsons.ModpackContentFields fields) {
+	public static GenerationTarget fromFlat(ModpackJsons.ModpackContentFields fields) {
 		if (fields == null) throw new IllegalArgumentException("Selected modpack target is missing");
 		String modpackId = ModpackId.requireValid(fields.modpackId);
 		OwnershipLedger ledger = OwnershipLedger.fromFields(fields.ownershipLedger);

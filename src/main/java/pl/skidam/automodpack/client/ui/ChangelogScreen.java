@@ -30,7 +30,7 @@ public class ChangelogScreen extends VersionedScreen {
 	private Button openMainPageButton;
 
 	public ChangelogScreen(Screen parent, Changelogs changelogs) {
-		super(VersionedText.literal("ChangelogScreen"));
+		super(VersionedText.translatable("automodpack.changelog.title"));
 		this.parent = parent;
 		this.changelogs = changelogs;
 
@@ -100,7 +100,7 @@ public class ChangelogScreen extends VersionedScreen {
 			this.height - 30,
 			actionButtonWidth(310, 3),
 			20,
-			VersionedText.literal("Project page"),
+			VersionedText.translatable("automodpack.changelog.openPage"),
 			button -> {
 				ListEntry selectedEntry = listEntryWidget.getSelected();
 

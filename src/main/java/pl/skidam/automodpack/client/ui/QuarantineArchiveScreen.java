@@ -34,7 +34,7 @@ public final class QuarantineArchiveScreen extends VersionedScreen {
 	private Future<?> work;
 
 	public QuarantineArchiveScreen(Screen parent, ClientStorage storage, String modpackId, String modpackName, boolean activePack, Runnable closedCallback) {
-		super(VersionedText.literal("Quarantine archive"));
+		super(VersionedText.translatable("automodpack.quarantine.title"));
 		this.parent = parent;
 		this.storage = storage;
 		this.modpackId = modpackId;
@@ -58,7 +58,7 @@ public final class QuarantineArchiveScreen extends VersionedScreen {
 			int y = 72 + (index - start) * ROW_HEIGHT;
 			if (activePack) {
 				int rowWidth = panelWidth(310);
-				Button restore = buttonWidget(panelLeft(310) + rowWidth - 72, y + 9, 72, 20, VersionedText.literal("Restore"), press -> restore(entry));
+				Button restore = buttonWidget(panelLeft(310) + rowWidth - 72, y + 9, 72, 20, VersionedText.translatable("automodpack.quarantine.restore"), press -> restore(entry));
 				restore.active = !busy && !loading;
 				this.addRenderableWidget(restore);
 			}
@@ -68,13 +68,13 @@ public final class QuarantineArchiveScreen extends VersionedScreen {
 		int actionWidth = actionButtonWidth(310, actionCount);
 		int actionY = this.height - 28;
 		if (hasPagination) {
-			Button previous = buttonWidget(actionButtonX(310, 3, 0), actionY, actionWidth, 20, VersionedText.literal("< Prev"), press -> changePage(-1));
+			Button previous = buttonWidget(actionButtonX(310, 3, 0), actionY, actionWidth, 20, VersionedText.translatable("automodpack.ui.previous"), press -> changePage(-1));
 			previous.active = page > 0;
 			this.addRenderableWidget(previous);
-			Button pageLabel = buttonWidget(actionButtonX(310, 3, 1), actionY, actionWidth, 20, VersionedText.literal((page + 1) + " / " + pageCount), press -> {});
+			Button pageLabel = buttonWidget(actionButtonX(310, 3, 1), actionY, actionWidth, 20, VersionedText.translatable("automodpack.ui.page", page + 1, pageCount), press -> {});
 			pageLabel.active = false;
 			this.addRenderableWidget(pageLabel);
-			Button next = buttonWidget(actionButtonX(310, 3, 2), actionY, actionWidth, 20, VersionedText.literal("Next >"), press -> changePage(1));
+			Button next = buttonWidget(actionButtonX(310, 3, 2), actionY, actionWidth, 20, VersionedText.translatable("automodpack.ui.next"), press -> changePage(1));
 			next.active = page + 1 < pageCount;
 			this.addRenderableWidget(next);
 		} else {
@@ -184,11 +184,11 @@ public final class QuarantineArchiveScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		String title = (modpackName.isBlank() ? modpackId : modpackName) + " quarantine archive";
+		String title = VersionedText.translatable("automodpack.quarantine.titleNamed", modpackName.isBlank() ? modpackId : modpackName).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Local mods moved because they conflicted with this pack.").withStyle(ChatFormatting.GRAY), this.width / 2, 28, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("They were not deleted; unrelated local mods were left alone.").withStyle(ChatFormatting.GRAY), this.width / 2, 40, TextColors.WHITE);
-		String state = loading ? "Loading quarantine entries..." : activePack ? "Active pack: restore is available when safe." : "Inactive pack: switch and review this pack before restoring.";
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.quarantine.description1").withStyle(ChatFormatting.GRAY), this.width / 2, 28, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.quarantine.description2").withStyle(ChatFormatting.GRAY), this.width / 2, 40, TextColors.WHITE);
+		String state = loading ? VersionedText.translatable("automodpack.quarantine.loading").getString() : activePack ? VersionedText.translatable("automodpack.quarantine.activeState").getString() : VersionedText.translatable("automodpack.quarantine.inactiveState").getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, 54, TextColors.WHITE);
 		List<QuarantineArchive.ArchiveEntry> values = entries();
 		int pageSize = rowsPerPage();
@@ -198,11 +198,11 @@ public final class QuarantineArchiveScreen extends VersionedScreen {
 		for (int index = start; index < end; index++) {
 			QuarantineArchive.ArchiveEntry entry = values.get(index);
 			int y = 72 + (index - start) * ROW_HEIGHT;
-			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "From: " + entry.sourcePath(), textWidth)).withStyle(ChatFormatting.WHITE), panelLeft(310), y, TextColors.WHITE);
-			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "IDs: " + String.join(", ", entry.modIds()), textWidth)).withStyle(ChatFormatting.AQUA), panelLeft(310), y + 12, TextColors.WHITE);
-			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Target: " + entry.targetPath(), textWidth)).withStyle(ChatFormatting.GRAY), panelLeft(310), y + 24, TextColors.WHITE);
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.quarantine.from", entry.sourcePath()).getString(), textWidth)).withStyle(ChatFormatting.WHITE), panelLeft(310), y, TextColors.WHITE);
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.quarantine.ids", String.join(", ", entry.modIds())).getString(), textWidth)).withStyle(ChatFormatting.AQUA), panelLeft(310), y + 12, TextColors.WHITE);
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.quarantine.target", entry.targetPath()).getString(), textWidth)).withStyle(ChatFormatting.GRAY), panelLeft(310), y + 24, TextColors.WHITE);
 		}
-		if (!loading && values.isEmpty()) drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("No quarantined local mods remain.").withStyle(ChatFormatting.GRAY), this.width / 2, 92, TextColors.WHITE);
+		if (!loading && values.isEmpty()) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.quarantine.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 92, TextColors.WHITE);
 	}
 
 	@Override

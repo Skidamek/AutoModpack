@@ -52,7 +52,7 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
@@ -114,7 +114,7 @@ class DownloadClientTest {
 		CompletableFuture<Boolean> decision = new CompletableFuture<>();
 
 		try (TransferServer server = new TransferServer(keyPair, certificate)) {
-			Jsons.ConnectionInfo connectionInfo = new Jsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, null, null);
 			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> decision);
 
@@ -136,7 +136,7 @@ class DownloadClientTest {
 		CompletableFuture<Boolean> decision = new CompletableFuture<>();
 
 		try (TransferServer server = new TransferServer(keyPair, certificate)) {
-			Jsons.ConnectionInfo connectionInfo = new Jsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, null, null);
 			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> decision);
 
@@ -154,7 +154,7 @@ class DownloadClientTest {
 		String fingerprint = NetUtils.getFingerprint(certificate);
 
 		try (LeasingServer server = new LeasingServer(keyPair, certificate)) {
-			Jsons.ConnectionInfo connectionInfo = new Jsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, fingerprint, null);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(5,
 					TimeUnit.SECONDS)) {

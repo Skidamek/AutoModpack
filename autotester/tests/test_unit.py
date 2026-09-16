@@ -219,6 +219,28 @@ def test_condition_screen_and_element(make_ctx):
     assert conditions.evaluate(ctx, {"no_element": {"text": "missing"}}, gui=GUI) is True
 
 
+def test_condition_vanilla_title_screen_uses_semantic_snapshot(make_ctx):
+    ctx = make_ctx()
+    condition = {
+        "all": [
+            {"screen": "Title Screen"},
+            {"element": {"role": "button", "text": "Singleplayer", "enabled": True, "visible": True}},
+            {"element": {"role": "button", "text": "Multiplayer", "enabled": True, "visible": True}},
+        ]
+    }
+    mapped_title = {
+        "screenClass": "net.minecraft.class_442",
+        "title": "Title Screen",
+        "buttons": [
+            {"id": 1, "text": "Singleplayer", "enabled": True, "visible": True},
+            {"id": 2, "text": "Multiplayer", "enabled": True, "visible": True},
+        ],
+    }
+    assert conditions.evaluate(ctx, condition, gui=mapped_title) is True
+    assert conditions.evaluate(ctx, condition, gui={**mapped_title, "title": "Play Multiplayer"}) is False
+    assert conditions.evaluate(ctx, condition, gui={**mapped_title, "buttons": mapped_title["buttons"][1:]}) is False
+
+
 def test_condition_screen_none(make_ctx):
     ctx = make_ctx()
     assert conditions.evaluate(ctx, {"screen_none": True}, gui={"screenClass": None}) is True
@@ -260,6 +282,20 @@ def test_screenshot_verb_records_artifact(make_ctx):
     assert ctx.bridge.screenshots == ["first-connect"]
     assert (ctx.game_dir / "automodpack/autotest/screenshots/first-connect.png").is_file()
     assert ctx.vars["screenshot"].endswith("first-connect.png")
+
+
+def test_screenshot_verb_captures_the_currently_rendered_screen(make_ctx):
+    from automodpack_autotester.engine.steps_ui import screenshot
+    from .conftest import FakeBridge
+
+    ctx = make_ctx()
+    ctx.bridge = FakeBridge(ctx)
+    ctx.bridge.screen = "settings"
+    assert ctx.bridge.rendered_screen == "title"
+
+    screenshot(ctx, {"file": "settings"})
+
+    assert ctx.bridge.rendered_screens["settings"] == "settings"
 
 
 # ── executor ──────────────────────────────────────────────────────────────

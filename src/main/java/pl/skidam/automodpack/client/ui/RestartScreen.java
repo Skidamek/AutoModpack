@@ -21,7 +21,7 @@ public class RestartScreen extends VersionedScreen {
 	private Button changelogsButton;
 
 	public RestartScreen(UpdateType updateType, Changelogs changelogs) {
-		super(VersionedText.literal("RestartScreen"));
+		super(VersionedText.translatable("automodpack.restart.title"));
 		this.updateType = updateType;
 		this.changelogs = changelogs;
 

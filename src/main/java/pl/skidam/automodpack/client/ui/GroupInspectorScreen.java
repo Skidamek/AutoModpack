@@ -26,7 +26,7 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	private int page;
 
 	public GroupInspectorScreen(Screen parent, GroupManifest manifest, String groupId) {
-		super(VersionedText.literal("GroupInspectorScreen"));
+		super(VersionedText.translatable("automodpack.groupInspector.title"));
 		this.parent = parent;
 		this.groupId = groupId;
 		this.manifest = manifest;
@@ -41,8 +41,8 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		int y = this.height - 28;
 		int buttonWidth = actionButtonWidth(310, 3);
 		boolean hasPagination = pageCount() > 1;
-		this.previousButton = buttonWidget(actionButtonX(310, 3, 1), y, buttonWidth, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
-		this.nextButton = buttonWidget(actionButtonX(310, 3, 2), y, buttonWidth, 20, VersionedText.literal("Next >"), button -> changePage(1));
+		this.previousButton = buttonWidget(actionButtonX(310, 3, 1), y, buttonWidth, 20, VersionedText.translatable("automodpack.ui.previous"), button -> changePage(-1));
+		this.nextButton = buttonWidget(actionButtonX(310, 3, 2), y, buttonWidth, 20, VersionedText.translatable("automodpack.ui.next"), button -> changePage(1));
 		this.previousButton.active = page > 0;
 		this.nextButton.active = page + 1 < pageCount();
 		if (hasPagination) {
@@ -63,22 +63,30 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String name = group.displayName().isBlank() ? groupId : group.displayName();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Group " + groupId, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, 26, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font,
+				VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.groupInspector.group", groupId).getString(), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, 26,
+				TextColors.WHITE);
 		List<String> descriptionLines = descriptionLines();
 		for (int index = 0; index < descriptionLines.size(); index++) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.WHITE), this.width / 2, 40 + index * 12, TextColors.WHITE);
 		}
 
 		int metadataY = 56 + (descriptionLines.size() - 1) * 12;
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Tag: " + tagLabel(), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, metadataY,
+		drawCenteredTextWithShadow(matrices, this.font,
+				VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.groupInspector.tag", tagLabel()).getString(), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2,
+				metadataY,
 				TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.literal(truncateToWidth(this.font, "Requires: " + join(group.requires()) + "  Conflicts: " + join(group.breaksWith()), this.width - 20)).withStyle(ChatFormatting.GRAY),
+				VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.groupInspector.requiresConflicts", join(group.requires()), join(group.breaksWith())).getString(), this.width - 20))
+						.withStyle(ChatFormatting.GRAY),
 				this.width / 2, metadataY + 13, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Platforms: " + platforms(), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, metadataY + 26,
+		drawCenteredTextWithShadow(matrices, this.font,
+				VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.groupInspector.platforms", platforms()).getString(), this.width - 20)).withStyle(ChatFormatting.GRAY),
+				this.width / 2, metadataY + 26,
 				TextColors.WHITE);
 		int nextMetadataY = metadataY + 39;
-		String status = (group.required() ? "Required" : group.defaultSelected() ? "Included by default" : "Optional") + "  |  " + files.size() + " files";
+		String statusKey = group.required() ? "automodpack.groupInspector.required" : group.defaultSelected() ? "automodpack.groupInspector.defaultSelected" : "automodpack.groupInspector.optional";
+		String status = VersionedText.translatable("automodpack.groupInspector.status", VersionedText.translatable(statusKey).getString(), files.size()).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(status).withStyle(ChatFormatting.YELLOW), this.width / 2, nextMetadataY, TextColors.WHITE);
 
 		int pageSize = rowsPerPage();
@@ -95,7 +103,7 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		int pageCount = pageCount();
 		int y = this.height - 52;
 		if (pageCount > 1) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Page " + (page + 1) + " / " + pageCount).withStyle(ChatFormatting.GRAY), this.width / 2, y - 12,
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.ui.page", page + 1, pageCount).withStyle(ChatFormatting.GRAY), this.width / 2, y - 12,
 					TextColors.WHITE);
 		}
 	}
@@ -114,12 +122,12 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	}
 
 	private List<String> descriptionLines() {
-		String description = group.description().isBlank() ? "No description published." : group.description();
+		String description = group.description().isBlank() ? VersionedText.translatable("automodpack.groupInspector.noDescription").getString() : group.description();
 		return wrapToWidth(this.font, description, Math.max(1, this.width - 20), 2);
 	}
 
 	private String tagLabel() {
-		if (group.tag().isEmpty()) return "General";
+		if (group.tag().isEmpty()) return VersionedText.translatable("automodpack.ui.general").getString();
 		return categoryLabel(group.tag());
 	}
 
@@ -134,7 +142,9 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	}
 
 	private String platforms() {
-		return group.compatiblePlatforms().isEmpty() ? "All supported platforms" : group.compatiblePlatforms().stream().map(ClientPlatform::id).sorted().reduce((first, second) -> first + ", " + second).orElse("");
+		return group.compatiblePlatforms().isEmpty()
+				? VersionedText.translatable("automodpack.groupInspector.allPlatforms").getString()
+				: group.compatiblePlatforms().stream().map(ClientPlatform::id).sorted().reduce((first, second) -> first + ", " + second).orElse("");
 	}
 
 	private String join(Iterable<String> values) {
@@ -144,12 +154,12 @@ public final class GroupInspectorScreen extends VersionedScreen {
 			GroupManifest.Group related = manifest.groups().get(value);
 			result.append(related == null || related.displayName().isBlank() ? value : related.displayName());
 		}
-		return result.length() == 0 ? "none" : truncateToWidth(this.font, result.toString(), Math.max(1, this.width - 20));
+		return result.length() == 0 ? VersionedText.translatable("automodpack.ui.none").getString() : truncateToWidth(this.font, result.toString(), Math.max(1, this.width - 20));
 	}
 
 	private static String fileFlags(GroupManifest.GroupFile file) {
 		StringBuilder flags = new StringBuilder();
-		if (file.editable()) flags.append(" editable");
+		if (file.editable()) flags.append(" ").append(VersionedText.translatable("automodpack.groupInspector.editable").getString());
 		return flags.toString();
 	}
 

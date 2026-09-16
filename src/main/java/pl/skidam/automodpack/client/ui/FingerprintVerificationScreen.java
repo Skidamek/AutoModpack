@@ -31,7 +31,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 	private Button wikiButton;
 
 	public FingerprintVerificationScreen(Screen parent, String serverFingerprint, Runnable validatedCallback, Runnable canceledCallback) {
-		super(VersionedText.literal("FingerprintVerificationScreen"));
+		super(VersionedText.translatable("automodpack.validation.title"));
 		this.parent = parent;
 		this.serverFingerprint = serverFingerprint;
 		this.validatedCallback = validatedCallback;

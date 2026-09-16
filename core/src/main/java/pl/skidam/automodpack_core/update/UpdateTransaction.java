@@ -11,7 +11,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -48,12 +49,12 @@ public final class UpdateTransaction {
 	public List<String> excludedGroups;
 	public List<Operation> operations;
 	public List<ProjectedFile> projectedFinalState;
-	public Jsons.ClientConfigFieldsV3 plannedClientConfig;
+	public ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig;
 	public List<RestartReason> restartReasons;
 	public List<Preservation> plannedPreservations;
 	public List<BaselineCapture> plannedBaselineCaptures;
 	public List<Conflict> plannedConflicts;
-	public Jsons.ClientGeneratedCopiesFields plannedGeneratedCopies;
+	public ClientStorageJsons.ClientGeneratedCopiesFields plannedGeneratedCopies;
 	public Status resultStatus;
 	public String resultOperation;
 	public String resultPath;

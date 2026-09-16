@@ -10,7 +10,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 
 public record GenerationMetadata(
 		int schemaVersion,
@@ -67,8 +67,8 @@ public record GenerationMetadata(
 		}
 	}
 
-	public Jsons.CompleteModpackContentFields.GenerationFields toFields() {
-		Jsons.CompleteModpackContentFields.GenerationFields fields = new Jsons.CompleteModpackContentFields.GenerationFields();
+	public ModpackJsons.CompleteModpackContentFields.GenerationFields toFields() {
+		ModpackJsons.CompleteModpackContentFields.GenerationFields fields = new ModpackJsons.CompleteModpackContentFields.GenerationFields();
 		fields.schemaVersion = schemaVersion;
 		fields.generationId = generationId;
 		fields.parentGenerationId = parentGenerationId;
@@ -81,7 +81,7 @@ public record GenerationMetadata(
 		return fields;
 	}
 
-	public static GenerationMetadata fromFields(Jsons.CompleteModpackContentFields.GenerationFields fields) {
+	public static GenerationMetadata fromFields(ModpackJsons.CompleteModpackContentFields.GenerationFields fields) {
 		if (fields == null) throw new IllegalArgumentException("Generation metadata is missing");
 		String createdAtText = Objects.requireNonNull(fields.createdAt, "Generation creation timestamp is missing");
 		Instant createdAt;

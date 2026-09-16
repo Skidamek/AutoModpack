@@ -16,6 +16,8 @@ releaseGate:
     - generation-update
     - conflict-preservation
     - quarantine-restoration
+    - storage-maintenance
+    - server-history-compaction
     - fresh-generation-deletion
     - removal
     - secure-bootstrap
@@ -33,6 +35,10 @@ flow:
             container: client
             matches: 'Imported seeded certificate pin for origin'
             not_matches: 'Received untrusted certificate|Asking user to verify certificate'
+  - do: write_file
+    name: seed an ordinary local baseline before the first server-owned install
+    path: config/amp-autotest-baseline.json
+    content: "local-baseline\n"
   - use: connect_to_server
   - do: wait_for
     name: show the first connection review
@@ -454,6 +460,53 @@ flow:
     name: return to the installed pack manager
     select: { text: Pack manager }
   - do: click
+    name: open client local storage maintenance
+    select: { text: Local storage }
+  - do: wait_for
+    name: wait for client local storage maintenance
+    timeout: 120s
+    until:
+      all:
+        - screen: ClientStorageMaintenanceScreen
+        # Before cleanup, the primary action is the enabled cleanup command.
+        - element: { text: Clean local storage, enabled: true }
+  - do: screenshot
+    name: capture client local storage before cleanup
+    file: all-local-storage-before
+  - do: click
+    name: clean stale client local storage
+    select: { text: Clean local storage }
+  - do: wait_for
+    name: wait for client local storage cleanup to complete
+    timeout: 120s
+    until:
+      all:
+        - screen: ClientStorageMaintenanceScreen
+        - element: { text: Cleanup complete, enabled: false }
+  - do: assert_file_content
+    name: verify cleanup kept the active Pack B v2 projection
+    path: "${active_dir}/config/pack-b.txt"
+    content: "pack-b-v2\n"
+  - do: assert_mod_fixture
+    name: verify cleanup kept the restored local quarantine payload
+    path: mods/amp-autotest-conflict.jar
+    fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
+  - do: assert
+    name: verify cleanup kept the consumed quarantine archive empty
+    that: { file_gone: automodpack/client/quarantine/packbbb/conflicts/fake-conflict/payload }
+  - do: screenshot
+    name: capture client local storage after cleanup
+    file: all-local-storage-after
+  - do: click
+    name: leave client local storage maintenance
+    select: { text: Back }
+  - do: wait_for
+    name: return to installed pack manager after cleanup
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Pack A }
+  - do: click
     name: open Pack A before the published update flow
     select: { text: Pack A }
   - do: click
@@ -535,6 +588,9 @@ flow:
   - do: assert_generation
     name: verify the published generation and latest patch notes
     patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
+  - do: compact_server_history
+    name: compact server history and verify retained patch notes and deleted metadata
+    timeout: 180s
   - do: wait_for
     name: wait for changed generation restart
     until: { screen: RestartScreen }
@@ -624,7 +680,11 @@ flow:
     select: { text: Remove }
   - do: wait_for
     name: return to title after Pack A removal
-    until: { screen: TitleScreen }
+    until:
+      all:
+        - screen: Title Screen
+        - element: { role: button, text: Singleplayer, enabled: true, visible: true }
+        - element: { role: button, text: Multiplayer, enabled: true, visible: true }
   - do: assert
     name: verify Pack A active state was removed
     that: { file_gone: automodpack/client/active-state.json }
@@ -659,7 +719,7 @@ topology:
             required: true
             defaultSelected: true
             allowEditsInFiles: ["/config/pack-shared-editable.txt"]
-            syncedFiles: ["/config/amp-autotest-alpha.txt", "/config/amp-autotest-beta.json", "/config/amp-autotest-gamma.cfg", "/config/amp-autotest-delta.txt", "/config/amp-autotest-marker.json", "/config/pack-a-only.txt", "/config/pack-shared-editable.txt", "/mods/amp-autotest-removed.jar"]
+            syncedFiles: ["/config/amp-autotest-alpha.txt", "/config/amp-autotest-beta.json", "/config/amp-autotest-gamma.cfg", "/config/amp-autotest-baseline.json", "/config/amp-autotest-delta.txt", "/config/amp-autotest-marker.json", "/config/pack-a-only.txt", "/config/pack-shared-editable.txt", "/mods/amp-autotest-removed.jar"]
           visual:
             displayName: Visuals
             description: Default client visuals
@@ -693,6 +753,7 @@ serverFiles:
     - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha\n" }
     - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":42}' }
     - { path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
+    - { path: config/amp-autotest-baseline.json, content: "server-baseline-v1\n" }
     - { path: config/amp-autotest-visual.txt, content: "visual-v1\n" }
     - { path: config/pack-a-only.txt, content: "pack-a\n" }
     - { path: config/pack-shared-editable.txt, content: "pack-a-default\n" }
@@ -702,6 +763,7 @@ serverFiles:
         - { group: main, path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha\n" }
         - { group: main, path: config/amp-autotest-beta.json, content: '{"id":"beta","value":42}' }
         - { group: main, path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
+        - { group: main, path: config/amp-autotest-baseline.json, content: "server-baseline-v1\n" }
         - { group: main, path: mods/amp-autotest-removed.jar, fixture: { modId: amp_autotest_removed, version: "1.0.0-published", marker: published } }
         - { group: visual, path: config/amp-autotest-visual.txt, content: "visual-v1\n" }
         - { group: addon, path: config/amp-autotest-addon.txt, content: "addon-v1\n" }
@@ -713,6 +775,7 @@ serverFiles:
       files:
         - { group: main, path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha-v2\n" }
         - { group: main, path: config/amp-autotest-beta.json, content: '{"id":"beta","value":43}' }
+        - { group: main, path: config/amp-autotest-baseline.json, content: "server-baseline-v2\n" }
         - { group: visual, path: config/amp-autotest-visual.txt, content: "visual-v2\n" }
         - { group: main, path: config/amp-autotest-delta.txt, content: "delta-v2\n" }
         - { group: addon, path: config/amp-autotest-addon.txt, content: "addon-v2\n" }

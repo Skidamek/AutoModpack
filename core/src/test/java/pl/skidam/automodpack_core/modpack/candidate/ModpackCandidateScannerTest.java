@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
 
 class ModpackCandidateScannerTest {
 	@TempDir
@@ -27,7 +27,7 @@ class ModpackCandidateScannerTest {
 		Files.createDirectories(groups.resolve("main/config"));
 		Files.writeString(server.resolve("config/example.txt"), "synced", StandardCharsets.UTF_8);
 		Files.writeString(groups.resolve("main/config/example.txt"), "explicit", StandardCharsets.UTF_8);
-		Jsons.GroupDeclaration main = group("/config/**");
+		ServerConfigJsons.GroupDeclaration main = group("/config/**");
 
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
 
@@ -54,7 +54,7 @@ class ModpackCandidateScannerTest {
 		Files.createDirectories(groups);
 		Files.writeString(server.resolve("config/example.txt"), "shared", StandardCharsets.UTF_8);
 		Files.writeString(server.resolve("unrelated/deep/example.txt"), "ignored", StandardCharsets.UTF_8);
-		Map<String, Jsons.GroupDeclaration> declarations = new LinkedHashMap<>();
+		Map<String, ServerConfigJsons.GroupDeclaration> declarations = new LinkedHashMap<>();
 		declarations.put("visuals", group("/config/**"));
 		declarations.put("main", group("/config/**"));
 
@@ -125,10 +125,10 @@ class ModpackCandidateScannerTest {
 		Files.createDirectories(server.resolve("config"));
 		Files.createDirectories(groups);
 		Files.writeString(server.resolve("config/example.txt"), "shared", StandardCharsets.UTF_8);
-		Map<String, Jsons.GroupDeclaration> first = new LinkedHashMap<>();
+		Map<String, ServerConfigJsons.GroupDeclaration> first = new LinkedHashMap<>();
 		first.put("visuals", group("/config/**"));
 		first.put("main", group("/config/**"));
-		Map<String, Jsons.GroupDeclaration> second = new LinkedHashMap<>();
+		Map<String, ServerConfigJsons.GroupDeclaration> second = new LinkedHashMap<>();
 		second.put("main", group("/config/**"));
 		second.put("visuals", group("/config/**"));
 
@@ -197,15 +197,15 @@ class ModpackCandidateScannerTest {
 		assertFalse(Files.exists(staging, LinkOption.NOFOLLOW_LINKS));
 	}
 
-	private ModpackCandidate scan(Path server, Path groups, Map<String, Jsons.GroupDeclaration> declarations, boolean autoExclude) throws Exception {
+	private ModpackCandidate scan(Path server, Path groups, Map<String, ServerConfigJsons.GroupDeclaration> declarations, boolean autoExclude) throws Exception {
 		Executor direct = Runnable::run;
 		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, declarations,
 				autoExclude, false, tempDir.resolve("staging"), direct);
 		return new ModpackCandidateScanner().scan(request);
 	}
 
-	private static Jsons.GroupDeclaration group(String... rules) {
-		Jsons.GroupDeclaration group = new Jsons.GroupDeclaration();
+	private static ServerConfigJsons.GroupDeclaration group(String... rules) {
+		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
 		group.syncedFiles = new LinkedHashSet<>(List.of(rules));
 		return group;
 	}

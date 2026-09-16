@@ -17,7 +17,7 @@ public class ErrorScreen extends VersionedScreen {
 	private Button backButton;
 
 	public ErrorScreen(Screen parent, String... errorMessages) {
-		super(VersionedText.literal("ErrorScreen"));
+		super(VersionedText.translatable("automodpack.error.title"));
 		this.parent = parent;
 		this.errorMessages = errorMessages;
 
@@ -44,7 +44,7 @@ public class ErrorScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.literal("[AutoModpack] Error! ").append(VersionedText.translatable("automodpack.error").withStyle(ChatFormatting.RED)),
+				VersionedText.translatable("automodpack.error.titleLine", VersionedText.translatable("automodpack.error").getString()).withStyle(ChatFormatting.RED),
 				this.width / 2, 36, TextColors.WHITE);
 
 		int y = 62;

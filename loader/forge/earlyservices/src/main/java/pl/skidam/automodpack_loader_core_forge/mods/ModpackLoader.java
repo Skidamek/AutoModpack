@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
@@ -19,14 +20,14 @@ public class ModpackLoader implements ModpackLoaderService {
 	// in place (see EarlyServiceLayer), so nothing forces a copy.
 
 	@Override
-	public void loadModpack(List<Path> modpackMods) {
+	public void loadModpack(ModpackLoadRequest request) {
 		try {
-			for (Path modpackMod : modpackMods) {
+			for (Path modpackMod : request.modpackMods()) {
 				if (FileInspection.isModCompatible(modpackMod)) modsToLoad.add(modpackMod);
 			}
 
 			// set for connector
-			String paths = modpackMods.stream().map(Path::toString).collect(Collectors.joining(","));
+			String paths = request.modpackMods().stream().map(Path::toString).collect(Collectors.joining(","));
 			String finalMods = paths + "," + System.getProperty(CONNECTOR_MODS_PROPERTY, "");
 			System.setProperty(CONNECTOR_MODS_PROPERTY, finalMods);
 		} catch (Exception e) {

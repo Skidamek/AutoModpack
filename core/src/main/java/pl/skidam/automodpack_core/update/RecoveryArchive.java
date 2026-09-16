@@ -14,16 +14,16 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 /** A manifest of user-recoverable paths whose bytes are copied into an independent recovery archive. */
 public final class RecoveryArchive {
 	private static final Pattern SHA1 = Pattern.compile("[0-9a-fA-F]{40}");
-	private static final Comparator<Jsons.ClientRecoveryArchiveFields.EntryFields> ENTRY_ORDER = Comparator
-			.comparing((Jsons.ClientRecoveryArchiveFields.EntryFields entry) -> entry.logicalPath)
+	private static final Comparator<ClientStorageJsons.ClientRecoveryArchiveFields.EntryFields> ENTRY_ORDER = Comparator
+			.comparing((ClientStorageJsons.ClientRecoveryArchiveFields.EntryFields entry) -> entry.logicalPath)
 			.thenComparing(entry -> entry.sha1).thenComparingLong(entry -> entry.size);
 
 	private RecoveryArchive() {}
@@ -51,17 +51,17 @@ public final class RecoveryArchive {
 			SmartFileUtils.copyVerifiedAtomic(object, archivedObject, size, normalizedHash);
 		}
 
-		Jsons.ClientRecoveryArchiveFields archive = read(archiveRoot);
+		ClientStorageJsons.ClientRecoveryArchiveFields archive = read(archiveRoot);
 		boolean alreadyRecorded = archive.entries.stream().anyMatch(entry -> normalizedPath.equals(entry.logicalPath)
 				&& normalizedHash.equalsIgnoreCase(entry.sha1) && size == entry.size);
 		if (!alreadyRecorded) {
-			Jsons.ClientRecoveryArchiveFields.EntryFields entry = new Jsons.ClientRecoveryArchiveFields.EntryFields();
+			ClientStorageJsons.ClientRecoveryArchiveFields.EntryFields entry = new ClientStorageJsons.ClientRecoveryArchiveFields.EntryFields();
 			entry.logicalPath = normalizedPath;
 			entry.sha1 = normalizedHash;
 			entry.size = size;
 			entry.sourceGenerationId = normalizedSourceGenerationId;
 			entry.preservedAt = normalizedPreservedAt;
-			List<Jsons.ClientRecoveryArchiveFields.EntryFields> entries = new ArrayList<>(archive.entries);
+			List<ClientStorageJsons.ClientRecoveryArchiveFields.EntryFields> entries = new ArrayList<>(archive.entries);
 			entries.add(entry);
 			entries.sort(ENTRY_ORDER);
 			archive.entries = entries;
@@ -70,19 +70,19 @@ public final class RecoveryArchive {
 		return archivedObject;
 	}
 
-	public static Jsons.ClientRecoveryArchiveFields read(Path recoveryDirectory) throws IOException {
+	public static ClientStorageJsons.ClientRecoveryArchiveFields read(Path recoveryDirectory) throws IOException {
 		Path archiveRoot = requireArchiveRoot(recoveryDirectory);
 		Path manifestPath = archiveRoot.resolve("manifest.json");
 		if (!Files.exists(manifestPath, LinkOption.NOFOLLOW_LINKS)) {
-			Jsons.ClientRecoveryArchiveFields empty = new Jsons.ClientRecoveryArchiveFields();
+			ClientStorageJsons.ClientRecoveryArchiveFields empty = new ClientStorageJsons.ClientRecoveryArchiveFields();
 			empty.entries = new ArrayList<>();
 			return empty;
 		}
 		validateNoSymbolicLinkDescendants(archiveRoot, manifestPath);
 		if (!Files.isRegularFile(manifestPath, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Recovery archive manifest is not a regular file");
-		Jsons.ClientRecoveryArchiveFields archive;
+		ClientStorageJsons.ClientRecoveryArchiveFields archive;
 		try {
-			archive = ConfigTools.read(manifestPath, Jsons.ClientRecoveryArchiveFields.class)
+			archive = ConfigTools.read(manifestPath, ClientStorageJsons.ClientRecoveryArchiveFields.class)
 					.orElseThrow(() -> new IOException("Recovery archive manifest is empty"));
 		} catch (RuntimeException e) {
 			throw new IOException("Recovery archive manifest is invalid", e);
@@ -90,8 +90,8 @@ public final class RecoveryArchive {
 		if (archive.schemaVersion != 1 || archive.entries == null) throw new IOException("Recovery archive manifest identity is invalid");
 		Path archiveObjects = requireDirectory(archiveRoot.resolve("objects"), "recovery object archive");
 		Set<String> unique = new HashSet<>();
-		List<Jsons.ClientRecoveryArchiveFields.EntryFields> sorted = new ArrayList<>(archive.entries);
-		for (Jsons.ClientRecoveryArchiveFields.EntryFields entry : sorted) {
+		List<ClientStorageJsons.ClientRecoveryArchiveFields.EntryFields> sorted = new ArrayList<>(archive.entries);
+		for (ClientStorageJsons.ClientRecoveryArchiveFields.EntryFields entry : sorted) {
 			if (entry == null || entry.logicalPath == null || !requirePath(entry.logicalPath).equals(entry.logicalPath))
 				throw new IOException("Recovery archive entry path is invalid");
 			String hash = requireHash(entry.sha1);

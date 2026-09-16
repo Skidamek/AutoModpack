@@ -19,6 +19,7 @@ import net.fabricmc.loader.impl.metadata.DependencyOverrides;
 import net.fabricmc.loader.impl.metadata.VersionOverrides;
 import net.fabricmc.loader.impl.util.SystemProperties;
 
+import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
@@ -29,16 +30,9 @@ public class ModpackLoader15 implements ModpackLoaderService {
 	private final Map<String, Set<ModCandidate>> envDisabledMods = new HashMap<>();
 
 	@Override
-	public void loadModpack(List<Path> modpackMods) {
-
-		Path activeModsDirectory = null;
-
-		for (Path path : modpackMods) {
-			activeModsDirectory = path.toAbsolutePath().normalize().getParent();
-			break;
-		}
-
-		if (activeModsDirectory == null) return;
+	public void loadModpack(ModpackLoadRequest request) {
+		if (request.modpackMods().isEmpty()) return;
+		Path activeModsDirectory = request.activeModsDirectory();
 
 		try {
 			LOGGER.info("Discovering mods from {}", activeModsDirectory.getParent().getFileName() + "/" + activeModsDirectory.getFileName());
@@ -295,10 +289,8 @@ public class ModpackLoader15 implements ModpackLoaderService {
 			for (var entry : definitions.entrySet()) {
 
 				if (!candidate.getId().equals(MOD_ID) && adapterMap.containsKey(entry.getKey())) {
-
-					// TODO require restart or erase that package from vm and remove adapter from the map
-
 					FabricGuiEntry.displayCriticalError(new IllegalArgumentException("Duplicate language adapter ID: " + entry.getKey()), true);
+					continue;
 				}
 
 				try {

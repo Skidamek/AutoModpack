@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.SelectionJsons;
 
 class ClientSelectionStoreTest {
 	@TempDir
@@ -24,8 +24,8 @@ class ClientSelectionStoreTest {
 		store.compareAndSet("abc1234", null, intent);
 
 		assertEquals(intent, store.get("abc1234").orElseThrow());
-		Jsons.ClientSelectionStoreFields fields = ConfigTools.read(path, Jsons.ClientSelectionStoreFields.class).orElseThrow();
-		Jsons.ClientSelectionStoreFields.ModpackSelection selection = fields.selections.get("abc1234");
+		SelectionJsons.ClientSelectionStoreFields fields = ConfigTools.read(path, SelectionJsons.ClientSelectionStoreFields.class).orElseThrow();
+		SelectionJsons.ClientSelectionStoreFields.ModpackSelection selection = fields.selections.get("abc1234");
 		assertEquals(Set.of("optional", "stale-group"), selection.requestedGroups);
 		assertEquals(Set.of("variant"), selection.excludedGroups);
 	}

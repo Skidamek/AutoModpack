@@ -9,7 +9,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 
@@ -30,11 +30,11 @@ class GenerationHistorySummaryTest {
 	}
 
 	private static GroupManifest manifest(String name, String hash) {
-		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		fields.modpackName = name;
-		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.files = new LinkedHashMap<>(Map.of("mods/test.jar", new Jsons.CompleteModpackContentFields.GroupFileFields("1", "mod", false, false, hash, null)));
+		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.files = new LinkedHashMap<>(Map.of("mods/test.jar", new ModpackJsons.CompleteModpackContentFields.GroupFileFields("1", "mod", false, false, hash, null)));
 		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);
 	}

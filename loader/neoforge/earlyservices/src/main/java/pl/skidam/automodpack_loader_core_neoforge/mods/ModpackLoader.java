@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Set;
 
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
+import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
@@ -24,9 +25,9 @@ public class ModpackLoader implements ModpackLoaderService {
 	}
 
 	@Override
-	public void loadModpack(List<Path> modpackMods) {
+	public void loadModpack(ModpackLoadRequest request) {
 		try {
-			List<Path> stagedMods = modpackMods.stream().map(path -> path.toAbsolutePath().normalize()).distinct().sorted().filter(FileInspection::isMod).toList();
+			List<Path> stagedMods = request.modpackMods().stream().filter(FileInspection::isMod).toList();
 			modsToLoad.addAll(stagedMods);
 		} catch (Exception e) {
 			LOGGER.error("Error while loading modpack", e);

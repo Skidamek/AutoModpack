@@ -13,7 +13,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
@@ -22,16 +22,16 @@ import pl.skidam.automodpack_core.utils.AddressHelpers;
 public final class ConnectionStore {
 	private ConnectionStore() {}
 
-	public static Jsons.ConnectionRecordFields read(ClientStorage storage, String modpackId) throws IOException {
+	public static ConnectionJsons.ConnectionRecordFields read(ClientStorage storage, String modpackId) throws IOException {
 		Path file = file(storage, modpackId);
 		return withLock(storage.connectionLockFile(modpackId), () -> readUnlocked(file));
 	}
 
-	public static void update(ClientStorage storage, String modpackId, Consumer<Jsons.ConnectionRecordFields> update) throws IOException {
+	public static void update(ClientStorage storage, String modpackId, Consumer<ConnectionJsons.ConnectionRecordFields> update) throws IOException {
 		Objects.requireNonNull(update, "update");
 		Path file = file(storage, modpackId);
 		withLock(storage.connectionLockFile(modpackId), () -> {
-			Jsons.ConnectionRecordFields fields = readUnlocked(file);
+			ConnectionJsons.ConnectionRecordFields fields = readUnlocked(file);
 			normalize(fields);
 			update.accept(fields);
 			Files.createDirectories(file.getParent());
@@ -40,11 +40,11 @@ public final class ConnectionStore {
 		});
 	}
 
-	public static Jsons.ConnectionInfo getConnection(ClientStorage storage, String modpackId) throws IOException {
+	public static ConnectionJsons.ConnectionInfo getConnection(ClientStorage storage, String modpackId) throws IOException {
 		return read(storage, modpackId).connection;
 	}
 
-	public static void saveConnection(ClientStorage storage, String modpackId, Jsons.ConnectionInfo connection) throws IOException {
+	public static void saveConnection(ClientStorage storage, String modpackId, ConnectionJsons.ConnectionInfo connection) throws IOException {
 		ModpackId.requireValid(modpackId);
 		if (connection == null || !connection.isComplete()) throw new IllegalArgumentException("Connection origin or endpoint is missing");
 		update(storage, modpackId, fields -> fields.connection = connection);
@@ -64,16 +64,16 @@ public final class ConnectionStore {
 		return storage.connectionFile(ModpackId.requireValid(modpackId));
 	}
 
-	private static Jsons.ConnectionRecordFields readUnlocked(Path file) throws IOException {
-		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return new Jsons.ConnectionRecordFields();
+	private static ConnectionJsons.ConnectionRecordFields readUnlocked(Path file) throws IOException {
+		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return new ConnectionJsons.ConnectionRecordFields();
 		if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Connection record is not a regular file: " + file);
-		Jsons.ConnectionRecordFields fields = ConfigTools.read(file, Jsons.ConnectionRecordFields.class)
+		ConnectionJsons.ConnectionRecordFields fields = ConfigTools.read(file, ConnectionJsons.ConnectionRecordFields.class)
 				.orElseThrow(() -> new IOException("Connection record is empty: " + file));
 		normalize(fields);
 		return fields;
 	}
 
-	private static void normalize(Jsons.ConnectionRecordFields fields) {
+	private static void normalize(ConnectionJsons.ConnectionRecordFields fields) {
 		if (fields.secrets == null) fields.secrets = new HashMap<>();
 	}
 

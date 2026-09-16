@@ -34,7 +34,7 @@ public class ListEntryWidget extends ObjectSelectionList<ListEntry> {
 		this.clearEntries();
 
 		if (rows == null || rows.isEmpty()) {
-			ListEntry entry = new ListEntry(VersionedText.literal("No changelogs found").withStyle(ChatFormatting.BOLD), true, this.minecraft);
+			ListEntry entry = new ListEntry(VersionedText.translatable("automodpack.changelog.noChanges").withStyle(ChatFormatting.BOLD), true, this.minecraft);
 			this.addEntry(entry);
 			return;
 		}

@@ -1,3 +1,4 @@
+import dev.luna5ama.jaroptimizer.OptimizeJarTask
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.jvm.tasks.Jar
@@ -109,12 +110,24 @@ tasks.register("cleanMerged") {
 
 val mergeJarTask =
 	tasks.register<MergeJarTask>("mergeJar") {
-		this.mergedDirPath.set(project.rootProject.projectDir.absolutePath + "/merged")
 		this.rootProjectPath.set(project.rootProject.projectDir.absolutePath)
 		this.loaderModuleName.set(getLoaderModuleName(project.name))
 		this.buildMode.set(automodpackBuildMode)
 		this.buildDirectory.set(layout.buildDirectory)
-		this.outputJar.set(layout.buildDirectory.file("merged-jar-path.txt"))
+		this.mergedJar.set(
+			layout.buildDirectory
+				.file(
+					provider {
+						"merged/" +
+							getMergedJarPath(
+								layout.buildDirectory
+									.dir("libs")
+									.get()
+									.asFile,
+							).name
+					},
+				),
+		)
 
 		// Hash the shadow jars where they exist: they're what this task actually merges and
 		// the only outputs that change when a shared subproject (core, loader-core, an
@@ -154,60 +167,41 @@ val mergeJarTask =
 				BigInteger(1, digest.digest()).toString(16)
 			},
 		)
-
-		finalizedBy(tasks.named("optimizeMergedJar"))
 	}
 
-val mergedJarWrapper =
-	tasks.register<Jar>("mergedJarWrapper") {
+val optimizedMergedJar =
+	tasks.register<OptimizeJarTask>("optimizeMergedJar") {
 		dependsOn(mergeJarTask)
-		enabled = false
-		inputs.property("automodpackBuildMode", automodpackBuildMode)
-		destinationDirectory.set(File(mergedDirPath))
+		jarFile.set(mergeJarTask.flatMap { it.mergedJar })
+		keeps.add("pl.skidam")
+		destinationDirectory.set(rootProject.layout.projectDirectory.dir("merged"))
+		archiveFileName.set(
+			provider {
+				getMergedJarPath(
+					layout.buildDirectory
+						.dir("libs")
+						.get()
+						.asFile,
+				).name
+			},
+		)
 	}
-
-val optimizedMergedJar = jarOptimizer.register(mergedJarWrapper, "pl.skidam")
 optimizedMergedJar.configure {
 	inputs.property("automodpackBuildMode", automodpackBuildMode)
 }
 
-val optimizeMergedJarTask =
-	tasks.register("optimizeMergedJar") {
-		dependsOn(optimizedMergedJar)
-
-		val outputJarFile = mergeJarTask.flatMap { it.outputJar }
-		val optimizedFileProvider = optimizedMergedJar.flatMap { it.archiveFile }
-
-		inputs.file(outputJarFile)
-		inputs.property("automodpackBuildMode", automodpackBuildMode)
-
-		doLast {
-			val jarPath = outputJarFile.get().asFile.readText()
-			val jarFile = File(jarPath)
-			if (!jarFile.exists()) {
-				println("Merged jar not found: ${jarFile.absolutePath}")
-				return@doLast
-			}
-
-			val time = System.currentTimeMillis()
-			val optimizedFile = optimizedFileProvider.get().asFile
-
-			if (optimizedFile.exists() && optimizedFile.length() > 0) {
-				jarFile.delete()
-				optimizedFile.renameTo(jarFile)
-				println("Optimized ${jarFile.name} - Took: ${System.currentTimeMillis() - time}ms")
-			}
-		}
-	}
-
 val auditMergedJarTask =
 	tasks.register<MergedJarAuditTask>("auditMergedJar") {
-		mergedJarPath.set(mergeJarTask.flatMap { it.outputJar })
+		mergedJar.set(optimizedMergedJar.flatMap { it.archiveFile })
 		inputs.property("automodpackBuildMode", automodpackBuildMode)
 		maxJarBytes.set(3L * 1024 * 1024)
 		maxMusicBytes.set(64L * 1024)
 	}
 
-optimizeMergedJarTask.configure {
+mergeJarTask.configure {
+	finalizedBy(optimizedMergedJar)
+}
+
+optimizedMergedJar.configure {
 	finalizedBy(auditMergedJarTask)
 }

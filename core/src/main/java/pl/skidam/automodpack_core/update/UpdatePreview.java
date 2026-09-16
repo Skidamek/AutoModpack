@@ -14,7 +14,8 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
@@ -63,8 +64,7 @@ public record UpdatePreview(
 	}
 
 	public long preservedBytes() {
-		return entries.stream().filter(entry -> entry.kind == Kind.PRESERVED_CAS || entry.kind == Kind.PRESERVED_CHANGED
-				|| entry.kind == Kind.PRESERVED_UNAVAILABLE || entry.kind == Kind.PRESERVED_OUTSIDE).mapToLong(Entry::size).sum();
+		return entries.stream().filter(entry -> entry.kind.isPreserved()).mapToLong(Entry::size).sum();
 	}
 
 	public long uncachedAcquisitionBytes() {
@@ -80,10 +80,10 @@ public record UpdatePreview(
 		Set<FileKey> unsafe = new HashSet<>();
 		for (Entry entry : entries) {
 			FileKey key = new FileKey(entry.root, entry.relativePath);
-			switch (entry.kind) {
-				case ADDED, CHANGED, RESTORED_BASELINE -> changed.add(key);
+			switch (entry.kind.summaryBucket()) {
+				case CHANGED -> changed.add(key);
 				case REMOVED -> removed.add(key);
-				case PRESERVED_CAS, PRESERVED_CHANGED, PRESERVED_UNAVAILABLE, PRESERVED_OUTSIDE -> preserved.add(key);
+				case PRESERVED -> preserved.add(key);
 				case UNSAFE -> unsafe.add(key);
 			}
 		}
@@ -98,7 +98,7 @@ public record UpdatePreview(
 		for (Entry entry : entries) {
 			FileKey key = new FileKey(entry.root, entry.relativePath);
 			Entry previous = unique.get(key);
-			if (previous == null || displayPriority(entry.kind) < displayPriority(previous.kind)) unique.put(key, entry);
+			if (previous == null || entry.kind.sortBucket().compareTo(previous.kind.sortBucket()) < 0) unique.put(key, entry);
 		}
 		return unique.values().stream().sorted(Comparator.comparing((Entry entry) -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal())
 				.thenComparing(Entry::relativePath)).toList();
@@ -126,37 +126,28 @@ public record UpdatePreview(
 		return entries.stream().filter(entry -> entry.kind == kind).mapToLong(Entry::size).sum();
 	}
 
-	private static int displayPriority(Kind kind) {
-		return switch (kind) {
-			case UNSAFE -> 0;
-			case REMOVED -> 1;
-			case ADDED, CHANGED, RESTORED_BASELINE -> 2;
-			case PRESERVED_CHANGED, PRESERVED_UNAVAILABLE, PRESERVED_OUTSIDE, PRESERVED_CAS -> 3;
-		};
-	}
-
-	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
+	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, ModpackJsons.ModpackContentFields target,
 			ResolvedSelection selection, boolean removal) {
 		return create(plan, originalFiles, target, selection, removal, null, "", List.of());
 	}
 
-	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
+	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, ModpackJsons.ModpackContentFields target,
 			ResolvedSelection selection, boolean removal, String patchNotes) {
 		return create(plan, originalFiles, target, selection, removal, null, patchNotes, List.of());
 	}
 
-	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
-			ResolvedSelection selection, boolean removal, Jsons.ClientBaselineFields baseline) {
+	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, ModpackJsons.ModpackContentFields target,
+			ResolvedSelection selection, boolean removal, ClientStorageJsons.ClientBaselineFields baseline) {
 		return create(plan, originalFiles, target, selection, removal, baseline, "", List.of());
 	}
 
-	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
-			ResolvedSelection selection, boolean removal, Jsons.ClientBaselineFields baseline, String patchNotes) {
+	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, ModpackJsons.ModpackContentFields target,
+			ResolvedSelection selection, boolean removal, ClientStorageJsons.ClientBaselineFields baseline, String patchNotes) {
 		return create(plan, originalFiles, target, selection, removal, baseline, patchNotes, List.of());
 	}
 
-	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
-			ResolvedSelection selection, boolean removal, Jsons.ClientBaselineFields baseline, String patchNotes,
+	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, ModpackJsons.ModpackContentFields target,
+			ResolvedSelection selection, boolean removal, ClientStorageJsons.ClientBaselineFields baseline, String patchNotes,
 			List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(originalFiles, "originalFiles");
@@ -165,7 +156,7 @@ public record UpdatePreview(
 				.collect(Collectors.toMap(operation -> new FileKey(operation.root(), operation.relativePath()), operation -> operation));
 		Set<FileKey> preserved = new HashSet<>();
 		for (Preservation preservation : plan.preservations()) preserved.add(new FileKey(preservation.root(), preservation.relativePath()));
-		Map<String, Jsons.ClientBaselineFields.EntryFields> baselineEntries = baselineEntries(baseline);
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries = baselineEntries(baseline);
 		List<Entry> entries = new ArrayList<>();
 		for (Operation operation : plan.operations()) {
 			FileKey key = new FileKey(operation.root(), operation.relativePath());
@@ -220,16 +211,16 @@ public record UpdatePreview(
 		return new GroupConsequences(selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedGroups(), explanations);
 	}
 
-	private static Map<String, Jsons.ClientBaselineFields.EntryFields> baselineEntries(Jsons.ClientBaselineFields baseline) {
+	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries(ClientStorageJsons.ClientBaselineFields baseline) {
 		if (baseline == null || baseline.entries == null) return Map.of();
-		Map<String, Jsons.ClientBaselineFields.EntryFields> entries = new HashMap<>();
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> entries = new HashMap<>();
 		for (var entry : baseline.entries) {
 			if (entry != null && entry.logicalPath != null) entries.put(UpdatePlanner.normalize(entry.logicalPath), entry);
 		}
 		return entries;
 	}
 
-	private static boolean baselineMatches(FileState current, Jsons.ClientBaselineFields.EntryFields baseline) {
+	private static boolean baselineMatches(FileState current, ClientStorageJsons.ClientBaselineFields.EntryFields baseline) {
 		return baseline != null && !baseline.absent && baseline.objectHash != null && baseline.objectHash.matches("[0-9a-fA-F]{40}")
 				&& baseline.size >= 0 && current.regularFile() && baseline.size == current.size() && baseline.objectHash.equalsIgnoreCase(current.sha1());
 	}
@@ -267,14 +258,54 @@ public record UpdatePreview(
 	}
 
 	public enum Kind {
-		ADDED,
+		ADDED(SummaryBucket.CHANGED, SortBucket.CHANGED, "+ "),
+		CHANGED(SummaryBucket.CHANGED, SortBucket.CHANGED, "~ "),
+		REMOVED(SummaryBucket.REMOVED, SortBucket.REMOVED, "- "),
+		PRESERVED_CAS(SummaryBucket.PRESERVED, SortBucket.PRESERVED, "  "),
+		PRESERVED_CHANGED(SummaryBucket.PRESERVED, SortBucket.PRESERVED, "  "),
+		PRESERVED_UNAVAILABLE(SummaryBucket.PRESERVED, SortBucket.PRESERVED, "  "),
+		PRESERVED_OUTSIDE(SummaryBucket.PRESERVED, SortBucket.PRESERVED, "  "),
+		UNSAFE(SummaryBucket.UNSAFE, SortBucket.UNSAFE, "! "),
+		RESTORED_BASELINE(SummaryBucket.CHANGED, SortBucket.CHANGED, "+ ");
+
+		private final SummaryBucket summaryBucket;
+		private final SortBucket sortBucket;
+		private final String displaySymbol;
+
+		Kind(SummaryBucket summaryBucket, SortBucket sortBucket, String displaySymbol) {
+			this.summaryBucket = summaryBucket;
+			this.sortBucket = sortBucket;
+			this.displaySymbol = displaySymbol;
+		}
+
+		public boolean isPreserved() {
+			return this.summaryBucket == SummaryBucket.PRESERVED;
+		}
+
+		public SummaryBucket summaryBucket() {
+			return this.summaryBucket;
+		}
+
+		public SortBucket sortBucket() {
+			return this.sortBucket;
+		}
+
+		public String displaySymbol() {
+			return this.displaySymbol;
+		}
+	}
+
+	public enum SummaryBucket {
 		CHANGED,
 		REMOVED,
-		PRESERVED_CAS,
-		PRESERVED_CHANGED,
-		PRESERVED_UNAVAILABLE,
-		PRESERVED_OUTSIDE,
+		PRESERVED,
+		UNSAFE
+	}
+
+	public enum SortBucket {
 		UNSAFE,
-		RESTORED_BASELINE
+		REMOVED,
+		CHANGED,
+		PRESERVED
 	}
 }

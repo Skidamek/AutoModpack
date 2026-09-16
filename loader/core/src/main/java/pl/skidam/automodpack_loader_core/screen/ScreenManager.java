@@ -1,44 +1,56 @@
 package pl.skidam.automodpack_loader_core.screen;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
+import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.update.UpdatePlan;
+import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_loader_core.client.Changelogs;
+import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
+import pl.skidam.automodpack_loader_core.utils.DownloadManager;
+import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public class ScreenManager implements ScreenService {
 
 	public static ScreenService INSTANCE = new PreloadScreenImpl();
 
 	@Override
-	public void download(Object... args) {
-		INSTANCE.download(args);
+	public void download(DownloadManager downloadManager, String modpackName) {
+		INSTANCE.download(downloadManager, modpackName);
 	}
 
 	@Override
-	public void changelog(Object... args) {
-		INSTANCE.changelog(args);
+	public void changelog(Object parent, Changelogs changelogs) {
+		INSTANCE.changelog(parent, changelogs);
 	}
 
 	@Override
-	public void restart(Object... args) {
-		INSTANCE.restart(args);
+	public void restart(UpdateType updateType, Changelogs changelogs) {
+		INSTANCE.restart(updateType, changelogs);
 	}
 
 	@Override
-	public void welcome(Object... args) {
-		INSTANCE.welcome(args);
+	public void welcome(ModpackUpdater modpackUpdater) {
+		INSTANCE.welcome(modpackUpdater);
 	}
 
 	@Override
-	public boolean preview(Object... args) {
-		return INSTANCE.preview(args);
+	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean removal, boolean returnToSelection,
+			Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
+		return INSTANCE.preview(preview, modpackName, continueAction, cancelAction, removal, returnToSelection, mainPageUrls);
 	}
 
 	@Override
-	public void recovery(Object... args) {
-		INSTANCE.recovery(args);
+	public void recovery(ModpackUpdater modpackUpdater, ModpackUpdater.RecoverySnapshot recoverySnapshot, String modpackName, Runnable closed) {
+		INSTANCE.recovery(modpackUpdater, recoverySnapshot, modpackName, closed);
 	}
 
 	@Override
-	public void history(Object... args) {
-		INSTANCE.history(args);
+	public void history(List<GenerationRecord> history, String modpackName, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Runnable closed) {
+		INSTANCE.history(history, modpackName, patchNotesHistory, closed);
 	}
 
 	@Override
@@ -47,18 +59,13 @@ public class ScreenManager implements ScreenService {
 	}
 
 	@Override
-	public void menu(Object... args) {
-		INSTANCE.menu(args);
+	public void title() {
+		INSTANCE.title();
 	}
 
 	@Override
-	public void title(Object... args) {
-		INSTANCE.title(args);
-	}
-
-	@Override
-	public void validation(Object... args) {
-		INSTANCE.validation(args);
+	public void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled) {
+		INSTANCE.validation(parent, fingerprint, validated, canceled);
 	}
 
 	@Override

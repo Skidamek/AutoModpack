@@ -7,7 +7,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 
 class GroupManifestValidatorTest {
 	@Test
@@ -257,39 +257,39 @@ class GroupManifestValidatorTest {
 		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
 
-	private static Jsons.CompleteModpackContentFields catalogue() {
-		var fields = new Jsons.CompleteModpackContentFields();
+	private static ModpackJsons.CompleteModpackContentFields catalogue() {
+		var fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		fields.groups = Map.of();
 		return fields;
 	}
 
-	private static Jsons.CompleteModpackContentFields.ModpackGroupFields group(Jsons.CompleteModpackContentFields.GroupFileFields file) {
+	private static ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group(ModpackJsons.CompleteModpackContentFields.GroupFileFields file) {
 		return groupAt("mods/example.jar", file);
 	}
 
-	private static Jsons.CompleteModpackContentFields.ModpackGroupFields groupAt(String path, Jsons.CompleteModpackContentFields.GroupFileFields file) {
-		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+	private static ModpackJsons.CompleteModpackContentFields.ModpackGroupFields groupAt(String path, ModpackJsons.CompleteModpackContentFields.GroupFileFields file) {
+		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.files = Map.of(path, file);
 		return group;
 	}
 
-	private static Jsons.CompleteModpackContentFields.GroupFileFields file(String content) {
+	private static ModpackJsons.CompleteModpackContentFields.GroupFileFields file(String content) {
 		String hash = content.equals("a") ? "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8" : "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98";
 		return fileOfType("mod", hash);
 	}
 
-	private static Jsons.CompleteModpackContentFields.GroupFileFields fileOfType(String type) {
+	private static ModpackJsons.CompleteModpackContentFields.GroupFileFields fileOfType(String type) {
 		return fileOfType(type, "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8");
 	}
 
-	private static Jsons.CompleteModpackContentFields.GroupFileFields fileOfType(String type, String hash) {
-		return new Jsons.CompleteModpackContentFields.GroupFileFields("1", type, false, false, hash, null);
+	private static ModpackJsons.CompleteModpackContentFields.GroupFileFields fileOfType(String type, String hash) {
+		return new ModpackJsons.CompleteModpackContentFields.GroupFileFields("1", type, false, false, hash, null);
 	}
 
-	private static Map<String, Jsons.CompleteModpackContentFields.ModpackGroupFields> linkedGroups(Object... values) {
-		Map<String, Jsons.CompleteModpackContentFields.ModpackGroupFields> groups = new LinkedHashMap<>();
-		for (int i = 0; i < values.length; i += 2) groups.put((String) values[i], (Jsons.CompleteModpackContentFields.ModpackGroupFields) values[i + 1]);
+	private static Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> linkedGroups(Object... values) {
+		Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> groups = new LinkedHashMap<>();
+		for (int i = 0; i < values.length; i += 2) groups.put((String) values[i], (ModpackJsons.CompleteModpackContentFields.ModpackGroupFields) values[i + 1]);
 		return groups;
 	}
 }

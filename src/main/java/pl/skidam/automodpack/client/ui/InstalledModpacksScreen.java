@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client.ui;
 
+import pl.skidam.automodpack_core.config.ConnectionJsons;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
@@ -16,7 +17,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -61,18 +62,18 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			int pageY = listBottom + 4;
 			int pageWidth = actionButtonWidth(PANEL_WIDTH, 3);
 			this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 0), pageY, pageWidth, 20,
-					VersionedText.literal("< Prev"), press -> {
+					VersionedText.translatable("automodpack.ui.previous"), press -> {
 						if (page > 0) {
 							page--;
 							rebuild();
 						}
 					}));
 			Button pageLabel = buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 1), pageY, pageWidth, 20,
-					VersionedText.literal((page + 1) + " / " + pageCount), press -> {});
+					VersionedText.translatable("automodpack.ui.page", page + 1, pageCount), press -> {});
 			pageLabel.active = false;
 			this.addRenderableWidget(pageLabel);
 			this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 2), pageY, pageWidth, 20,
-					VersionedText.literal("Next >"), press -> {
+				VersionedText.translatable("automodpack.ui.next"), press -> {
 						if (page < pageCount - 1) {
 							page++;
 							rebuild();
@@ -80,9 +81,12 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 					}));
 		}
 
-		int backWidth = actionButtonWidth(PANEL_WIDTH, 1);
-		this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 1, 1, 0), this.height - 28, backWidth,
-				20, VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
+		int actionWidth = actionButtonWidth(PANEL_WIDTH, 2);
+		int actionY = this.height - 28;
+		this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 2, 2, 0), actionY, actionWidth, 20,
+				VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, storage))));
+		this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 2, 2, 1), actionY, actionWidth, 20,
+				VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
 	}
 
 	private void open(Entry entry) {
@@ -101,9 +105,9 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 
 	private MutableComponent rowLabel(Entry entry) {
 		String name = entry.record().manifest().modpackName().isBlank() ? entry.record().manifest().modpackId() : entry.record().manifest().modpackName();
-		String state = entry.active() ? "  [active]" : "  [review switch]";
-		String connection = entry.connectionAvailable() ? "  connected" : "  local record";
-		return VersionedText.literal(truncateToWidth(this.font, name + state + connection, panelWidth(PANEL_WIDTH) - 12)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE);
+		String state = VersionedText.translatable(entry.active() ? "automodpack.packManager.activeMarker" : "automodpack.packManager.reviewMarker").getString();
+		String connection = VersionedText.translatable(entry.connectionAvailable() ? "automodpack.packManager.connected" : "automodpack.packManager.localRecord").getString();
+		return VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.packManager.row", name, state, connection).getString(), panelWidth(PANEL_WIDTH) - 12)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE);
 	}
 
 	@Override
@@ -125,7 +129,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private static List<Entry> loadEntries(ClientStorage storage) {
 		String activeId = "";
 		try {
-			Jsons.ClientGenerationStateFields state = storage.readActiveState();
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 			activeId = state == null ? "" : state.modpackId;
 		} catch (IOException | RuntimeException e) {
 			LOGGER.warn("Could not read the active modpack state; showing installed records without an active marker", e);
@@ -144,7 +148,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 
 	private static boolean hasConnection(ClientStorage storage, String modpackId) {
 		try {
-			Jsons.ConnectionRecordFields fields = ConnectionStore.read(storage, modpackId);
+			ConnectionJsons.ConnectionRecordFields fields = ConnectionStore.read(storage, modpackId);
 			return fields.connection != null && fields.connection.isComplete();
 		} catch (IOException | RuntimeException e) {
 			return false;

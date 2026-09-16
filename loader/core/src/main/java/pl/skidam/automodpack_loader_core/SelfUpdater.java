@@ -7,7 +7,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -34,7 +34,7 @@ public class SelfUpdater {
 		return update(null);
 	}
 
-	public static boolean update(Jsons.ModpackContentFields serverModpackContent) {
+	public static boolean update(ModpackJsons.ModpackContentFields serverModpackContent) {
 		if (LOADER_MANAGER.isDevelopmentEnvironment()) return false;
 
 		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER && !serverConfig.selfUpdater) {

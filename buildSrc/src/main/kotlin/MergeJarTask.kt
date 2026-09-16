@@ -1,7 +1,7 @@
 import org.gradle.api.DefaultTask
-import org.gradle.api.provider.Property
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.OutputFile
@@ -17,9 +17,6 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 abstract class MergeJarTask : DefaultTask() {
-    @get:Input
-    abstract val mergedDirPath: Property<String>
-
     @get:Input
     abstract val rootProjectPath: Property<String>
 
@@ -38,13 +35,10 @@ abstract class MergeJarTask : DefaultTask() {
     abstract val inputHash: Property<String>
 
     @get:OutputFile
-    abstract val outputJar: RegularFileProperty
+    abstract val mergedJar: RegularFileProperty
 
     @TaskAction
     fun mergeJars() {
-        val mergedDir = File(mergedDirPath.get())
-        mergedDir.mkdirs()
-
         val buildDirLibs = buildDirectory.get().dir("libs").asFile
         val jarToMerge = getMergedJarPath(buildDirLibs)
 
@@ -57,7 +51,8 @@ abstract class MergeJarTask : DefaultTask() {
             ?.single { it.isFile && !it.name.endsWith("-sources.jar") && it.name.endsWith(".jar") }
             ?: error("No loader jar found in ${loaderBuildDir.absolutePath}")
 
-        val finalJar = File(mergedDir, jarToMerge.name)
+        val finalJar = mergedJar.get().asFile
+        finalJar.parentFile.mkdirs()
         val manifest = mergeStonecutterMetadata(loaderFile, jarToMerge)
 
         val seen = mutableSetOf<String>()
@@ -82,8 +77,6 @@ abstract class MergeJarTask : DefaultTask() {
             FileInputStream(jarToMerge).buffered().use { it.copyTo(zipStream) }
             zipStream.closeEntry()
         }
-
-        outputJar.get().asFile.writeText(finalJar.absolutePath)
         println("Merged: ${jarToMerge.name} with ${loaderFile.name} into: ${finalJar.name} Took: ${System.currentTimeMillis() - time}ms")
     }
 

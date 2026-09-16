@@ -3,7 +3,7 @@ package pl.skidam.automodpack_core.modpack.generation;
 import java.time.Instant;
 import java.util.Objects;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 
 /** Small immutable generation metadata envelope linking a catalogue and ownership delta. */
@@ -51,8 +51,8 @@ public record GenerationCommit(
 				rollbackTargetGenerationId);
 	}
 
-	public Jsons.GenerationCommitFields toFields() {
-		Jsons.GenerationCommitFields fields = new Jsons.GenerationCommitFields();
+	public GenerationJsons.GenerationCommitFields toFields() {
+		GenerationJsons.GenerationCommitFields fields = new GenerationJsons.GenerationCommitFields();
 		fields.schemaVersion = schemaVersion;
 		fields.generationId = generationId;
 		fields.parentGenerationId = parentGenerationId;
@@ -67,7 +67,7 @@ public record GenerationCommit(
 		return fields;
 	}
 
-	public static GenerationCommit fromFields(Jsons.GenerationCommitFields fields) {
+	public static GenerationCommit fromFields(GenerationJsons.GenerationCommitFields fields) {
 		if (fields == null) throw new IllegalArgumentException("Generation commit is missing");
 		String createdAtText = Objects.requireNonNull(fields.createdAt, "Generation commit creation timestamp is missing");
 		Instant createdAt;

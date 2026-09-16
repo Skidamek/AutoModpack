@@ -3,7 +3,6 @@ package pl.skidam.automodpack_loader_core;
 import static pl.skidam.automodpack_core.Constants.*;
 
 import java.awt.*;
-import java.nio.file.Path;
 import java.util.concurrent.Semaphore;
 
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
@@ -15,19 +14,16 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 public class ReLauncher {
 
 	private final String updateMessage;
-	private final Path activeDirectory;
 	private final UpdateType updateType;
 	private final Changelogs changelogs;
 
 	public ReLauncher(UpdateType updateType) {
-		this.activeDirectory = null;
 		this.updateType = updateType;
 		this.changelogs = null;
 		this.updateMessage = "Successfully updated AutoModpack!";
 	}
 
-	public ReLauncher(Path activeDirectory, UpdateType updateType, Changelogs changelogs) {
-		this.activeDirectory = activeDirectory;
+	public ReLauncher(UpdateType updateType, Changelogs changelogs) {
 		this.updateType = updateType;
 		this.changelogs = changelogs;
 		this.updateMessage = "Successfully updated the modpack!";
@@ -51,7 +47,7 @@ public class ReLauncher {
 
 	private void handleClientRestart(Runnable[] callbacks, boolean isHeadless) {
 		if (updateType != null && new ScreenManager().getScreenString().isPresent()) {
-			new ScreenManager().restart(activeDirectory, updateType, changelogs);
+			new ScreenManager().restart(updateType, changelogs);
 		} else if (preload) {
 			ProcessSignalIO.post("normal_stop"); // let crash assistant know
 

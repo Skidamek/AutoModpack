@@ -7,7 +7,10 @@ import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 
@@ -26,14 +29,14 @@ class UpdatePlannerTest {
 
 	@Test
 	void firstInstallQuarantinesAnUnownedSameIdMod() {
-		Jsons.ModpackContentFields target = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
+		ModpackJsons.ModpackContentFields target = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/server.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true, true),
 				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true, true));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(),
 				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())),
-				List.of(new ModInfo("mods/local.jar", OLD_HASH, 8, Set.of("sodium"), Set.of())), List.of(), null, new Jsons.ClientConfigFieldsV3()));
+				List.of(new ModInfo("mods/local.jar", OLD_HASH, 8, Set.of("sodium"), Set.of())), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
 
 		assertEquals(1, plan.conflicts().size());
 		assertEquals(ConflictAction.QUARANTINE, plan.conflicts().get(0).action());
@@ -43,14 +46,14 @@ class UpdatePlannerTest {
 
 	@Test
 	void samePathSameContentStillGetsAnExplicitDisposition() {
-		Jsons.ModpackContentFields target = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
+		ModpackJsons.ModpackContentFields target = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/server.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true, true),
 				new FileKey(Root.GAME_DIR, "mods/server.jar"), new FileState(TARGET_HASH, 9, true, true));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(),
 				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())),
-				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())), List.of(), null, new Jsons.ClientConfigFieldsV3()));
+				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
 
 		assertEquals(1, plan.conflicts().size());
 		assertEquals(OperationType.DELETE, plan.operations().stream().filter(operation -> operation.root() == Root.GAME_DIR).findFirst().orElseThrow().operation());
@@ -66,26 +69,26 @@ class UpdatePlannerTest {
 		String baseB = "9999999999999999999999999999999999999999";
 		String editedA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 		String local = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-		Jsons.ModpackContentFields a = packManifest("packaa1", Map.of("mods/shared.jar", item("mods/shared.jar", sharedA, 1, "mod"),
+		ModpackJsons.ModpackContentFields a = packManifest("packaa1", Map.of("mods/shared.jar", item("mods/shared.jar", sharedA, 1, "mod"),
 				"mods/a.jar", item("mods/a.jar", aOnly, 1, "mod"), "config/shared.json", editableItem("config/shared.json", baseA, 1, "config")),
 				entry("mods/shared.jar", sharedA, 1, OwnershipLedger.Status.PRESENT), entry("mods/a.jar", aOnly, 1, OwnershipLedger.Status.PRESENT),
 				entry("config/shared.json", baseA, 1, OwnershipLedger.Status.PRESENT));
-		Jsons.ModpackContentFields b = packManifest("packbb1", Map.of("mods/shared.jar", item("mods/shared.jar", sharedB, 1, "mod"),
+		ModpackJsons.ModpackContentFields b = packManifest("packbb1", Map.of("mods/shared.jar", item("mods/shared.jar", sharedB, 1, "mod"),
 				"mods/b.jar", item("mods/b.jar", bOnly, 1, "mod"), "config/shared.json", editableItem("config/shared.json", baseB, 1, "config")),
 				entryFor("packbb1", "mods/shared.jar", sharedB, 1), entryFor("packbb1", "mods/b.jar", bOnly, 1), entryFor("packbb1", "config/shared.json", baseB, 1));
 		Map<FileKey, FileState> initial = Map.of(new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(local, 1, true, true));
 		Map<String, FileState> aOverlay = Map.of("config/shared.json", new FileState(editedA, 1, true, false));
 		UpdatePlan first = UpdatePlanner.plan(new UpdatePlanner.Input(null, a, initial, aOverlay, Set.of(),
-				List.of(mod("mods/shared.jar", sharedA, "shared"), mod("mods/a.jar", aOnly, "a")), List.of(mod("mods/local.jar", local, "local")), List.of(), null,
+				List.of(mod("mods/shared.jar", sharedA, "shared"), mod("mods/a.jar", aOnly, "a")), List.of(mod("mods/local.jar", local, "local")), List.of(), List.of(), null,
 				config("packaa1")));
 		Map<FileKey, FileState> afterA = projectedFiles(first);
 		Map<FileKey, FileState> beforeB = withoutOverlays(afterA);
 		UpdatePlan second = UpdatePlanner.plan(new UpdatePlanner.Input(a, b, beforeB, Map.of(), Set.of(),
-				List.of(mod("mods/shared.jar", sharedB, "shared"), mod("mods/b.jar", bOnly, "b")), List.of(mod("mods/local.jar", local, "local")), List.of(),
+				List.of(mod("mods/shared.jar", sharedB, "shared"), mod("mods/b.jar", bOnly, "b")), List.of(mod("mods/local.jar", local, "local")), List.of(), List.of(),
 				new UpdatePlanner.SelectionContext("packaa1", a, aOverlay), config("packbb1")));
 		Map<FileKey, FileState> beforeAAgain = withoutOverlays(projectedFiles(second));
 		UpdatePlan third = UpdatePlanner.plan(new UpdatePlanner.Input(b, a, beforeAAgain, aOverlay, Set.of(),
-				List.of(mod("mods/shared.jar", sharedA, "shared"), mod("mods/a.jar", aOnly, "a")), List.of(mod("mods/local.jar", local, "local")), List.of(),
+				List.of(mod("mods/shared.jar", sharedA, "shared"), mod("mods/a.jar", aOnly, "a")), List.of(mod("mods/local.jar", local, "local")), List.of(), List.of(),
 				new UpdatePlanner.SelectionContext("packbb1", b, Map.of()), config("packaa1")));
 
 		assertTrue(second.operations().stream().anyMatch(operation -> operation.root() == Root.PROJECTION && operation.relativePath().equals("mods/a.jar")
@@ -100,7 +103,7 @@ class UpdatePlannerTest {
 
 	@Test
 	void cleanupUsesHistoricalHashAndSizeForManagedFiles() {
-		Jsons.ModpackContentFields target = manifest(Map.of(
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(
 				"mods/new.jar", item("mods/new.jar", TARGET_HASH, 9, "mod"),
 				"config/kept.json", item("config/kept.json", OTHER_HASH, 4, "config")),
 				ledger(entry("mods/old.jar", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE),
@@ -111,10 +114,10 @@ class UpdatePlannerTest {
 		files.put(new FileKey(Root.PROJECTION, "mods/new.jar"), new FileState(TARGET_HASH, 9, true, true));
 		files.put(new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OTHER_HASH, 4, true, false));
 
-		Jsons.ModpackContentFields installed = manifest(Map.of("mods/old.jar", item("mods/old.jar", OLD_HASH, 8, "mod")),
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of("mods/old.jar", item("mods/old.jar", OLD_HASH, 8, "mod")),
 				ledger(entry("mods/old.jar", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), null,
-				new Jsons.ClientConfigFieldsV3()));
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
 
 		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR
 				&& operation.relativePath().equals("mods/old.jar") && operation.operation() == OperationType.DELETE
@@ -167,9 +170,9 @@ class UpdatePlannerTest {
 
 	@Test
 	void removalCleansOnlyUnmodifiedGeneratedCopies() {
-		Jsons.ModpackContentFields installed = manifest(Map.of("mods/root.jar", item("mods/root.jar", TARGET_HASH, 9, "mod")),
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of("mods/root.jar", item("mods/root.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/root.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
-		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
 		baseline.modpackId = installed.modpackId;
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, "mods/root.jar"), new FileState(TARGET_HASH, 9, true, true),
@@ -180,7 +183,7 @@ class UpdatePlannerTest {
 		GeneratedCopyState generated = new GeneratedCopyState(installed.modpackId, installed.targetGenerationId, "3".repeat(40), List.of(
 				new GeneratedCopyState.Entry("mods/nested.jar", OLD_HASH, 8), new GeneratedCopyState.Entry("mods/nested-edited.jar", OLD_HASH, 8)));
 
-		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(), generated, new Jsons.ClientConfigFieldsV3()));
+		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(), generated, new ClientConfigJsons.ClientConfigFieldsV3()));
 
 		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/nested.jar")
 				&& operation.operation() == OperationType.DELETE && OLD_HASH.equals(operation.expectedExistingHash())));
@@ -192,7 +195,7 @@ class UpdatePlannerTest {
 	@Test
 	void cleanupPreservesMismatchesUnsafeTypesAndPlayerLocalPaths() {
 		String localHash = "4444444444444444444444444444444444444444";
-		Jsons.ModpackContentFields target = manifest(Map.of(), ledger(
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(
 				entry("config/changed.json", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE),
 				entry("config/size.json", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE),
 				entry("config/link.json", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE),
@@ -215,13 +218,13 @@ class UpdatePlannerTest {
 
 	@Test
 	void installedPackDoesNotDeleteAnEditedReplacement() {
-		Jsons.ModpackContentFields installed = manifest(Map.of("mods/sodium.jar", item("mods/sodium.jar", OLD_HASH, 8, "mod")),
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of("mods/sodium.jar", item("mods/sodium.jar", OLD_HASH, 8, "mod")),
 				ledger(entry("mods/sodium.jar", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
-		Jsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("mods/sodium.jar", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("mods/sodium.jar", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/sodium.jar"), new FileState(OTHER_HASH, 8, true, true));
 
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), null,
-				new Jsons.ClientConfigFieldsV3()));
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
 
 		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/sodium.jar")
 				&& operation.operation() == OperationType.DELETE));
@@ -230,7 +233,7 @@ class UpdatePlannerTest {
 
 	@Test
 	void freshClientMayRemoveOnlyExactServerKnownTombstoneBytes() {
-		Jsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("mods/removed.jar", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("mods/removed.jar", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/removed.jar"), new FileState(OLD_HASH, 8, true, true),
 				new FileKey(Root.GAME_DIR, "mods/unrelated.jar"), new FileState(OTHER_HASH, 8, true, true));
 
@@ -246,14 +249,14 @@ class UpdatePlannerTest {
 	void editedEditableFilesBecomeLineageOverlays() {
 		String editedOldHash = "5555555555555555555555555555555555555555";
 		String editedTargetHash = "6666666666666666666666666666666666666666";
-		Jsons.ModpackContentFields target = new Jsons.ModpackContentFields(Set.of(
+		ModpackJsons.ModpackContentFields target = new ModpackJsons.ModpackContentFields(Set.of(
 				editableItem("config/settings.json", TARGET_HASH, 7, "config")));
 		target.modpackId = "abc1234";
 		target.targetGenerationId = "1".repeat(40);
 		target.parentGenerationId = "";
 		target.stateDigest = "2".repeat(40);
 		target.ownershipLedger = ledger(entry("config/settings.json", TARGET_HASH, 7, OwnershipLedger.Status.PRESENT));
-		Jsons.ModpackContentFields previous = new Jsons.ModpackContentFields(Set.of(
+		ModpackJsons.ModpackContentFields previous = new ModpackJsons.ModpackContentFields(Set.of(
 				editableItem("config/settings.json", OLD_HASH, 6, "config")));
 		previous.modpackId = "old1234";
 		previous.targetGenerationId = "3".repeat(40);
@@ -263,8 +266,8 @@ class UpdatePlannerTest {
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/settings.json"), new FileState(editedTargetHash, 7, true, false),
 				new FileKey(Root.PROJECTION, "config/settings.json"), new FileState(editedTargetHash, 7, true, false));
 		UpdatePlanner.Input input = new UpdatePlanner.Input(null, target, files,
-				Map.of("config/settings.json", new FileState(editedOldHash, 6, true, false)), Set.of(), List.of(), List.of(), List.of(),
-				new UpdatePlanner.SelectionContext("old1234", previous), new Jsons.ClientConfigFieldsV3());
+				Map.of("config/settings.json", new FileState(editedOldHash, 6, true, false)), Set.of(), List.of(), List.of(), List.of(), List.of(),
+				new UpdatePlanner.SelectionContext("old1234", previous), new ClientConfigJsons.ClientConfigFieldsV3());
 
 		UpdatePlan plan = UpdatePlanner.plan(input);
 
@@ -275,18 +278,18 @@ class UpdatePlannerTest {
 		assertTrue(plan.restartReasons().contains(RestartReason.SELECTED_MODPACK));
 	}
 
-	private static UpdatePlanner.Input input(Jsons.ModpackContentFields target, Map<FileKey, FileState> files) {
-		return new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), null, new Jsons.ClientConfigFieldsV3());
+	private static UpdatePlanner.Input input(ModpackJsons.ModpackContentFields target, Map<FileKey, FileState> files) {
+		return new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3());
 	}
 
-	private static UpdatePlan planWithGeneratedCopies(Jsons.ModpackContentFields target, Map<FileKey, FileState> files, List<NestedCopy> previous, List<NestedCopy> generated) {
+	private static UpdatePlan planWithGeneratedCopies(ModpackJsons.ModpackContentFields target, Map<FileKey, FileState> files, List<NestedCopy> previous, List<NestedCopy> generated) {
 		return UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), previous, generated, null,
-				new Jsons.ClientConfigFieldsV3()));
+				new ClientConfigJsons.ClientConfigFieldsV3()));
 	}
 
-	private static Jsons.ModpackContentFields manifest(Map<String, Jsons.ModpackContentFields.ModpackContentItem> items,
-			Jsons.OwnershipLedgerFields ownershipLedger) {
-		Jsons.ModpackContentFields target = new Jsons.ModpackContentFields(new LinkedHashSet<>(items.values()));
+	private static ModpackJsons.ModpackContentFields manifest(Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> items,
+			GenerationJsons.OwnershipLedgerFields ownershipLedger) {
+		ModpackJsons.ModpackContentFields target = new ModpackJsons.ModpackContentFields(new LinkedHashSet<>(items.values()));
 		target.modpackId = "abc1234";
 		target.targetGenerationId = "1".repeat(40);
 		target.parentGenerationId = "";
@@ -295,17 +298,17 @@ class UpdatePlannerTest {
 		return target;
 	}
 
-	private static Jsons.ModpackContentFields.ModpackContentItem item(String path, String hash, long size, String type) {
-		return new Jsons.ModpackContentFields.ModpackContentItem(path, String.valueOf(size), type, false, false, hash, "0");
+	private static ModpackJsons.ModpackContentFields.ModpackContentItem item(String path, String hash, long size, String type) {
+		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, String.valueOf(size), type, false, false, hash, "0");
 	}
 
-	private static Jsons.ModpackContentFields.ModpackContentItem editableItem(String path, String hash, long size, String type) {
-		return new Jsons.ModpackContentFields.ModpackContentItem(path, String.valueOf(size), type, true, false, hash, "0");
+	private static ModpackJsons.ModpackContentFields.ModpackContentItem editableItem(String path, String hash, long size, String type) {
+		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, String.valueOf(size), type, true, false, hash, "0");
 	}
 
-	private static Jsons.ModpackContentFields packManifest(String modpackId, Map<String, Jsons.ModpackContentFields.ModpackContentItem> items,
+	private static ModpackJsons.ModpackContentFields packManifest(String modpackId, Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> items,
 			OwnershipLedger.Entry... entries) {
-		Jsons.ModpackContentFields target = new Jsons.ModpackContentFields(new LinkedHashSet<>(items.values()));
+		ModpackJsons.ModpackContentFields target = new ModpackJsons.ModpackContentFields(new LinkedHashSet<>(items.values()));
 		target.modpackId = modpackId;
 		target.targetGenerationId = "1".repeat(40);
 		target.parentGenerationId = "";
@@ -322,8 +325,8 @@ class UpdatePlannerTest {
 		return new ModInfo(path, hash, 1, Set.of(id), Set.of());
 	}
 
-	private static Jsons.ClientConfigFieldsV3 config(String modpackId) {
-		Jsons.ClientConfigFieldsV3 config = new Jsons.ClientConfigFieldsV3();
+	private static ClientConfigJsons.ClientConfigFieldsV3 config(String modpackId) {
+		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
 		config.selectedModpackId = modpackId;
 		return config;
 	}
@@ -340,11 +343,11 @@ class UpdatePlannerTest {
 				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (first, second) -> first, LinkedHashMap::new));
 	}
 
-	private static Jsons.OwnershipLedgerFields ledger(OwnershipLedger.Entry... entries) {
+	private static GenerationJsons.OwnershipLedgerFields ledger(OwnershipLedger.Entry... entries) {
 		return ledgerFor("abc1234", entries);
 	}
 
-	private static Jsons.OwnershipLedgerFields ledgerFor(String modpackId, OwnershipLedger.Entry... entries) {
+	private static GenerationJsons.OwnershipLedgerFields ledgerFor(String modpackId, OwnershipLedger.Entry... entries) {
 		Map<String, OwnershipLedger.Entry> values = new TreeMap<>();
 		for (OwnershipLedger.Entry entry : entries) values.put(entry.logicalPath(), entry);
 		return new OwnershipLedger(modpackId, values).toFields();

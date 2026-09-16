@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
@@ -48,12 +48,12 @@ class GenerationIdentityTest {
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 		GenerationRecord record = GenerationRecord.create(manifest, null, Instant.parse("2026-01-03T00:00:00Z"), "notes\n");
 		Path path = temporaryDirectory.resolve("automodpack-catalogue.json");
-		Jsons.CompleteModpackContentFields completeFields = record.toFields();
+		ModpackJsons.CompleteModpackContentFields completeFields = record.toFields();
 		GenerationPatchNoteHistory.writeFields(completeFields, GenerationPatchNoteHistory.forRecord(record));
 		ConfigTools.writeAtomic(path, completeFields);
 
 		GenerationRecord read = ModpackContentTools.readGenerationRecord(path);
-		Jsons.CompleteModpackContentFields readFields = ModpackContentTools.readCompleteFields(path);
+		ModpackJsons.CompleteModpackContentFields readFields = ModpackContentTools.readCompleteFields(path);
 
 		assertEquals(record, read);
 		assertEquals(GenerationPatchNoteHistory.forRecord(record), GenerationPatchNoteHistory.fromFields(readFields));
@@ -100,13 +100,13 @@ class GenerationIdentityTest {
 		assertEquals(GenerationIdentity.patchNotesDigest("note\n"), second.metadata().patchNotesDigest());
 	}
 
-	private static Jsons.CompleteModpackContentFields catalogue(String mainId, String description) {
-		var fields = new Jsons.CompleteModpackContentFields();
+	private static ModpackJsons.CompleteModpackContentFields catalogue(String mainId, String description) {
+		var fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
-		var main = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		var main = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		main.description = description;
 		main.files = Map.of();
-		var optional = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		var optional = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		optional.files = Map.of();
 		fields.groups = new LinkedHashMap<>();
 		fields.groups.put(mainId, main);
