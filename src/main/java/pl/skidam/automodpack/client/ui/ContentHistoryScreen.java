@@ -299,7 +299,8 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, status, rowWidth - 12)).withStyle(isCurrent(entry) ? ChatFormatting.GREEN : ChatFormatting.GRAY), left + 6, y + 4, TextColors.WHITE);
 			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.history.patchNotes", note).getString(), rowWidth - 12)).withStyle(ChatFormatting.YELLOW), left + 6, y + 31,
 					TextColors.WHITE);
-			String diffText = VersionedText.translatable("automodpack.history.diff", diff.addedFiles(), diff.modifiedFiles(), diff.removedFiles(), diff.metadataOnlyFiles(), diff.metadataChanges()).getString();
+			String metadata = VersionedText.translatable("automodpack.browser.kind.metadata_only").getString();
+			String diffText = "+" + diff.addedFiles() + "  ~" + diff.modifiedFiles() + "  -" + diff.removedFiles() + "  " + metadata + ": " + (diff.metadataOnlyFiles() + diff.metadataChanges());
 			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, diffText, rowWidth - 12)).withStyle(ChatFormatting.GRAY), left + 6, y + 42, TextColors.WHITE);
 		}
 		if (entries.isEmpty()) drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.empty").withStyle(ChatFormatting.GRAY), left, ENTRY_TOP, TextColors.WHITE);

@@ -15,6 +15,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -75,7 +76,7 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.GAME_DIR, "mods/nested.jar", OperationType.INSTALL_OBJECT, nestedHash, nestedBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/root.jar", true, rootHash, rootBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "mods/nested.jar", true, nestedHash, nestedBytes.length)),
-				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.FIXED_NESTED_MODS), List.of(), List.of(), List.of(), List.of(generated));
+				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.FIXED_NESTED_MODS), List.of(), List.of(), List.of(), List.of(generated), ChangeSet.empty());
 
 		assertTrue(executor(storage).commit(plan, target).success());
 
@@ -93,7 +94,8 @@ class UpdateTransactionExecutorTest {
 		String hash = HashUtils.getHash(Files.write(storage.activePath("mods/existing.jar"), bytes));
 		SelectedModpackTarget target = target("mods/existing.jar", "mod", false, hash, bytes.length);
 		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.generationTarget(), List.of(),
-				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of());
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of(),
+				ChangeSet.empty());
 
 		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
 
@@ -104,7 +106,7 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
-	void firstInstallQuarantinesLocalSameIdModBeforeProjectionApply() throws Exception {
+	void firstInstallPreservesLocalSameIdModBeforeProjectionApply() throws Exception {
 		ClientStorage storage = storage();
 		byte[] serverBytes = "server-sodium".getBytes(StandardCharsets.UTF_8);
 		String serverHash = store(storage, serverBytes);
@@ -129,9 +131,34 @@ class UpdateTransactionExecutorTest {
 		assertTrue(execution.success());
 		assertFalse(Files.exists(local));
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/server-sodium.jar"), serverBytes.length, serverHash));
-		ClientStorageJsons.ClientQuarantineFields quarantine = QuarantineArchive.read(storage, target.manifest().modpackId());
-		assertEquals(1, quarantine.entries.size());
-		assertTrue(FileIntegrity.matches(storage.quarantinePayload(target.manifest().modpackId(), plan.conflicts().get(0).conflictId()), localBytes.length, localHash));
+		PreservationVault.Snapshot preservation = PreservationVault.read(storage, target.manifest().modpackId());
+		assertEquals(1, preservation.claims().size());
+		assertEquals(PreservationVault.Reason.LOCAL_CONFLICT, preservation.claims().get(0).reason());
+		assertTrue(FileIntegrity.matches(storage.objectsDirectory().resolve(localHash), localBytes.length, localHash));
+	}
+
+	@Test
+	void firstInstallConsentPreservesLocalBytesBeforeSamePathReplacement() throws Exception {
+		ClientStorage storage = storage();
+		byte[] serverBytes = "server-replacement".getBytes(StandardCharsets.UTF_8);
+		String serverHash = store(storage, serverBytes);
+		Path local = storage.modsDirectory().resolve("shared.jar");
+		byte[] localBytes = "player-local".getBytes(StandardCharsets.UTF_8);
+		Files.write(local, localBytes);
+		String localHash = HashUtils.getHash(local);
+		SelectedModpackTarget target = target("mods/shared.jar", "other", false, serverHash, serverBytes.length);
+		UpdatePlan.FileState localState = new UpdatePlan.FileState(localHash, localBytes.length, true);
+		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/shared.jar"), localState);
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				clientConfig(target.manifest().modpackId()), Map.of("mods/shared.jar", localState)));
+
+		assertTrue(executor(storage).commit(plan, target).success());
+
+		assertTrue(FileIntegrity.matches(local, serverBytes.length, serverHash));
+		PreservationVault.Claim claim = PreservationVault.read(storage, target.manifest().modpackId()).claims().get(0);
+		assertEquals(PreservationVault.Reason.STRICT_INSTALL, claim.reason());
+		assertEquals(localHash, claim.objectHash());
+		assertTrue(FileIntegrity.matches(storage.objectsDirectory().resolve(localHash), localBytes.length, localHash));
 	}
 
 	@Test
@@ -218,6 +245,56 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void preservesOwnedBytesWhileRestoringThePrePackBaseline() throws Exception {
+		ClientStorage storage = storage();
+		byte[] serverBytes = "pack-a-value".getBytes(StandardCharsets.UTF_8);
+		byte[] baselineBytes = "player-value".getBytes(StandardCharsets.UTF_8);
+		byte[] targetBytes = "pack-b-value".getBytes(StandardCharsets.UTF_8);
+		String serverHash = store(storage, serverBytes);
+		String baselineHash = store(storage, baselineBytes);
+		String targetHash = store(storage, targetBytes);
+		String restoredPath = "config/pack-a.json";
+		SelectedModpackTarget installed = target(restoredPath, "config", false, serverHash, serverBytes.length);
+		UpdatePlan installedPlan = plan(installed, clientConfig(installed.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, restoredPath, OperationType.INSTALL_OBJECT, serverHash, serverBytes.length, null),
+				new Operation(Root.GAME_DIR, restoredPath, OperationType.INSTALL_OBJECT, serverHash, serverBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, restoredPath, true, serverHash, serverBytes.length),
+						new ProjectedFile(Root.GAME_DIR, restoredPath, true, serverHash, serverBytes.length)));
+		UpdateTransactionExecutor executor = executor(storage);
+		assertTrue(executor.commit(installedPlan, installed).success());
+		Files.delete(storage.objectsDirectory().resolve(serverHash));
+
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
+		baseline.modpackId = installed.manifest().modpackId();
+		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
+		baselineEntry.logicalPath = restoredPath;
+		baselineEntry.objectHash = baselineHash;
+		baselineEntry.size = baselineBytes.length;
+		baseline.entries = List.of(baselineEntry);
+		ModpackJsons.CompleteModpackContentFields targetFields = fields("config/pack-b.json", "config", false, targetHash, targetBytes.length);
+		targetFields.modpackId = "def5678";
+		GenerationRecord targetRecord = GenerationRecord.create(GroupManifestValidator.validate(targetFields), null, Instant.parse("2026-01-02T00:00:00Z"), "");
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(targetRecord.toFields(), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(
+				new UpdatePlan.FileKey(Root.PROJECTION, restoredPath), new UpdatePlan.FileState(serverHash, serverBytes.length, true),
+				new UpdatePlan.FileKey(Root.GAME_DIR, restoredPath), new UpdatePlan.FileState(serverHash, serverBytes.length, true));
+		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.manifest().modpackId(), installed.flatTarget(), Map.of(), baseline,
+				Set.of(baselineHash));
+		UpdatePlan switchPlan = UpdatePlanner.plan(new UpdatePlanner.Input(installed.flatTarget(), target.flatTarget(), files, Map.of(), Set.of(), List.of(), List.of(),
+				List.of(), List.of(), selection, clientConfig(target.manifest().modpackId())));
+
+		assertEquals(List.of(new UpdatePlan.Preservation(Root.GAME_DIR, restoredPath, serverHash, serverBytes.length)), switchPlan.preservations());
+		assertTrue(switchPlan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals(restoredPath)
+				&& file.present() && baselineHash.equals(file.expectedHash())));
+		assertTrue(executor.commit(switchPlan, target).success());
+		assertArrayEquals(baselineBytes, Files.readAllBytes(storage.gameDirectory().resolve(restoredPath)));
+		assertTrue(FileIntegrity.matches(storage.objectsDirectory().resolve(serverHash), serverBytes.length, serverHash));
+		PreservationVault.Claim preserved = PreservationVault.read(storage, installed.manifest().modpackId()).claims().get(0);
+		assertEquals(installed.generationTarget().targetGenerationId(), preserved.generationId());
+		assertEquals(PreservationVault.Reason.MODPACK_DEACTIVATION, preserved.reason());
+	}
+
+	@Test
 	void removalSwapsToAnEmptyProjectionAndKeepsImmutableGenerationRecords() throws Exception {
 		ClientStorage storage = storage();
 		byte[] bytes = "removable-object".getBytes(StandardCharsets.UTF_8);
@@ -264,6 +341,7 @@ class UpdateTransactionExecutorTest {
 		assertFalse(Files.exists(generatedLive));
 		assertFalse(Files.exists(storage.generatedCopiesFile(target.manifest().modpackId(), target.generationTarget().targetGenerationId(), UpdateTransaction.digest(expected))));
 		assertTrue(FileIntegrity.matches(storage.objectsDirectory().resolve(hash), bytes.length, hash));
+		assertEquals(PreservationVault.Reason.MODPACK_REMOVAL, PreservationVault.read(storage, target.manifest().modpackId()).claims().get(0).reason());
 		assertTrue(Files.isDirectory(storage.activeDirectory()));
 		try (var paths = Files.list(storage.activeDirectory())) {
 			assertEquals(List.of(), paths.toList());
@@ -375,7 +453,8 @@ class UpdateTransactionExecutorTest {
 	}
 
 	private static UpdatePlan plan(SelectedModpackTarget target, ClientConfigJsons.ClientConfigFieldsV3 config, List<Operation> operations, List<ProjectedFile> finalState) {
-		return new UpdatePlan(target.manifest().modpackId(), target.generationTarget(), operations, finalState, config, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of());
+		return new UpdatePlan(target.manifest().modpackId(), target.generationTarget(), operations, finalState, config, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(),
+				ChangeSet.empty());
 	}
 
 	private static SelectedModpackTarget target(String path, String type, boolean editable, String hash, long size) {

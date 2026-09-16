@@ -1,10 +1,7 @@
 package pl.skidam.automodpack_loader_core.screen;
 
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
-import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -23,10 +20,7 @@ public interface ScreenService {
 
 	void welcome(ModpackUpdater modpackUpdater);
 
-	boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection,
-			Map<UpdatePlan.FileKey, List<String>> mainPageUrls);
-
-	void recovery(ModpackUpdater modpackUpdater, ModpackUpdater.RecoverySnapshot recoverySnapshot, String modpackName, Runnable closed);
+	boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection);
 
 	void history(HistoryViewRequest request);
 

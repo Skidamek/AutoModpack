@@ -49,7 +49,41 @@ class UpdatePlannerTest {
 	}
 
 	@Test
-	void firstInstallQuarantinesAnUnownedSameIdMod() {
+	void firstInstallConsentPreservesAndRemovesAnObservedLocalMod() {
+		String path = "mods/local.jar";
+		FileState local = new FileState(OLD_HASH, 8, true);
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, path), local);
+		UpdatePlanner.Input input = new UpdatePlanner.Input(null, manifest(Map.of(), ledger()), files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of(path, local));
+
+		UpdatePlan plan = UpdatePlanner.plan(input);
+
+		assertEquals(List.of(new Preservation(Root.GAME_DIR, path, OLD_HASH, 8, PreservationProof.PLAYER_CONSENT)), plan.preservations());
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(path)
+				&& operation.operation() == OperationType.DELETE && OLD_HASH.equals(operation.expectedExistingHash())));
+		assertTrue(plan.restartReasons().contains(RestartReason.REMOVED_LOCAL_MODS));
+	}
+
+	@Test
+	void firstInstallConsentPreservesBeforeReplacingTheSameLivePath() {
+		String path = "mods/shared.jar";
+		FileState local = new FileState(OLD_HASH, 8, true);
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(path, item(path, TARGET_HASH, 9, "other")),
+				ledger(entry(path, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, path), local);
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of(path, local)));
+
+		Operation operation = plan.operations().stream().filter(value -> value.root() == Root.GAME_DIR && value.relativePath().equals(path)).findFirst().orElseThrow();
+		assertEquals(OperationType.INSTALL_OBJECT, operation.operation());
+		assertEquals(TARGET_HASH, operation.expectedObjectHash());
+		assertEquals(OLD_HASH, operation.expectedExistingHash());
+		assertEquals(PreservationProof.PLAYER_CONSENT, plan.preservations().get(0).proof());
+	}
+
+	@Test
+	void firstInstallPreservesAnUnownedSameIdMod() {
 		ModpackJsons.ModpackContentFields target = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/server.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
@@ -60,7 +94,7 @@ class UpdatePlannerTest {
 				List.of(new ModInfo("mods/local.jar", OLD_HASH, 8, Set.of("sodium"), Set.of())), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
 
 		assertEquals(1, plan.conflicts().size());
-		assertEquals(ConflictAction.QUARANTINE, plan.conflicts().get(0).action());
+		assertEquals(ConflictAction.PRESERVE_LOCAL, plan.conflicts().get(0).action());
 		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/local.jar")
 				&& operation.operation() == OperationType.DELETE && OLD_HASH.equals(operation.expectedExistingHash())));
 	}

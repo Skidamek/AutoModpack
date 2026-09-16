@@ -13,6 +13,8 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.utils.HashUtils;
+
 class FileMetadataCacheTest {
 	@TempDir
 	Path temporaryDirectory;
@@ -56,6 +58,26 @@ class FileMetadataCacheTest {
 
 		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
 			assertEquals(expectedHash, cache.getOrComputeHash(file));
+		}
+	}
+
+	@Test
+	void forcedRehashBypassesAValidLookingStaleRecord() throws Exception {
+		Path file = temporaryDirectory.resolve("file.bin");
+		Files.writeString(file, "first", StandardCharsets.UTF_8);
+		FileTime originalLastModifiedTime = FileTime.from(Instant.ofEpochSecond(1_700_000_000L));
+		Files.setLastModifiedTime(file, originalLastModifiedTime);
+		Path cacheDirectory = temporaryDirectory.resolve("file-metadata");
+		String staleHash;
+
+		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
+			staleHash = cache.getOrComputeHash(file);
+			Files.writeString(file, "other", StandardCharsets.UTF_8);
+			Files.setLastModifiedTime(file, originalLastModifiedTime);
+
+			assertEquals(staleHash, cache.getOrComputeHash(file));
+			assertEquals(HashUtils.getHash(file), cache.rehash(file));
+			assertNotEquals(staleHash, cache.getOrComputeHash(file));
 		}
 	}
 }

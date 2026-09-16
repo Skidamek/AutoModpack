@@ -2,7 +2,6 @@ package pl.skidam.automodpack.client.ui;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
@@ -13,7 +12,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.change.ChangeSet;
-import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 
 /** A concise confirmation screen. Detailed file changes open in the shared browser. */
@@ -30,7 +28,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private boolean finished;
 
 	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, boolean returnToSelection, Runnable continueAction,
-			Runnable cancelAction, Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
+			Runnable cancelAction) {
 		super(VersionedText.translatable(titleKey(preview.mode())));
 		this.parent = parent;
 		this.preview = preview;
@@ -39,7 +37,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		this.returnToSelection = returnToSelection;
 		this.continueAction = continueAction;
 		this.cancelAction = cancelAction;
-		this.changes = preview.changeSet().withReferences((location, path) -> references(location, path, mainPageUrls));
+		this.changes = preview.changeSet();
 	}
 
 	@Override
@@ -53,14 +51,6 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 				optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()),
 				primaryAction(VersionedText.translatable(actionKey(mode)), button -> continueUpdate())));
 		this.addActionArea(310, this.height - 28, rows.toArray(ActionRow[]::new));
-	}
-
-	private static List<String> references(String location, String path, Map<UpdatePlan.FileKey, List<String>> urls) {
-		try {
-			return urls.getOrDefault(new UpdatePlan.FileKey(UpdatePlan.Root.valueOf(location), path), List.of());
-		} catch (IllegalArgumentException e) {
-			return List.of();
-		}
 	}
 
 	private void continueUpdate() {
@@ -125,8 +115,9 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 				.getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(bytes).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += 15;
-		if (summary.effectCount() > 0) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.summary.otherEffects", summary.effectCount()).withStyle(ChatFormatting.YELLOW), this.width / 2, y, TextColors.WHITE);
+		long otherEffects = changes.effects().stream().filter(effect -> !"restart".equals(effect.category())).count();
+		if (otherEffects > 0) {
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.summary.otherEffects", otherEffects).withStyle(ChatFormatting.YELLOW), this.width / 2, y, TextColors.WHITE);
 			y += 15;
 		}
 		String restart = preview.restartReasons().isEmpty()

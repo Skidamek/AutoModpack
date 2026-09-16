@@ -12,7 +12,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
-/** Routes pack-specific recovery archives and the explicit global storage cleanup. */
+/** Routes pack-specific preserved files and the explicit global storage cleanup. */
 public final class ModpackStorageScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 320;
 
@@ -31,11 +31,9 @@ public final class ModpackStorageScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		List<ActionRow> actions = new ArrayList<>();
-		if (controller.hasRecovery(pack)) {
-			actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.management.recovery"), button -> openRecovery())));
-		}
-		if (controller.hasQuarantine(pack)) {
-			actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.management.quarantine"), button -> openQuarantine())));
+		if (controller.hasPreservedFiles(pack)) {
+			actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
+					optionalAction(VersionedText.translatable("automodpack.management.preservedFiles"), button -> openPreservedFiles())));
 		}
 		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, primaryAction(VersionedText.translatable("automodpack.packDetails.localStorage"), button -> openLocalStorage())));
 		this.addActionAreaAt(PANEL_WIDTH, 76, actions.toArray(ActionRow[]::new));
@@ -43,12 +41,8 @@ public final class ModpackStorageScreen extends VersionedScreen {
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent))));
 	}
 
-	private void openRecovery() {
-		controller.openRecovery(this, pack, () -> {});
-	}
-
-	private void openQuarantine() {
-		ScreenImpl.setScreen(new QuarantineArchiveScreen(this, controller.storage(), pack.modpackId(), pack.name(), pack.active(), () -> {}));
+	private void openPreservedFiles() {
+		controller.openPreservedFiles(this, pack, () -> {});
 	}
 
 	private void openLocalStorage() {

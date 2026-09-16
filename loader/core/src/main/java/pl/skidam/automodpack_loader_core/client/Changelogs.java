@@ -10,8 +10,6 @@ import java.util.Optional;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
-import pl.skidam.automodpack_core.update.UpdatePlan;
-import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 
 public class Changelogs {
@@ -44,13 +42,12 @@ public class Changelogs {
 		changeSet = ChangeSet.empty();
 	}
 
-	public void replaceWith(UpdatePreview preview, Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
+	public void replaceWith(UpdatePreview preview) {
 		Objects.requireNonNull(preview, "preview");
-		Objects.requireNonNull(mainPageUrls, "main page URLs");
 		clear();
 		latestPatchNotes = preview.latestPatchNotes();
 		patchNotesHistory = preview.patchNotesHistory();
-		changeSet = preview.changeSet().withReferences((location, path) -> references(location, path, mainPageUrls));
+		changeSet = preview.changeSet();
 		for (ChangeSet.Change change : changeSet.changes()) {
 			FileChange fileChange = new FileChange(change.logicalPath(), references(change));
 			switch (change.kind()) {
@@ -85,14 +82,6 @@ public class Changelogs {
 
 	public void setRestartReasons(List<String> restartReasons) {
 		this.restartReasons = List.copyOf(Objects.requireNonNull(restartReasons, "restart reasons"));
-	}
-
-	private static List<String> references(String location, String path, Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
-		try {
-			return mainPageUrls.getOrDefault(new UpdatePlan.FileKey(Root.valueOf(location), path), List.of());
-		} catch (IllegalArgumentException e) {
-			return List.of();
-		}
 	}
 
 	private static List<String> references(ChangeSet.Change change) {

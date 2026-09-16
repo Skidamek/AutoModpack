@@ -6,11 +6,13 @@ dedicated verb is needed for them.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
+import re
 from fnmatch import fnmatch
 from pathlib import Path
 
-from ..mod_fixtures import assert_valid_mod_fixture, write_valid_mod_fixture
+from ..mod_fixtures import assert_valid_mod_fixture, valid_mod_jar_bytes, write_valid_mod_fixture
 from .registry import verb
 from .util import await_condition, parse_duration
 
@@ -25,6 +27,103 @@ def _await_exist(ctx, root, rels, step, msg, default_timeout):
         step.get("poll"),
         msg,
     )
+
+
+_CORRUPT_BYTES = b"AutoModpack autotester deliberate corruption\n"
+
+
+def _client_path(ctx, template, purpose):
+    raw = Path(str(ctx.resolve(template)))
+    path = ctx.path(raw).resolve()
+    root = ctx.game_dir.resolve()
+    if raw.is_absolute() or not path.is_relative_to(root):
+        raise ValueError(f"{purpose} escapes the client game directory: {path}")
+    return path
+
+
+def _mutate_file(path, action):
+    if action == "delete":
+        if not path.is_file():
+            raise FileNotFoundError(f"cannot delete missing file: {path}")
+        path.unlink()
+        return
+    if action != "corrupt":
+        raise ValueError(f"unknown client-file mutation {action!r}")
+    if not path.is_file():
+        raise FileNotFoundError(f"cannot corrupt missing file: {path}")
+    original = path.read_bytes()
+    payload = _CORRUPT_BYTES
+    while payload == original:
+        payload += b"!"
+    path.write_bytes(payload)
+
+
+def _active_file(ctx, logical_path):
+    """Return the selected generation entry for one canonical logical path."""
+    _state, manifest = _read_active_generation(ctx)
+    wanted = Path(str(ctx.resolve(logical_path)))
+    if wanted.is_absolute() or ".." in wanted.parts:
+        raise ValueError(f"active logical path must be relative: {logical_path!r}")
+    canonical = wanted.as_posix()
+    matches = []
+    for group in (manifest.get("groups", {}) or {}).values():
+        if not isinstance(group, dict):
+            continue
+        entry = (group.get("files", {}) or {}).get(canonical)
+        if isinstance(entry, dict):
+            matches.append(entry)
+    if not matches:
+        raise ValueError(f"active generation has no file {canonical!r}")
+    identities = {(str(entry.get("sha1", "")), str(entry.get("size", ""))) for entry in matches}
+    if len(identities) != 1:
+        raise ValueError(f"active generation has conflicting metadata for {canonical!r}")
+    expected_hash, raw_size = identities.pop()
+    if not re.fullmatch(r"[0-9a-f]{40}", expected_hash):
+        raise ValueError(f"active generation has an invalid object hash for {canonical!r}")
+    try:
+        expected_size = int(raw_size)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"active generation has an invalid file size for {canonical!r}") from error
+    return canonical, expected_hash, expected_size
+
+
+def _object_path(ctx, object_hash):
+    return ctx.game_dir / "automodpack" / "client" / "data" / "objects" / object_hash
+
+
+def _claim_fields(ctx, step):
+    pack_id = str(ctx.resolve(step["packId"]))
+    manifest = ctx.game_dir / "automodpack" / "client" / "preservation" / pack_id / "claims.json"
+    if not manifest.is_file():
+        return manifest, []
+    try:
+        claims = json.loads(manifest.read_text(encoding="utf-8")).get("claims", [])
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AssertionError(f"preservation manifest is invalid: {manifest}") from error
+    if not isinstance(claims, list):
+        raise AssertionError(f"preservation manifest has no claim list: {manifest}")
+    original_path = step.get("originalPath")
+    reason = step.get("reason")
+    status = step.get("status")
+    fixture = ctx.resolve(step.get("fixture"))
+    fixture_hash = hashlib.sha1(valid_mod_jar_bytes(fixture, ctx.target.minecraft)).hexdigest() if isinstance(fixture, dict) else None
+    content_hash = hashlib.sha1(str(ctx.resolve(step["content"])).encode("utf-8")).hexdigest() if "content" in step else None
+    result = []
+    for claim in claims:
+        if not isinstance(claim, dict):
+            continue
+        if original_path is not None and claim.get("originalPath") != str(ctx.resolve(original_path)):
+            continue
+        if reason is not None and claim.get("reason") != str(ctx.resolve(reason)):
+            continue
+        if status is not None and claim.get("status") != str(ctx.resolve(status)):
+            continue
+        if fixture_hash is not None and claim.get("objectHash") != fixture_hash:
+            continue
+        if content_hash is not None and claim.get("objectHash") != content_hash:
+            continue
+        result.append(claim)
+    return manifest, result
 
 
 @verb("wait_file")
@@ -142,6 +241,50 @@ def write_file(ctx, step):
         raise ValueError(f"local file path escapes the client game directory: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(str(ctx.resolve(step.get("content", ""))), encoding="utf-8")
+
+
+@verb("mutate_client_file")
+def mutate_client_file(ctx, step):
+    """Deliberately delete or corrupt one exact file inside the client game directory."""
+    path = _client_path(ctx, step["path"], "client-file mutation")
+    _mutate_file(path, str(step["action"]))
+
+
+@verb("mutate_active_object")
+def mutate_active_object(ctx, step):
+    """Deliberately delete or corrupt the CAS object expected by an active logical path."""
+    _logical_path, expected_hash, _expected_size = _active_file(ctx, step["path"])
+    _mutate_file(_object_path(ctx, expected_hash), str(step["action"]))
+
+
+@verb("assert_client_object")
+def assert_client_object(ctx, step):
+    """Assert presence and integrity of the CAS object expected by an active logical path."""
+    logical_path, expected_hash, expected_size = _active_file(ctx, step["path"])
+    path = _object_path(ctx, expected_hash)
+    expected_present = step.get("present", True)
+    if path.exists() != expected_present:
+        raise AssertionError(f"client object for {logical_path!r} presence was {path.exists()}, expected {expected_present}")
+    if not expected_present:
+        return
+    if not path.is_file():
+        raise AssertionError(f"client object for {logical_path!r} is not a regular file: {path}")
+    valid = path.stat().st_size == expected_size and hashlib.sha1(path.read_bytes()).hexdigest() == expected_hash
+    expected_valid = step.get("valid", True)
+    if valid != expected_valid:
+        raise AssertionError(f"client object for {logical_path!r} validity was {valid}, expected {expected_valid}")
+
+
+@verb("mutate_preservation_object")
+def mutate_preservation_object(ctx, step):
+    """Deliberately delete or corrupt the CAS object for one uniquely selected vault claim."""
+    manifest, matches = _claim_fields(ctx, step)
+    if len(matches) != 1:
+        raise AssertionError(f"expected one matching preservation claim under {manifest}, found {len(matches)}")
+    object_hash = str(matches[0].get("objectHash", ""))
+    if not re.fullmatch(r"[0-9a-f]{40}", object_hash):
+        raise AssertionError(f"matching preservation claim has an invalid object hash: {object_hash!r}")
+    _mutate_file(_object_path(ctx, object_hash), str(step["action"]))
 
 
 @verb("assert_bootstrap_import")
@@ -268,25 +411,30 @@ def assert_mod_fixture(ctx, step):
         raise AssertionError(f"mod fixture {path} is not readable: {error}") from error
 
 
-@verb("assert_quarantine_payload")
-def assert_quarantine_payload(ctx, step):
-    """Assert that a conflict payload was archived under one pack's quarantine records."""
-    pack_id = str(ctx.resolve(step["packId"]))
-    fixture = ctx.resolve(step.get("fixture"))
-    expected = str(ctx.resolve(step.get("content", "")))
-    conflicts = ctx.game_dir / "automodpack" / "client" / "quarantine" / pack_id / "conflicts"
-    if not conflicts.is_dir():
-        raise AssertionError(f"quarantine conflicts directory is missing: {conflicts}")
-    for payload in sorted(conflicts.glob("*/payload")):
+@verb("assert_preservation_claim")
+def assert_preservation_claim(ctx, step):
+    """Assert filtered vault claims and verify that their claimed CAS bytes are sound."""
+    manifest, matches = _claim_fields(ctx, step)
+    expected_present = step.get("present", True)
+    expected_count = step.get("count")
+    if expected_count is not None:
+        if len(matches) != expected_count:
+            raise AssertionError(f"matching preservation claim count under {manifest} was {len(matches)}, expected {expected_count}")
+    elif bool(matches) != expected_present:
+        raise AssertionError(f"matching preservation claim presence under {manifest} was {bool(matches)}, expected {expected_present}")
+    if not expected_present or not matches:
+        return
+    expected_valid = step.get("objectValid", True)
+    for claim in matches:
+        object_hash = str(claim.get("objectHash", ""))
+        payload = _object_path(ctx, object_hash)
         try:
-            if isinstance(fixture, dict):
-                assert_valid_mod_fixture(payload.read_bytes(), fixture, ctx.target.minecraft)
-                return
-            if payload.read_text(encoding="utf-8") == expected:
-                return
-        except (AssertionError, FileNotFoundError, IsADirectoryError, OSError):
-            continue
-    raise AssertionError(f"no quarantine payload under {conflicts} matched the expected local content")
+            size = int(claim.get("size", -1))
+        except (TypeError, ValueError):
+            size = -1
+        valid = re.fullmatch(r"[0-9a-f]{40}", object_hash) is not None and payload.is_file() and payload.stat().st_size == size and hashlib.sha1(payload.read_bytes()).hexdigest() == object_hash
+        if valid != expected_valid:
+            raise AssertionError(f"preservation object {object_hash!r} validity was {valid}, expected {expected_valid}")
 
 
 @verb("assert_generation")

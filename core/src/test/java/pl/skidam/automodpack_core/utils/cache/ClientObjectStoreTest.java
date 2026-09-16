@@ -25,6 +25,8 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.PreservationVault;
+import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 class ClientObjectStoreTest {
@@ -134,6 +136,24 @@ class ClientObjectStoreTest {
 		assertThrows(IllegalArgumentException.class, () -> ClientObjectStore.normalizeHash("not-a-sha1"));
 		ClientStorage storage = storage();
 		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of("not-a-sha1")));
+	}
+
+	@Test
+	void preservationClaimsPinObjectsUntilExplicitDeletion() throws Exception {
+		ClientStorage storage = storage();
+		Path source = storage.gamePath("config/removed.txt");
+		Files.createDirectories(source.getParent());
+		Files.writeString(source, "preserved", StandardCharsets.UTF_8);
+		String hash = HashUtils.getHash(source);
+		PreservationVault.Claim claim = PreservationVault.preserve(storage, MODPACK_ID, "a".repeat(40), PreservationVault.Reason.SERVER_REMOVAL, Root.GAME_DIR,
+				"config/removed.txt", hash, Files.size(source));
+
+		ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of());
+		assertTrue(Files.exists(storage.objectsDirectory().resolve(hash)));
+
+		PreservationVault.delete(storage, MODPACK_ID, claim.claimId());
+		ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of());
+		assertFalse(Files.exists(storage.objectsDirectory().resolve(hash)));
 	}
 
 	private ClientStorage storage() throws Exception {

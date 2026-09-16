@@ -22,6 +22,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 	private final InstalledModpackController.Pack pack;
 	private final List<Button> actionButtons = new ArrayList<>();
 	private boolean busy;
+	private boolean upToDate;
 
 	public ModpackDetailsScreen(Screen parent, InstalledModpackController controller, InstalledModpackController.Pack pack) {
 		super(VersionedText.translatable("automodpack.packDetails.title"));
@@ -35,7 +36,8 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		super.init();
 		actionButtons.clear();
 		List<Action> actions = new ArrayList<>();
-		actions.add(new Action(pack.active() ? "automodpack.management.update" : "automodpack.management.activate", this::primaryAction));
+		actions.add(new Action(pack.active() && upToDate ? "automodpack.management.upToDate" : pack.active() ? "automodpack.management.update" : "automodpack.management.activate", this::primaryAction));
+		if (pack.active()) actions.add(new Action("automodpack.management.repair", this::repair));
 		actions.add(new Action("automodpack.selection.button", this::openFeatures));
 		if (controller.hasHistory(pack)) actions.add(new Action("automodpack.management.history", this::openHistory));
 		actions.add(new Action("automodpack.management.files", this::openFiles));
@@ -67,8 +69,21 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		if (busy) return;
 		busy = true;
 		updateActions();
-		if (pack.active()) controller.update(pack, this::released);
+		if (pack.active()) controller.update(pack, this::updateCompleted);
 		else controller.activate(pack, this::released);
+	}
+
+	private void updateCompleted(boolean current) {
+		upToDate = current;
+		released();
+		if (current) rebuild();
+	}
+
+	private void repair() {
+		if (busy || !pack.active()) return;
+		busy = true;
+		updateActions();
+		controller.repair(this, pack, this::updateCompleted);
 	}
 
 	private void openFeatures() {
@@ -113,7 +128,16 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 	}
 
 	private void updateActions() {
-		for (int index = 0; index < actionButtons.size(); index++) actionButtons.get(index).active = !busy && (index != 0 || !pack.active() || pack.connectionAvailable());
+		for (int index = 0; index < actionButtons.size(); index++) actionButtons.get(index).active = !busy && (index != 0 || !pack.active() || pack.connectionAvailable() && !upToDate);
+	}
+
+	private void rebuild() {
+		/*? if >=1.19.2 {*/
+		this.rebuildWidgets();
+		/*?} else {*/
+		/*
+		this.init(this.minecraft, this.width, this.height);
+		*//*?}*/
 	}
 
 	@Override
