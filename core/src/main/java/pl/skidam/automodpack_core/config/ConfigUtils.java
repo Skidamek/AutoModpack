@@ -64,16 +64,11 @@ public class ConfigUtils {
 		// Rules are group-directory-relative: no leading slash, no '/automodpack/host-modpack/<this group>' prefix (slash optional).
 		if (config.modpack == null) return;
 		for (var categoryEntry : config.modpack.entrySet()) {
-			if (categoryEntry.getValue() == null) {
-				LOGGER.warn("Ignored null category declaration '{}'.", categoryEntry.getKey());
-				continue;
-			}
-			for (var groupEntry : categoryEntry.getValue().entrySet()) {
+			var category = categoryEntry.getValue();
+			if (category == null) throw new ConfigTools.ConfigParseException("Category '" + categoryEntry.getKey() + "' is null; declare its groups or remove the category");
+			for (var groupEntry : category.entrySet()) {
 				var group = groupEntry.getValue();
-				if (group == null) {
-					LOGGER.warn("Ignored null group declaration '{}' in category '{}'.", groupEntry.getKey(), categoryEntry.getKey());
-					continue;
-				}
+				if (group == null) throw new ConfigTools.ConfigParseException("Group '" + groupEntry.getKey() + "' in category '" + categoryEntry.getKey() + "' is null; declare it or remove the entry");
 				Pattern ownGroupPrefix = Pattern.compile("^/?automodpack/host-modpack/" + Pattern.quote(groupEntry.getKey()) + "(?:/|$)");
 				group.syncedFiles = normalizeRuleSet(group.syncedFiles, "syncedFiles", groupEntry.getKey(), ownGroupPrefix, true);
 				group.excludedFiles = normalizeRuleSet(group.excludedFiles, "excludedFiles", groupEntry.getKey(), ownGroupPrefix, false);

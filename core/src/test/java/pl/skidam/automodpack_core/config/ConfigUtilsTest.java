@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -56,5 +57,19 @@ class ConfigUtilsTest {
 		// Whole-directory remainders (empty, `**`, `**/*`, collapsed `**/**`) are dropped: excludedFiles also matches synced paths.
 		// A foreign group's rule is kept verbatim instead of being rewritten into this group's space.
 		assertEquals(List.of("automodpack/host-modpack/other/**"), List.copyOf(group.excludedFiles));
+	}
+
+	@Test
+	void nullGroupAndCategoryDeclarationsAreInvalid() {
+		ServerConfigJsons.ServerConfigFieldsV3 nullCategory = new ServerConfigJsons.ServerConfigFieldsV3();
+		nullCategory.modpack = new LinkedHashMap<>(Map.of("General", new LinkedHashMap<>(Map.of("main", new ServerConfigJsons.GroupDeclaration()))));
+		nullCategory.modpack.put("Broken", null);
+		assertThrows(ConfigTools.ConfigParseException.class, () -> ConfigUtils.normalizeServerConfig(nullCategory));
+
+		ServerConfigJsons.ServerConfigFieldsV3 nullGroup = new ServerConfigJsons.ServerConfigFieldsV3();
+		Map<String, ServerConfigJsons.GroupDeclaration> groups = new LinkedHashMap<>();
+		groups.put("main", null);
+		nullGroup.modpack = new LinkedHashMap<>(Map.of("General", groups));
+		assertThrows(ConfigTools.ConfigParseException.class, () -> ConfigUtils.normalizeServerConfig(nullGroup));
 	}
 }
