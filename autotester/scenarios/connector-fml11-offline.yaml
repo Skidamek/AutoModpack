@@ -1,8 +1,8 @@
 id: connector-fml11-offline
 description: |
   NeoForge 26.1.2 proof that current Sinytra Connector and its FML11 services load
-  in place from AutoModpack's selected modpack directory, then discover, initialize,
-  and mix in a genuinely Fabric-only downstream mod from that directory. The fixture
+  in place from AutoModpack's active projection, then discover, initialize,
+  and mix in a genuinely Fabric-only downstream mod from that projection. The fixture
   has no NeoForge metadata and deliberately lacks Launchpad's compatibility opt-in,
   so Launchpad cannot make this test pass in Connector's place. Nothing is copied to
   standard mods/ and no restart, filename-order trick, or timing sleep is used.

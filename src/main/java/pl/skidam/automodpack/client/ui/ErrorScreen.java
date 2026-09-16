@@ -31,7 +31,7 @@ public class ErrorScreen extends VersionedScreen {
 	}
 
 	private void initWidgets() {
-		backButton = buttonWidget(this.width / 2 - 100, this.height / 2 + 50, 200, 20, VersionedText.translatable("automodpack.back"), button -> {
+		backButton = buttonWidget(this.width / 2 - 100, this.height - 48, 200, 20, VersionedText.translatable("automodpack.back"), button -> {
 			assert minecraft != null;
 			ScreenImpl.setScreen(null);
 		});

@@ -34,7 +34,7 @@ class ModpackExecutorTest {
 		Path source = groups.resolve("main/config/example.txt");
 		Files.createDirectories(source.getParent());
 		Files.writeString(source, "one", StandardCharsets.UTF_8);
-		Path notes = tempDir.resolve("host-patch-notes.md");
+		Path notes = generationRoot.resolve("patch-notes.md");
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();

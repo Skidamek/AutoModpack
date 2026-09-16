@@ -5,6 +5,7 @@ import java.nio.file.Path;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
@@ -24,8 +25,11 @@ public class ModpackContentTools {
 	}
 
 	public static Jsons.CompleteModpackContentFields readCompleteFields(Path path) {
-		GenerationRecord record = readGenerationRecord(path);
-		return record == null ? null : record.toFields();
+		Jsons.CompleteModpackContentFields fields = ConfigTools.read(path, Jsons.CompleteModpackContentFields.class).orElse(null);
+		if (fields == null) return null;
+		GenerationRecord.fromFields(fields);
+		GenerationPatchNoteHistory.fromFields(fields);
+		return fields;
 	}
 
 	private static Jsons.ModpackContentFields requireValid(Jsons.ModpackContentFields content) {

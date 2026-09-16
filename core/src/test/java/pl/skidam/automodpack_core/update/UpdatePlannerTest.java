@@ -66,6 +66,7 @@ class UpdatePlannerTest {
 		assertTrue(UpdatePlanner.managedCleanupKey("config/changed.json").isPresent());
 		assertTrue(UpdatePlanner.managedCleanupKey("config/size.json").isPresent());
 		assertTrue(UpdatePlanner.managedCleanupKey("saves/world.dat").isEmpty());
+		assertEquals(Optional.of(new FileKey(Root.GAME_DIR, "mods")), UpdatePlanner.managedCleanupKey("mods"));
 		assertEquals(Optional.of(new FileKey(Root.GAME_DIR, "mods/nested/old.jar")), UpdatePlanner.managedCleanupKey("mods/nested/old.jar"));
 	}
 

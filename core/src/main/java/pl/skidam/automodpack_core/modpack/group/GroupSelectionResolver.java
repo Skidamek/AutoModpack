@@ -44,34 +44,20 @@ public final class GroupSelectionResolver {
 		return resolved;
 	}
 
-	public static SelectionIntent prefer(GroupManifest manifest, SelectionIntent current, String clicked, ClientPlatform platform) {
-		Objects.requireNonNull(manifest);
+	public static SelectionIntent prefer(SelectionIntent current, String clicked) {
 		Objects.requireNonNull(current);
 		Objects.requireNonNull(clicked);
-		Objects.requireNonNull(platform);
 		Set<String> requestedTags = new TreeSet<>(current.requestedTags());
 		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
-		if (!requestedGroups.add(clicked)) {
-			requestedGroups.remove(clicked);
-			return new SelectionIntent(requestedTags, requestedGroups, excludedGroups);
-		}
+		if (!requestedGroups.add(clicked)) requestedGroups.remove(clicked);
 		excludedGroups.remove(clicked);
-
-		Set<String> clickedClosure = resolvedGroups(manifest, new SelectionIntent(Set.of(), Set.of(clicked)), platform);
-		for (String other : new TreeSet<>(requestedGroups)) {
-			if (other.equals(clicked)) continue;
-			Set<String> otherClosure = resolvedGroups(manifest, new SelectionIntent(Set.of(), Set.of(other)), platform);
-			if (closuresConflict(manifest, clickedClosure, otherClosure)) requestedGroups.remove(other);
-		}
 		return new SelectionIntent(requestedTags, requestedGroups, excludedGroups);
 	}
 
-	public static SelectionIntent preferTag(GroupManifest manifest, SelectionIntent current, String tagId, ClientPlatform platform) {
-		Objects.requireNonNull(manifest);
+	public static SelectionIntent preferTag(SelectionIntent current, String tagId) {
 		Objects.requireNonNull(current);
 		Objects.requireNonNull(tagId);
-		Objects.requireNonNull(platform);
 		Set<String> requestedTags = new TreeSet<>(current.requestedTags());
 		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
@@ -79,26 +65,7 @@ public final class GroupSelectionResolver {
 			requestedTags.remove(tagId);
 			return new SelectionIntent(requestedTags, requestedGroups, excludedGroups);
 		}
-
-		Set<String> tagClosure = resolvedGroups(manifest, new SelectionIntent(Set.of(tagId), Set.of()), platform);
-		for (String other : new TreeSet<>(requestedGroups)) {
-			Set<String> otherClosure = resolvedGroups(manifest, new SelectionIntent(Set.of(), Set.of(other)), platform);
-			if (closuresConflict(manifest, tagClosure, otherClosure)) requestedGroups.remove(other);
-		}
 		return new SelectionIntent(requestedTags, requestedGroups, excludedGroups);
-	}
-
-	private static Set<String> resolvedGroups(GroupManifest manifest, SelectionIntent intent, ClientPlatform platform) {
-		try {
-			return resolve(manifest, intent, platform).selectedGroups();
-		} catch (SelectionResolutionException e) {
-			return e.resolution() == null ? Set.of() : e.resolution().selectedGroups();
-		}
-	}
-
-	private static boolean closuresConflict(GroupManifest manifest, Set<String> first, Set<String> second) {
-		for (String firstGroup : first) for (String secondGroup : second) if (conflicts(manifest, firstGroup, secondGroup)) return true;
-		return false;
 	}
 
 	public static boolean conflicts(GroupManifest manifest, String first, String second) {

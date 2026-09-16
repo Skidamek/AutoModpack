@@ -83,7 +83,7 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		for (int index = start; index < end; index++) {
 			Map.Entry<String, GroupManifest.GroupFile> entry = files.get(index);
 			GroupManifest.GroupFile file = entry.getValue();
-			String line = entry.getKey() + "  " + file.type() + "  " + formatSize(file.size()) + fileFlags(file);
+			String line = entry.getKey() + "  " + file.type() + "  " + UiFormat.formatSize(file.size()) + fileFlags(file);
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, line, this.width - 20)), this.width / 2, filesY + (index - start) * 16, TextColors.WHITE);
 		}
 
@@ -137,12 +137,6 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		if (file.editable()) flags.append(" editable");
 		if (file.forceCopy()) flags.append(" copied");
 		return flags.toString();
-	}
-
-	private static String formatSize(long bytes) {
-		if (bytes < 1024) return bytes + " B";
-		if (bytes < 1024 * 1024) return (bytes / 1024) + " KiB";
-		return (bytes / (1024 * 1024)) + " MiB";
 	}
 
 	@Override

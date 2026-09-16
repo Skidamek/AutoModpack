@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.FetchManager;
@@ -11,9 +12,12 @@ import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.util.Optional;
+import java.util.Locale;
+import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 
 public class ScreenImpl implements ScreenService {
 
@@ -24,11 +28,6 @@ public class ScreenImpl implements ScreenService {
 	@Override
 	public void download(Object... args) {
 		executeOnClient(() -> Screens.download(args[0], args[1]));
-	}
-
-	@Override
-	public void fetch(Object... args) {
-		executeOnClient(() -> Screens.fetch(args[0]));
 	}
 
 	@Override
@@ -95,7 +94,7 @@ public class ScreenImpl implements ScreenService {
 	@Override
 	public Optional<String> getScreenString() {
 		Screen screen = Screens.getScreen();
-		return Optional.of(screen.getTitle().getString().toLowerCase());
+		return Optional.ofNullable(screen).map(current -> current.getTitle().getString().toLowerCase(Locale.ROOT));
 	}
 
 	@Override
@@ -107,8 +106,12 @@ public class ScreenImpl implements ScreenService {
 		Screens.setScreen(screen);
 	}
 
+	public static void multiplayer() {
+		Screens.multiplayer();
+	}
+
 	private static class Screens {
-		private static Screen parentBeforePreparing;
+		private static Screen interactiveParent;
 
 		private static Screen getScreen() {
 			/*? if >=26.2 {*/
@@ -120,10 +123,10 @@ public class ScreenImpl implements ScreenService {
 
 		public static void setScreen(Screen screen) {
 			Screen current = Screens.getScreen();
-			if (screen instanceof PreparingScreen) {
-				if (!(current instanceof PreparingScreen)) parentBeforePreparing = current;
+			if (isTransient(screen)) {
+				if (!isTransient(current)) interactiveParent = current;
 			} else {
-				parentBeforePreparing = null;
+				interactiveParent = null;
 			}
 			/*? if >=26.2 {*/
 			Minecraft.getInstance().gui.setScreen(screen);
@@ -134,10 +137,6 @@ public class ScreenImpl implements ScreenService {
 
 		public static void download(Object downloadManager, Object header) {
 			Screens.setScreen(new DownloadScreen((DownloadManager) downloadManager, (String) header));
-		}
-
-		public static void fetch(Object fetchManager) {
-			Screens.setScreen(new FetchScreen((FetchManager) fetchManager));
 		}
 
 		public static void changelog(Object parent, Object changelog) {
@@ -158,10 +157,17 @@ public class ScreenImpl implements ScreenService {
 
 		public static void preview(Object... args) {
 			Screen parent = Screens.getScreen();
-			if (parent instanceof PreparingScreen) parent = parentBeforePreparing;
-			parentBeforePreparing = null;
+			if (isTransient(parent)) parent = interactiveParent;
+			interactiveParent = null;
 			boolean removal = args.length > 4 && Boolean.TRUE.equals(args[4]);
-			Screens.setScreen(new UpdatePreviewScreen(parent, (UpdatePreview) args[0], (String) args[1], removal, (Runnable) args[2], (Runnable) args[3]));
+			FetchManager sourceFetchManager = args.length > 5 && args[5] instanceof FetchManager manager
+					? manager
+					: null;
+			Screens.setScreen(new UpdatePreviewScreen(parent, (UpdatePreview) args[0], (String) args[1], removal, (Runnable) args[2], (Runnable) args[3], sourceFetchManager));
+		}
+
+		private static boolean isTransient(Screen screen) {
+			return screen instanceof PreparingScreen || screen instanceof DownloadScreen;
 		}
 
 		public static void recovery(Object... args) {
@@ -172,10 +178,16 @@ public class ScreenImpl implements ScreenService {
 
 		public static void history(Object... args) {
 			Screen parent = Screens.getScreen();
-			Runnable closed = args.length > 2 && args[2] instanceof Runnable callback ? callback : () -> {};
 			@SuppressWarnings("unchecked")
-			java.util.List<GenerationRecord> history = (java.util.List<GenerationRecord>) args[0];
-			Screens.setScreen(new ContentHistoryScreen(parent, history, (String) args[1], closed));
+			List<GenerationRecord> history = (List<GenerationRecord>) args[0];
+			boolean hasPatchNotesHistory = args.length > 2 && args[2] instanceof List<?>;
+			@SuppressWarnings("unchecked")
+			List<GenerationPatchNoteHistory.Entry> patchNotesHistory = hasPatchNotesHistory
+					? (List<GenerationPatchNoteHistory.Entry>) args[2]
+					: GenerationPatchNoteHistory.fromRecords(history);
+			int callbackIndex = hasPatchNotesHistory ? 3 : 2;
+			Runnable closed = args.length > callbackIndex && args[callbackIndex] instanceof Runnable callback ? callback : () -> {};
+			Screens.setScreen(new ContentHistoryScreen(parent, history, (String) args[1], patchNotesHistory, closed));
 		}
 
 		public static void error(String... errors) {
@@ -184,6 +196,10 @@ public class ScreenImpl implements ScreenService {
 
 		public static void title() {
 			Screens.setScreen(new TitleScreen());
+		}
+
+		public static void multiplayer() {
+			Screens.setScreen(new JoinMultiplayerScreen(new TitleScreen()));
 		}
 
 		public static void menu(Object parent) {

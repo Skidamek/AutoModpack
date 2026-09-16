@@ -65,7 +65,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		this.textField.setMaxLength(64);
 
 		// Back button (left)
-		this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 80, 100, 20,
+		this.backButton = buttonWidget(this.width / 2 - 155, this.height - 48, 100, 20,
 				VersionedText.translatable("automodpack.back"),
 				button -> {
 					ScreenImpl.setScreen(parent);
@@ -76,7 +76,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		);
 
 		// Skip verification button (middle)
-		this.skipButton = buttonWidget(this.width / 2 - 50, this.height / 2 + 80, 100, 20,
+		this.skipButton = buttonWidget(this.width / 2 - 50, this.height - 48, 100, 20,
 				VersionedText.translatable("automodpack.skip"),
 				button -> {
 					assert this.minecraft != null;
@@ -84,7 +84,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 				});
 
 		// Verify button (right - primary action, bold)
-		this.verifyButton = buttonWidget(this.width / 2 + 55, this.height / 2 + 80, 100, 20,
+		this.verifyButton = buttonWidget(this.width / 2 + 55, this.height - 48, 100, 20,
 				VersionedText.translatable("automodpack.validation.verify").withStyle(ChatFormatting.BOLD),
 				button -> verifyFingerprint());
 

@@ -15,6 +15,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.modpack.GameHelpers;
 import pl.skidam.automodpack.networking.PacketSender;
+import pl.skidam.automodpack.networking.content.LoginUpdateResponse;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
@@ -33,9 +34,9 @@ public class DataS2CPacket {
 
 			if (buf.readableBytes() == 0) return;
 
-			String clientHasUpdate = buf.readUtf(Short.MAX_VALUE);
+			LoginUpdateResponse clientResponse = LoginUpdateResponse.fromWire(buf.readUtf(Short.MAX_VALUE));
 
-			if ("true".equals(clientHasUpdate)) { // disconnect
+			if (clientResponse == LoginUpdateResponse.UPDATE_REQUIRED) { // disconnect
 				String fingerprint = hostServer.getCertificateFingerprint();
 				if (fingerprint == null) {
 					LOGGER.warn("{} has not installed modpack", GameHelpers.getPlayerName(profile));
@@ -46,7 +47,7 @@ public class DataS2CPacket {
 				Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);
-			} else if ("false".equals(clientHasUpdate)) {
+			} else if (clientResponse == LoginUpdateResponse.CONTINUE) {
 				LOGGER.info("{} has installed whole modpack", GameHelpers.getPlayerName(profile));
 			} else {
 				Component reason = VersionedText.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!");

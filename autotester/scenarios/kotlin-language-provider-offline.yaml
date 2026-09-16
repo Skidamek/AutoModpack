@@ -2,7 +2,7 @@ id: kotlin-language-provider-offline
 description: |
   Offline / client-only proof that Kotlin-for-Forge - a mod that ships a language provider
   (IModLanguageLoader on NeoForge, IModLanguageProvider on Forge) and a tree of nested
-  jar-in-jar libraries - loads straight from AutoModpack's modpack folder, with NO copy into
+  jar-in-jar libraries - loads straight from AutoModpack's active projection, with NO copy into
   the standard mods/ directory.
 
   Language providers need no in-place bootstrapping: on NeoForge, FML's ServiceLoaderUtil scans
@@ -25,7 +25,7 @@ targets:
 
 flow:
   - do: stage_modpack
-    name: stage kotlinforforge (language provider) into the modpack folder
+    name: stage kotlinforforge (language provider) into the active projection
     mods:
       - url:
           1.21.1-neoforge: https://cdn.modrinth.com/data/ordsPcFz/versions/uhJhCT7X/kotlinforforge-5.12.0-all.jar
@@ -46,7 +46,7 @@ flow:
         matches_all:
           - 'AutoModpack prelaunched'
           # KFF's own entrypoint log - it only appears if the language provider was
-          # discovered (from the modpack folder, uncopied) and the mod constructed through it
+          # discovered (from the active projection, uncopied) and the mod constructed through it
           - 'Kotlin For Forge Enabled'
   - do: wait_for
     name: NeoForge additionally logs the in-place library discovery and the mod-list entry
@@ -57,7 +57,7 @@ flow:
       log:
         container: client
         matches_all:
-          # the aggregator is discovered in the modpack folder, not copied to mods/
+          # the aggregator is discovered in the active projection, not copied to mods/
           - 'Found library file "kotlinforforge'
           - 'Kotlin For Forge .*\(kotlinforforge\)'
   - use: finish_client_only

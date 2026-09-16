@@ -41,6 +41,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 *//*?}*/
 
 import pl.skidam.automodpack.init.Common;
+import pl.skidam.automodpack.client.ui.TextColors;
 
 public class VersionedScreen extends Screen {
 
@@ -109,6 +110,27 @@ public class VersionedScreen extends Screen {
 	}
 	*//*?}*/
 
+	/*? if >=1.20 {*/
+	public static void drawTextWithShadow(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int x, int y, int color) {
+		/*? if >=26.1 {*/
+		matrices.getContext().text(textRenderer, text, x, y, color, true);
+		/*?} else {*/
+		/*matrices.getContext().drawString(textRenderer, text, x, y, color, true);
+		*//*?}*/
+	}
+	/*?} else {*/
+	/*public static void drawTextWithShadow(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int x, int y, int color) {
+		textRenderer.drawShadow(matrices.getContext(), text, (float)x, (float)y, color);
+	}
+	*//*?}*/
+
+	protected final int panelWidth(int preferredWidth) {
+		return Math.min(preferredWidth, Math.max(1, this.width - 24));
+	}
+
+	protected final int panelLeft(int preferredWidth) {
+		return (this.width - panelWidth(preferredWidth)) / 2;
+	}
 
 	/*? if <1.19.3 {*/
 	/*public static Button buttonWidget(int x, int y, int width, int height, Component message, Button.OnPress onPress) {

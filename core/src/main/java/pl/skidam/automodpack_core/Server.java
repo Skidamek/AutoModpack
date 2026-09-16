@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core;
 import static pl.skidam.automodpack_core.Constants.*;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Objects;
 
@@ -14,33 +13,18 @@ import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 public class Server {
 
-	// TODO Finish this class that it will be able to host the server without mod
+	// Standalone hosting uses the same instance layout as the modded server.
 	public static void main(String[] args) throws IOException {
-
-		if (args.length < 1) {
-			LOGGER.error("Modpack directory not provided!");
-			return;
-		}
 
 		NettyServer server = new NettyServer();
 		hostServer = server;
-
-		String modpackDirStr = args[0];
-
-		Path cwd = Path.of(System.getProperty("user.dir"));
-		Path modpackDir = cwd.resolve("modpacks").resolve(modpackDirStr);
-
-		modpackDir.toFile().mkdirs();
-
-		serverConfigFile = modpackDir.resolve("automodpack-server.json");
-		serverCoreConfigFile = modpackDir.resolve("automodpack-core.json");
 
 		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV3.class, Jsons.ServerConfigFieldsV3::new);
 		if (serverConfig == null) {
 			LOGGER.error("Failed to load standalone host configuration");
 			return;
 		}
-		// Standalone host serves only what is already in the modpack dir, so no group pulls in CWD files.
+		// Standalone host serves only what is already in host-modpack, so no group pulls in CWD files.
 		if (serverConfig.groups != null) serverConfig.groups.values().stream().filter(Objects::nonNull).forEach(group -> group.syncedFiles = new HashSet<>());
 		serverConfig.validateSecrets = false;
 		ConfigTools.writeAtomic(serverConfigFile, serverConfig);
@@ -50,18 +34,7 @@ public class Server {
 			return;
 		}
 
-		Jsons.ServerCoreConfigFields serverCoreConfig = ConfigTools.readOrCreate(serverCoreConfigFile, Jsons.ServerCoreConfigFields.class,
-				Jsons.ServerCoreConfigFields::new);
-		if (serverCoreConfig != null) {
-			AM_VERSION = serverCoreConfig.automodpackVersion;
-			LOADER = serverCoreConfig.loader;
-			LOADER_VERSION = serverCoreConfig.loaderVersion;
-			MC_VERSION = serverCoreConfig.mcVersion;
-			ConfigTools.writeAtomic(serverCoreConfigFile, serverCoreConfig);
-		}
-
-		Path hostGenerations = modpackDir.resolve(hostGenerationsDir.getFileName());
-		modpackExecutor = new ModpackExecutor(modpackDir, modpackDir, hostGenerations);
+		modpackExecutor = new ModpackExecutor();
 		var generation = modpackExecutor.publish();
 
 		if (generation instanceof ModpackExecutor.Published || generation instanceof ModpackExecutor.NoChanges) {

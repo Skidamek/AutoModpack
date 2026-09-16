@@ -29,11 +29,6 @@ public record OwnershipDelta(String modpackId, NavigableMap<String, Change> chan
 			groupIds = immutableStrings(groupIds);
 		}
 
-		/** Keeps the original single-content constructor available to existing callers. */
-		public Change(String logicalPath, Kind kind, OwnershipLedger.Content content, NavigableSet<String> groupIds) {
-			this(logicalPath, kind, content, immutableContents(List.of(content)), groupIds);
-		}
-
 		private static NavigableSet<OwnershipLedger.Content> immutableContents(Collection<OwnershipLedger.Content> values) {
 			TreeSet<OwnershipLedger.Content> sorted = new TreeSet<>(CONTENT_ORDER);
 			if (values != null) sorted.addAll(values);
@@ -70,7 +65,7 @@ public record OwnershipDelta(String modpackId, NavigableMap<String, Change> chan
 			Current now = current.get(path);
 			if (now == null) {
 				if (old != null && old.currentStatus() == OwnershipLedger.Status.PRESENT)
-					changes.put(path, new Change(path, Kind.REMOVED, old.historicalHashes().first(), old.historicalGroupIds()));
+					changes.put(path, new Change(path, Kind.REMOVED, old.historicalHashes().first(), singletonContents(old.historicalHashes().first()), old.historicalGroupIds()));
 				continue;
 			}
 			if (old == null) changes.put(path, new Change(path, Kind.ADDED, now.content(), now.contents(), now.groups()));
@@ -85,6 +80,12 @@ public record OwnershipDelta(String modpackId, NavigableMap<String, Change> chan
 							changes.put(path, new Change(path, Kind.GROUP_OWNERSHIP_CHANGED, now.content(), now.contents(), now.groups()));
 		}
 		return new OwnershipDelta(manifest.modpackId(), new TreeMap<>(changes));
+	}
+
+	private static NavigableSet<OwnershipLedger.Content> singletonContents(OwnershipLedger.Content content) {
+		TreeSet<OwnershipLedger.Content> contents = new TreeSet<>(CONTENT_ORDER);
+		contents.add(content);
+		return contents;
 	}
 
 	public Jsons.OwnershipDeltaFields toFields() {

@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.update.UpdatePlan.FileKey;
@@ -30,16 +31,22 @@ public record UpdatePreview(
 		UpdatePlan plan,
 		List<Entry> entries,
 		GroupConsequences groupConsequences,
-		String patchNotes) {
+		String patchNotes,
+		List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {
 	public UpdatePreview {
 		plan = Objects.requireNonNull(plan, "plan");
 		entries = List.copyOf(entries);
 		groupConsequences = Objects.requireNonNull(groupConsequences, "groupConsequences");
 		patchNotes = GenerationMetadata.validateNotes(patchNotes == null ? "" : patchNotes);
+		patchNotesHistory = List.copyOf(Objects.requireNonNull(patchNotesHistory, "patchNotesHistory"));
 	}
 
 	public UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences) {
-		this(plan, entries, groupConsequences, "");
+		this(plan, entries, groupConsequences, "", List.of());
+	}
+
+	public UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences, String patchNotes) {
+		this(plan, entries, groupConsequences, patchNotes, List.of());
 	}
 
 	public long addedBytes() {
@@ -75,21 +82,27 @@ public record UpdatePreview(
 
 	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
 			ResolvedSelection selection, boolean removal) {
-		return create(plan, originalFiles, target, selection, removal, null, "");
+		return create(plan, originalFiles, target, selection, removal, null, "", List.of());
 	}
 
 	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
 			ResolvedSelection selection, boolean removal, String patchNotes) {
-		return create(plan, originalFiles, target, selection, removal, null, patchNotes);
+		return create(plan, originalFiles, target, selection, removal, null, patchNotes, List.of());
 	}
 
 	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
 			ResolvedSelection selection, boolean removal, Jsons.ClientBaselineFields baseline) {
-		return create(plan, originalFiles, target, selection, removal, baseline, "");
+		return create(plan, originalFiles, target, selection, removal, baseline, "", List.of());
 	}
 
 	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
 			ResolvedSelection selection, boolean removal, Jsons.ClientBaselineFields baseline, String patchNotes) {
+		return create(plan, originalFiles, target, selection, removal, baseline, patchNotes, List.of());
+	}
+
+	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
+			ResolvedSelection selection, boolean removal, Jsons.ClientBaselineFields baseline, String patchNotes,
+			List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(originalFiles, "originalFiles");
 		Objects.requireNonNull(target, "target");
@@ -143,7 +156,7 @@ public record UpdatePreview(
 
 		entries.sort(Comparator.comparing((Entry entry) -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal()).thenComparing(Entry::relativePath));
 		GroupConsequences consequences = selection == null ? new GroupConsequences(Set.of(), Set.of(), Set.of()) : consequences(selection);
-		return new UpdatePreview(plan, entries, consequences, patchNotes);
+		return new UpdatePreview(plan, entries, consequences, patchNotes, patchNotesHistory);
 	}
 
 	private static GroupConsequences consequences(ResolvedSelection selection) {

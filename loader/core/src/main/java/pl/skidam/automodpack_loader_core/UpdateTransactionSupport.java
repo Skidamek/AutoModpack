@@ -19,7 +19,7 @@ public final class UpdateTransactionSupport {
 		return ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
 	}
 
-	public static UpdateTransactionExecutor executor(UpdateTransaction transaction) {
+	public static UpdateTransactionExecutor executor() {
 		ClientStorage storage = storage();
 		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(storage, UpdateTransactionSupport::applyLauncherMetadata));
 	}

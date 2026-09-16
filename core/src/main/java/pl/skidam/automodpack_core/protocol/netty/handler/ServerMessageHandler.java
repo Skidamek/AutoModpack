@@ -25,13 +25,12 @@ import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
-import pl.skidam.automodpack_core.protocol.netty.message.request.RefreshRequestMessage;
 import pl.skidam.automodpack_core.utils.LockFreeInputStream;
 
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 
 	private final NettyServer server;
-	private final Map<byte[], String> secretLookup = new HashMap<>();
+	private String authenticatedSecret;
 	private byte protocolVersion;
 	private int chunkSize;
 
@@ -79,36 +78,19 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 				FileRequestMessage fileRequest = (FileRequestMessage) msg;
 				sendFile(ctx, fileRequest.getFileHash());
 				break;
-			case REFRESH_REQUEST_TYPE :
-				RefreshRequestMessage refreshRequest = (RefreshRequestMessage) msg;
-				refreshModpackFiles(ctx, refreshRequest.getFileHashesList());
-				break;
 			default :
 				sendError(ctx, protocolVersion, "Unknown message type");
 		}
 	}
 
-	private void refreshModpackFiles(ChannelHandlerContext context, byte[][] fileHashesList) throws IOException {
-		Set<String> hashes = new TreeSet<>();
-		for (byte[] hash : fileHashesList) hashes.add(new String(hash, StandardCharsets.UTF_8));
-		LOGGER.info("Received refresh request after failed hashes: {}", hashes);
-		sendFile(context, new byte[0]);
-	}
-
 	private boolean validateSecret(ChannelHandlerContext ctx, SocketAddress address, byte[] secret) {
-		String decodedSecret = secretLookup.get(secret);
-		boolean addConnection = false;
-		if (decodedSecret == null) {
-			decodedSecret = Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
-			addConnection = true;
-			secretLookup.put(secret, decodedSecret);
+		String decodedSecret = Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
+		if (!Secrets.isSecretValid(decodedSecret, address)) return false;
+		if (authenticatedSecret == null) {
+			authenticatedSecret = decodedSecret;
+			server.addConnection(ctx.channel(), decodedSecret);
 		}
-
-		boolean valid = Secrets.isSecretValid(decodedSecret, address);
-
-		if (addConnection && valid) server.addConnection(ctx.channel(), decodedSecret);
-
-		return valid;
+		return authenticatedSecret.equals(decodedSecret);
 	}
 
 	private void sendFile(ChannelHandlerContext ctx, byte[] bsha1) throws IOException {

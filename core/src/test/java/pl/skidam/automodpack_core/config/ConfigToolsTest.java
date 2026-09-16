@@ -69,9 +69,10 @@ class ConfigToolsTest {
 	}
 
 	@Test
-	void readsConnectionAddressAliasesAndWritesOnlyNewNames() throws Exception {
-		String legacy = """
+	void keepsConnectionStateOutOfTheUserConfig() throws Exception {
+		String configJson = """
 				{
+				  "selectedModpackId": "pack",
 				  "installedModpacks": {
 				    "pack": {
 				      "serverAddress": "Play.Example.com",
@@ -81,22 +82,15 @@ class ConfigToolsTest {
 				  }
 				}
 				""";
-		Jsons.ClientConfigFieldsV3 config = ConfigTools.parse(legacy, Jsons.ClientConfigFieldsV3.class);
-		Jsons.ConnectionInfo connectionInfo = config.modpackConnections.get("pack");
+		Jsons.ClientConfigFieldsV3 config = ConfigTools.parse(configJson, Jsons.ClientConfigFieldsV3.class);
 
-		assertEquals("play.example.com:25565", AddressHelpers.formatAddress(connectionInfo.origin));
-		assertEquals("[2001:db8::1]:24444", AddressHelpers.formatAddress(connectionInfo.endpoint));
-		assertEquals(ModpackConnectionMode.MAGIC_PACKET, connectionInfo.connectionMode);
+		assertEquals("pack", config.selectedModpackId);
 
 		Path path = temporaryDirectory.resolve("client.json");
 		ConfigTools.writeAtomic(path, config);
 		String serialized = Files.readString(path, StandardCharsets.UTF_8);
-		assertTrue(serialized.contains("\"modpackConnections\""));
-		assertTrue(serialized.contains("\"origin\""));
-		assertTrue(serialized.contains("\"endpoint\""));
+		assertFalse(serialized.contains("\"modpackConnections\""));
 		assertFalse(serialized.contains("installedModpacks"));
-		assertFalse(serialized.contains("serverAddress"));
-		assertFalse(serialized.contains("hostAddress"));
 	}
 
 	@Test

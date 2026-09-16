@@ -26,7 +26,7 @@ public class ModpackLoader implements ModpackLoaderService {
 	}
 
 	@Override
-	public List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir, FileMetadataCache cache) {
-		return INSTANCE.getModpackNestedConflicts(modpackDir, cache);
+	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileMetadataCache cache) {
+		return INSTANCE.getModpackNestedConflicts(activeProjectionDirectory, cache);
 	}
 }

@@ -28,7 +28,6 @@ val fabricLoaderVersion = loaderVersion()
 val tomljVersion = versionProperty("versionTomlj")
 val bouncyCastleVersion = versionProperty("versionBouncyCastle")
 val nettyVersion = versionProperty("versionNetty")
-val h2Version = versionProperty("versionH2")
 val mcholepunchVersion = versionProperty("versionMcholepunch")
 val aircompressorVersion = versionProperty("versionAircompressor")
 
@@ -51,7 +50,6 @@ dependencies {
 	implementation("io.netty:netty-codec-haproxy:$nettyVersion") {
 		isTransitive = false
 	}
-	implementation("com.h2database:h2-mvstore:$h2Version")
 
 	// mcholepunch jars — shadowed into the loader so classes are available at
 	// the root classpath (needed by the preload-stage client).
@@ -94,7 +92,6 @@ tasks.named<ShadowJar>("shadowJar") {
 	relocate("org.checkerframework", "$reloc.org.checkerframework")
 	relocate("org.slf4j", "$reloc.org.slf4j")
 	relocate("org.bouncycastle", "$reloc.org.bouncycastle")
-	relocate("org.h2", "$reloc.org.h2")
 	relocate("io.netty.handler.codec.haproxy", "$reloc.io.netty.handler.codec.haproxy")
 
 	// Project internal relocations

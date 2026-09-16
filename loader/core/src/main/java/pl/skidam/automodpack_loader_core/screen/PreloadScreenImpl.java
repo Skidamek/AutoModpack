@@ -9,9 +9,6 @@ public class PreloadScreenImpl implements ScreenService {
 	public void download(Object... args) {}
 
 	@Override
-	public void fetch(Object... args) {}
-
-	@Override
 	public void changelog(Object... args) {}
 
 	@Override

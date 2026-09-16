@@ -42,6 +42,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -347,7 +348,7 @@ public final class AutoTestBridge {
 	}
 
 	private static Set<Object> newSeenSet() {
-		return java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+		return Collections.newSetFromMap(new IdentityHashMap<>());
 	}
 
 	private static <T> String onMain(ThrowingSupplier<T> supplier) throws Exception {

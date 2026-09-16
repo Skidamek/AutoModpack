@@ -12,11 +12,6 @@ public class ScreenManager implements ScreenService {
 	}
 
 	@Override
-	public void fetch(Object... args) {
-		INSTANCE.fetch(args);
-	}
-
-	@Override
 	public void changelog(Object... args) {
 		INSTANCE.changelog(args);
 	}

@@ -3,6 +3,8 @@ package pl.skidam.automodpack_core.utils.cache;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -10,28 +12,27 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-import org.h2.mvstore.MVMap;
-import org.h2.mvstore.MVStore;
-
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
+/** A shared content-keyed mod inspection cache backed by immutable loose records. */
 public class ModFileCache implements AutoCloseable {
 
 	private static final Map<Path, ModFileCache> INSTANCES = new HashMap<>();
 	private static final Object GLOBAL_LOCK = new Object();
+	private static final String RECORD_SUFFIX = ".json";
 
-	private final Path dbPath;
-	private final MVStore store;
-	private final MVMap<String, FileInspection.Mod> modFileMap;
+	private final Path recordsDirectory;
+	private final Map<String, ModRecord> hotRecords = new HashMap<>();
 	private final AtomicInteger refCount = new AtomicInteger(1);
-
 	private final Object[] locks = new Object[64];
 
-	public static ModFileCache open(Path path) {
+	public static ModFileCache open(Path path) throws IOException {
 		Path absPath = path.toAbsolutePath().normalize();
-		SmartFileUtils.createParentDirsNoEx(absPath);
+		Files.createDirectories(absPath);
 		synchronized (GLOBAL_LOCK) {
 			ModFileCache existing = INSTANCES.get(absPath);
 			if (existing != null) {
@@ -45,43 +46,28 @@ public class ModFileCache implements AutoCloseable {
 		}
 	}
 
-	private ModFileCache(Path dbPath) {
-		this.dbPath = dbPath;
-		this.store = new MVStore.Builder().fileName(dbPath.toString()).cacheSize(20).open();
-
-		this.modFileMap = store.openMap("mod_file_by_hash");
-
-		for (int i = 0; i < locks.length; i++) {
-			locks[i] = new Object();
-		}
+	private ModFileCache(Path recordsDirectory) {
+		this.recordsDirectory = recordsDirectory;
+		for (int i = 0; i < locks.length; i++) locks[i] = new Object();
 	}
 
 	public FileInspection.Mod getOrComputeMod(Path file, FileMetadataCache cache) throws IOException {
 		Path absPath = file.toAbsolutePath().normalize();
 		String hash = cache.getOrComputeHash(absPath);
 		if (hash == null) return null;
-		FileInspection.Mod cached = modFileMap.get(hash);
-		if (cached != null && hash.equalsIgnoreCase(cached.hash())) {
-			return cached.at(absPath); // CACHE HIT
-		}
-
-		// Calculate which lock bucket to use
 		int lockIndex = Math.floorMod(hash.hashCode(), locks.length);
 
 		synchronized (locks[lockIndex]) {
-			// Check if another thread has already updated the cache
+			ModRecord cached = readRecord(hash);
+			if (cached != null) return cached.at(absPath);
+
 			hash = cache.getOrComputeHash(absPath);
 			if (hash == null) return null;
-			cached = modFileMap.get(hash);
-			if (cached != null && hash.equalsIgnoreCase(cached.hash())) {
-				return cached.at(absPath); // CACHE HIT
-			}
+			cached = readRecord(hash);
+			if (cached != null) return cached.at(absPath);
 
-			// Actual work happens here
 			FileInspection.Mod modFile = FileInspection.getMod(absPath, cache);
-
-			if (modFile != null) modFileMap.put(hash, modFile.at(null));
-
+			if (modFile != null) writeRecord(hash, new ModRecord(modFile));
 			return modFile;
 		}
 	}
@@ -90,7 +76,7 @@ public class ModFileCache implements AutoCloseable {
 		try {
 			return getOrComputeMod(path, cache);
 		} catch (IOException e) {
-			LOGGER.error("Failed to compute hash for path: {}", path, e);
+			LOGGER.error("Failed to compute mod metadata for path: {}", path, e);
 			return null;
 		}
 	}
@@ -98,26 +84,84 @@ public class ModFileCache implements AutoCloseable {
 	public void retainOnly(Iterable<String> retainedHashes) {
 		Set<String> retained = new HashSet<>();
 		for (String hash : retainedHashes) if (hash != null) retained.add(hash.toLowerCase(Locale.ROOT));
-		synchronized (store) {
-			modFileMap.keySet().removeIf(hash -> !retained.contains(hash));
-			store.commit();
-			store.compactFile(2000);
+		hotRecords.keySet().removeIf(hash -> !retained.contains(hash));
+		if (!Files.isDirectory(recordsDirectory, LinkOption.NOFOLLOW_LINKS)) return;
+		try (Stream<Path> paths = Files.walk(recordsDirectory)) {
+			for (Path path : paths.filter(candidate -> candidate.getFileName().toString().endsWith(RECORD_SUFFIX))
+					.filter(candidate -> Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)).toList()) {
+				String name = path.getFileName().toString();
+				String hash = name.substring(0, name.length() - RECORD_SUFFIX.length()).toLowerCase(Locale.ROOT);
+				if (!retained.contains(hash)) {
+					Files.deleteIfExists(path);
+					hotRecords.remove(hash);
+				}
+			}
+		} catch (IOException e) {
+			LOGGER.debug("Could not clean mod metadata cache: {}", recordsDirectory, e);
 		}
+	}
+
+	private ModRecord readRecord(String hash) {
+		String normalizedHash = hash.toLowerCase(Locale.ROOT);
+		ModRecord hot = hotRecords.get(normalizedHash);
+		if (hot != null && normalizedHash.equalsIgnoreCase(hot.hash)) return hot;
+		Path recordPath = recordPath(normalizedHash);
+		if (!Files.isRegularFile(recordPath, LinkOption.NOFOLLOW_LINKS)) return null;
+		try {
+			ModRecord record = ConfigTools.read(recordPath, ModRecord.class).orElse(null);
+			if (record == null || !normalizedHash.equalsIgnoreCase(record.hash)) return null;
+			hotRecords.put(normalizedHash, record);
+			return record;
+		} catch (RuntimeException e) {
+			LOGGER.debug("Ignoring invalid mod metadata cache record: {}", recordPath);
+			return null;
+		}
+	}
+
+	private void writeRecord(String hash, ModRecord record) {
+		String normalizedHash = hash.toLowerCase(Locale.ROOT);
+		hotRecords.put(normalizedHash, record);
+		try {
+			ConfigTools.writeAtomic(recordPath(normalizedHash), record);
+		} catch (IOException e) {
+			LOGGER.debug("Could not persist mod metadata cache record: {}", normalizedHash, e);
+		}
+	}
+
+	private Path recordPath(String hash) {
+		return recordsDirectory.resolve(hash.substring(0, 2)).resolve(hash + RECORD_SUFFIX);
 	}
 
 	@Override
 	public void close() {
 		synchronized (GLOBAL_LOCK) {
 			if (refCount.decrementAndGet() <= 0) {
-				try {
-					if (!store.isClosed()) {
-						store.commit();
-						store.close();
-					}
-				} finally {
-					INSTANCES.remove(this.dbPath, this);
-				}
+				hotRecords.clear();
+				INSTANCES.remove(recordsDirectory, this);
 			}
+		}
+	}
+
+	private static final class ModRecord {
+		private Set<String> IDs;
+		private String hash;
+		private String version;
+		private Set<String> deps;
+		private Set<ModRecord> nestedMods;
+
+		private ModRecord() {}
+
+		private ModRecord(FileInspection.Mod mod) {
+			IDs = mod.IDs();
+			hash = mod.hash();
+			version = mod.version();
+			deps = mod.deps();
+			nestedMods = mod.nestedMods().stream().map(ModRecord::new).collect(Collectors.toSet());
+		}
+
+		private FileInspection.Mod at(Path path) {
+			Set<FileInspection.Mod> nested = nestedMods == null ? Set.of() : nestedMods.stream().map(record -> record.at(null)).collect(Collectors.toSet());
+			return new FileInspection.Mod(IDs == null ? Set.of() : IDs, hash, version, path, deps == null ? Set.of() : deps, nested);
 		}
 	}
 }

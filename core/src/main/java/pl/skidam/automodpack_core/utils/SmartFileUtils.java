@@ -167,15 +167,31 @@ public class SmartFileUtils {
 		forceFile(temporary);
 		if (!isValidFile(temporary, expectedSize, expectedSha1)) throw new IOException("Downloaded file failed size/SHA-1 verification: " + temporary);
 		createParentDirs(targetFile);
-		moveAtomicReplace(temporary, targetFile);
+		try {
+			moveAtomicReplace(temporary, targetFile);
+		} catch (AtomicMoveNotSupportedException crossFileSystem) {
+			promoteAcrossFileSystems(temporary, targetFile, expectedSize, expectedSha1, crossFileSystem);
+		}
+	}
+
+	private static void promoteAcrossFileSystems(Path temporary, Path targetFile, long expectedSize, String expectedSha1, AtomicMoveNotSupportedException crossFileSystem)
+			throws IOException {
+		Path targetParent = targetFile.toAbsolutePath().normalize().getParent();
+		if (targetParent == null) throw new IOException("Target path has no parent: " + targetFile, crossFileSystem);
+		Path targetTemporary = Files.createTempFile(targetParent, "." + targetFile.getFileName() + ".", ".tmp");
+		try {
+			Files.copy(temporary, targetTemporary, StandardCopyOption.REPLACE_EXISTING);
+			forceFile(targetTemporary);
+			if (!isValidFile(targetTemporary, expectedSize, expectedSha1))
+				throw new IOException("Cross-filesystem promotion failed size/SHA-1 verification: " + targetTemporary, crossFileSystem);
+			moveAtomicReplace(targetTemporary, targetFile);
+		} finally {
+			Files.deleteIfExists(targetTemporary);
+		}
 	}
 
 	private static void moveAtomicReplace(Path sourceFile, Path targetFile) throws IOException {
-		try {
-			Files.move(sourceFile, targetFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-		} catch (AtomicMoveNotSupportedException e) {
-			throw new IOException("Atomic replacement is unsupported for " + targetFile, e);
-		}
+		Files.move(sourceFile, targetFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
 	}
 
 	private static void forceFile(Path file) throws IOException {

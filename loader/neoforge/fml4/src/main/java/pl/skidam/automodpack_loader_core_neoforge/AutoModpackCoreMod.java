@@ -5,7 +5,7 @@ import net.neoforged.neoforgespi.coremod.ICoreMod;
 
 /**
  * An {@link ICoreMod} shipped by AutoModpack that forwards the transformers of coremods living in the
- * selected modpack folder, so they run without being copied into the standard {@code mods/} directory.
+ * active projection, so they run without being copied into the standard {@code mods/} directory.
  * (A modpack jar's own {@code ITransformationService} transformers are forwarded separately, by
  * {@link AutoModpackTransformationService} - a natively ServiceLoader-discovered service, not this
  * FML-collected one.)

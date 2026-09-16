@@ -38,7 +38,7 @@ public final class UpdateHelperMain {
 					.orElseThrow(() -> new IOException("Persisted update transaction is missing"));
 			if (!expectedTransactionId.equals(transaction.transactionId)) throw new IOException("Persisted transaction UUID does not match helper invocation");
 
-			UpdateTransactionExecutor executor = UpdateTransactionSupport.executor(transaction);
+			UpdateTransactionExecutor executor = UpdateTransactionSupport.executor();
 			executor.validate(transaction);
 			long backoff = INITIAL_BACKOFF_MILLIS;
 			for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {

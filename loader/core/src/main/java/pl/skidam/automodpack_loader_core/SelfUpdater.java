@@ -11,6 +11,7 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.DownloadSource;
@@ -181,9 +182,10 @@ public class SelfUpdater {
 			String currentHash = HashUtils.getHash(currentJar);
 			if (currentHash == null || !Files.isRegularFile(currentJar)) throw new IllegalStateException("Loaded AutoModpack JAR cannot be verified");
 
-			UpdateTransaction transaction = UpdateTransaction.createSelfUpdate(currentJar.getFileName().toString(), targetJar.getFileName().toString(),
-					automodpack.SHA1Hash(), automodpack.fileSize(), currentHash);
-			UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(transaction).commit(transaction);
+			String currentPath = UpdatePlanner.normalize(storage.gameDirectory().relativize(currentJar).toString());
+			String targetPath = UpdatePlanner.normalize(storage.gameDirectory().relativize(targetJar).toString());
+			UpdateTransaction transaction = UpdateTransaction.createSelfUpdate(currentPath, targetPath, automodpack.SHA1Hash(), automodpack.fileSize(), currentHash);
+			UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
 			if (!execution.success()) DetachedUpdateHelper.launch(transaction);
 			LOGGER.info("AutoModpack update transaction {} is ready; restart required", transaction.transactionId);
 			new ReLauncher(UpdateType.AUTOMODPACK).restart(true);

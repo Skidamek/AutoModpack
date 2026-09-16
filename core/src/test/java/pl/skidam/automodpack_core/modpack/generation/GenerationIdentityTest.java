@@ -3,7 +3,9 @@ package pl.skidam.automodpack_core.modpack.generation;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -19,6 +21,12 @@ import pl.skidam.automodpack_core.utils.ModpackContentTools;
 class GenerationIdentityTest {
 	@TempDir
 	Path temporaryDirectory;
+
+	@Test
+	void canonicalEncoderHasTheAutotesterParityVector() throws Exception {
+		CanonicalEncoder encoder = new CanonicalEncoder().string("parity").integer(7).longValue(11).bool(true);
+		assertEquals("74298b52636c03aab0beb88c118b33b03343fd30", HexFormat.of().formatHex(MessageDigest.getInstance("SHA-1").digest(encoder.bytes())));
+	}
 
 	@Test
 	void shuffledCatalogueOrderDoesNotChangeStateDigest() {
@@ -40,11 +48,15 @@ class GenerationIdentityTest {
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 		GenerationRecord record = GenerationRecord.create(manifest, null, Instant.parse("2026-01-03T00:00:00Z"), "notes\n");
 		Path path = temporaryDirectory.resolve("automodpack-catalogue.json");
-		ConfigTools.writeAtomic(path, record.toFields());
+		Jsons.CompleteModpackContentFields completeFields = record.toFields();
+		GenerationPatchNoteHistory.writeFields(completeFields, GenerationPatchNoteHistory.forRecord(record));
+		ConfigTools.writeAtomic(path, completeFields);
 
 		GenerationRecord read = ModpackContentTools.readGenerationRecord(path);
+		Jsons.CompleteModpackContentFields readFields = ModpackContentTools.readCompleteFields(path);
 
 		assertEquals(record, read);
+		assertEquals(GenerationPatchNoteHistory.forRecord(record), GenerationPatchNoteHistory.fromFields(readFields));
 		assertEquals(record.metadata().generationId(), read.metadata().generationId());
 		assertEquals(record.metadata().parentGenerationId(), read.metadata().parentGenerationId());
 		assertEquals(record.metadata().stateDigest(), read.metadata().stateDigest());

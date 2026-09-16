@@ -35,6 +35,9 @@ class RecoveryArchiveTest {
 		assertEquals(1, archive.entries.size());
 		assertEquals("config/old.json", archive.entries.get(0).logicalPath);
 		assertEquals(hash, archive.entries.get(0).sha1);
+		Files.delete(object);
+		assertEquals(1, RecoveryArchive.read(recovery).entries.size());
+		assertEquals(archived, RecoveryArchive.archive(store, recovery, "config/old.json", hash, Files.size(archived)));
 	}
 
 	@Test
@@ -73,6 +76,7 @@ class RecoveryArchiveTest {
 		assertEquals(1, RecoveryArchive.read(recoveryRoot.resolve("second")).entries.size());
 		assertEquals("config/one.json", RecoveryArchive.read(recoveryRoot.resolve("first")).entries.get(0).logicalPath);
 		assertEquals("config/two.json", RecoveryArchive.read(recoveryRoot.resolve("second")).entries.get(0).logicalPath);
+		assertArrayEquals(Files.readAllBytes(firstArchived), Files.readAllBytes(secondArchived));
 	}
 
 	@Test

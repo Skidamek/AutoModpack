@@ -18,7 +18,7 @@ public class ModpackLoader implements ModpackLoaderService {
 	@Override
 	public Set<String> forceCopyServices() {
 		// NeoForge picks the early-window provider and creates the window in the same call, before
-		// and out of reach of anything we can do from the modpack folder - a mod needing it must be
+		// and out of reach of anything we can do from the active projection - a mod needing it must be
 		// copied to standard mods/.
 		return Set.of(LoaderServicePaths.NEOFORGE_IMMEDIATE_WINDOW_PROVIDER);
 	}
@@ -34,7 +34,7 @@ public class ModpackLoader implements ModpackLoaderService {
 	}
 
 	@Override
-	public List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir, FileMetadataCache cache) {
+	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileMetadataCache cache) {
 		return new ArrayList<>();
 	}
 }

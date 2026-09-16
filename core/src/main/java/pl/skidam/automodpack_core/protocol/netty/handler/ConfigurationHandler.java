@@ -3,9 +3,11 @@ package pl.skidam.automodpack_core.protocol.netty.handler;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
+import java.util.List;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.handler.codec.ByteToMessageDecoder;
 
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
@@ -14,25 +16,20 @@ import pl.skidam.automodpack_core.protocol.netty.message.configuration.Configura
 import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationCompressionMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.configuration.UnknownConfigurationMessage;
 
-public class ConfigurationHandler extends ChannelInboundHandlerAdapter {
+public class ConfigurationHandler extends ByteToMessageDecoder {
 
 	@Override
-	public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-		if (!(msg instanceof ByteBuf)) {
-			ctx.fireChannelRead(msg);
-			return;
-		}
-		ByteBuf in = (ByteBuf) msg;
-		in.markReaderIndex();
+	protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
 		LOGGER.debug("Received a message (checking for configuration) with {} readable bytes", in.readableBytes());
 		if (in.readableBytes() < 2) return;
 
+		in.markReaderIndex();
 		byte version = in.readByte();
 		byte type = in.readByte();
 		LOGGER.debug("Message version: {}, type: {}, readable bytes: {}", version, type, in.readableBytes());
 		if ((type & 0xF0) != 0x40) {
 			in.resetReaderIndex();
-			ctx.fireChannelRead(in);
+			out.add(in.readRetainedSlice(in.readableBytes()));
 			ctx.pipeline().remove(this);
 			return;
 		}
@@ -40,7 +37,6 @@ public class ConfigurationHandler extends ChannelInboundHandlerAdapter {
 		if (type == CONFIGURATION_ECHO_TYPE) {
 			if (version > LATEST_SUPPORTED_PROTOCOL_VERSION || version <= 0) {
 				LOGGER.debug("Failed to negotiate protocol version with client");
-				in.release();
 				ctx.close();
 				return;
 			}
@@ -59,7 +55,6 @@ public class ConfigurationHandler extends ChannelInboundHandlerAdapter {
 				requested = CompressionType.fromWireId(in.readByte());
 			} catch (IllegalArgumentException e) {
 				LOGGER.debug("Received unsupported compression type", e);
-				in.release();
 				ctx.close();
 				return;
 			}
@@ -83,6 +78,5 @@ public class ConfigurationHandler extends ChannelInboundHandlerAdapter {
 			LOGGER.debug("Received unknown configuration message type: {} version: {}", type, version);
 			ctx.writeAndFlush(new UnknownConfigurationMessage(LATEST_SUPPORTED_PROTOCOL_VERSION).toByteBuf());
 		}
-		in.release();
 	}
 }

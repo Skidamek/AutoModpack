@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentMap;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.update.ClientStorage;
 
 public class SecretsStore {
 	private static class SecretsCache {
@@ -57,7 +57,6 @@ public class SecretsStore {
 	}
 
 	private static final SecretsCache hostSecrets = new SecretsCache(Constants.serverSecretsFile);
-	private static final SecretsCache clientSecrets = new SecretsCache(Constants.clientSecretsFile);
 
 	public static Map.Entry<String, Secrets.Secret> getHostSecret(String secret) {
 		hostSecrets.load();
@@ -73,16 +72,19 @@ public class SecretsStore {
 		hostSecrets.save(uuid, secret);
 	}
 
-	public static Secrets.Secret getClientSecret(InetSocketAddress origin) {
-		return clientSecrets.get(clientKey(origin));
+	public static Secrets.Secret getClientSecret(ClientStorage storage, String modpackId, InetSocketAddress origin) {
+		try {
+			return ConnectionStore.getClientSecret(storage, modpackId, origin);
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to load client secret", e);
+		}
 	}
 
-	public static void saveClientSecret(InetSocketAddress origin, Secrets.Secret secret) throws IllegalArgumentException {
-		clientSecrets.save(clientKey(origin), secret);
-	}
-
-	private static String clientKey(InetSocketAddress origin) {
-		if (origin == null) throw new IllegalArgumentException("Origin cannot be null");
-		return AddressHelpers.formatAddress(origin);
+	public static void saveClientSecret(ClientStorage storage, String modpackId, InetSocketAddress origin, Secrets.Secret secret) throws IllegalArgumentException {
+		try {
+			ConnectionStore.saveClientSecret(storage, modpackId, origin, secret);
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to save client secret", e);
+		}
 	}
 }

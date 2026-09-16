@@ -43,7 +43,6 @@ public class NetUtils {
 	public static final byte ECHO_TYPE = 0x00;
 	public static final byte FILE_REQUEST_TYPE = 0x01;
 	public static final byte FILE_RESPONSE_TYPE = 0x02;
-	public static final byte REFRESH_REQUEST_TYPE = 0x03;
 	public static final byte END_OF_TRANSMISSION = 0x04;
 	public static final byte ERROR = 0x05;
 

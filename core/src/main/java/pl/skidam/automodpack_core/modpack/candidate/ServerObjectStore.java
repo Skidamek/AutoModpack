@@ -52,6 +52,33 @@ public final class ServerObjectStore {
 		} catch (FileAlreadyExistsException e) {
 			verifyExisting(destination, object);
 			object.delete();
+		} catch (UnsupportedOperationException | FileSystemException e) {
+			promoteByCopy(object, destination, e);
+		}
+	}
+
+	private void promoteByCopy(StagedObject object, Path destination, Exception linkFailure) throws IOException {
+		Path temporary = Files.createTempFile(objectsDirectory, ".object-", ".tmp");
+		try {
+			Files.copy(object.stagedPath(), temporary, StandardCopyOption.REPLACE_EXISTING);
+			force(temporary);
+			if (!valid(temporary, object)) throw new IOException("Copied object failed size/SHA-1 verification: " + temporary);
+			try {
+				try {
+					Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE);
+				} catch (AtomicMoveNotSupportedException e) {
+					Files.move(temporary, destination);
+				}
+			} catch (FileAlreadyExistsException e) {
+				verifyExisting(destination, object);
+			}
+			forceDirectory(objectsDirectory);
+			object.delete();
+		} catch (IOException e) {
+			e.addSuppressed(linkFailure);
+			throw e;
+		} finally {
+			Files.deleteIfExists(temporary);
 		}
 	}
 

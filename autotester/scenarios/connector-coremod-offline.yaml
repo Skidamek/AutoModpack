@@ -2,7 +2,7 @@ id: connector-coremod-offline
 description: |
   Offline / client-only proof that Sinytra Connector - which ships an ICoreMod (a coremod),
   an IModFileCandidateLocator and an IDependencyLocator, and loads Fabric mods - runs straight
-  from AutoModpack's modpack folder, with NO copy into the standard mods/ directory.
+  from AutoModpack's active projection, with NO copy into the standard mods/ directory.
 
   This is the hard case the GraphicsBootstrapper trick alone couldn't reach, and the one that
   used to need a game-library copy. Now it loads with NO copy: AutoModpack's ICoreMod forwards
@@ -31,7 +31,7 @@ targets:
 
 flow:
   - do: stage_modpack
-    name: stage Connector + deps + a Connector-loaded Fabric mod into the modpack folder
+    name: stage Connector + deps + a Connector-loaded Fabric mod into the active projection
     mods:
       - url:
           1.21.1-neoforge: https://cdn.modrinth.com/data/u58R1TMW/versions/1i8teo7m/connector-2.0.0-beta.14%2B1.21.1-full.jar
