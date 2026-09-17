@@ -148,7 +148,7 @@ class UpdatePlannerTest {
 	}
 
 	@Test
-	void samePathSameContentStillGetsAnExplicitDisposition() {
+	void byteIdenticalLiveCopyIsDeletedWithoutConflictOrVault() {
 		ModpackJsons.ModpackContentFields target = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/server.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
@@ -158,8 +158,13 @@ class UpdatePlannerTest {
 				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())),
 				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
 
-		assertEquals(1, plan.conflicts().size());
-		assertEquals(OperationType.DELETE, plan.operations().stream().filter(operation -> operation.root() == Root.GAME_DIR).findFirst().orElseThrow().operation());
+		// The live copy holds the pack's own bytes, so it is a plain delete: no conflict question, no vault copy.
+		assertTrue(plan.conflicts().isEmpty());
+		assertTrue(plan.preservations().isEmpty());
+		assertTrue(plan.restartReasons().contains(RestartReason.REMOVED_DUPLICATE_MODS));
+		Operation delete = plan.operations().stream().filter(operation -> operation.root() == Root.GAME_DIR).findFirst().orElseThrow();
+		assertEquals(OperationType.DELETE, delete.operation());
+		assertEquals(TARGET_HASH, delete.expectedExistingHash());
 	}
 
 	@Test

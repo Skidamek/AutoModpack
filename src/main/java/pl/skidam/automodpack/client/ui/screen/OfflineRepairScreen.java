@@ -65,17 +65,6 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		super.init();
 		int width = panelWidth(PANEL_WIDTH);
 		int x = panelLeft(PANEL_WIDTH);
-		if (!prepared.unownedModPaths().isEmpty()) {
-			String files = String.join("\n", wrapToWidth(this.font, String.join(", ", prepared.unownedModPaths()), 240, 8));
-			AbstractWidget keep = new CheckboxWidget(this.font, x, keepCheckboxY(), width, VersionedText.translatable("automodpack.confirm.keepExistingMods", prepared.unownedModPaths().size()), keepUnownedMods,
-					value -> {
-						keepUnownedMods = value;
-						rebuild();
-					});
-			keep.active = !busy;
-			VersionedScreen.setTooltip(keep, VersionedText.translatable("automodpack.confirm.leftoverTooltip", files));
-			this.addRenderableWidget(keep);
-		}
 
 		List<OfflineRepair.EditableResetCandidate> candidates = prepared.editableResetCandidates();
 		boolean needsUpdate = prepared.requiresUpdate();
@@ -109,11 +98,28 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		if (showKeepAll) actionButtons.get(actionIndex++).active = !busy;
 		actionButtons.get(actionIndex++).active = !busy && hasRepairWork();
 		if (canUpdate) actionButtons.get(actionIndex).active = !busy;
-		if (candidates.isEmpty()) return;
-		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), 0, listTop(), listBottom, ROW_HEIGHT, listRows,
-				index -> {
-					if (!busy) toggleEditable(candidates.get(index).logicalPath());
-				}));
+		RowListWidget list = null;
+		if (!candidates.isEmpty()) {
+			list = new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), 0, listTop(), listBottom, ROW_HEIGHT, listRows,
+					index -> {
+						if (!busy) toggleEditable(candidates.get(index).logicalPath());
+					});
+			this.addRenderableWidget(list);
+		}
+		if (!prepared.unownedModPaths().isEmpty()) {
+			// The checkbox anchors to the list's real row left, so it and the row checkboxes share one x on every version.
+			int checkboxX = list == null ? x : list.rowLeft();
+			String files = String.join("\n", wrapToWidth(this.font, String.join(", ", prepared.unownedModPaths()), 240, 8));
+			AbstractWidget keep = new CheckboxWidget(this.font, checkboxX, keepCheckboxY(), x + width - checkboxX, VersionedText.translatable("automodpack.confirm.keepExistingMods", prepared.unownedModPaths().size()),
+					keepUnownedMods,
+					value -> {
+						keepUnownedMods = value;
+						rebuild();
+					});
+			keep.active = !busy;
+			VersionedScreen.setTooltip(keep, VersionedText.translatable("automodpack.confirm.leftoverTooltip", files));
+			this.addRenderableWidget(keep);
+		}
 	}
 
 	/** The header above the list wraps to real lines, so the list starts below the deepest line instead of a fixed guess. */

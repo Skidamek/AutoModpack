@@ -82,19 +82,21 @@ public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> 
 
 		@Override
 		protected void versionedRender(VersionedMatrices matrices, int x, int y, int width, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			int checkboxReserve = row.state() == null ? 0 : CHECKBOX_RESERVE;
-			int lineWidth = Math.max(1, width - TEXT_MARGIN * 2 - checkboxReserve);
+			boolean checkboxRow = row.state() != null;
+			int lineWidth = Math.max(1, width - TEXT_MARGIN * 2 - (checkboxRow ? CHECKBOX_RESERVE : 0));
 			int lines = row.lines().size();
-			int textX = x + TEXT_MARGIN + checkboxReserve;
+			// A checkbox row mirrors CheckboxWidget's own geometry from the row's left edge, so every checkbox
+			// on the screen starts on the same x; plain rows keep their centered text.
 			int textY = y + Math.max(0, (rowHeight() - lines * LINE_STEP) / 2) + 1;
 			// Washes carry the row state: the selected row stays washed, a hovered row washes while the pointer is on it.
 			if (getSelected() == this) matrices.fill(x, y, x + width, y + rowHeight(), SELECTED_COLOR);
 			else if (hovered) matrices.fill(x, y, x + width, y + rowHeight(), HOVER_COLOR);
-			if (row.state() != null) CheckboxWidget.drawBox(matrices, x + TEXT_MARGIN, y + Math.max(0, (rowHeight() - CheckboxWidget.BOX_SIZE) / 2), row.state());
+			if (checkboxRow) CheckboxWidget.drawBox(matrices, x, y + Math.max(0, (rowHeight() - CheckboxWidget.BOX_SIZE) / 2), row.state());
 			for (MutableComponent line : row.lines()) {
 				MutableComponent drawn = line;
 				if (minecraft.font.width(line) > lineWidth) drawn = VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, line.getString(), lineWidth)).withStyle(line.getStyle());
-				VersionedScreen.drawTextWithShadow(matrices, minecraft.font, drawn, checkboxReserve == 0 ? textX + Math.max(0, (width - TEXT_MARGIN * 2 - minecraft.font.width(drawn)) / 2) : textX, textY, TextColors.WHITE);
+				int lineX = checkboxRow ? x + CheckboxWidget.BOX_SIZE + CheckboxWidget.TEXT_SPACING : x + Math.max(0, (width - TEXT_MARGIN * 2 - minecraft.font.width(drawn)) / 2);
+				VersionedScreen.drawTextWithShadow(matrices, minecraft.font, drawn, lineX, textY, TextColors.WHITE);
 				textY += LINE_STEP;
 			}
 			if (hovered && row.tooltip() != null) VersionedScreen.showComponentTooltip(row.tooltip(), mouseX, mouseY);
