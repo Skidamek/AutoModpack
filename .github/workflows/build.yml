@@ -41,6 +41,15 @@ jobs:
         with:
           distribution: temurin
           java-version: 25
+      - name: Install pinned zstd
+        env:
+          ZSTD_VERSION: v1.5.7
+        run: |
+          git clone --depth 1 --branch "$ZSTD_VERSION" https://github.com/facebook/zstd /tmp/zstd-build
+          make -C /tmp/zstd-build -j"$(nproc)"
+          sudo make -C /tmp/zstd-build install PREFIX=/usr/local
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+          zstd --version
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
