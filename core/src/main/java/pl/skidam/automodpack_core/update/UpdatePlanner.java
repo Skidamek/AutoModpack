@@ -74,7 +74,7 @@ public final class UpdatePlanner {
 	}
 
 	public record SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest, Map<String, FileState> previousEditableOverlays,
-			ClientBaseline baseline, Set<String> availableBaselineObjects) {
+			PreInstallState preInstall, Set<String> availableBaselineObjects) {
 		public SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest) {
 			this(previousModpackId, previousManifest, Map.of(), null, Set.of());
 		}
@@ -92,7 +92,7 @@ public final class UpdatePlanner {
 		}
 	}
 
-	public record RemovalInput(ModpackJsons.ModpackContentFields installedManifest, ClientBaseline baseline,
+	public record RemovalInput(ModpackJsons.ModpackContentFields installedManifest, PreInstallState preInstall,
 			Map<FileKey, FileState> files, Set<String> availableBaselineObjects, GeneratedCopyState generatedCopies, ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig) {
 		public RemovalInput {
 			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
@@ -112,11 +112,11 @@ public final class UpdatePlanner {
 		if (input.generatedCopies() != null && (!installed.modpackId.equals(input.generatedCopies().modpackId())
 				|| !packTarget.contentToken().equals(input.generatedCopies().contentToken())))
 			throw new IllegalArgumentException("Removal generated-copy state identity is invalid");
-		if (input.baseline() == null || !installed.modpackId.equals(input.baseline().modpackId()))
-			throw new IllegalArgumentException("Removal baseline identity is invalid");
+		if (input.preInstall() == null || !installed.modpackId.equals(input.preInstall().modpackId()))
+			throw new IllegalArgumentException("Removal pre-install state identity is invalid");
 		if (input.plannedClientConfig() == null) throw new IllegalArgumentException("Removal client config is missing");
 
-		Map<String, ClientBaseline.Entry> baselines = input.baseline().entriesByPath();
+		Map<String, PreInstallState.Entry> baselines = input.preInstall().entriesByPath();
 		PlanningSession session = new PlanningSession(input.files());
 		session.restart(RestartReason.SELECTED_MODPACK);
 
@@ -145,11 +145,11 @@ public final class UpdatePlanner {
 			if (state == null || !state.regularFile() || state.sha1() == null) continue;
 			OwnershipLedger.Content current = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
 			if (!ledgerEntry.historicalHashes().contains(current)) continue;
-			ClientBaseline.Entry baseline = baselines.get(ledgerEntry.logicalPath());
+			PreInstallState.Entry baseline = baselines.get(ledgerEntry.logicalPath());
 			restoreOwnedLiveFile(key, state, baseline, input.availableBaselineObjects(), true, session);
 		}
 
-		return session.finalState(installed.modpackId, packTarget, input.plannedClientConfig(), input.files(), installed, ledger, true, input.baseline(), List.of());
+		return session.finalState(installed.modpackId, packTarget, input.plannedClientConfig(), input.files(), installed, ledger, true, input.preInstall(), List.of());
 	}
 
 	public static UpdatePlan plan(Input input) {
@@ -290,7 +290,7 @@ public final class UpdatePlanner {
 	}
 
 	private static ChangeSet consequences(List<Operation> operations, Map<FileKey, FileState> originalFiles, ModpackJsons.ModpackContentFields target,
-			OwnershipLedger ledger, Set<RestartReason> restartReasons, boolean removal, ClientBaseline baseline) {
+			OwnershipLedger ledger, Set<RestartReason> restartReasons, boolean removal, PreInstallState preInstall) {
 		Map<FileKey, Operation> operationsByFile = operations.stream().collect(Collectors.toMap(operation -> new FileKey(operation.root(), operation.relativePath()), Function.identity()));
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetFiles = target.list == null ? Map.of() : sortedItems(target.list);
 		List<ChangeSet.Change> changes = new ArrayList<>();
@@ -313,7 +313,7 @@ public final class UpdatePlanner {
 		}
 
 		Set<String> targetPaths = targetFiles.keySet();
-		Map<String, ClientBaseline.Entry> baselineEntries = removal ? baseline.entriesByPath() : Map.of();
+		Map<String, PreInstallState.Entry> baselineEntries = removal ? preInstall.entriesByPath() : Map.of();
 		for (OwnershipLedger.Entry ledgerEntry : ledger.entries().values()) {
 			if (!removal && targetPaths.contains(ledgerEntry.logicalPath())) continue;
 			Optional<FileKey> optionalKey = managedCleanupKey(ledgerEntry.logicalPath());
@@ -342,7 +342,7 @@ public final class UpdatePlanner {
 		return ChangeSet.of(changes, effects);
 	}
 
-	private static boolean consequenceBaselineMatches(FileState current, ClientBaseline.Entry baseline) {
+	private static boolean consequenceBaselineMatches(FileState current, PreInstallState.Entry baseline) {
 		return baseline != null && !baseline.absent() && current.regularFile() && baseline.size() == current.size() && baseline.objectHash().equalsIgnoreCase(current.sha1());
 	}
 
@@ -366,7 +366,7 @@ public final class UpdatePlanner {
 
 	private static void planLedgerCleanup(OwnershipLedger ledger, Set<String> installedPaths, Set<String> targetPaths, SelectionContext selection, boolean preserveReplacedBytes,
 			PlanningSession session) {
-		Map<String, ClientBaseline.Entry> baselines = selection == null || selection.baseline() == null ? Map.of() : selection.baseline().entriesByPath();
+		Map<String, PreInstallState.Entry> baselines = selection == null || selection.preInstall() == null ? Map.of() : selection.preInstall().entriesByPath();
 		for (OwnershipLedger.Entry entry : ledger.entries().values()) {
 			if (!installedPaths.contains(entry.logicalPath()) || targetPaths.contains(entry.logicalPath())) continue;
 			Optional<FileKey> candidateKey = managedCleanupKey(entry.logicalPath());
@@ -376,8 +376,8 @@ public final class UpdatePlanner {
 			if (state == null || !state.regularFile() || state.sha1() == null) continue;
 			OwnershipLedger.Content content = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
 			if (!entry.historicalHashes().contains(content)) continue;
-			ClientBaseline.Entry baseline = baselines.get(entry.logicalPath());
-			if (selection == null || selection.baseline() == null) {
+			PreInstallState.Entry baseline = baselines.get(entry.logicalPath());
+			if (selection == null || selection.preInstall() == null) {
 				session.preserve(new Preservation(key.root(), key.relativePath(), state.sha1().toLowerCase(Locale.ROOT), state.size()));
 				session.delete(key, state.sha1());
 				noteStandardModsMutation(key, true, session);
@@ -387,11 +387,11 @@ public final class UpdatePlanner {
 		}
 	}
 
-	private static boolean baselineMatches(FileState state, ClientBaseline.Entry baseline) {
+	private static boolean baselineMatches(FileState state, PreInstallState.Entry baseline) {
 		return !baseline.absent() && matches(state, baseline.objectHash(), baseline.size());
 	}
 
-	private static boolean restoreOwnedLiveFile(FileKey key, FileState state, ClientBaseline.Entry baseline,
+	private static boolean restoreOwnedLiveFile(FileKey key, FileState state, PreInstallState.Entry baseline,
 			Set<String> availableBaselineObjects, boolean preserveReplacedBytes, PlanningSession session) {
 		if (baseline != null && baselineMatches(state, baseline)) return false;
 		String currentHash = state.sha1().toLowerCase(Locale.ROOT);
@@ -515,9 +515,7 @@ public final class UpdatePlanner {
 			FileKey targetKey = new FileKey(Root.GAME_DIR, targetPath);
 			if (!keepStandard && oldKey.equals(targetKey) && standard.sha1().equalsIgnoreCase(target.sha1())) {
 				// The live copy is byte-identical to the pack's own mod: the projection serves the same bytes, so the
-				// copy is redundant and goes - but it is vaulted, so if the server later stops shipping the mod the
-				// player can still restore it from Preserved files.
-				session.preserve(new Preservation(Root.GAME_DIR, standardPath, standard.sha1().toLowerCase(Locale.ROOT), standard.size(), PreservationProof.PLAYER_CONSENT));
+				// redundant copy just goes - nothing of the player's to preserve and no conflict to ask about.
 				session.delete(oldKey, standard.sha1());
 				session.restart(RestartReason.REMOVED_DUPLICATE_MODS);
 				continue;
@@ -670,7 +668,7 @@ public final class UpdatePlanner {
 
 		/** The canonical plan: ordered operations, the projected final state after every operation, and the sorted review consequences. */
 		UpdatePlan finalState(String modpackId, PackTarget packTarget, ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig, Map<FileKey, FileState> originalFiles,
-				ModpackJsons.ModpackContentFields manifest, OwnershipLedger ledger, boolean removal, ClientBaseline baseline, List<NestedCopy> generatedCopies) {
+				ModpackJsons.ModpackContentFields manifest, OwnershipLedger ledger, boolean removal, PreInstallState preInstall, List<NestedCopy> generatedCopies) {
 			List<Operation> ordered = operations.values().stream().sorted(Operation.ORDER).toList();
 			projectedScope.addAll(operations.keySet());
 			List<ProjectedFile> finalState = projectedScope.stream().sorted(FileKey.ORDER).map(key -> {
@@ -679,7 +677,7 @@ public final class UpdatePlanner {
 						? new ProjectedFile(key.root(), key.relativePath(), false, null, -1)
 						: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 			}).toList();
-			ChangeSet consequences = consequences(ordered, originalFiles, manifest, ledger, restartReasons, removal, baseline);
+			ChangeSet consequences = consequences(ordered, originalFiles, manifest, ledger, restartReasons, removal, preInstall);
 			return new UpdatePlan(modpackId, packTarget, ordered, finalState, plannedClientConfig, restartReasons,
 					preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList(),
 					baselineCaptures.stream().sorted(Comparator.comparing((BaselineCapture capture) -> capture.root().ordinal()).thenComparing(BaselineCapture::relativePath)).toList(),

@@ -37,7 +37,6 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private ClientObjectStore.CollectionResult collectionResult;
 	private ClientObjectStore.StorageReport verificationReport;
 	private Future<?> work;
-	private int preservedCount;
 	private int statusY;
 	private int titleTop;
 
@@ -50,7 +49,6 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		preservedCount = controller.preservedClaimCount();
 		ActionRow maintenanceRow = actionRow(ActionAreaLayout.RowKind.AUXILIARY,
 				optionalAction(VersionedText.text("automodpack.storage.verify"), button -> verify()),
 				primaryAction(VersionedText.text(compactArmed ? "automodpack.storage.confirmArmed" : "automodpack.storage.confirm"), button -> compactPressed()));
@@ -62,8 +60,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.description"), wrapWidth, ChatFormatting.GRAY));
 		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.removes"), wrapWidth, ChatFormatting.YELLOW));
 		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.keeps"), wrapWidth, ChatFormatting.GREEN));
-		lines.addAll(
-				wrapParagraph(this.font, VersionedText.str(preservedCount > 0 ? "automodpack.storage.preservedKept" : "automodpack.vault.empty", preservedCount), wrapWidth, ChatFormatting.GREEN));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.stateHistoryKept"), wrapWidth, ChatFormatting.GREEN));
 		for (ClientGenerationStore.CompactionReceipt receipt : controller.compactionReceipts())
 			lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.compacted", UiFormat.formatInstant(receipt.compactedAt()), receipt.boundarySeq()), wrapWidth,
 					ChatFormatting.GREEN));

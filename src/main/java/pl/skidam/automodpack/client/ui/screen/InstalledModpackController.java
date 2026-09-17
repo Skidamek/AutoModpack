@@ -51,7 +51,6 @@ import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.OfflineRepair;
-import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.StateHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
@@ -156,17 +155,6 @@ final class InstalledModpackController {
 		return discoveryFailure;
 	}
 
-	int preservedClaimCount() {
-		try {
-			int count = 0;
-			for (PreservationVault.Snapshot snapshot : PreservationVault.snapshots(storage)) count += snapshot.claims().size();
-			return count;
-		} catch (IOException | RuntimeException e) {
-			discoveryFailure = e;
-			return 0;
-		}
-	}
-
 	ClientObjectStore.StorageReport validateStorage() throws IOException {
 		return ClientObjectStore.validate(storage);
 	}
@@ -186,10 +174,6 @@ final class InstalledModpackController {
 			discoveryFailure = e;
 			return List.of();
 		}
-	}
-
-	List<PreservationVault.Snapshot> preservedFiles() throws IOException {
-		return PreservationVault.snapshots(storage);
 	}
 
 	/** One installed pack this origin no longer serves, with its player-facing name or raw id. */
@@ -251,18 +235,6 @@ final class InstalledModpackController {
 		}
 	}
 
-	Path restorePreservedFile(String modpackId, String claimId) throws IOException {
-		return PreservationVault.restoreOriginal(storage, modpackId, claimId);
-	}
-
-	Path savePreservedCopy(String modpackId, String claimId) throws IOException {
-		return PreservationVault.saveCopy(storage, modpackId, claimId);
-	}
-
-	void deletePreservedFile(String modpackId, String claimId) throws IOException {
-		PreservationVault.delete(storage, modpackId, claimId);
-	}
-
 	List<ClientStateJournal.StateEntry> stateEntries() throws IOException {
 		return StateHistory.entries(storage);
 	}
@@ -271,7 +243,7 @@ final class InstalledModpackController {
 		return StateHistory.restorability(storage, entry);
 	}
 
-	PreservationVault.OriginalRestore stateFileGate(UpdatePlan.Root root, String path) throws IOException {
+	StateHistory.FileGate stateFileGate(UpdatePlan.Root root, String path) throws IOException {
 		return StateHistory.fileRestoreGate(storage, root, path);
 	}
 
@@ -420,10 +392,6 @@ final class InstalledModpackController {
 		manifest.groups().forEach((groupId, group) -> names.put(groupId,
 				group.displayName().isBlank() ? VersionedText.str("automodpack.browser.unknownGroup") : group.displayName()));
 		return Map.copyOf(names);
-	}
-
-	void openPreservedFiles(Screen parent, Runnable released) {
-		ScreenImpl.setScreen(new PreservationVaultScreen(parent, this, released));
 	}
 
 	private void removeActive(Pack pack, boolean deactivation, Runnable released, Runnable removed) {

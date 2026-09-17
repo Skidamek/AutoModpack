@@ -28,7 +28,6 @@ import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStateJournal;
-import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.StateHistory;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
@@ -50,7 +49,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private Long selectedSeq;
 	private int selectedFileIndex = -1;
 	private final Map<Long, StateHistory.RestoreOption> restorabilityBySeq = new HashMap<>();
-	private final Map<String, PreservationVault.OriginalRestore> fileGates = new HashMap<>();
+	private final Map<String, StateHistory.FileGate> fileGates = new HashMap<>();
 	private final Map<String, String> packNames = new HashMap<>();
 	private boolean loading;
 	private boolean busy;
@@ -128,8 +127,8 @@ public final class StateHistoryScreen extends VersionedScreen {
 		this.addRenderableWidget(list);
 		List<AbstractWidget> buttons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new));
 		AbstractWidget restore = buttons.get(0);
-		PreservationVault.OriginalRestore gate = gate(selectedFile());
-		restore.active = !busy && gate == PreservationVault.OriginalRestore.AVAILABLE;
+		StateHistory.FileGate gate = gate(selectedFile());
+		restore.active = !busy && gate == StateHistory.FileGate.AVAILABLE;
 		setTooltip(restore, fileRestoreTooltip(gate));
 		buttons.get(1).active = !busy && selectedFile() != null;
 	}
@@ -144,7 +143,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 		ChatFormatting color = switch (entry.kind()) {
 			case INSTALL, ROLLBACK -> ChatFormatting.GREEN;
 			case REMOVAL, DEACTIVATION -> ChatFormatting.RED;
-			case FILE_RESTORE, REPAIR, RECOVERY_REVERT -> ChatFormatting.YELLOW;
+			case FILE_RESTORE, REPAIR, DRIFT_RESET, RECOVERY_REVERT -> ChatFormatting.YELLOW;
 			case UPDATE -> ChatFormatting.WHITE;
 		};
 		MutableComponent title = VersionedText.translatable("automodpack.stateHistory.kind." + entry.kind().name()).withStyle(color);
@@ -175,19 +174,18 @@ public final class StateHistoryScreen extends VersionedScreen {
 		};
 	}
 
-	private PreservationVault.OriginalRestore gate(ClientStateJournal.TrackedFile file) {
+	private StateHistory.FileGate gate(ClientStateJournal.TrackedFile file) {
 		ClientStateJournal.StateEntry selected = selectedEntry();
 		if (selected == null || file == null) return null;
 		return fileGates.get(gateKey(selected, file));
 	}
 
-	private MutableComponent fileRestoreTooltip(PreservationVault.OriginalRestore gate) {
+	private MutableComponent fileRestoreTooltip(StateHistory.FileGate gate) {
 		if (gate == null) return VersionedText.translatable("automodpack.stateHistory.restorePickFirst");
 		return switch (gate) {
 			case AVAILABLE -> VersionedText.translatable("automodpack.stateHistory.restoreFileReady");
 			case NOT_GAME_DIR -> VersionedText.translatable("automodpack.stateHistory.restoreFileManaged");
-			case STILL_OWNED -> VersionedText.translatable("automodpack.stateHistory.restoreFileOwned");
-			case INACTIVE_PACK -> VersionedText.translatable("automodpack.stateHistory.restoreFileManaged");
+			case OWNED -> VersionedText.translatable("automodpack.stateHistory.restoreFileOwned");
 		};
 	}
 
@@ -255,7 +253,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 		if (selected == null || file == null || fileGates.containsKey(gateKey(selected, file))) return;
 		work = ScreenManager.background(() -> {
 			try {
-				PreservationVault.OriginalRestore gate = controller.stateFileGate(file.root(), file.path());
+				StateHistory.FileGate gate = controller.stateFileGate(file.root(), file.path());
 				this.minecraft.execute(() -> {
 					if (closed) return;
 					fileGates.put(gateKey(selected, file), gate);
@@ -264,7 +262,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 			} catch (Exception e) {
 				this.minecraft.execute(() -> {
 					if (closed) return;
-					fileGates.put(gateKey(selected, file), PreservationVault.OriginalRestore.STILL_OWNED);
+					fileGates.put(gateKey(selected, file), StateHistory.FileGate.OWNED);
 					rebuild();
 				});
 			}

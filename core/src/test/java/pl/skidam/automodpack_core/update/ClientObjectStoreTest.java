@@ -26,7 +26,6 @@ import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.ExpectedSizes;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
-import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
@@ -219,24 +218,6 @@ class ClientObjectStoreTest {
 		assertThrows(IllegalArgumentException.class, () -> ClientObjectStore.normalizeHash("not-a-sha1"));
 		ClientStorage storage = storage();
 		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of("not-a-sha1")));
-	}
-
-	@Test
-	void preservationClaimsPinObjectsUntilExplicitDeletion() throws Exception {
-		ClientStorage storage = storage();
-		Path source = storage.gamePath("config/removed.txt");
-		Files.createDirectories(source.getParent());
-		Files.writeString(source, "preserved", StandardCharsets.UTF_8);
-		String hash = HashUtils.getHash(source);
-		PreservationVault.Claim claim = PreservationVault.preserve(storage, MODPACK_ID, "a".repeat(40), PreservationVault.Reason.SERVER_REMOVAL, Root.GAME_DIR,
-				"config/removed.txt", hash, Files.size(source));
-
-		ClientObjectStore.collectUnreachableObjects(storage, Set.of());
-		assertTrue(Files.exists(storage.objectFile(hash)));
-
-		PreservationVault.delete(storage, MODPACK_ID, claim.claimId());
-		ClientObjectStore.collectUnreachableObjects(storage, Set.of());
-		assertFalse(Files.exists(storage.objectFile(hash)));
 	}
 
 	/** The receipt behind publishOwnership's per-commit cost: measured ~2ms warm for 200 entries; the assert is a structural tripwire, not a speed test. */

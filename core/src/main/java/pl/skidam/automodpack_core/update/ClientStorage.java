@@ -48,7 +48,6 @@ public final class ClientStorage {
 	private final Path dataDirectory;
 	private final Path objectsDirectory;
 	private final Path overlaysDirectory;
-	private final Path baselinesDirectory;
 	private final Path generatedCopiesDirectory;
 	private final Path activeDirectory;
 	private final Path incomingDirectory;
@@ -62,7 +61,6 @@ public final class ClientStorage {
 	private final Path stuckTransactionStateFile;
 	private final Path clientConfigFile;
 	private final Path modpackContentTempFile;
-	private final Path preservationDirectory;
 	private final Path historyDirectory;
 	private final Path stateHistoryDirectory;
 	private final Path journalTempFile;
@@ -83,7 +81,6 @@ public final class ClientStorage {
 		DataRootResolver.Layout dataLayout = dataLocation.layout();
 		this.objectsDirectory = dataLayout.objectsDirectory();
 		this.overlaysDirectory = this.gameDirectory.resolve(CLIENT_OVERLAYS_DIR).normalize();
-		this.baselinesDirectory = this.gameDirectory.resolve(CLIENT_BASELINES_DIR).normalize();
 		this.generatedCopiesDirectory = this.gameDirectory.resolve(CLIENT_GENERATED_COPIES_DIR).normalize();
 		this.activeDirectory = this.gameDirectory.resolve(CLIENT_ACTIVE_DIR).normalize();
 		this.incomingDirectory = this.gameDirectory.resolve(CLIENT_INCOMING_DIR).normalize();
@@ -97,7 +94,6 @@ public final class ClientStorage {
 		this.stuckTransactionStateFile = this.gameDirectory.resolve(CLIENT_STUCK_TRANSACTION_STATE_FILE).normalize();
 		this.clientConfigFile = this.gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize();
 		this.modpackContentTempFile = this.gameDirectory.resolve(CLIENT_CONTENT_TEMP_FILE).normalize();
-		this.preservationDirectory = this.gameDirectory.resolve(CLIENT_PRESERVATION_DIR).normalize();
 		this.historyDirectory = this.gameDirectory.resolve(CLIENT_HISTORY_DIR).normalize();
 		this.stateHistoryDirectory = this.gameDirectory.resolve(CLIENT_STATE_HISTORY_DIR).normalize();
 		this.journalTempFile = this.gameDirectory.resolve(CLIENT_JOURNAL_TEMP_FILE).normalize();
@@ -173,10 +169,6 @@ public final class ClientStorage {
 
 	public Path overlaysDirectory() {
 		return overlaysDirectory;
-	}
-
-	public Path baselinesDirectory() {
-		return baselinesDirectory;
 	}
 
 	public Path generatedCopiesDirectory() {
@@ -303,10 +295,6 @@ public final class ClientStorage {
 		return modpackContentTempFile;
 	}
 
-	public Path preservationDirectory() {
-		return preservationDirectory;
-	}
-
 	public Path historyDirectory() {
 		return historyDirectory;
 	}
@@ -336,14 +324,6 @@ public final class ClientStorage {
 
 	public Path journalTempFile() {
 		return journalTempFile;
-	}
-
-	public Path preservationPackDirectory(String modpackId) {
-		return preservationDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
-	}
-
-	public Path preservationManifest(String modpackId) {
-		return preservationPackDirectory(modpackId).resolve("claims.json").normalize();
 	}
 
 	public Path bootstrapFile() {
@@ -422,10 +402,6 @@ public final class ClientStorage {
 		Files.deleteIfExists(overlayStateFile(modpackId));
 	}
 
-	public Path baselineFile(String modpackId) {
-		return baselinesDirectory.resolve(ModpackId.requireValid(modpackId)).resolve("baseline.json").normalize();
-	}
-
 	public String overlayDigest(String modpackId) throws IOException {
 		return ClientOverlaySnapshot.capture(this, modpackId, null).digest();
 	}
@@ -443,10 +419,8 @@ public final class ClientStorage {
 		FileTrees.createManagedDirectory(platformCacheDirectory, "platform cache");
 		FileTrees.createManagedDirectory(packsDirectory, "shared pack state");
 		FileTrees.createManagedDirectory(overlaysDirectory, "client overlays");
-		FileTrees.createManagedDirectory(baselinesDirectory, "client baselines");
 		FileTrees.createManagedDirectory(generatedCopiesDirectory, "client generated-copy state");
 		FileTrees.createManagedDirectory(stagingDirectory(), "shared publication staging");
-		FileTrees.createManagedDirectory(preservationDirectory, "client preservation root");
 		FileTrees.createManagedDirectory(historyDirectory, "client journal mirrors");
 		FileTrees.createManagedDirectory(stateHistoryDirectory, "client state history");
 	}
@@ -509,7 +483,7 @@ public final class ClientStorage {
 	private void validateLayout() {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
-		validateWithin(clientDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
+		validateWithin(clientDirectory, overlaysDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory,
 				historyDirectory, stateHistoryDirectory, stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, stuckTransactionStateFile, modpackContentTempFile,
 				journalTempFile);
 		validateWithin(dataDirectory, objectsDirectory, fileCacheDirectory, modCacheDirectory, platformCacheDirectory, packsDirectory, stagingDirectory(), knownHostsFile, knownHostsLockFile);

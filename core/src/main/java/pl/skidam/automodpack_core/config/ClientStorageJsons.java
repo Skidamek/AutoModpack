@@ -3,20 +3,6 @@ package pl.skidam.automodpack_core.config;
 import java.util.List;
 
 public class ClientStorageJsons {
-	public static class ClientBaselineFields {
-		public int schemaVersion = 1;
-		public String modpackId = "";
-		public List<EntryFields> entries = List.of();
-
-		public static class EntryFields {
-			public String logicalPath = "";
-			public String objectHash = "";
-			public long size = -1;
-			public boolean absent;
-			public String baselineGenerationId = "";
-		}
-	}
-
 	public static class ClientGeneratedCopiesFields {
 		public int schemaVersion = 1;
 		public String modpackId = "";
@@ -43,24 +29,6 @@ public class ClientStorageJsons {
 		 * Head equality alone never moves the flag.
 		 */
 		public boolean detached = false;
-	}
-
-	public static class ClientPreservationVaultFields {
-		public int schemaVersion = 1;
-		public String modpackId = "";
-		public List<ClaimFields> claims = List.of();
-
-		public static class ClaimFields {
-			public String claimId = "";
-			public String originalPath = "";
-			public String sourceRoot = "";
-			public String objectHash = "";
-			public long size = -1;
-			public String modpackId = "";
-			public String contentToken = "";
-			public String reason = "";
-			public String preservedAt = "";
-		}
 	}
 
 	/** One line of the client state history journal: the complete tracked file state after one committed mutation. */

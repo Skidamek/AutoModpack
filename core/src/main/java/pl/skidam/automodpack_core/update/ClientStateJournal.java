@@ -42,7 +42,7 @@ public final class ClientStateJournal {
 
 	/** What kind of committed mutation produced a state. Repairs and single-file restores append entries once their flows land on this journal. */
 	public enum Kind {
-		INSTALL, UPDATE, ROLLBACK, DEACTIVATION, REMOVAL, REPAIR, FILE_RESTORE, RECOVERY_REVERT
+		INSTALL, UPDATE, ROLLBACK, DEACTIVATION, REMOVAL, REPAIR, DRIFT_RESET, FILE_RESTORE, RECOVERY_REVERT
 	}
 
 	/** One tracked file of a checkpoint manifest: present after the entry's mutation, pinned by its hash. */
@@ -78,11 +78,11 @@ public final class ClientStateJournal {
 			return JournalEntry.Change.Kind.CHANGED;
 		}
 
-		static Change install(Root root, String path, String existingHash, String hash, long size) {
+		public static Change install(Root root, String path, String existingHash, String hash, long size) {
 			return new Change(root, path, existingHash, existingHash == null ? 0 : UNKNOWN_SIZE, hash, size);
 		}
 
-		static Change removal(Root root, String path, String existingHash) {
+		public static Change removal(Root root, String path, String existingHash) {
 			return new Change(root, path, existingHash, UNKNOWN_SIZE, null, 0);
 		}
 	}

@@ -4,9 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
@@ -31,7 +29,6 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private final InstalledModpackController controller;
 	private List<InstalledModpackController.Pack> entries;
 	private RowListWidget packList;
-	private int preservedCount;
 	private boolean discoveryFailureShown;
 
 	public InstalledModpacksScreen(Screen parent) {
@@ -43,7 +40,6 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 
 	private void refreshEntries() {
 		this.entries = controller.installed();
-		this.preservedCount = controller.preservedClaimCount();
 	}
 
 	@Override
@@ -55,21 +51,14 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			ScreenManager.failure(FailureRequest.of(controller.discoveryFailure(), "automodpack.error.storage", FailureCategory.STORAGE,
 					FailureDestination.CURRENT_SCREEN, null));
 		}
-		MutableComponent preservedLabel = preservedCount > 0
-				? VersionedText.text("automodpack.management.preservedFilesCount", preservedCount)
-				: VersionedText.text("automodpack.management.preservedFiles");
 		ActionRow management = actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-			optionalAction(preservedLabel, press -> controller.openPreservedFiles(this, () -> {
-				refreshEntries();
-				rebuild();
-			})),
-			optionalAction(VersionedText.text("automodpack.management.stateHistory"), press -> controller.openStateHistory(this, () -> {
-				refreshEntries();
-				rebuild();
-			})),
-			optionalAction(VersionedText.text("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller))),
-			optionalAction(VersionedText.text("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this))));
-	ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
+				optionalAction(VersionedText.text("automodpack.management.stateHistory"), press -> controller.openStateHistory(this, () -> {
+					refreshEntries();
+					rebuild();
+				})),
+				optionalAction(VersionedText.text("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller))),
+				optionalAction(VersionedText.text("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this))));
+		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
 		ActionRow[] actionRows = {management, footer};
 		int rowWidth = panelWidth(PANEL_WIDTH) - TEXT_MARGIN * 2;
 		int activeIndex = -1;
@@ -92,8 +81,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			this.packList.setSelected(this.packList.children().get(activeIndex));
 			this.packList.revealRow(activeIndex);
 		}
-		List<AbstractWidget> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows);
-		if (preservedCount == 0) setTooltip(actionButtons.get(0), VersionedText.text("automodpack.vault.empty"));
+		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows);
 	}
 
 	private void open(InstalledModpackController.Pack entry) {

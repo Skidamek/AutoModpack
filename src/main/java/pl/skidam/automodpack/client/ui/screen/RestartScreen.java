@@ -42,7 +42,8 @@ public class RestartScreen extends VersionedScreen {
 		int preservedFiles = hasChangelogs ? changelogs.changeSet().summary().preservedFiles() : 0;
 		List<ActionRow> rows = new ArrayList<>();
 		if (hasChangelogs) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.changelog.view"), button -> ScreenManager.changelog(changelogs))));
-		if (preservedFiles > 0) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.management.preservedFilesCount", preservedFiles), button -> openVault())));
+		if (preservedFiles > 0)
+			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.management.preservedFilesCount", preservedFiles), button -> openStateHistory())));
 		if (!new InstalledModpackController().stalePacks().isEmpty())
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.restart.removeStale"),
 					button -> new InstalledModpackController().offerStalePackRemoval(this::rebuild))));
@@ -91,9 +92,9 @@ public class RestartScreen extends VersionedScreen {
 		return lines;
 	}
 
-	/** The vault is one click away from the screen that just preserved the files. */
-	private void openVault() {
-		new InstalledModpackController().openPreservedFiles(this, this::rebuild);
+	/** Kept files from this update live on the instance timeline. */
+	private void openStateHistory() {
+		new InstalledModpackController().openStateHistory(this, this::rebuild);
 	}
 
 	@Override
