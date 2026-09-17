@@ -243,8 +243,8 @@ public class FileInspection {
 	private static ModMetadata parseTomlMetadata(BufferedReader reader) {
 		try {
 			Map<String, Object> result = MiniToml.parse(reader);
-			List<Object> mods = MiniToml.getList(result, "mods");
-			if (mods == null || mods.isEmpty()) return null;
+			List<Map<String, Object>> mods = MiniToml.getTables(result, "mods");
+			if (mods.isEmpty()) return null;
 
 			String modId = null;
 			String version = "1";
@@ -252,10 +252,7 @@ public class FileInspection {
 			Set<String> deps = new HashSet<>();
 			LoaderManagerService.EnvironmentType env = LoaderManagerService.EnvironmentType.UNIVERSAL;
 
-			for (Object mod : mods) {
-				if (!(mod instanceof Map)) continue;
-				Map<String, Object> modTable = cast(mod);
-
+			for (Map<String, Object> modTable : mods) {
 				if (modId == null) modId = MiniToml.getString(modTable, "modId");
 
 				String v = MiniToml.getString(modTable, "version");
@@ -268,12 +265,8 @@ public class FileInspection {
 			if (modId != null) {
 				// Deliberately deps, not the dependencies.<modId> tables the forge/neoforge format actually declares - long-standing scanner behavior
 				Map<String, Object> depsTable = MiniToml.getTable(result, "deps");
-				List<Object> depArray = depsTable == null ? null : MiniToml.getList(depsTable, modId);
-				if (depArray != null) {
-					for (Object dep : depArray) {
-						if (!(dep instanceof Map)) continue;
-						Map<String, Object> depTable = cast(dep);
-
+				if (depsTable != null) {
+					for (Map<String, Object> depTable : MiniToml.getTables(depsTable, modId)) {
 						String depId = MiniToml.getString(depTable, "modId");
 						if (depId == null) continue;
 
@@ -293,11 +286,6 @@ public class FileInspection {
 			LOGGER.error("TOML Parse Error: {}", e.getMessage());
 			return null;
 		}
-	}
-
-	@SuppressWarnings("unchecked")
-	private static <T> T cast(Object value) {
-		return (T) value;
 	}
 
 	private static ModMetadata parseJsonMetadata(BufferedReader reader) {

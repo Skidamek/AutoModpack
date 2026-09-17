@@ -31,15 +31,15 @@ class MiniTomlTest {
 				""";
 		Map<String, Object> root = MiniToml.parse(new StringReader(toml));
 		assertEquals(List.of("modLoader", "loaderVersion", "license", "mods", "dependencies", "mixins"), List.copyOf(root.keySet()));
-		List<Object> mods = MiniToml.getList(root, "mods");
+		List<Map<String, Object>> mods = MiniToml.getTables(root, "mods");
 		assertEquals(1, mods.size());
-		Map<String, Object> mod = cast(mods.get(0));
+		Map<String, Object> mod = mods.get(0);
 		assertEquals("somemod", MiniToml.getString(mod, "modId"));
 		assertEquals("1.2.3", MiniToml.getString(mod, "version"));
 		assertEquals(List.of("somemod_compat"), MiniToml.getList(mod, "provides"));
 		// [[dependencies."someid"]] lands at dependencies -> someid; the production lookup asks for the deps table, which this document does not have
 		assertNotNull(MiniToml.getTable(root, "dependencies"));
-		assertEquals("minecraft", MiniToml.getString(cast(MiniToml.getList(MiniToml.getTable(root, "dependencies"), "someid").get(0)), "modId"));
+		assertEquals("minecraft", MiniToml.getString(MiniToml.getTables(MiniToml.getTable(root, "dependencies"), "someid").get(0), "modId"));
 		assertNull(MiniToml.getTable(root, "deps"));
 	}
 
@@ -139,10 +139,10 @@ class MiniTomlTest {
 				color = "blue"
 				""";
 		Map<String, Object> root = MiniToml.parse(new StringReader(toml));
-		List<Object> mods = MiniToml.getList(root, "mods");
+		List<Map<String, Object>> mods = MiniToml.getTables(root, "mods");
 		assertEquals(2, mods.size());
-		assertEquals("red", MiniToml.getString(MiniToml.getTable(cast(mods.get(0)), "info"), "color"));
-		assertEquals("blue", MiniToml.getString(MiniToml.getTable(cast(mods.get(1)), "info"), "color"));
+		assertEquals("red", MiniToml.getString(MiniToml.getTable(mods.get(0), "info"), "color"));
+		assertEquals("blue", MiniToml.getString(MiniToml.getTable(mods.get(1), "info"), "color"));
 	}
 
 	@Test
@@ -164,8 +164,12 @@ class MiniTomlTest {
 		assertTrue(e.getMessage().contains("line 2"), e.getMessage());
 	}
 
-	@SuppressWarnings("unchecked")
-	private static <T> T cast(Object value) {
-		return (T) value;
+	@Test
+	void tableAccessorSkipsNonTablesAndKeepsOrder() throws Exception {
+		Map<String, Object> root = MiniToml.parse(new StringReader("mixed = [1, { id = 'first' }, 'ignored', { id = 'second' }]\nscalar = true\nempty = []"));
+		assertEquals(List.of(Map.of("id", "first"), Map.of("id", "second")), MiniToml.getTables(root, "mixed"));
+		assertTrue(MiniToml.getTables(root, "missing").isEmpty());
+		assertTrue(MiniToml.getTables(root, "scalar").isEmpty());
+		assertTrue(MiniToml.getTables(root, "empty").isEmpty());
 	}
 }

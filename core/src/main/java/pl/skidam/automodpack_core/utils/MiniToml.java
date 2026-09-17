@@ -48,6 +48,14 @@ public final class MiniToml {
 		return table.get(key) instanceof List ? cast(table.get(key)) : null;
 	}
 
+	public static List<Map<String, Object>> getTables(Map<String, Object> table, String key) {
+		List<Object> values = getList(table, key);
+		if (values == null) return List.of();
+		List<Map<String, Object>> tables = new ArrayList<>();
+		for (Object value : values) if (value instanceof Map) tables.add(cast(value));
+		return tables;
+	}
+
 	/** Single key lookup; the value only when it is a string, else null on type mismatch. */
 	public static String getString(Map<String, Object> table, String key) {
 		return table.get(key) instanceof String ? (String) table.get(key) : null;
