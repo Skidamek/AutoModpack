@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -118,10 +119,15 @@ class DnsPinResolverTest {
 
 	@Test
 	void rejectsMalformedWireformatResponses() {
-		// the standard question section ends at offset 46, so answers begin at 47 and a pointer there targets itself
-		byte[] selfLoopOwner = pointerBytes(47);
+		// the standard question section ends at offset 46, so answers begin at 47
+		byte[] cyclicOwner = new byte[22];
+		cyclicOwner[0] = 19;
+		Arrays.fill(cyclicOwner, 1, 20, (byte) 'a');
+		cyclicOwner[20] = (byte) 0xC0;
+		cyclicOwner[21] = 47; // legal backwards pointer through a long label re-enters itself - only the jump budget terminates this
 		byte[] headerOnly = new byte[]{0, 0, (byte) 0x81, (byte) 0xA0, 0, 1, 0, 1, 0, 0, 0, 0};
-		List<byte[]> malformed = List.of(headerOnly, record(new byte[]{(byte) 0x80, 3}, 16, 600, new byte[]{4, 'a', 'b', 'c', 'd'}), record(selfLoopOwner, 16, 600, new byte[]{4, 'a', 'b', 'c', 'd'}),
+		List<byte[]> malformed = List.of(headerOnly, record(new byte[]{(byte) 0x80, 3}, 16, 600, new byte[]{4, 'a', 'b', 'c', 'd'}), record(new byte[]{(byte) 0xC0, 47}, 16, 600, new byte[]{4, 'a', 'b', 'c', 'd'}),
+				record(cyclicOwner, 16, 600, new byte[]{4, 'a', 'b', 'c', 'd'}),
 				record(nameBytes("play.example.com"), 16, 600, new byte[]{20, 'a', 'b'}), record(nameBytes("play.example.com"), 6, 120, new byte[]{9, 'n', 's', 2, 'n', 's', 0, 1, 2, 3}));
 
 		for (int i = 0; i < malformed.size(); i++) {

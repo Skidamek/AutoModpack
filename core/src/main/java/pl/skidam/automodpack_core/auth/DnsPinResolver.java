@@ -411,8 +411,9 @@ public final class DnsPinResolver {
 	/**
 	 * Byte reader over an RFC 1035 message with name decompression. A name ends where its encoding ends -
 	 * right after the first compression pointer, not at the end of the pointed-to name - so the field cursor
-	 * and the name-walk cursor are kept apart. Pointers must point strictly backwards, which alone bounds
-	 * decompression, and the jump budget on top is a tripwire for crafted garbage.
+	 * and the name-walk cursor are kept apart. Pointers must point strictly backwards per RFC 1035, but that
+	 * alone does not rule out cycles of legal backwards pointers, so the jump budget is what guarantees
+	 * termination.
 	 */
 	private static final class Reader {
 		private final byte[] message;
