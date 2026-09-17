@@ -59,13 +59,17 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 				? VersionedText.text("automodpack.management.preservedFilesCount", preservedCount)
 				: VersionedText.text("automodpack.management.preservedFiles");
 		ActionRow management = actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-				optionalAction(preservedLabel, press -> controller.openPreservedFiles(this, () -> {
-					refreshEntries();
-					rebuild();
-				})),
-				optionalAction(VersionedText.text("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller))),
-				optionalAction(VersionedText.text("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this))));
-		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
+			optionalAction(preservedLabel, press -> controller.openPreservedFiles(this, () -> {
+				refreshEntries();
+				rebuild();
+			})),
+			optionalAction(VersionedText.text("automodpack.management.stateHistory"), press -> controller.openStateHistory(this, () -> {
+				refreshEntries();
+				rebuild();
+			})),
+			optionalAction(VersionedText.text("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller))),
+			optionalAction(VersionedText.text("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this))));
+	ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
 		ActionRow[] actionRows = {management, footer};
 		int rowWidth = panelWidth(PANEL_WIDTH) - TEXT_MARGIN * 2;
 		int activeIndex = -1;

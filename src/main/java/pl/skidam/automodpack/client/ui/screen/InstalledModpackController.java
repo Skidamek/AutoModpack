@@ -48,9 +48,11 @@ import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
+import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.OfflineRepair;
 import pl.skidam.automodpack_core.update.PreservationVault;
+import pl.skidam.automodpack_core.update.StateHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
@@ -261,6 +263,35 @@ final class InstalledModpackController {
 		PreservationVault.delete(storage, modpackId, claimId);
 	}
 
+	List<ClientStateJournal.StateEntry> stateEntries() throws IOException {
+		return StateHistory.entries(storage);
+	}
+
+	StateHistory.RestoreOption stateRestorability(ClientStateJournal.StateEntry entry) throws IOException {
+		return StateHistory.restorability(storage, entry);
+	}
+
+	PreservationVault.OriginalRestore stateFileGate(UpdatePlan.Root root, String path) throws IOException {
+		return StateHistory.fileRestoreGate(storage, root, path);
+	}
+
+	Path restoreStateFile(long seq, UpdatePlan.Root root, String path) throws IOException {
+		return StateHistory.restoreFile(storage, seq, root, path);
+	}
+
+	Path saveStateFileCopy(long seq, UpdatePlan.Root root, String path) throws IOException {
+		return StateHistory.saveFileCopy(storage, seq, root, path);
+	}
+
+	/** Restores one of the active pack's past states whole through the reviewed rollback flow; the gate check happened at the button. */
+	void restoreState(ClientStateJournal.StateEntry entry, StateHistory.RestoreOption option, String modpackName, Runnable released) {
+		SwitchFlow.rollback(storage, entry.modpackId(), option.generation(), modpackName, released);
+	}
+
+	void openStateHistory(Screen parent, Runnable released) {
+		ScreenImpl.setScreen(new StateHistoryScreen(parent, this, released));
+	}
+
 	void update(Pack pack, Consumer<Boolean> completed) {
 		if (!pack.active() || !pack.connectionAvailable()) {
 			releaseOnClient(() -> completed.accept(false));
@@ -429,7 +460,7 @@ final class InstalledModpackController {
 		}
 	}
 
-	private String activeModpackId() {
+	String activeModpackId() {
 		try {
 			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 			return state == null || state.modpackId == null ? "" : state.modpackId;
