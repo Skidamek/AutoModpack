@@ -120,8 +120,8 @@ public final class PackConfirmScreen extends VersionedScreen {
 
 		ActionDefinition historyAction = notes ? optionalAction(VersionedText.text("automodpack.management.history"), button -> openHistory()) : null;
 		ActionDefinition customizeAction = customize ? optionalAction(PackConfirmCopy.customizeLabel(), button -> customize()) : null;
-		Component cancelLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.cancel" : "automodpack.back");
-		Component primaryLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.download" : UpdatePreviewScreen.actionKey(laterPreview.mode()));
+		Component cancelLabel = VersionedText.text(firstInstall ? "automodpack.firstConnect.cancel" : "automodpack.back");
+		Component primaryLabel = VersionedText.text(firstInstall ? "automodpack.firstConnect.download" : UpdatePreviewScreen.actionKey(laterPreview.mode()));
 		ActionDefinition cancelAction = secondaryAction(cancelLabel, button -> cancel());
 		ActionDefinition reviewAction = optionalAction(VersionedText.text("automodpack.browser.reviewFiles"), button -> openFiles());
 		ActionDefinition primaryDef = primaryAction(primaryLabel, button -> confirm());

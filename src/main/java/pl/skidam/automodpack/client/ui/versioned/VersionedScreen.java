@@ -477,6 +477,10 @@ public class VersionedScreen extends Screen {
 	}
 
 	protected final TextScrollWidget addScrollBody(int contentWidth, int topY, int bottomY, List<? extends Component> lines, boolean center) {
+		// The window shrinks to a whole number of rows: a bottom between the line-grid points would cut the last
+		// visible row mid-glyph, which reads as overlapping lines once the body overflows and starts scrolling.
+		int window = Math.max(0, bottomY - topY);
+		bottomY = topY + window / LINE_HEIGHT * LINE_HEIGHT;
 		TextScrollWidget body = new TextScrollWidget(this.minecraft, this.width, this.height, panelWidth(contentWidth), topY, bottomY, lines, center);
 		this.addRenderableWidget(body);
 		return body;

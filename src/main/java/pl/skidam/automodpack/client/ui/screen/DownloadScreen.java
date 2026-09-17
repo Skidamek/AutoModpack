@@ -68,19 +68,20 @@ public class DownloadScreen extends VersionedScreen {
 				}))).get(0);
 
 		// The music toggle is one square icon button at the right end of the footer rail, the vanilla icon-button idiom.
+		// No label on the button: the icon speaks and the tooltip names it - a text label inside a 20px button scissor-clips mid-word.
 		int iconX = panelLeft(ActionAreaLayout.FOOTER_RAIL) + panelWidth(ActionAreaLayout.FOOTER_RAIL) - ActionAreaLayout.BUTTON_HEIGHT;
 		int iconY = VersionedScreen.widgetY(cancelButton);
 
 		muteMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(iconX, iconY, ActionAreaLayout.BUTTON_HEIGHT, 16, button -> {
 			AudioManager.stopMusic();
 			ClientPreferences.setMusicEnabled(false);
-		}, "music-note", VersionedText.translatable("soundCategory.music")));
+		}, "music-note"));
 		setTooltip(muteMusicButton, VersionedText.translatable("soundCategory.music"));
 
 		playMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(iconX, iconY, ActionAreaLayout.BUTTON_HEIGHT, 16, button -> {
 			AudioManager.playMusic();
 			ClientPreferences.setMusicEnabled(true);
-		}, "mute-music-note", VersionedText.translatable("soundCategory.music")));
+		}, "mute-music-note"));
 		setTooltip(playMusicButton, VersionedText.translatable("soundCategory.music"));
 	}
 

@@ -85,7 +85,7 @@ public final class PinnedModsScreen extends VersionedScreen {
 		int rowWidth = Math.max(1, width - 8);
 		List<RowListWidget.Row> listRows = new ArrayList<>(rows.size());
 		for (Row row : rows) {
-			listRows.add(new RowListWidget.Row(List.of(rowLabel(row, rowWidth)), VersionedText.translatable(row.present ? "automodpack.pinnedMods.liveTooltip" : "automodpack.pinnedMods.missingTooltip"),
+			listRows.add(new RowListWidget.Row(List.of(rowLabel(row, rowWidth)), VersionedText.text(row.present ? "automodpack.pinnedMods.liveTooltip" : "automodpack.pinnedMods.missingTooltip"),
 					row.pinned ? CheckboxWidget.State.CHECKED : CheckboxWidget.State.UNCHECKED));
 		}
 		// The list fills the space between the input row and the pinned actions; only a real overflow scrolls.
