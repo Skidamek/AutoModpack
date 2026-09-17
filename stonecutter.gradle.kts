@@ -252,7 +252,7 @@ val auditOneJarTask =
 		description = "Audits the packed one jar: size budget, manifest ids, STORE entries, assets, no nested jarjar."
 		oneJar.set(oneJarTask.flatMap { it.oneJar })
 		expectedIds.set(selectedTargets.sorted())
-		// Packed one-jar measured 4131389 bytes (deflated outer assets, 22 STORE impls in a 917037-byte zstd solid); 5 MiB is the tripwire past any good build.
+		// Packed one-jar measured 3670546 bytes after the tomlj drop (deflated outer assets, 22 STORE impls in the zstd solid); 5 MiB is the tripwire past any good build.
 		maxJarBytes.set(5L * 1024 * 1024)
 		enforceReleaseSizeBudget.set(automodpackBuildMode.map { it != "autotest" })
 		// The waiting loop is the transcribed note-block bossa nova, 550322 bytes as packaged; 1 MiB leaves it headroom and still trips on accidental full songs.
@@ -263,11 +263,13 @@ oneJarTask.configure {
 	finalizedBy(auditOneJarTask)
 }
 
-tasks.register("buildTargets") {
-	group = "build"
-	description = "Builds the one release jar from the selected AutoModpack targets and writes its release metadata."
-	dependsOn(oneJarTask)
-	dependsOn(writeReleaseMatrix)
+// `build` is the one verb: it takes the selected targets (-Pautomodpack.targets, all of them by
+// default) from impl jars to the audited one jar in merged/. Release metadata stays out of the
+// everyday build; the release workflow asks writeReleaseMatrix for it explicitly.
+afterEvaluate {
+	tasks.named("build") {
+		dependsOn(oneJarTask)
+	}
 }
 
 tasks.register("formatApply") {

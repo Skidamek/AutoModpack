@@ -49,7 +49,7 @@ jobs:
       - name: Build targets
         env:
           TARGETS: ${{ inputs.targets }}
-        run: ./gradlew buildTargets --continue "-Pautomodpack.targets=$TARGETS"
+        run: ./gradlew build writeReleaseMatrix --continue "-Pautomodpack.targets=$TARGETS"
       - name: Verify artifacts
         id: matrix
         run: |

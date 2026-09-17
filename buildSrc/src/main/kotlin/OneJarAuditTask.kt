@@ -12,8 +12,8 @@ import java.util.jar.JarFile
 import java.util.zip.ZipEntry
 
 /**
- * Audits the ONE jar. Receipts: the packed one-jar measured 4131389 bytes (deflated outer assets, 22
- * STORE impls in a 917037-byte zstd solid), so the 5 MiB budget is the tripwire past where a good
+ * Audits the ONE jar. Receipts: the packed one-jar measured 3670546 bytes after the tomlj drop (deflated
+ * outer assets, 22 STORE impls in the zstd solid), so the 5 MiB budget is the tripwire past where a good
  * build never goes, not a target. The waiting music is checked on the outer `assets/automodpack/`
  * tree - the only place assets may live (the one jar strips them from every impl, so an outer asset
  * entry is by construction the only copy). The manifest is parsed with the build-side implementation
