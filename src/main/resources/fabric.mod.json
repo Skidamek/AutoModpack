@@ -4,6 +4,7 @@
   "version": "${version}",
   "name": "${name}",
   "description": "${description}",
+  "icon": "icon.png",
   "authors": [
     "Skidam"
   ],
