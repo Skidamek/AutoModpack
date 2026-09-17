@@ -121,13 +121,6 @@ public final class ClientLaunch {
 			transport.close();
 			return;
 		}
-		if (manifestResult.unchanged()) {
-			// The installed head is the server head by hash: no planning or object work can be pending, so boot the local pack.
-			transport.close();
-			loadLocalModpack(connectionInfo, secret, hasActiveProjection());
-			return;
-		}
-
 		ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, transport);
 		if (trustedBootstrapApply) updater.applyTrustedInstall();
 		else updater.processModpackUpdate(true);
