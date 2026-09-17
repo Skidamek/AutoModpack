@@ -17,7 +17,7 @@ public class MultiMCMeta {
 
 	private static final long DELAY = 5000;
 	private static final Path MMC_PACK_PATH = Path.of("../mmc-pack.json");
-	private static final Map<String, String> LOADER_UID_MAP = Map.of("fabric", "net.fabricmc.fabric-loader", "quilt", "org.quiltmc.quilt-loader", "forge",
+	private static final Map<String, String> LOADER_UID_MAP = Map.of("fabric", "net.fabricmc.fabric-loader", "forge",
 			"net.minecraftforge", "neoforge", "net.neoforged");
 
 	public static boolean requiresLoaderVersionUpdate(String loaderType, String newVersion) {
