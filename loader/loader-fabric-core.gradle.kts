@@ -19,7 +19,6 @@ val fabricLoaderVersion = loaderVersion()
 
 dependencies {
 	compileOnly(project(":core"))
-	compileOnly(project(":loader-fabric-shared"))
 
 	// External provided deps to compile this
 	compileOnly("com.google.code.gson:gson:$gsonVersion")

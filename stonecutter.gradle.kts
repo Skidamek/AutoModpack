@@ -31,10 +31,13 @@ fun structuredString(vararg path: String): String =
 		.asPrimitive()
 		.content as String
 
+// What each loader module compiles against: the oldest platform API floor that has everything the
+// module calls, so newer-API slips are compile errors here instead of LinkageErrors on a user's
+// install. loader-fabric-latest is not a module, it is a pin alias for the autotest fixtures, which
+// deliberately compile against the newest loader.
 extra["loaderVersions"] =
 	mapOf(
 		"loader-fabric-core" to structuredString("loader-modules", "fabric"),
-		"loader-fabric-shared" to structuredString("loader-modules", "fabric"),
 		"loader-fabric-latest" to structuredString("fabric", "deps", "fabric-loader"),
 		"loader-forge-fml40" to structuredString("1.18.2-forge", "deps", "forge"),
 		"loader-forge-fml47" to structuredString("1.20.1-forge", "deps", "forge"),

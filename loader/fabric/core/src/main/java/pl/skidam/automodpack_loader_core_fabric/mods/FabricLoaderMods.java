@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_loader_fabric_shared;
+package pl.skidam.automodpack_loader_core_fabric.mods;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;

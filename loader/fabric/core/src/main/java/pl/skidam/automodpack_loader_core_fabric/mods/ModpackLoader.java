@@ -1,7 +1,7 @@
 package pl.skidam.automodpack_loader_core_fabric.mods;
 
 import static pl.skidam.automodpack_core.Constants.*;
-import static pl.skidam.automodpack_loader_fabric_shared.FabricLoaderImplAccessor.*;
+import static pl.skidam.automodpack_loader_core_fabric.mods.FabricLoaderImplAccessor.*;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,7 +25,6 @@ import pl.skidam.automodpack_core.loader.RequestedCandidates;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
-import pl.skidam.automodpack_loader_fabric_shared.FabricLoaderMods;
 
 @SuppressWarnings({"unchecked", "unused"})
 public class ModpackLoader implements ModpackLoaderService {

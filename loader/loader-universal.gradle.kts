@@ -7,7 +7,6 @@ import org.gradle.api.file.DuplicatesStrategy
 // The root project's oneJar task optimizes this jar, then appends every target's impl as the
 // solid impl/manifest.bin + impl/all.zst pair - no nested jarjar discovery anywhere.
 evaluationDependsOn(":core")
-evaluationDependsOn(":loader-fabric-shared")
 evaluationDependsOn(":loader-fabric-core")
 evaluationDependsOn(":loader-modlauncher-earlyservices")
 evaluationDependsOn(":loader-forge-earlyservices")
@@ -79,7 +78,6 @@ tasks.named<ShadowJar>("shadowJar") {
 	val subprojects =
 		listOf(
 			":core",
-			":loader-fabric-shared",
 			":loader-fabric-core",
 			":loader-modlauncher-earlyservices",
 			":loader-forge-earlyservices",

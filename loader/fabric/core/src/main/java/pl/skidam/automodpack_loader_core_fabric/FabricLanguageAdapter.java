@@ -10,9 +10,9 @@ import net.fabricmc.loader.api.ModContainer;
 import pl.skidam.automodpack_core.Preload;
 import pl.skidam.automodpack_core.loader.ImplStore;
 import pl.skidam.automodpack_loader_core_fabric.loader.LoaderManager;
+import pl.skidam.automodpack_loader_core_fabric.mods.FabricLoaderMods;
 import pl.skidam.automodpack_loader_core_fabric.mods.ImplMount;
 import pl.skidam.automodpack_loader_core_fabric.mods.ModpackLoader;
-import pl.skidam.automodpack_loader_fabric_shared.FabricLoaderMods;
 
 public class FabricLanguageAdapter implements LanguageAdapter {
 
