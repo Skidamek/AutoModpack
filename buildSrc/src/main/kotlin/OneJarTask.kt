@@ -89,8 +89,8 @@ abstract class OneJarTask : DefaultTask() {
             val normalized = ByteArrayOutputStream()
             ZipOutputStream(normalized).use { output ->
                 ZipInputStream(FileInputStream(implJarsById.getValue(id))).use { input ->
-                    generateSequence { input.nextEntry }.forEach { entry ->
-                        if (entry.isDirectory) return@forEach
+                    val entries = generateSequence { input.nextEntry }.mapNotNull { entry ->
+                        if (entry.isDirectory) return@mapNotNull null
                         val bytes = input.readBytes()
                         if (entry.name.startsWith("assets/")) {
                             val crc = CRC32().apply { update(bytes) }.value
@@ -99,9 +99,15 @@ abstract class OneJarTask : DefaultTask() {
                             }
                             outerAssetsCrcs[entry.name] = crc
                             outerAssets.putIfAbsent(entry.name, bytes)
-                            return@forEach
+                            return@mapNotNull null
                         }
-                        putStored(output, ZipEntry(entry.name).apply { time = entry.time }, bytes)
+                        entry.name to bytes
+                    }.toMap()
+                    // Sorted names and zeroed timestamps: the producers stamp file mtimes and fs
+                    // order into their zips, and the packer normalizes both away so the solid - and
+                    // everything hashed from it - is a pure function of the impl contents.
+                    for ((name, bytes) in entries.toSortedMap()) {
+                        putStored(output, ZipEntry(name).apply { time = 0L }, bytes)
                     }
                 }
             }
@@ -156,7 +162,7 @@ abstract class OneJarTask : DefaultTask() {
                 if (!seen.add(entry.name)) throw GradleException("Duplicate entry ${entry.name} in the outer jar")
                 val bytes = input.readBytes()
                 val copy = ZipEntry(entry.name).apply {
-                    time = entry.time
+                    time = 0L
                 }
                 if (entry.method == ZipEntry.STORED) {
                     putStored(output, copy, bytes)
