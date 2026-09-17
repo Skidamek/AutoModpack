@@ -38,7 +38,6 @@ repositories {
 	}
 }
 
-val tomljVersion = versionProperty("versionTomlj")
 val bouncyCastleVersion = versionProperty("versionBouncyCastle")
 val nettyVersion = versionProperty("versionNetty")
 val mcholepunchVersion = versionProperty("versionMcholepunch")
@@ -47,7 +46,6 @@ val aircompressorVersion = versionProperty("versionAircompressor")
 dependencies {
 	// Stuff to actually bundle
 	implementation("io.airlift:aircompressor:$aircompressorVersion")
-	implementation("org.tomlj:tomlj:$tomljVersion")
 	implementation("org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion")
 	// Disable transitives so netty-buffer/common/transport aren't pulled in
 	implementation("io.netty:netty-codec-haproxy:$nettyVersion") {
@@ -107,8 +105,6 @@ tasks.named<ShadowJar>("shadowJar") {
 
 	val reloc = "amp_libs"
 	relocate("io.airlift.compress", "$reloc.io.airlift.compress")
-	relocate("org.antlr", "$reloc.org.antlr")
-	relocate("org.tomlj", "$reloc.org.tomlj")
 	relocate("org.checkerframework", "$reloc.org.checkerframework")
 	relocate("org.slf4j", "$reloc.org.slf4j")
 	relocate("org.bouncycastle", "$reloc.org.bouncycastle")
