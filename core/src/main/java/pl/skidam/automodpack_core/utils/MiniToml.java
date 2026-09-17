@@ -48,6 +48,7 @@ public final class MiniToml {
 		return table.get(key) instanceof List ? cast(table.get(key)) : null;
 	}
 
+	/** Single key lookup; the tables held by the list in order, skipping any element that is not a table; empty on absent key, type mismatch, or nothing table-shaped. */
 	public static List<Map<String, Object>> getTables(Map<String, Object> table, String key) {
 		List<Object> values = getList(table, key);
 		if (values == null) return List.of();
@@ -69,6 +70,8 @@ public final class MiniToml {
 	private final String src;
 	private int pos;
 	private int line = 1;
+	// Identity-keyed sets (map content mutates as it fills, so content hashing would corrupt them): definedTables tracks tables already
+	// opened by a header or claimed by dotted keys, tableArrays tracks lists that [[...]] headers may append to.
 	private final Set<Map<String, Object>> definedTables = Collections.newSetFromMap(new IdentityHashMap<>());
 	private final Set<List<Object>> tableArrays = Collections.newSetFromMap(new IdentityHashMap<>());
 

@@ -263,8 +263,8 @@ public class FileInspection {
 			}
 
 			if (modId != null) {
-				// Deliberately deps, not the dependencies.<modId> tables the forge/neoforge format actually declares - long-standing scanner behavior
-				Map<String, Object> depsTable = MiniToml.getTable(result, "deps");
+				// [[dependencies.<modId>]] is keyed by the mod's own id; a platform dependency's side says where the mod itself runs, feeding autoExcludeServerSideMods
+				Map<String, Object> depsTable = MiniToml.getTable(result, "dependencies");
 				if (depsTable != null) {
 					for (Map<String, Object> depTable : MiniToml.getTables(depsTable, modId)) {
 						String depId = MiniToml.getString(depTable, "modId");

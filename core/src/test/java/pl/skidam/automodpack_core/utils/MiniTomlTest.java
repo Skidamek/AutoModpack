@@ -23,8 +23,9 @@ class MiniTomlTest {
 				version = "1.2.3"
 				provides = ["somemod_compat"]
 
-				[[dependencies."someid"]]
+				[[dependencies.somemod]]
 				modId = "minecraft"
+				side = "BOTH"
 
 				[[mixins]]
 				config = "somemod.mixins.json"
@@ -37,10 +38,11 @@ class MiniTomlTest {
 		assertEquals("somemod", MiniToml.getString(mod, "modId"));
 		assertEquals("1.2.3", MiniToml.getString(mod, "version"));
 		assertEquals(List.of("somemod_compat"), MiniToml.getList(mod, "provides"));
-		// [[dependencies."someid"]] lands at dependencies -> someid; the production lookup asks for the deps table, which this document does not have
+		// [[dependencies.<modId>]] lands at dependencies -> somemod, keyed by the mod's own id - the table the production lookup reads
 		assertNotNull(MiniToml.getTable(root, "dependencies"));
-		assertEquals("minecraft", MiniToml.getString(MiniToml.getTables(MiniToml.getTable(root, "dependencies"), "someid").get(0), "modId"));
-		assertNull(MiniToml.getTable(root, "deps"));
+		Map<String, Object> dependency = MiniToml.getTables(MiniToml.getTable(root, "dependencies"), "somemod").get(0);
+		assertEquals("minecraft", MiniToml.getString(dependency, "modId"));
+		assertEquals("BOTH", MiniToml.getString(dependency, "side"));
 	}
 
 	@Test
