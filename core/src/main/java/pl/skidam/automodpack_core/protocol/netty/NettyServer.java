@@ -162,12 +162,8 @@ public class NettyServer {
 		}
 
 		if (connectionMode == ModpackConnectionMode.HTTP) {
-			// HTTP is HTTPS-only by design: the embedded listener terminates TLS itself, so without it there is no
-			// protocol left to serve. Advertising-only stays supported through an external static host of the contract.
-			if (serverConfig.disableInternalTLS) {
-				LOGGER.error("HTTP requires the built-in TLS termination; disableInternalTLS leaves the listener with no protocol it can serve");
-				return Optional.empty();
-			}
+			if (serverConfig.disableInternalTLS)
+				LOGGER.info("Internal TLS termination is disabled; the HTTP listener serves plaintext and expects TLS to be terminated in front of it");
 			if (serverConfig.bindPort == -1) {
 				LOGGER.info("HTTP is advertised without a built-in listener; expecting the contract to be served externally");
 				return Optional.empty();
@@ -234,10 +230,9 @@ public class NettyServer {
 					protected void initChannel(SocketChannel ch) {
 						if (connectionMode == ModpackConnectionMode.HTTP) {
 							// No ConnectionLifetimeHandler and no authentication handshake in HTTP: the lifetime timer's
-							// pre-configuration bound would kill a long download, and the TLS handshake is the whole session.
-							// TLS is never optional here, so a cleartext request dies as an invalid TLS record and the socket closes.
+							// pre-configuration bound would kill a long download, and there is no post-TLS handshake at all.
 							ch.pipeline().addLast("traffic-shaper", NettyServer.this.trafficHandler());
-							ch.pipeline().addLast("tls", NettyServer.this.getSslCtx().newHandler(ch.alloc()));
+							if (getSslCtx() != null) ch.pipeline().addLast("tls", getSslCtx().newHandler(ch.alloc()));
 							// The contract listener is public, so fully silent connections are reaped: the all-idle bound sits
 							// far past any client's keep-alive reuse window, and a streaming response keeps writing, so the
 							// reap can never interrupt a live transfer.
