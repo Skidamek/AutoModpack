@@ -11,6 +11,7 @@ import org.lwjgl.openal.AL10;
 import org.lwjgl.openal.ALC;
 import org.lwjgl.openal.ALC10;
 import org.lwjgl.openal.ALCCapabilities;
+import org.lwjgl.system.JNI;
 
 import net.minecraft.client.sounds.AudioStream;
 /*? if <1.21.1 {*/
@@ -244,7 +245,7 @@ public class AudioManager {
 
 			/** ALC_EXT_thread_local_context's alcSetThreadContext, reached through its raw function pointer because LWJGL does not wrap it; a zero context clears this thread's slot. The process-global context the game uses is never touched. */
 			private static boolean threadLocalContext(ALCCapabilities alc, long context) {
-				return org.lwjgl.system.JNI.invokePI(context, alc.alcSetThreadContext) != 0;
+				return JNI.invokePI(context, alc.alcSetThreadContext) != 0;
 			}
 
 			/** Follows the client's sound settings the way the vanilla engine computes them: master slider times music slider, at zero the loop keeps running inaudibly so raising either resumes it. */
