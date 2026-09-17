@@ -165,6 +165,31 @@ class MiniTomlTest {
 	}
 
 	@Test
+	void rejectsRedefiningDottedTablesAndStaticArrays() {
+		for (String toml : List.of("a.b = 1\n[a]", "a.b.c = 1\n[a.b]", "a = [{ b = 1 }]\n[[a]]", "a = [{ b = 1 }]\n[a.child]", "a = [{ b = 1 }]\n[[a.child]]")) {
+			assertThrows(MiniToml.ParseException.class, () -> MiniToml.parse(new StringReader(toml)), toml);
+		}
+	}
+
+	@Test
+	void allowsDottedSiblingsAndImplicitHeaderParents() throws Exception {
+		Map<String, Object> root = MiniToml.parse(new StringReader("a.b = 1\na.c = 2\n[a.child]\nx = 3\n[parent.child]\nx = 4\n[parent]\nx = 5"));
+		assertEquals(2L, MiniToml.getTable(root, "a").get("c"));
+		assertEquals(3L, MiniToml.getTable(root, "a.child").get("x"));
+		assertEquals(5L, MiniToml.getTable(root, "parent").get("x"));
+	}
+
+	@Test
+	void preservesHashContentAfterMultilineContinuation() throws Exception {
+		for (String newline : List.of("\n", "\r\n")) {
+			String toml = "value = \"\"\"start\\  " + newline + " \t" + newline + " #content\"\"\"";
+			assertEquals("start#content", MiniToml.getString(MiniToml.parse(new StringReader(toml)), "value"));
+			MiniToml.ParseException error = assertThrows(MiniToml.ParseException.class, () -> MiniToml.parse(new StringReader(toml + newline + "bad = nope")));
+			assertTrue(error.getMessage().startsWith("line 4:"), error.getMessage());
+		}
+	}
+
+	@Test
 	void tableAccessorSkipsNonTablesAndKeepsOrder() throws Exception {
 		Map<String, Object> root = MiniToml.parse(new StringReader("mixed = [1, { id = 'first' }, 'ignored', { id = 'second' }]\nscalar = true\nempty = []"));
 		assertEquals(List.of(Map.of("id", "first"), Map.of("id", "second")), MiniToml.getTables(root, "mixed"));

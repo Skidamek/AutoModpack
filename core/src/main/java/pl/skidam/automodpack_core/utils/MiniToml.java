@@ -69,8 +69,8 @@ public final class MiniToml {
 	private final String src;
 	private int pos;
 	private int line = 1;
-	/** Tables explicitly opened by a [...] header - identity-keyed (map content mutates as it fills, so content hashing would corrupt the set), so each element of an array of tables can define its own sub-tables. */
 	private final Set<Map<String, Object>> definedTables = Collections.newSetFromMap(new IdentityHashMap<>());
+	private final Set<List<Object>> tableArrays = Collections.newSetFromMap(new IdentityHashMap<>());
 
 	private MiniToml(String src) {
 		this.src = src;
@@ -103,8 +103,8 @@ public final class MiniToml {
 		String name = String.join(".", path);
 		Object existing = parent.get(last);
 		if (arrayOfTables) {
-			if (existing instanceof List<?> tables) { // an array-of-tables list is never empty and only ever holds tables
-				if (tables.isEmpty() || !(tables.get(0) instanceof Map)) throw error("'" + name + "' is already defined as a different kind");
+			if (existing instanceof List<?> tables) {
+				if (!tableArrays.contains(tables)) throw error("'" + name + "' is already defined as a different kind");
 				Map<String, Object> table = new LinkedHashMap<>();
 				List<Object> appendable = cast(tables);
 				appendable.add(table);
@@ -113,6 +113,7 @@ public final class MiniToml {
 			if (existing != null) throw error("'" + name + "' is already defined as a different kind");
 			Map<String, Object> table = new LinkedHashMap<>();
 			List<Object> tables = new ArrayList<>();
+			tableArrays.add(tables);
 			tables.add(table);
 			parent.put(last, tables);
 			return table;
@@ -135,7 +136,7 @@ public final class MiniToml {
 		if (value instanceof Map) return cast(value);
 		if (value instanceof List) {
 			List<Object> list = cast(value);
-			if (!list.isEmpty() && list.get(list.size() - 1) instanceof Map) return cast(list.get(list.size() - 1));
+			if (tableArrays.contains(list)) return cast(list.get(list.size() - 1));
 			throw error("'" + key + "' is not a table");
 		}
 		if (value == null) {
@@ -159,6 +160,7 @@ public final class MiniToml {
 				if (existing != null) throw error("'" + path.get(i) + "' is not a table");
 				Map<String, Object> created = new LinkedHashMap<>();
 				target.put(path.get(i), created);
+				definedTables.add(created);
 				existing = created;
 			}
 			target = cast(existing);
@@ -332,7 +334,7 @@ public final class MiniToml {
 				while (scan < src.length() && (src.charAt(scan) == ' ' || src.charAt(scan) == '\t' || src.charAt(scan) == '\r')) scan++;
 				if (scan < src.length() && src.charAt(scan) == '\n') {
 					pos = scan;
-					skipWhitespaceAndComments();
+					skipWhitespace();
 				} else {
 					parseEscape(sb);
 				}
@@ -407,18 +409,19 @@ public final class MiniToml {
 	}
 
 	private void skipWhitespaceAndComments() {
+		while (true) {
+			skipWhitespace();
+			if (peek() != '#') return;
+			while (pos < src.length() && src.charAt(pos) != '\n') pos++;
+		}
+	}
+
+	private void skipWhitespace() {
 		while (pos < src.length()) {
 			char c = src.charAt(pos);
-			if (c == '\n') {
-				line++;
-				pos++;
-			} else if (c == ' ' || c == '\t' || c == '\r') {
-				pos++;
-			} else if (c == '#') {
-				while (pos < src.length() && src.charAt(pos) != '\n') pos++;
-			} else {
-				return;
-			}
+			if (c == '\n') line++;
+			else if (c != ' ' && c != '\t' && c != '\r') return;
+			pos++;
 		}
 	}
 
