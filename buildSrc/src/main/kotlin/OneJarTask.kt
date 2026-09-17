@@ -1,3 +1,4 @@
+import com.github.luben.zstd.Zstd
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.ConfigurableFileCollection
@@ -28,11 +29,16 @@ import java.util.zip.ZipOutputStream
  * jar as a solid zstd blob. Each impl jar is STORE-normalized (re-zipped with method 0 so the
  * solid compresses) and its `assets/` entries are stripped - assets ship once on the outer, taken
  * from the impls while stripping (byte-identical across targets, which is checked, not assumed).
- * `impl/all.zst` is `zstd --ultra -20 -T1` over a FILE so the frame header carries the uncompressed size the
- * runtime's aircompressor decode relies on; `impl/manifest.bin` indexes the solid. Both entries
+ * `impl/all.zst` is one-shot zstd level 20 over the whole solid, compressed by the pinned zstd-jni
+ * natives (single-threaded by nature, one version everywhere, no CLI on PATH); the frame header
+ * carries the uncompressed size the runtime's aircompressor decode relies on. `impl/manifest.bin`
+ * indexes the solid. Both entries
  * are appended AFTER the optimizer ran, and appended as STORE - that ordering is what keeps them
  * uncompressed, because the optimizer never sees the impl entries.
  */
+/** One-shot level 20: the measured sweet spot on the shipped solid (-19 gave up 4.9 KB more, -21/-22 under 100 bytes each, --max 905 bytes for 12 s) and single-threaded by nature, so the bytes cannot drift with core count. */
+private const val ZSTD_LEVEL = 20
+
 abstract class OneJarTask : DefaultTask() {
     /** Target id (e.g. "1.20.1-fabric") to its optimized impl jar path; explicit paths so a convention drift fails loudly instead of packing stale bytes. */
     @get:Input
@@ -41,6 +47,10 @@ abstract class OneJarTask : DefaultTask() {
     /** Target id to the exact Minecraft versions that target covers (its `publish_versions`); the manifest's version-resolution source of truth. */
     @get:Input
     abstract val implVersions: MapProperty<String, List<String>>
+
+    /** The pinned zstd-jni release; an input, so bumping the compressor repacks the jar. */
+    @get:Input
+    abstract val zstdVersion: Property<String>
 
     /** The same files as implJars, for content tracking. */
     @get:InputFiles
@@ -57,9 +67,6 @@ abstract class OneJarTask : DefaultTask() {
 
     @get:OutputFile
     abstract val oneJar: RegularFileProperty
-
-    /** The zstd release that produced the solid; logged so cross-machine size deltas are explainable. */
-    private var zstdVersion: String = "unknown"
 
     @TaskAction
     fun pack() {
@@ -117,7 +124,7 @@ abstract class OneJarTask : DefaultTask() {
         }
 
         val solidBytes = solid.toByteArray()
-        val zstdBinary = runZstd(solidBytes)
+        val zstdBinary = Zstd.compress(solidBytes, ZSTD_LEVEL)
         val generation = sha1(zstdBinary)
         val manifest = ImplManifestFormat.write(generation, manifestEntries)
 
@@ -133,7 +140,7 @@ abstract class OneJarTask : DefaultTask() {
             putStored(output, ZipEntry(ImplManifestFormat.SOLID_ENTRY).apply { time = 0L }, zstdBinary)
         }
         println(
-            "Packed ${outputFile.name}: ${outputFile.length()} bytes, ${manifestEntries.size} impls, solid ${solidBytes.size} bytes -> zstd ${zstdBinary.size} bytes (${zstdVersion})" +
+            "Packed ${outputFile.name}: ${outputFile.length()} bytes, ${manifestEntries.size} impls, solid ${solidBytes.size} bytes -> zstd ${zstdBinary.size} bytes (zstd-jni ${zstdVersion.get()})" +
                 " (${manifestEntries.sumOf { it.length }} impl bytes), took ${System.currentTimeMillis() - startTime}ms",
         )
     }
@@ -177,30 +184,6 @@ abstract class OneJarTask : DefaultTask() {
         output.putNextEntry(entry)
         output.write(bytes)
         output.closeEntry()
-    }
-
-    /** `zstd --ultra -20 -T1` over a real file so the frame header carries the uncompressed size. The level is a measured point, not a preference: on the shipped 22 MB solid -19 packed 924800 bytes in 1.3s, -20 packed 919915 in 1.6s, -21/-22 bought under 100 more bytes and --max bought 919010 for 18.5s, so -20 is the whole curve worth paying for. -T1 pins single-threading because threaded zstd changes its output with core count, and the version rides in the pack log: zstd does not promise byte-identical output across its own releases, so a size delta between machines needs both receipts. */
-    private fun runZstd(solidBytes: ByteArray): ByteArray {
-        val version = try {
-            val probe = ProcessBuilder("zstd", "--version").start()
-            if (probe.waitFor() != 0) throw GradleException("zstd --version failed with exit code ${probe.exitValue()}")
-            Regex("(\\d+\\.\\d+\\.\\d+)").find(String(probe.inputStream.readAllBytes(), StandardCharsets.UTF_8))?.groupValues?.get(1) ?: "unknown"
-        } catch (e: IOException) {
-            throw GradleException("The zstd binary is required to pack the one jar but is not on PATH - install it (linux: the zstd package, macOS: brew install zstd, windows: winget install YannCollet.Zstandard)", e)
-        }
-        val solidFile = File.createTempFile("automodpack-solid-", ".bin")
-        val zstFile = File.createTempFile("automodpack-solid-", ".zst")
-        try {
-            solidFile.writeBytes(solidBytes)
-            val process = ProcessBuilder("zstd", "--ultra", "-20", "-T1", "-q", "-f", solidFile.absolutePath, "-o", zstFile.absolutePath).redirectErrorStream(true).start()
-            val output = String(process.inputStream.readAllBytes(), StandardCharsets.UTF_8)
-            if (process.waitFor() != 0) throw GradleException("zstd -20 failed: ${output.trim()}")
-            zstdVersion = version
-            return zstFile.readBytes()
-        } finally {
-            solidFile.delete()
-            zstFile.delete()
-        }
     }
 
     private fun sha1(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-1").digest(bytes)

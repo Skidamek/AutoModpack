@@ -232,6 +232,7 @@ val oneJarTask =
 		group = "build"
 		description = "Packs the optimized universal outer and every selected target's optimized impl jar into the one published jar."
 		buildMode.set(automodpackBuildMode)
+		zstdVersion.set(versionProperty("versionZstdJni"))
 		outerJar.set(optimizedOuterJar())
 		implJars.set(providers.provider { selectedTargets.associateWith { target -> optimizedImplJar(target).asFile.absolutePath } })
 		implJarFiles.setFrom(selectedTargets.map { optimizedImplJar(it) })
@@ -256,7 +257,7 @@ val auditOneJarTask =
 		description = "Audits the packed one jar: size budget, manifest ids, STORE entries, assets, no nested jarjar."
 		oneJar.set(oneJarTask.flatMap { it.oneJar })
 		expectedIds.set(selectedTargets.sorted())
-		// Packed one-jar measured 3554677 bytes (zstd --ultra -20 -T1) (deflated outer assets, 22 STORE impls in the zstd solid, no zip directory entries); 5 MiB is the tripwire past any good build.
+		// Packed one-jar measured 3556383 bytes (zstd-jni level 20) (deflated outer assets, 22 STORE impls in the zstd solid, no zip directory entries); 5 MiB is the tripwire past any good build.
 		maxJarBytes.set(5L * 1024 * 1024)
 		enforceReleaseSizeBudget.set(automodpackBuildMode.map { it != "autotest" })
 		// The waiting loop is the transcribed note-block bossa nova, 550322 bytes as packaged; 1 MiB leaves it headroom and still trips on accidental full songs.
