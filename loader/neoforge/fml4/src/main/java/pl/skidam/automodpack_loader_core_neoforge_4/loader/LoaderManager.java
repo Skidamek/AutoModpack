@@ -7,8 +7,8 @@ import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.fml.loading.LoadingModList;
 import net.neoforged.fml.loading.moddiscovery.ModInfo;
 
+import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_loader_core_neoforge_4.EarlyServiceBootstrapper;
 
 @SuppressWarnings("unused")
 public class LoaderManager implements LoaderManagerService {
@@ -31,7 +31,7 @@ public class LoaderManager implements LoaderManagerService {
 
 	@Override
 	public String getLoaderVersion() {
-		if (preload && EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION != null) return EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION;
+		if (preload && EarlyLaunchEnvironment.LOADER_VERSION != null) return EarlyLaunchEnvironment.LOADER_VERSION;
 		return FMLLoader.versionInfo().neoForgeVersion();
 	}
 
@@ -41,8 +41,8 @@ public class LoaderManager implements LoaderManagerService {
 		// heuristic exists only for preload, where FMLLoader's dist isn't populated yet (see
 		// EarlyServiceBootstrapper). Trusting the heuristic past preload let a stale or misparsed
 		// launchTarget report CLIENT on a real dedicated server and crash mod construction.
-		if (preload && EarlyServiceBootstrapper.EARLY_IS_CLIENT != null) {
-			return EarlyServiceBootstrapper.EARLY_IS_CLIENT ? EnvironmentType.CLIENT : EnvironmentType.SERVER;
+		if (preload && EarlyLaunchEnvironment.IS_CLIENT != null) {
+			return EarlyLaunchEnvironment.IS_CLIENT ? EnvironmentType.CLIENT : EnvironmentType.SERVER;
 		}
 		if (FMLLoader.getDist() == Dist.CLIENT) {
 			return EnvironmentType.CLIENT;
@@ -55,7 +55,7 @@ public class LoaderManager implements LoaderManagerService {
 	public String getModVersion(String modId) {
 		if (preload) {
 			if (modId.equals("minecraft")) {
-				if (EarlyServiceBootstrapper.EARLY_MC_VERSION != null) return EarlyServiceBootstrapper.EARLY_MC_VERSION;
+				if (EarlyLaunchEnvironment.MC_VERSION != null) return EarlyLaunchEnvironment.MC_VERSION;
 				return FMLLoader.versionInfo().mcVersion();
 			}
 

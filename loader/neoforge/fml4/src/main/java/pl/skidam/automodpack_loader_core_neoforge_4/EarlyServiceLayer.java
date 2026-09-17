@@ -2,17 +2,11 @@ package pl.skidam.automodpack_loader_core_neoforge_4;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
-import java.lang.module.Configuration;
-import java.lang.module.ModuleFinder;
-import java.lang.reflect.Field;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -22,25 +16,19 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import cpw.mods.cl.JarModuleFinder;
-import cpw.mods.cl.ModuleClassLoader;
-import cpw.mods.jarhandling.SecureJar;
-import cpw.mods.modlauncher.api.IEnvironment;
-import cpw.mods.modlauncher.api.IModuleLayerManager;
 import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
 import net.neoforged.neoforgespi.ILaunchContext;
 import net.neoforged.neoforgespi.coremod.ICoreMod;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
-import net.neoforged.neoforgespi.locating.IDependencyLocator;
 import net.neoforged.neoforgespi.locating.IDiscoveryPipeline;
 import net.neoforged.neoforgespi.locating.IModFile;
-import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
 
 import pl.skidam.automodpack_core.loader.LoaderServiceFiles;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_loader_core_modlauncher.ModLauncherEarlyServiceBridge;
+import pl.skidam.automodpack_loader_core_neoforge_shared.EarlyServiceReplay;
 
 /**
  * Holds the per-jar child SERVICE module layers built by {@link EarlyServiceBootstrapper}
@@ -56,9 +44,10 @@ import pl.skidam.automodpack_loader_core_modlauncher.ModLauncherEarlyServiceBrid
  * {@code IDependencyLocator}s, loading whatever inner mods they provide.
  *
  * <p>
- * The ModLauncher-family machinery this shares with legacy Forge - the child-layer registry,
- * the {@code ITransformationService} forwarding engine and the GAME-classloader bridge -
- * lives in {@link ModLauncherEarlyServiceBridge}.
+ * The ModLauncher-family machinery this shares with legacy Forge - the child-layer build, the
+ * child-layer registry, the {@code ITransformationService} forwarding engine and the GAME-classloader
+ * bridge - lives in {@link ModLauncherEarlyServiceBridge}; the locator/reader replay machinery it
+ * shares with the flat-classloader fml10/11 generation lives in {@link EarlyServiceReplay}.
  */
 public final class EarlyServiceLayer {
 
@@ -127,9 +116,6 @@ public final class EarlyServiceLayer {
 		return Set.copyOf(handled);
 	}
 
-	// Maps each handled modpack jar to its child-layer classloader/layer. Populated by EarlyServiceBootstrapper.
-	// The shared registry itself lives in ModLauncherEarlyServiceBridge.
-
 	// Per-jar facts derived from a single jar mount, cached for the JVM's life (jar content is
 	// immutable for the run). Without this the bootstrapper and both locators each re-open the
 	// same jar to re-derive the same booleans/service lists - ~10 mounts per early-service jar.
@@ -175,81 +161,30 @@ public final class EarlyServiceLayer {
 	}
 
 	/**
-	 * Runs the {@code IModFileCandidateLocator}s declared inside an early-service jar
-	 * against AutoModpack's discovery pipeline. This is how mods like Sodium load their
-	 * real (inner) mod jar - the loader would otherwise only run this from its SERVICE
-	 * layer, which AutoModpack never reaches.
+	 * Runs the hosted jars' {@code IModFileCandidateLocator}s against AutoModpack's discovery pipeline.
+	 * This is how mods like Sodium load their real (inner) mod jar - the loader would otherwise only
+	 * run this from its SERVICE layer, which AutoModpack never reaches. The replay itself is shared
+	 * with the fml10/11 generation (see {@link EarlyServiceReplay}); only this generation's
+	 * service cache and child-layer classloaders are bound here.
 	 */
 	public static void runCandidateLocators(List<Path> jars, ILaunchContext context, IDiscoveryPipeline pipeline) {
-		List<IModFileCandidateLocator> locators = new ArrayList<>();
-		for (Path jar : jars) {
-			ClassLoader cl = ModLauncherEarlyServiceBridge.classLoaderFor(jar);
-			if (cl == null) continue;
-			for (String impl : serviceImpls(jar, CANDIDATE_LOCATOR_SERVICE)) {
-				try {
-					locators.add((IModFileCandidateLocator) Class.forName(impl, true, cl).getDeclaredConstructor().newInstance());
-				} catch (Throwable t) {
-					LOGGER.error("[AutoModpack] Failed to load candidate locator {} from {}", impl, jar.getFileName(), t);
-				}
-			}
-		}
-		// Run highest-priority first (IOrderedProvider order) across ALL early-service jars, so a
-		// replayed locator's declared priority is honoured relative to the others; raw modsToLoad
-		// (filesystem) order would silently drop it.
-		locators.sort(Comparator.comparingInt(IModFileCandidateLocator::getPriority).reversed());
-		for (IModFileCandidateLocator locator : locators) {
-			try {
-				LOGGER.debug("[AutoModpack] Running in-place candidate locator {} (priority {})", locator.getClass().getName(), locator.getPriority());
-				locator.findCandidates(context, pipeline);
-			} catch (Throwable t) {
-				LOGGER.error("[AutoModpack] Failed to run candidate locator {}", locator.getClass().getName(), t);
-			}
-		}
+		EarlyServiceReplay.runCandidateLocators(jars, jar -> serviceImpls(jar, CANDIDATE_LOCATOR_SERVICE), EarlyServiceLayer::classLoaderFor, context, pipeline);
 	}
 
 	/**
-	 * Runs the {@code IDependencyLocator}s declared inside an early-service jar. This is
-	 * how mods like Ixeris load their real (inner) mod jar.
+	 * Runs the hosted jars' {@code IDependencyLocator}s. This is how mods like Ixeris load their real
+	 * (inner) mod jar. Shared with the fml10/11 generation (see {@link EarlyServiceReplay}).
 	 */
-	public static void runDependencyLocators(List<Path> jars, List<?> loadedMods, IDiscoveryPipeline pipeline) {
-		@SuppressWarnings("unchecked")
-		List<IModFile> mods = (List<IModFile>) loadedMods;
-		List<IDependencyLocator> locators = new ArrayList<>();
-		for (Path jar : jars) {
-			ClassLoader cl = ModLauncherEarlyServiceBridge.classLoaderFor(jar);
-			if (cl == null) continue;
-			for (String impl : serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE)) {
-				try {
-					locators.add((IDependencyLocator) Class.forName(impl, true, cl).getDeclaredConstructor().newInstance());
-				} catch (Throwable t) {
-					LOGGER.error("[AutoModpack] Failed to load dependency locator {} from {}", impl, jar.getFileName(), t);
-				}
-			}
-		}
-		locators.sort(Comparator.comparingInt(IDependencyLocator::getPriority).reversed());
-		for (IDependencyLocator locator : locators) {
-			try {
-				LOGGER.debug("[AutoModpack] Running in-place dependency locator {} (priority {})", locator.getClass().getName(), locator.getPriority());
-				locator.scanMods(mods, pipeline);
-			} catch (Throwable t) {
-				LOGGER.error("[AutoModpack] Failed to run dependency locator {}", locator.getClass().getName(), t);
-			}
-		}
+	public static void runDependencyLocators(List<Path> jars, List<IModFile> loadedMods, IDiscoveryPipeline pipeline) {
+		EarlyServiceReplay.runDependencyLocators(jars, jar -> serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE), EarlyServiceLayer::classLoaderFor, loadedMods, pipeline);
 	}
 
 	/**
 	 * Forwards an early-service jar's {@code IModFileReader}s into the live discovery pipeline, so a
 	 * modpack-folder mod that ships a reader for a custom mod-file format can interpret candidates in
-	 * place - no copy needed.
-	 *
-	 * <p>
-	 * Unlike a locator, a reader isn't invoked directly: the pipeline consults its own
-	 * {@code modFileReaders} list (built by {@code ModDiscoverer} from the SERVICE/PLUGIN layers,
-	 * which a modpack jar never reaches) whenever it reads a candidate. There is no public API to add
-	 * one, so we splice ours into that list by reflection - the loader is an automatic module, so
-	 * plain {@code setAccessible} reaches it. We run from {@link EarlyModLocator} (highest priority),
-	 * before the pipeline reads most candidates, and re-sort by {@code IOrderedProvider} priority so
-	 * our reader keeps the loader's precedence contract.
+	 * place - no copy needed. Instantiates this generation's readers from the jar's child SERVICE
+	 * layer; the splice into the pipeline's reader list is shared with the fml10/11 generation (see
+	 * {@link EarlyServiceReplay#forwardModFileReaders}).
 	 */
 	public static void runModFileReaders(Path jar, IDiscoveryPipeline pipeline) {
 		ClassLoader cl = ModLauncherEarlyServiceBridge.classLoaderFor(jar);
@@ -262,36 +197,7 @@ public final class EarlyServiceLayer {
 				LOGGER.error("[AutoModpack] Failed to instantiate IModFileReader {} from {}", impl, jar.getFileName(), t);
 			}
 		}
-		if (readers.isEmpty()) return;
-
-		try {
-			// pipeline is ModDiscoverer.DiscoveryPipeline; reach its outer ModDiscoverer's reader list.
-			Field outer = pipeline.getClass().getDeclaredField("this$0");
-			outer.setAccessible(true);
-			Object modDiscoverer = outer.get(pipeline);
-			Field readersField = modDiscoverer.getClass().getDeclaredField("modFileReaders");
-			readersField.setAccessible(true);
-			@SuppressWarnings("unchecked")
-			List<Object> current = (List<Object>) readersField.get(modDiscoverer);
-			List<Object> merged = new ArrayList<>(current);
-			merged.addAll(readers);
-			// ModDiscoverer sorts readers by IOrderedProvider.getPriority(), highest first.
-			merged.sort(Comparator.comparingInt(EarlyServiceLayer::providerPriority).reversed());
-			readersField.set(modDiscoverer, List.copyOf(merged));
-			LOGGER.debug("[AutoModpack] Forwarded {} in-place IModFileReader(s) from {} into mod discovery", readers.size(), jar.getFileName());
-		} catch (Throwable t) {
-			LOGGER.error("[AutoModpack] Could not forward IModFileReader(s) from {} into mod discovery; a mod relying on that reader may need copy-to-standard",
-					jar.getFileName(), t);
-		}
-	}
-
-	/** {@code IOrderedProvider.getPriority()} of a reader, or the default (0) if it can't be read. */
-	private static int providerPriority(Object provider) {
-		try {
-			return (int) provider.getClass().getMethod("getPriority").invoke(provider);
-		} catch (Throwable t) {
-			return 0;
-		}
+		EarlyServiceReplay.forwardModFileReaders(readers, jar.getFileName().toString(), pipeline);
 	}
 
 	/**
@@ -344,48 +250,6 @@ public final class EarlyServiceLayer {
 		});
 	}
 
-	/** Forwards ModLauncher's native {@code onLoad} call to each in-place transformation service. */
-	static void forwardOnLoad(IEnvironment env, Set<String> otherServices) {
-		ModLauncherEarlyServiceBridge.forEachTransformationService("onLoad", service -> service.onLoad(env, otherServices));
-	}
-
-	/** Forwards ModLauncher's native {@code initialize} call to each in-place transformation service. */
-	static void forwardInitialize(IEnvironment env) {
-		ModLauncherEarlyServiceBridge.forEachTransformationService("initialize", service -> service.initialize(env));
-	}
-
-	/**
-	 * Forwards ModLauncher's native {@code beginScanning} call to each in-place transformation service,
-	 * merging their returned resources - previously impossible to run at all, since we had no hook at
-	 * ModLauncher's real {@code runScanningTransformationServices} time; those resources now reach the
-	 * PLUGIN/GAME layers exactly as they would if the jar sat on the real SERVICE layer.
-	 */
-	static List<ITransformationService.Resource> forwardBeginScanning(IEnvironment env) {
-		return ModLauncherEarlyServiceBridge.collectFromTransformationServices("beginScanning", service -> service.beginScanning(env));
-	}
-
-	/**
-	 * Forwards ModLauncher's {@code completeScan} to each in-place transformation service, merging
-	 * their layer resources. Called by {@link AutoModpackTransformationService} when ModLauncher runs
-	 * {@code triggerScanCompletion} - so the returned jars (e.g. Connector's {@code FabricASMFixer}
-	 * generated classes and its {@code authlib}/{@code brigadier} moves) are added to the GAME/PLUGIN
-	 * layers as they are built.
-	 */
-	static List<ITransformationService.Resource> forwardCompleteScan(IModuleLayerManager layerManager) {
-		return ModLauncherEarlyServiceBridge.collectFromTransformationServices("completeScan", service -> service.completeScan(layerManager));
-	}
-
-	/**
-	 * Forwards each in-place transformation service's {@code transformers()}, called by {@link
-	 * AutoModpackTransformationService#transformers()} - a separate pass from {@link
-	 * #collectForwardedTransformers()} (which forwards {@code ICoreMod} transformers for {@link
-	 * AutoModpackCoreMod}), so each SPI's transformers are collected exactly once, by the AutoModpack
-	 * service that is itself natively discovered the same way the real SPI would be.
-	 */
-	static List<ITransformer<?>> collectTransformationServiceTransformers() {
-		return ModLauncherEarlyServiceBridge.collectFromTransformationServices("transformers", service -> new ArrayList<>(service.transformers()));
-	}
-
 	/**
 	 * Instantiates the {@code ICoreMod}s shipped by the registered early-service jars (from their
 	 * child SERVICE layer, where the outer classes live) and collects their transformers. Called by
@@ -399,7 +263,7 @@ public final class EarlyServiceLayer {
 	 * jar's coremod is never part of that scan. AutoModpack, however, sits on the SERVICE layer and IS
 	 * scanned - so it forwards the modpack coremods' transformers as its own. (A modpack jar's own
 	 * {@code ITransformationService} transformers are forwarded separately, by {@link
-	 * AutoModpackTransformationService#transformers()} - see {@link #collectTransformationServiceTransformers()}.)
+	 * AutoModpackTransformationService#transformers()}.)
 	 */
 	public static List<ITransformer<?>> collectForwardedTransformers() {
 		List<ITransformer<?>> transformers = new ArrayList<>();
@@ -422,10 +286,10 @@ public final class EarlyServiceLayer {
 				}
 			}
 			// A transformation service's transformers are forwarded separately, by
-			// AutoModpackTransformationService#transformers() (see collectTransformationServiceTransformers) -
-			// that service is itself natively ServiceLoader-discovered the same way a real
-			// ITransformationService would be, so ModLauncher calls its transformers() directly; forwarding
-			// them again here would register every one of them twice.
+			// AutoModpackTransformationService#transformers() - that service is itself natively
+			// ServiceLoader-discovered the same way a real ITransformationService would be, so
+			// ModLauncher calls its transformers() directly; forwarding them again here would register
+			// every one of them twice.
 		}
 		return transformers;
 	}
@@ -483,40 +347,25 @@ public final class EarlyServiceLayer {
 		return ModLauncherEarlyServiceBridge.isEarlyServiceJar(jar);
 	}
 
+	/** The child SERVICE layer classloader of a hosted jar, or null if it never registered - the replay source this generation binds to. */
 	static ClassLoader classLoaderFor(Path jar) {
 		return ModLauncherEarlyServiceBridge.classLoaderFor(jar);
 	}
 
-	static void register(Path jar, ClassLoader serviceClassLoader, ModuleLayer childLayer, String moduleName) {
-		ModLauncherEarlyServiceBridge.register(jar, serviceClassLoader, childLayer, moduleName);
-	}
-
 	/**
-	 * Resolves every eligible jar into ONE shared child configuration/layer/classloader - mirroring
-	 * {@code ModuleLayerHandler.buildLayer}, which resolves every jar destined for a given layer
-	 * together in a single {@code Configuration.resolveAndBind} call. Building one configuration per
-	 * jar (sibling layers) would mean one early-service jar's module can never {@code requires}/
-	 * classload another's - breaking a modpack-folder mod split across, or depending on, more than
-	 * one early-service jar.
+	 * Resolves every eligible jar into ONE shared child configuration/layer/classloader (via {@link
+	 * ModLauncherEarlyServiceBridge#buildChildLayers}), then fires the jars' own {@code
+	 * GraphicsBootstrapper}s on it.
 	 *
 	 * <p>
 	 * Lives here rather than on {@link EarlyServiceBootstrapper} so the bootstrapper stays free of
-	 * securejarhandler bytecode: the universal outer jar registers both generations' bootstrappers
-	 * under the same services, ServiceLoader links every provider it instantiates, and securejarhandler
-	 * classes do not exist on the flat-classloader generation - linking them there would crash the
-	 * launch. Only the fml4 generation ever executes into this class, so only it ever links it.
+	 * ModLauncher/securejarhandler bytecode: the universal outer jar registers both generations'
+	 * bootstrappers under the same services, ServiceLoader links every provider it instantiates, and
+	 * those classes do not exist on the flat-classloader generation - linking them there would crash
+	 * the launch. Only the fml4 generation ever executes into this class, so only it ever links it.
 	 */
 	static void bootstrapJars(List<Path> jars, ModuleLayer serviceLayer, String[] arguments) {
-		List<Path> registered = new ArrayList<>(jars);
-		if (!buildAndRegister(jars, serviceLayer)) {
-			// Shared resolution failed for the whole batch (e.g. a module-name clash). Retry each
-			// jar on its own layer so one bad jar doesn't take every other one down; cross-jar
-			// `requires` edges are lost in this degraded mode.
-			registered.clear();
-			for (Path jar : jars) {
-				if (buildAndRegister(List.of(jar), serviceLayer)) registered.add(jar);
-			}
-		}
+		List<Path> registered = ModLauncherEarlyServiceBridge.buildChildLayers(jars, serviceLayer, "FML Early Services");
 
 		for (Path jar : registered) {
 			for (String impl : serviceImpls(jar, GRAPHICS_BOOTSTRAPPER_SERVICE)) {
@@ -530,52 +379,4 @@ public final class EarlyServiceLayer {
 			}
 		}
 	}
-
-	/**
-	 * Resolves the given jars into one child configuration/layer/classloader and registers each with
-	 * this registry. Returns false - with nothing registered - if resolution fails.
-	 */
-	private static boolean buildAndRegister(List<Path> jars, ModuleLayer serviceLayer) {
-		try {
-			SecureJar[] secureJars = new SecureJar[jars.size()];
-			List<String> moduleNames = new ArrayList<>(jars.size());
-			for (int i = 0; i < jars.size(); i++) {
-				SecureJar secureJar = SecureJar.from(jars.get(i));
-				secureJars[i] = secureJar;
-				moduleNames.add(secureJar.name());
-			}
-
-			Configuration configuration = serviceLayer.configuration().resolveAndBind(JarModuleFinder.of(secureJars), ModuleFinder.of(), moduleNames);
-
-			List<ModuleLayer> parentLayers = flattenParents(serviceLayer);
-
-			ModuleClassLoader classLoader = new ModuleClassLoader("FML Early Services", configuration, parentLayers);
-			classLoader.setFallbackClassLoader(EarlyServiceLayer.class.getClassLoader());
-			ModuleLayer childLayer = ModuleLayer.defineModules(configuration, List.of(serviceLayer), name -> classLoader).layer();
-
-			for (int i = 0; i < jars.size(); i++) {
-				register(jars.get(i), classLoader, childLayer, moduleNames.get(i));
-			}
-			return true;
-		} catch (Throwable t) {
-			LOGGER.error("[AutoModpack] Could not build a service layer for early-service jar(s) {}", jars.stream().map(Path::getFileName).toList(), t);
-			return false;
-		}
-	}
-
-	private static List<ModuleLayer> flattenParents(ModuleLayer layer) {
-		List<ModuleLayer> result = new ArrayList<>();
-		Deque<ModuleLayer> queue = new ArrayDeque<>();
-		queue.add(layer);
-		while (!queue.isEmpty()) {
-			ModuleLayer current = queue.poll();
-			if (!result.contains(current)) {
-				result.add(current);
-				queue.addAll(current.parents());
-			}
-		}
-		return result;
-	}
-
-	/** Reads the implementation class names listed in a {@code META-INF/services/...} file. */
 }

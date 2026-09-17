@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core_neoforge_4;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -9,14 +10,16 @@ import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
 
 import pl.skidam.automodpack_core.loader.GenerationProbes;
+import pl.skidam.automodpack_loader_core_modlauncher.ModLauncherEarlyServiceBridge;
 
 /**
  * A real, {@code META-INF/services}-shipped {@link ITransformationService} that forwards every
- * lifecycle call to each in-place early-service jar's own {@code ITransformationService} (see
- * {@link EarlyServiceLayer}). Discoverable the same way {@link AutoModpackCoreMod} already is:
- * AutoModpack's own jar ships {@code GraphicsBootstrapper}/{@code IModFileCandidateLocator}/
- * {@code IDependencyLocator} service files, so ModLauncher's {@code TransformationServicesHandler}
- * puts it on the SERVICE layer and {@code ServiceLoader} finds this class too.
+ * lifecycle call to each in-place early-service jar's own {@code ITransformationService} (instantiated
+ * by {@link EarlyServiceLayer#instantiateTransformationServices}). Discoverable the same way {@link
+ * AutoModpackCoreMod} already is: AutoModpack's own jar ships {@code GraphicsBootstrapper}/
+ * {@code IModFileCandidateLocator}/{@code IDependencyLocator} service files, so ModLauncher's
+ * {@code TransformationServicesHandler} puts it on the SERVICE layer and {@code ServiceLoader} finds
+ * this class too.
  *
  * <p>
  * The universal outer jar also carries legacy Forge's transformation service (which ServiceLoader
@@ -51,30 +54,30 @@ public class AutoModpackTransformationService implements ITransformationService 
 	@Override
 	public void onLoad(IEnvironment env, Set<String> otherServices) {
 		if (!GenerationProbes.NEOFORGE_FML4) return;
-		EarlyServiceLayer.forwardOnLoad(env, otherServices);
+		ModLauncherEarlyServiceBridge.forEachTransformationService("onLoad", service -> service.onLoad(env, otherServices));
 	}
 
 	@Override
 	public void initialize(IEnvironment environment) {
 		if (!GenerationProbes.NEOFORGE_FML4) return;
-		EarlyServiceLayer.forwardInitialize(environment);
+		ModLauncherEarlyServiceBridge.forEachTransformationService("initialize", service -> service.initialize(environment));
 	}
 
 	@Override
 	public List<Resource> beginScanning(IEnvironment environment) {
 		if (!GenerationProbes.NEOFORGE_FML4) return List.of();
-		return EarlyServiceLayer.forwardBeginScanning(environment);
+		return ModLauncherEarlyServiceBridge.collectFromTransformationServices("beginScanning", service -> service.beginScanning(environment));
 	}
 
 	@Override
 	public List<ITransformationService.Resource> completeScan(IModuleLayerManager layerManager) {
 		if (!GenerationProbes.NEOFORGE_FML4) return List.of();
-		return EarlyServiceLayer.forwardCompleteScan(layerManager);
+		return ModLauncherEarlyServiceBridge.collectFromTransformationServices("completeScan", service -> service.completeScan(layerManager));
 	}
 
 	@Override
 	public List<? extends ITransformer<?>> transformers() {
 		if (!GenerationProbes.NEOFORGE_FML4) return List.of();
-		return EarlyServiceLayer.collectTransformationServiceTransformers();
+		return ModLauncherEarlyServiceBridge.collectFromTransformationServices("transformers", service -> new ArrayList<>(service.transformers()));
 	}
 }

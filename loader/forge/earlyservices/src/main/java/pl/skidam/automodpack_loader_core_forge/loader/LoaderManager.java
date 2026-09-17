@@ -7,8 +7,8 @@ import net.minecraftforge.fml.loading.FMLLoader;
 import net.minecraftforge.fml.loading.VersionInfo;
 import net.minecraftforge.fml.loading.moddiscovery.ModInfo;
 
+import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_loader_core_forge.EarlyLaunchEnvironment;
 
 @SuppressWarnings("unused")
 public class LoaderManager implements LoaderManagerService {
@@ -28,7 +28,7 @@ public class LoaderManager implements LoaderManagerService {
 		// versionInfo() is still null when Preload runs from onLoad() (see
 		// AutoModpackTransformationService) - use the launch args captured there for that window;
 		// once preload is false, versionInfo() is populated.
-		if (preload && EarlyLaunchEnvironment.FORGE_VERSION != null) return EarlyLaunchEnvironment.FORGE_VERSION;
+		if (preload && EarlyLaunchEnvironment.LOADER_VERSION != null) return EarlyLaunchEnvironment.LOADER_VERSION;
 		VersionInfo versionInfo = FMLLoader.versionInfo();
 		if (versionInfo != null) return versionInfo.forgeVersion();
 		throw new IllegalStateException("Forge version is not available yet");

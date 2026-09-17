@@ -3,8 +3,9 @@ import org.gradle.api.attributes.java.TargetJvmVersion
 // NeoForge fml4 (1.21.1) is the last ModLauncher-era NeoForge generation: it shares
 // :loader-modlauncher-earlyservices with legacy Forge - both still run the original
 // ModLauncher/securejarhandler machinery, so the GAME-classloader bridge mechanics are identical;
-// the SPI-specific EarlyServiceLayer/EarlyServiceBootstrapper stay in fml4's own sources.
-// The 21.10+ generations use the flat-classloader :loader-neoforge-earlyservices instead.
+// the SPI-specific EarlyServiceLayer/EarlyServiceBootstrapper stay in fml4's own sources. The replay
+// machinery shared with the flat-classloader generations lives in :loader-neoforge-shared. The
+// 21.10+ generations use :loader-neoforge-earlyservices instead.
 
 // Forces these to configure before us: their sourceSets are referenced lazily by :loader-universal,
 // which - configuration-on-demand does not always reach in time otherwise (surfaces when this
@@ -12,6 +13,7 @@ import org.gradle.api.attributes.java.TargetJvmVersion
 // full build).
 evaluationDependsOn(":core")
 evaluationDependsOn(":loader-modlauncher-earlyservices")
+evaluationDependsOn(":loader-neoforge-shared")
 
 plugins {
 	kotlin("jvm")
@@ -44,6 +46,7 @@ configurations.configureEach {
 dependencies {
 	compileOnly(project(":core"))
 	compileOnly(project(":loader-modlauncher-earlyservices"))
+	compileOnly(project(":loader-neoforge-shared"))
 
 	// External provided deps to compile this
 	compileOnly("com.google.code.gson:gson:$gsonVersion")

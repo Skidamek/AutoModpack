@@ -20,6 +20,8 @@ import net.neoforged.neoforgespi.locating.ModFileDiscoveryAttributes;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.Preload;
+import pl.skidam.automodpack_core.loader.ConnectorFallback;
+import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.GenerationProbes;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.TargetId;
@@ -46,14 +48,6 @@ import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
  */
 public class EarlyModLocator implements IModFileCandidateLocator {
 
-	// The launch facts every later phase reads: the graphics-bootstrap arguments carry none of these
-	// on this generation, so they are filled in from the launch context before Preload runs.
-	public static volatile String EARLY_MC_VERSION;
-	public static volatile String EARLY_NEOFORGE_VERSION;
-	// FMLLoader.getCurrent().getDist() throws before the loader is current (see makeCurrent ordering),
-	// so the launch context's required distribution stands in for it while Preload runs.
-	public static volatile Boolean EARLY_IS_CLIENT;
-
 	@Override
 	public void findCandidates(ILaunchContext context, IDiscoveryPipeline pipeline) {
 		// Coexists with the fml4 locators in the universal outer jar; only 21.10+ may act.
@@ -61,12 +55,15 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 
 		// The graphics-bootstrap arguments carry nothing on this generation (FML consumes them to
 		// build its own state first), so dist and versions both come off the launch context here.
-		EARLY_MC_VERSION = context.getVersions().mcVersion();
-		EARLY_NEOFORGE_VERSION = context.getVersions().neoForgeVersion();
-		EARLY_IS_CLIENT = context.getRequiredDistribution() == Dist.CLIENT;
+		EarlyLaunchEnvironment.MC_VERSION = context.getVersions().mcVersion();
+		EarlyLaunchEnvironment.LOADER_VERSION = context.getVersions().neoForgeVersion();
+		// FMLLoader.getCurrent().getDist() throws before the loader is current (see makeCurrent ordering),
+		// so the launch context's required distribution stands in for it while Preload runs.
+		EarlyLaunchEnvironment.IS_CLIENT = context.getRequiredDistribution() == Dist.CLIENT;
+
 		// TargetId throws when the id cannot be resolved: a launch without a target id must crash,
 		// not silently run on an unknown combination.
-		Constants.LOGGER.info("AutoModpack target: {}", TargetId.id("neoforge", EARLY_MC_VERSION));
+		TargetId.id("neoforge", EarlyLaunchEnvironment.MC_VERSION);
 
 		// Run our own update/reconcile step first: it decides what this launch loads, and the
 		// early-service hosting below hosts only jars from that decision. Preload failures must crash
@@ -124,7 +121,9 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 				unclaimablePaths.add(path);
 			}
 		}
-		ModpackLoader.configureConnectorFallback(unclaimablePaths);
+		// Only the paths no native reader could claim are offered here - unlike forge, whose
+		// modsToLoad pre-filters out every incompatible jar, nothing was dropped before discovery.
+		ConnectorFallback.offer(unclaimablePaths);
 		// Replay all hosted candidate locators together, priority-ordered (see the method).
 		EarlyServiceLayer.runCandidateLocators(context, pipeline);
 	}

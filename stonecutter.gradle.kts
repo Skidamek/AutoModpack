@@ -43,6 +43,7 @@ extra["loaderVersions"] =
 		"loader-forge-fml47" to structuredString("1.20.1-forge", "deps", "forge"),
 		"loader-forge-earlyservices" to structuredString("1.20.1-forge", "deps", "forge"),
 		"loader-modlauncher-earlyservices" to structuredString("1.20.1-forge", "deps", "forge"),
+		"loader-neoforge-shared" to structuredString("1.21.1-neoforge", "deps", "neoforge"),
 		"loader-neoforge-fml4" to structuredString("1.21.1-neoforge", "deps", "neoforge"),
 		"loader-neoforge-earlyservices" to structuredString("1.21.10-neoforge", "deps", "neoforge"),
 	)
@@ -255,7 +256,7 @@ val auditOneJarTask =
 		description = "Audits the packed one jar: size budget, manifest ids, STORE entries, assets, no nested jarjar."
 		oneJar.set(oneJarTask.flatMap { it.oneJar })
 		expectedIds.set(selectedTargets.sorted())
-		// Packed one-jar measured 3560659 bytes (deflated outer assets, 22 STORE impls in the zstd solid, no zip directory entries); 5 MiB is the tripwire past any good build.
+		// Packed one-jar measured 3556594 bytes (deflated outer assets, 22 STORE impls in the zstd solid, no zip directory entries); 5 MiB is the tripwire past any good build.
 		maxJarBytes.set(5L * 1024 * 1024)
 		enforceReleaseSizeBudget.set(automodpackBuildMode.map { it != "autotest" })
 		// The waiting loop is the transcribed note-block bossa nova, 550322 bytes as packaged; 1 MiB leaves it headroom and still trips on accidental full songs.

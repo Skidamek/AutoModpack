@@ -8,6 +8,7 @@ import java.util.Map;
 import net.minecraftforge.fml.loading.moddiscovery.AbstractJarFileDependencyLocator;
 import net.minecraftforge.forgespi.locating.IModFile;
 
+import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.ImplStore;
 
 /**

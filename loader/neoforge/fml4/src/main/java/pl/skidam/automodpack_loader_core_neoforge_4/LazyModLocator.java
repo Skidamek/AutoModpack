@@ -7,6 +7,7 @@ import java.util.List;
 
 import net.neoforged.neoforgespi.locating.*;
 
+import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.GenerationProbes;
 import pl.skidam.automodpack_core.loader.ImplStore;
 import pl.skidam.automodpack_loader_core_neoforge_4.mods.ImplMount;
@@ -48,9 +49,9 @@ public class LazyModLocator implements IDependencyLocator {
 	}
 
 	private static Path implJar() throws IOException {
-		Boolean client = EarlyServiceBootstrapper.EARLY_IS_CLIENT;
+		Boolean client = EarlyLaunchEnvironment.IS_CLIENT;
 		if (client == null) throw new IllegalStateException("AutoModpack cannot tell client from server before mounting the impl jar");
-		return ImplStore.select(LazyModLocator.class, "neoforge", EarlyServiceBootstrapper.EARLY_MC_VERSION, client);
+		return ImplStore.select(LazyModLocator.class, "neoforge", EarlyLaunchEnvironment.MC_VERSION, client);
 	}
 
 	@Override

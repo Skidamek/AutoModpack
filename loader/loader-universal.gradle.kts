@@ -12,6 +12,7 @@ evaluationDependsOn(":loader-modlauncher-earlyservices")
 evaluationDependsOn(":loader-forge-earlyservices")
 evaluationDependsOn(":loader-forge-fml40")
 evaluationDependsOn(":loader-forge-fml47")
+evaluationDependsOn(":loader-neoforge-shared")
 evaluationDependsOn(":loader-neoforge-earlyservices")
 evaluationDependsOn(":loader-neoforge-fml4")
 
@@ -83,6 +84,7 @@ tasks.named<ShadowJar>("shadowJar") {
 			":loader-forge-earlyservices",
 			":loader-forge-fml40",
 			":loader-forge-fml47",
+			":loader-neoforge-shared",
 			":loader-neoforge-earlyservices",
 			":loader-neoforge-fml4",
 		)

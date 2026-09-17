@@ -1,11 +1,10 @@
 package pl.skidam.automodpack_loader_core_fabric.loader;
 
-import java.util.*;
+import java.util.Optional;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
-import net.fabricmc.loader.api.metadata.ModEnvironment;
 
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 
@@ -47,18 +46,5 @@ public class LoaderManager implements LoaderManagerService {
 	@Override
 	public boolean isDevelopmentEnvironment() {
 		return FabricLoader.getInstance().isDevelopmentEnvironment();
-	}
-
-	private EnvironmentType getModEnvironment(String modId) {
-		var container = FabricLoader.getInstance().getModContainer(modId);
-		if (container.isEmpty()) return EnvironmentType.UNIVERSAL;
-		ModEnvironment env = container.get().getMetadata().getEnvironment();
-		if (env == ModEnvironment.CLIENT) {
-			return EnvironmentType.CLIENT;
-		} else if (env == ModEnvironment.SERVER) {
-			return EnvironmentType.SERVER;
-		} else {
-			return EnvironmentType.UNIVERSAL;
-		}
 	}
 }

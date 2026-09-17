@@ -12,7 +12,7 @@ import java.util.jar.JarFile
 import java.util.zip.ZipEntry
 
 /**
- * Audits the ONE jar. Receipts: the packed one-jar measured 3560659 bytes (deflated outer assets, 22
+ * Audits the ONE jar. Receipts: the packed one-jar measured 3556594 bytes (deflated outer assets, 22
  * STORE impls in the zstd solid, no zip directory entries), so the 5 MiB budget is the tripwire past where a good
  * build never goes, not a target. The waiting music is checked on the outer `assets/automodpack/`
  * tree - the only place assets may live (the one jar strips them from every impl, so an outer asset

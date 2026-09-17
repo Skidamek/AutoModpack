@@ -2,7 +2,7 @@ package pl.skidam.automodpack_core.loader;
 
 public interface LoaderManagerService {
 	enum ModPlatform {
-		FABRIC, QUILT, FORGE, NEOFORGE
+		FABRIC, FORGE, NEOFORGE
 	}
 	enum EnvironmentType {
 		CLIENT, SERVER, UNIVERSAL

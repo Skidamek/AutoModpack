@@ -12,6 +12,7 @@ import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
 import net.neoforged.neoforgespi.locating.IncompatibleFileReporting;
 import net.neoforged.neoforgespi.locating.ModFileDiscoveryAttributes;
 
+import pl.skidam.automodpack_core.loader.ConnectorFallback;
 import pl.skidam.automodpack_core.loader.GenerationProbes;
 import pl.skidam.automodpack_loader_core_neoforge_4.mods.ModpackLoader;
 
@@ -72,7 +73,9 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 		// Connector remains responsible for plain Fabric jars that have no native FML representation,
 		// but it must not rediscover jars already claimed by a higher-priority custom reader. This is
 		// what lets translation layers such as Roxy replace Fabric metadata before Connector validates it.
-		ModpackLoader.configureConnectorFallback(connectorModLocations);
+		// Only the unclaimable paths are offered here - unlike forge, whose modsToLoad pre-filters out
+		// every incompatible jar, nothing was dropped before discovery on this generation.
+		ConnectorFallback.offer(connectorModLocations);
 		// Replay all early-service candidate locators together, priority-ordered (see the method).
 		EarlyServiceLayer.runCandidateLocators(earlyServiceJars, context, pipeline);
 	}

@@ -7,8 +7,8 @@ import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.fml.loading.LoadingModList;
 import net.neoforged.fml.loading.moddiscovery.ModInfo;
 
+import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_loader_core_neoforge.EarlyModLocator;
 
 @SuppressWarnings("unused")
 public class LoaderManager implements LoaderManagerService {
@@ -34,7 +34,7 @@ public class LoaderManager implements LoaderManagerService {
 		// getVersionInfo() is only reachable through the loader instance once it is current (see
 		// EarlyModLocator) - fall back to the value captured off the launch context during discovery;
 		// by the time preload is false, getVersionInfo() is always populated.
-		if (preload && EarlyModLocator.EARLY_NEOFORGE_VERSION != null) return EarlyModLocator.EARLY_NEOFORGE_VERSION;
+		if (preload && EarlyLaunchEnvironment.LOADER_VERSION != null) return EarlyLaunchEnvironment.LOADER_VERSION;
 		return FMLLoader.getCurrent().getVersionInfo().neoForgeVersion();
 	}
 
@@ -44,8 +44,8 @@ public class LoaderManager implements LoaderManagerService {
 		// distribution exists only for preload, where FMLLoader's dist isn't populated yet (see
 		// EarlyModLocator). Trusting the capture past preload let a stale or misparsed
 		// launchTarget report CLIENT on a real dedicated server and crash mod construction.
-		if (preload && EarlyModLocator.EARLY_IS_CLIENT != null) {
-			return EarlyModLocator.EARLY_IS_CLIENT ? EnvironmentType.CLIENT : EnvironmentType.SERVER;
+		if (preload && EarlyLaunchEnvironment.IS_CLIENT != null) {
+			return EarlyLaunchEnvironment.IS_CLIENT ? EnvironmentType.CLIENT : EnvironmentType.SERVER;
 		}
 		if (FMLLoader.getCurrent().getDist() == Dist.CLIENT) {
 			return EnvironmentType.CLIENT;
@@ -58,7 +58,7 @@ public class LoaderManager implements LoaderManagerService {
 	public String getModVersion(String modId) {
 		if (preload) {
 			if (modId.equals("minecraft")) {
-				if (EarlyModLocator.EARLY_MC_VERSION != null) return EarlyModLocator.EARLY_MC_VERSION;
+				if (EarlyLaunchEnvironment.MC_VERSION != null) return EarlyLaunchEnvironment.MC_VERSION;
 				return FMLLoader.getCurrent().getVersionInfo().mcVersion();
 			}
 

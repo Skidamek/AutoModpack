@@ -58,7 +58,6 @@ public final class ImplStore {
 		Path outerJar = JarUtils.getJarPath(outerClass);
 		ImplManifest manifest = readManifest(outerJar);
 		ImplManifest.Entry entry = manifest.entryFor(loader, mcVersion);
-		LOGGER.info("AutoModpack target: {}", entry.id());
 		Path cacheDir = GameDirectory.current().resolve(client ? StoragePaths.CLIENT_IMPL_CACHE_DIR : StoragePaths.SERVER_IMPL_CACHE_DIR);
 		Path implJar = cacheDir.resolve(entry.id() + ".jar");
 		Path lockFile = cacheDir.resolveSibling(cacheDir.getFileName() + LOCK_SUFFIX);

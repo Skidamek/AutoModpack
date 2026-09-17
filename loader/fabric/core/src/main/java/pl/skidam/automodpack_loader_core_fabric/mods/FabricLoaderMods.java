@@ -13,17 +13,21 @@ import net.fabricmc.loader.impl.FabricLoaderImpl;
 import net.fabricmc.loader.impl.ModContainerImpl;
 
 // Inspired by preloading tricks by settingdust
-@SuppressWarnings("unchecked unused")
 public class FabricLoaderMods {
 
 	private static final List<ModContainerImpl> mods;
 
 	static {
 		try {
-			mods = new ArrayList<>((List<ModContainerImpl>) FabricLoaderImplAccessor.FIELD_MODS.get(FabricLoaderImpl.INSTANCE));
+			mods = new ArrayList<>(castMods(FabricLoaderImplAccessor.FIELD_MODS.get(FabricLoaderImpl.INSTANCE)));
 		} catch (IllegalAccessException e) {
 			throw new RuntimeException(e);
 		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static List<ModContainerImpl> castMods(Object value) {
+		return (List<ModContainerImpl>) value;
 	}
 
 	/** Swaps FabricLoaderImpl's mod list for a proxy over ours, so mods added before loader discovery stick. Must run before Preload adds the modpack. */

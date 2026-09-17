@@ -8,7 +8,6 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -17,14 +16,13 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import net.neoforged.neoforgespi.ILaunchContext;
-import net.neoforged.neoforgespi.locating.IDependencyLocator;
 import net.neoforged.neoforgespi.locating.IDiscoveryPipeline;
 import net.neoforged.neoforgespi.locating.IModFile;
-import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
 
 import pl.skidam.automodpack_core.loader.LoaderServiceFiles;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_loader_core_neoforge_shared.EarlyServiceReplay;
 
 /**
  * NeoForge 21.6+ ("FML 10.x"/"11.x") drops ModLauncher/securejarhandler entirely: early-service
@@ -40,8 +38,10 @@ import pl.skidam.automodpack_core.utils.FileInspection;
  * discovers their language loaders and class processors through its native (post-discovery)
  * ServiceLoader passes, but its locator/reader enumerations ran BEFORE the candidate phase that does
  * the appending - so AutoModpack replays candidate locators, dependency locators and mod file readers
- * itself (below), and invokes GraphicsBootstrapper directly because FML's own bootstrapper pass
- * already happened by the time we host.
+ * itself, and invokes GraphicsBootstrapper directly because FML's own bootstrapper pass already
+ * happened by the time we host. The replay machinery itself is shared with the ModLauncher-era fml4
+ * generation ({@link EarlyServiceReplay}); this class binds it to this generation's registry (the
+ * flat classloader tail) and service cache.
  */
 public final class EarlyServiceLayer {
 
@@ -192,66 +192,29 @@ public final class EarlyServiceLayer {
 	 * Runs the {@code IModFileCandidateLocator}s declared inside the hosted jars against AutoModpack's
 	 * discovery pipeline - FML enumerated candidate locators before the candidate phase that appended
 	 * these jars, so this is how mods like a Connector-style locator get to run in place at all.
+	 * The replay itself is shared with the fml4 generation (see {@link EarlyServiceReplay}); only this
+	 * generation's registry and flat-chain classloader are bound here.
 	 */
 	public static void runCandidateLocators(ILaunchContext context, IDiscoveryPipeline pipeline) {
-		List<IModFileCandidateLocator> locators = new ArrayList<>();
-		for (Path jar : registeredJars()) {
-			for (String impl : serviceImpls(jar, CANDIDATE_LOCATOR_SERVICE)) {
-				try {
-					locators.add((IModFileCandidateLocator) Class.forName(impl, true, hostedClassLoader()).getDeclaredConstructor().newInstance());
-				} catch (Throwable t) {
-					LOGGER.error("[AutoModpack] Failed to load candidate locator {} from {}", impl, jar.getFileName(), t);
-				}
-			}
-		}
-		// Highest priority first, so a replayed locator's declared priority is honoured relative to
-		// the others; registration (staging) order would silently drop it.
-		locators.sort(Comparator.comparingInt(IModFileCandidateLocator::getPriority).reversed());
-		for (IModFileCandidateLocator locator : locators) {
-			try {
-				LOGGER.debug("[AutoModpack] Running in-place candidate locator {} (priority {})", locator.getClass().getName(), locator.getPriority());
-				locator.findCandidates(context, pipeline);
-			} catch (Throwable t) {
-				LOGGER.error("[AutoModpack] Failed to run candidate locator {}", locator.getClass().getName(), t);
-			}
-		}
+		EarlyServiceReplay.runCandidateLocators(registeredJars(), jar -> serviceImpls(jar, CANDIDATE_LOCATOR_SERVICE), jar -> hostedClassLoader(), context, pipeline);
 	}
 
 	/**
 	 * Runs the {@code IDependencyLocator}s declared inside the hosted jars - FML enumerated dependency
 	 * locators before the candidate phase that appended these jars, so this is how a jar-in-jar
-	 * dependency locator (CrashAssistant-style) contributes its real inner mod in place.
+	 * dependency locator (CrashAssistant-style) contributes its real inner mod in place. Shared with
+	 * the fml4 generation (see {@link EarlyServiceReplay}).
 	 */
 	public static void runDependencyLocators(List<IModFile> loadedMods, IDiscoveryPipeline pipeline) {
-		List<IDependencyLocator> locators = new ArrayList<>();
-		for (Path jar : registeredJars()) {
-			for (String impl : serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE)) {
-				try {
-					locators.add((IDependencyLocator) Class.forName(impl, true, hostedClassLoader()).getDeclaredConstructor().newInstance());
-				} catch (Throwable t) {
-					LOGGER.error("[AutoModpack] Failed to load dependency locator {} from {}", impl, jar.getFileName(), t);
-				}
-			}
-		}
-		locators.sort(Comparator.comparingInt(IDependencyLocator::getPriority).reversed());
-		for (IDependencyLocator locator : locators) {
-			try {
-				LOGGER.debug("[AutoModpack] Running in-place dependency locator {} (priority {})", locator.getClass().getName(), locator.getPriority());
-				locator.scanMods(loadedMods, pipeline);
-			} catch (Throwable t) {
-				LOGGER.error("[AutoModpack] Failed to run dependency locator {}", locator.getClass().getName(), t);
-			}
-		}
+		EarlyServiceReplay.runDependencyLocators(registeredJars(), jar -> serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE), jar -> hostedClassLoader(), loadedMods,
+				pipeline);
 	}
 
 	/**
-	 * Forwards a hosted jar's {@code IModFileReader}s into the live discovery pipeline, so a modpack
-	 * mod that ships a reader for a custom mod-file format can interpret candidates in place - FML
-	 * enumerated readers before the candidate phase that appended the jar, so no replay call would
-	 * ever reach them. Unlike a locator, a reader isn't invoked directly: the pipeline consults the
-	 * discoverer's {@code modFileReaders} list whenever it reads a candidate, so this splices ours
-	 * into that list by reflection and re-sorts by {@code IOrderedProvider} priority to keep the
-	 * loader's precedence contract.
+	 * Instantiates this generation's {@code IModFileReader}s from the hosted jars' flat-chain
+	 * classloader - FML enumerated readers before the candidate phase that appended the jars, so no
+	 * replay call would ever reach them - and hands them to the shared splice (see {@link
+	 * EarlyServiceReplay#forwardModFileReaders}).
 	 */
 	public static void runModFileReaders(IDiscoveryPipeline pipeline) {
 		List<Object> readers = new ArrayList<>();
@@ -264,37 +227,7 @@ public final class EarlyServiceLayer {
 				}
 			}
 		}
-		if (readers.isEmpty()) return;
-
-		try {
-			// pipeline is ModDiscoverer's anonymous DiscoveryPipeline; reach its outer ModDiscoverer's reader list.
-			Field outer = pipeline.getClass().getDeclaredField("this$0");
-			outer.setAccessible(true);
-			Object modDiscoverer = outer.get(pipeline);
-			Field readersField = modDiscoverer.getClass().getDeclaredField("modFileReaders");
-			readersField.setAccessible(true);
-			@SuppressWarnings("unchecked")
-			List<Object> current = (List<Object>) readersField.get(modDiscoverer);
-			List<Object> merged = new ArrayList<>(current);
-			merged.addAll(readers);
-			// ModDiscoverer sorts readers by IOrderedProvider.getPriority(), highest first.
-			merged.sort(Comparator.comparingInt(EarlyServiceLayer::providerPriority).reversed());
-			readersField.set(modDiscoverer, List.copyOf(merged));
-			LOGGER.debug("[AutoModpack] Forwarded {} in-place IModFileReader(s) from {} into mod discovery", readers.size(),
-					registeredJars().stream().map(Path::getFileName).toList());
-		} catch (Throwable t) {
-			LOGGER.error("[AutoModpack] Could not forward IModFileReader(s) from {} into mod discovery; a mod relying on that reader may need copy-to-standard",
-					registeredJars().stream().map(Path::getFileName).toList(), t);
-		}
-	}
-
-	/** {@code IOrderedProvider.getPriority()} of a reader, or the default (0) if it can't be read. */
-	private static int providerPriority(Object provider) {
-		try {
-			return (int) provider.getClass().getMethod("getPriority").invoke(provider);
-		} catch (Throwable t) {
-			return 0;
-		}
+		EarlyServiceReplay.forwardModFileReaders(readers, registeredJars().stream().map(Path::getFileName).toList().toString(), pipeline);
 	}
 
 	public static boolean eligibleForInPlace(Path jar) {

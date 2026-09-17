@@ -57,6 +57,7 @@ coreModules.forEach { module ->
 		"fabric-core" -> project.buildFileName = "../../loader-fabric-core.gradle.kts"
 		"forge-fml40", "forge-fml47" -> project.buildFileName = "../../loader-forge.gradle.kts"
 		"forge-earlyservices" -> project.buildFileName = "../../loader-forge-earlyservices.gradle.kts"
+		"neoforge-shared" -> project.buildFileName = "../../loader-neoforge-shared.gradle.kts"
 		"neoforge-earlyservices" -> project.buildFileName = "../../loader-neoforge-earlyservices.gradle.kts"
 		"modlauncher-earlyservices" -> project.buildFileName = "../../loader-modlauncher-earlyservices.gradle.kts"
 		"neoforge-fml4" -> project.buildFileName = "../../loader-neoforge.gradle.kts"

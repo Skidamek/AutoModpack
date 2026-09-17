@@ -2,7 +2,6 @@ package pl.skidam.automodpack_loader_core_neoforge_4;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Locale;
 
 import net.neoforged.fml.loading.progress.ProgressMeter;
 import net.neoforged.fml.loading.progress.StartupNotificationManager;
@@ -10,6 +9,7 @@ import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.Preload;
+import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.GenerationProbes;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.TargetId;
@@ -33,12 +33,6 @@ import pl.skidam.automodpack_loader_core_neoforge_4.mods.ModpackLoader;
  */
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
-	public static volatile String EARLY_MC_VERSION;
-	public static volatile String EARLY_NEOFORGE_VERSION;
-	// FMLLoader.getDist() is unreliable this early, so we read dist from --launchTarget instead;
-	// an incorrect dist here makes Preload.updateAll() skip populating ModpackLoader.modsToLoad.
-	public static volatile Boolean EARLY_IS_CLIENT;
-
 	@Override
 	public String name() {
 		return "automodpack";
@@ -49,14 +43,13 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 		// Coexists with the 21.10+ bootstrapper in the universal outer jar; only the ModLauncher-era generation may act.
 		if (!GenerationProbes.NEOFORGE_FML4) return;
 
-		EARLY_MC_VERSION = argValue(arguments, "--fml.mcVersion");
-		EARLY_NEOFORGE_VERSION = argValue(arguments, "--fml.neoForgeVersion");
-		String launchTarget = argValue(arguments, "--launchTarget");
-		if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
+		// FMLLoader.getDist() is unreliable this early, so the dist comes from --launchTarget instead;
+		// an incorrect dist here makes Preload.updateAll() skip populating ModpackLoader.modsToLoad.
+		EarlyLaunchEnvironment.captureFromArguments(arguments, "--fml.neoForgeVersion");
 
 		// TargetId throws when the id cannot be resolved: a launch without a target id must crash,
 		// not silently run on an unknown combination.
-		Constants.LOGGER.info("AutoModpack target: {}", TargetId.id("neoforge", EARLY_MC_VERSION));
+		TargetId.id("neoforge", EarlyLaunchEnvironment.MC_VERSION);
 
 		// Run our own update/reconcile step first: it decides what this launch loads, and the
 		// early-service hosting below hosts only jars from that decision. Preload failures must crash
@@ -91,16 +84,5 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			Constants.LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
 			throw new RuntimeException("AutoModpack early-service bootstrap failed", t);
 		}
-	}
-
-	private static String argValue(String[] arguments, String name) {
-		if (arguments != null) {
-			String prefix = name + "=";
-			for (int i = 0; i < arguments.length; i++) {
-				if (name.equals(arguments[i]) && i + 1 < arguments.length) return arguments[i + 1];
-				if (arguments[i].startsWith(prefix)) return arguments[i].substring(prefix.length());
-			}
-		}
-		return null;
 	}
 }

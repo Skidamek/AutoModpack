@@ -3,9 +3,13 @@ package pl.skidam.automodpack_loader_core_modlauncher;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
+import java.lang.module.Configuration;
+import java.lang.module.ModuleFinder;
 import java.net.URL;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
@@ -18,23 +22,25 @@ import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import cpw.mods.cl.JarModuleFinder;
 import cpw.mods.cl.ModuleClassLoader;
+import cpw.mods.jarhandling.SecureJar;
 import cpw.mods.modlauncher.api.IModuleLayerManager;
 import cpw.mods.modlauncher.api.ITransformationService;
 
 /**
  * The ModLauncher-family half of both loaders' {@code EarlyServiceLayer} (legacy Forge and NeoForge
  * fml4): both run the same ModLauncher/securejarhandler module-layer machinery ({@code cpw.mods.*}),
- * so the GAME-classloader bridge mechanics, the in-place {@code ITransformationService} forwarding
- * engine and the child-layer registry are identical and live here once. Only the SPI-specific parts
- * (per-layer service-name constants, jar inspection/eligibility rules, locator replay) stay in each
- * loader's own {@code EarlyServiceLayer}, which delegates here.
+ * so the child-layer build, the GAME-classloader bridge mechanics, the in-place {@code
+ * ITransformationService} forwarding engine and the child-layer registry are identical and live here
+ * once. Only the SPI-specific parts (per-layer service-name constants, jar inspection/eligibility
+ * rules, locator replay) stay in each loader's own {@code EarlyServiceLayer}, which delegates here.
  *
  * <p>
  * Compiled against legacy Forge's republished ModLauncher and bundled into both jars (relocated
  * alongside {@link ModuleClassLoaderAccess}): every {@code cpw.mods.*} type referenced here is
  * present with identical erasure in both runtime families (modlauncher 9/10 for Forge, 11 for
- * NeoForge fml4).
+ * NeoForge fml4). The flat-classloader NeoForge generation never links this class.
  */
 public final class ModLauncherEarlyServiceBridge {
 
@@ -96,6 +102,78 @@ public final class ModLauncherEarlyServiceBridge {
 	// folder, so lexical equality already holds and a real filesystem stat is avoided.
 	public static Path canonical(Path jar) {
 		return jar.toAbsolutePath().normalize();
+	}
+
+	/**
+	 * Resolves the given jars into ONE shared child configuration/layer/classloader - mirroring how
+	 * the loader's own SERVICE layer resolves every jar destined for it together in a single {@code
+	 * Configuration.resolveAndBind} call, so an early-service jar split across, or dependent on, more
+	 * than one modpack-folder jar resolves exactly as it would on the real layer - and registers each
+	 * with {@link #register}. Returns the jars that registered. If the shared resolution fails (e.g.
+	 * two jars deriving the same automatic module name throw for the whole batch), each jar is
+	 * retried on its own layer so one bad jar doesn't take every other early-service mod down with
+	 * it; cross-jar {@code requires} edges are lost in that degraded mode.
+	 *
+	 * <p>
+	 * {@code loaderName} is the child {@link ModuleClassLoader}'s display name; each family passes its
+	 * own ("AutoModpack Early Services" / "FML Early Services").
+	 */
+	public static List<Path> buildChildLayers(List<Path> jars, ModuleLayer serviceLayer, String loaderName) {
+		if (jars.isEmpty()) return List.of();
+		List<Path> registered = new ArrayList<>(jars);
+		if (!buildAndRegister(jars, serviceLayer, loaderName)) {
+			registered.clear();
+			for (Path jar : jars) {
+				if (buildAndRegister(List.of(jar), serviceLayer, loaderName)) registered.add(jar);
+			}
+		}
+		return List.copyOf(registered);
+	}
+
+	/**
+	 * Resolves the given jars into one child configuration/layer/classloader and registers each in
+	 * the shared registry. Returns false - with nothing registered - if resolution fails.
+	 */
+	private static boolean buildAndRegister(List<Path> jars, ModuleLayer serviceLayer, String loaderName) {
+		try {
+			SecureJar[] secureJars = new SecureJar[jars.size()];
+			List<String> moduleNames = new ArrayList<>(jars.size());
+			for (int i = 0; i < jars.size(); i++) {
+				SecureJar secureJar = SecureJar.from(jars.get(i));
+				secureJars[i] = secureJar;
+				moduleNames.add(secureJar.name());
+			}
+
+			Configuration configuration = serviceLayer.configuration().resolveAndBind(JarModuleFinder.of(secureJars), ModuleFinder.of(), moduleNames);
+
+			List<ModuleLayer> parentLayers = flattenParents(serviceLayer);
+
+			ModuleClassLoader classLoader = new ModuleClassLoader(loaderName, configuration, parentLayers);
+			classLoader.setFallbackClassLoader(ModLauncherEarlyServiceBridge.class.getClassLoader());
+			ModuleLayer childLayer = ModuleLayer.defineModules(configuration, List.of(serviceLayer), name -> classLoader).layer();
+
+			for (int i = 0; i < jars.size(); i++) {
+				register(jars.get(i), classLoader, childLayer, moduleNames.get(i));
+			}
+			return true;
+		} catch (Throwable t) {
+			LOGGER.error("[AutoModpack] Could not build a service layer for early-service jar(s) {}", jars.stream().map(Path::getFileName).toList(), t);
+			return false;
+		}
+	}
+
+	private static List<ModuleLayer> flattenParents(ModuleLayer layer) {
+		List<ModuleLayer> result = new ArrayList<>();
+		Deque<ModuleLayer> queue = new ArrayDeque<>();
+		queue.add(layer);
+		while (!queue.isEmpty()) {
+			ModuleLayer current = queue.poll();
+			if (!result.contains(current)) {
+				result.add(current);
+				queue.addAll(current.parents());
+			}
+		}
+		return result;
 	}
 
 	/** Keeps an in-place jar's freshly instantiated {@code ITransformationService} for later forwarding. */

@@ -41,6 +41,12 @@ dependencies {
 tasks {
 	processResources {
 		exclude("**/fabric.mod.json", "**/automodpack*.accesswidener", "**/mods.toml")
+		if (sc.current.parsed >= "1.21.9") {
+			exclude("**/pack.mcmeta")
+			rename("new-pack.mcmeta", "pack.mcmeta")
+		} else {
+			exclude("**/new-pack.mcmeta")
+		}
 	}
 
 	named("createMinecraftArtifacts") {
