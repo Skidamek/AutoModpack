@@ -16,7 +16,6 @@ repositories {
 
 val gsonVersion = versionProperty("versionLoaderGson")
 val log4jVersion = versionProperty("versionLoaderFabricLog4j")
-val tomljVersion = versionProperty("versionTomlj")
 val fabricLoaderVersion = loaderVersion()
 
 dependencies {
@@ -25,7 +24,6 @@ dependencies {
 
 	compileOnly("com.google.code.gson:gson:$gsonVersion")
 	compileOnly("org.apache.logging.log4j:log4j-core:$log4jVersion")
-	implementation("org.tomlj:tomlj:$tomljVersion")
 
 	implementation("net.fabricmc:fabric-loader:$fabricLoaderVersion")
 }
