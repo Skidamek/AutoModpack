@@ -33,8 +33,8 @@ fun structuredString(vararg path: String): String =
 
 extra["loaderVersions"] =
 	mapOf(
-		"loader-fabric-core" to structuredString("loader-modules", "fabric-16"),
-		"loader-fabric-shared" to structuredString("loader-modules", "fabric-16"),
+		"loader-fabric-core" to structuredString("loader-modules", "fabric"),
+		"loader-fabric-shared" to structuredString("loader-modules", "fabric"),
 		"loader-fabric-latest" to structuredString("fabric", "deps", "fabric-loader"),
 		"loader-forge-fml40" to structuredString("1.18.2-forge", "deps", "forge"),
 		"loader-forge-fml47" to structuredString("1.20.1-forge", "deps", "forge"),
