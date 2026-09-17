@@ -55,6 +55,10 @@ public class AudioManager {
 	public static void playMusic() {
 		synchronized (LOCK) {
 			if (PLAYER != null) return;
+			// Menu music may already be in flight from before this screen; the tracker mixin only blocks
+			// new vanilla tracks from starting, so an already-playing one gets stopped here, music source
+			// only - every other sound stays untouched.
+			Minecraft.getInstance().getSoundManager().stop(null, SoundSource.MUSIC);
 			Loop loop = new Loop();
 			PLAYER = loop;
 			Thread thread = new Thread(loop, "AutoModpack waiting music");
