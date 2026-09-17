@@ -73,12 +73,5 @@ tasks {
 		} else {
 			exclude("**/automodpack.unobf.accesswidener")
 		}
-
-		if (sc.current.parsed >= "1.21.9") {
-			exclude("**/pack.mcmeta")
-			rename("new-pack.mcmeta", "pack.mcmeta")
-		} else {
-			exclude("**/new-pack.mcmeta")
-		}
 	}
 }
