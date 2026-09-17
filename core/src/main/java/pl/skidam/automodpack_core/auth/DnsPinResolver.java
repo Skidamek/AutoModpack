@@ -3,14 +3,18 @@ package pl.skidam.automodpack_core.auth;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.normalizeFingerprint;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -19,10 +23,6 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
-
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
@@ -36,13 +36,22 @@ public final class DnsPinResolver {
 	public static final String RECORD_PREFIX = "_automodpack.";
 	public static final String RECORD_VERSION = "amp1";
 
-	private static final List<String> DOH_RESOLVERS = List.of("https://cloudflare-dns.com/dns-query", "https://doh.mullvad.net/dns-query");
+	private static final List<String> DOH_RESOLVERS = List.of("https://cloudflare-dns.com/dns-query", "https://dns.quad9.net/dns-query");
 	private static final Duration TIMEOUT = NetUtils.HTTP_TIMEOUT;
 	private static final Duration MAX_PIN_CACHE_TIME = Duration.ofMinutes(5);
 	private static final Duration MAX_ABSENCE_CACHE_TIME = Duration.ofSeconds(30);
 	private static final int MAX_CACHE_ENTRIES = 128;
 	private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
 	private static final Resolver RESOLVER = new Resolver(DOH_RESOLVERS, DnsPinResolver::queryResolverAsync, System::currentTimeMillis);
+	private static final Base64.Encoder DOH_QUERY_ENCODING = Base64.getUrlEncoder().withoutPadding();
+	private static final int TYPE_SOA = 6, TYPE_TXT = 16, TYPE_OPT = 41;
+	private static final int CLASS_IN = 1;
+	private static final int EDNS_PAYLOAD_SIZE = 1232;
+	private static final int DNSSEC_OK_FLAG = 0x00008000;
+	private static final int FLAGS_RESPONSE = 0x8000, FLAGS_TRUNCATED = 0x0200, FLAGS_AUTHENTICATED_DATA = 0x0020;
+	private static final int OPCODE_SHIFT = 11, OPCODE_QUERY = 0;
+	private static final int RCODE_MASK = 0xF, RCODE_NXDOMAIN = 3;
+	private static final int MAX_LABEL_LENGTH = 63;
 
 	private DnsPinResolver() {}
 
@@ -210,11 +219,14 @@ public final class DnsPinResolver {
 
 	private static CompletableFuture<ResolverResult> queryResolverAsync(String resolver, String name) {
 		try {
-			HttpRequest request = HttpRequest.newBuilder().uri(URI.create(resolver + "?name=" + URLEncoder.encode(name, StandardCharsets.UTF_8) + "&type=TXT"))
-					.header("Accept", "application/dns-json").timeout(TIMEOUT).GET().build();
+			HttpRequest request = HttpRequest.newBuilder().uri(URI.create(resolver + "?dns=" + DOH_QUERY_ENCODING.encodeToString(buildTxtQuery(name)))).header("Accept", "application/dns-message").timeout(TIMEOUT).GET()
+					.build();
 
-			return HTTP_CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenApply(response -> {
-				if (response.statusCode() < 200 || response.statusCode() >= 300) return new ResolverUnavailable();
+			return HTTP_CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray()).thenApply(response -> {
+				if (response.statusCode() < 200 || response.statusCode() >= 300) {
+					LOGGER.warn("DNS fingerprint resolver {} returned HTTP {} for {}", resolver, response.statusCode(), name);
+					return new ResolverUnavailable();
+				}
 				return parseDnsResponse(response.body());
 			}).exceptionally(error -> {
 				LOGGER.debug("DNS fingerprint lookup for {} via {} failed", name, resolver, error);
@@ -226,28 +238,84 @@ public final class DnsPinResolver {
 		}
 	}
 
-	static ResolverResult parseDnsResponse(String body) {
+	/**
+	 * Builds an RFC 1035 TXT query carrying an EDNS0 OPT record with the DNSSEC OK bit set. Validating
+	 * resolvers only flag answers as authenticated (AD) when the query asks for DNSSEC - measured on both
+	 * Cloudflare and Quad9: wireformat answers omit AD without it, and both set it with it.
+	 */
+	private static byte[] buildTxtQuery(String name) {
 		try {
-			JsonObject json = JsonParser.parseString(body).getAsJsonObject();
-			int status = json.has("Status") ? json.get("Status").getAsInt() : -1;
-			boolean authenticated = json.has("AD") && json.get("AD").getAsBoolean();
+			ByteArrayOutputStream buffer = new ByteArrayOutputStream(32 + name.length());
+			DataOutputStream out = new DataOutputStream(buffer);
+			out.writeShort(0); // id, not matched - the TLS transport is what authenticates the response
+			out.writeShort(0x0100); // recursion desired
+			out.writeShort(1); // question count
+			out.writeShort(0); // answer count
+			out.writeShort(0); // authority count
+			out.writeShort(1); // additional count
+			writeName(out, name);
+			out.writeShort(TYPE_TXT);
+			out.writeShort(CLASS_IN);
+			out.writeByte(0); // root
+			out.writeShort(TYPE_OPT);
+			out.writeShort(EDNS_PAYLOAD_SIZE);
+			out.writeInt(DNSSEC_OK_FLAG);
+			out.writeShort(0); // no OPT options
+			return buffer.toByteArray();
+		} catch (IOException e) {
+			throw new UncheckedIOException(e); // DataOutputStream over a ByteArrayOutputStream never throws
+		}
+	}
 
-			if (!authenticated) return new ResolverUnavailable();
+	private static void writeName(DataOutputStream out, String name) throws IOException {
+		for (String label : name.split("\\.")) {
+			byte[] bytes = label.getBytes(StandardCharsets.US_ASCII);
+			if (label.isEmpty() || bytes.length > MAX_LABEL_LENGTH) throw new IllegalArgumentException("invalid dns label: " + label);
+			out.writeByte(bytes.length);
+			out.write(bytes);
+		}
+		out.writeByte(0);
+	}
 
-			long negativeTtl = parseNegativeTtl(json);
-			if (status == 3) return new ResolverAbsent(negativeTtl);
-			if (status != 0) return new ResolverUnavailable();
+	/**
+	 * Parses an RFC 1035 DoH wireformat response (RFC 8484). Answers without DNSSEC validation (AD) are
+	 * unusable, NXDOMAIN is a proven absence carrying the negative TTL from the authority SOA, and anything
+	 * malformed is unavailable.
+	 */
+	static ResolverResult parseDnsResponse(byte[] message) {
+		try {
+			Reader reader = new Reader(message);
+			reader.readUnsignedShort(); // id
+			int flags = reader.readUnsignedShort();
+			int questionCount = reader.readUnsignedShort();
+			int answerCount = reader.readUnsignedShort();
+			int authorityCount = reader.readUnsignedShort();
+			reader.readUnsignedShort(); // additional count, resolvers echo the OPT record there
+
+			if ((flags & FLAGS_RESPONSE) == 0 || (flags & FLAGS_TRUNCATED) != 0 || (flags >>> OPCODE_SHIFT & 0xF) != OPCODE_QUERY) return new ResolverUnavailable();
+			if ((flags & FLAGS_AUTHENTICATED_DATA) == 0) return new ResolverUnavailable();
+
+			for (int i = 0; i < questionCount; i++) {
+				reader.skipName();
+				reader.skip(4); // question type + class
+			}
 
 			List<ResolverTxt> txtRecords = new ArrayList<>();
-			if (json.has("Answer")) {
-				for (JsonElement element : json.getAsJsonArray("Answer")) {
-					JsonObject answer = element.getAsJsonObject();
-					if (answer.has("type") && answer.get("type").getAsInt() == 16 && answer.has("data")) {
-						long ttl = answer.has("TTL") ? Math.max(0, answer.get("TTL").getAsLong()) : 0;
-						txtRecords.add(new ResolverTxt(decodeTxtData(answer.get("data").getAsString()), ttl));
-					}
-				}
+			for (int i = 0; i < answerCount; i++) {
+				reader.skipName();
+				int type = reader.readUnsignedShort();
+				reader.readUnsignedShort(); // class
+				long ttl = reader.readUnsignedInt();
+				int length = reader.readUnsignedShort();
+				if (type == TYPE_TXT) txtRecords.add(new ResolverTxt(reader.readTxtStrings(length), ttl));
+				else reader.skip(length);
 			}
+			long negativeTtl = readNegativeTtl(reader, authorityCount);
+
+			int rcode = flags & RCODE_MASK;
+			if (rcode == RCODE_NXDOMAIN) return new ResolverAbsent(negativeTtl);
+			if (rcode != 0) return new ResolverUnavailable();
+
 			ResolverResult result = parseTxtRecordsWithTtl(txtRecords);
 			if (result instanceof ResolverAbsent) return new ResolverAbsent(negativeTtl);
 			return result;
@@ -257,22 +325,24 @@ public final class DnsPinResolver {
 		}
 	}
 
-	private static long parseNegativeTtl(JsonObject json) {
-		if (!json.has("Authority")) return 0;
+	private static long readNegativeTtl(Reader reader, int count) {
 		long minimum = Long.MAX_VALUE;
-		for (JsonElement element : json.getAsJsonArray("Authority")) {
-			JsonObject authority = element.getAsJsonObject();
-			if (!authority.has("type") || authority.get("type").getAsInt() != 6 || !authority.has("data")) continue;
-
-			long recordTtl = authority.has("TTL") ? Math.max(0, authority.get("TTL").getAsLong()) : 0;
-			String[] fields = authority.get("data").getAsString().trim().split("\\s+");
-			long soaMinimum = 0;
-			if (fields.length > 0) {
-				try {
-					soaMinimum = Math.max(0, Long.parseLong(fields[fields.length - 1]));
-				} catch (NumberFormatException ignored) {
-				}
+		for (int i = 0; i < count; i++) {
+			reader.skipName();
+			int type = reader.readUnsignedShort();
+			reader.readUnsignedShort(); // class
+			long recordTtl = reader.readUnsignedInt();
+			int length = reader.readUnsignedShort();
+			if (type != TYPE_SOA) {
+				reader.skip(length);
+				continue;
 			}
+			int end = reader.offset() + length;
+			reader.skipName(); // primary nameserver
+			reader.skipName(); // hostmaster mailbox
+			reader.skip(16); // serial, refresh, retry, expire
+			long soaMinimum = reader.readUnsignedInt();
+			if (reader.offset() != end) throw new IllegalArgumentException("soa record length mismatch");
 			long ttl = recordTtl == 0 ? soaMinimum : soaMinimum == 0 ? recordTtl : Math.min(recordTtl, soaMinimum);
 			if (ttl > 0) minimum = Math.min(minimum, ttl);
 		}
@@ -338,30 +408,84 @@ public final class DnsPinResolver {
 		return RECORD_PREFIX + owner + ". IN TXT \"v=" + RECORD_VERSION + ";fp=" + normalizeFingerprint(fingerprint) + "\"";
 	}
 
-	static String decodeTxtData(String data) {
-		if (data == null) return "";
-		String trimmed = data.trim();
-		StringBuilder decoded = new StringBuilder();
-		boolean quoted = false;
-		boolean escaping = false;
+	/**
+	 * Byte reader over an RFC 1035 message with name decompression. A name ends where its encoding ends -
+	 * right after the first compression pointer, not at the end of the pointed-to name - so the field cursor
+	 * and the name-walk cursor are kept apart. Pointers must point strictly backwards, which alone bounds
+	 * decompression, and the jump budget on top is a tripwire for crafted garbage.
+	 */
+	private static final class Reader {
+		private final byte[] message;
+		private int offset;
 
-		for (int i = 0; i < trimmed.length(); i++) {
-			char c = trimmed.charAt(i);
-			if (escaping) {
-				decoded.append(c);
-				escaping = false;
-			} else if (c == '\\' && quoted) {
-				escaping = true;
-			} else if (c == '"') {
-				quoted = !quoted;
-			} else if (!quoted && Character.isWhitespace(c)) {
-				continue;
-			} else {
-				decoded.append(c);
-			}
+		Reader(byte[] message) {
+			this.message = message;
 		}
-		if (quoted || escaping) throw new IllegalArgumentException("malformed TXT quoting");
-		return decoded.toString().trim();
+
+		int offset() {
+			return offset;
+		}
+
+		int readUnsignedByte() {
+			if (offset >= message.length) throw new IllegalArgumentException("dns message truncated");
+			return message[offset++] & 0xFF;
+		}
+
+		int readUnsignedShort() {
+			if (offset + 2 > message.length) throw new IllegalArgumentException("dns message truncated");
+			int value = (message[offset] & 0xFF) << 8 | (message[offset + 1] & 0xFF);
+			offset += 2;
+			return value;
+		}
+
+		long readUnsignedInt() {
+			if (offset + 4 > message.length) throw new IllegalArgumentException("dns message truncated");
+			long value = (long) (message[offset] & 0xFF) << 24 | (message[offset + 1] & 0xFF) << 16 | (message[offset + 2] & 0xFF) << 8 | (message[offset + 3] & 0xFF);
+			offset += 4;
+			return value;
+		}
+
+		void skip(int count) {
+			if (count < 0 || offset + count > message.length) throw new IllegalArgumentException("dns message truncated");
+			offset += count;
+		}
+
+		void skipName() {
+			int walk = offset;
+			int resume = -1;
+			int jumpsLeft = 128;
+			while (true) {
+				if (walk >= message.length) throw new IllegalArgumentException("dns message truncated");
+				int length = message[walk++] & 0xFF;
+				if (length == 0) break;
+				if ((length & 0xC0) == 0xC0) {
+					if (walk >= message.length) throw new IllegalArgumentException("dns message truncated");
+					int pointer = (length & 0x3F) << 8 | (message[walk++] & 0xFF);
+					if (pointer >= walk - 2) throw new IllegalArgumentException("dns name pointer does not point backwards");
+					if (resume < 0) resume = walk;
+					if (--jumpsLeft == 0) throw new IllegalArgumentException("too many dns name pointers");
+					walk = pointer;
+				} else if ((length & 0xC0) != 0) {
+					throw new IllegalArgumentException("reserved dns label type");
+				} else {
+					walk += length;
+				}
+			}
+			offset = resume < 0 ? walk : resume;
+		}
+
+		String readTxtStrings(int recordLength) {
+			int end = offset + recordLength;
+			if (end > message.length) throw new IllegalArgumentException("dns message truncated");
+			StringBuilder value = new StringBuilder();
+			while (offset < end) {
+				int chunkLength = readUnsignedByte();
+				if (offset + chunkLength > end) throw new IllegalArgumentException("txt chunk overruns record");
+				value.append(new String(message, offset, chunkLength, StandardCharsets.UTF_8));
+				offset += chunkLength;
+			}
+			return value.toString();
+		}
 	}
 
 	private static boolean isAmp1Record(String txt) {

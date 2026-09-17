@@ -2,6 +2,8 @@ package pl.skidam.automodpack_core.auth;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -17,6 +19,8 @@ class DnsPinResolverTest {
 
 	private static final String FP_A = "a".repeat(64);
 	private static final String FP_B = "b".repeat(64);
+	private static final int FLAG_RESPONSE = 0x8000, FLAG_RECURSION = 0x0080, FLAG_AUTHENTICATED = 0x0020, FLAG_TRUNCATED = 0x0200;
+	private static final int FLAG_SERVFAIL = 0x0002, FLAG_NXDOMAIN = 0x0003;
 
 	@Test
 	void parsesSingleFingerprint() {
@@ -61,8 +65,68 @@ class DnsPinResolverTest {
 	}
 
 	@Test
-	void decodesSplitTxtChunks() {
-		assertEquals("v=amp1;fp=" + FP_A, DnsPinResolver.decodeTxtData("\"v=amp1;\" \"fp=" + FP_A + "\""));
+	void parsesWireformatTxtAnswerWithTtl() {
+		byte[] response = dnsResponse(FLAG_RESPONSE | FLAG_RECURSION | FLAG_AUTHENTICATED, List.of(txtRecord(nameBytes("_automodpack.play.example.com"), 600, "v=amp1;fp=" + FP_A)), List.of());
+
+		DnsPinResolver.ResolverPin pin = assertInstanceOf(DnsPinResolver.ResolverPin.class, DnsPinResolver.parseDnsResponse(response));
+		assertEquals(FP_A, pin.fingerprint());
+		assertEquals(600, pin.ttlSeconds());
+	}
+
+	@Test
+	void joinsSplitTxtCharacterStrings() {
+		byte[] response = dnsResponse(FLAG_RESPONSE | FLAG_RECURSION | FLAG_AUTHENTICATED, List.of(txtRecord(nameBytes("_automodpack.play.example.com"), 600, "v=amp1;", "fp=" + FP_A)), List.of());
+
+		DnsPinResolver.ResolverPin pin = assertInstanceOf(DnsPinResolver.ResolverPin.class, DnsPinResolver.parseDnsResponse(response));
+		assertEquals(FP_A, pin.fingerprint());
+	}
+
+	@Test
+	void derivesNegativeTtlFromSoaAuthority() {
+		byte[] soa = record(nameBytes("play.example.com"), 6, 120, soaRdata(nameBytes("ns.example.com"), nameBytes("hostmaster.example.com"), 90));
+		byte[] response = dnsResponse(FLAG_RESPONSE | FLAG_RECURSION | FLAG_AUTHENTICATED | FLAG_NXDOMAIN, List.of(), List.of(soa));
+
+		DnsPinResolver.ResolverAbsent absent = assertInstanceOf(DnsPinResolver.ResolverAbsent.class, DnsPinResolver.parseDnsResponse(response));
+		assertEquals(90, absent.ttlSeconds());
+	}
+
+	@Test
+	void followsBackwardsCompressionPointers() {
+		// the question name sits at offset 12, so pointers to it are legal backwards references
+		byte[] pointed = pointerBytes(12);
+		byte[] soa = record(nameBytes("play.example.com"), 6, 120, soaRdata(pointed, pointed, 90));
+		byte[] response = dnsResponse(FLAG_RESPONSE | FLAG_RECURSION | FLAG_AUTHENTICATED, List.of(txtRecord(pointed, 600, "v=amp1;fp=" + FP_A)), List.of(soa));
+
+		DnsPinResolver.ResolverPin pin = assertInstanceOf(DnsPinResolver.ResolverPin.class, DnsPinResolver.parseDnsResponse(response));
+		assertEquals(FP_A, pin.fingerprint());
+	}
+
+	@Test
+	void rejectsUnauthenticatedAnswers() {
+		byte[] response = dnsResponse(FLAG_RESPONSE | FLAG_RECURSION, List.of(txtRecord(nameBytes("_automodpack.play.example.com"), 600, "v=amp1;fp=" + FP_A)), List.of());
+
+		assertInstanceOf(DnsPinResolver.ResolverUnavailable.class, DnsPinResolver.parseDnsResponse(response));
+	}
+
+	@Test
+	void rejectsErrorCodesAndTruncation() {
+		List<byte[]> answer = List.of(txtRecord(nameBytes("_automodpack.play.example.com"), 600, "v=amp1;fp=" + FP_A));
+
+		assertInstanceOf(DnsPinResolver.ResolverUnavailable.class, DnsPinResolver.parseDnsResponse(dnsResponse(FLAG_RESPONSE | FLAG_RECURSION | FLAG_AUTHENTICATED | FLAG_SERVFAIL, answer, List.of())));
+		assertInstanceOf(DnsPinResolver.ResolverUnavailable.class, DnsPinResolver.parseDnsResponse(dnsResponse(FLAG_RESPONSE | FLAG_RECURSION | FLAG_AUTHENTICATED | FLAG_TRUNCATED, answer, List.of())));
+	}
+
+	@Test
+	void rejectsMalformedWireformatResponses() {
+		// the standard question section ends at offset 46, so answers begin at 47 and a pointer there targets itself
+		byte[] selfLoopOwner = pointerBytes(47);
+		byte[] headerOnly = new byte[]{0, 0, (byte) 0x81, (byte) 0xA0, 0, 1, 0, 1, 0, 0, 0, 0};
+		List<byte[]> malformed = List.of(headerOnly, record(new byte[]{(byte) 0x80, 3}, 16, 600, new byte[]{4, 'a', 'b', 'c', 'd'}), record(selfLoopOwner, 16, 600, new byte[]{4, 'a', 'b', 'c', 'd'}),
+				record(nameBytes("play.example.com"), 16, 600, new byte[]{20, 'a', 'b'}), record(nameBytes("play.example.com"), 6, 120, new byte[]{9, 'n', 's', 2, 'n', 's', 0, 1, 2, 3}));
+
+		for (int i = 0; i < malformed.size(); i++) {
+			assertInstanceOf(DnsPinResolver.ResolverUnavailable.class, DnsPinResolver.parseDnsResponse(malformed.get(i)), "expected rejection at index " + i);
+		}
 	}
 
 	@Test
@@ -143,14 +207,83 @@ class DnsPinResolverTest {
 		assertEquals(4, unavailableCalls.get());
 	}
 
-	@Test
-	void parsesPositiveAndNegativeTtls() {
-		String positive = "{\"Status\":0,\"AD\":true,\"Answer\":[{\"type\":16,\"TTL\":600,\"data\":\"\\\"v=amp1;fp=" + FP_A + "\\\"\"}]}";
-		DnsPinResolver.ResolverPin pin = assertInstanceOf(DnsPinResolver.ResolverPin.class, DnsPinResolver.parseDnsResponse(positive));
-		assertEquals(600, pin.ttlSeconds());
+	private static byte[] dnsResponse(int flags, List<byte[]> answers, List<byte[]> authority) {
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		putShort(out, 0);
+		putShort(out, flags);
+		putShort(out, 1); // question count
+		putShort(out, answers.size());
+		putShort(out, authority.size());
+		putShort(out, 0); // additional count
+		nameBytesInto(out, "_automodpack.play.example.com");
+		putShort(out, 16); // TXT
+		putShort(out, 1); // IN
+		answers.forEach(out::writeBytes);
+		authority.forEach(out::writeBytes);
+		return out.toByteArray();
+	}
 
-		String absent = "{\"Status\":3,\"AD\":true,\"Authority\":[{\"type\":6,\"TTL\":120,\"data\":\"ns.example. hostmaster.example. 1 2 3 4 90\"}]}";
-		DnsPinResolver.ResolverAbsent noPolicy = assertInstanceOf(DnsPinResolver.ResolverAbsent.class, DnsPinResolver.parseDnsResponse(absent));
-		assertEquals(90, noPolicy.ttlSeconds());
+	private static byte[] txtRecord(byte[] owner, long ttl, String... chunks) {
+		ByteArrayOutputStream rdata = new ByteArrayOutputStream();
+		for (String chunk : chunks) {
+			byte[] bytes = chunk.getBytes(StandardCharsets.UTF_8);
+			if (bytes.length > 255) throw new IllegalArgumentException("chunk too long");
+			rdata.write(bytes.length);
+			rdata.writeBytes(bytes);
+		}
+		return record(owner, 16, ttl, rdata.toByteArray());
+	}
+
+	private static byte[] record(byte[] owner, int type, long ttl, byte[] rdata) {
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		out.writeBytes(owner);
+		putShort(out, type);
+		putShort(out, 1); // IN
+		putInt(out, ttl);
+		putShort(out, rdata.length);
+		out.writeBytes(rdata);
+		return out.toByteArray();
+	}
+
+	private static byte[] soaRdata(byte[] mname, byte[] rname, long minimum) {
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		out.writeBytes(mname);
+		out.writeBytes(rname);
+		putInt(out, 1); // serial
+		putInt(out, 2); // refresh
+		putInt(out, 3); // retry
+		putInt(out, 4); // expire
+		putInt(out, minimum);
+		return out.toByteArray();
+	}
+
+	private static byte[] nameBytes(String name) {
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		nameBytesInto(out, name);
+		return out.toByteArray();
+	}
+
+	private static void nameBytesInto(ByteArrayOutputStream out, String name) {
+		for (String label : name.split("\\.")) {
+			out.write(label.length());
+			out.writeBytes(label.getBytes(StandardCharsets.US_ASCII));
+		}
+		out.write(0);
+	}
+
+	private static byte[] pointerBytes(int offset) {
+		return new byte[]{(byte) (0xC0 | offset >> 8), (byte) offset};
+	}
+
+	private static void putShort(ByteArrayOutputStream out, int value) {
+		out.write(value >>> 8 & 0xFF);
+		out.write(value & 0xFF);
+	}
+
+	private static void putInt(ByteArrayOutputStream out, long value) {
+		out.write((int) (value >>> 24 & 0xFF));
+		out.write((int) (value >>> 16 & 0xFF));
+		out.write((int) (value >>> 8 & 0xFF));
+		out.write((int) (value & 0xFF));
 	}
 }

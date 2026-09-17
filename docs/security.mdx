@@ -56,7 +56,7 @@ _automodpack.play.example.com. IN TXT "v=amp1;fp=<certificate-sha256>"
 
 Publish exactly one AMP1 record in the DNSSEC-signed zone. Any DNSSEC-capable provider works; [deSEC](https://desec.io/) is a free managed option if yours has none.
 
-Clients resolve the record over DNS-over-HTTPS through Cloudflare and Mullvad. The certificate is accepted only when both resolvers confirm DNSSEC validation, agree on the record, and the fingerprint matches a currently valid certificate. A mismatch or a malformed record fails. A missing or unreachable record falls back to the manual prompt.
+Clients resolve the record over DNS-over-HTTPS through Cloudflare and Quad9. The certificate is accepted only when both resolvers confirm DNSSEC validation, agree on the record, and the fingerprint matches a currently valid certificate. A mismatch or a malformed record fails. A missing or unreachable record falls back to the manual prompt.
 
 When the certificate changes, update the `fp` value and wait out DNS caching before deploying it.
 
