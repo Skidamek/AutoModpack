@@ -247,9 +247,10 @@ public class AudioManager {
 				return org.lwjgl.system.JNI.invokePI(context, alc.alcSetThreadContext) != 0;
 			}
 
-			/** Follows the client's music slider; at zero the loop keeps running inaudibly so raising the slider resumes it. */
+			/** Follows the client's sound settings the way the vanilla engine computes them: master slider times music slider, at zero the loop keeps running inaudibly so raising either resumes it. */
 			void applyVolume() {
-				float gain = Minecraft.getInstance().options.getSoundSourceVolume(SoundSource.MUSIC) * GAIN_SCALE;
+				var options = Minecraft.getInstance().options;
+				float gain = options.getSoundSourceVolume(SoundSource.MASTER) * options.getSoundSourceVolume(SoundSource.MUSIC) * GAIN_SCALE;
 				AL10.alSourcef(this.source, AL10.AL_GAIN, gain);
 			}
 
