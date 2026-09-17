@@ -1,4 +1,5 @@
 import com.github.luben.zstd.Zstd
+import io.airlift.compress.zstd.ZstdDecompressor
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.ConfigurableFileCollection
@@ -125,6 +126,7 @@ abstract class OneJarTask : DefaultTask() {
 
         val solidBytes = solid.toByteArray()
         val zstdBinary = Zstd.compress(solidBytes, ZSTD_LEVEL)
+        verifyRuntimeDecodable(zstdBinary, solidBytes)
         val generation = sha1(zstdBinary)
         val manifest = ImplManifestFormat.write(generation, manifestEntries)
 
@@ -140,7 +142,7 @@ abstract class OneJarTask : DefaultTask() {
             putStored(output, ZipEntry(ImplManifestFormat.SOLID_ENTRY).apply { time = 0L }, zstdBinary)
         }
         println(
-            "Packed ${outputFile.name}: ${outputFile.length()} bytes, ${manifestEntries.size} impls, solid ${solidBytes.size} bytes -> zstd ${zstdBinary.size} bytes (zstd-jni ${zstdVersion.get()})" +
+            "Packed ${outputFile.name}: ${outputFile.length()} bytes, ${manifestEntries.size} impls, solid ${solidBytes.size} bytes -> zstd ${zstdBinary.size} bytes (zstd-jni ${zstdVersion.get()}, level $ZSTD_LEVEL)" +
                 " (${manifestEntries.sumOf { it.length }} impl bytes), took ${System.currentTimeMillis() - startTime}ms",
         )
     }
@@ -184,6 +186,15 @@ abstract class OneJarTask : DefaultTask() {
         output.putNextEntry(entry)
         output.write(bytes)
         output.closeEntry()
+    }
+
+    /** The runtime unpacks the solid with aircompressor, whose zstd decoder accepts a narrower frame set than the zstd CLI (streaming level-20 frames, for one, use a window it rejects). One-shot through the pinned zstd-jni stays inside that set, and this check is the tripwire that keeps it there: a frame the client would fail to decode fails the build here instead. */
+    private fun verifyRuntimeDecodable(frame: ByteArray, solid: ByteArray) {
+        val decoded = ByteArray(solid.size)
+        val written = ZstdDecompressor().decompress(frame, 0, frame.size, decoded, 0, decoded.size)
+        if (written != solid.size || !decoded.contentEquals(solid)) {
+            throw GradleException("The packed solid is not decodable by the runtime's aircompressor decoder (got $written of ${solid.size} bytes)")
+        }
     }
 
     private fun sha1(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-1").digest(bytes)
