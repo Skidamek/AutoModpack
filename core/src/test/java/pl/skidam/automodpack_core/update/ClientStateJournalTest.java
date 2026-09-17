@@ -28,7 +28,6 @@ import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.JsonLines;
 
 class ClientStateJournalTest {
 	private static final String MODPACK_ID = "abc1234";
@@ -85,11 +84,16 @@ class ClientStateJournalTest {
 	}
 
 	@Test
-	void contractBreaksAreCorruptionEvenAtTheTail() throws Exception {
+	void aCorruptInteriorLineIsAsidedAndTheJournalContinuesEmpty() throws Exception {
 		ClientStateJournal journal = ClientStateJournal.open(journalFile());
 		journal.append(entry(1, "txn-1", Kind.INSTALL));
-		Files.writeString(journalFile(), Files.readString(journalFile(), StandardCharsets.UTF_8) + "{\"seq\":-5,\"transactionId\":\"txn-2\"}", StandardCharsets.UTF_8);
-		assertThrows(JsonLines.UnusableContentException.class, () -> ClientStateJournal.open(journalFile()));
+		Files.writeString(journalFile(), Files.readString(journalFile(), StandardCharsets.UTF_8) + "{\"seq\":-5,\"transactionId\":\"txn-2\"}\n", StandardCharsets.UTF_8);
+
+		ClientStateJournal reopened = ClientStateJournal.open(journalFile());
+		assertTrue(reopened.entries().isEmpty(), "Corrupt content reads as empty after the aside");
+		assertTrue(Files.list(journalFile().getParent()).anyMatch(path -> path.getFileName().toString().contains("corrupt")), "The corrupt evidence stays");
+		reopened.append(entry(1, "txn-3", Kind.UPDATE));
+		assertEquals(1, ClientStateJournal.open(journalFile()).entries().size());
 	}
 
 	@Test

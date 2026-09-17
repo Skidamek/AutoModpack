@@ -248,7 +248,7 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	private AvailablePreInstall readAvailablePreInstall(String modpackId, FileCache cache) throws IOException {
-		PreInstallState preInstall = StateHistory.preInstallState(storage, modpackId);
+		PreInstallState preInstall = ClientStorageMutation.run(storage, () -> StateHistory.preInstallState(storage, modpackId));
 		Set<String> availableObjects = new HashSet<>();
 		for (PreInstallState.Entry entry : preInstall.entries())
 			if (!entry.absent() && FileIntegrity.matchesNamed(storage.objectFile(entry.objectHash()), entry.size(), entry.objectHash(), cache)) availableObjects.add(entry.objectHash());

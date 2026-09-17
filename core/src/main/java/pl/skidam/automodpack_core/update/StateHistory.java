@@ -96,12 +96,13 @@ public final class StateHistory {
 
 	public static List<StateEntry> entries(ClientStorage storage) throws IOException {
 		Objects.requireNonNull(storage, "storage");
-		return ClientStateJournal.open(storage.stateHistoryJournalFile()).entries();
+		// Locked, so a read that repairs a torn tail cannot race a concurrent append.
+		return ClientStorageMutation.run(storage, () -> ClientStateJournal.open(storage.stateHistoryJournalFile()).entries());
 	}
 
 	/** The one state entry of the journal, by sequence. */
 	public static StateEntry entry(ClientStorage storage, long seq) throws IOException {
-		return requireEntry(ClientStateJournal.open(storage.stateHistoryJournalFile()), seq);
+		return ClientStorageMutation.run(storage, () -> requireEntry(ClientStateJournal.open(storage.stateHistoryJournalFile()), seq));
 	}
 
 	/**
@@ -164,6 +165,9 @@ public final class StateHistory {
 				if (gate == FileGate.NOT_GAME_DIR) throw new IOException("Only game-directory files can be restored to their original path");
 				if (gate == FileGate.OWNED) throw new IOException("The active modpack still owns " + path);
 				Path destination = storage.gamePath(path);
+				// A destination that already holds exactly these bytes is a no-op restore; recording it would claim a
+				// change that never happened.
+				if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS) && FileIntegrity.matchesNamed(destination, file.size(), file.sha1(), cache)) return destination;
 				copyWithoutOverwrite(storage.gameDirectory(), storage.objectFile(file.sha1()), destination, file.size(), file.sha1(), cache);
 				appendFileRestore(journal, entry, file);
 				return destination;

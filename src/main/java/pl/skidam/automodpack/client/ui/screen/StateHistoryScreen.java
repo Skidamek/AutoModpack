@@ -29,6 +29,7 @@ import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.StateHistory;
+import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /**
@@ -121,7 +122,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 		for (ClientStateJournal.TrackedFile file : files)
 			rows.add(new RowListWidget.Row(List.of(
 					VersionedText.literal(truncateToWidth(this.font, file.path(), panelWidth(PANEL_WIDTH) - 16)).withStyle(ChatFormatting.WHITE),
-					VersionedText.literal(truncateToWidth(this.font, file.root().name() + " · " + humanSize(file.size()), panelWidth(PANEL_WIDTH) - 16)).withStyle(ChatFormatting.GRAY))));
+					VersionedText.literal(truncateToWidth(this.font, rootLabel(file.root()) + " · " + humanSize(file.size()), panelWidth(PANEL_WIDTH) - 16)).withStyle(ChatFormatting.GRAY))));
 		RowListWidget list = new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), 0, LIST_TOP, listBottom, ROW_HEIGHT, rows, this::pickFile);
 		if (selectedFileIndex >= 0 && selectedFileIndex < list.children().size()) list.setSelected(list.children().get(selectedFileIndex));
 		this.addRenderableWidget(list);
@@ -403,6 +404,10 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private String packName(String modpackId) {
 		String name = packNames.get(modpackId);
 		return name == null ? modpackId : name;
+	}
+
+	private static String rootLabel(Root root) {
+		return VersionedText.translatable("automodpack.stateHistory.root." + root.name()).getString();
 	}
 
 	private static String humanSize(long bytes) {

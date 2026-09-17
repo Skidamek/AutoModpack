@@ -1,0 +1,154 @@
+id: state-history
+description: |
+  Screenshots and end-to-end checks for the state history screen: the timeline
+  lists the install and update checkpoints, selecting a checkpoint offers a
+  whole-state restore through the reviewed rollback and per-file recovery, and
+  the restore of an older checkpoint routes into the normal reviewed revert.
+renderClient: true
+
+flow:
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - use: restart_client
+  - use: rejoin
+  - do: publish_server_generation
+    name: publish a changed generation so the timeline gets a second checkpoint
+    generation: 1
+  - do: disconnect
+    name: leave the game for the published update
+  - do: connect
+    name: connect to the published generation
+  - do: wait_for
+    name: show the published generation review
+    timeout: 90s
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: Update, enabled: true }
+  - do: click
+    name: accept the published generation
+    select: { text: Update }
+  - do: wait_file_content
+    name: wait for the changed file
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha-v2\n"
+    timeout: 300s
+  - do: wait_generation
+    name: wait for the committed head generation
+    timeout: 300s
+  - do: wait_for
+    name: wait for the post-update restart
+    timeout: 60s
+    until: { screen: RestartScreen }
+  - do: click
+    name: restart onto the head generation
+    select: { text: "Yes, close the game" }
+    timeout: 20s
+  - do: wait_client_exit
+    name: wait for the head restart to exit
+  - do: launch_client
+    name: relaunch the head client without the server
+  - do: wait_bridge
+    name: wait for the offline bridge
+  - use: open_multiplayer
+  - use: open_pack_manager
+  - do: screenshot
+    name: capture the pack manager with the state history button
+    file: state-history-manager
+  - do: click
+    name: open the state history
+    select: { key: automodpack.management.stateHistory }
+  - do: wait_for
+    name: wait for the state history timeline
+    timeout: 20s
+    until: { screen: StateHistoryScreen }
+  - do: screenshot
+    name: capture the state history timeline
+    file: state-history-timeline
+  - do: click
+    name: select the install checkpoint
+    select: { text: "Installed modpack" }
+  - do: wait_for
+    name: wait until the checkpoint's restorability is resolved
+    timeout: 30s
+    until:
+      all:
+        - element: { key: automodpack.stateHistory.restore, enabled: true }
+        - element: { key: automodpack.stateHistory.files, enabled: true }
+  - do: screenshot
+    name: capture the selected install checkpoint with its restore offer
+    file: state-history-entry-selected
+  - do: click
+    name: open the checkpoint's tracked files
+    select: { key: automodpack.stateHistory.files }
+  - do: wait_for
+    name: wait for the file list
+    timeout: 20s
+    until: { element: { key: automodpack.stateHistory.timeline, enabled: true } }
+  - do: screenshot
+    name: capture the checkpoint's file list
+    file: state-history-files
+  - do: click
+    name: select a tracked file
+    select: { text: "config/amp-autotest-alpha.txt" }
+  - do: screenshot
+    name: capture the selected file with restore and save copy
+    file: state-history-file-selected
+  - do: click
+    name: return to the timeline
+    select: { key: automodpack.stateHistory.timeline }
+  - do: wait_for
+    name: show the timeline again
+    timeout: 20s
+    until: { screen: StateHistoryScreen }
+  - do: click
+    name: select the install checkpoint again
+    select: { text: "Installed modpack" }
+  - do: wait_for
+    name: wait for the whole-state restore to unlock
+    timeout: 30s
+    until: { element: { key: automodpack.stateHistory.restore, enabled: true } }
+  - do: click
+    name: restore the install checkpoint whole
+    select: { key: automodpack.stateHistory.restore }
+  - do: wait_for
+    name: show the reviewed rollback confirm for the older state
+    timeout: 90s
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { key: automodpack.update.rollbackApply, enabled: true }
+  - do: screenshot
+    name: capture the reviewed rollback confirm the state restore routes into
+    file: state-history-restore-confirm
+  - do: click
+    name: cancel out of the restore to keep the run read-only
+    select: { text: Back }
+  - do: wait_for
+    name: land back on the state history timeline
+    timeout: 20s
+    until: { screen: StateHistoryScreen }
+  - do: screenshot
+    name: capture the timeline after returning from the cancelled restore
+    file: state-history-after-cancel
+  - do: quit
+    name: quit the client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  generations:
+    - files:
+        - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha\n" }
+        - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":42}' }
+    - files:
+        - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha-v2\n" }
+        - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":43}' }
+        - { path: config/amp-autotest-gamma.cfg, content: "gamma=true\n" }

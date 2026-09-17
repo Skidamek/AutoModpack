@@ -1,8 +1,10 @@
 package pl.skidam.automodpack_core.update;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.utils.HashUtils.isCanonicalSha1;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -28,6 +30,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JsonLines;
 
@@ -242,9 +245,20 @@ public final class ClientStateJournal {
 		this.entries = entries;
 	}
 
-	/** Opens the local durable state history, repairing away a torn final line left by a crash or power cut mid-append. */
+	/**
+	 * Opens the local durable state history, repairing away a torn final line left by a crash or power cut mid-append.
+	 * A line that is genuinely corrupt is set aside as evidence with a loud log and the journal reads as empty: the
+	 * history would otherwise sit in the ownership sweep's reference path and silently block every future update, and
+	 * a moved-aside journal the player can inspect beats an update flow that can never run again.
+	 */
 	public static ClientStateJournal open(Path file) throws IOException {
-		return new ClientStateJournal(file, JsonLines.read(file, "state history", line -> StateEntry.fromFields(COMPACT.fromJson(line, ClientStorageJsons.StateEntryFields.class)), true));
+		try {
+			return new ClientStateJournal(file, JsonLines.read(file, "state history", line -> StateEntry.fromFields(COMPACT.fromJson(line, ClientStorageJsons.StateEntryFields.class)), true));
+		} catch (JsonLines.UnusableContentException e) {
+			LOGGER.error("The client state history is corrupt and was moved aside; earlier checkpoints are no longer restorable from it: {}", file, e);
+			DurableFiles.setAside(file, "Client state history", e);
+			return new ClientStateJournal(file, List.of());
+		}
 	}
 
 	public List<StateEntry> entries() {
@@ -279,10 +293,18 @@ public final class ClientStateJournal {
 	 */
 	public synchronized StateEntry appendTransaction(UpdateTransaction transaction) throws IOException {
 		Objects.requireNonNull(transaction, "transaction");
-		if (!entries.isEmpty() && entries.get(entries.size() - 1).transactionId().equals(transaction.transactionId)) return entries.get(entries.size() - 1);
-		UpdatePlan plan = transaction.plan();
-		long seq = entries.isEmpty() ? 1 : entries.get(entries.size() - 1).seq() + 1;
-		return append(entryFor(transaction, plan, seq));
+		// The whole-journal scan matters: a recovery path can commit a fresh entry (a drift reset) between the crash
+		// that lost this transaction's checkpoint and the replay that records it, so the head alone would duplicate it.
+		return entries.stream().filter(entry -> entry.transactionId().equals(transaction.transactionId)).findFirst()
+				.orElseGet(() -> {
+					try {
+						UpdatePlan plan = transaction.plan();
+						long seq = entries.isEmpty() ? 1 : entries.get(entries.size() - 1).seq() + 1;
+						return append(entryFor(transaction, plan, seq));
+					} catch (IOException e) {
+						throw new UncheckedIOException(e);
+					}
+				});
 	}
 
 	private StateEntry entryFor(UpdateTransaction transaction, UpdatePlan plan, long seq) {
