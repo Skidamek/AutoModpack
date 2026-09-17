@@ -102,6 +102,11 @@ public final class UpdateTransactionExecutor {
 		return commitPrepared(transaction, null);
 	}
 
+	/** Commits an already-built transaction against the target it was created for; the session builds transactions to decorate them with their state-history story. */
+	public Execution commit(UpdateTransaction transaction, SelectedModpackTarget unpublishedTarget) throws IOException {
+		return commitPrepared(transaction, unpublishedTarget);
+	}
+
 	/**
 	 * The one commit-with-replan: applies the current plan once, and on a replan-required result rebuilds the plan from
 	 * mutable inputs through {@code replan} and retries exactly once. A second replan-required result is terminal and

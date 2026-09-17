@@ -118,6 +118,58 @@ class ClientStateJournalTest {
 		assertTrue(referenced.contains(replaced));
 	}
 
+	@Test
+	void theDeclaredStateKindBeatsThePurposeMapping() throws Exception {
+		ClientStateJournal journal = ClientStateJournal.open(journalFile());
+		UpdateTransaction rollback = transaction("txn-1", plan());
+		rollback.stateKind = ClientStateJournal.Kind.ROLLBACK.name();
+		journal.appendTransaction(rollback);
+		assertEquals(1, journal.entries().size());
+		assertEquals(Kind.ROLLBACK, journal.head().kind());
+	}
+
+	@Test
+	void fileRestoreGatesAppendsACheckpointAndSavesCopies() throws Exception {
+		ClientStorage storage = storage();
+		String bytes = "player-mod";
+		String hash = store(storage, bytes);
+		ClientStateJournal journal = ClientStateJournal.open(storage.stateHistoryJournalFile());
+		journal.append(new StateEntry(1, "txn-1", Kind.UPDATE, MODPACK_ID, hash("token"), CREATED, StateEntry.NO_RESTORE,
+				List.of(new TrackedFile(Root.GAME_DIR, "oldmods/player.jar", hash, bytes.length())), List.of(), List.of()));
+
+		// Projection files have no game-directory path to restore to.
+		assertThrows(IOException.class, () -> StateHistory.restoreFile(storage, 1, Root.PROJECTION, "mods/player.jar"));
+
+		Path restored = StateHistory.restoreFile(storage, 1, Root.GAME_DIR, "oldmods/player.jar");
+		assertEquals("player-mod", Files.readString(restored, StandardCharsets.UTF_8));
+		List<StateEntry> entries = StateHistory.entries(storage);
+		assertEquals(2, entries.size());
+		assertEquals(Kind.FILE_RESTORE, entries.get(1).kind());
+		assertEquals(1, entries.get(1).restoreOfSeq());
+		assertEquals(hash, entries.get(1).state().get(0).sha1());
+
+		// Restoring refuses to overwrite a different live file.
+		Files.writeString(restored, "changed by hand", StandardCharsets.UTF_8);
+		assertThrows(IOException.class, () -> StateHistory.restoreFile(storage, 1, Root.GAME_DIR, "oldmods/player.jar"));
+
+		Path copy = StateHistory.saveFileCopy(storage, 1, Root.GAME_DIR, "oldmods/player.jar");
+		assertEquals("player-mod", Files.readString(copy, StandardCharsets.UTF_8));
+		assertTrue(copy.toString().contains("recovered"));
+	}
+
+	@Test
+	void restorabilityRoutesByKindAndActivePack() throws Exception {
+		ClientStorage storage = storage();
+		ClientStateJournal journal = ClientStateJournal.open(storage.stateHistoryJournalFile());
+		journal.append(new StateEntry(1, "txn-1", Kind.UPDATE, MODPACK_ID, hash("token"), CREATED, StateEntry.NO_RESTORE,
+				List.of(new TrackedFile(Root.PROJECTION, "mods/a.jar", hash("a"), 1)), List.of(), List.of()));
+		journal.append(new StateEntry(2, "file-1", Kind.FILE_RESTORE, MODPACK_ID, hash("token"), CREATED, 1,
+				List.of(new TrackedFile(Root.PROJECTION, "mods/a.jar", hash("a"), 1), new TrackedFile(Root.GAME_DIR, "oldmods/player.jar", hash("p"), 1)), List.of(), List.of()));
+
+		assertEquals(StateHistory.Restorability.INACTIVE_PACK, StateHistory.restorability(storage, StateHistory.entry(storage, 1)).restorability());
+		assertEquals(StateHistory.Restorability.MIXED, StateHistory.restorability(storage, StateHistory.entry(storage, 2)).restorability());
+	}
+
 	private Path journalFile() {
 		return temporaryDirectory.resolve("state-history").resolve("journal.jsonl");
 	}

@@ -292,11 +292,10 @@ public final class ClientStateJournal {
 		List<Change> changes = new ArrayList<>();
 		for (Operation operation : plan.operations()) {
 			String existingHash = operation.expectedExistingHash() == null ? null : HashUtils.normalizeSha1(operation.expectedExistingHash());
-			if (operation.operation() == OperationType.INSTALL_OBJECT)
-				changes.add(Change.install(operation.root(), operation.relativePath(), existingHash, HashUtils.normalizeSha1(operation.expectedObjectHash()), operation.expectedSize()));
-			else
-				if (operation.operation() == OperationType.DELETE && existingHash != null)
-					changes.add(Change.removal(operation.root(), operation.relativePath(), existingHash));
+			boolean install = operation.operation() == OperationType.INSTALL_OBJECT;
+			boolean remove = operation.operation() == OperationType.DELETE && existingHash != null;
+			if (install) changes.add(Change.install(operation.root(), operation.relativePath(), existingHash, HashUtils.normalizeSha1(operation.expectedObjectHash()), operation.expectedSize()));
+			if (remove) changes.add(Change.removal(operation.root(), operation.relativePath(), existingHash));
 		}
 		List<Capture> captures = new ArrayList<>();
 		for (BaselineCapture capture : plan.baselineCaptures())
@@ -306,8 +305,9 @@ public final class ClientStateJournal {
 		changes.sort(StateEntry.CHANGE_ORDER);
 		captures.sort(StateEntry.CAPTURE_ORDER);
 		String contentToken = plan.packTarget().contentToken() == null ? null : HashUtils.normalizeSha1(plan.packTarget().contentToken());
-		return new StateEntry(seq, transaction.transactionId, kindFor(plan.modpackId(), transaction.purpose), plan.modpackId(), contentToken, Instant.now(), StateEntry.NO_RESTORE, state, changes,
-				captures);
+		// A flow that knows its own story better than the purpose mapping - the rollback - labels the entry itself.
+		Kind kind = transaction.stateKind == null || transaction.stateKind.isBlank() ? kindFor(plan.modpackId(), transaction.purpose) : Kind.valueOf(transaction.stateKind);
+		return new StateEntry(seq, transaction.transactionId, kind, plan.modpackId(), contentToken, Instant.now(), transaction.stateRestoreOfSeq, state, changes, captures);
 	}
 
 	private Kind kindFor(String modpackId, UpdateTransaction.Purpose purpose) {

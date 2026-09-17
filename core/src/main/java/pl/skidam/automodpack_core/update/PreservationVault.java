@@ -128,6 +128,18 @@ public final class PreservationVault {
 			if (ledgerEntry == null || ledgerEntry.currentStatus() != OwnershipLedger.Status.PRESENT) throw new IOException("Active target and ownership ledger disagree about " + path);
 			return OriginalRestore.STILL_OWNED;
 		}
+
+		/**
+		 * The entry-file restore gate for the state history: only the live path's ownership under the currently active
+		 * generation matters, not which pack the file's state belonged to. Save copy stays available either way.
+		 */
+		OriginalRestore livePathRestore(Root sourceRoot, String logicalPath) {
+			if (sourceRoot != Root.GAME_DIR) return OriginalRestore.NOT_GAME_DIR;
+			String path = LogicalPath.normalize(logicalPath);
+			if (activeTarget == null) return OriginalRestore.AVAILABLE;
+			if (generatedPaths.contains(path) || flatTargetPaths.contains(path)) return OriginalRestore.STILL_OWNED;
+			return OriginalRestore.AVAILABLE;
+		}
 	}
 
 	public static Claim preserve(ClientStorage storage, String modpackId, String contentToken, Reason reason, Root sourceRoot, String originalPath, String objectHash, long size)
@@ -362,7 +374,7 @@ public final class PreservationVault {
 		}
 	}
 
-	private static void copyWithoutOverwrite(Path constrainedRoot, Path source, Path destination, long size, String hash, FileCache cache) throws IOException {
+	static void copyWithoutOverwrite(Path constrainedRoot, Path source, Path destination, long size, String hash, FileCache cache) throws IOException {
 		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
 		if (!FileIntegrity.matchesNamed(source, size, hash, cache)) throw new IOException("Preserved object is missing or corrupt: " + hash);
 		if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
