@@ -45,8 +45,7 @@ public final class ManifestFetcher {
 		SUCCESS, OPERATION_FAILED, CONNECTION_FAILED
 	}
 
-	/** {@code unchanged} is true iff the head came from the local mirror via a conditional match and the journal was not refetched: the installed generation is the server head. */
-	public record ManifestFetchResult(ManifestFetchState state, GenerationJsons.HeadDocumentFields content, PackTransport transport, Throwable failure, boolean unchanged) {
+	public record ManifestFetchResult(ManifestFetchState state, GenerationJsons.HeadDocumentFields content, PackTransport transport, Throwable failure) {
 		public boolean successful() {
 			return state == ManifestFetchState.SUCCESS;
 		}
@@ -61,7 +60,7 @@ public final class ManifestFetcher {
 			return future.get(NetUtils.NETWORK_TIMEOUT.multipliedBy(6).toSeconds(), TimeUnit.SECONDS);
 		} catch (Exception e) {
 			Throwable cause = Throwables.unwrap(e);
-			return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, cause, false);
+			return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, cause);
 		}
 	}
 
@@ -71,34 +70,32 @@ public final class ManifestFetcher {
 			boolean allowAskingUser, String selectedModpackId) {
 		ManifestFetchState connectionFailedState = ManifestFetchState.CONNECTION_FAILED;
 		if (!connectionInfo.isComplete()) {
-			return CompletableFuture.completedFuture(new ManifestFetchResult(connectionFailedState, null, null, new IllegalArgumentException("Connection origin or endpoint is missing"),
-					false));
+			return CompletableFuture.completedFuture(new ManifestFetchResult(connectionFailedState, null, null, new IllegalArgumentException("Connection origin or endpoint is missing")));
 		}
 
 		return createTransport(connectionInfo, secret == null ? null : secret.secretBytes(), manualValidationCallbackAsync(connectionInfo, allowAskingUser))
 				.thenCompose(transport -> fetchModpackContentAsync(storage, transport, ModpackId.isValid(selectedModpackId) ? selectedModpackId : null).handle((fetched, error) -> {
-					if (error != null || fetched == null || fetched.content() == null) {
+					if (error != null || fetched == null) {
 						transport.close();
 						Throwable cause = error == null ? new IOException("Server returned no usable modpack content") : Throwables.unwrap(error);
-						return new ManifestFetchResult(ManifestFetchState.OPERATION_FAILED, null, null, cause, false);
+						return new ManifestFetchResult(ManifestFetchState.OPERATION_FAILED, null, null, cause);
 					}
-					return new ManifestFetchResult(ManifestFetchState.SUCCESS, fetched.content(), transport, null, fetched.unchanged());
+					return new ManifestFetchResult(ManifestFetchState.SUCCESS, fetched, transport, null);
 				}))
 				.exceptionally(error -> {
 					Throwable cause = Throwables.unwrap(error);
-					return new ManifestFetchResult(connectionFailedState, null, null, cause, false);
+					return new ManifestFetchResult(connectionFailedState, null, null, cause);
 				});
 	}
 
-	/** The head document plus whether it arrived from the local mirror rather than the wire. */
-	private record HeadAndJournal(GenerationJsons.HeadDocumentFields content, boolean unchanged) {}
-
 	/**
 	 * One conditional fetch of the head document and its journal vouch. When the selected pack's head mirror parses and
-	 * names the active generation, its sha1 rides along as the validator; a match short-circuits the fetch or is
-	 * confirmed by the body hash. The journal mirror follows the same discipline against its own file hash.
+	 * names the active generation, its sha1 rides along as the validator; a match short-circuits the transfer or is
+	 * confirmed by the body hash. The journal mirror follows the same discipline against its own file hash. The
+	 * short-circuit covers the transfer only: every caller still verifies the local projection against the content, so
+	 * a corrupted or removed file is repaired even when the server head never moved.
 	 */
-	private static CompletableFuture<HeadAndJournal> fetchModpackContentAsync(ClientStorage storage, PackTransport transport, String selectedModpackId) {
+	private static CompletableFuture<GenerationJsons.HeadDocumentFields> fetchModpackContentAsync(ClientStorage storage, PackTransport transport, String selectedModpackId) {
 		final String headExpected;
 		final String journalExpected;
 		if (selectedModpackId != null) {
@@ -131,21 +128,18 @@ public final class ManifestFetcher {
 	}
 
 	/** Applies one head fetch answer: parses the served or mirrored document, writes a fresh fetch through to the mirror, then syncs the journal vouch. */
-	private static CompletableFuture<HeadAndJournal> applyFetchedHead(ClientStorage storage, PackTransport transport, String selectedModpackId, String headExpected, String journalExpected,
+	private static CompletableFuture<GenerationJsons.HeadDocumentFields> applyFetchedHead(ClientStorage storage, PackTransport transport, String selectedModpackId, String headExpected, String journalExpected,
 			DocumentFetch fetch) {
 		GenerationJsons.HeadDocumentFields content;
-		boolean headFromMirror;
 		if (fetch.unchanged()) {
 			// The validator is the only thing that can make UNCHANGED a truthful answer; anything else is a broken or
 			// hostile server, and no mirror may be trusted on its word.
 			if (headExpected == null) return CompletableFuture.failedFuture(new IOException("Server answered UNCHANGED to an unconditional head request"));
 			// A conditional match: the server sent nothing, or it ignored the validator and the body hashed to the
 			// expectation - either way the mirror holds exactly those bytes, so the content reads from there.
-			headFromMirror = true;
 			Path source = fetch.path() != null ? fetch.path() : storage.historyHeadFile(selectedModpackId);
 			content = ModpackContentTools.readHeadDocument(source);
 		} else {
-			headFromMirror = false;
 			LOGGER.info("Fetched the head document from the server (installed mirror {})", headExpected == null ? "did not vouch" : "is stale");
 			content = ModpackContentTools.readHeadDocument(storage.modpackContentTempFile());
 			if (content != null) {
@@ -157,8 +151,8 @@ public final class ManifestFetcher {
 				}
 			}
 		}
-		if (content == null) return CompletableFuture.completedFuture(new HeadAndJournal(null, false));
-		return syncJournalMirror(storage, transport, content, journalExpected).thenApply(journalRefetched -> new HeadAndJournal(content, headFromMirror && !journalRefetched));
+		if (content == null) return CompletableFuture.completedFuture(null);
+		return syncJournalMirror(storage, transport, content, journalExpected).thenApply(journalRefetched -> content);
 	}
 
 	/**

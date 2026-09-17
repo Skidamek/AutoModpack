@@ -32,7 +32,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 
 /**
  * The full conditional fetch chain against a real TLS server: the first contact writes the fetched head through to the
- * installed mirror, and the second contact reads as unchanged from that mirror — the login short-circuit's footing.
+ * installed mirror, and the second contact validates against that mirror instead of re-downloading the document.
  */
 class ManifestFetcherMirrorChainTest {
 	private static final String MODPACK_ID = "abc1234";
@@ -64,9 +64,13 @@ class ManifestFetcherMirrorChainTest {
 		// The install the first sync drives: the active generation now points at the fetched head's token.
 		storage.writeActiveState(MODPACK_ID, head.contentToken, head.ownershipLedger);
 
+		// The second contact carries the mirror's hash as the validator: the server answers without a body and the
+		// content is served from the mirror. The flow's local verification runs regardless — only the transfer is skipped.
 		var second = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
 		assertTrue(second.successful(), () -> "second fetch failed: " + second.failure());
-		assertTrue(second.unchanged(), "The second fetch must read as unchanged through the installed mirror");
+		assertEquals(head.contentToken, second.content().contentToken);
+		assertEquals(head.policySha1, second.content().policySha1);
+		assertEquals(new String(headBytes, StandardCharsets.UTF_8), Files.readString(storage.historyHeadFile(MODPACK_ID), StandardCharsets.UTF_8));
 	}
 
 	private byte[] journalBytes(String headToken, GroupManifest manifest) throws IOException {
