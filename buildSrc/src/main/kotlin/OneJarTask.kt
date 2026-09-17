@@ -135,11 +135,12 @@ abstract class OneJarTask : DefaultTask() {
         )
     }
 
-    /** Copies the optimized outer's entries, preserving each entry's own compression method. */
+    /** Copies the optimized outer's entries, preserving each entry's own compression method. Directory entries are dropped: zip readers synthesize them and they are 583 dead zero-byte entries otherwise. */
     private fun copyOuter(output: ZipOutputStream) {
         val seen = mutableSetOf<String>()
         ZipInputStream(FileInputStream(outerJar.get().asFile)).use { input ->
             generateSequence { input.nextEntry }.forEach { entry ->
+                if (entry.isDirectory) return@forEach
                 if (!seen.add(entry.name)) throw GradleException("Duplicate entry ${entry.name} in the outer jar")
                 val bytes = input.readBytes()
                 val copy = ZipEntry(entry.name).apply {

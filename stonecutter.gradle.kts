@@ -252,7 +252,7 @@ val auditOneJarTask =
 		description = "Audits the packed one jar: size budget, manifest ids, STORE entries, assets, no nested jarjar."
 		oneJar.set(oneJarTask.flatMap { it.oneJar })
 		expectedIds.set(selectedTargets.sorted())
-		// Packed one-jar measured 3670546 bytes after the tomlj drop (deflated outer assets, 22 STORE impls in the zstd solid); 5 MiB is the tripwire past any good build.
+		// Packed one-jar measured 3560113 bytes (deflated outer assets, 22 STORE impls in the zstd solid, no zip directory entries); 5 MiB is the tripwire past any good build.
 		maxJarBytes.set(5L * 1024 * 1024)
 		enforceReleaseSizeBudget.set(automodpackBuildMode.map { it != "autotest" })
 		// The waiting loop is the transcribed note-block bossa nova, 550322 bytes as packaged; 1 MiB leaves it headroom and still trips on accidental full songs.
