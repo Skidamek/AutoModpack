@@ -7,7 +7,6 @@ import java.nio.IntBuffer;
 
 import javax.sound.sampled.AudioFormat;
 
-import org.lwjgl.openal.AL;
 import org.lwjgl.openal.AL10;
 import org.lwjgl.openal.ALC;
 import org.lwjgl.openal.ALC10;
@@ -175,14 +174,20 @@ public class AudioManager {
 						return null;
 					}
 					ALCCapabilities alc = ALC.createCapabilities(device);
+					if (!alc.ALC_EXT_thread_local_context) {
+						// Without the thread-local extension the only way to make a context current is the
+						// process-global slot, which would steal it from the game's own sound engine.
+						Constants.LOGGER.error("OpenAL on this machine lacks ALC_EXT_thread_local_context; skipping the waiting music");
+						ALC10.alcCloseDevice(device);
+						return null;
+					}
 					context = ALC10.alcCreateContext(device, (IntBuffer) null);
-					if (context == 0 || !ALC10.alcMakeContextCurrent(context)) {
+					if (context == 0 || !threadLocalContext(alc, context)) {
 						Constants.LOGGER.error("No OpenAL context for the waiting music; skipping it");
 						ALC10.alcDestroyContext(context);
 						ALC10.alcCloseDevice(device);
 						return null;
 					}
-					AL.createCapabilities(alc);
 					int source = AL10.alGenSources();
 					int[] buffers = new int[BUFFER_COUNT];
 					boolean voiced = source != 0;
@@ -233,6 +238,11 @@ public class AudioManager {
 				return AL10.alGetSourcei(this.source, AL10.AL_SOURCE_STATE) == AL10.AL_STOPPED;
 			}
 
+			/** ALC_EXT_thread_local_context's alcSetThreadContext, reached through its raw function pointer because LWJGL does not wrap it; a zero context clears this thread's slot. The process-global context the game uses is never touched. */
+			private static boolean threadLocalContext(ALCCapabilities alc, long context) {
+				return org.lwjgl.system.JNI.invokePI(context, alc.alcSetThreadContext) != 0;
+			}
+
 			/** Follows the client's music slider; at zero the loop keeps running inaudibly so raising the slider resumes it. */
 			void applyVolume() {
 				float gain = Minecraft.getInstance().options.getSoundSourceVolume(SoundSource.MUSIC) * GAIN_SCALE;
@@ -249,6 +259,9 @@ public class AudioManager {
 				} catch (Exception e) {
 					Constants.LOGGER.warn("Failed to release the waiting music's OpenAL objects", e);
 				}
+				// The context is current on this thread only through the thread-local slot; clear it or
+				// alcDestroyContext refuses, and the process-global context the game owns is never ours.
+				threadLocalContext(ALC.createCapabilities(this.device), 0);
 				ALC10.alcDestroyContext(this.context);
 				ALC10.alcCloseDevice(this.device);
 			}
