@@ -126,12 +126,12 @@ public final class OfflineRepairScreen extends VersionedScreen {
 	private int listTop() {
 		int headerEnd = statusBandTop() + (prepared.requiresUpdate() ? 24 : 12);
 		if (prepared.unownedModPaths().isEmpty()) return Math.max(prepared.requiresUpdate() ? 94 : 82, headerEnd + 4);
-		return headerEnd + 30;
+		return headerEnd + 27;
 	}
 
-	/** Where the keep checkbox sits: under the header, right above the editable list. */
+	/** Where the keep checkbox sits: one tight gap above the editable list's first checkbox. */
 	private int keepCheckboxY() {
-		return listTop() - 28;
+		return listTop() - 24;
 	}
 
 	/** Where the working/receipt/update-needed line sits: under the wrapped unowned line, never above the fixed band. */

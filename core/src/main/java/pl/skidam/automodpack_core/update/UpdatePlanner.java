@@ -514,8 +514,10 @@ public final class UpdatePlanner {
 			boolean keepStandard = target.ids().stream().anyMatch(idsToKeep::contains);
 			FileKey targetKey = new FileKey(Root.GAME_DIR, targetPath);
 			if (!keepStandard && oldKey.equals(targetKey) && standard.sha1().equalsIgnoreCase(target.sha1())) {
-				// The live copy is byte-identical to the pack's own mod: the projection serves the same bytes,
-				// so the redundant copy just goes - nothing of the player's to preserve and no conflict to ask about.
+				// The live copy is byte-identical to the pack's own mod: the projection serves the same bytes, so the
+				// copy is redundant and goes - but it is vaulted, so if the server later stops shipping the mod the
+				// player can still restore it from Preserved files.
+				session.preserve(new Preservation(Root.GAME_DIR, standardPath, standard.sha1().toLowerCase(Locale.ROOT), standard.size(), PreservationProof.PLAYER_CONSENT));
 				session.delete(oldKey, standard.sha1());
 				session.restart(RestartReason.REMOVED_DUPLICATE_MODS);
 				continue;
