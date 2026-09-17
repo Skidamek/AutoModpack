@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.client.ui.versioned;
 
 import java.util.ArrayList;
-import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -36,7 +35,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.client.gui.components.Renderable;
 /*?}*/
 
-import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.widget.DropdownWidget;
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
@@ -293,11 +291,6 @@ public class VersionedScreen extends Screen {
 		return action(message, button -> {}, ActionAreaLayout.Role.OPTIONAL, false);
 	}
 
-	/** A checkbox in the action grid: one row of its own, built and placed like any other action. */
-	protected final ActionDefinition checkboxAction(Component message, boolean selected, Consumer<Boolean> onPress) {
-		return new ActionDefinition(message, null, ActionAreaLayout.Role.OPTIONAL, true, selected, onPress);
-	}
-
 	private ActionDefinition action(Component message, Button.OnPress onPress, ActionAreaLayout.Role role, boolean enabled) {
 		return new ActionDefinition(message, onPress, role, enabled);
 	}
@@ -340,9 +333,7 @@ public class VersionedScreen extends Screen {
 		List<AbstractWidget> widgets = new ArrayList<>(area.layout().placements().size());
 		for (ActionAreaLayout.Placement placement : area.layout().placements()) {
 			ActionDefinition definition = area.definitions().get(placement.id());
-			AbstractWidget widget = definition.checkbox()
-					? new CheckboxWidget(this.font, placement.x(), placement.y(), placement.width(), definition.message(), definition.selected(), value -> definition.onCheck().accept(value))
-					: buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), definition.message(), definition.onPress());
+			AbstractWidget widget = buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), definition.message(), definition.onPress());
 			widget.active = definition.enabled();
 			definition.widget = widget;
 			this.addRenderableWidget(widget);
@@ -660,23 +651,13 @@ public class VersionedScreen extends Screen {
 		private final Button.OnPress onPress;
 		private final ActionAreaLayout.Role role;
 		private final boolean enabled;
-		private final boolean checkbox;
-		private final boolean selected;
-		private final Consumer<Boolean> onCheck;
 		private AbstractWidget widget;
 
 		private ActionDefinition(Component message, Button.OnPress onPress, ActionAreaLayout.Role role, boolean enabled) {
-			this(message, onPress, role, enabled, false, null);
-		}
-
-		private ActionDefinition(Component message, Button.OnPress onPress, ActionAreaLayout.Role role, boolean enabled, boolean selected, Consumer<Boolean> onCheck) {
 			this.message = message;
 			this.onPress = onPress;
 			this.role = role;
 			this.enabled = enabled;
-			this.checkbox = onCheck != null;
-			this.selected = selected;
-			this.onCheck = onCheck;
 		}
 
 		private Component message() {
@@ -695,21 +676,9 @@ public class VersionedScreen extends Screen {
 			return enabled;
 		}
 
-		private boolean checkbox() {
-			return checkbox;
-		}
-
 		/** The widget this action was built into by the last {@code addActionArea} call, so screens never replay row conditionals as indices. */
 		public AbstractWidget widget() {
 			return widget;
-		}
-
-		private boolean selected() {
-			return selected;
-		}
-
-		private Consumer<Boolean> onCheck() {
-			return onCheck;
 		}
 	}
 

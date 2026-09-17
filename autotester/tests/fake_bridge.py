@@ -618,7 +618,7 @@ class FakeBridge:
         buttons: list[dict] = []
         if not self.repair_applied:
             buttons.append({"id": 97, "text": f"Keep {len(self._repair_unowned_mods())} existing mod files", "enabled": True, "visible": bool(self._repair_unowned_mods()), "checked": self.repair_keep_unowned, "key": "automodpack.confirm.keepExistingMods"})
-            buttons.append({"id": 95, "text": "[ ] Keep changes in config/pack-shared-editable.txt" if self.repair_editable_reset else "[x] Keep changes in config/pack-shared-editable.txt", "enabled": True, "visible": True})
+            buttons.append({"id": 95, "text": "Keep changes in config/pack-shared-editable.txt", "enabled": True, "visible": True, "checked": not self.repair_editable_reset})
             if self.repair_editable_reset:
                 buttons.append({"id": 96, "text": "Keep all editable changes", "enabled": True, "visible": True})
         repair_work = not self.repair_applied and (self.repair_editable_reset or self.repair_keep_unowned or bool(self.repair_mutations))

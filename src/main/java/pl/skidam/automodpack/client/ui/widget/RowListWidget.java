@@ -22,15 +22,21 @@ import net.minecraft.client.input.MouseButtonEvent;
 public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> implements RowViewport {
 	public static final int LINE_STEP = 10;
 	private static final int TEXT_MARGIN = 6;
+	/** Left-side space a checkbox row reserves for the box, so screen-side pre-wrapping clears it. */
+	public static final int CHECKBOX_RESERVE = CheckboxWidget.BOX_SIZE + CheckboxWidget.TEXT_SPACING;
 	/** The hovered-row wash reads as "you can click this"; the selected wash is the stronger one that stays. */
 	private static final int HOVER_COLOR = 0x40FFFFFF;
 	private static final int SELECTED_COLOR = 0x60FFFFFF;
 	private final IntConsumer rowPicked;
 
-	/** One row: pre-wrapped, pre-styled lines plus an optional hover tooltip. */
-	public record Row(List<MutableComponent> lines, Component tooltip) {
+	/** One row: pre-wrapped, pre-styled lines plus an optional hover tooltip; a checkbox state draws our checkbox and reports it to tooling. */
+	public record Row(List<MutableComponent> lines, Component tooltip, CheckboxWidget.State state) {
 		public Row {
 			lines = List.copyOf(Objects.requireNonNull(lines, "row lines"));
+		}
+
+		public Row(List<MutableComponent> lines, Component tooltip) {
+			this(lines, tooltip, null);
 		}
 
 		public Row(List<MutableComponent> lines) {
@@ -76,16 +82,19 @@ public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> 
 
 		@Override
 		protected void versionedRender(VersionedMatrices matrices, int x, int y, int width, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			int lineWidth = Math.max(1, width - TEXT_MARGIN * 2);
+			int checkboxReserve = row.state() == null ? 0 : CHECKBOX_RESERVE;
+			int lineWidth = Math.max(1, width - TEXT_MARGIN * 2 - checkboxReserve);
 			int lines = row.lines().size();
+			int textX = x + TEXT_MARGIN + checkboxReserve;
 			int textY = y + Math.max(0, (rowHeight() - lines * LINE_STEP) / 2) + 1;
 			// Washes carry the row state: the selected row stays washed, a hovered row washes while the pointer is on it.
 			if (getSelected() == this) matrices.fill(x, y, x + width, y + rowHeight(), SELECTED_COLOR);
 			else if (hovered) matrices.fill(x, y, x + width, y + rowHeight(), HOVER_COLOR);
+			if (row.state() != null) CheckboxWidget.drawBox(matrices, x + TEXT_MARGIN, y + Math.max(0, (rowHeight() - CheckboxWidget.BOX_SIZE) / 2), row.state());
 			for (MutableComponent line : row.lines()) {
 				MutableComponent drawn = line;
 				if (minecraft.font.width(line) > lineWidth) drawn = VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, line.getString(), lineWidth)).withStyle(line.getStyle());
-				VersionedScreen.drawTextWithShadow(matrices, minecraft.font, drawn, x + Math.max(0, (width - minecraft.font.width(drawn)) / 2), textY, TextColors.WHITE);
+				VersionedScreen.drawTextWithShadow(matrices, minecraft.font, drawn, checkboxReserve == 0 ? textX + Math.max(0, (width - TEXT_MARGIN * 2 - minecraft.font.width(drawn)) / 2) : textX, textY, TextColors.WHITE);
 				textY += LINE_STEP;
 			}
 			if (hovered && row.tooltip() != null) VersionedScreen.showComponentTooltip(row.tooltip(), mouseX, mouseY);
@@ -113,7 +122,8 @@ public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> 
 
 	@Override
 	public RowView rowView(int index) {
-		return new RowView(this.children().get(index).row().text(), true, null, false);
+		Row row = this.children().get(index).row();
+		return new RowView(row.text(), true, row.state() == null ? null : row.state() == CheckboxWidget.State.CHECKED, row.state() == CheckboxWidget.State.PARTIAL);
 	}
 
 	@Override

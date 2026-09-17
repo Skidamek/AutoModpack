@@ -28,6 +28,7 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.loader.PinnedMods;
@@ -84,7 +85,8 @@ public final class PinnedModsScreen extends VersionedScreen {
 		int rowWidth = Math.max(1, width - 8);
 		List<RowListWidget.Row> listRows = new ArrayList<>(rows.size());
 		for (Row row : rows) {
-			listRows.add(new RowListWidget.Row(List.of(rowLabel(row, rowWidth)), VersionedText.translatable(row.present ? "automodpack.pinnedMods.liveTooltip" : "automodpack.pinnedMods.missingTooltip")));
+			listRows.add(new RowListWidget.Row(List.of(rowLabel(row, rowWidth)), VersionedText.translatable(row.present ? "automodpack.pinnedMods.liveTooltip" : "automodpack.pinnedMods.missingTooltip"),
+					row.pinned ? CheckboxWidget.State.CHECKED : CheckboxWidget.State.UNCHECKED));
 		}
 		// The list fills the space between the input row and the pinned actions; only a real overflow scrolls.
 		int listBottom = actionAreaTop(FOOTER_WIDTH, this.height - 28, actionRows) - 8;
@@ -109,9 +111,9 @@ public final class PinnedModsScreen extends VersionedScreen {
 
 	private MutableComponent rowLabel(Row row, int width) {
 		String raw = row.present
-				? VersionedText.translatable(row.pinned ? "automodpack.pinnedMods.liveOn" : "automodpack.pinnedMods.liveOff", row.id, row.fileName).getString()
+				? VersionedText.translatable("automodpack.pinnedMods.live", row.id, row.fileName).getString()
 				: VersionedText.translatable("automodpack.pinnedMods.missing", row.id).getString();
-		return VersionedText.literal(truncateToWidth(this.font, raw, Math.max(1, width - 8))).withStyle(key(row).equals(selectedKey) ? ChatFormatting.GREEN : ChatFormatting.WHITE);
+		return VersionedText.literal(truncateToWidth(this.font, raw, Math.max(1, width - 8 - RowListWidget.CHECKBOX_RESERVE))).withStyle(key(row).equals(selectedKey) ? ChatFormatting.GREEN : ChatFormatting.WHITE);
 	}
 
 	private void toggle(Row row) {

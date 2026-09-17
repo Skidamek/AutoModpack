@@ -17,6 +17,7 @@ import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.widget.Countdown;
 import pl.skidam.automodpack.client.ui.widget.UnverifiedJarList;
 import pl.skidam.automodpack_core.client.Changelogs;
@@ -54,7 +55,9 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private boolean finished;
 	private AbstractWidget cancelButton;
 	private AbstractWidget primaryButton;
-	private AbstractWidget ackCheckbox;
+	private CheckboxWidget leftoverCheckbox;
+	private CheckboxWidget ackCheckbox;
+	private int ackReasonY = -1;
 	private String originFull = "";
 	private String originDisplay = "";
 
@@ -116,14 +119,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 				: laterPreview != null && Changelogs.hasNotes(laterPreview.journal());
 
 		ActionDefinition historyAction = notes ? optionalAction(VersionedText.translatable("automodpack.management.history"), button -> openHistory()) : null;
-		ActionDefinition leftoverAction = leftover ? checkboxAction(PackConfirmCopy.leftoverLabel(welcome.firstInstallLocalModPaths().size()), keepExistingMods, value -> {
-			keepExistingMods = value;
-			actions.setFirstInstallLocalModCleanup().accept(!keepExistingMods);
-			// The checkbox label is constant now; the rebuild only refreshes the existing-mods summary line.
-			rebuild();
-		}) : null;
 		ActionDefinition customizeAction = customize ? optionalAction(PackConfirmCopy.customizeLabel(), button -> customize()) : null;
-		ActionDefinition ackAction = unverified ? checkboxAction(PackConfirmCopy.ackLabel(), acknowledged, value -> onAckToggled(value)) : null;
 		Component cancelLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.cancel" : "automodpack.back");
 		Component primaryLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.download" : UpdatePreviewScreen.actionKey(laterPreview.mode()));
 		ActionDefinition cancelAction = secondaryAction(cancelLabel, button -> cancel());
@@ -134,18 +130,29 @@ public final class PackConfirmScreen extends VersionedScreen {
 		if (historyAction != null && customizeAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, historyAction, customizeAction));
 		else if (historyAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, historyAction));
 		else if (customizeAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, customizeAction));
-		if (leftoverAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, leftoverAction));
-		if (ackAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, ackAction));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, cancelAction, reviewAction, primaryDef));
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
 		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
-		if (leftoverAction != null) {
+		// The consent choices live in the body next to the text they belong to; layoutBody places them.
+		leftoverCheckbox = null;
+		if (leftover) {
+			leftoverCheckbox = new CheckboxWidget(this.font, 0, 0, panelWidth(BODY), PackConfirmCopy.leftoverLabel(welcome.firstInstallLocalModPaths().size()), keepExistingMods, value -> {
+				keepExistingMods = value;
+				actions.setFirstInstallLocalModCleanup().accept(!keepExistingMods);
+				// The checkbox label is constant now; the rebuild only refreshes the existing-mods summary line.
+				rebuild();
+			});
 			String joined = String.join("\n", wrapToWidth(this.font, String.join(", ", welcome.firstInstallLocalModPaths()), 240, 8));
-			VersionedScreen.setTooltip(leftoverAction.widget(), VersionedText.translatable("automodpack.confirm.leftoverTooltip", joined));
+			VersionedScreen.setTooltip(leftoverCheckbox, VersionedText.translatable("automodpack.confirm.leftoverTooltip", joined));
+			this.addRenderableWidget(leftoverCheckbox);
 		}
-		ackCheckbox = ackAction == null ? null : ackAction.widget();
-		// The risk acknowledgement stays locked until the read countdown ran out.
-		if (ackCheckbox != null) ackCheckbox.active = !countdown.running();
+		ackCheckbox = null;
+		if (unverified) {
+			ackCheckbox = new CheckboxWidget(this.font, 0, 0, panelWidth(BODY), PackConfirmCopy.ackLabel(), acknowledged, this::onAckToggled);
+			// The risk acknowledgement stays locked until the read countdown ran out.
+			ackCheckbox.active = !countdown.running();
+			this.addRenderableWidget(ackCheckbox);
+		}
 		cancelButton = cancelAction.widget();
 		primaryButton = primaryDef.widget();
 		primaryButton.active = !unverified || (!countdown.running() && acknowledged);
@@ -202,30 +209,50 @@ public final class PackConfirmScreen extends VersionedScreen {
 
 		int topHeight = topLines.size() * LINE_HEIGHT;
 		int bottomHeight = bottomLines.size() * LINE_HEIGHT;
+		int consentHeight = (leftoverCheckbox == null ? 0 : ActionAreaLayout.SEAM + leftoverCheckbox.boxHeight())
+				+ (ackCheckbox == null ? 0 : ActionAreaLayout.SEAM + ackCheckbox.boxHeight());
 		int available = Math.max(LINE_HEIGHT, bottomY - 42);
-		int listRows = preferredListRows(available - topHeight - bottomHeight - 2 * ActionAreaLayout.SEAM);
+		int listRows = preferredListRows(available - topHeight - bottomHeight - consentHeight - 2 * ActionAreaLayout.SEAM);
 		int listHeight = listRows * UnverifiedJarList.ROW_HEIGHT;
-		int needed = topHeight + ActionAreaLayout.SEAM + listHeight + ActionAreaLayout.SEAM + bottomHeight;
+		int needed = topHeight + consentHeight + ActionAreaLayout.SEAM + listHeight + ActionAreaLayout.SEAM + bottomHeight;
 
 		if (needed > available) {
 			listRows = Math.max(3, listRows - 1);
 			listHeight = listRows * UnverifiedJarList.ROW_HEIGHT;
-			needed = topHeight + ActionAreaLayout.SEAM + listHeight + ActionAreaLayout.SEAM + bottomHeight;
+			needed = topHeight + consentHeight + ActionAreaLayout.SEAM + listHeight + ActionAreaLayout.SEAM + bottomHeight;
 		}
 		if (needed <= available) {
-			// The whole assembly centers, so a short window never opens a hole between the blocks.
+			// The whole assembly centers, so a short window never opens a hole between the blocks; the risk
+			// acknowledgement sits directly under the risk paragraphs it consents to.
 			int assemblyTop = 42 + (available - needed) / 2;
-			placeUnverifiedBody(assemblyTop, assemblyTop + needed, topLines, bottomLines, topHeight, listHeight);
+			placeUnverifiedBody(assemblyTop, topLines, bottomLines, topHeight, listHeight, bottomHeight);
 			return;
 		}
 
+		int scrollBottom = pinConsentCheckboxes(bottomY);
 		List<MutableComponent> all = new ArrayList<>(topLines);
 		all.add(blankLine());
 		for (UnverifiedJarList.UnverifiedFile file : unverifiedFiles)
 			all.addAll(wrapParagraph(this.font, file.size() > 0 ? file.path() + " · " + UiFormat.formatSize(file.size()) : file.path(), wrapWidth, ChatFormatting.GRAY));
 		all.add(blankLine());
 		all.addAll(bottomLines);
-		this.addCenteredScrollBody(BODY, 42, bottomY, all);
+		this.addCenteredScrollBody(BODY, 42, scrollBottom, all);
+	}
+
+	/** Pins the consent checkboxes above the action rail when the body overflows; returns the scroll body's new bottom. */
+	private int pinConsentCheckboxes(int bottomY) {
+		int nextBottom = bottomY;
+		if (ackCheckbox != null) {
+			ackCheckbox.moveTo(panelLeft(BODY), nextBottom - ackCheckbox.boxHeight());
+			// The reason sits between the ack and whatever is stacked above it.
+			ackReasonY = ackCheckbox.yPosition() - 11;
+			nextBottom = ackCheckbox.yPosition() - 20;
+		}
+		if (leftoverCheckbox != null) {
+			leftoverCheckbox.moveTo(panelLeft(BODY), nextBottom - leftoverCheckbox.boxHeight());
+			nextBottom = leftoverCheckbox.yPosition() - ActionAreaLayout.SEAM;
+		}
+		return nextBottom;
 	}
 
 	/** The platform lookup has settled before this screen opens, so the unverified count is final and red. */
@@ -247,7 +274,13 @@ public final class PackConfirmScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.computerRisk(), wrapWidth));
 		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.sharedCommands(), wrapWidth, ChatFormatting.YELLOW));
-		DialogColumn column = layoutDialogColumn(42, footerTop, lines.size() * LINE_HEIGHT, 0);
+		int bodyFooter = footerTop;
+		if (leftoverCheckbox != null) {
+			// The keep choice pins above the rail; the dialog column stops above it.
+			leftoverCheckbox.moveTo(panelLeft(BODY), footerTop - ActionAreaLayout.SEAM - leftoverCheckbox.boxHeight());
+			bodyFooter = leftoverCheckbox.yPosition();
+		}
+		DialogColumn column = layoutDialogColumn(42, bodyFooter, lines.size() * LINE_HEIGHT, 0);
 		this.addCenteredScrollBody(BODY, column.bodyTop(), column.bodyBottom(), lines);
 	}
 
@@ -276,11 +309,25 @@ public final class PackConfirmScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, text, wrapWidth, style));
 	}
 
-	private void placeUnverifiedBody(int topY, int bottomY, List<MutableComponent> topLines, List<MutableComponent> bottomLines, int topHeight, int listHeight) {
-		this.addCenteredScrollBody(BODY, topY, topY + topHeight, topLines);
-		int listTop = topY + topHeight + ActionAreaLayout.SEAM;
-		this.addRenderableWidget(new UnverifiedJarList(this.minecraft, this.width, this.height, panelWidth(BODY), listTop, listTop + listHeight, unverifiedFiles));
-		this.addCenteredScrollBody(BODY, listTop + listHeight + ActionAreaLayout.SEAM, bottomY, bottomLines);
+	private void placeUnverifiedBody(int topY, List<MutableComponent> topLines, List<MutableComponent> bottomLines, int topHeight, int listHeight, int bottomHeight) {
+		int y = topY;
+		this.addCenteredScrollBody(BODY, y, y + topHeight, topLines);
+		y += topHeight;
+		if (leftoverCheckbox != null) {
+			y += ActionAreaLayout.SEAM;
+			leftoverCheckbox.moveTo(panelLeft(BODY), y);
+			y += leftoverCheckbox.boxHeight();
+		}
+		y += ActionAreaLayout.SEAM;
+		this.addRenderableWidget(new UnverifiedJarList(this.minecraft, this.width, this.height, panelWidth(BODY), y, y + listHeight, unverifiedFiles));
+		y += listHeight + ActionAreaLayout.SEAM;
+		this.addCenteredScrollBody(BODY, y, y + bottomHeight, bottomLines);
+		y += bottomHeight;
+		if (ackCheckbox != null) {
+			y += ActionAreaLayout.SEAM;
+			ackCheckbox.moveTo(panelLeft(BODY), y);
+			ackReasonY = y + ackCheckbox.boxHeight() + 2;
+		}
 	}
 
 	private int preferredListRows(int freeHeight) {
@@ -373,8 +420,10 @@ public final class PackConfirmScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, panelWidth(BODY))).withStyle(ChatFormatting.WHITE), this.width / 2, 14, TextColors.WHITE);
 		// The disabled primary needs its reason on screen: the countdown while the risk read runs, the checkbox after it.
 		if (!finished && !unverifiedPaths.isEmpty() && !acknowledged) {
-			if (countdown.running()) drawCountdown(matrices, VersionedText.translatable("automodpack.confirm.ackCountdown", countdown.secondsRemaining()), this.height - 40);
-			else drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.confirm.ackUnlock").withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 40, TextColors.WHITE);
+			// The reason travels with the risk box: under it in the centered assembly, above it when pinned.
+			int reasonY = ackReasonY >= 0 ? ackReasonY : this.height - 40;
+			if (countdown.running()) drawCountdown(matrices, VersionedText.translatable("automodpack.confirm.ackCountdown", countdown.secondsRemaining()), reasonY);
+			else drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.confirm.ackUnlock").withStyle(ChatFormatting.GRAY), this.width / 2, reasonY, TextColors.WHITE);
 		}
 	}
 

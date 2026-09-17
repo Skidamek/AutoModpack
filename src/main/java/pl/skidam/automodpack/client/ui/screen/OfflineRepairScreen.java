@@ -65,17 +65,16 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		super.init();
 		int width = panelWidth(PANEL_WIDTH);
 		int x = panelLeft(PANEL_WIDTH);
-		int listTop = prepared.requiresUpdate() ? 94 : 82;
 		if (!prepared.unownedModPaths().isEmpty()) {
 			String files = String.join("\n", wrapToWidth(this.font, String.join(", ", prepared.unownedModPaths()), 240, 8));
-			AbstractWidget keep = new CheckboxWidget(this.font, x, listTop, width, VersionedText.translatable("automodpack.confirm.keepExistingMods", prepared.unownedModPaths().size()), keepUnownedMods, value -> {
-				keepUnownedMods = value;
-				rebuild();
-			});
+			AbstractWidget keep = new CheckboxWidget(this.font, x, keepCheckboxY(), width, VersionedText.translatable("automodpack.confirm.keepExistingMods", prepared.unownedModPaths().size()), keepUnownedMods,
+					value -> {
+						keepUnownedMods = value;
+						rebuild();
+					});
 			keep.active = !busy;
 			VersionedScreen.setTooltip(keep, VersionedText.translatable("automodpack.confirm.leftoverTooltip", files));
 			this.addRenderableWidget(keep);
-			listTop += 28;
 		}
 
 		List<OfflineRepair.EditableResetCandidate> candidates = prepared.editableResetCandidates();
@@ -98,8 +97,9 @@ public final class OfflineRepairScreen extends VersionedScreen {
 			// while it consents and checked once the player's changes are kept.
 			boolean resetConsent = selectedEditablePaths.contains(candidate.logicalPath());
 			listRows.add(new RowListWidget.Row(List.of(VersionedText.literal(truncateToWidth(this.font,
-					VersionedText.translatable(resetConsent ? "automodpack.repair.editableKeep" : "automodpack.repair.editableKeepChecked", candidate.logicalPath()).getString(), width - 12))),
-					editableTooltip(resetConsent, candidate.logicalPath())));
+					VersionedText.translatable("automodpack.repair.editableKeep", candidate.logicalPath()).getString(), width - 12))),
+					editableTooltip(resetConsent, candidate.logicalPath()),
+					resetConsent ? CheckboxWidget.State.UNCHECKED : CheckboxWidget.State.CHECKED));
 		}
 		// The list fills the space between the header state and the pinned actions; only a real overflow scrolls.
 		int actionsBottom = this.height - 28;
@@ -110,10 +110,29 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		actionButtons.get(actionIndex++).active = !busy && hasRepairWork();
 		if (canUpdate) actionButtons.get(actionIndex).active = !busy;
 		if (candidates.isEmpty()) return;
-		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), 0, listTop, listBottom, ROW_HEIGHT, listRows,
+		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), 0, listTop(), listBottom, ROW_HEIGHT, listRows,
 				index -> {
 					if (!busy) toggleEditable(candidates.get(index).logicalPath());
 				}));
+	}
+
+	/** The header above the list wraps to real lines, so the list starts below the deepest line instead of a fixed guess. */
+	private int listTop() {
+		int headerEnd = statusBandTop() + (prepared.requiresUpdate() ? 24 : 12);
+		if (prepared.unownedModPaths().isEmpty()) return Math.max(prepared.requiresUpdate() ? 94 : 82, headerEnd + 4);
+		return headerEnd + 30;
+	}
+
+	/** Where the keep checkbox sits: under the header, right above the editable list. */
+	private int keepCheckboxY() {
+		return listTop() - 28;
+	}
+
+	/** Where the working/receipt/update-needed line sits: under the wrapped unowned line, never above the fixed band. */
+	private int statusBandTop() {
+		if (prepared.unownedModPaths().isEmpty()) return 66;
+		String unownedState = VersionedText.translatable(keepUnownedMods ? "automodpack.repair.unownedKept" : "automodpack.repair.unownedArchived", prepared.unownedModPaths().size()).getString();
+		return Math.max(66, 54 + wrapToWidth(this.font, unownedState, this.width - 28, 2).size() * 11 + 1);
 	}
 
 	private void toggleEditable(String path) {
@@ -235,23 +254,25 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, hashed, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, 42, TextColors.WHITE);
 		if (!prepared.unownedModPaths().isEmpty()) {
 			String unownedState = VersionedText.translatable(keepUnownedMods ? "automodpack.repair.unownedKept" : "automodpack.repair.unownedArchived", prepared.unownedModPaths().size()).getString();
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, unownedState, this.width - 20)).withStyle(keepUnownedMods ? ChatFormatting.YELLOW : ChatFormatting.GRAY),
-					this.width / 2, 54, TextColors.WHITE);
+			List<String> unownedLines = wrapToWidth(this.font, unownedState, this.width - 28, 2);
+			for (int index = 0; index < unownedLines.size(); index++)
+				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(unownedLines.get(index)).withStyle(keepUnownedMods ? ChatFormatting.YELLOW : ChatFormatting.GRAY),
+						this.width / 2, 54 + index * 11, TextColors.WHITE);
 		} else {
 			String choices = VersionedText.translatable("automodpack.repair.choices", selectedEditablePaths.size(), prepared.editableResetCandidates().size()).getString();
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, choices, this.width - 20)).withStyle(ChatFormatting.AQUA), this.width / 2, 54, TextColors.WHITE);
 		}
-		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.repair.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 66, TextColors.WHITE);
+		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.repair.working").withStyle(ChatFormatting.YELLOW), this.width / 2, statusBandTop(), TextColors.WHITE);
 		else if (receipt != null) {
 			String result = VersionedText.translatable("automodpack.repair.receipt", receipt.repairedCasObjects(), receipt.repairedMaterializedFiles(), receipt.resetEditableFiles(), receipt.archivedUnownedMods())
 					.getString();
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, result, this.width - 20)).withStyle(receipt.complete() ? ChatFormatting.GREEN : ChatFormatting.YELLOW),
-					this.width / 2, 66, TextColors.WHITE);
+					this.width / 2, statusBandTop(), TextColors.WHITE);
 		} else if (prepared.requiresUpdate()) {
 			String updateMessage = VersionedText.translatable(updateAction == null ? "automodpack.repair.updateNeededOffline" : "automodpack.repair.updateNeeded").getString();
 			List<String> lines = wrapToWidth(this.font, updateMessage, this.width - 28, 2);
 			for (int index = 0; index < lines.size(); index++)
-				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(lines.get(index)).withStyle(ChatFormatting.YELLOW), this.width / 2, 66 + index * 12, TextColors.WHITE);
+				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(lines.get(index)).withStyle(ChatFormatting.YELLOW), this.width / 2, statusBandTop() + index * 12, TextColors.WHITE);
 		}
 	}
 

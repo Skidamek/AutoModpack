@@ -179,4 +179,26 @@ public class CheckboxWidget extends AbstractButton {
 		/*return y;
 		*//*?}*/
 	}
+
+	/** Version-proof geometry access for screens that lay the checkbox out manually. */
+	public void moveTo(int x, int y) {
+		/*? if >=1.19.4 {*/
+		setPosition(x, y);
+		/*?} else {*/
+		/*this.x = x;
+		this.y = y;
+		*//*?}*/
+	}
+
+	public int xPosition() {
+		return left();
+	}
+
+	public int yPosition() {
+		return top();
+	}
+
+	public int boxHeight() {
+		return height;
+	}
 }

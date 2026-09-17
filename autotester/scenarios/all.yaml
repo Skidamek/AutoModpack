@@ -902,7 +902,7 @@ flow:
     until:
       all:
         - screen: OfflineRepairScreen
-        - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
+        - element: { text: "Keep changes in config/pack-shared-editable.txt", enabled: true, checked: false }
         - element: { text: "Keep 2 existing mod files", enabled: true }
         - element: { text: Repair, enabled: true }
         - element: { text: Update and finish repair, enabled: true }
@@ -913,21 +913,21 @@ flow:
     name: show the editable row checked as reset consent by default
     until:
       all:
-        - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
+        - element: { text: "Keep changes in config/pack-shared-editable.txt", enabled: true, checked: false }
         - element: { text: "Keep 2 existing mod files", enabled: true }
         - element: { text: Keep all editable changes, enabled: true }
   - do: click
     name: opt into keeping the edited file
-    select: { text: "[ ] Keep changes in config/pack-shared-editable.txt" }
+    select: { text: "Keep changes in config/pack-shared-editable.txt" }
   - do: wait_for
     name: show the keep choice checked on the editable row
-    until: { element: { text: "[x] Keep changes in config/pack-shared-editable.txt", enabled: true } }
+    until: { element: { text: "Keep changes in config/pack-shared-editable.txt", enabled: true, checked: true } }
   - do: click
     name: return the editable row to removal consent before leaving
-    select: { text: "[x] Keep changes in config/pack-shared-editable.txt" }
+    select: { text: "Keep changes in config/pack-shared-editable.txt", checked: true }
   - do: wait_for
     name: restore the unchecked reset consent on the editable row
-    until: { element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true } }
+    until: { element: { text: "Keep changes in config/pack-shared-editable.txt", enabled: true, checked: false } }
   - do: click
     name: opt into keeping the unowned mods
     select: { text: "Keep 2 existing mod files" }
@@ -954,13 +954,13 @@ flow:
     timeout: 120s
     until:
       all:
-        - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
+        - element: { text: "Keep changes in config/pack-shared-editable.txt", enabled: true, checked: false }
         - element: { text: "Keep 2 existing mod files", enabled: true }
   - do: wait_for
     name: hold both rows at removal consent while keeping is one click away
     until:
       all:
-        - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
+        - element: { text: "Keep changes in config/pack-shared-editable.txt", enabled: true, checked: false }
         - element: { text: "Keep 2 existing mod files", enabled: true }
         - element: { text: Repair, enabled: true }
   - do: click
