@@ -64,6 +64,7 @@ public final class ClientStorage {
 	private final Path modpackContentTempFile;
 	private final Path preservationDirectory;
 	private final Path historyDirectory;
+	private final Path stateHistoryDirectory;
 	private final Path journalTempFile;
 	private final Path bootstrapFile;
 	private final Path fileCacheDirectory;
@@ -98,6 +99,7 @@ public final class ClientStorage {
 		this.modpackContentTempFile = this.gameDirectory.resolve(CLIENT_CONTENT_TEMP_FILE).normalize();
 		this.preservationDirectory = this.gameDirectory.resolve(CLIENT_PRESERVATION_DIR).normalize();
 		this.historyDirectory = this.gameDirectory.resolve(CLIENT_HISTORY_DIR).normalize();
+		this.stateHistoryDirectory = this.gameDirectory.resolve(CLIENT_STATE_HISTORY_DIR).normalize();
 		this.journalTempFile = this.gameDirectory.resolve(CLIENT_JOURNAL_TEMP_FILE).normalize();
 		this.bootstrapFile = this.gameDirectory.resolve(BOOTSTRAP_FILE).normalize();
 		this.fileCacheDirectory = dataLayout.fileCacheDirectory();
@@ -309,6 +311,15 @@ public final class ClientStorage {
 		return historyDirectory;
 	}
 
+	public Path stateHistoryDirectory() {
+		return stateHistoryDirectory;
+	}
+
+	/** The instance-wide state history: one append-only checkpoint per committed file-state mutation. */
+	public Path stateHistoryJournalFile() {
+		return stateHistoryDirectory.resolve("journal.jsonl").normalize();
+	}
+
 	public Path historyPackDirectory(String modpackId) {
 		return historyDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
 	}
@@ -437,6 +448,7 @@ public final class ClientStorage {
 		FileTrees.createManagedDirectory(stagingDirectory(), "shared publication staging");
 		FileTrees.createManagedDirectory(preservationDirectory, "client preservation root");
 		FileTrees.createManagedDirectory(historyDirectory, "client journal mirrors");
+		FileTrees.createManagedDirectory(stateHistoryDirectory, "client state history");
 	}
 
 	/**
@@ -498,7 +510,7 @@ public final class ClientStorage {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
 		validateWithin(clientDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
-				historyDirectory, stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, stuckTransactionStateFile, modpackContentTempFile,
+				historyDirectory, stateHistoryDirectory, stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, stuckTransactionStateFile, modpackContentTempFile,
 				journalTempFile);
 		validateWithin(dataDirectory, objectsDirectory, fileCacheDirectory, modCacheDirectory, platformCacheDirectory, packsDirectory, stagingDirectory(), knownHostsFile, knownHostsLockFile);
 	}

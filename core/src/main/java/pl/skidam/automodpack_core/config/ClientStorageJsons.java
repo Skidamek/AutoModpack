@@ -63,6 +63,44 @@ public class ClientStorageJsons {
 		}
 	}
 
+	/** One line of the client state history journal: the complete tracked file state after one committed mutation. */
+	public static class StateEntryFields {
+		public long seq = -1;
+		public String transactionId = "";
+		public String kind = "";
+		public String modpackId = "";
+		public String contentToken = "";
+		public String createdAt = "";
+		public long restoreOfSeq = -1;
+		public List<FileFields> state = List.of();
+		public List<ChangeFields> changes = List.of();
+		public List<CaptureFields> captures = List.of();
+
+		public static class FileFields {
+			public String root = "";
+			public String path = "";
+			public String sha1 = "";
+			public long size = -1;
+		}
+
+		public static class ChangeFields {
+			public String root = "";
+			public String path = "";
+			public String fromSha1 = "";
+			public long fromSize = -1;
+			public String toSha1 = "";
+			public long toSize = -1;
+		}
+
+		public static class CaptureFields {
+			public String root = "";
+			public String path = "";
+			public String sha1 = "";
+			public long size = -1;
+			public boolean absent;
+		}
+	}
+
 	public static class ClientOverlayFields {
 		public String modpackId = "";
 		public List<String> deletedPaths = List.of();

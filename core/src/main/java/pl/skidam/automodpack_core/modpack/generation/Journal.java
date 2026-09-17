@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
@@ -16,10 +14,10 @@ import java.util.TreeMap;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonParseException;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.utils.JsonLines;
 
 /** The append-only history of one modpack lineage: one entry per content change. */
 public final class Journal {
@@ -55,46 +53,10 @@ public final class Journal {
 	}
 
 	private static List<JournalEntry> parse(Path file, boolean tolerateTornTail) throws IOException {
-		if (!Files.exists(file)) return List.of();
-		byte[] bytes = Files.readAllBytes(file);
-		List<JournalEntry> entries = new ArrayList<>();
-		int intactBytes = bytes.length;
-		int lineStart = 0;
-		while (lineStart < bytes.length) {
-			int lineEnd = lineStart;
-			while (lineEnd < bytes.length && bytes[lineEnd] != '\n') lineEnd++;
-			boolean finalLine = lineEnd == bytes.length;
-			String line = new String(bytes, lineStart, lineEnd - lineStart, StandardCharsets.UTF_8);
-			int droppedFrom = lineStart;
-			lineStart = finalLine ? bytes.length : lineEnd + 1;
-			if (line.isBlank()) continue;
-			try {
-				entries.add(JournalEntry.fromFields(COMPACT.fromJson(line, GenerationJsons.JournalEntryFields.class)));
-			} catch (IllegalArgumentException e) {
-				// A line that parses as JSON but breaks the entry contract is real corruption, never a torn write - even at the tail.
-				throw new UnusableContentException("Corrupt journal line " + (entries.size() + 1) + " in " + file, e);
-			} catch (JsonParseException e) {
-				// A crash or power cut mid-append tears the last line; anything unparsable earlier is real corruption.
-				if (!finalLine || !tolerateTornTail) throw new UnusableContentException("Malformed journal line " + (entries.size() + 1) + " in " + file, e);
-				LOGGER.warn("Journal {} ends in a torn line after {} intact entries; dropping the last {} bytes and keeping the intact prefix", file, entries.size(),
-						bytes.length - droppedFrom);
-				truncate(file, droppedFrom);
-				intactBytes = droppedFrom;
-				break;
-			}
-		}
-		if (tolerateTornTail && intactBytes > 0 && bytes[intactBytes - 1] != '\n') {
-			// A crash can land after the entry's bytes but before its newline; the entry parsed fine, so restore the newline before the next append fuses two entries into one line.
-			Files.writeString(file, "\n", StandardCharsets.UTF_8, StandardOpenOption.WRITE, StandardOpenOption.APPEND);
-		}
-		return List.copyOf(entries);
-	}
-
-	/** Repairs the torn tail away, so later appends and the served file start from the intact prefix. */
-	private static void truncate(Path file, long intactBytes) throws IOException {
-		try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
-			channel.truncate(intactBytes);
-			channel.force(true);
+		try {
+			return JsonLines.read(file, "journal", line -> JournalEntry.fromFields(COMPACT.fromJson(line, GenerationJsons.JournalEntryFields.class)), tolerateTornTail);
+		} catch (JsonLines.UnusableContentException e) {
+			throw new UnusableContentException(e.getMessage(), e);
 		}
 	}
 

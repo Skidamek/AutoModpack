@@ -140,7 +140,10 @@ public final class UpdateTransactionExecutor {
 		UpdateTransaction pending = UpdateTransaction.read(storage.transactionFile());
 		if (pending == null) return;
 		if (pending.phase == UpdateTransaction.Phase.COMMITTED) {
+			// A crash can land after the COMMITTED marker but before its state-history checkpoint; replaying the tail here
+			// records the entry (idempotent by transaction id) before the record that produced it retires.
 			cleanupTransactionDirectories(pending);
+			recordStateHistory(pending);
 			Files.deleteIfExists(storage.transactionFile());
 			return;
 		}
@@ -258,17 +261,28 @@ public final class UpdateTransactionExecutor {
 
 	/**
 	 * The one durable commit tail, shared by the live path and the recovery of a crash after the COMMITTED phase
-	 * persisted: drop the working directories, retire the journal, and refresh the ownership receipt. The receipt
-	 * published at commit start names every object the journal pinned, and retiring it is the only reference loss
-	 * since, so the stale on-disk receipt protected everything until this refresh replaces it with exactly the
-	 * durable set. A publish is a full-state sweep (~2ms over a 200-entry journal, pinned by
+	 * persisted: drop the working directories, checkpoint the state history, retire the journal, and refresh the
+	 * ownership receipt. The receipt published at commit start names every object the journal pinned, and retiring it
+	 * is the only reference loss since, so the stale on-disk receipt protected everything until this refresh replaces
+	 * it with exactly the durable set. A publish is a full-state sweep (~2ms over a 200-entry journal, pinned by
 	 * {@code ClientObjectStoreTest}), so a commit publishes at its start and here, and never per file.
 	 */
 	private Execution finalizeCommitted(UpdateTransaction transaction) throws IOException {
 		cleanupTransactionDirectories(transaction);
+		recordStateHistory(transaction);
 		Files.deleteIfExists(context.storage().transactionFile());
 		ClientObjectStore.publishOwnership(context.storage());
 		return new Execution(UpdateTransaction.Status.SUCCESS, transaction, null, null, null, null);
+	}
+
+	/**
+	 * The instance state history entry of a committed transaction: one complete checkpoint of every tracked file plus
+	 * the changes and before-state captures that produced it. The append lands before the transaction record retires
+	 * and dedupes on the transaction id, so a crash between append and retirement replays to the same single entry,
+	 * and the checkpoint is always durable before the record that produced it can be forgotten.
+	 */
+	private void recordStateHistory(UpdateTransaction transaction) throws IOException {
+		ClientStateJournal.open(context.storage().stateHistoryJournalFile()).appendTransaction(transaction);
 	}
 
 	/** The modpack apply sequence: pre-mutation captures, live operations, projection publication, and durable finalization. */
