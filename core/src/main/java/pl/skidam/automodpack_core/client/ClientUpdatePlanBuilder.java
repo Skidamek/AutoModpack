@@ -271,6 +271,9 @@ final class ClientUpdatePlanBuilder {
 	void reconcileEditableState(FileCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields target) throws IOException {
 		ModpackJsons.ModpackContentFields activeTarget = projection.target();
 		if (activeTarget == null || activeTarget.list == null) return;
+		Set<UpdatePlan.FileKey> extra = new TreeSet<>(UpdatePlan.FileKey.ORDER);
+		for (var item : activeTarget.list) extra.add(new UpdatePlan.FileKey(UpdatePlan.Root.GAME_DIR, LogicalPath.normalize(item.file)));
+		StateHistory.snapshotIfDirty(storage, extra, ClientStateJournal.Kind.LIVE, activeTarget.modpackId, "drift-reset");
 		List<DriftReset> driftResets = new ArrayList<>();
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = new HashMap<>();
 		if (target != null && target.list != null) target.list.forEach(item -> targetItems.put(LogicalPath.normalize(item.file), item));
@@ -341,21 +344,9 @@ final class ClientUpdatePlanBuilder {
 	 */
 	private void recordDriftResets(String modpackId, List<DriftReset> driftResets) throws IOException {
 		if (driftResets.isEmpty()) return;
-		ClientStorageMutation.run(storage, () -> {
-			ClientStateJournal journal = ClientStateJournal.open(storage.stateHistoryJournalFile());
-			if (journal.entries().isEmpty()) return null;
-			ClientStateJournal.StateEntry head = journal.head();
-			if (!head.modpackId().equals(modpackId)) throw new IOException("Drift resets belong to " + modpackId + " but the state history head is " + head.modpackId());
-			List<ClientStateJournal.Change> changes = new ArrayList<>();
-			List<ClientStateJournal.Capture> captures = new ArrayList<>();
-			for (DriftReset reset : driftResets) {
-				changes.add(ClientStateJournal.Change.install(UpdatePlan.Root.GAME_DIR, reset.path(), reset.driftHash(), reset.packHash(), reset.packSize()));
-				captures.add(new ClientStateJournal.Capture(UpdatePlan.Root.GAME_DIR, reset.path(), reset.driftHash(), reset.driftSize(), false));
-			}
-			journal.appendCheckpoint("drift-reset-" + UUID.randomUUID(), ClientStateJournal.Kind.DRIFT_RESET, head.modpackId(), head.contentToken(), ClientStateJournal.StateEntry.NO_RESTORE, head.state(),
-					changes, captures);
-			return null;
-		});
+		Set<UpdatePlan.FileKey> extra = new TreeSet<>(UpdatePlan.FileKey.ORDER);
+		for (DriftReset reset : driftResets) extra.add(new UpdatePlan.FileKey(UpdatePlan.Root.GAME_DIR, reset.path()));
+		StateHistory.recordAfter(storage, extra, ClientStateJournal.Kind.DRIFT_RESET, modpackId, "drift-reset");
 	}
 
 	/** Silently resets client-side drift of an unchanged server-provided non-mod file so it never becomes an update prompt; the server changing the file stays a reviewable update. */

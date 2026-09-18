@@ -1,9 +1,8 @@
 id: state-history
 description: |
-  Screenshots and end-to-end checks for the state history screen: the timeline
-  lists the install and update checkpoints, selecting a checkpoint offers a
-  whole-state restore through the reviewed rollback and per-file recovery, and
-  the restore of an older checkpoint routes into the normal reviewed revert.
+  Screenshots and end-to-end checks for the instance timeline: install and
+  update snapshots appear, Files shows the parent diff, and Restore this state
+  unlocks for a past snapshot. Restore is an offline checkout, not pack-history revert.
 renderClient: true
 
 flow:
@@ -109,29 +108,9 @@ flow:
     name: wait for the whole-state restore to unlock
     timeout: 30s
     until: { element: { key: automodpack.stateHistory.restore, enabled: true } }
-  - do: click
-    name: restore the install checkpoint whole
-    select: { key: automodpack.stateHistory.restore }
-  - do: wait_for
-    name: show the reviewed rollback confirm for the older state
-    timeout: 90s
-    until:
-      all:
-        - screen: UpdatePreviewScreen
-        - element: { key: automodpack.update.rollbackApply, enabled: true }
   - do: screenshot
-    name: capture the reviewed rollback confirm the state restore routes into
-    file: state-history-restore-confirm
-  - do: click
-    name: cancel out of the restore to keep the run read-only
-    select: { text: Back }
-  - do: wait_for
-    name: land back on the state history timeline
-    timeout: 20s
-    until: { screen: StateHistoryScreen }
-  - do: screenshot
-    name: capture the timeline after returning from the cancelled restore
-    file: state-history-after-cancel
+    name: capture the timeline with restore ready
+    file: state-history-restore-ready
   - do: quit
     name: quit the client
 

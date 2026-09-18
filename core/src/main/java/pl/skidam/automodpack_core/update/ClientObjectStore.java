@@ -314,15 +314,11 @@ public final class ClientObjectStore {
 		validateActiveProjection(storage);
 	}
 
-	/** The state history is the revert material: every manifest, change, and capture hash is a required reference, so cleanup can never strand a checkpoint's bytes. */
+	/** Every instance-tree file hash is a required pin, so cleanup cannot strand a snapshot. */
 	private static void collectStateJournal(ClientStorage storage, ExpectedSizes retained) throws IOException {
-		for (ClientStateJournal.StateEntry entry : ClientStateJournal.open(storage.stateHistoryJournalFile()).entries()) {
-			for (ClientStateJournal.TrackedFile file : entry.state()) retained.require(file.sha1(), file.size(), "state history");
-			for (ClientStateJournal.Change change : entry.changes()) {
-				if (change.toSha1() != null) retained.require(change.toSha1(), change.toSize(), "state history");
-				if (change.fromSha1() != null) retained.ifPresent(change.fromSha1(), change.fromSize() < 0 ? -1 : change.fromSize(), "state history");
-			}
-			for (ClientStateJournal.Capture capture : entry.captures()) if (!capture.absent()) retained.require(capture.sha1(), capture.size(), "state history");
+		for (ClientStateJournal.Snapshot snapshot : ClientStateJournal.open(storage).entries()) {
+			InstanceTree tree = InstanceTree.read(storage, snapshot.treeSha1());
+			for (InstanceTree.TrackedFile file : tree.files()) retained.require(file.sha1(), file.size(), "instance timeline");
 		}
 	}
 

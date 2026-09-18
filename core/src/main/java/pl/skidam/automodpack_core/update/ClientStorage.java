@@ -303,9 +303,17 @@ public final class ClientStorage {
 		return stateHistoryDirectory;
 	}
 
-	/** The instance-wide state history: one append-only checkpoint per committed file-state mutation. */
+	/** The instance timeline journal: one small line per snapshot. */
 	public Path stateHistoryJournalFile() {
 		return stateHistoryDirectory.resolve("journal.jsonl").normalize();
+	}
+
+	public Path stateHistoryTreesDirectory() {
+		return stateHistoryDirectory.resolve("trees").normalize();
+	}
+
+	public Path stateHistoryTreeFile(String sha1) {
+		return stateHistoryTreesDirectory().resolve(HashUtils.normalizeSha1(sha1)).normalize();
 	}
 
 	public Path historyPackDirectory(String modpackId) {
@@ -423,6 +431,7 @@ public final class ClientStorage {
 		FileTrees.createManagedDirectory(stagingDirectory(), "shared publication staging");
 		FileTrees.createManagedDirectory(historyDirectory, "client journal mirrors");
 		FileTrees.createManagedDirectory(stateHistoryDirectory, "client state history");
+		FileTrees.createManagedDirectory(stateHistoryTreesDirectory(), "instance trees");
 	}
 
 	/**
@@ -484,7 +493,8 @@ public final class ClientStorage {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
 		validateWithin(clientDirectory, overlaysDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory,
-				historyDirectory, stateHistoryDirectory, stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, stuckTransactionStateFile, modpackContentTempFile,
+				historyDirectory, stateHistoryDirectory, stateHistoryTreesDirectory(), stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, stuckTransactionStateFile,
+				modpackContentTempFile,
 				journalTempFile);
 		validateWithin(dataDirectory, objectsDirectory, fileCacheDirectory, modCacheDirectory, platformCacheDirectory, packsDirectory, stagingDirectory(), knownHostsFile, knownHostsLockFile);
 	}

@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -121,9 +120,8 @@ class OfflineRepairTest {
 		assertTrue(FileIntegrity.matches(live, expectedBytes.length, hash));
 		assertFalse(Files.exists(extra));
 		assertTrue(Files.exists(protectedJar));
-		// The repair has no state history behind it on this fresh install, so the checkpoint is skipped; the changed
-		// files' receipts are the record.
-		assertTrue(ClientStateJournal.open(storage.stateHistoryJournalFile()).entries().isEmpty());
+		assertFalse(ClientStateJournal.open(storage).entries().isEmpty());
+		assertEquals(ClientStateJournal.Kind.REPAIR, ClientStateJournal.open(storage).head().kind());
 	}
 
 	@Test
@@ -139,17 +137,18 @@ class OfflineRepairTest {
 		Path extra = write(storage.modsDirectory().resolve("extra.jar"), "extra".getBytes(StandardCharsets.UTF_8));
 		String extraHash = HashUtils.getHash(extra);
 		String editedHash = HashUtils.sha1(editedBytes);
-		ClientStateJournal journal = ClientStateJournal.open(storage.stateHistoryJournalFile());
-		journal.append(new ClientStateJournal.StateEntry(1, "txn-1", ClientStateJournal.Kind.INSTALL, target.manifest().modpackId(), target.document().contentToken(), Instant.parse("2026-09-17T12:00:00Z"),
-				ClientStateJournal.StateEntry.NO_RESTORE, List.of(new ClientStateJournal.TrackedFile(UpdatePlan.Root.GAME_DIR, "config/settings.json", hash, expectedBytes.length)), List.of(), List.of()));
+		ClientObjectStore.storeObject(storage, hash, expectedBytes);
+		ClientObjectStore.storeObject(storage, editedHash, editedBytes);
+		ClientObjectStore.storeObject(storage, extraHash, "extra".getBytes(StandardCharsets.UTF_8));
+		InstanceTree tree = InstanceTree.of(InstanceTree.LiveIdentity.empty(), List.of(
+				new InstanceTree.TrackedFile(UpdatePlan.Root.GAME_DIR, "", "config/settings.json", hash, expectedBytes.length)));
+		tree.write(storage);
+		ClientStateJournal.open(storage).append(tree.sha1(), ClientStateJournal.Kind.INSTALL, target.manifest().modpackId(), "txn-1");
 		OfflineRepair repair = new OfflineRepair(storage);
 
 		repair.apply(repair.inspect(new OfflineRepair.Request(target, Set.of(), null)), Set.of("config/settings.json"), Set.of("mods/extra.jar"));
 
-		ClientStateJournal.StateEntry checkpoint = ClientStateJournal.open(storage.stateHistoryJournalFile()).head();
-		assertEquals(ClientStateJournal.Kind.REPAIR, checkpoint.kind());
-		assertTrue(checkpoint.captures().stream().anyMatch(capture -> editedHash.equals(capture.sha1())));
-		assertTrue(checkpoint.captures().stream().anyMatch(capture -> extraHash.equals(capture.sha1())));
+		assertEquals(ClientStateJournal.Kind.REPAIR, ClientStateJournal.open(storage).head().kind());
 		assertTrue(ClientObjectStore.referencedHashes(storage).contains(editedHash));
 		assertTrue(ClientObjectStore.referencedHashes(storage).contains(extraHash));
 	}

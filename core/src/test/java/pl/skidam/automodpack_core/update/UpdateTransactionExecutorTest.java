@@ -123,7 +123,7 @@ class UpdateTransactionExecutorTest {
 
 		assertTrue(execution.success());
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/existing.jar"), bytes.length, hash));
-		assertFalse(Files.exists(storage.objectFile(hash)));
+		assertTrue(Files.exists(storage.objectFile(hash)), "the instance snapshot pins projection bytes in CAS");
 		assertEquals(target.packTarget().contentToken(), storage.readActiveState().contentToken);
 	}
 

@@ -50,6 +50,7 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.InstanceTree;
 import pl.skidam.automodpack_core.update.OfflineRepair;
 import pl.skidam.automodpack_core.update.StateHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -235,12 +236,20 @@ final class InstalledModpackController {
 		}
 	}
 
-	List<ClientStateJournal.StateEntry> stateEntries() throws IOException {
+	List<ClientStateJournal.Snapshot> stateEntries() throws IOException {
 		return StateHistory.entries(storage);
 	}
 
-	StateHistory.RestoreOption stateRestorability(ClientStateJournal.StateEntry entry) throws IOException {
-		return StateHistory.restorability(storage, entry);
+	StateHistory.Restorability stateRestorability(ClientStateJournal.Snapshot snapshot) throws IOException {
+		return StateHistory.restorability(storage, snapshot);
+	}
+
+	List<StateHistory.FileDiff> stateDiff(ClientStateJournal.Snapshot snapshot) throws IOException {
+		return StateHistory.diff(storage, snapshot);
+	}
+
+	InstanceTree stateTree(ClientStateJournal.Snapshot snapshot) throws IOException {
+		return StateHistory.tree(storage, snapshot);
 	}
 
 	StateHistory.FileGate stateFileGate(UpdatePlan.Root root, String path) throws IOException {
@@ -255,9 +264,28 @@ final class InstalledModpackController {
 		return StateHistory.saveFileCopy(storage, seq, root, path);
 	}
 
-	/** Restores one of the active pack's past states whole through the reviewed rollback flow; the gate check happened at the button. */
-	void restoreState(ClientStateJournal.StateEntry entry, StateHistory.RestoreOption option, String modpackName, Runnable released) {
-		SwitchFlow.rollback(storage, entry.modpackId(), option.generation(), modpackName, released);
+	void restoreState(ClientStateJournal.Snapshot snapshot, Runnable released) {
+		ScreenManager.background(() -> {
+			try {
+				StateHistory.checkout(storage, snapshot.seq());
+				releaseOnClient(released);
+			} catch (Exception e) {
+				released.run();
+				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
+			}
+		});
+	}
+
+	void forgetOlderThan(long seq, Runnable released) {
+		ScreenManager.background(() -> {
+			try {
+				StateHistory.forgetOlderThan(storage, seq);
+				releaseOnClient(released);
+			} catch (Exception e) {
+				released.run();
+				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
+			}
+		});
 	}
 
 	void openStateHistory(Screen parent, Runnable released) {

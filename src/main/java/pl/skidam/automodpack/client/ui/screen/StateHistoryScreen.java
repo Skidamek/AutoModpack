@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Future;
 
@@ -26,43 +25,43 @@ import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.screen.ScreenManager;
-import pl.skidam.automodpack_core.storage.GameDirectory;
-import pl.skidam.automodpack_core.update.ClientStateJournal;
+import pl.skidam.automodpack_core.update.ClientStateJournal.Snapshot;
+import pl.skidam.automodpack_core.update.InstanceTree;
+import pl.skidam.automodpack_core.update.InstanceTree.TrackedFile;
 import pl.skidam.automodpack_core.update.StateHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /**
- * The instance state history: every checkpoint AutoModpack recorded, newest first. A clean generation state of the
- * active pack restores whole through the reviewed rollback; every file of every state can be restored or copied out.
+ * Instance timeline: snapshots this computer lived. Restore checkouts the whole tree. Files shows the parent diff
+ * first. Forget drops older snapshots.
  */
 public final class StateHistoryScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 500;
-	private static final int LIST_TOP = 66;
-	private static final int ROW_HEIGHT = 24;
-	private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.ROOT).withZone(ZoneId.systemDefault());
-
-	private final Screen parent;
-	private final InstalledModpackController controller;
-	private final Runnable closedCallback;
-	private Mode mode = Mode.TIMELINE;
-	private List<ClientStateJournal.StateEntry> entries;
-	private Long selectedSeq;
-	private int selectedFileIndex = -1;
-	private final Map<Long, StateHistory.RestoreOption> restorabilityBySeq = new HashMap<>();
-	private final Map<String, StateHistory.FileGate> fileGates = new HashMap<>();
-	private final Map<String, String> packNames = new HashMap<>();
-	private boolean loading;
-	private boolean busy;
-	private boolean presentingFailure;
-	private boolean closed;
-	private boolean lastResultRestore;
-	private Path lastResult;
-	private Future<?> work;
+	private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
 
 	private enum Mode {
 		TIMELINE, FILES
 	}
+
+	private final Screen parent;
+	private final InstalledModpackController controller;
+	private final Runnable closedCallback;
+	private List<Snapshot> entries;
+	private Long selectedSeq;
+	private Mode mode = Mode.TIMELINE;
+	private boolean showFullTree;
+	private final Map<Long, StateHistory.Restorability> restorabilityBySeq = new HashMap<>();
+	private final Map<Long, List<StateHistory.FileDiff>> diffsBySeq = new HashMap<>();
+	private final Map<Long, InstanceTree> treesBySeq = new HashMap<>();
+	private final Map<String, StateHistory.FileGate> fileGates = new HashMap<>();
+	private RowListWidget timeline;
+	private RowListWidget files;
+	private boolean loading = true;
+	private boolean busy;
+	private boolean closed;
+	private Path lastResult;
+	private boolean lastResultRestore;
+	private Future<?> load;
 
 	public StateHistoryScreen(Screen parent, InstalledModpackController controller, Runnable closedCallback) {
 		super(VersionedText.translatable("automodpack.stateHistory.title"));
@@ -74,109 +73,90 @@ public final class StateHistoryScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		if (!loading && entries == null) load();
 		if (mode == Mode.TIMELINE) initTimeline();
 		else initFiles();
+		if (loading && load == null) load = ScreenManager.background(this::loadEntries);
 	}
 
 	private void initTimeline() {
-		ClientStateJournal.StateEntry selected = selectedEntry();
-		List<ActionRow> actions = new ArrayList<>();
-		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-				primaryAction(VersionedText.translatable("automodpack.stateHistory.restore"), press -> restoreState()),
-				optionalAction(VersionedText.translatable("automodpack.stateHistory.files"), press -> openFiles())));
-		if (selected != null && isUndoableArrival(selected))
-			actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-					optionalAction(VersionedText.translatable("automodpack.stateHistory.undoArrival"), press -> undoArrival())));
-		if (lastResult != null) actions.add(confirmationRow());
-		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back())));
-		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)) - 8;
-		List<ClientStateJournal.StateEntry> newestFirst = reversed();
-		List<RowListWidget.Row> rows = new ArrayList<>();
-		for (ClientStateJournal.StateEntry entry : newestFirst) rows.add(entryRow(entry));
-		RowListWidget list = new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), 0, LIST_TOP, listBottom, ROW_HEIGHT, rows,
-				index -> select(newestFirst.get(index).seq()));
-		selectRow(list, newestFirst, selected);
-		this.addRenderableWidget(list);
-		List<AbstractWidget> buttons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new));
-		AbstractWidget restore = buttons.get(0);
-		StateHistory.RestoreOption option = selected == null ? null : restorabilityBySeq.get(selected.seq());
-		restore.active = !busy && option != null && option.restorability() == StateHistory.Restorability.READY;
-		setTooltip(restore, restoreTooltip(selected, option));
-		buttons.get(1).active = !busy && selected != null;
+		ActionDefinition restore = primaryAction(VersionedText.translatable("automodpack.stateHistory.restore"), press -> restoreState());
+		ActionDefinition filesAction = optionalAction(VersionedText.translatable("automodpack.stateHistory.files"), press -> openFiles());
+		ActionDefinition forget = optionalAction(VersionedText.translatable("automodpack.stateHistory.forgetOlder"), press -> forgetOlder());
+		ActionRow[] rows = {actionRow(ActionAreaLayout.RowKind.FOOTER, restore, filesAction, forget, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back()))};
+		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows) - 6;
+		List<RowListWidget.Row> listRows = new ArrayList<>();
+		List<Snapshot> newestFirst = reversed();
+		Snapshot selected = selectedEntry();
+		for (Snapshot entry : newestFirst) listRows.add(entryRow(entry));
+		this.timeline = this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, this.width - 20, 0, 64, listBottom, 36, listRows, this::select));
+		selectRow(this.timeline, newestFirst, selected);
+		List<AbstractWidget> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows);
+		buttons.get(0).active = selected != null && restorabilityBySeq.get(selected.seq()) == StateHistory.Restorability.READY && !busy;
+		buttons.get(1).active = selected != null && !busy;
+		buttons.get(2).active = selected != null && !busy && entries != null && !entries.isEmpty() && selected.seq() != entries.get(0).seq();
+		setTooltip(buttons.get(0), restoreTooltip(selected, selected == null ? null : restorabilityBySeq.get(selected.seq())));
 	}
 
 	private void initFiles() {
-		ClientStateJournal.StateEntry selected = selectedEntry();
-		List<ClientStateJournal.TrackedFile> files = selectedFiles();
-		List<ActionRow> actions = new ArrayList<>();
-		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-				primaryAction(VersionedText.translatable("automodpack.stateHistory.restoreFile"), press -> restoreFile()),
-				optionalAction(VersionedText.translatable("automodpack.stateHistory.saveCopy"), press -> saveFileCopy())));
-		if (lastResult != null) actions.add(confirmationRow());
-		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.stateHistory.timeline"), press -> showTimeline()),
-				secondaryAction(VersionedText.translatable("automodpack.back"), press -> back())));
-		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)) - 8;
-		List<RowListWidget.Row> rows = new ArrayList<>();
-		for (ClientStateJournal.TrackedFile file : files)
-			rows.add(new RowListWidget.Row(List.of(
-					VersionedText.literal(truncateToWidth(this.font, file.path(), panelWidth(PANEL_WIDTH) - 16)).withStyle(ChatFormatting.WHITE),
-					VersionedText.literal(truncateToWidth(this.font, rootLabel(file.root()) + " · " + humanSize(file.size()), panelWidth(PANEL_WIDTH) - 16)).withStyle(ChatFormatting.GRAY))));
-		RowListWidget list = new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), 0, LIST_TOP, listBottom, ROW_HEIGHT, rows, this::pickFile);
-		if (selectedFileIndex >= 0 && selectedFileIndex < list.children().size()) list.setSelected(list.children().get(selectedFileIndex));
-		this.addRenderableWidget(list);
-		List<AbstractWidget> buttons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new));
-		AbstractWidget restore = buttons.get(0);
-		StateHistory.FileGate gate = gate(selectedFile());
-		restore.active = !busy && gate == StateHistory.FileGate.AVAILABLE;
-		setTooltip(restore, fileRestoreTooltip(gate));
-		buttons.get(1).active = !busy && selectedFile() != null;
+		Snapshot selected = selectedEntry();
+		ActionDefinition restore = primaryAction(VersionedText.translatable("automodpack.stateHistory.restoreFile"), press -> restoreFile());
+		ActionDefinition save = optionalAction(VersionedText.translatable("automodpack.stateHistory.saveCopy"), press -> saveFileCopy());
+		ActionDefinition all = optionalAction(VersionedText.translatable(showFullTree ? "automodpack.stateHistory.showDiff" : "automodpack.stateHistory.showAll"), press -> {
+			showFullTree = !showFullTree;
+			super.rebuild();
+		});
+		ActionRow[] rows = {actionRow(ActionAreaLayout.RowKind.FOOTER, restore, save, all, secondaryAction(VersionedText.translatable("automodpack.stateHistory.timeline"), press -> showTimeline()))};
+		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows) - 6;
+		List<RowListWidget.Row> listRows = new ArrayList<>();
+		List<TrackedFile> shown = selectedFiles();
+		for (TrackedFile file : shown) listRows.add(fileRow(file));
+		this.files = this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, this.width - 20, 0, 64, listBottom, 24, listRows, index -> super.rebuild()));
+		TrackedFile selectedFile = selectedFile();
+		StateHistory.FileGate gate = gate(selectedFile);
+		List<AbstractWidget> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows);
+		buttons.get(0).active = !busy && gate == StateHistory.FileGate.AVAILABLE;
+		buttons.get(1).active = selectedFile != null && !busy;
+		setTooltip(buttons.get(0), fileRestoreTooltip(gate));
 	}
 
-	private ActionRow confirmationRow() {
-		String key = lastResultRestore ? "automodpack.stateHistory.restoredTo" : "automodpack.stateHistory.savedTo";
-		String confirmation = truncateToWidth(this.font, VersionedText.translatable(key, displayPath(lastResult)).getString(), panelWidth(PANEL_WIDTH) - 12);
-		return actionRow(ActionAreaLayout.RowKind.AUXILIARY, disabledAction(VersionedText.literal(confirmation).withStyle(ChatFormatting.GREEN)));
-	}
-
-	private RowListWidget.Row entryRow(ClientStateJournal.StateEntry entry) {
+	private RowListWidget.Row entryRow(Snapshot entry) {
 		ChatFormatting color = switch (entry.kind()) {
-			case INSTALL, ROLLBACK -> ChatFormatting.GREEN;
-			case REMOVAL, DEACTIVATION -> ChatFormatting.RED;
-			case FILE_RESTORE, REPAIR, DRIFT_RESET, RECOVERY_REVERT -> ChatFormatting.YELLOW;
-			case UPDATE -> ChatFormatting.WHITE;
+			case INSTALL, UPDATE, ROLLBACK, RESTORE -> ChatFormatting.GREEN;
+			case LIVE, FILE_RESTORE, REPAIR, DRIFT_RESET -> ChatFormatting.YELLOW;
+			case DEACTIVATION, REMOVAL -> ChatFormatting.RED;
 		};
 		MutableComponent title = VersionedText.translatable("automodpack.stateHistory.kind." + entry.kind().name()).withStyle(color);
-		long added = 0;
-		long changed = 0;
-		long removed = 0;
-		for (ClientStateJournal.Change change : entry.changes()) {
-			switch (change.kind()) {
+		List<StateHistory.FileDiff> diffs = diffsBySeq.get(entry.seq());
+		int added = 0, changed = 0, removed = 0;
+		if (diffs != null) for (StateHistory.FileDiff diff : diffs) {
+			switch (diff.kind()) {
 				case ADDED -> added++;
 				case CHANGED -> changed++;
 				case REMOVED -> removed++;
 			}
 		}
-		String summary = VersionedText.translatable("automodpack.stateHistory.entrySummary", DATE_FORMAT.format(entry.createdAt()), packName(entry.modpackId()), entry.state().size(), added, changed, removed)
-				.getString();
-		return new RowListWidget.Row(List.of(title, VersionedText.literal(truncateToWidth(this.font, summary, panelWidth(PANEL_WIDTH) - 16)).withStyle(ChatFormatting.GRAY)));
+		int files = treesBySeq.get(entry.seq()) == null ? 0 : treesBySeq.get(entry.seq()).files().size();
+		String pack = entry.modpackId().isEmpty() ? "" : packName(entry.modpackId());
+		String summary = VersionedText.translatable("automodpack.stateHistory.entrySummary", DATE_FORMAT.format(entry.createdAt()), pack, files, added, changed, removed).getString();
+		return new RowListWidget.Row(List.of(title, VersionedText.literal(summary).withStyle(ChatFormatting.GRAY)));
 	}
 
-	private MutableComponent restoreTooltip(ClientStateJournal.StateEntry selected, StateHistory.RestoreOption option) {
+	private RowListWidget.Row fileRow(TrackedFile file) {
+		return new RowListWidget.Row(List.of(VersionedText.literal(rootLabel(file.root()) + " · " + file.path()).withStyle(ChatFormatting.WHITE)));
+	}
+
+	private MutableComponent restoreTooltip(Snapshot selected, StateHistory.Restorability option) {
 		if (selected == null) return VersionedText.translatable("automodpack.stateHistory.restorePickFirst");
 		if (option == null) return VersionedText.translatable("automodpack.stateHistory.checking");
-		return switch (option.restorability()) {
+		return switch (option) {
 			case READY -> VersionedText.translatable("automodpack.stateHistory.restoreReady");
 			case CURRENT -> VersionedText.translatable("automodpack.stateHistory.restoreCurrent");
 			case NOT_KEPT -> VersionedText.translatable("automodpack.stateHistory.restoreNotKept");
-			case INACTIVE_PACK -> VersionedText.translatable("automodpack.stateHistory.restoreInactive");
-			case MIXED -> VersionedText.translatable("automodpack.stateHistory.restoreMixed");
 		};
 	}
 
-	private StateHistory.FileGate gate(ClientStateJournal.TrackedFile file) {
-		ClientStateJournal.StateEntry selected = selectedEntry();
+	private StateHistory.FileGate gate(TrackedFile file) {
+		Snapshot selected = selectedEntry();
 		if (selected == null || file == null) return null;
 		return fileGates.get(gateKey(selected, file));
 	}
@@ -190,46 +170,37 @@ public final class StateHistoryScreen extends VersionedScreen {
 		};
 	}
 
-	private void load() {
-		loading = true;
-		work = ScreenManager.background(() -> {
-			try {
-				List<ClientStateJournal.StateEntry> loaded = controller.stateEntries();
-				this.minecraft.execute(() -> loaded(loaded));
-			} catch (Exception e) {
-				this.minecraft.execute(() -> fail(e));
-			}
-		});
+	private void loadEntries() {
+		try {
+			List<Snapshot> loaded = controller.stateEntries();
+			this.minecraft.execute(() -> loaded(loaded));
+		} catch (Exception e) {
+			this.minecraft.execute(() -> fail(e));
+		}
 	}
 
-	private void loaded(List<ClientStateJournal.StateEntry> loaded) {
+	private void loaded(List<Snapshot> loaded) {
 		if (closed) return;
-		entries = List.copyOf(loaded);
-		for (InstalledModpackController.Pack pack : controller.installed()) packNames.put(pack.modpackId(), pack.name());
+		entries = loaded;
 		loading = false;
-		busy = false;
-		if (selectedSeq != null && entries.stream().noneMatch(entry -> entry.seq() == selectedSeq)) selectedSeq = null;
-		rebuild();
+		load = null;
+		if (selectedSeq == null && !loaded.isEmpty()) selectedSeq = loaded.get(loaded.size() - 1).seq();
+		super.rebuild();
+		for (Snapshot entry : loaded) {
+			resolveRestorability(entry);
+			resolveDiff(entry);
+		}
 	}
 
-	private void select(long seq) {
-		if (busy || loading) return;
-		selectedSeq = seq;
-		selectedFileIndex = -1;
-		lastResult = null;
-		rebuild();
-		resolveRestorability(selectedEntry());
-	}
-
-	private void resolveRestorability(ClientStateJournal.StateEntry entry) {
-		if (entry == null || restorabilityBySeq.containsKey(entry.seq())) return;
-		work = ScreenManager.background(() -> {
+	private void resolveRestorability(Snapshot entry) {
+		if (restorabilityBySeq.containsKey(entry.seq())) return;
+		ScreenManager.background(() -> {
 			try {
-				StateHistory.RestoreOption option = controller.stateRestorability(entry);
+				StateHistory.Restorability option = controller.stateRestorability(entry);
 				this.minecraft.execute(() -> {
 					if (closed) return;
 					restorabilityBySeq.put(entry.seq(), option);
-					rebuild();
+					super.rebuild();
 				});
 			} catch (Exception e) {
 				this.minecraft.execute(() -> fail(e));
@@ -237,24 +208,34 @@ public final class StateHistoryScreen extends VersionedScreen {
 		});
 	}
 
-	private void pickFile(int index) {
-		if (busy || loading) return;
-		selectedFileIndex = index;
-		lastResult = null;
-		rebuild();
-		resolveFileGate(selectedFile());
+	private void resolveDiff(Snapshot entry) {
+		if (diffsBySeq.containsKey(entry.seq())) return;
+		ScreenManager.background(() -> {
+			try {
+				List<StateHistory.FileDiff> diffs = controller.stateDiff(entry);
+				InstanceTree tree = controller.stateTree(entry);
+				this.minecraft.execute(() -> {
+					if (closed) return;
+					diffsBySeq.put(entry.seq(), diffs);
+					treesBySeq.put(entry.seq(), tree);
+					super.rebuild();
+				});
+			} catch (Exception e) {
+				this.minecraft.execute(() -> fail(e));
+			}
+		});
 	}
 
-	private void resolveFileGate(ClientStateJournal.TrackedFile file) {
-		ClientStateJournal.StateEntry selected = selectedEntry();
+	private void resolveFileGate(TrackedFile file) {
+		Snapshot selected = selectedEntry();
 		if (selected == null || file == null || fileGates.containsKey(gateKey(selected, file))) return;
-		work = ScreenManager.background(() -> {
+		ScreenManager.background(() -> {
 			try {
 				StateHistory.FileGate gate = controller.stateFileGate(file.root(), file.path());
 				this.minecraft.execute(() -> {
 					if (closed) return;
 					fileGates.put(gateKey(selected, file), gate);
-					rebuild();
+					super.rebuild();
 				});
 			} catch (Exception e) {
 				this.minecraft.execute(() -> fail(e));
@@ -262,177 +243,151 @@ public final class StateHistoryScreen extends VersionedScreen {
 		});
 	}
 
-	private static String gateKey(ClientStateJournal.StateEntry entry, ClientStateJournal.TrackedFile file) {
-		return entry.seq() + "/" + file.root().name() + "/" + file.path();
+	private static String gateKey(Snapshot entry, TrackedFile file) {
+		return entry.seq() + ":" + file.root() + ":" + file.overlayPackId() + ":" + file.path();
 	}
 
 	private void restoreState() {
-		ClientStateJournal.StateEntry entry = selectedEntry();
-		StateHistory.RestoreOption option = entry == null ? null : restorabilityBySeq.get(entry.seq());
-		if (entry == null || option == null || busy || option.restorability() != StateHistory.Restorability.READY) return;
-		controller.restoreState(entry, option, packName(entry.modpackId()), this::reopenAfterFlow);
+		Snapshot entry = selectedEntry();
+		if (entry == null || restorabilityBySeq.get(entry.seq()) != StateHistory.Restorability.READY || busy) return;
+		busy = true;
+		super.rebuild();
+		controller.restoreState(entry, this::refreshAfterMutation);
 	}
 
-	private void undoArrival() {
-		ClientStateJournal.StateEntry entry = selectedEntry();
-		if (entry == null || busy || !isUndoableArrival(entry)) return;
-		InstalledModpackController.Pack pack = pack(entry.modpackId());
-		if (pack == null) return;
-		controller.remove(pack, this::reopenAfterFlow, this::reopenAfterFlow);
-	}
-
-	private void openFiles() {
-		if (busy || selectedEntry() == null) return;
-		mode = Mode.FILES;
-		selectedFileIndex = -1;
-		lastResult = null;
-		rebuild();
-	}
-
-	private void showTimeline() {
-		mode = Mode.TIMELINE;
-		selectedFileIndex = -1;
-		lastResult = null;
-		rebuild();
+	private void forgetOlder() {
+		Snapshot entry = selectedEntry();
+		if (entry == null || busy || entries == null || entries.isEmpty() || entry.seq() == entries.get(0).seq()) return;
+		busy = true;
+		super.rebuild();
+		controller.forgetOlderThan(entry.seq(), this::refreshAfterMutation);
 	}
 
 	private void restoreFile() {
-		ClientStateJournal.TrackedFile file = selectedFile();
+		TrackedFile file = selectedFile();
 		if (file == null || busy) return;
-		run(() -> controller.restoreStateFile(selectedSeq, file.root(), file.path()), true);
+		busy = true;
+		super.rebuild();
+		runFileOp(() -> controller.restoreStateFile(selectedEntry().seq(), file.root(), file.path()), true);
 	}
 
 	private void saveFileCopy() {
-		ClientStateJournal.TrackedFile file = selectedFile();
+		TrackedFile file = selectedFile();
 		if (file == null || busy) return;
-		run(() -> controller.saveStateFileCopy(selectedSeq, file.root(), file.path()), false);
+		busy = true;
+		super.rebuild();
+		runFileOp(() -> controller.saveStateFileCopy(selectedEntry().seq(), file.root(), file.path()), false);
 	}
 
-	private void run(StateOperation operation, boolean restoreAttempt) {
-		busy = true;
-		rebuild();
-		work = ScreenManager.background(() -> {
+	private void runFileOp(StateOperation operation, boolean restore) {
+		ScreenManager.background(() -> {
 			try {
-				Path destination = operation.run();
-				List<ClientStateJournal.StateEntry> refreshed = controller.stateEntries();
+				Path result = operation.run();
 				this.minecraft.execute(() -> {
-					lastResult = destination;
-					lastResultRestore = restoreAttempt;
-					loaded(refreshed);
+					if (closed) return;
+					lastResult = result;
+					lastResultRestore = restore;
+					busy = false;
+					refreshAfterMutation();
 				});
 			} catch (Exception e) {
 				this.minecraft.execute(() -> fail(e));
 			}
 		});
+	}
+
+	private void refreshAfterMutation() {
+		if (closed) return;
+		busy = false;
+		restorabilityBySeq.clear();
+		diffsBySeq.clear();
+		treesBySeq.clear();
+		fileGates.clear();
+		loading = true;
+		load = ScreenManager.background(this::loadEntries);
+		super.rebuild();
 	}
 
 	private void fail(Exception exception) {
 		if (closed) return;
-		loading = false;
-		busy = false;
-		if (entries == null) entries = List.of();
-		rebuild();
-		presentingFailure = true;
+		closed = true;
+		closedCallback.run();
 		ScreenManager.failure(FailureRequest.of(exception, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 	}
 
-	/** The flows behind Restore this state and Undo arrival run their own screens; they land back on a fresh history. */
-	private void reopenAfterFlow() {
-		ScreenImpl.setScreen(new StateHistoryScreen(parent, controller, closedCallback));
+	private void openFiles() {
+		if (selectedEntry() == null) return;
+		mode = Mode.FILES;
+		showFullTree = false;
+		super.rebuild();
+	}
+
+	private void showTimeline() {
+		mode = Mode.TIMELINE;
+		super.rebuild();
+	}
+
+	private void select(int index) {
+		List<Snapshot> newestFirst = reversed();
+		if (index < 0 || index >= newestFirst.size()) return;
+		selectedSeq = newestFirst.get(index).seq();
+		super.rebuild();
+	}
+
+	private Snapshot selectedEntry() {
+		if (selectedSeq == null || entries == null) return null;
+		return entries.stream().filter(entry -> entry.seq() == selectedSeq).findFirst().orElse(null);
+	}
+
+	private void selectRow(RowListWidget list, List<Snapshot> newestFirst, Snapshot selected) {
+		if (selected == null || newestFirst.isEmpty()) return;
+		int index = newestFirst.indexOf(selected);
+		if (index < 0) return;
+		list.setSelected(list.children().get(index));
+	}
+
+	private List<Snapshot> reversed() {
+		List<Snapshot> newestFirst = new ArrayList<>(entries == null ? List.of() : entries);
+		Collections.reverse(newestFirst);
+		return newestFirst;
+	}
+
+	private List<TrackedFile> selectedFiles() {
+		Snapshot entry = selectedEntry();
+		if (entry == null) return List.of();
+		if (showFullTree) {
+			InstanceTree tree = treesBySeq.get(entry.seq());
+			return tree == null ? List.of() : tree.files();
+		}
+		List<StateHistory.FileDiff> diffs = diffsBySeq.get(entry.seq());
+		if (diffs == null) return List.of();
+		List<TrackedFile> files = new ArrayList<>();
+		for (StateHistory.FileDiff diff : diffs) files.add(diff.after() == null ? diff.before() : diff.after());
+		return files;
+	}
+
+	private TrackedFile selectedFile() {
+		List<TrackedFile> shown = selectedFiles();
+		if (files == null || shown.isEmpty()) return null;
+		int index = files.getSelected() == null ? -1 : files.children().indexOf(files.getSelected());
+		if (index < 0 || index >= shown.size()) return null;
+		return shown.get(index);
+	}
+
+	private String packName(String modpackId) {
+		InstalledModpackController.Pack pack = controller.installedPack(modpackId);
+		return pack == null ? modpackId : pack.name();
+	}
+
+	private String rootLabel(Root root) {
+		return VersionedText.translatable("automodpack.stateHistory.root." + root.name()).getString();
 	}
 
 	private void back() {
 		if (closed) return;
 		closed = true;
-		cancelWork();
 		closedCallback.run();
 		ScreenImpl.setScreen(parent);
-	}
-
-	private void cancelWork() {
-		Future<?> current = work;
-		if (current != null && !current.isDone()) current.cancel(true);
-	}
-
-	private ClientStateJournal.StateEntry selectedEntry() {
-		if (selectedSeq == null || entries == null) return null;
-		return entries.stream().filter(entry -> entry.seq() == selectedSeq).findFirst().orElse(null);
-	}
-
-	private void selectRow(RowListWidget list, List<ClientStateJournal.StateEntry> newestFirst, ClientStateJournal.StateEntry selected) {
-		if (selected == null) return;
-		for (int index = 0; index < newestFirst.size(); index++)
-			if (newestFirst.get(index).seq() == selected.seq()) {
-				list.setSelected(list.children().get(index));
-				list.revealRow(index);
-				return;
-			}
-	}
-
-	private List<ClientStateJournal.StateEntry> reversed() {
-		List<ClientStateJournal.StateEntry> newestFirst = new ArrayList<>(entries == null ? List.of() : entries);
-		Collections.reverse(newestFirst);
-		return newestFirst;
-	}
-
-	private List<ClientStateJournal.TrackedFile> selectedFiles() {
-		ClientStateJournal.StateEntry entry = selectedEntry();
-		return entry == null ? List.of() : entry.state();
-	}
-
-	private ClientStateJournal.TrackedFile selectedFile() {
-		List<ClientStateJournal.TrackedFile> files = selectedFiles();
-		return selectedFileIndex >= 0 && selectedFileIndex < files.size() ? files.get(selectedFileIndex) : null;
-	}
-
-	private boolean isUndoableArrival(ClientStateJournal.StateEntry entry) {
-		return entry.kind() == ClientStateJournal.Kind.INSTALL && entry.modpackId().equals(controller.activeModpackId()) && pack(entry.modpackId()) != null;
-	}
-
-	private InstalledModpackController.Pack pack(String modpackId) {
-		return controller.installed().stream().filter(candidate -> candidate.modpackId().equals(modpackId)).findFirst().orElse(null);
-	}
-
-	private String packName(String modpackId) {
-		String name = packNames.get(modpackId);
-		return name == null ? modpackId : name;
-	}
-
-	private static String rootLabel(Root root) {
-		return VersionedText.translatable("automodpack.stateHistory.root." + root.name()).getString();
-	}
-
-	private static String humanSize(long bytes) {
-		if (bytes < 0) return "?";
-		if (bytes < 1024) return bytes + " B";
-		double value = bytes;
-		for (String unit : new String[]{"KiB", "MiB", "GiB"}) {
-			value /= 1024;
-			if (value < 1024) return String.format(Locale.ROOT, "%.1f %s", value, unit);
-		}
-		return String.format(Locale.ROOT, "%.1f TiB", value / 1024);
-	}
-
-	private static String displayPath(Path path) {
-		Path game = GameDirectory.current().toAbsolutePath().normalize();
-		Path absolute = path.toAbsolutePath().normalize();
-		if (absolute.startsWith(game)) return game.relativize(absolute).toString().replace('\\', '/');
-		return absolute.toString().replace('\\', '/');
-	}
-
-	@Override
-	public void removed() {
-		if (presentingFailure) {
-			presentingFailure = false;
-			super.removed();
-			return;
-		}
-		if (!closed) {
-			closed = true;
-			cancelWork();
-			closedCallback.run();
-		}
-		super.removed();
 	}
 
 	@Override
@@ -442,7 +397,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 		if (loading) description = VersionedText.translatable("automodpack.stateHistory.loading").getString();
 		else if (mode == Mode.TIMELINE) description = VersionedText.translatable("automodpack.stateHistory.description", entries == null ? 0 : entries.size()).getString();
 		else {
-			ClientStateJournal.StateEntry selected = selectedEntry();
+			Snapshot selected = selectedEntry();
 			description = VersionedText.translatable("automodpack.stateHistory.filesDescription", selectedFiles().size(), selected == null ? "" : packName(selected.modpackId())).getString();
 		}
 		List<String> descriptionLines = wrapToWidth(this.font, description, this.width - 28, 2);
@@ -451,6 +406,10 @@ public final class StateHistoryScreen extends VersionedScreen {
 		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.stateHistory.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
 		if (!loading && entries != null && entries.isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.stateHistory.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
+		if (lastResult != null) {
+			String key = lastResultRestore ? "automodpack.stateHistory.restoredTo" : "automodpack.stateHistory.savedTo";
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(key, lastResult.toString()).withStyle(ChatFormatting.GREEN), this.width / 2, 52, TextColors.WHITE);
+		}
 	}
 
 	@Override

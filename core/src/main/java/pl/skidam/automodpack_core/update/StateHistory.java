@@ -8,22 +8,23 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
-import pl.skidam.automodpack_core.update.ClientStateJournal.Capture;
-import pl.skidam.automodpack_core.update.ClientStateJournal.Change;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Kind;
-import pl.skidam.automodpack_core.update.ClientStateJournal.StateEntry;
-import pl.skidam.automodpack_core.update.ClientStateJournal.TrackedFile;
+import pl.skidam.automodpack_core.update.ClientStateJournal.Snapshot;
+import pl.skidam.automodpack_core.update.InstanceTree.TrackedFile;
+import pl.skidam.automodpack_core.update.UpdatePlan.FileKey;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
@@ -31,156 +32,180 @@ import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
- * The user-facing view over the client state journal: the entry timeline, whether a past state can be restored whole
- * and through which reviewed flow, per-file recovery out of any past state, and each pack's pre-install state.
- * Restores append their own checkpoints, so the timeline stays a complete record of every file-state mutation.
+ * The user-facing instance timeline: snapshots of states this computer lived, whole-instance checkout, per-file
+ * recovery, and forget-prefix. Diffs are computed from parent trees. Restore is offline.
  */
 public final class StateHistory {
 	private StateHistory() {}
 
-	/** What kind of committed mutation produced a state. Repairs and single-file restores append entries once their flows land on this journal. */
 	public enum Restorability {
-		/** This entry is where the active pack already is. */
-		CURRENT,
-		/** A clean generation state of the active pack whose bytes are still kept; restores through the reviewed rollback. */
-		READY,
-		/** A clean generation state whose bytes were compacted away. */
-		NOT_KEPT,
-		/** A clean generation state of another pack; activate it first. */
-		INACTIVE_PACK,
-		/** A state pieced together from single-file restores; restore files individually instead. */
-		MIXED
+		CURRENT, READY, NOT_KEPT
 	}
 
-	/** The live gate for restoring one past file to its original path; Save copy stays available either way. */
 	public enum FileGate {
 		AVAILABLE, NOT_GAME_DIR, OWNED
 	}
 
-	/** One entry's restorability; the generation is the mirror entry the reviewed rollback restores, when there is one. */
-	public record RestoreOption(Restorability restorability, JournalEntry generation) {
-		public RestoreOption {
-			Objects.requireNonNull(restorability, "restorability");
+	public record FileDiff(TrackedFile before, TrackedFile after) {
+		public JournalEntry.Change.Kind kind() {
+			if (before == null) return JournalEntry.Change.Kind.ADDED;
+			if (after == null) return JournalEntry.Change.Kind.REMOVED;
+			return JournalEntry.Change.Kind.CHANGED;
 		}
 	}
 
-	/**
-	 * One read of the live generation's ownership: the active state, its target, and every path that target owns.
-	 * Building it costs a few durable parses; evaluating any number of files against it is pure, so batch callers
-	 * resolve it once per operation instead of per file.
-	 */
-	private record LiveOwnership(SelectedModpackTarget activeTarget, FileCache cache, Set<String> generatedPaths, Set<String> flatTargetPaths) {
-		static LiveOwnership read(ClientStorage storage, FileCache cache) throws IOException {
-			ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
-			SelectedModpackTarget activeTarget = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
-			String activePack = activeState == null ? null : activeState.modpackId;
-			if (activeTarget == null || activePack == null || !activePack.equals(activeTarget.manifest().modpackId()))
-				return new LiveOwnership(null, cache, Set.of(), Set.of());
-			Set<String> generated = new HashSet<>();
-			GeneratedCopyState.read(storage, activePack, activeTarget.packTarget().contentToken(), UpdateTransaction.digest(activeTarget.selection().intent())).entries()
-					.forEach(entry -> generated.add(entry.logicalPath()));
-			Set<String> flat = new HashSet<>();
-			if (activeTarget.flatTarget().list != null) for (var item : activeTarget.flatTarget().list) flat.add(LogicalPath.normalize(item.file));
-			return new LiveOwnership(activeTarget, cache, generated, flat);
-		}
+	public static List<Snapshot> entries(ClientStorage storage) throws IOException {
+		return ClientStorageMutation.run(storage, () -> ClientStateJournal.open(storage).entries());
+	}
 
-		FileGate fileGate(Root root, String logicalPath) {
-			if (root != Root.GAME_DIR) return FileGate.NOT_GAME_DIR;
-			String path = LogicalPath.normalize(logicalPath);
-			if (activeTarget == null) return FileGate.AVAILABLE;
-			if (generatedPaths.contains(path) || flatTargetPaths.contains(path)) return FileGate.OWNED;
+	public static Snapshot entry(ClientStorage storage, long seq) throws IOException {
+		return ClientStorageMutation.run(storage, () -> ClientStateJournal.open(storage).require(seq));
+	}
+
+	public static InstanceTree tree(ClientStorage storage, Snapshot snapshot) throws IOException {
+		return InstanceTree.read(storage, snapshot.treeSha1());
+	}
+
+	public static Restorability restorability(ClientStorage storage, Snapshot snapshot) throws IOException {
+		return ClientStorageMutation.run(storage, () -> {
+			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+				InstanceTree target = InstanceTree.read(storage, snapshot.treeSha1());
+				if (!blobsPresent(storage, target, cache)) return Restorability.NOT_KEPT;
+				InstanceTree live = InstanceTree.observe(storage, fileKeys(target), cache);
+				return live.sameAs(target) ? Restorability.CURRENT : Restorability.READY;
+			}
+		});
+	}
+
+	public static List<FileDiff> diff(ClientStorage storage, Snapshot snapshot) throws IOException {
+		return ClientStorageMutation.run(storage, () -> {
+			InstanceTree current = InstanceTree.read(storage, snapshot.treeSha1());
+			InstanceTree parent = snapshot.parentSeq() == ClientStateJournal.NO_PARENT ? null : InstanceTree.read(storage, ClientStateJournal.open(storage).require(snapshot.parentSeq()).treeSha1());
+			return diff(parent, current);
+		});
+	}
+
+	static List<FileDiff> diff(InstanceTree parent, InstanceTree current) {
+		Map<String, TrackedFile> before = new TreeMap<>();
+		if (parent != null) for (TrackedFile file : parent.files()) before.put(diffKey(file), file);
+		Map<String, TrackedFile> after = new TreeMap<>();
+		for (TrackedFile file : current.files()) after.put(diffKey(file), file);
+		Set<String> keys = new TreeSet<>();
+		keys.addAll(before.keySet());
+		keys.addAll(after.keySet());
+		List<FileDiff> diffs = new ArrayList<>();
+		for (String key : keys) {
+			TrackedFile left = before.get(key);
+			TrackedFile right = after.get(key);
+			if (left != null && right != null && left.sha1().equals(right.sha1()) && left.size() == right.size()) continue;
+			diffs.add(new FileDiff(left, right));
+		}
+		return diffs;
+	}
+
+	public static FileGate fileRestoreGate(ClientStorage storage, Root root, String path) throws IOException {
+		if (root != Root.GAME_DIR) return FileGate.NOT_GAME_DIR;
+		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
+		if (active == null) return FileGate.AVAILABLE;
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			var target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
+			if (target == null) return FileGate.AVAILABLE;
+			String normalized = LogicalPath.normalize(path);
+			if (target.flatTarget().list != null)
+				for (var item : target.flatTarget().list)
+					if (LogicalPath.normalize(item.file).equals(normalized)) return FileGate.OWNED;
 			return FileGate.AVAILABLE;
 		}
 	}
 
-	public static List<StateEntry> entries(ClientStorage storage) throws IOException {
-		Objects.requireNonNull(storage, "storage");
-		// Locked, so a read that repairs a torn tail cannot race a concurrent append.
-		return ClientStorageMutation.run(storage, () -> ClientStateJournal.open(storage.stateHistoryJournalFile()).entries());
+	/** Snapshot live if it differs from head. Kind is LIVE when this is a dirty-before row. */
+	public static void snapshotIfDirty(ClientStorage storage, Set<FileKey> extraPaths, Kind kind, String modpackId, String transactionId) throws IOException {
+		ClientStorageMutation.run(storage, () -> {
+			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+				InstanceTree live = InstanceTree.observe(storage, extraPaths, cache);
+				ClientStateJournal journal = ClientStateJournal.open(storage);
+				if (!journal.entries().isEmpty() && live.sameAs(InstanceTree.read(storage, journal.head().treeSha1()))) return null;
+				acquireTreeBlobs(storage, live, extraPaths, cache);
+				live.write(storage);
+				journal.append(live.sha1(), kind, modpackId, transactionId);
+				return null;
+			}
+		});
 	}
 
-	/** The one state entry of the journal, by sequence. */
-	public static StateEntry entry(ClientStorage storage, long seq) throws IOException {
-		return ClientStorageMutation.run(storage, () -> requireEntry(ClientStateJournal.open(storage.stateHistoryJournalFile()), seq));
+	public static void recordAfter(ClientStorage storage, Set<FileKey> extraPaths, Kind kind, String modpackId, String transactionId) throws IOException {
+		snapshotIfDirty(storage, extraPaths, kind, modpackId, transactionId);
 	}
 
-	/**
-	 * What restoring this entry whole would mean. Only clean generation states of the active pack qualify: their
-	 * generation identity names a mirrored journal entry whose bytes the rollback machinery already knows how to serve.
-	 */
-	public static RestoreOption restorability(ClientStorage storage, StateEntry entry) throws IOException {
-		Objects.requireNonNull(storage, "storage");
-		Objects.requireNonNull(entry, "entry");
-		if (!isGenerationState(entry.kind())) return new RestoreOption(Restorability.MIXED, null);
-		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
-		if (active == null || !active.modpackId.equals(entry.modpackId())) return new RestoreOption(Restorability.INACTIVE_PACK, null);
-		if (active.contentToken.equals(entry.contentToken())) return new RestoreOption(Restorability.CURRENT, null);
-		for (JournalEntry candidate : new JournalMirror(storage).entries(entry.modpackId()))
-			if (candidate.contentToken().equals(entry.contentToken()))
-				return new RestoreOption(new ClientGenerationStore(storage).locallyRestorable(entry.modpackId(), candidate) ? Restorability.READY : Restorability.NOT_KEPT, candidate);
-		return new RestoreOption(Restorability.NOT_KEPT, null);
+	public static void aroundMutation(ClientStorage storage, Set<FileKey> extraPaths, Kind kind, String modpackId, String transactionId, ClientStorageMutation.Operation<?> mutation) throws IOException {
+		ClientStorageMutation.run(storage, () -> {
+			snapshotIfDirty(storage, extraPaths, Kind.LIVE, modpackId, transactionId);
+			mutation.run();
+			recordAfter(storage, extraPaths, kind, modpackId, transactionId);
+			return null;
+		});
 	}
 
-	private static boolean isGenerationState(Kind kind) {
-		return kind == Kind.INSTALL || kind == Kind.UPDATE || kind == Kind.ROLLBACK;
-	}
-
-	/** The live gate for restoring one file to its original path, so the UI can disable Restore with the reason; Save copy stays available either way. */
-	public static FileGate fileRestoreGate(ClientStorage storage, Root root, String path) throws IOException {
-		Objects.requireNonNull(storage, "storage");
-		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-			return LiveOwnership.read(storage, cache).fileGate(root, path);
-		}
-	}
-
-	/**
-	 * The pack's pre-install state, derived from its entries: the first capture per path wins, because a later capture
-	 * names bytes a previous entry already tracks. Removal and cleanup restore from here.
-	 */
-	public static PreInstallState preInstallState(ClientStorage storage, String modpackId) throws IOException {
-		ModpackId.requireValid(modpackId);
-		Map<String, PreInstallState.Entry> entries = new TreeMap<>();
-		for (StateEntry entry : entries(storage)) {
-			if (!entry.modpackId().equals(modpackId)) continue;
-			for (Capture capture : entry.captures())
-				entries.putIfAbsent(capture.path(), new PreInstallState.Entry(capture.path(), capture.sha1(), capture.absent() ? 0 : capture.size(), capture.absent()));
-		}
-		return new PreInstallState(modpackId, entries);
-	}
-
-	/**
-	 * Restores one tracked file of a past state to its original game path: unowned game-directory paths only, and
-	 * never overwriting a different live file. Appends a {@code FILE_RESTORE} checkpoint whose lineage names the
-	 * source entry, so the state after the restore is itself on the timeline.
-	 */
-	public static Path restoreFile(ClientStorage storage, long seq, Root root, String path) throws IOException {
-		Objects.requireNonNull(storage, "storage");
+	public static Path checkout(ClientStorage storage, long seq) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-				ClientStateJournal journal = ClientStateJournal.open(storage.stateHistoryJournalFile());
-				StateEntry entry = requireEntry(journal, seq);
-				TrackedFile file = requireFile(entry, root, path);
-				FileGate gate = LiveOwnership.read(storage, cache).fileGate(root, path);
+				ClientStateJournal journal = ClientStateJournal.open(storage);
+				Snapshot snapshot = journal.require(seq);
+				InstanceTree target = InstanceTree.read(storage, snapshot.treeSha1());
+				if (!blobsPresent(storage, target, cache)) throw new IOException("Instance snapshot " + seq + " is missing file data on this computer");
+				InstanceTree live = InstanceTree.observe(storage, fileKeys(target), cache);
+				if (live.sameAs(target)) return storage.gameDirectory();
+				applyTree(storage, live, target, cache);
+				applyIdentity(storage, target.identity());
+				detachInstalled(storage);
+				InstanceTree after = InstanceTree.observe(storage, fileKeys(target), cache);
+				if (!sameFiles(after, target)) throw new IOException("Instance restore did not reproduce snapshot " + seq);
+				after.write(storage);
+				ClientStateJournal.open(storage).append(after.sha1(), Kind.RESTORE, target.identity().activeModpackId(), "restore-" + seq);
+				return storage.gameDirectory();
+			}
+		});
+	}
+
+	public static void forgetOlderThan(ClientStorage storage, long seq) throws IOException {
+		ClientStorageMutation.run(storage, () -> {
+			ClientStateJournal journal = ClientStateJournal.open(storage);
+			List<Snapshot> remaining = journal.entries().stream().filter(entry -> entry.seq() >= seq).toList();
+			if (remaining.isEmpty()) throw new IOException("Forgetting that prefix would leave no snapshots");
+			journal.replaceAll(remaining);
+			Set<String> kept = new HashSet<>();
+			for (Snapshot entry : remaining) kept.add(entry.treeSha1());
+			InstanceTree.deleteUnused(storage, kept);
+			ClientObjectStore.collectUnreachableObjects(storage, Set.of());
+			return null;
+		});
+	}
+
+	public static Path restoreFile(ClientStorage storage, long seq, Root root, String path) throws IOException {
+		return ClientStorageMutation.run(storage, () -> {
+			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+				Snapshot snapshot = ClientStateJournal.open(storage).require(seq);
+				InstanceTree tree = InstanceTree.read(storage, snapshot.treeSha1());
+				TrackedFile file = requireGameFile(tree, root, path);
+				FileGate gate = fileRestoreGate(storage, root, path);
 				if (gate == FileGate.NOT_GAME_DIR) throw new IOException("Only game-directory files can be restored to their original path");
 				if (gate == FileGate.OWNED) throw new IOException("The active modpack still owns " + path);
 				Path destination = storage.gamePath(path);
-				// A destination that already holds exactly these bytes is a no-op restore; recording it would claim a
-				// change that never happened.
 				if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS) && FileIntegrity.matchesNamed(destination, file.size(), file.sha1(), cache)) return destination;
+				Set<FileKey> extra = Set.of(file.fileKey());
+				snapshotIfDirty(storage, extra, Kind.LIVE, snapshot.modpackId(), "file-restore-" + UUID.randomUUID());
 				copyWithoutOverwrite(storage.gameDirectory(), storage.objectFile(file.sha1()), destination, file.size(), file.sha1(), cache);
-				appendFileRestore(journal, entry, file);
+				recordAfter(storage, extra, Kind.FILE_RESTORE, snapshot.modpackId(), "file-restore-" + seq);
 				return destination;
 			}
 		});
 	}
 
-	/** Saves {@code automodpack/recovered/{originalPath}} for one tracked file of a past state. No state changes, so no checkpoint. */
 	public static Path saveFileCopy(ClientStorage storage, long seq, Root root, String path) throws IOException {
-		Objects.requireNonNull(storage, "storage");
 		return ClientStorageMutation.run(storage, () -> {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-				StateEntry entry = requireEntry(ClientStateJournal.open(storage.stateHistoryJournalFile()), seq);
-				TrackedFile file = requireFile(entry, root, path);
+				InstanceTree tree = InstanceTree.read(storage, ClientStateJournal.open(storage).require(seq).treeSha1());
+				TrackedFile file = requireFile(tree, root, path);
 				Path destination = RecoveredFiles.destination(storage, path, file.sha1());
 				copyWithoutOverwrite(storage.gameDirectory(), storage.objectFile(file.sha1()), destination, file.size(), file.sha1(), cache);
 				return destination;
@@ -188,32 +213,39 @@ public final class StateHistory {
 		});
 	}
 
-	private static void appendFileRestore(ClientStateJournal journal, StateEntry source, TrackedFile file) throws IOException {
-		StateEntry head = journal.head();
-		TrackedFile previous = head.state().stream().filter(existing -> existing.root() == file.root() && existing.path().equals(file.path())).findFirst().orElse(null);
-		List<TrackedFile> state = new ArrayList<>(head.state());
-		state.removeIf(existing -> existing.root() == file.root() && existing.path().equals(file.path()));
-		state.add(file);
-		String fromHash = previous == null ? null : previous.sha1();
-		long fromSize = previous == null ? 0 : previous.size();
-		journal.appendCheckpoint("file-restore-" + UUID.randomUUID(), Kind.FILE_RESTORE, head.modpackId(), head.contentToken(), source.seq(), state,
-				List.of(new Change(file.root(), file.path(), fromHash, fromSize, file.sha1(), file.size())), List.of());
+	public static PreInstallState preInstallState(ClientStorage storage, String modpackId) throws IOException {
+		ModpackId.requireValid(modpackId);
+		return ClientStorageMutation.run(storage, () -> {
+			ClientStateJournal journal = ClientStateJournal.open(storage);
+			Snapshot install = null;
+			for (Snapshot entry : journal.entries())
+				if (entry.kind() == Kind.INSTALL && entry.modpackId().equals(modpackId)) {
+					install = entry;
+					break;
+				}
+			if (install == null || install.parentSeq() == ClientStateJournal.NO_PARENT)
+				return new PreInstallState(modpackId, Map.of());
+			InstanceTree parent = InstanceTree.read(storage, journal.require(install.parentSeq()).treeSha1());
+			Map<String, PreInstallState.Entry> entries = new TreeMap<>();
+			for (TrackedFile file : parent.files()) {
+				if (file.root() != Root.GAME_DIR) continue;
+				entries.putIfAbsent(file.path(), new PreInstallState.Entry(file.path(), file.sha1(), file.size(), false));
+			}
+			return new PreInstallState(modpackId, entries);
+		});
 	}
 
-	private static StateEntry requireEntry(ClientStateJournal journal, long seq) throws IOException {
-		return journal.entries().stream().filter(entry -> entry.seq() == seq).findFirst()
-				.orElseThrow(() -> new IOException("No state history entry " + seq));
+	static Set<FileKey> planPaths(UpdatePlan plan) {
+		Set<FileKey> paths = new TreeSet<>(FileKey.ORDER);
+		for (UpdatePlan.ProjectedFile projected : plan.projectedFinalState()) paths.add(new FileKey(projected.root(), projected.relativePath()));
+		for (UpdatePlan.Operation operation : plan.operations()) paths.add(new FileKey(operation.root(), operation.relativePath()));
+		for (UpdatePlan.Preservation preservation : plan.preservations()) paths.add(new FileKey(preservation.root(), preservation.relativePath()));
+		return paths;
 	}
 
-	private static TrackedFile requireFile(StateEntry entry, Root root, String path) throws IOException {
-		return entry.state().stream().filter(file -> file.root() == root && file.path().equals(path)).findFirst()
-				.orElseThrow(() -> new IOException("State history entry " + entry.seq() + " does not track " + path));
-	}
-
-	/** Verifies the source object, never overwrites a different live file, and verifies the copy; shared by every journal-sourced restore. */
 	static void copyWithoutOverwrite(Path constrainedRoot, Path source, Path destination, long size, String hash, FileCache cache) throws IOException {
 		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
-		if (!FileIntegrity.matchesNamed(source, size, hash, cache)) throw new IOException("State history object is missing or corrupt: " + hash);
+		if (!FileIntegrity.matchesNamed(source, size, hash, cache)) throw new IOException("Instance tree object is missing or corrupt: " + hash);
 		if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
 			if (!Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matchesNamed(destination, size, hash, cache))
 				throw new IOException("Refusing to overwrite a different file at " + destination);
@@ -222,5 +254,110 @@ public final class StateHistory {
 		VerifiedFileTransfer.copyCreateOnly(source, destination, size, hash, cache);
 		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
 		if (!FileIntegrity.matchesNamed(destination, size, hash, cache)) throw new IOException("Restored file failed verification: " + destination);
+	}
+
+	private static void applyTree(ClientStorage storage, InstanceTree live, InstanceTree target, FileCache cache) throws IOException {
+		Set<String> wanted = new HashSet<>();
+		for (TrackedFile file : target.files()) {
+			wanted.add(diffKey(file));
+			Path destination = storage.rootedPath(file.root(), file.overlayPackId(), file.path());
+			Path object = storage.objectFile(file.sha1());
+			if (FileIntegrity.matchesNamed(destination, file.size(), file.sha1(), cache)) continue;
+			FileTrees.requireNoSymbolicLinkDescendants(storage.root(file.root(), file.overlayPackId().isEmpty() ? "_" : file.overlayPackId()), destination, "instance restore");
+			if (file.root() == Root.PROJECTION) VerifiedFileTransfer.linkAtomic(object, destination, file.size(), file.sha1(), cache);
+			else VerifiedFileTransfer.copyAtomic(object, destination, file.size(), file.sha1(), cache);
+		}
+		for (TrackedFile file : live.files()) {
+			if (wanted.contains(diffKey(file))) continue;
+			Path destination = storage.rootedPath(file.root(), file.overlayPackId(), file.path());
+			Files.deleteIfExists(destination);
+			FileTrees.pruneEmptyAncestors(destination, storage.root(file.root(), file.overlayPackId().isEmpty() ? "_" : file.overlayPackId()));
+		}
+	}
+
+	private static void applyIdentity(ClientStorage storage, InstanceTree.LiveIdentity identity) throws IOException {
+		if (identity.activeModpackId().isEmpty()) {
+			storage.clearActiveState();
+			return;
+		}
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		JournalEntry generation = null;
+		for (JournalEntry entry : new JournalMirror(storage).entries(identity.activeModpackId()))
+			if (entry.contentToken().equals(identity.contentToken())) {
+				generation = entry;
+				break;
+			}
+		if (generation == null) throw new IOException("Pack history has no generation " + identity.contentToken() + " for " + identity.activeModpackId());
+		PackDocument document = generations.document(identity.activeModpackId(), generation);
+		storage.writeActiveState(identity.activeModpackId(), identity.contentToken(), document.ownershipLedger().toFields());
+		SelectionIntent target = identity.selection();
+		if (target != null) {
+			ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
+			SelectionIntent current = selections.get(identity.activeModpackId()).orElse(null);
+			selections.compareAndSet(identity.activeModpackId(), current, target);
+		}
+		Set<String> written = new HashSet<>();
+		for (InstanceTree.Tombstone tombstone : identity.tombstones()) {
+			storage.writeOverlayState(tombstone.modpackId(), new TreeSet<>(tombstone.deletedPaths()));
+			written.add(tombstone.modpackId());
+		}
+		if (!written.contains(identity.activeModpackId())) storage.writeOverlayState(identity.activeModpackId(), Set.of());
+	}
+
+	private static void detachInstalled(ClientStorage storage) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
+		if (active == null) return;
+		storage.setDetached(active.modpackId, true);
+	}
+
+	private static void acquireTreeBlobs(ClientStorage storage, InstanceTree tree, Set<FileKey> extraPaths, FileCache cache) throws IOException {
+		for (TrackedFile file : tree.files()) {
+			Path object = storage.objectFile(file.sha1());
+			if (FileIntegrity.matchesNamed(object, file.size(), file.sha1(), cache)) continue;
+			Path live = storage.rootedPath(file.root(), file.overlayPackId(), file.path());
+			if (!FileIntegrity.matchesNamed(live, file.size(), file.sha1(), cache)) throw new IOException("Cannot pin instance tree file: " + file.path());
+			VerifiedFileTransfer.copyAtomicImmutable(live, object, file.size(), file.sha1(), cache);
+		}
+	}
+
+	private static boolean blobsPresent(ClientStorage storage, InstanceTree tree, FileCache cache) {
+		for (TrackedFile file : tree.files())
+			if (!FileIntegrity.matchesNamed(storage.objectFile(file.sha1()), file.size(), file.sha1(), cache)) return false;
+		return true;
+	}
+
+	private static boolean sameFiles(InstanceTree left, InstanceTree right) {
+		if (left.files().size() != right.files().size()) return false;
+		for (int index = 0; index < left.files().size(); index++) {
+			TrackedFile a = left.files().get(index);
+			TrackedFile b = right.files().get(index);
+			if (a.root() != b.root() || !a.overlayPackId().equals(b.overlayPackId()) || !a.path().equals(b.path()) || !a.sha1().equals(b.sha1()) || a.size() != b.size()) return false;
+		}
+		return true;
+	}
+
+	private static Set<FileKey> fileKeys(InstanceTree tree) {
+		Set<FileKey> keys = new TreeSet<>(FileKey.ORDER);
+		for (TrackedFile file : tree.files()) keys.add(file.fileKey());
+		return keys;
+	}
+
+	private static String diffKey(TrackedFile file) {
+		return file.root().name() + "/" + file.overlayPackId() + "/" + file.path();
+	}
+
+	private static TrackedFile requireGameFile(InstanceTree tree, Root root, String path) throws IOException {
+		if (root != Root.GAME_DIR) throw new IOException("Only game-directory files can be restored to their original path");
+		return requireFile(tree, root, path);
+	}
+
+	private static TrackedFile requireFile(InstanceTree tree, Root root, String path) throws IOException {
+		TrackedFile file = tree.file(root, "", path);
+		if (file == null && root == Root.OVERLAY) {
+			for (TrackedFile candidate : tree.files())
+				if (candidate.root() == root && candidate.path().equals(path)) return candidate;
+		}
+		if (file == null) throw new IOException("Instance tree does not track " + path);
+		return file;
 	}
 }

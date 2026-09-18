@@ -31,41 +31,39 @@ public class ClientStorageJsons {
 		public boolean detached = false;
 	}
 
-	/** One line of the client state history journal: the complete tracked file state after one committed mutation. */
-	public static class StateEntryFields {
+	/** One line of the instance timeline journal: parent, tree hash, and event. The tree document is a sibling file. */
+	public static class SnapshotFields {
 		public long seq = -1;
-		public String transactionId = "";
+		public long parentSeq = 0;
+		public String treeSha1 = "";
 		public String kind = "";
 		public String modpackId = "";
-		public String contentToken = "";
+		public String transactionId = "";
 		public String createdAt = "";
-		public long restoreOfSeq = -1;
-		public List<FileFields> state = List.of();
-		public List<ChangeFields> changes = List.of();
-		public List<CaptureFields> captures = List.of();
+	}
+
+	/** One instance tree document: live identity plus every tracked file at that moment. */
+	public static class InstanceTreeFields {
+		public String activeModpackId = "";
+		public String contentToken = "";
+		public boolean detached;
+		public List<String> requestedGroups = List.of();
+		public List<String> requestedCategories = List.of();
+		public List<String> excludedGroups = List.of();
+		public List<TombstoneFields> tombstones = List.of();
+		public List<FileFields> files = List.of();
+
+		public static class TombstoneFields {
+			public String modpackId = "";
+			public List<String> deletedPaths = List.of();
+		}
 
 		public static class FileFields {
 			public String root = "";
+			public String overlayPackId = "";
 			public String path = "";
 			public String sha1 = "";
 			public long size = -1;
-		}
-
-		public static class ChangeFields {
-			public String root = "";
-			public String path = "";
-			public String fromSha1 = "";
-			public long fromSize = -1;
-			public String toSha1 = "";
-			public long toSize = -1;
-		}
-
-		public static class CaptureFields {
-			public String root = "";
-			public String path = "";
-			public String sha1 = "";
-			public long size = -1;
-			public boolean absent;
 		}
 	}
 

@@ -283,7 +283,25 @@ public final class UpdateTransactionExecutor {
 	 * and the checkpoint is always durable before the record that produced it can be forgotten.
 	 */
 	private void recordStateHistory(UpdateTransaction transaction) throws IOException {
-		ClientStateJournal.open(context.storage().stateHistoryJournalFile()).appendTransaction(transaction);
+		StateHistory.recordAfter(context.storage(), StateHistory.planPaths(transaction.plan()), snapshotKind(transaction), transaction.plan().modpackId(), transaction.transactionId);
+	}
+
+	private void snapshotBefore(UpdateTransaction transaction) throws IOException {
+		StateHistory.snapshotIfDirty(context.storage(), StateHistory.planPaths(transaction.plan()), ClientStateJournal.Kind.LIVE, transaction.plan().modpackId(), transaction.transactionId);
+	}
+
+	private ClientStateJournal.Kind snapshotKind(UpdateTransaction transaction) throws IOException {
+		if (transaction.stateKind != null && !transaction.stateKind.isBlank()) return ClientStateJournal.Kind.valueOf(transaction.stateKind);
+		return switch (transaction.purpose) {
+			case MODPACK_UPDATE -> {
+				String modpackId = transaction.plan().modpackId();
+				boolean seen = ClientStateJournal.open(context.storage()).entries().stream()
+						.anyMatch(entry -> entry.modpackId().equals(modpackId) && (entry.kind() == ClientStateJournal.Kind.INSTALL || entry.kind() == ClientStateJournal.Kind.UPDATE));
+				yield seen ? ClientStateJournal.Kind.UPDATE : ClientStateJournal.Kind.INSTALL;
+			}
+			case MODPACK_DEACTIVATION -> ClientStateJournal.Kind.DEACTIVATION;
+			case MODPACK_REMOVAL -> ClientStateJournal.Kind.REMOVAL;
+		};
 	}
 
 	/** The modpack apply sequence: pre-mutation captures, live operations, projection publication, and durable finalization. */
@@ -291,9 +309,8 @@ public final class UpdateTransactionExecutor {
 			boolean preserveNewerSelection) throws IOException {
 		if (!publicationStarted && validator.mutableInputDrift(transaction).configuration())
 			throw new UpdateReplanRequiredException(null, "Client configuration changed after planning the update");
+		snapshotBefore(transaction);
 		capturePreStates(transaction);
-		// The journaled captures acquire the player's bytes into the object store before any live file is touched;
-		// the state entry's change hashes then pin them for every later restore.
 		capturePreservations(transaction);
 		captureConflicts(transaction);
 		if (!liveAlreadyApplied) applyOperations(transaction, current);
