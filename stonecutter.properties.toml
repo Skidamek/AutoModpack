@@ -1,7 +1,7 @@
 ["26.3-fabric"]
 
 ["26.3-neoforge"]
-deps.neoforge = "26.3.0.3-beta"
+deps.neoforge = "26.3.0.6-beta"
 
 ["26.3"]
 deps.minecraft = "26.3"
