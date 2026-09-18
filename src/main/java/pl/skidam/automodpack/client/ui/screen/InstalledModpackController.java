@@ -188,7 +188,7 @@ final class InstalledModpackController {
 		if (activeId.isBlank()) return List.of();
 		try {
 			List<StalePack> stale = new ArrayList<>();
-			for (String modpackId : ConnectionStore.staleSameOriginPackIds(storage, activeId)) stale.add(new StalePack(modpackId, stalePackName(modpackId)));
+			for (String modpackId : ConnectionStore.staleSameOriginPackIds(storage, activeId)) stale.add(new StalePack(modpackId, packName(modpackId)));
 			return List.copyOf(stale);
 		} catch (IOException | RuntimeException e) {
 			discoveryFailure = e;
@@ -196,7 +196,8 @@ final class InstalledModpackController {
 		}
 	}
 
-	private String stalePackName(String modpackId) {
+	/** The light name lookup: one document read, no catalogue projection. For labels; never for pack actions. */
+	String packName(String modpackId) {
 		try {
 			PackDocument record = new ClientGenerationStore(storage).newestDocument(modpackId);
 			if (record != null) return displayName(record, connectionOrigin(connection(modpackId)));

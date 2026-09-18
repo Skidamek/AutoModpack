@@ -42,6 +42,10 @@ public final class StateHistoryScreen extends VersionedScreen {
 		TIMELINE, FILES
 	}
 
+	private enum WorkResult {
+		NONE, RESTORED, SAVED
+	}
+
 	private final Screen parent;
 	private final InstalledModpackController controller;
 	private final Runnable closedCallback;
@@ -57,8 +61,8 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private boolean loading = true;
 	private boolean busy;
 	private boolean closed;
-	private boolean lastResultPresent;
-	private boolean lastResultRestore;
+	private WorkResult result = WorkResult.NONE;
+	private Map<String, String> packNames = Map.of();
 	private Future<?> load;
 
 	public StateHistoryScreen(Screen parent, InstalledModpackController controller, Runnable closedCallback) {
@@ -146,7 +150,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 			}
 		}
 		int files = view == null ? 0 : view.tree().files().size();
-		String pack = entry.modpackId().isEmpty() ? "" : packName(entry.modpackId());
+		String pack = entry.modpackId().isEmpty() ? "" : packNames.getOrDefault(entry.modpackId(), entry.modpackId());
 		String summary = VersionedText.str("automodpack.stateHistory.entrySummary", DATE_FORMAT.format(entry.createdAt()), pack, files, added, changed, removed);
 		return new RowListWidget.Row(List.of(title, VersionedText.literal(summary).withStyle(ChatFormatting.GRAY)));
 	}
@@ -184,15 +188,21 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private void loadEntries() {
 		try {
 			List<StateHistory.SnapshotView> loaded = controller.stateViews();
-			this.minecraft.execute(() -> loaded(loaded));
+			Map<String, String> names = new HashMap<>();
+			for (StateHistory.SnapshotView view : loaded) {
+				String modpackId = view.snapshot().modpackId();
+				if (!modpackId.isEmpty()) names.putIfAbsent(modpackId, controller.packName(modpackId));
+			}
+			this.minecraft.execute(() -> loaded(loaded, names));
 		} catch (Exception e) {
 			this.minecraft.execute(() -> fail(e));
 		}
 	}
 
-	private void loaded(List<StateHistory.SnapshotView> loaded) {
+	private void loaded(List<StateHistory.SnapshotView> loaded, Map<String, String> names) {
 		if (closed) return;
 		views = loaded;
+		packNames = names;
 		loading = false;
 		load = null;
 		if (selectedSeq == null && !loaded.isEmpty()) selectedSeq = loaded.get(loaded.size() - 1).snapshot().seq();
@@ -232,43 +242,45 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private void restoreState() {
 		Snapshot entry = selectedEntry();
 		if (entry == null || restorability(entry.seq()) != StateHistory.Restorability.READY || busy) return;
-		busy = true;
-		super.rebuild();
+		beginWork();
 		controller.restoreState(entry, this::refreshAfterMutation);
 	}
 
 	private void forgetOlder() {
 		Snapshot entry = selectedEntry();
 		if (entry == null || busy || views == null || views.isEmpty() || entry.seq() == views.get(0).snapshot().seq()) return;
-		busy = true;
-		super.rebuild();
+		beginWork();
 		controller.forgetOlderThan(entry.seq(), this::refreshAfterMutation);
 	}
 
 	private void restoreFile() {
 		TrackedFile file = selectedFile();
 		if (file == null || busy) return;
-		busy = true;
-		super.rebuild();
-		runFileOp(() -> controller.restoreStateFile(selectedEntry().seq(), file.root(), file.path()), true);
+		beginWork();
+		runFileOp(() -> controller.restoreStateFile(selectedEntry().seq(), file.root(), file.path()), WorkResult.RESTORED);
 	}
 
 	private void saveFileCopy() {
 		TrackedFile file = selectedFile();
 		if (file == null || busy) return;
-		busy = true;
-		super.rebuild();
-		runFileOp(() -> controller.saveStateFileCopy(selectedEntry().seq(), file.root(), file.path()), false);
+		beginWork();
+		runFileOp(() -> controller.saveStateFileCopy(selectedEntry().seq(), file.root(), file.path()), WorkResult.SAVED);
 	}
 
-	private void runFileOp(StateOperation operation, boolean restore) {
+	/** Starts a mutation: the working line replaces any stale result line, so the two never draw over each other. */
+	private void beginWork() {
+		busy = true;
+		result = WorkResult.NONE;
+		super.rebuild();
+	}
+
+	private void runFileOp(StateOperation operation, WorkResult done) {
 		ScreenManager.background(() -> {
 			try {
 				operation.run();
 				this.minecraft.execute(() -> {
 					if (closed) return;
-					lastResultPresent = true;
-					lastResultRestore = restore;
+					result = done;
 					busy = false;
 					refreshAfterMutation();
 				});
@@ -373,11 +385,6 @@ public final class StateHistoryScreen extends VersionedScreen {
 		return null;
 	}
 
-	private String packName(String modpackId) {
-		InstalledModpackController.Pack pack = controller.installedPack(modpackId);
-		return pack == null ? modpackId : pack.name();
-	}
-
 	private String rootLabel(Root root) {
 		return VersionedText.str("automodpack.stateHistory.root." + root.name());
 	}
@@ -402,10 +409,9 @@ public final class StateHistoryScreen extends VersionedScreen {
 		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.stateHistory.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
 		if (!loading && views != null && views.isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.stateHistory.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
-		if (lastResultPresent) {
-			String key = lastResultRestore ? "automodpack.stateHistory.restoredTo" : "automodpack.stateHistory.savedTo";
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text(key).withStyle(ChatFormatting.GREEN), this.width / 2, 52, TextColors.WHITE);
-		}
+		if (result != WorkResult.NONE)
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text(result == WorkResult.RESTORED ? "automodpack.stateHistory.restoredTo" : "automodpack.stateHistory.savedTo").withStyle(ChatFormatting.GREEN),
+					this.width / 2, 52, TextColors.WHITE);
 	}
 
 	@Override
