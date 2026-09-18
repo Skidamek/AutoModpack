@@ -11,7 +11,8 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
 import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
-import pl.skidam.automodpack_core.client.SessionUpdateState;
+import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.screen.PreviewPayload;
 import pl.skidam.automodpack_core.screen.ReviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenService;
@@ -40,9 +41,16 @@ public class ScreenImpl implements ScreenService {
 		Minecraft.getInstance().execute(task);
 	}
 
-	/** Quiet reminder that this session installed content the running game has not loaded; never replaces a screen. */
+	/**
+	 * Quiet reminder on a failed join while a pack is installed: a kick can mean the running game does not have the
+	 * modpack's current mods loaded, and a restart is the cheapest retry. Never replaces a screen.
+	 */
 	public static void updatePendingRestartToast() {
-		if (!SessionUpdateState.hasAppliedContentNotLoaded()) return;
+		try {
+			if (ClientStorage.open(GameDirectory.current()).readActiveState() == null) return;
+		} catch (Exception e) {
+			return;
+		}
 		executeOnClient(() -> {
 			var title = VersionedText.text("automodpack.restart.toast.title");
 			var description = VersionedText.text("automodpack.restart.toast.description");
