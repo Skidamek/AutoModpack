@@ -34,7 +34,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV HMC_HOME=/work/hmc-cache
 
 # Most runs use HeadlessMC's LWJGL transformer. UI screenshot scenarios opt into
-# Xvfb and Mesa so Minecraft renders the real interface in a virtual display.
+# Xvfb and Mesa so Minecraft renders the real interface in a virtual display;
+# mesa-vulkan-drivers (lavapipe) completes that software stack for Minecraft
+# 26.3+, whose renderpearl backend rejects Xvfb's GLX visuals and renders
+# through Vulkan instead.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -47,6 +50,7 @@ RUN apt-get update \
         libasound2t64 \
         libgl1-mesa-dri \
         libglx-mesa0 \
+        mesa-vulkan-drivers \
         libxcursor1 \
         libxi6 \
         libxinerama1 \

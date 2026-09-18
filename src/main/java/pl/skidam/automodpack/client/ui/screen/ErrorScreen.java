@@ -9,7 +9,6 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
@@ -20,6 +19,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
+import pl.skidam.automodpack_core.utils.UriOpener;
 
 public class ErrorScreen extends VersionedScreen {
 
@@ -88,7 +88,7 @@ public class ErrorScreen extends VersionedScreen {
 	private void openLogs() {
 		Path gameDirectory = GameDirectory.current();
 		Path logsDirectory = gameDirectory.resolve("logs");
-		Util.getPlatform().openFile((Files.isDirectory(logsDirectory) ? logsDirectory : gameDirectory).toFile());
+		UriOpener.openFile((Files.isDirectory(logsDirectory) ? logsDirectory : gameDirectory).toFile());
 	}
 
 	private void copyDetails() {

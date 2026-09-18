@@ -25,6 +25,7 @@ _PACK_METADATA_RECEIPTS = {
     "26.1": {"min_format": 84, "max_format": 84},
     "26.1.2": {"min_format": 84, "max_format": 84},
     "26.2": {"min_format": 88, "max_format": 88},
+    "26.3": {"min_format": 97, "max_format": 97},
 }
 
 

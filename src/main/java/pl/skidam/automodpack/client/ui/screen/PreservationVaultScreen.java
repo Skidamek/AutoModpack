@@ -13,7 +13,6 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
@@ -30,6 +29,7 @@ import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
+import pl.skidam.automodpack_core.utils.UriOpener;
 import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
 /** One browser for every file AutoModpack preserved before a destructive change. */
@@ -175,7 +175,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 
 	private ActionRow platformRow(List<PlatformReferences.Page> pages) {
 		List<ActionDefinition> definitions = new ArrayList<>();
-		for (PlatformReferences.Page page : pages) definitions.add(optionalAction(VersionedText.text("automodpack.browser." + page.platform()), button -> Util.getPlatform().openUri(page.url())));
+		for (PlatformReferences.Page page : pages) definitions.add(optionalAction(VersionedText.text("automodpack.browser." + page.platform()), button -> UriOpener.openUri(page.url())));
 		return actionRow(ActionAreaLayout.RowKind.AUXILIARY, definitions.toArray(ActionDefinition[]::new));
 	}
 
