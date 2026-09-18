@@ -22,7 +22,7 @@ The one-shot client drop-in is `~/automodpack/automodpack-bootstrap.json`. Put a
 | `credentials/private-key.pem` | TLS private key, PKCS#8 PEM |
 | `credentials/provisioning-secret` | Bootstrap provisioning secret; keep this folder out of support dumps |
 
-`recovered/` holds copies saved from the preservation vault. Pack source files belong in `host-modpack/`, not here.
+`recovered/` holds copies you save from the instance timeline. Pack source files belong in `host-modpack/`, not here.
 
 ## AutoModpack manages these
 
@@ -43,9 +43,10 @@ Edit these by hand only when support asks you to; AutoModpack owns their content
 | Path | Role |
 | --- | --- |
 | `active/` | The one live projection the game loads from |
-| `history/<modpack-id>/` | The journal mirror for one pack, so the History screen works offline |
+| `history/<modpack-id>/` | The journal mirror for one pack, so pack history works offline |
+| `state-history/` | Instance timeline journal and per-instance tree documents |
 | `overlays/<modpack-id>/` | Player edits that survive generation switches |
-| `baselines/`, `generated-copies/`, `incoming/`, `backup/`, `preservation/` | Update, repair, and loader-copy working state |
+| `generated-copies/`, `incoming/`, `backup/` | Update, repair, and loader-copy working state |
 | `active-state.json`, `selections.json`, `restart-state.json`, `update-transaction.json`, `repair.json` | Pointers and in-flight work |
 
 `automodpack/helper/`, outside `client/`, is where detached update and repair helpers log their runs.

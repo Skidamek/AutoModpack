@@ -33,7 +33,7 @@ public final class ClientStateJournal {
 	public static final long NO_PARENT = 0;
 
 	public enum Kind {
-		LIVE, INSTALL, UPDATE, ROLLBACK, RESTORE, REMOVAL, DEACTIVATION, REPAIR, DRIFT_RESET, FILE_RESTORE
+		LIVE, INSTALL, UPDATE, ROLLBACK, RESTORE, REMOVAL, DEACTIVATION, REPAIR, FILE_RESTORE
 	}
 
 	public record Snapshot(long seq, long parentSeq, String treeSha1, Kind kind, String modpackId, String transactionId, Instant createdAt) {

@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -120,11 +121,23 @@ public final class StateHistory {
 
 	/** Snapshot live if it differs from head. Kind is LIVE when this is a dirty-before row. */
 	public static void snapshotIfDirty(ClientStorage storage, Set<FileKey> extraPaths, Kind kind, String modpackId, String transactionId) throws IOException {
+		snapshotIfDirty(storage, extraPaths, kind, modpackId, transactionId, null);
+	}
+
+	/**
+	 * Same as {@link #snapshotIfDirty(ClientStorage, Set, Kind, String, String)} but skips a row when live already
+	 * matches {@code toward} on every path that differs from head. Reconcile can move drifted files onto the pack
+	 * version without a second timeline row; leftover player files that the plan will delete still snapshot.
+	 */
+	public static void snapshotIfDirty(ClientStorage storage, Set<FileKey> extraPaths, Kind kind, String modpackId, String transactionId, UpdatePlan toward) throws IOException {
 		ClientStorageMutation.run(storage, () -> {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				InstanceTree live = InstanceTree.observe(storage, extraPaths, cache);
 				ClientStateJournal journal = ClientStateJournal.open(storage);
-				if (!journal.entries().isEmpty() && live.sameAs(InstanceTree.read(storage, journal.head().treeSha1()))) return null;
+				if (!journal.entries().isEmpty()) {
+					InstanceTree head = InstanceTree.read(storage, journal.head().treeSha1());
+					if (live.sameAs(head) || toward != null && alreadyMovedTowardPlan(live, head, toward)) return null;
+				}
 				acquireTreeBlobs(storage, live, extraPaths, cache);
 				live.write(storage);
 				journal.append(live.sha1(), kind, modpackId, transactionId);
@@ -213,7 +226,8 @@ public final class StateHistory {
 		});
 	}
 
-	public static PreInstallState preInstallState(ClientStorage storage, String modpackId) throws IOException {
+	/** Game-directory files from the parent of this pack's first install snapshot. Missing path means the pack created it. */
+	public static Map<String, TrackedFile> priorGameDir(ClientStorage storage, String modpackId) throws IOException {
 		ModpackId.requireValid(modpackId);
 		return ClientStorageMutation.run(storage, () -> {
 			ClientStateJournal journal = ClientStateJournal.open(storage);
@@ -223,15 +237,14 @@ public final class StateHistory {
 					install = entry;
 					break;
 				}
-			if (install == null || install.parentSeq() == ClientStateJournal.NO_PARENT)
-				return new PreInstallState(modpackId, Map.of());
+			if (install == null || install.parentSeq() == ClientStateJournal.NO_PARENT) return Map.of();
 			InstanceTree parent = InstanceTree.read(storage, journal.require(install.parentSeq()).treeSha1());
-			Map<String, PreInstallState.Entry> entries = new TreeMap<>();
+			Map<String, TrackedFile> files = new TreeMap<>();
 			for (TrackedFile file : parent.files()) {
 				if (file.root() != Root.GAME_DIR) continue;
-				entries.putIfAbsent(file.path(), new PreInstallState.Entry(file.path(), file.sha1(), file.size(), false));
+				files.putIfAbsent(file.path(), file);
 			}
-			return new PreInstallState(modpackId, entries);
+			return Map.copyOf(files);
 		});
 	}
 
@@ -323,6 +336,24 @@ public final class StateHistory {
 	private static boolean blobsPresent(ClientStorage storage, InstanceTree tree, FileCache cache) {
 		for (TrackedFile file : tree.files())
 			if (!FileIntegrity.matchesNamed(storage.objectFile(file.sha1()), file.size(), file.sha1(), cache)) return false;
+		return true;
+	}
+
+	private static boolean alreadyMovedTowardPlan(InstanceTree live, InstanceTree head, UpdatePlan plan) {
+		Map<FileKey, UpdatePlan.ProjectedFile> projected = new HashMap<>();
+		for (UpdatePlan.ProjectedFile file : plan.projectedFinalState()) projected.put(new FileKey(file.root(), file.relativePath()), file);
+		Map<FileKey, TrackedFile> liveFiles = new HashMap<>();
+		for (TrackedFile file : live.files()) liveFiles.put(file.fileKey(), file);
+		Map<FileKey, TrackedFile> headFiles = new HashMap<>();
+		for (TrackedFile file : head.files()) headFiles.put(file.fileKey(), file);
+		if (!liveFiles.keySet().equals(headFiles.keySet())) return false;
+		for (FileKey key : liveFiles.keySet()) {
+			TrackedFile now = liveFiles.get(key);
+			TrackedFile before = headFiles.get(key);
+			if (now.sha1().equals(before.sha1()) && now.size() == before.size()) continue;
+			UpdatePlan.ProjectedFile wanted = projected.get(key);
+			if (wanted == null || !wanted.present() || !now.sha1().equalsIgnoreCase(wanted.expectedHash()) || now.size() != wanted.expectedSize()) return false;
+		}
 		return true;
 	}
 

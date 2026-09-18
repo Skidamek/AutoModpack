@@ -111,6 +111,37 @@ flow:
   - do: screenshot
     name: capture the timeline with restore ready
     file: state-history-restore-ready
+  - do: click
+    name: restore the install snapshot onto the running instance
+    select: { key: automodpack.stateHistory.restore }
+  - do: wait_file_content
+    name: wait until the install generation file is back
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha\n"
+    timeout: 120s
+  - do: click
+    name: leave the timeline for the pack manager
+    select: { text: Back }
+  - do: wait_for
+    name: show the pack still listed after restore
+    timeout: 20s
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: amp-autotest }
+  - do: click
+    name: open the restored pack
+    select: { text: amp-autotest }
+  - do: wait_for
+    name: show resume syncing because restore detached the pack
+    timeout: 20s
+    until:
+      all:
+        - screen: ModpackSettingsScreen
+        - element: { key: automodpack.management.resumeSyncing, enabled: true }
+  - do: screenshot
+    name: capture the pack still installed and detached after instance restore
+    file: state-history-restored-detached
   - do: quit
     name: quit the client
 

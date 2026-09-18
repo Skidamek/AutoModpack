@@ -82,7 +82,7 @@ class UpdatePreviewTest {
 	void removalDoesNotReportLiveFileAlreadyMatchingBaseline() {
 		ModpackJsons.ModpackContentFields installed = manifest(item("config/kept.json", OLD_HASH, 7, "config"),
 				entry("config/kept.json", OLD_HASH, 7, OwnershipLedger.Status.PRESENT));
-		PreInstallState baseline = new PreInstallState(installed.modpackId, Map.of("config/kept.json", new PreInstallState.Entry("config/kept.json", OLD_HASH, 7, false)));
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of("config/kept.json", new InstanceTree.TrackedFile(Root.GAME_DIR, "", "config/kept.json", OLD_HASH, 7));
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, "config/kept.json"), new FileState(OLD_HASH, 7, true),
 				new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OLD_HASH, 7, true));

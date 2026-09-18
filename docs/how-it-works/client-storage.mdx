@@ -1,25 +1,31 @@
 # Client storage
 
-The client keeps its own copy of every pack it follows. The storage screen, reachable through the modpack manager, shows what that copy holds and offers two actions: Verify storage and Clean local storage.
+The client keeps pack files in a content-addressed store, keyed by hash. When two generations ship the same jar, the store holds one copy of the bytes.
 
-## What is stored
+On top of that sit the pack-history mirror (the server's published generations), the live projection the game loads from, overlays for editable files, and the instance timeline.
 
-Each pack's files live once in a content-addressed store, keyed by hash. On top of that sit the journal mirror (the server's generation timeline), the active projection the game loads from, baselines and overlays for editable files, notes, and preserved files. When two generations ship the same jar, the store holds one copy of the bytes and both generations point at it.
+## Instance timeline
 
-Every synced generation stays restorable: its file data is kept so the History screen can put it back later. Storage grows until you clean it or remove the pack.
+The Instance timeline lists snapshots this Minecraft instance actually lived. Each snapshot is the tracked files plus the live identity (active pack, selection, overlays) at that moment. Restore puts the running instance back to that snapshot. It does not talk to the server. Every installed pack stays in the pack list and is detached, so the next join cannot overwrite the restore until you sync.
+
+Files on a snapshot show what changed from the previous snapshot. You can save a copy of any file. Restore of a single file only writes into the game folder when that path is free.
+
+Forget older than this drops older snapshots on this computer and then unpins file data nothing else still names. That is the retention control for the timeline. Clean local storage does not drop timeline snapshots.
 
 ## Clean local storage
 
-Cleaning is the one explicit cleanup pass. Per pack it keeps the active generation and the newest generation with all their file data, plus every generation's policy document, so the history list keeps working. File data that only older generations still reference is deleted, and nothing about the running pack changes: the journal mirror, the active projection, overlays, baselines, notes, and preserved files are untouched.
+Cleaning is the explicit pass for **pack history** objects that the instance timeline does not pin. Per pack it keeps the active generation and the newest generation, plus every generation's policy document. File data that only older generations still name, and that no instance snapshot names, is deleted.
 
-A clean refuses to run while an update transaction is active. After it finishes, the screen shows one receipt per pack: the date of the clean, the generation it cleaned through, and how much was reclaimed. Generations older than that boundary can no longer be restored on this computer, and the History screen marks them as such before you try.
+A clean refuses to run while an update transaction is active. After it finishes, the screen shows one receipt per pack: the date of the clean, the generation it cleaned through, and how much was reclaimed. Pack-history restore of those older generations then shows as not kept on this computer.
+
+Instance timeline snapshots keep their bytes until you use Forget older than this on the timeline.
 
 ## Verify storage
 
-Verification checks every object the pack references and reports how many are present and valid. It runs in the background and keeps running when you leave the screen.
+Verification checks every object the pack and the instance timeline reference and reports how many are present and valid. It runs in the background and keeps running when you leave the screen.
 
-## History, restore, and stop syncing
+## Pack history, restore, and stop syncing
 
-The History screen lists the synced generations from the journal mirror. An entry shows its patch notes and file changes, and Restore puts that generation's files back when their data is still in the store. Restoring a generation other than the current one also stops syncing, so the server cannot immediately overwrite the state you restored.
+Pack history is the server catalog of one pack: generation number, date, notes, and the pack file diff. It is not the instance timeline. Apply of an older generation uses files already in the local store. The server does not send historical generation objects; it serves the latest generation.
 
-"Stop syncing" detaches the pack: your files stay exactly as they are and the server can no longer change them. While detached, joining the server warns you that it may expect different files, and "Sync now" reattaches and applies the server's current generation.
+Restoring a pack-history generation, or an instance snapshot, detaches the pack so the server cannot immediately overwrite it. Stop syncing does the same from the pack manager: your files stay as they are. Sync now reattaches and applies the server's current generation.

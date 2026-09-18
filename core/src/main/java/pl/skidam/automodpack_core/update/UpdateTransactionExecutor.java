@@ -287,7 +287,8 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void snapshotBefore(UpdateTransaction transaction) throws IOException {
-		StateHistory.snapshotIfDirty(context.storage(), StateHistory.planPaths(transaction.plan()), ClientStateJournal.Kind.LIVE, transaction.plan().modpackId(), transaction.transactionId);
+		StateHistory.snapshotIfDirty(context.storage(), StateHistory.planPaths(transaction.plan()), ClientStateJournal.Kind.LIVE, transaction.plan().modpackId(), transaction.transactionId,
+				transaction.plan());
 	}
 
 	private ClientStateJournal.Kind snapshotKind(UpdateTransaction transaction) throws IOException {

@@ -624,7 +624,7 @@ class UpdateTransactionExecutorTest {
 		assertTrue(commit(storage, installedPlan, installed).success());
 		Files.delete(storage.objectFile(serverHash));
 
-		PreInstallState baseline = new PreInstallState(installed.manifest().modpackId(), Map.of(restoredPath, new PreInstallState.Entry(restoredPath, baselineHash, baselineBytes.length, false)));
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of(restoredPath, new InstanceTree.TrackedFile(Root.GAME_DIR, "", restoredPath, baselineHash, baselineBytes.length));
 		ModpackJsons.CompleteModpackContentFields targetFields = fields("config/pack-b.json", "config", false, targetHash, targetBytes.length);
 		targetFields.modpackId = "def5678";
 		PackDocument switchedDocument = TestPacks.document(GroupManifestValidator.validate(targetFields));
@@ -668,7 +668,7 @@ class UpdateTransactionExecutorTest {
 				UpdateTransaction.digest(expected), List.of(new GeneratedCopyState.Entry("mods/generated-remove.jar", generatedHash, generatedBytes.length)));
 		generatedCopies.write(storage);
 
-		PreInstallState baseline = new PreInstallState(target.manifest().modpackId(), Map.of("mods/remove.jar", new PreInstallState.Entry("mods/remove.jar", null, 0, true)));
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of();
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(
 				new UpdatePlan.FileKey(Root.PROJECTION, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true),
 				new UpdatePlan.FileKey(Root.GAME_DIR, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true),
@@ -714,7 +714,7 @@ class UpdateTransactionExecutorTest {
 		Path overlay = storage.overlayFile(target.manifest().modpackId(), "config/options.txt");
 		Files.createDirectories(overlay.getParent());
 		Files.writeString(overlay, "player-edit", StandardCharsets.UTF_8);
-		PreInstallState baseline = new PreInstallState(target.manifest().modpackId(), Map.of(managedPath, new PreInstallState.Entry(managedPath, null, 0, true)));
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of();
 		SelectionIntent expected = target.selection().intent();
 		GeneratedCopyState generatedCopies = new GeneratedCopyState(target.manifest().modpackId(), target.packTarget().contentToken(),
 				UpdateTransaction.digest(expected), List.of());

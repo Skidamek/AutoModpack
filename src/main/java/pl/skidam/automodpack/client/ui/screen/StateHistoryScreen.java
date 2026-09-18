@@ -122,7 +122,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private RowListWidget.Row entryRow(Snapshot entry) {
 		ChatFormatting color = switch (entry.kind()) {
 			case INSTALL, UPDATE, ROLLBACK, RESTORE -> ChatFormatting.GREEN;
-			case LIVE, FILE_RESTORE, REPAIR, DRIFT_RESET -> ChatFormatting.YELLOW;
+			case LIVE, FILE_RESTORE, REPAIR -> ChatFormatting.YELLOW;
 			case DEACTIVATION, REMOVAL -> ChatFormatting.RED;
 		};
 		MutableComponent title = VersionedText.translatable("automodpack.stateHistory.kind." + entry.kind().name()).withStyle(color);

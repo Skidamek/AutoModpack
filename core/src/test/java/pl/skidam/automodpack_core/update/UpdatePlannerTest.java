@@ -298,7 +298,7 @@ class UpdatePlannerTest {
 	void removalCleansOnlyUnmodifiedGeneratedCopies() {
 		ModpackJsons.ModpackContentFields installed = manifest(Map.of("mods/root.jar", item("mods/root.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/root.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
-		PreInstallState baseline = new PreInstallState(installed.modpackId, Map.of());
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of();
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, "mods/root.jar"), new FileState(TARGET_HASH, 9, true),
 				new FileKey(Root.GAME_DIR, "mods/root.jar"), new FileState(TARGET_HASH, 9, true),
@@ -323,7 +323,7 @@ class UpdatePlannerTest {
 		String path = "test/server-owned.mp4";
 		ModpackJsons.ModpackContentFields installed = manifest(Map.of(path, item(path, TARGET_HASH, 9, "other")),
 				ledger(entry(path, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
-		PreInstallState baseline = new PreInstallState(installed.modpackId, Map.of());
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of();
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, path), new FileState(TARGET_HASH, 9, true),
 				new FileKey(Root.GAME_DIR, path), new FileState(TARGET_HASH, 9, true));
@@ -392,7 +392,7 @@ class UpdatePlannerTest {
 		ModpackJsons.ModpackContentFields installed = manifest(Map.of("config/connector.json", item("config/connector.json", OLD_HASH, 8, "config")),
 				ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
 		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
-		PreInstallState baseline = new PreInstallState(installed.modpackId, Map.of("config/connector.json", new PreInstallState.Entry("config/connector.json", OLD_HASH, 8, false)));
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of("config/connector.json", new InstanceTree.TrackedFile(Root.GAME_DIR, "", "config/connector.json", OLD_HASH, 8));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/connector.json"), new FileState(OLD_HASH, 8, true));
 		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.modpackId, installed, Map.of(), baseline, Set.of(OLD_HASH));
 
@@ -409,7 +409,7 @@ class UpdatePlannerTest {
 				ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
 		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
 		String baselineHash = "4444444444444444444444444444444444444444";
-		PreInstallState baseline = new PreInstallState(installed.modpackId, Map.of("config/connector.json", new PreInstallState.Entry("config/connector.json", baselineHash, 8, false)));
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of("config/connector.json", new InstanceTree.TrackedFile(Root.GAME_DIR, "", "config/connector.json", baselineHash, 8));
 		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.modpackId, installed, Map.of(), baseline, Set.of(baselineHash));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target,
