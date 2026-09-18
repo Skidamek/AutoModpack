@@ -64,6 +64,10 @@ coreModules.forEach { module ->
 	}
 }
 
+// Compile-time stubs of Kilt's Knit API; provided at runtime by Kilt, never bundled.
+include(":loader-knit-api-stubs")
+project(":loader-knit-api-stubs").projectDir = file("loader/knit-api-stubs")
+
 stonecutter {
 	create(rootProject) {
 		fun match(

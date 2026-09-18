@@ -162,7 +162,9 @@ def _launch_client(ctx: Context):
 
 
 def _stage_client_runtime_mods(ctx: Context) -> None:
-    entries = (ctx.settings.get("clientRuntimeMods", {}) or {}).get(ctx.target.id, []) or []
+    # A scenario may declare its own client-side mods; the settings entries are the shared default.
+    declared = (ctx.scenario.get("clientRuntimeMods") or {}).get(ctx.target.id, []) or []
+    entries = declared or (ctx.settings.get("clientRuntimeMods", {}) or {}).get(ctx.target.id, []) or []
     staged = []
     for entry in entries:
         mod = resolve_mod(entry, ctx.resolve, target_id=ctx.target.id, timeout=float(ctx.settings.get("timeouts", {}).get("downloadFileSeconds", 180)))

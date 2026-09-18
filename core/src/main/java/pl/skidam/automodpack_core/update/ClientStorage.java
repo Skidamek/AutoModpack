@@ -7,6 +7,7 @@ import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
@@ -438,6 +440,36 @@ public final class ClientStorage {
 	 * The active pack pointer, or null when none was persisted yet. Unusable content fails this boot in place and
 	 * fails this boot: the pointer carries the detach flag, so continuing as empty would silently rejoin enforcement.
 	 */
+	/**
+	 * Scan-time approximation of the projection gate in the projection loader: whether an active
+	 * projection exists that the on-disk selection would load. Runs before preload, so it reads
+	 * files only; the authoritative decision applies the boot-recovered configuration later.
+	 * Returns the projection's mods directory to hand to loaders that discover mods by directory,
+	 * or {@code null} when the projection must not load.
+	 */
+	public static Path loadableProjectionModsDirectory(Path gameDirectory) {
+		Path activeDirectory = gameDirectory.resolve(CLIENT_ACTIVE_DIR).normalize();
+		if (!Files.isDirectory(activeDirectory, LinkOption.NOFOLLOW_LINKS)) return null;
+		Path activeModsDirectory = activeDirectory.resolve(ModpackPathPolicy.MODS_ROOT);
+		if (!Files.isDirectory(activeModsDirectory, LinkOption.NOFOLLOW_LINKS)) return null;
+
+		ClientStorageJsons.ClientGenerationStateFields state;
+		try {
+			state = ConfigTools.readUnique(gameDirectory.resolve(CLIENT_ACTIVE_STATE_FILE).normalize(),
+					ClientStorageJsons.ClientGenerationStateFields.class, "Client active state", ClientStorage::validatedActiveState).orElse(null);
+		} catch (IOException e) {
+			LOGGER.debug("Failed to read the client active state, not exposing the projection to directory-scanning loaders", e);
+			return null;
+		}
+		if (state == null) return null;
+
+		ClientConfigJsons.ClientConfigFieldsV3 config =
+				ConfigTools.read(gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize(), ClientConfigJsons.ClientConfigFieldsV3.class).orElse(null);
+		if (config == null || !config.hasSelectedModpack()) return null;
+		if (!ModpackId.isValid(config.selectedModpackId) || !config.selectedModpackId.equals(state.modpackId)) return null;
+		return activeModsDirectory;
+	}
+
 	public ClientStorageJsons.ClientGenerationStateFields readActiveState() throws IOException {
 		return ConfigTools.readUnique(stateFile, ClientStorageJsons.ClientGenerationStateFields.class, "Client active state", ClientStorage::validatedActiveState).orElse(null);
 	}

@@ -1,0 +1,69 @@
+id: kilt-mods-dir-offline
+description: |
+  Offline / client-only proof that Kilt installed the NORMAL way (in the client's standard
+  mods/ directory) still discovers a (Neo)Forge mod synced into AutoModpack's active
+  projection, through AutoModpack's Knit extension, with NO copy of the Forge mod into
+  the standard mods/ directory.
+
+  Companion to kilt-fabric-offline, which instead loads Kilt itself from the projection.
+  The receipts are Kilt's own "Found NeoForge mod" scan line and KFF's language provider
+  entrypoint actually running.
+
+  Requires a Kilt build without the AutoModpack compat extension (upstream removal);
+  released builds that still read AutoModpack's removed internals crash the launch.
+
+network: host
+mode: client-only
+
+timeouts:
+  clientStartSeconds: 1200
+
+clientRuntimeMods:
+  1.21.1-fabric:
+    - url: https://cdn.modrinth.com/data/t87XZEqv/versions/h52BsZ5F/Kilt-21.1.12.jar
+      sha512: 6e307ef2db0b1beea5469f4a7ef68e8da249285c6b66bbd992e4b27632436c52b104f21f8915c579d28a1d703dd47852e8e87541b42e8882eee9fc01a8ca3e50
+    - url: https://cdn.modrinth.com/data/P7dR8mSH/versions/Mys3P7lK/fabric-api-0.116.17%2B1.21.1.jar
+      sha512: 98c478217da19181f0e4df3ea6c2da6bdbda271c7544a4aea048513a49b444f1ff5b71dc0df6303017c48e8ff69b7bb6af6179bdf0d0e09ab3c1ee08411857a8
+    - url: https://cdn.modrinth.com/data/Ha28R6CL/versions/eRRZzGMc/fabric-language-kotlin-1.14.1%2Bkotlin.2.4.20.jar
+      sha512: 91404f87774466ce8604aafea791d8cc97b603bc310dce17c8188f94f7783cca6dc14fc726ce871ca317bfe9033c199d8d858d51284106a00754e952147703b8
+
+targets:
+  - 1.21.1-fabric
+
+flow:
+  - do: stage_modpack
+    name: stage Kotlin for Forge into the active projection only
+    mods:
+      - url: https://cdn.modrinth.com/data/ordsPcFz/versions/uhJhCT7X/kotlinforforge-5.12.0-all.jar
+        sha512: b8c3942f4d33179edf3f102f3d870b99dd436f8b8236dbbd31aa51b888162c692cfd88927295f24dc8b4375232f4c6c17360c5d6c4823f93cbcd7cf4bdc8bd14
+  - do: launch_client
+    name: boot the client with Kilt in mods/ and KFF only in the projection
+  - do: wait_for
+    name: Kilt's Knit scan discovered KFF from the active projection (our extension ran)
+    timeout: 900s
+    until:
+      log:
+        container: client
+        matches_all:
+          - 'AutoModpack prelaunched'
+          # Kilt's scan line only appears if the projection's mods directory was handed
+          # over by AutoModpack's AutomodpackKnitExtension service
+          - 'Found NeoForge mod \(Kilt JiJ\).*kfflang'
+  - do: wait_for
+    name: KFF's language provider actually ran through Kilt
+    timeout: 300s
+    until:
+      log:
+        container: client
+        matches_all:
+          - 'Kotlin For Forge Enabled'
+  - use: finish_client_only
+  - do: assert
+    name: no fatal modpack-load or Kilt failure
+    that:
+      log:
+        container: client
+        not_matches:
+          - 'Failed to load modpack'
+          - 'Missing or unsupported mandatory dependencies'
+          - 'kilt.*(ERROR|FATAL)'
