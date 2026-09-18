@@ -212,6 +212,7 @@ val writeReleaseMatrix =
 								.map { it.substringAfterLast('-') }
 								.distinct()
 								.joinToString(","),
+						"name" to "$displayName $modVersion",
 						"file" to "$modName-$modVersion.jar",
 						"mod_name" to displayName,
 						"mod_version" to modVersion,

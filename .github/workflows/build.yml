@@ -7,11 +7,6 @@ on:
         description: Immutable commit to build
         type: string
         required: true
-      targets:
-        description: Comma-separated targets to build and expose; empty builds every target
-        type: string
-        required: false
-        default: ''
       artifact_retention_days:
         description: Retention for the packaged jar artifact
         type: number
@@ -47,9 +42,7 @@ jobs:
           add-job-summary: never
           cache-provider: basic
       - name: Build targets
-        env:
-          TARGETS: ${{ inputs.targets }}
-        run: ./gradlew build writeReleaseMatrix --continue "-Pautomodpack.targets=$TARGETS"
+        run: ./gradlew build writeReleaseMatrix --continue
       - name: Verify artifacts
         id: matrix
         run: |
