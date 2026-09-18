@@ -194,11 +194,14 @@ val writeReleaseMatrix =
 			val modVersion = project.property("mod_version").toString()
 			// One jar publishes once per loader that actually has an impl among the selected targets;
 			// a partial selection must never advertise a loader whose manifest would crash the boot.
-			// The game-version list is the distinct union across the selected targets, in stable order.
+			// The game-version list is the distinct union across the selected targets, in stable order;
+			// tildes collapse to their base because Modrinth's game-version lists enumerate real
+			// releases only - the tilde rides in the jar, not in the listing.
 			val publishVersions =
 				selectedTargets
 					.map { target -> structuredString(target.substringBeforeLast('-'), "publish_versions") }
 					.flatMap { it.split('\n') }
+					.map { it.removePrefix("~") }
 					.filter { it.isNotBlank() }
 					.distinct()
 					.joinToString(",")
@@ -250,15 +253,16 @@ val oneJarTask =
 		outerJar.set(optimizedOuterJar())
 		implJars.set(providers.provider { selectedTargets.associateWith { target -> optimizedImplJar(target).asFile.absolutePath } })
 		implJarFiles.setFrom(selectedTargets.map { optimizedImplJar(it) })
-		// The exact Minecraft versions each target covers (its group's publish_versions): the manifest's
-		// version-resolution source of truth, so a live 26.1.2 client resolves to the 26.1-fabric impl.
+		// The Minecraft versions each target covers (its group's publish_versions, exact or ~
+		// dotted-prefix): the manifest's version-resolution source of truth, so a live 26.1.2 client
+		// resolves to the 26.1-fabric impl through its ~26.1 cover.
 		implVersions.set(
 			providers.provider {
 				selectedTargets.associateWith { target -> structuredString(target.substringBeforeLast('-'), "publish_versions").split('\n').filter(String::isNotBlank) }
 			},
 		)
-		// Vanilla protocol per covered Minecraft version (the [protocols] table), packed as
-		// mc-protocols.json for the holepunch handshake: a covered version without a protocol fails
+		// Vanilla protocol per cover (the [protocols] table, keys mirroring the covers verbatim),
+		// packed as mc-protocols.json for the holepunch handshake: a cover without a protocol fails
 		// the build here instead of a player's connect screen.
 		protocols.set(
 			providers.provider {

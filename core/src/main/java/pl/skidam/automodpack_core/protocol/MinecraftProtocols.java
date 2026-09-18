@@ -16,9 +16,11 @@ import pl.skidam.automodpack_core.utils.JarUtils;
 /**
  * Vanilla protocol numbers of the Minecraft versions AutoModpack ships for, sent in the holepunch
  * Handshake. The holepunch login dialect itself is version independent. The table is packed by the
- * oneJar build from stonecutter.properties.toml, which fails the build when it drifts from the
- * manifest's covered versions - so this code works in preload too, where Minecraft classes cannot
- * be loaded.
+ * oneJar build from stonecutter.properties.toml as the verbatim mirror of the manifest's covers -
+ * one key per cover, a tilde key declaring that its number answers the whole patch line, which is
+ * stripped on read so a covered patch release walks up its dotted prefix onto it ({@code 26.1.3}
+ * rides {@code ~26.1}'s number). The build fails when the table drifts from the covers in either
+ * direction - so this code works in preload too, where Minecraft classes cannot be loaded.
  */
 public final class MinecraftProtocols {
 	private static final String ENTRY = "mc-protocols.json";
@@ -28,7 +30,14 @@ public final class MinecraftProtocols {
 
 	public static int forVersion(String minecraftVersion) {
 		Map<String, Integer> protocols = load();
-		Integer protocol = protocols.get(minecraftVersion);
+		String version = minecraftVersion;
+		int suffix = version.indexOf('-');
+		if (suffix >= 0) version = version.substring(0, suffix);
+		Integer protocol = protocols.get(version);
+		while (protocol == null && version.indexOf('.') >= 0) {
+			version = version.substring(0, version.lastIndexOf('.'));
+			protocol = protocols.get(version);
+		}
 		if (protocol == null) {
 			throw new IllegalArgumentException("Unsupported Minecraft version: " + minecraftVersion + "; shipped: " + String.join(", ", protocols.keySet()));
 		}
@@ -52,7 +61,8 @@ public final class MinecraftProtocols {
 			if (entry == null) throw new IllegalStateException("Outer jar " + outerJar + " carries no protocol table at " + ENTRY);
 			Map<String, Integer> protocols = new TreeMap<>();
 			for (var field : JsonParser.parseString(new String(zip.getInputStream(entry).readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject().entrySet()) {
-				protocols.put(field.getKey(), field.getValue().getAsInt());
+				String version = field.getKey();
+				protocols.put(version.startsWith("~") ? version.substring(1) : version, field.getValue().getAsInt());
 			}
 			return Collections.unmodifiableMap(protocols);
 		} catch (IOException e) {

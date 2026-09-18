@@ -36,7 +36,7 @@ def _manifest(entries: list[tuple[str, int, int, str]]) -> bytes:
             "impls": [
                 {
                     "id": target_id,
-                    "versions": [target_id.rsplit("-", 1)[0].split(".")[0]],  # shape only
+                    "covers": ["~" + target_id.rsplit("-", 1)[0]],  # shape only
                     "offset": offset,
                     "length": length,
                     "sha1": sha1,

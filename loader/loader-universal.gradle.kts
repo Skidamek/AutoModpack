@@ -5,7 +5,7 @@ import org.gradle.api.file.DuplicatesStrategy
 // The one universal OUTER trampoline jar: every loader generation's entrypoints plus the three
 // metadata files (fabric.mod.json, mods.toml, neoforge.mods.toml), published under every target.
 // The root project's oneJar task optimizes this jar, then appends every target's impl as the
-// solid impl/manifest.bin + impl/all.zst pair - no nested jarjar discovery anywhere.
+// solid impl/manifest.json + impl/all.zst pair - no nested jarjar discovery anywhere.
 
 plugins {
 	kotlin("jvm")

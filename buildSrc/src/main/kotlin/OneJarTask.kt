@@ -36,8 +36,8 @@ import java.util.zip.ZipOutputStream
  * carries the uncompressed size the runtime's aircompressor decode relies on. `impl/manifest.json`
  * indexes the solid. Both entries are appended AFTER the optimizer ran, and appended as STORE -
  * that ordering is what keeps them uncompressed, because the optimizer never sees the impl entries.
- * `mc-protocols.json` carries each covered Minecraft version's vanilla protocol number for the
- * holepunch handshake.
+ * `mc-protocols.json` mirrors the covers verbatim (one key per cover, a tilde key's number
+ * answering the whole patch line) for the holepunch handshake.
  */
 /** One-shot level 20: the measured sweet spot on the shipped solid (-19 gave up 4.9 KB more, -21/-22 under 100 bytes each, --max 905 bytes for 12 s) and single-threaded by nature, so the bytes cannot drift with core count. */
 private const val ZSTD_LEVEL = 20
@@ -50,11 +50,11 @@ abstract class OneJarTask : DefaultTask() {
     @get:Input
     abstract val implJars: MapProperty<String, String>
 
-    /** Target id to the exact Minecraft versions that target covers (its `publish_versions`); the manifest's version-resolution source of truth. */
+    /** Target id to the Minecraft versions that target covers (its `publish_versions`, exact or `~` dotted-prefix); the manifest's version-resolution source of truth. */
     @get:Input
     abstract val implVersions: MapProperty<String, List<String>>
 
-    /** Covered Minecraft version to its vanilla protocol number, packed as [PROTOCOLS_ENTRY] for the holepunch handshake. */
+    /** Cover to its vanilla protocol number (the covers' verbatim mirror), packed as [PROTOCOLS_ENTRY] for the holepunch handshake. */
     @get:Input
     abstract val protocols: MapProperty<String, Int>
 
@@ -126,26 +126,39 @@ abstract class OneJarTask : DefaultTask() {
         }
         if (outerAssets.isEmpty()) throw GradleException("No impl jar carried assets/ - the outer would ship without lang, textures or sounds")
 
-        // The manifest's covered versions are the runtime's ONLY version-to-target resolution, so an overlap
-        // would make that resolution order-dependent: a launch could mount either impl depending on sort order.
-        val coveredBy = hashMapOf<String, String>()
-        for (entry in manifestEntries) {
-            val loader = entry.id.substringAfterLast('-')
-            for (version in entry.versions) {
-                val previous = coveredBy.putIfAbsent("$version-$loader", entry.id)
-                if (previous != null && previous != entry.id) {
-                    throw GradleException("Minecraft $version on $loader is covered by both $previous and ${entry.id} - impl selection would be ambiguous")
+        // The manifest's covers are the runtime's ONLY version-to-target resolution, so two targets whose
+        // match sets intersect would make that resolution order-dependent: a launch could mount either impl
+        // depending on sort order. Within one target a cover subsumed by a sibling is dead weight. Both fail.
+        manifestEntries.flatMap { it.covers }.forEach(Cover::parse)
+        for ((loader, targets) in manifestEntries.groupBy { it.id.substringAfterLast('-') }) {
+            for ((i, a) in targets.withIndex()) {
+                for (b in targets.subList(i + 1, targets.size)) {
+                    for (coverA in a.covers) {
+                        for (coverB in b.covers) {
+                            if (Cover.parse(coverA).intersects(Cover.parse(coverB))) {
+                                throw GradleException("Minecraft $coverA and $coverB on $loader are covered by both ${a.id} and ${b.id} - impl selection would be ambiguous")
+                            }
+                        }
+                    }
                 }
             }
         }
-        // The protocol table answers for exactly the versions the manifest covers: drift either way
-        // ships a version whose holepunch handshake has no number to send, or packs a dead one.
-        val coveredVersions = manifestEntries.flatMap { it.versions }.toSet()
-        val packedProtocols = protocols.get()
-        val protocolDiff = coveredVersions - packedProtocols.keys
-        val protocolExtra = packedProtocols.keys - coveredVersions
+        for (entry in manifestEntries) {
+            for ((i, coverA) in entry.covers.withIndex()) {
+                for (coverB in entry.covers.subList(i + 1, entry.covers.size)) {
+                    if (Cover.parse(coverA).intersects(Cover.parse(coverB))) throw GradleException("Target ${entry.id} covers $coverA and $coverB - one subsumes the other, delete the narrower one")
+                }
+            }
+        }
+        // The protocol table mirrors the covers verbatim - a tilde key's number answers the whole patch
+        // line, which the runtime walks a patch's dotted prefix onto. Drift either way ships a cover whose
+        // handshake has no number to send, or packs a dead key.
+        val expectedProtocols = manifestEntries.flatMap { it.covers }.toSet()
+        val packedProtocols = protocols.get().keys
+        val protocolDiff = expectedProtocols - packedProtocols
+        val protocolExtra = packedProtocols - expectedProtocols
         if (protocolDiff.isNotEmpty() || protocolExtra.isNotEmpty()) {
-            throw GradleException("The [protocols] table disagrees with the shipped versions - no protocol for ${protocolDiff.sorted()}, protocol for unshipped ${protocolExtra.sorted()}")
+            throw GradleException("The [protocols] table must mirror the covers 1:1 - no protocol for ${protocolDiff.sorted()}, protocol for uncovered ${protocolExtra.sorted()}")
         }
 
         val solidBytes = solid.toByteArray()
@@ -226,4 +239,40 @@ abstract class OneJarTask : DefaultTask() {
         }
     }
 
+}
+
+/** A manifest cover: an exact version (`1.20.1`, matching only it) or a tilde patch line (`~26.3`, matching everything from the base below its bumped minor - the author's claim that the whole line rides one impl). */
+private data class Cover(val tilde: Boolean, val parts: List<Long>) {
+    fun intersects(other: Cover): Boolean = when {
+        !tilde && !other.tilde -> compare(parts, other.parts) == 0
+        !tilde -> other.contains(parts)
+        !other.tilde -> contains(other.parts)
+        else -> compare(parts, other.upperBound()) < 0 && compare(other.parts, upperBound()) < 0
+    }
+
+    private fun contains(candidate: List<Long>): Boolean = compare(candidate, parts) >= 0 && compare(candidate, upperBound()) < 0
+
+    /** The tilde's exclusive end - the second-to-last component bumped and the last dropped (`~26.3.1` ends at `26.4`), the base padded to three components first. */
+    private fun upperBound(): List<Long> {
+        val padded = if (parts.size < 3) parts + List(3 - parts.size) { 0L } else parts
+        return padded.dropLast(1).toMutableList().also { it[it.lastIndex] += 1 }
+    }
+
+    private fun compare(a: List<Long>, b: List<Long>): Int {
+        for (i in 0 until maxOf(a.size, b.size)) {
+            val left = a.getOrElse(i) { 0L }
+            val right = b.getOrElse(i) { 0L }
+            if (left != right) return left.compareTo(right)
+        }
+        return 0
+    }
+
+    companion object {
+        private val SHAPE = Regex("~?\\d+(\\.\\d+){1,3}")
+
+        fun parse(cover: String): Cover {
+            if (!SHAPE.matches(cover)) throw GradleException("Cover $cover is neither an exact Minecraft version nor a ~ patch line")
+            return Cover(cover.startsWith("~"), cover.removePrefix("~").split('.').map { it.toLong() })
+        }
+    }
 }

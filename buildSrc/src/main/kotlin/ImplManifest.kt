@@ -17,9 +17,10 @@ object ImplManifestFormat {
     const val MANIFEST_ENTRY = "impl/manifest.json"
     const val SOLID_ENTRY = "impl/all.zst"
 
-    data class Entry(val id: String, val versions: List<String>, val offset: Long, val length: Long, val sha1: String)
+    data class Entry(val id: String, val covers: List<String>, val offset: Long, val length: Long, val sha1: String)
 
     private val writer = ObjectMapper().writerWithDefaultPrettyPrinter()
+    private val COVER = Regex("~?\\d+(\\.\\d+){1,3}")
 
     fun write(digest: String, entries: List<Entry>): ByteArray =
         writer.writeValueAsBytes(
@@ -28,7 +29,7 @@ object ImplManifestFormat {
                 "impls" to entries.map { entry ->
                     linkedMapOf<String, Any>(
                         "id" to entry.id,
-                        "versions" to entry.versions,
+                        "covers" to entry.covers,
                         "offset" to entry.offset,
                         "length" to entry.length,
                         "sha1" to entry.sha1,
@@ -55,15 +56,17 @@ object ImplManifestFormat {
         val entries = impls.mapIndexed { position, node ->
             fun field(name: String): JsonNode = node.get(name) ?: fail("impl $position carries no $name")
             val id = field("id").takeIf { it.isTextual }?.textValue() ?: fail("impl $position carries no usable id")
-            val versions = field("versions").takeIf { it.isArray }?.map { version ->
-                version.takeIf { it.isTextual }?.textValue() ?: fail("impl $id carries a non-string version")
-            } ?: fail("impl $id carries no versions array")
+            val covers = field("covers").takeIf { it.isArray }?.map { cover ->
+                val coverText = cover.takeIf { it.isTextual }?.textValue() ?: fail("impl $id carries a non-string cover")
+                if (!COVER.matches(coverText)) fail("impl $id carries cover $coverText, neither an exact version nor a ~ dotted-prefix")
+                coverText
+            } ?: fail("impl $id carries no covers array")
             val offset = field("offset").takeIf { it.canConvertToLong() }?.longValue() ?: fail("impl $id carries no usable offset")
             val length = field("length").takeIf { it.canConvertToLong() }?.longValue() ?: fail("impl $id carries no usable length")
             if (offset < 0 || length < 0) fail("impl $id carries a negative offset or length")
             val sha1 = field("sha1").takeIf { it.isTextual }?.textValue() ?: fail("impl $id carries no usable sha1")
             if (!sha1.matches(Regex("[0-9a-f]{40}"))) fail("impl $id carries sha1 $sha1, not a SHA-1 hex digest")
-            Entry(id, versions, offset, length, sha1)
+            Entry(id, covers, offset, length, sha1)
         }
         return ParsedManifest(digest.textValue(), entries)
     }

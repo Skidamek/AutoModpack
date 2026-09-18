@@ -6,7 +6,7 @@ deps.neoforge = "26.3.0.6-beta"
 ["26.3"]
 deps.minecraft = "26.3"
 meta.minecraft = "~26.3"
-publish_versions = "26.3"
+publish_versions = "~26.3"
 
 
 ["26.2-fabric"]
@@ -17,7 +17,7 @@ deps.neoforge = "26.2.0.28-beta"
 ["26.2"]
 deps.minecraft = "26.2"
 meta.minecraft = "~26.2"
-publish_versions = "26.2"
+publish_versions = "~26.2"
 
 
 ["26.1-fabric"]
@@ -28,7 +28,7 @@ deps.neoforge = "26.1.2.84"
 ["26.1"]
 deps.minecraft = "26.1.2"
 meta.minecraft = "~26.1"
-publish_versions = "26.1\n26.1.1\n26.1.2"
+publish_versions = "~26.1"
 
 
 ["1.21.11-fabric"]
@@ -136,9 +136,11 @@ deps.fabric-loader = "0.19.5"
 ["loader-modules"]
 fabric = "0.16.1"
 
-# The vanilla protocol number of every shipped Minecraft version, packed as mc-protocols.json for
-# the holepunch handshake. The oneJar build fails when this table drifts from the publish_versions
-# coverage in either direction.
+# The vanilla protocol number of every shipped cover, packed as mc-protocols.json for the
+# holepunch handshake - the verbatim mirror of the publish_versions covers, so a tilde key
+# visibly declares that its number answers the whole patch line (the runtime strips the tilde
+# and walks a patch's dotted prefix onto it). The oneJar build fails when this table drifts
+# from the covers in either direction.
 ["protocols"]
 "1.18" = 757
 "1.18.1" = 757
@@ -157,8 +159,6 @@ fabric = "0.16.1"
 "1.21.8" = 772
 "1.21.10" = 773
 "1.21.11" = 774
-"26.1" = 775
-"26.1.1" = 775
-"26.1.2" = 775
-"26.2" = 776
-"26.3" = 777
+"~26.1" = 775
+"~26.2" = 776
+"~26.3" = 777
