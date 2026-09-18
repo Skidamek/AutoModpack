@@ -92,12 +92,12 @@ flow:
     name: select a tracked file
     select: { text: "config/amp-autotest-alpha.txt" }
   - do: wait_for
-    name: wait until per-file restore unlocks
+    name: wait until the owned file's restore gate resolves
     timeout: 20s
-    until: { element: { key: automodpack.stateHistory.restoreFile, enabled: true } }
+    until: { element: { key: automodpack.stateHistory.restoreFile, enabled: false } }
   - do: screenshot
-    name: capture the selected file with restore and save copy
-    file: state-history-file-selected
+    name: capture the selected file with the owned gate holding
+    file: state-history-file-gated
   - do: click
     name: return to the timeline
     select: { key: automodpack.back }
