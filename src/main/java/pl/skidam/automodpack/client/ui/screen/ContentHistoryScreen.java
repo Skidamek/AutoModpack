@@ -101,7 +101,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			MutableComponent badge = VersionedText.literal(VersionedText.str("automodpack.history.hadThis") + " · ").withStyle(ChatFormatting.YELLOW);
 			badge.append(VersionedText.literal(truncateToWidth(this.font, updated, width - this.font.width(badge))).withStyle(ChatFormatting.GRAY));
 			header = badge;
-		} else if (restore != null && !restorableSeqs.contains(entry.seq())) {
+		} else if (restore != null) {
 			String badge = " · " + VersionedText.str("automodpack.history.notRestorable");
 			MutableComponent marked = VersionedText.literal(truncateToWidth(this.font, updated, width - this.font.width(badge))).withStyle(ChatFormatting.GRAY);
 			marked.append(VersionedText.literal(badge).withStyle(ChatFormatting.DARK_GRAY));
