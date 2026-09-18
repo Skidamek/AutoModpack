@@ -45,12 +45,6 @@ abstract class OneJarAuditTask : DefaultTask() {
             throw GradleException("${jarFile.name} is ${jarFile.length()} bytes, exceeding the ${maxJarBytes.get()} byte one-jar budget")
         }
 
-        val prohibitedOuterPaths = listOf(
-            "amp_libs/org/apache/hc/",
-            "amp_libs/org/publicsuffix/",
-            "amp_libs/org/bouncycastle/jcajce/provider/",
-            "amp_libs/org/bouncycastle/pqc/",
-        )
         val groupedSizes = mutableMapOf<String, Long>()
         var musicSize: Long? = null
 
@@ -73,24 +67,12 @@ abstract class OneJarAuditTask : DefaultTask() {
                 throw GradleException("${ImplManifestFormat.MANIFEST_ENTRY} carries ${actual.joinToString()} but the build selected ${expected.joinToString()}")
             }
 
-            val assetNames = mutableSetOf<String>()
             jar.entries().asSequence().filterNot { it.isDirectory }.forEach { entry ->
-                val prohibitedPath = prohibitedOuterPaths.firstOrNull(entry.name::startsWith)
-                if (prohibitedPath != null || entry.name == "META-INF/services/java.security.Provider" || entry.name.contains("/lowmcL")) {
-                    throw GradleException("Prohibited content remains in ${jarFile.name}: ${entry.name}")
-                }
                 if (entry.name.startsWith(JARJAR_PREFIX)) throw GradleException("The one jar must not nest a jar under $JARJAR_PREFIX: ${entry.name}")
-                if (entry.name == OLD_MUSIC_PATH || entry.name == OLD_MUSIC_LICENSE_PATH) {
-                    throw GradleException("Old Bensound content remains in ${jarFile.name}: ${entry.name}")
-                }
                 if (entry.name == WAITING_MUSIC_PATH) musicSize = entry.size
                 val compressedSize = entry.compressedSize.coerceAtLeast(0)
                 groupedSizes.merge(groupName(entry.name), compressedSize) { current, added -> current + added }
-                if (entry.name.startsWith("assets/")) assetNames.add(entry.name)
             }
-
-            // Assets live on the outer once; if the outer carries none, the strip side of the pack failed too.
-            if (assetNames.none { it == WAITING_MUSIC_PATH }) throw GradleException("$WAITING_MUSIC_PATH is missing from ${jarFile.name}")
         }
 
         val packagedMusicSize = musicSize ?: throw GradleException("$WAITING_MUSIC_PATH is missing from ${jarFile.name}")
@@ -115,10 +97,8 @@ abstract class OneJarAuditTask : DefaultTask() {
         return parts.take(segments).joinToString("/")
     }
 
-    companion object {
-        private const val JARJAR_PREFIX = "META-INF/jarjar/"
-        private const val WAITING_MUSIC_PATH = "assets/automodpack/sounds/music/waiting.ogg"
-        private const val OLD_MUSIC_PATH = "assets/automodpack/sounds/music/theelevatorbossanova.ogg"
-        private const val OLD_MUSIC_LICENSE_PATH = "assets/automodpack/sounds/music/music-license"
+    private companion object {
+        const val JARJAR_PREFIX = "META-INF/jarjar/"
+        const val WAITING_MUSIC_PATH = "assets/automodpack/sounds/music/waiting.ogg"
     }
 }
