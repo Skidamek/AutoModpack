@@ -31,17 +31,9 @@ import pl.skidam.automodpack_core.loader.GenerationProbes;
 @SuppressWarnings("unused")
 public class ModLocatorDispatcher extends AbstractJarFileModLocator {
 	private static final String GENERATION_PACKAGE = GenerationProbes.FORGE_FML40 ? "pl.skidam.automodpack_loader_core_forge_40" : "pl.skidam.automodpack_loader_core_forge_47";
-	private static final EarlyModLocatorView EARLY = (EarlyModLocatorView) instantiate(GENERATION_PACKAGE + ".EarlyModLocator");
+	private static final EarlyModLocatorView EARLY = LocatorViews.instantiate(EarlyModLocatorView.class, GENERATION_PACKAGE + ".EarlyModLocator");
 	// Only 1.18.2 runs the 1-arg pass, so only it instantiates that generation's lazy locator.
-	private static final LazyModLocatorView LAZY_40 = GenerationProbes.FORGE_FML40 ? (LazyModLocatorView) instantiate("pl.skidam.automodpack_loader_core_forge_40.LazyModLocator") : null;
-
-	private static Object instantiate(String className) {
-		try {
-			return Class.forName(className, true, ModLocatorDispatcher.class.getClassLoader()).getDeclaredConstructor().newInstance();
-		} catch (ReflectiveOperationException e) {
-			throw new IllegalStateException("Failed to instantiate Forge locator " + className, e);
-		}
-	}
+	private static final LazyModLocatorView LAZY_40 = GenerationProbes.FORGE_FML40 ? LocatorViews.instantiate(LazyModLocatorView.class, "pl.skidam.automodpack_loader_core_forge_40.LazyModLocator") : null;
 
 	@Override
 	public String name() {

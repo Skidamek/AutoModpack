@@ -15,15 +15,7 @@ import net.minecraftforge.forgespi.locating.IModFile;
  */
 @SuppressWarnings("unused")
 public class DependencyLocatorDispatcher extends AbstractJarFileDependencyLocator {
-	private static final LazyModLocatorView LAZY = (LazyModLocatorView) instantiate("pl.skidam.automodpack_loader_core_forge_47.LazyModLocator");
-
-	private static Object instantiate(String className) {
-		try {
-			return Class.forName(className, true, DependencyLocatorDispatcher.class.getClassLoader()).getDeclaredConstructor().newInstance();
-		} catch (ReflectiveOperationException e) {
-			throw new IllegalStateException("Failed to instantiate Forge locator " + className, e);
-		}
-	}
+	private static final LazyModLocatorView LAZY = LocatorViews.instantiate(LazyModLocatorView.class, "pl.skidam.automodpack_loader_core_forge_47.LazyModLocator");
 
 	@Override
 	public String name() {
