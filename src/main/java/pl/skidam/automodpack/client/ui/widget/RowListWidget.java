@@ -7,6 +7,7 @@ import java.util.function.IntConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.util.Util;
 import org.jetbrains.annotations.NotNull;
 
 import pl.skidam.automodpack.client.ui.TextColors;
@@ -27,7 +28,12 @@ public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> 
 	/** The hovered-row wash reads as "you can click this"; the selected wash is the stronger one that stays. */
 	private static final int HOVER_COLOR = 0x40FFFFFF;
 	private static final int SELECTED_COLOR = 0x60FFFFFF;
+	/** Vanilla's double-click window; only lists built with a double-pick consumer can ever see a second click land. */
+	private static final long DOUBLE_PICK_MILLIS = 250;
 	private final IntConsumer rowPicked;
+	private final IntConsumer rowDoublePicked;
+	private RowEntry lastPicked;
+	private long lastPickMillis;
 
 	/** One row: pre-wrapped, pre-styled lines plus an optional hover tooltip; a checkbox state draws our checkbox and reports it to tooling. */
 	public record Row(List<MutableComponent> lines, Component tooltip, CheckboxWidget.State state) {
@@ -49,8 +55,14 @@ public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> 
 	}
 
 	public RowListWidget(Minecraft client, int width, int screenHeight, int contentWidth, int left, int top, int bottom, int rowHeight, List<Row> rows, IntConsumer rowPicked) {
+		this(client, width, screenHeight, contentWidth, left, top, bottom, rowHeight, rows, rowPicked, null);
+	}
+
+	public RowListWidget(Minecraft client, int width, int screenHeight, int contentWidth, int left, int top, int bottom, int rowHeight, List<Row> rows, IntConsumer rowPicked,
+			IntConsumer rowDoublePicked) {
 		super(client, width, screenHeight, left, top, bottom, contentWidth, rowHeight);
 		this.rowPicked = Objects.requireNonNull(rowPicked, "row pick");
+		this.rowDoublePicked = rowDoublePicked;
 		for (Row row : Objects.requireNonNull(rows, "rows")) this.addEntry(new RowEntry(row));
 	}
 
@@ -119,7 +131,16 @@ public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> 
 
 	private void activate(RowEntry entry) {
 		this.setSelected(entry);
-		rowPicked.accept(this.children().indexOf(entry));
+		int index = this.children().indexOf(entry);
+		long now = Util.getMillis();
+		if (rowDoublePicked != null && entry == lastPicked && now - lastPickMillis <= DOUBLE_PICK_MILLIS) {
+			lastPicked = null;
+			rowDoublePicked.accept(index);
+			return;
+		}
+		lastPicked = entry;
+		lastPickMillis = now;
+		rowPicked.accept(index);
 	}
 
 	@Override

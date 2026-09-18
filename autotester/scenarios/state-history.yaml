@@ -84,7 +84,7 @@ flow:
   - do: wait_for
     name: wait for the file list
     timeout: 20s
-    until: { element: { key: automodpack.stateHistory.timeline, enabled: true } }
+    until: { element: { key: automodpack.back, enabled: true } }
   - do: screenshot
     name: capture the checkpoint's file list
     file: state-history-files
@@ -100,7 +100,7 @@ flow:
     file: state-history-file-selected
   - do: click
     name: return to the timeline
-    select: { key: automodpack.stateHistory.timeline }
+    select: { key: automodpack.back }
   - do: wait_for
     name: show the timeline again
     timeout: 20s

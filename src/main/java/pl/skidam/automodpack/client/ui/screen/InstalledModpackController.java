@@ -3,6 +3,7 @@ package pl.skidam.automodpack.client.ui.screen;
 import static pl.skidam.automodpack_core.Constants.MODPACK_LOADER;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -51,10 +52,12 @@ import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.OfflineRepair;
+import pl.skidam.automodpack_core.update.RecoveredFiles;
 import pl.skidam.automodpack_core.update.StateHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.UriOpener;
 
 /**
  * Owns local installed-pack discovery and lifecycle operations used by the pack manager screens.
@@ -249,6 +252,19 @@ final class InstalledModpackController {
 
 	Path saveStateFileCopy(long seq, UpdatePlan.Root root, String path) throws IOException {
 		return StateHistory.saveFileCopy(storage, seq, root, path);
+	}
+
+	/** The recovered-copies folder is where saved copies land; opening it spares the player a path too long for any screen. */
+	void openRecoveredFolder() {
+		ScreenManager.background(() -> {
+			try {
+				Path folder = RecoveredFiles.directory(storage);
+				Files.createDirectories(folder);
+				UriOpener.openPath(folder);
+			} catch (Exception e) {
+				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
+			}
+		});
 	}
 
 	void restoreState(ClientStateJournal.Snapshot snapshot, Runnable released) {

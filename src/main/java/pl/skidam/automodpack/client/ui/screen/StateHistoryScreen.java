@@ -53,10 +53,11 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private final Map<String, StateHistory.FileGate> fileGates = new HashMap<>();
 	private RowListWidget timeline;
 	private RowListWidget files;
+	private List<AbstractWidget> timelineButtons;
 	private boolean loading = true;
 	private boolean busy;
 	private boolean closed;
-	private Path lastResult;
+	private boolean lastResultPresent;
 	private boolean lastResultRestore;
 	private Future<?> load;
 
@@ -79,31 +80,40 @@ public final class StateHistoryScreen extends VersionedScreen {
 		ActionDefinition restore = primaryAction(VersionedText.text("automodpack.stateHistory.restore"), press -> restoreState());
 		ActionDefinition filesAction = optionalAction(VersionedText.text("automodpack.stateHistory.files"), press -> openFiles());
 		ActionDefinition forget = optionalAction(VersionedText.text("automodpack.stateHistory.forgetOlder"), press -> forgetOlder());
-		ActionRow[] rows = {actionRow(ActionAreaLayout.RowKind.FOOTER, restore, filesAction, forget, secondaryAction(VersionedText.text("automodpack.back"), press -> back()))};
+		ActionRow[] rows = {actionRow(ActionAreaLayout.RowKind.AUXILIARY, restore, filesAction, forget),
+				actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), press -> back()))};
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows) - 6;
 		List<RowListWidget.Row> listRows = new ArrayList<>();
 		List<Snapshot> newestFirst = reversed();
 		Snapshot selected = selectedEntry();
 		for (Snapshot entry : newestFirst) listRows.add(entryRow(entry));
-		this.timeline = this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, this.width - 20, 0, 64, listBottom, 36, listRows, this::select));
+		this.timeline = this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, this.width - 20, 0, 64, listBottom, 36, listRows, this::select, index -> openFiles()));
 		selectRow(this.timeline, newestFirst, selected);
-		List<AbstractWidget> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows);
+		this.timelineButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows);
+		updateTimelineButtons();
+	}
+
+	/** Selection changes update the actions in place: a rebuild would drop the list's scroll and break double-click detection. */
+	private void updateTimelineButtons() {
+		if (timelineButtons == null) return;
+		Snapshot selected = selectedEntry();
 		StateHistory.Restorability restorability = selected == null ? null : restorability(selected.seq());
-		buttons.get(0).active = selected != null && restorability == StateHistory.Restorability.READY && !busy;
-		buttons.get(1).active = selected != null && !busy;
-		buttons.get(2).active = selected != null && !busy && views != null && !views.isEmpty() && selected.seq() != views.get(0).snapshot().seq();
-		setTooltip(buttons.get(0), restoreTooltip(selected, restorability));
+		timelineButtons.get(0).active = selected != null && restorability == StateHistory.Restorability.READY && !busy;
+		timelineButtons.get(1).active = selected != null && !busy;
+		timelineButtons.get(2).active = selected != null && !busy && views != null && !views.isEmpty() && selected.seq() != views.get(0).snapshot().seq();
+		setTooltip(timelineButtons.get(0), restoreTooltip(selected, restorability));
 	}
 
 	private void initFiles() {
-		Snapshot selected = selectedEntry();
 		ActionDefinition restore = primaryAction(VersionedText.text("automodpack.stateHistory.restoreFile"), press -> restoreFile());
 		ActionDefinition save = optionalAction(VersionedText.text("automodpack.stateHistory.saveCopy"), press -> saveFileCopy());
+		ActionDefinition openFolder = optionalAction(VersionedText.text("automodpack.stateHistory.openFolder"), press -> controller.openRecoveredFolder());
 		ActionDefinition all = optionalAction(VersionedText.text(showFullTree ? "automodpack.stateHistory.showDiff" : "automodpack.stateHistory.showAll"), press -> {
 			showFullTree = !showFullTree;
 			super.rebuild();
 		});
-		ActionRow[] rows = {actionRow(ActionAreaLayout.RowKind.FOOTER, restore, save, all, secondaryAction(VersionedText.text("automodpack.stateHistory.timeline"), press -> showTimeline()))};
+		ActionRow[] rows = {actionRow(ActionAreaLayout.RowKind.AUXILIARY, restore, save, openFolder, all),
+				actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), press -> showTimeline()))};
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows) - 6;
 		List<RowListWidget.Row> listRows = new ArrayList<>();
 		List<TrackedFile> shown = selectedFiles();
@@ -167,6 +177,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 			case AVAILABLE -> VersionedText.text("automodpack.stateHistory.restoreFileReady");
 			case NOT_GAME_DIR -> VersionedText.text("automodpack.stateHistory.restoreFileManaged");
 			case OWNED -> VersionedText.text("automodpack.stateHistory.restoreFileOwned");
+			case PROTECTED -> VersionedText.text("automodpack.stateHistory.restoreFileProtected");
 		};
 	}
 
@@ -253,10 +264,10 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private void runFileOp(StateOperation operation, boolean restore) {
 		ScreenManager.background(() -> {
 			try {
-				Path result = operation.run();
+				operation.run();
 				this.minecraft.execute(() -> {
 					if (closed) return;
-					lastResult = result;
+					lastResultPresent = true;
 					lastResultRestore = restore;
 					busy = false;
 					refreshAfterMutation();
@@ -301,7 +312,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 		List<Snapshot> newestFirst = reversed();
 		if (index < 0 || index >= newestFirst.size()) return;
 		selectedSeq = newestFirst.get(index).seq();
-		super.rebuild();
+		updateTimelineButtons();
 	}
 
 	private Snapshot selectedEntry() {
@@ -384,19 +395,16 @@ public final class StateHistoryScreen extends VersionedScreen {
 		String description;
 		if (loading) description = VersionedText.str("automodpack.stateHistory.loading");
 		else if (mode == Mode.TIMELINE) description = VersionedText.str("automodpack.stateHistory.description", views == null ? 0 : views.size());
-		else {
-			Snapshot selected = selectedEntry();
-			description = VersionedText.str("automodpack.stateHistory.filesDescription", selectedFiles().size(), selected == null ? "" : packName(selected.modpackId()));
-		}
+		else description = VersionedText.str("automodpack.stateHistory.filesDescription", selectedFiles().size());
 		List<String> descriptionLines = wrapToWidth(this.font, description, this.width - 28, 2);
 		for (int index = 0; index < descriptionLines.size(); index++)
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), this.width / 2, 28 + index * 12, TextColors.WHITE);
 		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.stateHistory.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
 		if (!loading && views != null && views.isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.stateHistory.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
-		if (lastResult != null) {
+		if (lastResultPresent) {
 			String key = lastResultRestore ? "automodpack.stateHistory.restoredTo" : "automodpack.stateHistory.savedTo";
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text(key, lastResult.toString()).withStyle(ChatFormatting.GREEN), this.width / 2, 52, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text(key).withStyle(ChatFormatting.GREEN), this.width / 2, 52, TextColors.WHITE);
 		}
 	}
 
