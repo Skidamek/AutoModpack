@@ -80,6 +80,17 @@ public final class ImplStore {
 		return implJar;
 	}
 
+	/**
+	 * Same, from the launch facts a loader generation captured into {@link EarlyLaunchEnvironment}:
+	 * crashes before any mount when the launch never captured them ({@code TargetId} owns the
+	 * unusable-version crash), so every generation's mount site is one call.
+	 */
+	public static Path select(Class<?> outerClass, String loader) throws IOException {
+		Boolean client = EarlyLaunchEnvironment.IS_CLIENT;
+		if (client == null) throw new IllegalStateException("AutoModpack cannot tell client from server before mounting the impl jar");
+		return select(outerClass, loader, EarlyLaunchEnvironment.MC_VERSION, client);
+	}
+
 	private static ImplManifest readManifest(Path outerJar) throws IOException {
 		try (ZipFile zip = new ZipFile(outerJar.toFile())) {
 			ZipEntry manifestEntry = zip.getEntry(MANIFEST_ENTRY);

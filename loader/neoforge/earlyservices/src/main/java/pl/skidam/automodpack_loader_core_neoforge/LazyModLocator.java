@@ -1,13 +1,11 @@
 package pl.skidam.automodpack_loader_core_neoforge;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 
 import net.neoforged.fml.jarcontents.JarContents;
 import net.neoforged.neoforgespi.locating.*;
 
-import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.GenerationProbes;
 import pl.skidam.automodpack_core.loader.ImplStore;
 
@@ -30,7 +28,7 @@ public class LazyModLocator implements IDependencyLocator {
 		try {
 			// The outer jar's nested impl carries no jarjar metadata anymore, so surface it explicitly.
 			// This is the native Jar-in-Jar flow: extract the nested jar, read it as a mod file, add it.
-			Path implJar = implJar();
+			Path implJar = ImplStore.select(LazyModLocator.class, "neoforge");
 			IModFile modFile = pipeline.readModFile(JarContents.ofPath(implJar), ModFileDiscoveryAttributes.DEFAULT);
 			if (modFile != null) pipeline.addModFile(modFile);
 		} catch (Exception e) {
@@ -40,12 +38,6 @@ public class LazyModLocator implements IDependencyLocator {
 		// their own jar-in-jar locators never run natively - replay them here, in the dependency phase
 		// they belong to (see EarlyServiceLayer.runDependencyLocators).
 		EarlyServiceLayer.runDependencyLocators(loadedMods, pipeline);
-	}
-
-	private static Path implJar() throws IOException {
-		Boolean client = EarlyLaunchEnvironment.IS_CLIENT;
-		if (client == null) throw new IllegalStateException("AutoModpack cannot tell client from server before mounting the impl jar");
-		return ImplStore.select(LazyModLocator.class, "neoforge", EarlyLaunchEnvironment.MC_VERSION, client);
 	}
 
 	@Override

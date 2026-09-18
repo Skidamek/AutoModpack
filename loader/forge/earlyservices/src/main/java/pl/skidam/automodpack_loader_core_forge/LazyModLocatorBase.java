@@ -8,7 +8,6 @@ import java.util.Map;
 import net.minecraftforge.fml.loading.moddiscovery.AbstractJarFileDependencyLocator;
 import net.minecraftforge.forgespi.locating.IModFile;
 
-import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.ImplStore;
 
 /**
@@ -52,11 +51,7 @@ public abstract class LazyModLocatorBase extends AbstractJarFileDependencyLocato
 
 	/** Selects this target's impl into the instance's impl cache and mounts it - {@code createMod} works on plain file paths. */
 	private IModFile embeddedMod() throws Exception {
-		String mcVersion = EarlyLaunchEnvironment.MC_VERSION;
-		Boolean client = EarlyLaunchEnvironment.IS_CLIENT;
-		if (mcVersion == null || client == null) throw new IllegalStateException("AutoModpack cannot tell its forge target before mounting the impl jar");
-		Path implJar = ImplStore.select(LazyModLocatorBase.class, "forge", mcVersion, client);
-		return embeddedMod(implJar);
+		return embeddedMod(ImplStore.select(LazyModLocatorBase.class, "forge"));
 	}
 
 	/** {@code createMod(modPath)} unwrapped - the return type is this class's only per-version seam. */
