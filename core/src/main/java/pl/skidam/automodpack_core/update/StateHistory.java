@@ -159,7 +159,7 @@ public final class StateHistory {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				ClientStateJournal journal = ClientStateJournal.open(storage);
 				Snapshot snapshot = journal.require(seq);
-				InstanceTree target = withoutRunningJar(InstanceTree.read(storage, snapshot.treeSha1()), storage);
+				InstanceTree target = InstanceTree.read(storage, snapshot.treeSha1());
 				if (!blobsPresent(storage, target, cache)) throw new IOException("Instance snapshot " + seq + " is missing file data on this computer");
 				if (!identityFeasible(storage, target.identity())) throw new IOException("Pack history has no generation " + target.identity().contentToken() + " for " + target.identity().activeModpackId());
 				InstanceTree live = InstanceTree.observe(storage, target.keys(), cache);
@@ -304,16 +304,6 @@ public final class StateHistory {
 		for (JournalEntry entry : new JournalMirror(storage).entries(identity.activeModpackId()))
 			if (entry.contentToken().equals(identity.contentToken())) return true;
 		return false;
-	}
-
-	/** The restorable view of a tree: trees written before the running jar was excluded from tracking still carry it, and a checkout must ignore that row. */
-	private static InstanceTree withoutRunningJar(InstanceTree tree, ClientStorage storage) throws IOException {
-		List<TrackedFile> restorable = new ArrayList<>();
-		for (TrackedFile file : tree.files()) {
-			Path disk = storage.rootedPath(file.root(), file.overlayPackId(), file.path());
-			if (!InstanceTree.isRunningModJar(disk)) restorable.add(file);
-		}
-		return restorable.size() == tree.files().size() ? tree : InstanceTree.of(tree.identity(), restorable);
 	}
 
 	private static void applyIdentity(ClientStorage storage, InstanceTree.LiveIdentity identity) throws IOException {
