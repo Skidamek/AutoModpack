@@ -4,16 +4,10 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -23,9 +17,8 @@ import net.minecraftforge.forgespi.locating.IModFile;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.loader.LoaderServiceFiles;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
-import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.loader.ServiceJarIndex;
 import pl.skidam.automodpack_loader_core_forge.mods.ModpackLoader;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
 import pl.skidam.automodpack_loader_core_modlauncher.ModLauncherEarlyServiceBridge;
@@ -76,15 +69,6 @@ public final class EarlyServiceLayer {
 	// Every service this Forge version actually handles: natively-excluded set above, plus
 	// IDependencyLocator (run post-discovery) and language providers.
 	private static final Set<String> HANDLED_SERVICES = computeHandledServices();
-
-	/**
-	 * Service files this loader version actually discovers/runs; superset of {@link #HANDLEABLE_SERVICES}.
-	 * Used to narrow a jar's raw service set (see {@link #inspect}) so a legacy/removed SPI this
-	 * loader version doesn't handle can't wrongly block {@link #eligibleForInPlace}.
-	 */
-	private static Set<String> knownServices() {
-		return HANDLED_SERVICES;
-	}
 
 	private static Set<String> computeNativeExclusionServices() {
 		Set<String> excluded = new HashSet<>();
@@ -169,38 +153,15 @@ public final class EarlyServiceLayer {
 		}
 	}
 
-	// Per-jar facts derived from a single jar mount, cached for the JVM's life.
-	private record JarInfo(boolean activelyRunInPlace, Set<String> services, Map<String, List<String>> serviceImpls) {}
-
-	private static final Map<Path, JarInfo> JAR_INFO = new ConcurrentHashMap<>();
-
-	private static JarInfo info(Path jar) {
-		return JAR_INFO.computeIfAbsent(ModLauncherEarlyServiceBridge.canonical(jar), EarlyServiceLayer::inspect);
-	}
-
-	private static JarInfo inspect(Path jar) {
-		boolean activelyRun = false;
-		Set<String> services = Set.of();
-		Map<String, List<String>> impls = new HashMap<>();
-		try (FileSystem fs = FileSystems.newFileSystem(jar)) {
-			// Scoped to what this loader version actually handles (knownServices()), so a legacy/
-			// removed SPI doesn't wrongly make an otherwise in-place-able mod look unhandleable.
-			services = FileInspection.getServices(fs, knownServices());
-			for (String service : ACTIVELY_RUN_SERVICES) {
-				if (Files.exists(fs.getPath(service))) {
-					activelyRun = true;
-					impls.put(service, LoaderServiceFiles.readImplementations(fs, service));
-				}
-			}
-		} catch (Exception e) {
-			LOGGER.warn("[AutoModpack] Could not inspect {}; not handling it in place", jar.getFileName(), e);
-		}
-		return new JarInfo(activelyRun, services, impls);
+	// Per-jar facts (services, replayed impls) come from the shared ServiceJarIndex, scoped to
+	// HANDLED_SERVICES so a legacy/removed SPI can't make a jar look unhostable.
+	private static ServiceJarIndex.Facts<Void> facts(Path jar) {
+		return ServiceJarIndex.facts(jar, HANDLED_SERVICES, ACTIVELY_RUN_SERVICES);
 	}
 
 	/** The impl class names of an {@link #ACTIVELY_RUN_SERVICES} service declared at the jar's root. */
 	public static List<String> serviceImpls(Path jar, String serviceFile) {
-		return info(jar).serviceImpls().getOrDefault(serviceFile, List.of());
+		return facts(jar).implsOf(serviceFile);
 	}
 
 	/**
@@ -212,13 +173,13 @@ public final class EarlyServiceLayer {
 	 * one modId; loading both natively would be a duplicate-mod crash).
 	 */
 	public static boolean eligibleForInPlace(Path jar) {
-		JarInfo info = info(jar);
-		return info.activelyRunInPlace() && HANDLEABLE_SERVICES.containsAll(info.services()) && nativelyServiceClaimed(info);
+		ServiceJarIndex.Facts<Void> facts = facts(jar);
+		return !facts.serviceImpls().isEmpty() && HANDLEABLE_SERVICES.containsAll(facts.services()) && nativelyServiceClaimed(facts);
 	}
 
 	/** Whether native Forge would claim this jar for the SERVICE layer (see {@link #eligibleForInPlace}). */
-	private static boolean nativelyServiceClaimed(JarInfo info) {
-		for (String service : info.serviceImpls().keySet()) {
+	private static boolean nativelyServiceClaimed(ServiceJarIndex.Facts<?> facts) {
+		for (String service : facts.serviceImpls().keySet()) {
 			if (NATIVE_EXCLUSION_SERVICES.contains(service)) return true;
 		}
 		return false;

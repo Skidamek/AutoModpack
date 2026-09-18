@@ -3,15 +3,11 @@ package pl.skidam.automodpack_loader_core_neoforge;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.lang.reflect.Field;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -19,8 +15,8 @@ import net.neoforged.neoforgespi.ILaunchContext;
 import net.neoforged.neoforgespi.locating.IDiscoveryPipeline;
 import net.neoforged.neoforgespi.locating.IModFile;
 
-import pl.skidam.automodpack_core.loader.LoaderServiceFiles;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
+import pl.skidam.automodpack_core.loader.ServiceJarIndex;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_loader_core_neoforge_shared.EarlyServiceReplay;
 
@@ -63,8 +59,8 @@ public final class EarlyServiceLayer {
 			MOD_FILE_READER_SERVICE, LANGUAGE_LOADER_SERVICE, CLASS_PROCESSOR_SERVICE, CLASS_PROCESSOR_PROVIDER_SERVICE);
 
 	// Read from net.neoforged.fml.loading.EarlyServiceDiscovery.SERVICES so this is exact for this
-	// loader version. The force-copy decision (ModpackLoader#knownServices) counts only services
-	// here: one this loader doesn't handle can't be fixed by copying to standard mods/ either.
+	// loader version; the inspection below is scoped to it, so a legacy/removed SPI this FML
+	// version doesn't handle can't wrongly block in-place hosting.
 	private static final Set<String> HANDLED_SERVICES = computeHandledServices();
 
 	// Services AutoModpack itself must drive for the hosted jars. FML enumerates locator and reader
@@ -74,15 +70,6 @@ public final class EarlyServiceLayer {
 	// the time we host, so EarlyModLocator invokes it directly.
 	private static final List<String> REPLAYED_SERVICES = List.of(GRAPHICS_BOOTSTRAPPER_SERVICE, CANDIDATE_LOCATOR_SERVICE, DEPENDENCY_LOCATOR_SERVICE,
 			MOD_FILE_READER_SERVICE);
-
-	/**
-	 * Service files this loader version actually discovers/runs; superset of {@link #HANDLEABLE_SERVICES}.
-	 * Used to narrow a jar's raw service set (see {@link #inspect}) so a legacy/removed SPI this
-	 * loader version doesn't handle can't wrongly block {@link #eligibleForInPlace}.
-	 */
-	private static Set<String> knownServices() {
-		return HANDLED_SERVICES;
-	}
 
 	private static Set<String> computeHandledServices() {
 		Set<String> handled = new HashSet<>();
@@ -153,39 +140,18 @@ public final class EarlyServiceLayer {
 		return jar.toAbsolutePath().normalize();
 	}
 
-	// Per-jar facts derived from a single jar mount, cached for the JVM's life.
-	private record JarInfo(boolean eligible, Map<String, List<String>> serviceImpls, boolean standalone) {}
-
-	private static final Map<Path, JarInfo> JAR_INFO = new ConcurrentHashMap<>();
-
-	private static JarInfo info(Path jar) {
-		return JAR_INFO.computeIfAbsent(canonical(jar), EarlyServiceLayer::inspect);
-	}
-
-	private static JarInfo inspect(Path jar) {
-		boolean eligible = false;
-		Map<String, List<String>> impls = new HashMap<>();
-		boolean standalone = false;
-		try (FileSystem fs = FileSystems.newFileSystem(jar)) {
-			// Scoped to what this loader version actually handles (knownServices()), so a legacy/
-			// removed SPI doesn't wrongly make an otherwise in-place-able mod look unhandleable.
-			Set<String> services = FileInspection.getServices(fs, knownServices());
-			eligible = !services.isEmpty() && HANDLEABLE_SERVICES.containsAll(services);
-			standalone = Files.exists(fs.getPath("META-INF/neoforge.mods.toml")) && !FileInspection.hasNestedModWithSameId(fs);
-			for (String service : REPLAYED_SERVICES) {
-				if (Files.exists(fs.getPath(service))) {
-					impls.put(service, LoaderServiceFiles.readImplementations(fs, service));
-				}
-			}
-		} catch (Exception e) {
-			LOGGER.warn("[AutoModpack] Could not inspect {}; not handling it in place", jar.getFileName(), e);
-		}
-		return new JarInfo(eligible, impls, standalone);
+	// Per-jar facts (services, replayed impls, standalone probe) come from the shared
+	// ServiceJarIndex, scoped to HANDLED_SERVICES so a legacy/removed SPI can't make a jar look
+	// unhostable. A standalone mod here additionally carries no nested jarjar of its own mod id -
+	// that nested jar is the real mod, discovered in place.
+	private static ServiceJarIndex.Facts<Boolean> facts(Path jar) {
+		return ServiceJarIndex.facts(jar, HANDLED_SERVICES, REPLAYED_SERVICES,
+				fs -> Files.exists(fs.getPath("META-INF/neoforge.mods.toml")) && !FileInspection.hasNestedModWithSameId(fs));
 	}
 
 	/** The implementation class names of a {@link #REPLAYED_SERVICES} service declared at the jar's root. */
 	public static List<String> serviceImpls(Path jar, String serviceFile) {
-		return info(jar).serviceImpls().getOrDefault(serviceFile, List.of());
+		return facts(jar).implsOf(serviceFile);
 	}
 
 	/**
@@ -231,11 +197,12 @@ public final class EarlyServiceLayer {
 	}
 
 	public static boolean eligibleForInPlace(Path jar) {
-		return info(jar).eligible();
+		Set<String> services = facts(jar).services();
+		return !services.isEmpty() && HANDLEABLE_SERVICES.containsAll(services);
 	}
 
 	public static boolean isStandaloneModFile(Path jar) {
-		return info(jar).standalone();
+		return Boolean.TRUE.equals(facts(jar).extra());
 	}
 
 }

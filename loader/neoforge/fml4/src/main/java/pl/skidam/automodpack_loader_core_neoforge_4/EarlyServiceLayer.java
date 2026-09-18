@@ -2,17 +2,12 @@ package pl.skidam.automodpack_loader_core_neoforge_4;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -24,9 +19,8 @@ import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 import net.neoforged.neoforgespi.locating.IDiscoveryPipeline;
 import net.neoforged.neoforgespi.locating.IModFile;
 
-import pl.skidam.automodpack_core.loader.LoaderServiceFiles;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
-import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.loader.ServiceJarIndex;
 import pl.skidam.automodpack_loader_core_modlauncher.ModLauncherEarlyServiceBridge;
 import pl.skidam.automodpack_loader_core_neoforge_shared.EarlyServiceReplay;
 
@@ -71,7 +65,7 @@ public final class EarlyServiceLayer {
 	// copying: the actively-run ones above, plus language loaders (passive - picked up from the GAME
 	// layer). Single source of truth for both the copy decision and the in-place bootstrapper.
 	//
-	// ImmediateWindowProvider is deliberately NOT here (though it IS in knownServices): NeoForge picks
+	// ImmediateWindowProvider is deliberately NOT here (though it IS in HANDLED_SERVICES): NeoForge picks
 	// the early-window provider and creates the window in the same call, before and out of reach of
 	// anything we can do from the active projection, so a mod needing it must force-copy to mods/.
 	public static final Set<String> HANDLEABLE_SERVICES = Stream.concat(ACTIVELY_RUN_SERVICES.stream(), Stream.of(LANGUAGE_LOADER_SERVICE))
@@ -82,15 +76,6 @@ public final class EarlyServiceLayer {
 	// outside that set) rather than a hand-maintained cross-version list. The force-copy decision
 	// counts only services in here: one the loader doesn't handle can't be fixed by copying either.
 	private static final Set<String> HANDLED_SERVICES = computeHandledServices();
-
-	/**
-	 * Service files this loader version actually discovers/runs; superset of {@link #HANDLEABLE_SERVICES}.
-	 * Used to narrow a jar's raw service set (see {@link #inspect}) so a legacy/removed SPI this
-	 * loader version doesn't handle can't wrongly block {@link #eligibleForInPlace}.
-	 */
-	private static Set<String> knownServices() {
-		return HANDLED_SERVICES;
-	}
 
 	private static Set<String> computeHandledServices() {
 		Set<String> handled = new HashSet<>();
@@ -116,48 +101,16 @@ public final class EarlyServiceLayer {
 		return Set.copyOf(handled);
 	}
 
-	// Per-jar facts derived from a single jar mount, cached for the JVM's life (jar content is
-	// immutable for the run). Without this the bootstrapper and both locators each re-open the
-	// same jar to re-derive the same booleans/service lists - ~10 mounts per early-service jar.
-	private record JarInfo(boolean activelyRunInPlace, // an ACTIVELY_RUN service exists at root
-			Set<String> services, // known services at root + nested jarjar
-			Map<String, List<String>> serviceImpls, // impl class names per ACTIVELY_RUN service
-			boolean standalone, // root META-INF/neoforge.mods.toml present
-			boolean coremod) {} // ships at least one ICoreMod impl
-
-	private static final Map<Path, JarInfo> JAR_INFO = new ConcurrentHashMap<>();
-
-	private static JarInfo info(Path jar) {
-		return JAR_INFO.computeIfAbsent(ModLauncherEarlyServiceBridge.canonical(jar), EarlyServiceLayer::inspect);
-	}
-
-	private static JarInfo inspect(Path jar) {
-		boolean activelyRun = false;
-		Set<String> services = Set.of();
-		Map<String, List<String>> impls = new HashMap<>();
-		boolean standalone = false;
-		try (FileSystem fs = FileSystems.newFileSystem(jar)) {
-			// Scoped to what this loader version actually handles (knownServices()), so a legacy/
-			// removed SPI (e.g. the old IModLocator) doesn't wrongly make an otherwise in-place-able
-			// mod look unhandleable.
-			services = FileInspection.getServices(fs, knownServices());
-			standalone = Files.exists(fs.getPath("META-INF/neoforge.mods.toml"));
-			for (String service : ACTIVELY_RUN_SERVICES) {
-				if (Files.exists(fs.getPath(service))) {
-					activelyRun = true;
-					impls.put(service, LoaderServiceFiles.readImplementations(fs, service));
-				}
-			}
-		} catch (Exception e) {
-			LOGGER.warn("[AutoModpack] Could not inspect {}; not handling it in place", jar.getFileName(), e);
-		}
-		boolean coremod = !impls.getOrDefault(COREMOD_SERVICE, List.of()).isEmpty();
-		return new JarInfo(activelyRun, services, impls, standalone, coremod);
+	// Per-jar facts (services, replayed impls, standalone probe) come from the shared
+	// ServiceJarIndex, scoped to HANDLED_SERVICES so a legacy/removed SPI (e.g. the old IModLocator)
+	// can't make a jar look unhostable.
+	private static ServiceJarIndex.Facts<Boolean> facts(Path jar) {
+		return ServiceJarIndex.facts(jar, HANDLED_SERVICES, ACTIVELY_RUN_SERVICES, fs -> Files.exists(fs.getPath("META-INF/neoforge.mods.toml")));
 	}
 
 	/** The impl class names of an {@link #ACTIVELY_RUN_SERVICES} service declared at the jar's root. */
 	public static List<String> serviceImpls(Path jar, String serviceFile) {
-		return info(jar).serviceImpls().getOrDefault(serviceFile, List.of());
+		return facts(jar).implsOf(serviceFile);
 	}
 
 	/**
@@ -208,9 +161,9 @@ public final class EarlyServiceLayer {
 	 * copy-to-standard path rather than being half-loaded in place.
 	 */
 	public static boolean eligibleForInPlace(Path jar) {
-		JarInfo info = info(jar);
+		ServiceJarIndex.Facts<Boolean> facts = facts(jar);
 		// Must actively run at least one service in place (root), and ship nothing we can't host.
-		return info.activelyRunInPlace() && HANDLEABLE_SERVICES.containsAll(info.services());
+		return !facts.serviceImpls().isEmpty() && HANDLEABLE_SERVICES.containsAll(facts.services());
 	}
 
 	/**
@@ -221,7 +174,7 @@ public final class EarlyServiceLayer {
 	 * non-standalone one has its outer classes bridged there instead.
 	 */
 	public static boolean isStandaloneModFile(Path jar) {
-		return info(jar).standalone();
+		return Boolean.TRUE.equals(facts(jar).extra());
 	}
 
 	/**
@@ -295,31 +248,9 @@ public final class EarlyServiceLayer {
 	}
 
 	/**
-	 * Points the GAME classloader at each in-place early-service jar's child SERVICE layer - the
-	 * layer its {@code GraphicsBootstrapper} actually fired on - so the outer classes resolve there,
-	 * in place, with no GAME-library copy.
-	 *
-	 * <p>
-	 * The inner mod (on the GAME layer) references its outer jar's classes; natively those resolve
-	 * because the outer jar sits on the SERVICE layer, a GAME ancestor. Our child layer is only a
-	 * sibling, so we add the child as a {@code parentLoaders} delegate for each of the outer jar's
-	 * packages (dropping any stale GAME {@code packageLookup} entry). Every outer class - whether
-	 * referenced structurally during Mixin config prep or read for its static state at runtime -
-	 * then resolves to the single, already-initialised child copy: no second class, no split state.
-	 *
-	 * <p>
-	 * Mixin prepares every mod's config as the launch target starts, loading outer classes before
-	 * any post-GAME mod hook exists. We beat that by running from an {@code EarlyServiceBridgePlugin}
-	 * launch plugin injected into ModLauncher: its {@code initializeLaunch} fires during
-	 * {@code announceLaunch}, after the GAME {@code TransformingClassLoader} is built but before Mixin's
-	 * prep. Idempotent, claimed only once we actually hold the GAME classloader, so a too-early call
-	 * does not poison the real one.
-	 *
-	 * <p>
-	 * Bridges both classes ({@code parentLoaders}) and resources ({@code resolvedRoots}), so it
-	 * works for a plain split early service (Sodium) AND for a coremod whose outer jar owns the mixins
-	 * (Sinytra Connector) - Mixin reads mixin classes as bytecode resources. Only a
-	 * <em>standalone</em> coremod (itself a mod, added to the GAME layer as its real self) is skipped.
+	 * Points the GAME classloader at each in-place early-service jar's child SERVICE layer (the
+	 * mechanics live on {@link ModLauncherEarlyServiceBridge#bridgeEarlyServicesToGameLayer}). This
+	 * generation's only own decision is the skip rule below.
 	 */
 	public static void bridgeEarlyServicesToGameLayer() {
 		// A standalone coremod that is itself a mod (root neoforge.mods.toml) was added to the
@@ -340,7 +271,7 @@ public final class EarlyServiceLayer {
 	 * #bridgeEarlyServicesToGameLayer()}, not a copy.
 	 */
 	public static boolean isCoremodJar(Path jar) {
-		return info(jar).coremod();
+		return !facts(jar).implsOf(COREMOD_SERVICE).isEmpty();
 	}
 
 	public static boolean isEarlyServiceJar(Path jar) {
