@@ -27,6 +27,7 @@ import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
 
@@ -55,8 +56,7 @@ public class HandshakeS2CPacket {
 			Common.players.put(playerName, false);
 			LOGGER.warn("{} has not installed AutoModpack.", playerName);
 			if (serverConfig.requireModpack) {
-				Component reason = VersionedText.literal(
-						"AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT) + " modloader is required to play on this server!");
+				Component reason = VersionedText.literal(serverConfig.nagMessage.replace(ServerConfigJsons.LOADER_PLACEHOLDER, LOADER));
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);
 				return;

@@ -14,6 +14,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack.modpack.GameHelpers;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
 
 /*? if >1.20.3 {*/
 import net.minecraft.server.network.CommonListenerCookie;
@@ -23,6 +24,7 @@ import net.minecraft.server.network.CommonListenerCookie;
 import java.net.URI;
 /*?}*/
 
+import static pl.skidam.automodpack_core.Constants.LOADER;
 import static pl.skidam.automodpack_core.Constants.serverConfig;
 
 @Mixin(PlayerList.class)
@@ -47,7 +49,7 @@ original.call(netManager, player);
 
 		if (serverConfig.nagUnModdedClients && !Common.players.get(playerName)) {
 			// Send chat nag message which is clickable and opens the link
-			Component nagText = VersionedText.literal(serverConfig.nagMessage).withStyle(style -> style.withBold(true));
+			Component nagText = VersionedText.literal(serverConfig.nagMessage.replace(ServerConfigJsons.LOADER_PLACEHOLDER, LOADER)).withStyle(style -> style.withBold(true));
 			Component nagClickableText = VersionedText.literal(serverConfig.nagClickableMessage).withStyle(style -> style.withUnderlined(true).withColor(TextColor.fromLegacyFormat(ChatFormatting.BLUE))
 					/*? if >=1.21.5 {*/
 					.withClickEvent(new ClickEvent.OpenUrl(URI.create(serverConfig.nagClickableLink))));
