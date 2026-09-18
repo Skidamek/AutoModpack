@@ -106,7 +106,7 @@ class ClientStateJournalTest {
 		Files.createDirectories(live.getParent());
 		Files.writeString(live, "current", StandardCharsets.UTF_8);
 
-		assertEquals(StateHistory.Restorability.NOT_KEPT, StateHistory.restorability(storage, StateHistory.entry(storage, 1)));
+		assertEquals(StateHistory.Restorability.NOT_KEPT, StateHistory.views(storage).get(0).restorability());
 		assertThrows(IOException.class, () -> StateHistory.checkout(storage, 1));
 		assertEquals("current", Files.readString(live, StandardCharsets.UTF_8));
 	}

@@ -60,24 +60,6 @@ public final class StateHistory {
 		return ClientStorageMutation.run(storage, () -> ClientStateJournal.open(storage).entries());
 	}
 
-	public static Snapshot entry(ClientStorage storage, long seq) throws IOException {
-		return ClientStorageMutation.run(storage, () -> ClientStateJournal.open(storage).require(seq));
-	}
-
-	public static InstanceTree tree(ClientStorage storage, Snapshot snapshot) throws IOException {
-		return InstanceTree.read(storage, snapshot.treeSha1());
-	}
-
-	public static Restorability restorability(ClientStorage storage, Snapshot snapshot) throws IOException {
-		return ClientStorageMutation.run(storage, () -> {
-			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-				InstanceTree target = InstanceTree.read(storage, snapshot.treeSha1());
-				InstanceTree live = InstanceTree.observe(storage, fileKeys(target), cache);
-				return restorabilityOf(storage, target, live, cache);
-			}
-		});
-	}
-
 	/** One pass over the timeline: trees, parent diffs, and restorability, with a single live observation. */
 	public static List<SnapshotView> views(ClientStorage storage) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
@@ -99,14 +81,6 @@ public final class StateHistory {
 				}
 				return List.copyOf(views);
 			}
-		});
-	}
-
-	public static List<FileDiff> diff(ClientStorage storage, Snapshot snapshot) throws IOException {
-		return ClientStorageMutation.run(storage, () -> {
-			InstanceTree current = InstanceTree.read(storage, snapshot.treeSha1());
-			InstanceTree parent = snapshot.parentSeq() == ClientStateJournal.NO_PARENT ? null : InstanceTree.read(storage, ClientStateJournal.open(storage).require(snapshot.parentSeq()).treeSha1());
-			return diff(parent, current);
 		});
 	}
 

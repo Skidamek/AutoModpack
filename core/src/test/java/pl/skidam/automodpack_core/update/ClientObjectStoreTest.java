@@ -252,9 +252,10 @@ class ClientObjectStoreTest {
 		long sweepMillis = (System.nanoTime() - start) / 1_000_000;
 
 		// 200 mirror generations plus a 200-snapshot instance timeline of a 50-file pack. Forget-prefix is the
-		// only unpin; this tripwire fails if the sweep became structural rather than incremental.
+		// only unpin; this tripwire fails if the sweep became structural rather than incremental. The pin floor
+		// is the measured 649: ~400 mirror pins plus the timeline's 50 base files and 200 changed snapshots.
 		assertTrue(sweepMillis < 5_000, "The reference sweep took " + sweepMillis + "ms for a 200-entry journal and 200-snapshot timeline");
-		assertTrue(referenced.size() >= 400);
+		assertTrue(referenced.size() >= 649, "The reference sweep pinned only " + referenced.size() + " hashes for a 200-entry journal and 200-snapshot timeline");
 		System.out.println("Reference sweep over a 200-entry journal and 200-snapshot timeline: " + sweepMillis + "ms, " + referenced.size() + " referenced hashes");
 	}
 
