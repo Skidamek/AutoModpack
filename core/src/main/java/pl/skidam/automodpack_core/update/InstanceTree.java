@@ -20,6 +20,7 @@ import java.util.TreeSet;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
+import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -165,12 +166,18 @@ public final class InstanceTree {
 			String pack = key.root() == Root.OVERLAY ? overlayPackByKey.getOrDefault(key, overlayPack) : "";
 			if (key.root() == Root.OVERLAY && (pack == null || pack.isEmpty())) continue;
 			Path disk = storage.rootedPath(key.root(), pack, key.relativePath());
-			if (!Files.isRegularFile(disk, LinkOption.NOFOLLOW_LINKS)) continue;
+			if (!Files.isRegularFile(disk, LinkOption.NOFOLLOW_LINKS) || isRunningModJar(disk)) continue;
 			long size = Files.size(disk);
 			String hash = FileIntegrity.observedHash(disk, size, null, cache);
 			files.add(new TrackedFile(key.root(), pack, key.relativePath(), HashUtils.normalizeSha1(hash), size));
 		}
 		return of(identity, files);
+	}
+
+	/** The running AutoModpack jar is the updater itself: it is never tracked, never restored over, and never deleted by a checkout. */
+	static boolean isRunningModJar(Path absoluteFile) {
+		if (Constants.THIS_MOD_JAR == null) return false;
+		return absoluteFile.toAbsolutePath().normalize().equals(Constants.THIS_MOD_JAR.toAbsolutePath().normalize());
 	}
 
 	static LiveIdentity observeIdentity(ClientStorage storage) throws IOException {

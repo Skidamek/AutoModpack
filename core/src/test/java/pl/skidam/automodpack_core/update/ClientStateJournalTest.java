@@ -15,6 +15,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Kind;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Snapshot;
@@ -89,6 +90,29 @@ class ClientStateJournalTest {
 		assertThrows(Exception.class, () -> StateHistory.restoreFile(storage, 1, Root.GAME_DIR, "oldmods/player.jar"));
 		Path copy = StateHistory.saveFileCopy(storage, 1, Root.GAME_DIR, "oldmods/player.jar");
 		assertEquals("player-mod", Files.readString(copy, StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void theRunningModJarIsNeverTrackedOrRestoredOver() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "automodpack-jar".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(bytes);
+		Path runningJar = storage.gamePath("mods/automodpack-9.9.9.jar");
+		Files.createDirectories(runningJar.getParent());
+		Files.write(runningJar, bytes);
+		Path previousThisModJar = Constants.THIS_MOD_JAR;
+		Constants.THIS_MOD_JAR = runningJar;
+		try {
+			Set<UpdatePlan.FileKey> extra = Set.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/automodpack-9.9.9.jar"));
+			StateHistory.snapshotIfDirty(storage, extra, Kind.LIVE, "", "txn-1");
+			InstanceTree head = InstanceTree.read(storage, ClientStateJournal.open(storage).head().treeSha1());
+			assertEquals(List.of(), head.files());
+			assertEquals(StateHistory.FileGate.PROTECTED, StateHistory.fileRestoreGate(storage, Root.GAME_DIR, "mods/automodpack-9.9.9.jar"));
+			assertThrows(Exception.class, () -> StateHistory.restoreFile(storage, 1, Root.GAME_DIR, "mods/automodpack-9.9.9.jar"));
+			assertEquals("automodpack-jar", Files.readString(runningJar, StandardCharsets.UTF_8));
+		} finally {
+			Constants.THIS_MOD_JAR = previousThisModJar;
+		}
 	}
 
 	@Test
