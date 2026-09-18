@@ -33,7 +33,17 @@ public final class ClientStateJournal {
 	public static final long NO_PARENT = 0;
 
 	public enum Kind {
-		LIVE, INSTALL, UPDATE, ROLLBACK, RESTORE, REMOVAL, DEACTIVATION, REPAIR, FILE_RESTORE
+		LIVE, INSTALL, UPDATE, ROLLBACK, RESTORE, REMOVAL, DEACTIVATION, REPAIR, FILE_RESTORE;
+
+		/** Blank means the caller should derive the kind. An unknown persisted name fails loudly. */
+		public static Kind parseDeclared(String name) {
+			if (name == null || name.isBlank()) return null;
+			try {
+				return valueOf(name);
+			} catch (IllegalArgumentException e) {
+				throw new IllegalArgumentException("Unknown snapshot kind '" + name + "'", e);
+			}
+		}
 	}
 
 	public record Snapshot(long seq, long parentSeq, String treeSha1, Kind kind, String modpackId, String transactionId, Instant createdAt) {

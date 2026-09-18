@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -220,7 +221,7 @@ class ClientObjectStoreTest {
 		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of("not-a-sha1")));
 	}
 
-	/** The receipt behind publishOwnership's per-commit cost: measured ~2ms warm for 200 entries; the assert is a structural tripwire, not a speed test. */
+	/** The receipt behind publishOwnership's per-commit cost. The tripwire is structural, not a speed test. */
 	@Test
 	void referenceSweepStaysCheapOnATwoHundredEntryJournal() throws Exception {
 		ClientStorage storage = storage();
@@ -231,17 +232,30 @@ class ClientObjectStoreTest {
 			TestPacks.stageGeneration(storage, record);
 			assertTrue(Files.exists(storage.objectFile(hash)));
 		}
+		List<InstanceTree.TrackedFile> files = new ArrayList<>();
+		for (int index = 0; index < 50; index++) {
+			byte[] bytes = ("pack-file-" + index).getBytes(StandardCharsets.UTF_8);
+			files.add(new InstanceTree.TrackedFile(UpdatePlan.Root.PROJECTION, "", "mods/file-" + index + ".jar", store(storage, bytes), bytes.length));
+		}
+		ClientStateJournal journal = ClientStateJournal.open(storage);
+		for (int snapshot = 0; snapshot < 200; snapshot++) {
+			byte[] changed = ("changed-" + snapshot).getBytes(StandardCharsets.UTF_8);
+			int slot = snapshot % 50;
+			files.set(slot, new InstanceTree.TrackedFile(UpdatePlan.Root.PROJECTION, "", "mods/file-" + slot + ".jar", store(storage, changed), changed.length));
+			InstanceTree tree = InstanceTree.of(InstanceTree.LiveIdentity.empty(), files);
+			tree.write(storage);
+			journal.append(tree.sha1(), ClientStateJournal.Kind.UPDATE, MODPACK_ID, "txn-" + snapshot);
+		}
 
 		long start = System.nanoTime();
 		Set<String> referenced = ClientObjectStore.referencedHashes(storage);
 		long sweepMillis = (System.nanoTime() - start) / 1_000_000;
 
-		// 200 policy documents plus their change targets: the mirror alone pins ~400 objects, and the sweep walks
-		// every mirror entry's JSON plus every overlay, baseline, and generated-copy file. Anything past the
-		// measured ~2ms by orders of magnitude means the sweep became structural, not incremental.
-		assertTrue(sweepMillis < 5_000, "The reference sweep took " + sweepMillis + "ms for a 200-entry journal");
+		// 200 mirror generations plus a 200-snapshot instance timeline of a 50-file pack. Forget-prefix is the
+		// only unpin; this tripwire fails if the sweep became structural rather than incremental.
+		assertTrue(sweepMillis < 5_000, "The reference sweep took " + sweepMillis + "ms for a 200-entry journal and 200-snapshot timeline");
 		assertTrue(referenced.size() >= 400);
-		System.out.println("Reference sweep over a 200-entry journal: " + sweepMillis + "ms, " + referenced.size() + " referenced hashes");
+		System.out.println("Reference sweep over a 200-entry journal and 200-snapshot timeline: " + sweepMillis + "ms, " + referenced.size() + " referenced hashes");
 	}
 
 	private ClientStorage storage() throws Exception {

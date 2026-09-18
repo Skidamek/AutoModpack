@@ -198,7 +198,7 @@ public final class OfflineRepair {
 		Prepared after = analyze(current.prepared().request(), fileCache).prepared();
 		requireSamePinnedIdentity(prepared, after);
 		Files.deleteIfExists(storage.repairJournalFile());
-		StateHistory.recordAfter(storage, extra, ClientStateJournal.Kind.REPAIR, prepared.modpackId(), "repair");
+		StateHistory.snapshotIfDirty(storage, extra, ClientStateJournal.Kind.REPAIR, prepared.modpackId(), "repair");
 		FileTrees.forceDirectory(storage.clientDirectory());
 		ClientObjectStore.publishOwnership(storage);
 		return new Receipt(current.prepared(), after, repaired.casObjects(), repaired.materializedFiles(), resetEdits, archivedUnowned);

@@ -197,9 +197,10 @@ public class ModpackUpdater implements AutoCloseable {
 	 */
 	void applyGenerationRollback() throws Exception {
 		if (selectedTarget == null) throw new IllegalStateException("Generation rollback was not prepared");
-		new ClientGenerationStore(storage).declareDetached(selectedTarget.manifest().modpackId());
 		UpdateAttempt current = attempt.get();
-		if (current instanceof UpdateSession session) session.declareStateKind(ClientStateJournal.Kind.ROLLBACK.name());
+		if (!(current instanceof UpdateSession session)) throw new IllegalStateException("Installed modpack switch was not prepared");
+		new ClientGenerationStore(storage).declareDetached(selectedTarget.manifest().modpackId());
+		session.declareStateKind(ClientStateJournal.Kind.ROLLBACK.name());
 		applyInstalledSwitch();
 	}
 

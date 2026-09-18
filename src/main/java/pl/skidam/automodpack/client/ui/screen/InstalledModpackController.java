@@ -50,7 +50,6 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.InstanceTree;
 import pl.skidam.automodpack_core.update.OfflineRepair;
 import pl.skidam.automodpack_core.update.StateHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -236,20 +235,8 @@ final class InstalledModpackController {
 		}
 	}
 
-	List<ClientStateJournal.Snapshot> stateEntries() throws IOException {
-		return StateHistory.entries(storage);
-	}
-
-	StateHistory.Restorability stateRestorability(ClientStateJournal.Snapshot snapshot) throws IOException {
-		return StateHistory.restorability(storage, snapshot);
-	}
-
-	List<StateHistory.FileDiff> stateDiff(ClientStateJournal.Snapshot snapshot) throws IOException {
-		return StateHistory.diff(storage, snapshot);
-	}
-
-	InstanceTree stateTree(ClientStateJournal.Snapshot snapshot) throws IOException {
-		return StateHistory.tree(storage, snapshot);
+	List<StateHistory.SnapshotView> stateViews() throws IOException {
+		return StateHistory.views(storage);
 	}
 
 	StateHistory.FileGate stateFileGate(UpdatePlan.Root root, String path) throws IOException {

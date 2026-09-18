@@ -47,8 +47,6 @@ public final class UpdateTransaction {
 	public GenerationJsons.OwnershipLedgerFields ownershipLedger;
 	/** The state-history kind of this mutation when the flow itself knows it better than the purpose mapping: rollbacks declare it, everything else derives. */
 	public String stateKind = "";
-	/** The state-history entry this mutation restores, once the state revert engine lands; {@code -1} when this is not a restore. */
-	public long stateRestoreOfSeq = -1;
 	public Status resultStatus;
 	public String resultOperation;
 	public String resultPath;

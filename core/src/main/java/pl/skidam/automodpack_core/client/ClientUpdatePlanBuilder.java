@@ -273,14 +273,13 @@ final class ClientUpdatePlanBuilder {
 		Set<UpdatePlan.FileKey> extra = new TreeSet<>(UpdatePlan.FileKey.ORDER);
 		for (var item : activeTarget.list) extra.add(new UpdatePlan.FileKey(UpdatePlan.Root.GAME_DIR, LogicalPath.normalize(item.file)));
 		StateHistory.snapshotIfDirty(storage, extra, ClientStateJournal.Kind.LIVE, activeTarget.modpackId, "before-reconcile");
-		List<DriftReset> driftResets = new ArrayList<>();
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = new HashMap<>();
 		if (target != null && target.list != null) target.list.forEach(item -> targetItems.put(LogicalPath.normalize(item.file), item));
 		boolean sameModpackTarget = target != null && target.modpackId.equals(activeTarget.modpackId);
 		Set<String> deletedPaths = new TreeSet<>(storage.readOverlayState(activeTarget.modpackId).deletedPaths);
 		for (var item : activeTarget.list) {
 			if (!item.editable) {
-				resetDriftedServerFile(cache, projection, activeTarget, targetItems, item, driftResets);
+				resetDriftedServerFile(cache, projection, activeTarget, targetItems, item);
 				continue;
 			}
 			Path live = livePath(item);
@@ -317,8 +316,7 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	/** A drifted file the pack owns: the drifted bytes are acquired for the state history and the live file gets the pack version back, without a review. */
-	private UpdatePlan.FileState resetDriftedFile(FileCache cache, ModpackJsons.ModpackContentFields.ModpackContentItem item, Path live, UpdatePlan.FileState drift,
-			List<DriftReset> driftResets) throws IOException {
+	private UpdatePlan.FileState resetDriftedFile(FileCache cache, ModpackJsons.ModpackContentFields.ModpackContentItem item, Path live, UpdatePlan.FileState drift) throws IOException {
 		long packSize = item.size;
 		Path object = storage.objectFile(item.sha1);
 		if (!FileIntegrity.matchesNamed(object, packSize, item.sha1, cache)) {
@@ -328,21 +326,12 @@ final class ClientUpdatePlanBuilder {
 		Path driftObject = storage.objectFile(drift.sha1());
 		if (!FileIntegrity.matchesNamed(driftObject, drift.size(), drift.sha1(), cache)) VerifiedFileTransfer.copyAtomicImmutable(live, driftObject, drift.size(), drift.sha1(), cache);
 		VerifiedFileTransfer.copyAtomic(object, live, packSize, item.sha1, cache);
-		driftResets.add(new DriftReset(LogicalPath.normalize(item.file), drift.sha1(), drift.size(), item.sha1, packSize));
 		return new UpdatePlan.FileState(item.sha1, packSize, true);
 	}
 
-	/** One drift reset the reconciliation performed: the drifted bytes it captured and the pack version it restored. */
-	private record DriftReset(String path, String driftHash, long driftSize, String packHash, long packSize) {}
-
-	/**
-	 * The state history checkpoint of a reconciliation's drift resets: the tracked manifest is unchanged - the pack
-	 * version was always the manifest's truth - but the change list and the captured drift bytes record exactly what
-	 * the reset touched, and the captures pin those bytes against collection.
-	 */
 	/** Silently resets client-side drift of an unchanged server-provided non-mod file so it never becomes an update prompt; the server changing the file stays a reviewable update. */
 	private void resetDriftedServerFile(FileCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields activeTarget,
-			Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, ModpackJsons.ModpackContentFields.ModpackContentItem item, List<DriftReset> driftResets)
+			Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, ModpackJsons.ModpackContentFields.ModpackContentItem item)
 			throws IOException {
 		if (targetItems.isEmpty()) return;
 		String relative = LogicalPath.normalize(item.file);
@@ -356,7 +345,7 @@ final class ClientUpdatePlanBuilder {
 		UpdatePlan.FileState state = new UpdatePlan.FileState(cache.getOrComputeHash(live), size, true);
 		if (projection.matchesPendingGameState(item.file, state)) return;
 		if (state.sha1().equalsIgnoreCase(item.sha1) && packSize == state.size()) return;
-		resetDriftedFile(cache, item, live, state, driftResets);
+		resetDriftedFile(cache, item, live, state);
 	}
 
 	private Path livePath(ModpackJsons.ModpackContentFields.ModpackContentItem item) {

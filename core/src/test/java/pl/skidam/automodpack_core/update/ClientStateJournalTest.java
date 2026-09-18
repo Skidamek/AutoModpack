@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -54,14 +55,14 @@ class ClientStateJournalTest {
 
 		StateHistory.snapshotIfDirty(storage, Set.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/player.jar")), Kind.LIVE, "", "before");
 		assertEquals(1, StateHistory.entries(storage).size());
-		StateHistory.recordAfter(storage, Set.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/player.jar")), Kind.LIVE, "", "before");
+		StateHistory.snapshotIfDirty(storage, Set.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/player.jar")), Kind.LIVE, "", "before");
 		assertEquals(1, StateHistory.entries(storage).size(), "Identical live is not a second row");
 
 		Files.write(storage.gamePath("mods/player.jar"), "changed".getBytes(StandardCharsets.UTF_8));
 		byte[] changed = "changed".getBytes(StandardCharsets.UTF_8);
 		String changedHash = HashUtils.sha1(changed);
 		ClientObjectStore.storeObject(storage, changedHash, changed);
-		StateHistory.recordAfter(storage, Set.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/player.jar")), Kind.UPDATE, "abc1234", "after");
+		StateHistory.snapshotIfDirty(storage, Set.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/player.jar")), Kind.UPDATE, "abc1234", "after");
 		assertEquals(2, StateHistory.entries(storage).size());
 
 		StateHistory.forgetOlderThan(storage, StateHistory.entries(storage).get(1).seq());
@@ -88,6 +89,26 @@ class ClientStateJournalTest {
 		assertThrows(Exception.class, () -> StateHistory.restoreFile(storage, 1, Root.GAME_DIR, "oldmods/player.jar"));
 		Path copy = StateHistory.saveFileCopy(storage, 1, Root.GAME_DIR, "oldmods/player.jar");
 		assertEquals("player-mod", Files.readString(copy, StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void checkoutRefusesWhenPackHistoryIsGone() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "restored".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(bytes);
+		ClientObjectStore.storeObject(storage, hash, bytes);
+		String token = hash("token");
+		InstanceTree tree = InstanceTree.of(new LiveIdentity("abc1234", token, false, null, List.of()),
+				List.of(new TrackedFile(Root.GAME_DIR, "", "config/pack.txt", hash, bytes.length)));
+		tree.write(storage);
+		ClientStateJournal.open(storage).append(tree.sha1(), Kind.INSTALL, "abc1234", "txn-1");
+		Path live = storage.gamePath("config/pack.txt");
+		Files.createDirectories(live.getParent());
+		Files.writeString(live, "current", StandardCharsets.UTF_8);
+
+		assertEquals(StateHistory.Restorability.NOT_KEPT, StateHistory.restorability(storage, StateHistory.entry(storage, 1)));
+		assertThrows(IOException.class, () -> StateHistory.checkout(storage, 1));
+		assertEquals("current", Files.readString(live, StandardCharsets.UTF_8));
 	}
 
 	@Test

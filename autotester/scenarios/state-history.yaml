@@ -91,6 +91,10 @@ flow:
   - do: click
     name: select a tracked file
     select: { text: "config/amp-autotest-alpha.txt" }
+  - do: wait_for
+    name: wait until per-file restore unlocks
+    timeout: 20s
+    until: { element: { key: automodpack.stateHistory.restoreFile, enabled: true } }
   - do: screenshot
     name: capture the selected file with restore and save copy
     file: state-history-file-selected

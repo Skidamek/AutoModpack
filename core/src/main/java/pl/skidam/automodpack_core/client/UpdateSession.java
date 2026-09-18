@@ -325,7 +325,6 @@ final class UpdateSession implements UpdateAttempt {
 			// The rebuilt transaction must keep the pending one's state-history story, or a resumed rollback lands mislabeled.
 			UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig());
 			transaction.stateKind = pending.stateKind;
-			transaction.stateRestoreOfSeq = pending.stateRestoreOfSeq;
 			return UpdateTransactionSupport.executor().commit(transaction, target);
 		}
 	}

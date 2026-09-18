@@ -283,7 +283,7 @@ public final class UpdateTransactionExecutor {
 	 * and the checkpoint is always durable before the record that produced it can be forgotten.
 	 */
 	private void recordStateHistory(UpdateTransaction transaction) throws IOException {
-		StateHistory.recordAfter(context.storage(), StateHistory.planPaths(transaction.plan()), snapshotKind(transaction), transaction.plan().modpackId(), transaction.transactionId);
+		StateHistory.snapshotIfDirty(context.storage(), StateHistory.planPaths(transaction.plan()), snapshotKind(transaction), transaction.plan().modpackId(), transaction.transactionId);
 	}
 
 	private void snapshotBefore(UpdateTransaction transaction) throws IOException {
@@ -292,7 +292,8 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private ClientStateJournal.Kind snapshotKind(UpdateTransaction transaction) throws IOException {
-		if (transaction.stateKind != null && !transaction.stateKind.isBlank()) return ClientStateJournal.Kind.valueOf(transaction.stateKind);
+		ClientStateJournal.Kind declared = ClientStateJournal.Kind.parseDeclared(transaction.stateKind);
+		if (declared != null) return declared;
 		return switch (transaction.purpose) {
 			case MODPACK_UPDATE -> {
 				String modpackId = transaction.plan().modpackId();

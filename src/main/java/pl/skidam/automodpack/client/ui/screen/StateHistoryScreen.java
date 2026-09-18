@@ -26,7 +26,6 @@ import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Snapshot;
-import pl.skidam.automodpack_core.update.InstanceTree;
 import pl.skidam.automodpack_core.update.InstanceTree.TrackedFile;
 import pl.skidam.automodpack_core.update.StateHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
@@ -46,13 +45,11 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private final Screen parent;
 	private final InstalledModpackController controller;
 	private final Runnable closedCallback;
-	private List<Snapshot> entries;
+	private List<StateHistory.SnapshotView> views;
 	private Long selectedSeq;
+	private String selectedFileKey;
 	private Mode mode = Mode.TIMELINE;
 	private boolean showFullTree;
-	private final Map<Long, StateHistory.Restorability> restorabilityBySeq = new HashMap<>();
-	private final Map<Long, List<StateHistory.FileDiff>> diffsBySeq = new HashMap<>();
-	private final Map<Long, InstanceTree> treesBySeq = new HashMap<>();
 	private final Map<String, StateHistory.FileGate> fileGates = new HashMap<>();
 	private RowListWidget timeline;
 	private RowListWidget files;
@@ -91,10 +88,11 @@ public final class StateHistoryScreen extends VersionedScreen {
 		this.timeline = this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, this.width - 20, 0, 64, listBottom, 36, listRows, this::select));
 		selectRow(this.timeline, newestFirst, selected);
 		List<AbstractWidget> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows);
-		buttons.get(0).active = selected != null && restorabilityBySeq.get(selected.seq()) == StateHistory.Restorability.READY && !busy;
+		StateHistory.Restorability restorability = selected == null ? null : restorability(selected.seq());
+		buttons.get(0).active = selected != null && restorability == StateHistory.Restorability.READY && !busy;
 		buttons.get(1).active = selected != null && !busy;
-		buttons.get(2).active = selected != null && !busy && entries != null && !entries.isEmpty() && selected.seq() != entries.get(0).seq();
-		setTooltip(buttons.get(0), restoreTooltip(selected, selected == null ? null : restorabilityBySeq.get(selected.seq())));
+		buttons.get(2).active = selected != null && !busy && views != null && !views.isEmpty() && selected.seq() != views.get(0).snapshot().seq();
+		setTooltip(buttons.get(0), restoreTooltip(selected, restorability));
 	}
 
 	private void initFiles() {
@@ -110,7 +108,8 @@ public final class StateHistoryScreen extends VersionedScreen {
 		List<RowListWidget.Row> listRows = new ArrayList<>();
 		List<TrackedFile> shown = selectedFiles();
 		for (TrackedFile file : shown) listRows.add(fileRow(file));
-		this.files = this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, this.width - 20, 0, 64, listBottom, 24, listRows, index -> super.rebuild()));
+		this.files = this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, this.width - 20, 0, 64, listBottom, 24, listRows, this::pickFile));
+		selectFileRow();
 		TrackedFile selectedFile = selectedFile();
 		StateHistory.FileGate gate = gate(selectedFile);
 		List<AbstractWidget> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows);
@@ -126,16 +125,17 @@ public final class StateHistoryScreen extends VersionedScreen {
 			case DEACTIVATION, REMOVAL -> ChatFormatting.RED;
 		};
 		MutableComponent title = VersionedText.translatable("automodpack.stateHistory.kind." + entry.kind().name()).withStyle(color);
-		List<StateHistory.FileDiff> diffs = diffsBySeq.get(entry.seq());
+		StateHistory.SnapshotView view = view(entry.seq());
+		List<StateHistory.FileDiff> diffs = view == null ? List.of() : view.diffs();
 		int added = 0, changed = 0, removed = 0;
-		if (diffs != null) for (StateHistory.FileDiff diff : diffs) {
+		for (StateHistory.FileDiff diff : diffs) {
 			switch (diff.kind()) {
 				case ADDED -> added++;
 				case CHANGED -> changed++;
 				case REMOVED -> removed++;
 			}
 		}
-		int files = treesBySeq.get(entry.seq()) == null ? 0 : treesBySeq.get(entry.seq()).files().size();
+		int files = view == null ? 0 : view.tree().files().size();
 		String pack = entry.modpackId().isEmpty() ? "" : packName(entry.modpackId());
 		String summary = VersionedText.translatable("automodpack.stateHistory.entrySummary", DATE_FORMAT.format(entry.createdAt()), pack, files, added, changed, removed).getString();
 		return new RowListWidget.Row(List.of(title, VersionedText.literal(summary).withStyle(ChatFormatting.GRAY)));
@@ -172,58 +172,29 @@ public final class StateHistoryScreen extends VersionedScreen {
 
 	private void loadEntries() {
 		try {
-			List<Snapshot> loaded = controller.stateEntries();
+			List<StateHistory.SnapshotView> loaded = controller.stateViews();
 			this.minecraft.execute(() -> loaded(loaded));
 		} catch (Exception e) {
 			this.minecraft.execute(() -> fail(e));
 		}
 	}
 
-	private void loaded(List<Snapshot> loaded) {
+	private void loaded(List<StateHistory.SnapshotView> loaded) {
 		if (closed) return;
-		entries = loaded;
+		views = loaded;
 		loading = false;
 		load = null;
-		if (selectedSeq == null && !loaded.isEmpty()) selectedSeq = loaded.get(loaded.size() - 1).seq();
+		if (selectedSeq == null && !loaded.isEmpty()) selectedSeq = loaded.get(loaded.size() - 1).snapshot().seq();
 		super.rebuild();
-		for (Snapshot entry : loaded) {
-			resolveRestorability(entry);
-			resolveDiff(entry);
-		}
+		if (mode == Mode.FILES) resolveFileGate(selectedFile());
 	}
 
-	private void resolveRestorability(Snapshot entry) {
-		if (restorabilityBySeq.containsKey(entry.seq())) return;
-		ScreenManager.background(() -> {
-			try {
-				StateHistory.Restorability option = controller.stateRestorability(entry);
-				this.minecraft.execute(() -> {
-					if (closed) return;
-					restorabilityBySeq.put(entry.seq(), option);
-					super.rebuild();
-				});
-			} catch (Exception e) {
-				this.minecraft.execute(() -> fail(e));
-			}
-		});
-	}
-
-	private void resolveDiff(Snapshot entry) {
-		if (diffsBySeq.containsKey(entry.seq())) return;
-		ScreenManager.background(() -> {
-			try {
-				List<StateHistory.FileDiff> diffs = controller.stateDiff(entry);
-				InstanceTree tree = controller.stateTree(entry);
-				this.minecraft.execute(() -> {
-					if (closed) return;
-					diffsBySeq.put(entry.seq(), diffs);
-					treesBySeq.put(entry.seq(), tree);
-					super.rebuild();
-				});
-			} catch (Exception e) {
-				this.minecraft.execute(() -> fail(e));
-			}
-		});
+	private void pickFile(int index) {
+		List<TrackedFile> shown = selectedFiles();
+		if (index < 0 || index >= shown.size() || selectedEntry() == null) return;
+		selectedFileKey = gateKey(selectedEntry(), shown.get(index));
+		resolveFileGate(shown.get(index));
+		super.rebuild();
 	}
 
 	private void resolveFileGate(TrackedFile file) {
@@ -249,7 +220,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 
 	private void restoreState() {
 		Snapshot entry = selectedEntry();
-		if (entry == null || restorabilityBySeq.get(entry.seq()) != StateHistory.Restorability.READY || busy) return;
+		if (entry == null || restorability(entry.seq()) != StateHistory.Restorability.READY || busy) return;
 		busy = true;
 		super.rebuild();
 		controller.restoreState(entry, this::refreshAfterMutation);
@@ -257,7 +228,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 
 	private void forgetOlder() {
 		Snapshot entry = selectedEntry();
-		if (entry == null || busy || entries == null || entries.isEmpty() || entry.seq() == entries.get(0).seq()) return;
+		if (entry == null || busy || views == null || views.isEmpty() || entry.seq() == views.get(0).snapshot().seq()) return;
 		busy = true;
 		super.rebuild();
 		controller.forgetOlderThan(entry.seq(), this::refreshAfterMutation);
@@ -299,10 +270,8 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private void refreshAfterMutation() {
 		if (closed) return;
 		busy = false;
-		restorabilityBySeq.clear();
-		diffsBySeq.clear();
-		treesBySeq.clear();
 		fileGates.clear();
+		selectedFileKey = null;
 		loading = true;
 		load = ScreenManager.background(this::loadEntries);
 		super.rebuild();
@@ -319,6 +288,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 		if (selectedEntry() == null) return;
 		mode = Mode.FILES;
 		showFullTree = false;
+		selectedFileKey = null;
 		super.rebuild();
 	}
 
@@ -335,8 +305,18 @@ public final class StateHistoryScreen extends VersionedScreen {
 	}
 
 	private Snapshot selectedEntry() {
-		if (selectedSeq == null || entries == null) return null;
-		return entries.stream().filter(entry -> entry.seq() == selectedSeq).findFirst().orElse(null);
+		StateHistory.SnapshotView view = selectedSeq == null ? null : view(selectedSeq);
+		return view == null ? null : view.snapshot();
+	}
+
+	private StateHistory.SnapshotView view(long seq) {
+		if (views == null) return null;
+		return views.stream().filter(entry -> entry.snapshot().seq() == seq).findFirst().orElse(null);
+	}
+
+	private StateHistory.Restorability restorability(long seq) {
+		StateHistory.SnapshotView view = view(seq);
+		return view == null ? null : view.restorability();
 	}
 
 	private void selectRow(RowListWidget list, List<Snapshot> newestFirst, Snapshot selected) {
@@ -346,32 +326,40 @@ public final class StateHistoryScreen extends VersionedScreen {
 		list.setSelected(list.children().get(index));
 	}
 
+	private void selectFileRow() {
+		if (files == null || selectedFileKey == null || selectedEntry() == null) return;
+		List<TrackedFile> shown = selectedFiles();
+		for (int index = 0; index < shown.size(); index++) {
+			if (selectedFileKey.equals(gateKey(selectedEntry(), shown.get(index)))) {
+				files.setSelected(files.children().get(index));
+				return;
+			}
+		}
+	}
+
 	private List<Snapshot> reversed() {
-		List<Snapshot> newestFirst = new ArrayList<>(entries == null ? List.of() : entries);
+		List<Snapshot> newestFirst = new ArrayList<>();
+		if (views != null) for (StateHistory.SnapshotView view : views) newestFirst.add(view.snapshot());
 		Collections.reverse(newestFirst);
 		return newestFirst;
 	}
 
 	private List<TrackedFile> selectedFiles() {
-		Snapshot entry = selectedEntry();
-		if (entry == null) return List.of();
-		if (showFullTree) {
-			InstanceTree tree = treesBySeq.get(entry.seq());
-			return tree == null ? List.of() : tree.files();
-		}
-		List<StateHistory.FileDiff> diffs = diffsBySeq.get(entry.seq());
-		if (diffs == null) return List.of();
+		StateHistory.SnapshotView view = selectedSeq == null ? null : view(selectedSeq);
+		if (view == null) return List.of();
+		if (showFullTree) return view.tree().files();
 		List<TrackedFile> files = new ArrayList<>();
-		for (StateHistory.FileDiff diff : diffs) files.add(diff.after() == null ? diff.before() : diff.after());
+		for (StateHistory.FileDiff diff : view.diffs()) files.add(diff.after() == null ? diff.before() : diff.after());
 		return files;
 	}
 
 	private TrackedFile selectedFile() {
 		List<TrackedFile> shown = selectedFiles();
-		if (files == null || shown.isEmpty()) return null;
-		int index = files.getSelected() == null ? -1 : files.children().indexOf(files.getSelected());
-		if (index < 0 || index >= shown.size()) return null;
-		return shown.get(index);
+		if (shown.isEmpty() || selectedEntry() == null) return null;
+		if (selectedFileKey != null) {
+			for (TrackedFile file : shown) if (selectedFileKey.equals(gateKey(selectedEntry(), file))) return file;
+		}
+		return null;
 	}
 
 	private String packName(String modpackId) {
@@ -395,7 +383,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.stateHistory.title").withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
 		String description;
 		if (loading) description = VersionedText.translatable("automodpack.stateHistory.loading").getString();
-		else if (mode == Mode.TIMELINE) description = VersionedText.translatable("automodpack.stateHistory.description", entries == null ? 0 : entries.size()).getString();
+		else if (mode == Mode.TIMELINE) description = VersionedText.translatable("automodpack.stateHistory.description", views == null ? 0 : views.size()).getString();
 		else {
 			Snapshot selected = selectedEntry();
 			description = VersionedText.translatable("automodpack.stateHistory.filesDescription", selectedFiles().size(), selected == null ? "" : packName(selected.modpackId())).getString();
@@ -404,7 +392,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 		for (int index = 0; index < descriptionLines.size(); index++)
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), this.width / 2, 28 + index * 12, TextColors.WHITE);
 		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.stateHistory.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
-		if (!loading && entries != null && entries.isEmpty())
+		if (!loading && views != null && views.isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.stateHistory.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
 		if (lastResult != null) {
 			String key = lastResultRestore ? "automodpack.stateHistory.restoredTo" : "automodpack.stateHistory.savedTo";

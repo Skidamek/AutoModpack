@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -55,6 +54,8 @@ public final class StateHistory {
 		}
 	}
 
+	public record SnapshotView(Snapshot snapshot, InstanceTree tree, List<FileDiff> diffs, Restorability restorability) {}
+
 	public static List<Snapshot> entries(ClientStorage storage) throws IOException {
 		return ClientStorageMutation.run(storage, () -> ClientStateJournal.open(storage).entries());
 	}
@@ -71,9 +72,32 @@ public final class StateHistory {
 		return ClientStorageMutation.run(storage, () -> {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				InstanceTree target = InstanceTree.read(storage, snapshot.treeSha1());
-				if (!blobsPresent(storage, target, cache)) return Restorability.NOT_KEPT;
 				InstanceTree live = InstanceTree.observe(storage, fileKeys(target), cache);
-				return live.sameAs(target) ? Restorability.CURRENT : Restorability.READY;
+				return restorabilityOf(storage, target, live, cache);
+			}
+		});
+	}
+
+	/** One pass over the timeline: trees, parent diffs, and restorability, with a single live observation. */
+	public static List<SnapshotView> views(ClientStorage storage) throws IOException {
+		return ClientStorageMutation.run(storage, () -> {
+			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+				ClientStateJournal journal = ClientStateJournal.open(storage);
+				Map<String, InstanceTree> trees = new HashMap<>();
+				Set<FileKey> extra = new TreeSet<>(FileKey.ORDER);
+				for (Snapshot snapshot : journal.entries()) {
+					InstanceTree tree = InstanceTree.read(storage, snapshot.treeSha1());
+					trees.put(snapshot.treeSha1(), tree);
+					extra.addAll(fileKeys(tree));
+				}
+				InstanceTree live = InstanceTree.observe(storage, extra, cache);
+				List<SnapshotView> views = new ArrayList<>();
+				for (Snapshot snapshot : journal.entries()) {
+					InstanceTree tree = trees.get(snapshot.treeSha1());
+					InstanceTree parent = snapshot.parentSeq() == ClientStateJournal.NO_PARENT ? null : trees.get(journal.require(snapshot.parentSeq()).treeSha1());
+					views.add(new SnapshotView(snapshot, tree, diff(parent, tree), restorabilityOf(storage, tree, live, cache)));
+				}
+				return List.copyOf(views);
 			}
 		});
 	}
@@ -146,15 +170,11 @@ public final class StateHistory {
 		});
 	}
 
-	public static void recordAfter(ClientStorage storage, Set<FileKey> extraPaths, Kind kind, String modpackId, String transactionId) throws IOException {
-		snapshotIfDirty(storage, extraPaths, kind, modpackId, transactionId);
-	}
-
 	public static void aroundMutation(ClientStorage storage, Set<FileKey> extraPaths, Kind kind, String modpackId, String transactionId, ClientStorageMutation.Operation<?> mutation) throws IOException {
 		ClientStorageMutation.run(storage, () -> {
 			snapshotIfDirty(storage, extraPaths, Kind.LIVE, modpackId, transactionId);
 			mutation.run();
-			recordAfter(storage, extraPaths, kind, modpackId, transactionId);
+			snapshotIfDirty(storage, extraPaths, kind, modpackId, transactionId);
 			return null;
 		});
 	}
@@ -166,6 +186,7 @@ public final class StateHistory {
 				Snapshot snapshot = journal.require(seq);
 				InstanceTree target = InstanceTree.read(storage, snapshot.treeSha1());
 				if (!blobsPresent(storage, target, cache)) throw new IOException("Instance snapshot " + seq + " is missing file data on this computer");
+				if (!identityFeasible(storage, target.identity())) throw new IOException("Pack history has no generation " + target.identity().contentToken() + " for " + target.identity().activeModpackId());
 				InstanceTree live = InstanceTree.observe(storage, fileKeys(target), cache);
 				if (live.sameAs(target)) return storage.gameDirectory();
 				applyTree(storage, live, target, cache);
@@ -206,9 +227,10 @@ public final class StateHistory {
 				Path destination = storage.gamePath(path);
 				if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS) && FileIntegrity.matchesNamed(destination, file.size(), file.sha1(), cache)) return destination;
 				Set<FileKey> extra = Set.of(file.fileKey());
-				snapshotIfDirty(storage, extra, Kind.LIVE, snapshot.modpackId(), "file-restore-" + UUID.randomUUID());
+				String transactionId = "file-restore-" + seq;
+				snapshotIfDirty(storage, extra, Kind.LIVE, snapshot.modpackId(), transactionId);
 				copyWithoutOverwrite(storage.gameDirectory(), storage.objectFile(file.sha1()), destination, file.size(), file.sha1(), cache);
-				recordAfter(storage, extra, Kind.FILE_RESTORE, snapshot.modpackId(), "file-restore-" + seq);
+				snapshotIfDirty(storage, extra, Kind.FILE_RESTORE, snapshot.modpackId(), transactionId);
 				return destination;
 			}
 		});
@@ -286,6 +308,19 @@ public final class StateHistory {
 			Files.deleteIfExists(destination);
 			FileTrees.pruneEmptyAncestors(destination, storage.root(file.root(), file.overlayPackId().isEmpty() ? "_" : file.overlayPackId()));
 		}
+	}
+
+	private static Restorability restorabilityOf(ClientStorage storage, InstanceTree target, InstanceTree live, FileCache cache) throws IOException {
+		if (live.sameAs(target)) return Restorability.CURRENT;
+		if (!blobsPresent(storage, target, cache) || !identityFeasible(storage, target.identity())) return Restorability.NOT_KEPT;
+		return Restorability.READY;
+	}
+
+	private static boolean identityFeasible(ClientStorage storage, InstanceTree.LiveIdentity identity) throws IOException {
+		if (identity.activeModpackId().isEmpty()) return true;
+		for (JournalEntry entry : new JournalMirror(storage).entries(identity.activeModpackId()))
+			if (entry.contentToken().equals(identity.contentToken())) return true;
+		return false;
 	}
 
 	private static void applyIdentity(ClientStorage storage, InstanceTree.LiveIdentity identity) throws IOException {
