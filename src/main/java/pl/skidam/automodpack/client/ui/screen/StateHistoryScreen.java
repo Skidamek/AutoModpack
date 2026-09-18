@@ -61,7 +61,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private Future<?> load;
 
 	public StateHistoryScreen(Screen parent, InstalledModpackController controller, Runnable closedCallback) {
-		super(VersionedText.translatable("automodpack.stateHistory.title"));
+		super(VersionedText.text("automodpack.stateHistory.title"));
 		this.parent = parent;
 		this.controller = controller;
 		this.closedCallback = closedCallback;
@@ -76,10 +76,10 @@ public final class StateHistoryScreen extends VersionedScreen {
 	}
 
 	private void initTimeline() {
-		ActionDefinition restore = primaryAction(VersionedText.translatable("automodpack.stateHistory.restore"), press -> restoreState());
-		ActionDefinition filesAction = optionalAction(VersionedText.translatable("automodpack.stateHistory.files"), press -> openFiles());
-		ActionDefinition forget = optionalAction(VersionedText.translatable("automodpack.stateHistory.forgetOlder"), press -> forgetOlder());
-		ActionRow[] rows = {actionRow(ActionAreaLayout.RowKind.FOOTER, restore, filesAction, forget, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back()))};
+		ActionDefinition restore = primaryAction(VersionedText.text("automodpack.stateHistory.restore"), press -> restoreState());
+		ActionDefinition filesAction = optionalAction(VersionedText.text("automodpack.stateHistory.files"), press -> openFiles());
+		ActionDefinition forget = optionalAction(VersionedText.text("automodpack.stateHistory.forgetOlder"), press -> forgetOlder());
+		ActionRow[] rows = {actionRow(ActionAreaLayout.RowKind.FOOTER, restore, filesAction, forget, secondaryAction(VersionedText.text("automodpack.back"), press -> back()))};
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows) - 6;
 		List<RowListWidget.Row> listRows = new ArrayList<>();
 		List<Snapshot> newestFirst = reversed();
@@ -97,13 +97,13 @@ public final class StateHistoryScreen extends VersionedScreen {
 
 	private void initFiles() {
 		Snapshot selected = selectedEntry();
-		ActionDefinition restore = primaryAction(VersionedText.translatable("automodpack.stateHistory.restoreFile"), press -> restoreFile());
-		ActionDefinition save = optionalAction(VersionedText.translatable("automodpack.stateHistory.saveCopy"), press -> saveFileCopy());
-		ActionDefinition all = optionalAction(VersionedText.translatable(showFullTree ? "automodpack.stateHistory.showDiff" : "automodpack.stateHistory.showAll"), press -> {
+		ActionDefinition restore = primaryAction(VersionedText.text("automodpack.stateHistory.restoreFile"), press -> restoreFile());
+		ActionDefinition save = optionalAction(VersionedText.text("automodpack.stateHistory.saveCopy"), press -> saveFileCopy());
+		ActionDefinition all = optionalAction(VersionedText.text(showFullTree ? "automodpack.stateHistory.showDiff" : "automodpack.stateHistory.showAll"), press -> {
 			showFullTree = !showFullTree;
 			super.rebuild();
 		});
-		ActionRow[] rows = {actionRow(ActionAreaLayout.RowKind.FOOTER, restore, save, all, secondaryAction(VersionedText.translatable("automodpack.stateHistory.timeline"), press -> showTimeline()))};
+		ActionRow[] rows = {actionRow(ActionAreaLayout.RowKind.FOOTER, restore, save, all, secondaryAction(VersionedText.text("automodpack.stateHistory.timeline"), press -> showTimeline()))};
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows) - 6;
 		List<RowListWidget.Row> listRows = new ArrayList<>();
 		List<TrackedFile> shown = selectedFiles();
@@ -124,7 +124,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 			case LIVE, FILE_RESTORE, REPAIR -> ChatFormatting.YELLOW;
 			case DEACTIVATION, REMOVAL -> ChatFormatting.RED;
 		};
-		MutableComponent title = VersionedText.translatable("automodpack.stateHistory.kind." + entry.kind().name()).withStyle(color);
+		MutableComponent title = VersionedText.text("automodpack.stateHistory.kind." + entry.kind().name()).withStyle(color);
 		StateHistory.SnapshotView view = view(entry.seq());
 		List<StateHistory.FileDiff> diffs = view == null ? List.of() : view.diffs();
 		int added = 0, changed = 0, removed = 0;
@@ -137,7 +137,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 		}
 		int files = view == null ? 0 : view.tree().files().size();
 		String pack = entry.modpackId().isEmpty() ? "" : packName(entry.modpackId());
-		String summary = VersionedText.translatable("automodpack.stateHistory.entrySummary", DATE_FORMAT.format(entry.createdAt()), pack, files, added, changed, removed).getString();
+		String summary = VersionedText.str("automodpack.stateHistory.entrySummary", DATE_FORMAT.format(entry.createdAt()), pack, files, added, changed, removed);
 		return new RowListWidget.Row(List.of(title, VersionedText.literal(summary).withStyle(ChatFormatting.GRAY)));
 	}
 
@@ -146,12 +146,12 @@ public final class StateHistoryScreen extends VersionedScreen {
 	}
 
 	private MutableComponent restoreTooltip(Snapshot selected, StateHistory.Restorability option) {
-		if (selected == null) return VersionedText.translatable("automodpack.stateHistory.restorePickFirst");
-		if (option == null) return VersionedText.translatable("automodpack.stateHistory.checking");
+		if (selected == null) return VersionedText.text("automodpack.stateHistory.restorePickFirst");
+		if (option == null) return VersionedText.text("automodpack.stateHistory.checking");
 		return switch (option) {
-			case READY -> VersionedText.translatable("automodpack.stateHistory.restoreReady");
-			case CURRENT -> VersionedText.translatable("automodpack.stateHistory.restoreCurrent");
-			case NOT_KEPT -> VersionedText.translatable("automodpack.stateHistory.restoreNotKept");
+			case READY -> VersionedText.text("automodpack.stateHistory.restoreReady");
+			case CURRENT -> VersionedText.text("automodpack.stateHistory.restoreCurrent");
+			case NOT_KEPT -> VersionedText.text("automodpack.stateHistory.restoreNotKept");
 		};
 	}
 
@@ -162,11 +162,11 @@ public final class StateHistoryScreen extends VersionedScreen {
 	}
 
 	private MutableComponent fileRestoreTooltip(StateHistory.FileGate gate) {
-		if (gate == null) return VersionedText.translatable("automodpack.stateHistory.restorePickFirst");
+		if (gate == null) return VersionedText.text("automodpack.stateHistory.restorePickFirst");
 		return switch (gate) {
-			case AVAILABLE -> VersionedText.translatable("automodpack.stateHistory.restoreFileReady");
-			case NOT_GAME_DIR -> VersionedText.translatable("automodpack.stateHistory.restoreFileManaged");
-			case OWNED -> VersionedText.translatable("automodpack.stateHistory.restoreFileOwned");
+			case AVAILABLE -> VersionedText.text("automodpack.stateHistory.restoreFileReady");
+			case NOT_GAME_DIR -> VersionedText.text("automodpack.stateHistory.restoreFileManaged");
+			case OWNED -> VersionedText.text("automodpack.stateHistory.restoreFileOwned");
 		};
 	}
 
@@ -368,7 +368,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 	}
 
 	private String rootLabel(Root root) {
-		return VersionedText.translatable("automodpack.stateHistory.root." + root.name()).getString();
+		return VersionedText.str("automodpack.stateHistory.root." + root.name());
 	}
 
 	private void back() {
@@ -380,23 +380,23 @@ public final class StateHistoryScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.stateHistory.title").withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.stateHistory.title").withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
 		String description;
-		if (loading) description = VersionedText.translatable("automodpack.stateHistory.loading").getString();
-		else if (mode == Mode.TIMELINE) description = VersionedText.translatable("automodpack.stateHistory.description", views == null ? 0 : views.size()).getString();
+		if (loading) description = VersionedText.str("automodpack.stateHistory.loading");
+		else if (mode == Mode.TIMELINE) description = VersionedText.str("automodpack.stateHistory.description", views == null ? 0 : views.size());
 		else {
 			Snapshot selected = selectedEntry();
-			description = VersionedText.translatable("automodpack.stateHistory.filesDescription", selectedFiles().size(), selected == null ? "" : packName(selected.modpackId())).getString();
+			description = VersionedText.str("automodpack.stateHistory.filesDescription", selectedFiles().size(), selected == null ? "" : packName(selected.modpackId()));
 		}
 		List<String> descriptionLines = wrapToWidth(this.font, description, this.width - 28, 2);
 		for (int index = 0; index < descriptionLines.size(); index++)
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), this.width / 2, 28 + index * 12, TextColors.WHITE);
-		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.stateHistory.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
+		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.stateHistory.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
 		if (!loading && views != null && views.isEmpty())
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.stateHistory.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.stateHistory.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
 		if (lastResult != null) {
 			String key = lastResultRestore ? "automodpack.stateHistory.restoredTo" : "automodpack.stateHistory.savedTo";
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(key, lastResult.toString()).withStyle(ChatFormatting.GREEN), this.width / 2, 52, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text(key, lastResult.toString()).withStyle(ChatFormatting.GREEN), this.width / 2, 52, TextColors.WHITE);
 		}
 	}
 
