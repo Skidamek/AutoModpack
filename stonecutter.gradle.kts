@@ -31,21 +31,21 @@ fun structuredString(vararg path: String): String =
 		.asPrimitive()
 		.content as String
 
+// What each loader module compiles against: the oldest platform API floor that has everything the
+// module calls, so newer-API slips are compile errors here instead of LinkageErrors on a user's
+// install. loader-fabric-latest is not a module, it is a pin alias for the autotest fixtures, which
+// deliberately compile against the newest loader.
 extra["loaderVersions"] =
 	mapOf(
-		"loader-fabric-15" to structuredString("loader-modules", "fabric-15"),
-		"loader-fabric-core" to structuredString("loader-modules", "fabric-15"),
-		"loader-fabric-shared" to structuredString("loader-modules", "fabric-15"),
-		"loader-fabric-16" to structuredString("loader-modules", "fabric-16"),
+		"loader-fabric-core" to structuredString("loader-modules", "fabric"),
 		"loader-fabric-latest" to structuredString("fabric", "deps", "fabric-loader"),
 		"loader-forge-fml40" to structuredString("1.18.2-forge", "deps", "forge"),
 		"loader-forge-fml47" to structuredString("1.20.1-forge", "deps", "forge"),
 		"loader-forge-earlyservices" to structuredString("1.20.1-forge", "deps", "forge"),
 		"loader-modlauncher-earlyservices" to structuredString("1.20.1-forge", "deps", "forge"),
+		"loader-neoforge-shared" to structuredString("1.21.1-neoforge", "deps", "neoforge"),
 		"loader-neoforge-fml4" to structuredString("1.21.1-neoforge", "deps", "neoforge"),
-		"loader-neoforge-fml10" to structuredString("1.21.10-neoforge", "deps", "neoforge"),
 		"loader-neoforge-earlyservices" to structuredString("1.21.10-neoforge", "deps", "neoforge"),
-		"loader-neoforge-fml11" to structuredString("26.1-neoforge", "deps", "neoforge"),
 	)
 
 stonecutter.parameters {
@@ -179,20 +179,32 @@ val writeReleaseMatrix =
 			val displayName = project.property("mod_name").toString()
 			val modName = displayName.lowercase(Locale.ROOT)
 			val modVersion = project.property("mod_version").toString()
+			// One jar publishes once per loader that actually has an impl among the selected targets;
+			// a partial selection must never advertise a loader whose manifest would crash the boot.
+			// The game-version list is the distinct union across the selected targets, in stable order.
+			val publishVersions =
+				selectedTargets
+					.map { target -> structuredString(target.substringBeforeLast('-'), "publish_versions") }
+					.flatMap { it.split('\n') }
+					.filter { it.isNotBlank() }
+					.distinct()
+					.joinToString(",")
 			val entries =
-				selectedTargets.map { target ->
-					val targetLine = target.substringBeforeLast('-')
-					val loader = target.substringAfterLast('-')
+				listOf(
 					mapOf(
-						"subproject" to target,
-						"target" to targetLine,
-						"loader" to loader,
-						"file" to "$modName-mc$target-$modVersion.jar",
+						"subproject" to "one-jar",
+						"target" to "universal",
+						"loader" to
+							selectedTargets
+								.map { it.substringAfterLast('-') }
+								.distinct()
+								.joinToString(","),
+						"file" to "$modName-$modVersion.jar",
 						"mod_name" to displayName,
 						"mod_version" to modVersion,
-						"publish_versions" to structuredString(targetLine, "publish_versions"),
-					)
-				}
+						"publish_versions" to publishVersions,
+					),
+				)
 			val output = releaseMatrixFile.get().asFile
 			output.parentFile.mkdirs()
 			output.writeText(ObjectMapper().writeValueAsString(mapOf("include" to entries)) + "\n")
@@ -200,11 +212,69 @@ val writeReleaseMatrix =
 		}
 	}
 
-tasks.register("buildTargets") {
-	group = "build"
-	description = "Builds the selected AutoModpack targets and writes their release metadata."
-	dependsOn(selectedTargets.map { ":$it:build" })
-	dependsOn(writeReleaseMatrix)
+val automodpackBuildMode =
+	providers
+		.gradleProperty("automodpack.autotest")
+		.map { "autotest" }
+		.orElse("release")
+val modVersion = project.property("mod_version").toString()
+val modName = project.property("mod_name").toString().lowercase(Locale.ROOT)
+val modId = project.property("mod.id").toString()
+
+// Convention paths shared with the producing tasks; if a convention drifts, oneJar fails loudly on
+// the missing file instead of packing stale bytes.
+fun optimizedImplJar(target: String) = layout.projectDirectory.file("versions/$target/build/libs-optimized/$modName-mc$target-$modVersion-optimized.jar")
+
+fun optimizedOuterJar() = layout.projectDirectory.file("loader/universal/build/libs/$modId-loader-universal-$modVersion-optimized.jar")
+
+val oneJarTask =
+	tasks.register<OneJarTask>("oneJar") {
+		group = "build"
+		description = "Packs the optimized universal outer and every selected target's optimized impl jar into the one published jar."
+		buildMode.set(automodpackBuildMode)
+		zstdVersion.set(versionProperty("versionZstdJni"))
+		outerJar.set(optimizedOuterJar())
+		implJars.set(providers.provider { selectedTargets.associateWith { target -> optimizedImplJar(target).asFile.absolutePath } })
+		implJarFiles.setFrom(selectedTargets.map { optimizedImplJar(it) })
+		// The exact Minecraft versions each target covers (its group's publish_versions): the manifest's
+		// version-resolution source of truth, so a live 26.1.2 client resolves to the 26.1-fabric impl.
+		implVersions.set(
+			providers.provider {
+				selectedTargets.associateWith { target -> structuredString(target.substringBeforeLast('-'), "publish_versions").split('\n').filter(String::isNotBlank) }
+			},
+		)
+		oneJar.set(layout.projectDirectory.file("merged/$modName-$modVersion.jar"))
+		dependsOn(":loader-universal:optimizeUniversalJar")
+		dependsOn(selectedTargets.map { ":$it:optimizeModJar" })
+		if (automodpackBuildMode.get() == "autotest") {
+			dependsOn(":autotest-fixtures:build")
+		}
+	}
+
+val auditOneJarTask =
+	tasks.register<OneJarAuditTask>("auditOneJar") {
+		group = "verification"
+		description = "Audits the packed one jar: size budget, manifest ids, STORE entries, assets, no nested jarjar."
+		oneJar.set(oneJarTask.flatMap { it.oneJar })
+		expectedIds.set(selectedTargets.sorted())
+		// The size tripwire; the measured receipts that justify the budget live on OneJarAuditTask.
+		maxJarBytes.set(5L * 1024 * 1024)
+		enforceReleaseSizeBudget.set(automodpackBuildMode.map { it != "autotest" })
+		// The waiting loop is the transcribed note-block bossa nova, 550322 bytes as packaged; 1 MiB leaves it headroom and still trips on accidental full songs.
+		maxMusicBytes.set(1024L * 1024)
+	}
+
+oneJarTask.configure {
+	finalizedBy(auditOneJarTask)
+}
+
+// `build` is the one verb: it takes the selected targets (-Pautomodpack.targets, all of them by
+// default) from impl jars to the audited one jar in merged/. Release metadata stays out of the
+// everyday build; the release workflow asks writeReleaseMatrix for it explicitly.
+afterEvaluate {
+	tasks.named("build") {
+		dependsOn(oneJarTask)
+	}
 }
 
 tasks.register("formatApply") {

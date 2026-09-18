@@ -27,7 +27,7 @@ public class RestartScreen extends VersionedScreen {
 	private int titleTop;
 
 	public RestartScreen(UpdateType updateType, Changelogs changelogs) {
-		super(VersionedText.translatable("automodpack.restart.title"));
+		super(VersionedText.text("automodpack.restart.title"));
 		this.updateType = updateType;
 		this.changelogs = changelogs;
 
@@ -41,14 +41,14 @@ public class RestartScreen extends VersionedScreen {
 		boolean hasChangelogs = changelogs != null && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty() || !changelogs.latestPatchNotes().isBlank());
 		int preservedFiles = hasChangelogs ? changelogs.changeSet().summary().preservedFiles() : 0;
 		List<ActionRow> rows = new ArrayList<>();
-		if (hasChangelogs) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.changelog.view"), button -> ScreenManager.changelog(changelogs))));
-		if (preservedFiles > 0) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.management.preservedFilesCount", preservedFiles), button -> openVault())));
+		if (hasChangelogs) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.changelog.view"), button -> ScreenManager.changelog(changelogs))));
+		if (preservedFiles > 0) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.management.preservedFilesCount", preservedFiles), button -> openVault())));
 		if (!new InstalledModpackController().stalePacks().isEmpty())
-			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.restart.removeStale"),
+			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.restart.removeStale"),
 					button -> new InstalledModpackController().offerStalePackRemoval(this::rebuild))));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.restart.cancel"), button -> ScreenImpl.multiplayer()),
-				primaryAction(VersionedText.translatable("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> minecraft.stop())));
+				secondaryAction(VersionedText.text("automodpack.restart.cancel"), button -> ScreenImpl.multiplayer()),
+				primaryAction(VersionedText.text("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> minecraft.stop())));
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
 		List<MutableComponent> lines = buildBodyLines();
 		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, rowArray);
@@ -61,8 +61,8 @@ public class RestartScreen extends VersionedScreen {
 	private List<MutableComponent> buildBodyLines() {
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
 		List<MutableComponent> lines = new ArrayList<>();
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.restart.description").getString(), wrapWidth));
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.restart.secDescription").getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.restart.description"), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.restart.secDescription"), wrapWidth));
 		if (changelogs != null) {
 			ChangeSet.Summary summary = changelogs.changeSet().summary();
 			boolean hasDiff = summary.addedFiles() > 0 || summary.modifiedFiles() > 0 || summary.removedFiles() > 0 || summary.preservedFiles() > 0 || summary.unsafeFiles() > 0;
@@ -73,18 +73,18 @@ public class RestartScreen extends VersionedScreen {
 			List<String> reasons = changelogs.restartReasons();
 			if (!reasons.isEmpty()) {
 				lines.add(blankLine());
-				lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.restart.reasonsTitle").getString(), wrapWidth, ChatFormatting.YELLOW));
+				lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.restart.reasonsTitle"), wrapWidth, ChatFormatting.YELLOW));
 				for (String reason : reasons)
-					lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.restart.reason." + reason).getString(), wrapWidth, ChatFormatting.GRAY));
+					lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.restart.reason." + reason), wrapWidth, ChatFormatting.GRAY));
 			}
 			if (summary.preservedFiles() > 0) {
 				lines.add(blankLine());
-				lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.restart.preservedFiles", summary.preservedFiles()).getString(), wrapWidth, ChatFormatting.GRAY));
+				lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.restart.preservedFiles", summary.preservedFiles()), wrapWidth, ChatFormatting.GRAY));
 			}
 			String notes = changelogs.latestPatchNotes();
 			if (!notes.isBlank()) {
 				lines.add(blankLine());
-				lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.patchNotes.latest").getString(), wrapWidth, ChatFormatting.YELLOW));
+				lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.patchNotes.latest"), wrapWidth, ChatFormatting.YELLOW));
 				lines.addAll(wrapParagraph(this.font, notes, wrapWidth));
 			}
 		}
@@ -99,7 +99,7 @@ public class RestartScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.translatable("automodpack.restart." + updateType.toString()).withStyle(ChatFormatting.BOLD), this.width / 2, titleTop,
+				VersionedText.text("automodpack.restart." + updateType.toString()).withStyle(ChatFormatting.BOLD), this.width / 2, titleTop,
 				TextColors.WHITE);
 	}
 

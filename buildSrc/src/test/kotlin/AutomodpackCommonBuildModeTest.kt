@@ -17,11 +17,9 @@ class AutomodpackCommonBuildModeTest {
 		projectDir.toPath().resolve("settings.gradle.kts").writeText(
 			"""
 			rootProject.name = "1.21.8-fabric"
-			include(":core", ":loader-fabric-core", ":loader-fabric-15", ":loader-fabric-16")
+			include(":core", ":loader-universal")
 			project(":core").projectDir = file("core")
-			project(":loader-fabric-core").projectDir = file("loader/fabric/core")
-			project(":loader-fabric-15").projectDir = file("loader/fabric/15")
-			project(":loader-fabric-16").projectDir = file("loader/fabric/16")
+			project(":loader-universal").projectDir = file("loader/universal")
 			""".trimIndent() + "\n",
 		)
 		projectDir.toPath().resolve("build.gradle.kts").writeText(
@@ -30,13 +28,9 @@ class AutomodpackCommonBuildModeTest {
 				java
 				id("automodpack.common")
 			}
-
-			tasks.named("mergeJar") {
-				enabled = false
-			}
 			""".trimIndent() + "\n",
 		)
-		for (module in listOf("core", "loader/fabric/core", "loader/fabric/15", "loader/fabric/16")) {
+		for (module in listOf("core", "loader/universal")) {
 			projectDir.toPath().resolve(module).createDirectories()
 			projectDir.toPath().resolve(module).resolve("build.gradle.kts").writeText("plugins { java }\n")
 		}

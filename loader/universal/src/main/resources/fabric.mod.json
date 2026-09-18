@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "automodpack",
+  "version": "${version}",
+  "name": "AutoModpack",
+  "description": "",
+  "authors": ["Skidam"],
+  "icon": "icon.png",
+  "contact": {},
+  "license": "LGPL-3.0-or-later",
+  "environment": "*",
+  "custom": {
+    "modmenu": {
+      "badges": [
+        "library"
+      ]
+    }
+  },
+  "languageAdapters": {
+    "automodpack_preload": "pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter"
+  }
+}

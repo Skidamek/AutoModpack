@@ -35,7 +35,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private boolean discoveryFailureShown;
 
 	public InstalledModpacksScreen(Screen parent) {
-		super(VersionedText.translatable("automodpack.packManager.title"));
+		super(VersionedText.text("automodpack.packManager.title"));
 		this.parent = parent;
 		this.controller = new InstalledModpackController();
 		refreshEntries();
@@ -56,23 +56,23 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 					FailureDestination.CURRENT_SCREEN, null));
 		}
 		MutableComponent preservedLabel = preservedCount > 0
-				? VersionedText.translatable("automodpack.management.preservedFilesCount", preservedCount)
-				: VersionedText.translatable("automodpack.management.preservedFiles");
+				? VersionedText.text("automodpack.management.preservedFilesCount", preservedCount)
+				: VersionedText.text("automodpack.management.preservedFiles");
 		ActionRow management = actionRow(ActionAreaLayout.RowKind.AUXILIARY,
 				optionalAction(preservedLabel, press -> controller.openPreservedFiles(this, () -> {
 					refreshEntries();
 					rebuild();
 				})),
-				optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller))),
-				optionalAction(VersionedText.translatable("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this))));
-		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
+				optionalAction(VersionedText.text("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller))),
+				optionalAction(VersionedText.text("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this))));
+		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
 		ActionRow[] actionRows = {management, footer};
 		int rowWidth = panelWidth(PANEL_WIDTH) - TEXT_MARGIN * 2;
 		int activeIndex = -1;
 		List<RowListWidget.Row> rows = new ArrayList<>(entries.size());
 		for (int index = 0; index < entries.size(); index++) {
 			InstalledModpackController.Pack entry = entries.get(index);
-			String source = VersionedText.translatable(entry.connectionAvailable() ? "automodpack.packManager.sourceServer" : "automodpack.packManager.sourceLocal").getString();
+			String source = VersionedText.str(entry.connectionAvailable() ? "automodpack.packManager.sourceServer" : "automodpack.packManager.sourceLocal");
 			// State is carried by color, not bracket markers: green = active pack, white = installed pack.
 			rows.add(new RowListWidget.Row(List.of(
 					VersionedText.literal(truncateToWidth(this.font, entry.name(), rowWidth)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE),
@@ -89,7 +89,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			this.packList.revealRow(activeIndex);
 		}
 		List<AbstractWidget> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows);
-		if (preservedCount == 0) setTooltip(actionButtons.get(0), VersionedText.translatable("automodpack.vault.empty"));
+		if (preservedCount == 0) setTooltip(actionButtons.get(0), VersionedText.text("automodpack.vault.empty"));
 	}
 
 	private void open(InstalledModpackController.Pack entry) {
@@ -98,11 +98,11 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packManager.title").withStyle(ChatFormatting.BOLD), this.width / 2, 16, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.packManager.title").withStyle(ChatFormatting.BOLD), this.width / 2, 16, TextColors.WHITE);
 		boolean hasEntries = !entries.isEmpty();
 		String description = !hasEntries
-				? VersionedText.translatable("automodpack.packManager.empty").getString()
-				: VersionedText.translatable("automodpack.packManager.description").getString();
+				? VersionedText.str("automodpack.packManager.empty")
+				: VersionedText.str("automodpack.packManager.description");
 		List<String> descriptionLines = wrapToWidth(this.font, description, this.width - 20, 2);
 		int descriptionY = descriptionLines.size() > 1 ? 28 : 32;
 		for (String line : descriptionLines) {
@@ -111,8 +111,8 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		}
 		if (!entries.isEmpty()) {
 			String active = entries.stream().filter(InstalledModpackController.Pack::active).findFirst()
-					.map(entry -> VersionedText.translatable("automodpack.packManager.active", entry.name()).getString())
-					.orElse(VersionedText.translatable("automodpack.packManager.noActive").getString());
+					.map(entry -> VersionedText.str("automodpack.packManager.active", entry.name()))
+					.orElse(VersionedText.str("automodpack.packManager.noActive"));
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, active, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2,
 					descriptionLines.size() > 1 ? 50 : 44, TextColors.WHITE);
 		}

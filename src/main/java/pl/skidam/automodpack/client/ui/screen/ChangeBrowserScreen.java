@@ -111,9 +111,9 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		int controlCount = 3;
 		int controlWidth = Math.max(1, (panelWidth - (narrow ? GAP * controlCount : searchWidth + GAP * (controlCount + 1))) / controlCount);
 		this.browserTop = (narrow ? 83 : 59) + preambleHeight;
-		this.searchField = fieldWidget(panelLeft, searchY, searchWidth, VersionedText.translatable("automodpack.browser.search"), null, Integer.MAX_VALUE);
+		this.searchField = fieldWidget(panelLeft, searchY, searchWidth, VersionedText.text("automodpack.browser.search"), null, Integer.MAX_VALUE);
 		this.searchField.setValue(search);
-		String searchHint = VersionedText.translatable("automodpack.browser.search").getString();
+		String searchHint = VersionedText.str("automodpack.browser.search");
 		this.searchField.setSuggestion(search.isEmpty() ? searchHint : "");
 		this.searchField.setResponder(value -> {
 			search = value;
@@ -142,20 +142,20 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	/** Re-sets every dropdown's label, options and highlight from the current selection and change set. */
 	private void refreshDropdowns() {
 		if (contentDropdown != null) {
-			contentDropdown.setMessage(VersionedText.translatable("automodpack.browser.contentFilter",
-					selectedContent.isBlank() ? VersionedText.translatable("automodpack.browser.all").getString() : VersionedText.translatable("automodpack.browser.content." + selectedContent).getString()));
+			contentDropdown.setMessage(VersionedText.text("automodpack.browser.contentFilter",
+					selectedContent.isBlank() ? VersionedText.str("automodpack.browser.all") : VersionedText.str("automodpack.browser.content." + selectedContent)));
 			List<String> ids = new ArrayList<>();
 			ids.add("");
 			ids.addAll(contentKinds());
 			List<Component> options = new ArrayList<>(ids.size());
 			for (String id : ids)
-				options.add(id.isBlank() ? VersionedText.translatable("automodpack.browser.all") : VersionedText.translatable("automodpack.browser.content." + id));
+				options.add(id.isBlank() ? VersionedText.text("automodpack.browser.all") : VersionedText.text("automodpack.browser.content." + id));
 			contentDropdown.setOptions(options, Math.max(0, ids.indexOf(selectedContent)), browserBottom, index -> pickContent(ids.get(index)));
 		}
 		if (groupDropdown != null) {
 			groupDropdown.active = !groupIds().isEmpty();
-			groupDropdown.setMessage(VersionedText.translatable("automodpack.browser.groupFilter",
-					selectedGroup.isBlank() ? VersionedText.translatable("automodpack.browser.allGroups").getString() : groupName(selectedGroup)));
+			groupDropdown.setMessage(VersionedText.text("automodpack.browser.groupFilter",
+					selectedGroup.isBlank() ? VersionedText.str("automodpack.browser.allGroups") : groupName(selectedGroup)));
 			List<String> optionIds = new ArrayList<>();
 			optionIds.add("");
 			List<String> ids = new ArrayList<>(groupIds());
@@ -163,19 +163,19 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			optionIds.addAll(ids);
 			List<Component> options = new ArrayList<>(optionIds.size());
 			for (String optionId : optionIds)
-				options.add(optionId.isBlank() ? VersionedText.translatable("automodpack.browser.allGroups") : VersionedText.literal(groupName(optionId)));
+				options.add(optionId.isBlank() ? VersionedText.text("automodpack.browser.allGroups") : VersionedText.literal(groupName(optionId)));
 			groupDropdown.setOptions(options, Math.max(0, optionIds.indexOf(selectedGroup)), browserBottom, index -> pickGroup(optionIds.get(index)));
 		}
 		if (sourceDropdown != null) {
-			sourceDropdown.setMessage(VersionedText.translatable("automodpack.browser.sourceFilter",
+			sourceDropdown.setMessage(VersionedText.text("automodpack.browser.sourceFilter",
 					selectedSource == null
-							? VersionedText.translatable("automodpack.browser.all").getString()
-							: VersionedText.translatable(selectedSource.booleanValue() ? "automodpack.browser.source.published" : "automodpack.browser.source.custom").getString()));
+							? VersionedText.str("automodpack.browser.all")
+							: VersionedText.str(selectedSource.booleanValue() ? "automodpack.browser.source.published" : "automodpack.browser.source.custom")));
 			List<Boolean> ids = Arrays.asList(null, Boolean.TRUE, Boolean.FALSE);
 			sourceDropdown.setOptions(List.of(
-					VersionedText.translatable("automodpack.browser.all"),
-					VersionedText.translatable("automodpack.browser.source.published"),
-					VersionedText.translatable("automodpack.browser.source.custom")), selectedSource == null ? 0 : selectedSource.booleanValue() ? 1 : 2, browserBottom, index -> pickSource(ids.get(index)));
+					VersionedText.text("automodpack.browser.all"),
+					VersionedText.text("automodpack.browser.source.published"),
+					VersionedText.text("automodpack.browser.source.custom")), selectedSource == null ? 0 : selectedSource.booleanValue() ? 1 : 2, browserBottom, index -> pickSource(ids.get(index)));
 		}
 	}
 
@@ -193,13 +193,13 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		for (ActionAreaLayout.Placement placement : layout.placements()) {
 			Button button = switch (placement.id()) {
 				case "modrinth" ->
-					buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.translatable("automodpack.browser.modrinth"), press -> openPage(platformUrl("modrinth")));
+					buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.text("automodpack.browser.modrinth"), press -> openPage(platformUrl("modrinth")));
 				case "curseforge" ->
-					buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.translatable("automodpack.browser.curseforge"), press -> openPage(platformUrl("curseforge")));
-				default -> buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.translatable("automodpack.browser.copyHash"), press -> copyHash());
+					buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.text("automodpack.browser.curseforge"), press -> openPage(platformUrl("curseforge")));
+				default -> buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.text("automodpack.browser.copyHash"), press -> copyHash());
 			};
 			button.active = placement.id().equals("hash") ? hash != null : platformUrl(placement.id()) != null;
-			if (placement.id().equals("hash") && hash != null) setTooltip(button, VersionedText.translatable("automodpack.browser.copyHashTooltip").append("\n" + hash));
+			if (placement.id().equals("hash") && hash != null) setTooltip(button, VersionedText.text("automodpack.browser.copyHashTooltip").append("\n" + hash));
 			paneButtons.add(button);
 			this.addRenderableWidget(button);
 		}
@@ -208,10 +208,10 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private List<ActionRow> buildActionRows() {
 		List<ActionRow> actionRows = new ArrayList<>();
 		if (auxiliaryAction != null)
-			actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back()),
+			actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), button -> back()),
 					optionalAction(auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this))));
 		else
-			actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
+			actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), button -> back())));
 		return actionRows;
 	}
 
@@ -245,7 +245,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		if (!currentProjection.effects().isEmpty()) summary += " | " + UiFormat.plural(currentProjection.effects().size(), "automodpack.browser.effectsSummary").getString();
 		long custom = currentProjection.files().stream().filter(ChangeBrowserScreen::isUnreferencedJar).count();
 		if (custom > 0) summary += " · " + UiFormat.plural(custom, "automodpack.browser.customSummary").getString();
-		if (downloadBytes > 0) summary += " · " + VersionedText.translatable("automodpack.browser.downloadCost", UiFormat.formatSize(downloadBytes)).getString();
+		if (downloadBytes > 0) summary += " · " + VersionedText.str("automodpack.browser.downloadCost", UiFormat.formatSize(downloadBytes));
 		this.summaryText = summary;
 	}
 
@@ -291,7 +291,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	private String groupName(String groupId) {
 		String name = groupNames.get(groupId);
-		return name == null || name.isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : name;
+		return name == null || name.isBlank() ? VersionedText.str("automodpack.browser.unknownGroup") : name;
 	}
 
 	private void resolveCachedReferences() {
@@ -370,9 +370,9 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		String summary = summaryText == null ? "" : summaryText;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, summary, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, this.summaryY, TextColors.WHITE);
 		if (currentProjection == null || currentProjection.rows().isEmpty())
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.empty").withStyle(ChatFormatting.GRAY), this.width / 2, browserTop + 24, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.browser.empty").withStyle(ChatFormatting.GRAY), this.width / 2, browserTop + 24, TextColors.WHITE);
 		ChangeBrowserProjection.FileRow selected = menuOpen() || this.browser == null ? null : this.browser.selectedFile();
-		if (selected == null) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.selectHint").withStyle(ChatFormatting.GRAY), this.width / 2, this.paneTop, TextColors.WHITE);
+		if (selected == null) drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.browser.selectHint").withStyle(ChatFormatting.GRAY), this.width / 2, this.paneTop, TextColors.WHITE);
 		else {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, selected.path(), contentWidth)).withStyle(ChatFormatting.WHITE), this.width / 2, this.paneTop,
 					TextColors.WHITE);

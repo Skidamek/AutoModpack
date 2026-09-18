@@ -62,14 +62,14 @@ public abstract class EditServerScreenMixin extends Screen {
 		pinRemoveArmed = false;
 
 		Button button = VersionedScreen.buttonWidget(width / 2 - 100, height / 2 + 105, 200, 20,
-				VersionedText.translatable("automodpack.pin.active"), pressed -> {
+				VersionedText.text("automodpack.pin.active"), pressed -> {
 					if (!pinRemoveArmed) {
 						pinRemoveArmed = true;
-						pressed.setMessage(VersionedText.translatable("automodpack.pin.removeConfirm"));
+						pressed.setMessage(VersionedText.text("automodpack.pin.removeConfirm"));
 						return;
 					}
 					CertificateTrustStore.remove(origin);
-					pressed.setMessage(VersionedText.translatable("automodpack.pin.removed"));
+					pressed.setMessage(VersionedText.text("automodpack.pin.removed"));
 					pressed.active = false;
 				});
 		addRenderableWidget(button);

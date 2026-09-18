@@ -113,7 +113,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 			ReviewActions actions, boolean managerEntry, PackDocument localRecord) {}
 
 	private GroupSelectionScreen(Screen parent, GroupManifest manifest, Entry entry) {
-		super(VersionedText.translatable("automodpack.selection.title"));
+		super(VersionedText.text("automodpack.selection.title"));
 		this.parent = parent;
 		this.manifest = Objects.requireNonNull(manifest);
 		this.modpackId = manifest.modpackId();
@@ -145,7 +145,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 					: GroupSelectionResolver.resolve(manifest, initial, effectivePlatform());
 		} catch (SelectionResolutionException e) {
 			this.resolution = Objects.requireNonNull(e.resolution(), "Invalid selection did not include a partial resolution");
-			this.resolutionError = VersionedText.translatable("automodpack.selection.savedInvalid").getString();
+			this.resolutionError = VersionedText.str("automodpack.selection.savedInvalid");
 		}
 	}
 
@@ -157,26 +157,26 @@ public class GroupSelectionScreen extends VersionedScreen {
 		String saveLabel = selectionAction != null ? "automodpack.selection.preview" : managerEntry && !activeModpack ? "automodpack.packManager.reviewSwitch" : "automodpack.selection.save";
 		SelectionIntent defaults = GroupSelectionResolver.defaultIntent(manifest);
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.back"), press -> back()),
-				optionalAction(VersionedText.translatable("automodpack.selection.reset"), press -> {
+				secondaryAction(VersionedText.text("automodpack.back"), press -> back()),
+				optionalAction(VersionedText.text("automodpack.selection.reset"), press -> {
 					chosen.clear();
 					chosen.addAll(defaults.requestedGroups());
 					chosenCategories.clear();
 					excluded.clear();
 					reresolveDefault();
 				}),
-				primaryAction(VersionedText.translatable(saveLabel), press -> save()));
+				primaryAction(VersionedText.text(saveLabel), press -> save()));
 		List<AbstractWidget> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY, footer);
 		this.saveButton = actionButtons.get(2);
 		this.saveButton.active = canSave();
-		if (selectionAction == null && resolutionError.isEmpty() && !this.saveButton.active) setTooltip(this.saveButton, VersionedText.translatable("automodpack.selection.noChanges"));
+		if (selectionAction == null && resolutionError.isEmpty() && !this.saveButton.active) setTooltip(this.saveButton, VersionedText.text("automodpack.selection.noChanges"));
 		int listTop = 80;
 		listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, footer) - LIST_FOOTER_GAP;
 		this.addRenderableWidget(new GroupSelectionList(this.minecraft, this.width, this.height, listWidth(), listTop, listBottom, listItems(), this::onListToggle, this::onListInspect));
 		String platformLabel = platformLabel();
 		int platformButtonWidth = Math.max(90, Math.min(160, this.font.width(platformLabel) + 26));
 		this.platformDropdown = dropdownWidget(listLeft() + listWidth() - platformButtonWidth, 24, platformButtonWidth, 20, VersionedText.literal(platformLabel));
-		setTooltip(this.platformDropdown, VersionedText.translatable("automodpack.selection.platformTooltip"));
+		setTooltip(this.platformDropdown, VersionedText.text("automodpack.selection.platformTooltip"));
 		List<ClientPlatform> choices = platformChoices();
 		// The saved platform may no longer be declared by a refreshed manifest; the detected platform is always a choice.
 		int selected = choices.indexOf(effectivePlatform());
@@ -196,7 +196,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 		List<Component> options = new ArrayList<>(choices.size());
 		for (ClientPlatform platform : choices)
 			options.add(platform.equals(detectedPlatform)
-					? VersionedText.translatable("automodpack.selection.platformDetected", platformDisplay(platform))
+					? VersionedText.text("automodpack.selection.platformDetected", platformDisplay(platform))
 					: VersionedText.literal(platformDisplay(platform)));
 		return options;
 	}
@@ -242,7 +242,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 	private void inspect(String groupId) {
 		if (!groups.containsKey(groupId)) return;
 		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.literal(displayName(groupId)),
-				VersionedText.translatable("automodpack.browser.groupDescription"), groupChanges(groupId), Map.of(groupId, displayName(groupId)), null, List.of(), 0, groupId));
+				VersionedText.text("automodpack.browser.groupDescription"), groupChanges(groupId), Map.of(groupId, displayName(groupId)), null, List.of(), 0, groupId));
 	}
 
 	/** The group's shipped files as a preserved catalogue for the shared browser. */
@@ -418,7 +418,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 		long optional = optionalGroupCount(category);
 		long selected = selectedOptionalGroupCount(category);
 		boolean allSelected = optional > 0 && selected == optional;
-		return VersionedText.literal(VersionedText.translatable("automodpack.selection.category", category).getString())
+		return VersionedText.literal(VersionedText.str("automodpack.selection.category", category))
 				.withStyle(ChatFormatting.BOLD, allSelected ? ChatFormatting.GREEN : selected == 0 ? ChatFormatting.GRAY : ChatFormatting.YELLOW);
 	}
 
@@ -435,9 +435,9 @@ public class GroupSelectionScreen extends VersionedScreen {
 
 	private Component headerTooltip(String category, boolean canToggle) {
 		if (!canToggle) return null;
-		StringBuilder tooltip = new StringBuilder(VersionedText.translatable("automodpack.selection.categoryTooltip").getString());
+		StringBuilder tooltip = new StringBuilder(VersionedText.str("automodpack.selection.categoryTooltip"));
 		if (categoryPartiallySelected(category))
-			tooltip.append("\n").append(VersionedText.translatable("automodpack.selection.categoryPart", selectedOptionalGroupCount(category), optionalGroupCount(category)).getString());
+			tooltip.append("\n").append(VersionedText.str("automodpack.selection.categoryPart", selectedOptionalGroupCount(category), optionalGroupCount(category)));
 		return VersionedText.literal(tooltip.toString()).withStyle(ChatFormatting.GRAY);
 	}
 
@@ -456,41 +456,41 @@ public class GroupSelectionScreen extends VersionedScreen {
 		if (!group.description().isBlank()) {
 			tooltip.append(group.description());
 			// The description is the server's words; the attribution keeps them from reading as client-authored copy.
-			appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.serverDescription").getString());
+			appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.serverDescription"));
 		}
 		GroupResolution explanation = resolution.resolution(groupId);
 		if (explanation != null) appendTooltipLine(tooltip, resolutionText(explanation));
-		appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.category", group.category()).getString());
+		appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.category", group.category()));
 		// The resolution text already carries "Required: always included" whenever it exists; only fall back to it here.
-		if (group.required() && explanation == null) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.requiredAlways").getString());
-		if (group.defaultSelected()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.defaultSelected").getString());
-		if (resolution.forcedGroups().contains(groupId)) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.forced").getString());
-		if (!group.requires().isEmpty()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.requires", names(group.requires())).getString());
-		if (!group.breaksWith().isEmpty()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.conflicts", names(group.breaksWith())).getString());
-		appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.files", group.files().size(), UiFormat.formatSize(groupBytes(group))).getString());
-		if (!group.supports(effectivePlatform())) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.unavailableOn", effectivePlatform().id()).getString());
+		if (group.required() && explanation == null) appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.requiredAlways"));
+		if (group.defaultSelected()) appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.defaultSelected"));
+		if (resolution.forcedGroups().contains(groupId)) appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.forced"));
+		if (!group.requires().isEmpty()) appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.requires", names(group.requires())));
+		if (!group.breaksWith().isEmpty()) appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.conflicts", names(group.breaksWith())));
+		appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.files", group.files().size(), UiFormat.formatSize(groupBytes(group))));
+		if (!group.supports(effectivePlatform())) appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.unavailableOn", effectivePlatform().id()));
 		return VersionedText.literal(tooltip.toString()).withStyle(ChatFormatting.GRAY);
 	}
 
 	private String resolutionText(GroupResolution groupResolution) {
 		return switch (groupResolution.status()) {
 			case SELECTED -> selectedResolutionText(groupResolution);
-			case AVAILABLE -> VersionedText.translatable("automodpack.selection.status.available").getString();
-			case UNAVAILABLE -> VersionedText.translatable("automodpack.selection.unavailableOn", effectivePlatform().id()).getString();
+			case AVAILABLE -> VersionedText.str("automodpack.selection.status.available");
+			case UNAVAILABLE -> VersionedText.str("automodpack.selection.unavailableOn", effectivePlatform().id());
 			case BLOCKED -> groupResolution.relatedGroups().isEmpty()
-					? VersionedText.translatable("automodpack.selection.status.dependencyUnavailable").getString()
-					: VersionedText.translatable("automodpack.selection.blockedBy", names(groupResolution.relatedGroups())).getString();
-			case EXCLUDED -> VersionedText.translatable("automodpack.selection.status.excluded").getString();
-			case CONFLICT -> VersionedText.translatable("automodpack.selection.conflictsWith", names(groupResolution.relatedGroups())).getString();
+					? VersionedText.str("automodpack.selection.status.dependencyUnavailable")
+					: VersionedText.str("automodpack.selection.blockedBy", names(groupResolution.relatedGroups()));
+			case EXCLUDED -> VersionedText.str("automodpack.selection.status.excluded");
+			case CONFLICT -> VersionedText.str("automodpack.selection.conflictsWith", names(groupResolution.relatedGroups()));
 		};
 	}
 
 	private String selectedResolutionText(GroupResolution groupResolution) {
-		if (groupResolution.reasons().contains(GroupResolution.Reason.REQUIRED)) return VersionedText.translatable("automodpack.selection.requiredAlways").getString();
-		if (groupResolution.reasons().contains(GroupResolution.Reason.FORCED)) return VersionedText.translatable("automodpack.selection.forced").getString();
-		if (groupResolution.reasons().contains(GroupResolution.Reason.DEPENDENCY)) return VersionedText.translatable("automodpack.selection.dependencyNamed", names(groupResolution.relatedGroups())).getString();
-		if (groupResolution.reasons().contains(GroupResolution.Reason.DEFAULT_SELECTED)) return VersionedText.translatable("automodpack.selection.defaultSelected").getString();
-		return VersionedText.translatable("automodpack.selection.status.selected").getString();
+		if (groupResolution.reasons().contains(GroupResolution.Reason.REQUIRED)) return VersionedText.str("automodpack.selection.requiredAlways");
+		if (groupResolution.reasons().contains(GroupResolution.Reason.FORCED)) return VersionedText.str("automodpack.selection.forced");
+		if (groupResolution.reasons().contains(GroupResolution.Reason.DEPENDENCY)) return VersionedText.str("automodpack.selection.dependencyNamed", names(groupResolution.relatedGroups()));
+		if (groupResolution.reasons().contains(GroupResolution.Reason.DEFAULT_SELECTED)) return VersionedText.str("automodpack.selection.defaultSelected");
+		return VersionedText.str("automodpack.selection.status.selected");
 	}
 
 	private static void appendTooltipLine(StringBuilder tooltip, String line) {
@@ -499,7 +499,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 	}
 
 	private MutableComponent rowLabel(String groupId, GroupManifest.Group group) {
-		if (group == null) return VersionedText.translatable("automodpack.browser.unknownGroup");
+		if (group == null) return VersionedText.text("automodpack.browser.unknownGroup");
 
 		GroupResolution explanation = resolution.resolution(groupId);
 		String status = statusWord(explanation);
@@ -536,10 +536,10 @@ public class GroupSelectionScreen extends VersionedScreen {
 			case SELECTED -> explanation.reasons().contains(GroupResolution.Reason.REQUIRED) || explanation.reasons().contains(GroupResolution.Reason.FORCED)
 					|| explanation.reasons().contains(GroupResolution.Reason.DEPENDENCY) || explanation.reasons().contains(GroupResolution.Reason.DEFAULT_SELECTED)
 							? ""
-							: VersionedText.translatable("automodpack.selection.status.selected").getString();
-			case AVAILABLE -> VersionedText.translatable("automodpack.selection.status.available").getString();
-			case BLOCKED -> explanation.relatedGroups().isEmpty() ? VersionedText.translatable("automodpack.selection.status.dependencyUnavailable").getString() : "";
-			case EXCLUDED -> VersionedText.translatable("automodpack.selection.status.excluded").getString();
+							: VersionedText.str("automodpack.selection.status.selected");
+			case AVAILABLE -> VersionedText.str("automodpack.selection.status.available");
+			case BLOCKED -> explanation.relatedGroups().isEmpty() ? VersionedText.str("automodpack.selection.status.dependencyUnavailable") : "";
+			case EXCLUDED -> VersionedText.str("automodpack.selection.status.excluded");
 			default -> "";
 		};
 	}
@@ -568,14 +568,14 @@ public class GroupSelectionScreen extends VersionedScreen {
 		for (String value : values) {
 			if (result.length() > 0) result.append(", ");
 			GroupManifest.Group related = groups.get(value);
-			result.append(related == null || related.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : related.displayName());
+			result.append(related == null || related.displayName().isBlank() ? VersionedText.str("automodpack.browser.unknownGroup") : related.displayName());
 		}
-		return result.length() == 0 ? VersionedText.translatable("automodpack.ui.none").getString() : result.toString();
+		return result.length() == 0 ? VersionedText.str("automodpack.ui.none") : result.toString();
 	}
 
 	private String displayName(String groupId) {
 		GroupManifest.Group group = groups.get(groupId);
-		return group == null || group.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : group.displayName();
+		return group == null || group.displayName().isBlank() ? VersionedText.str("automodpack.browser.unknownGroup") : group.displayName();
 	}
 
 	private boolean hasOptionalCategoryGroups(String category) {
@@ -595,12 +595,12 @@ public class GroupSelectionScreen extends VersionedScreen {
 	}
 
 	private String platformLabel() {
-		return VersionedText.translatable("automodpack.selection.platformButton", platformDisplay(effectivePlatform())).getString();
+		return VersionedText.str("automodpack.selection.platformButton", platformDisplay(effectivePlatform()));
 	}
 
 	/** The display name of a platform choice; nothing is known about the platform when none is detected or chosen. */
 	private String platformDisplay(ClientPlatform platform) {
-		if (platform == null) return VersionedText.translatable("automodpack.selection.platformUndetected").getString();
+		if (platform == null) return VersionedText.str("automodpack.selection.platformUndetected");
 		if (platform.equals(ClientPlatform.WINDOWS)) return "Windows";
 		if (platform.equals(ClientPlatform.LINUX)) return "Linux";
 		if (platform.equals(ClientPlatform.MACOS)) return "macOS";
@@ -633,13 +633,13 @@ public class GroupSelectionScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		// Header names the modpack when the server set one, so the player knows which pack they are editing.
 		MutableComponent header = modpackName.isBlank()
-				? VersionedText.translatable("automodpack.selection.title")
+				? VersionedText.text("automodpack.selection.title")
 				: VersionedText.literal(modpackName);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header.getString(), this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 11,
 				TextColors.WHITE);
 		MutableComponent description = managerEntry && !isActiveModpack()
-				? VersionedText.translatable("automodpack.packManager.switchDescription")
-				: VersionedText.translatable("automodpack.selection.description");
+				? VersionedText.text("automodpack.packManager.switchDescription")
+				: VersionedText.text("automodpack.selection.description");
 		// The header stack shares the rail with the platform dropdown (y 24..44), so the description
 		// wraps inside the space left of it and the summary waits until that zone ends. The origin
 		// takes the first rail line when it is known, so the pack name always sits next to its server.
@@ -647,7 +647,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 		int railWidth = listWidth();
 		int railY = 22;
 		if (!origin.isBlank()) {
-			drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.server", origin).withStyle(ChatFormatting.GRAY), railLeft, railY, TextColors.WHITE);
+			drawTextWithShadow(matrices, this.font, VersionedText.text("automodpack.packDetails.server", origin).withStyle(ChatFormatting.GRAY), railLeft, railY, TextColors.WHITE);
 			railY += 11;
 		}
 		List<String> descriptionLines = wrapToWidth(this.font, description.getString(), railWidth - platformDropdown.getWidth() - 8);
@@ -657,7 +657,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 		for (int index = 0; index < descriptionLines.size(); index++)
 			drawTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), railLeft, railY + index * 11, TextColors.WHITE);
 		drawTextWithShadow(matrices, this.font,
-				VersionedText.translatable("automodpack.selection.platformSummary", platformDisplay(effectivePlatform()), resolution.selectedGroups().size(), UiFormat.formatSize(selectionBytes()))
+				VersionedText.text("automodpack.selection.platformSummary", platformDisplay(effectivePlatform()), resolution.selectedGroups().size(), UiFormat.formatSize(selectionBytes()))
 						.withStyle(platformOverride == null ? ChatFormatting.GRAY : ChatFormatting.YELLOW),
 				railLeft, 44, TextColors.WHITE);
 		// Status lines are load-bearing sentences: they wrap, they never hard-truncate mid-sentence.
@@ -666,15 +666,15 @@ public class GroupSelectionScreen extends VersionedScreen {
 		} else if (!conflictNotice.isEmpty()) {
 			drawWrappedStatus(matrices, VersionedText.literal(conflictNotice).withStyle(ChatFormatting.YELLOW));
 		} else if (actions == null || actions.sourceAvailability().get().totalFiles() == 0) {
-			if (!groups.isEmpty()) drawWrappedStatus(matrices, VersionedText.translatable("automodpack.selection.categoryExplanation").withStyle(ChatFormatting.GRAY));
+			if (!groups.isEmpty()) drawWrappedStatus(matrices, VersionedText.text("automodpack.selection.categoryExplanation").withStyle(ChatFormatting.GRAY));
 		} else {
 			SourceAvailability availability = actions.sourceAvailability().get();
-			String sourceStatus = VersionedText.translatable(availability.cancelled()
+			String sourceStatus = VersionedText.str(availability.cancelled()
 					? "automodpack.selection.sourcesCancelled"
 					: !availability.complete()
 							? "automodpack.selection.sourcesResolving"
 							: "automodpack.selection.sourcesResolved",
-					availability.resolvedFiles(), availability.totalFiles()).getString();
+					availability.resolvedFiles(), availability.totalFiles());
 			drawWrappedStatus(matrices, VersionedText.literal(sourceStatus).withStyle(ChatFormatting.GRAY));
 		}
 	}

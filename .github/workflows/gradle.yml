@@ -16,7 +16,7 @@ concurrency:
 jobs:
   format:
     name: Formatting
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -38,7 +38,7 @@ jobs:
 
   natives:
     name: Windows native
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -75,7 +75,7 @@ jobs:
     name: CI Gate
     needs: [format, core-tests, autotester-tests, natives, build]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Check required jobs

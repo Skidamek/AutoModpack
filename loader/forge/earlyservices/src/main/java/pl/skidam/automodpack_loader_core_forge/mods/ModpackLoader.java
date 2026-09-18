@@ -5,16 +5,15 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
+import pl.skidam.automodpack_core.loader.ConnectorFallback;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public class ModpackLoader implements ModpackLoaderService {
-	public static String CONNECTOR_MODS_PROPERTY = "connector.additionalModLocations";
-	public static List<Path> modsToLoad = new ArrayList<>();
+	public static final List<Path> modsToLoad = new ArrayList<>();
 
 	// No override of forceCopyServices(): this Forge generation can host every service it handles
 	// in place (see EarlyServiceLayer), so nothing forces a copy.
@@ -26,10 +25,10 @@ public class ModpackLoader implements ModpackLoaderService {
 				if (FileInspection.isModCompatible(modpackMod)) modsToLoad.add(modpackMod);
 			}
 
-			// set for connector
-			String paths = request.modpackMods().stream().map(Path::toString).collect(Collectors.joining(","));
-			String finalMods = paths + "," + System.getProperty(CONNECTOR_MODS_PROPERTY, "");
-			System.setProperty(CONNECTOR_MODS_PROPERTY, finalMods);
+			// modsToLoad keeps only loader-compatible jars, so a plain Fabric jar would never reach
+			// discovery: Connector is offered the whole pack list here, unlike the neoforge families,
+			// which offer only the paths native discovery could not claim (see their EarlyModLocators).
+			ConnectorFallback.offer(request.modpackMods());
 		} catch (Exception e) {
 			LOGGER.error("Error while loading modpack", e);
 		}

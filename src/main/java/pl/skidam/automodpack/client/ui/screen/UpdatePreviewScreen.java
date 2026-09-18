@@ -48,7 +48,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private int titleTop;
 
 	public UpdatePreviewScreen(Screen parent, PreviewPayload payload) {
-		super(VersionedText.translatable(titleKey(payload.preview().mode())));
+		super(VersionedText.text(titleKey(payload.preview().mode())));
 		this.parent = parent;
 		this.preview = payload.preview();
 		this.modpackName = payload.modpackName() == null ? "" : payload.modpackName();
@@ -79,12 +79,12 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private List<ActionRow> buildRows() {
 		List<ActionRow> rows = new ArrayList<>();
 		if (Changelogs.hasNotes(preview.journal()))
-			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.management.history"), button -> openHistory())));
+			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.management.history"), button -> openHistory())));
 		if (canCustomize()) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.back"), button -> cancel()),
-				optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()),
-				primaryAction(VersionedText.translatable(actionKey(mode)), button -> continueUpdate())));
+				secondaryAction(VersionedText.text("automodpack.back"), button -> cancel()),
+				optionalAction(VersionedText.text("automodpack.browser.reviewFiles"), button -> openFiles()),
+				primaryAction(VersionedText.text(actionKey(mode)), button -> continueUpdate())));
 		return rows;
 	}
 
@@ -103,32 +103,32 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 20);
 		List<MutableComponent> lines = new ArrayList<>();
 		if (mode == UpdatePreview.Mode.ROLLBACK) {
-			lines.add(VersionedText.translatable("automodpack.update.rollbackDetaches").withStyle(ChatFormatting.YELLOW));
+			lines.add(VersionedText.text("automodpack.update.rollbackDetaches").withStyle(ChatFormatting.YELLOW));
 			lines.add(blankLine());
 		}
 		String patchNotes = preview.latestPatchNotes();
 		if (!patchNotes.isBlank()) {
-			lines.add(VersionedText.translatable("automodpack.patchNotes.latest").withStyle(ChatFormatting.GRAY));
+			lines.add(VersionedText.text("automodpack.patchNotes.latest").withStyle(ChatFormatting.GRAY));
 			lines.addAll(wrapParagraph(this.font, patchNotes, wrapWidth));
 			lines.add(blankLine());
 		}
 		UpdatePreview.GroupConsequences groups = preview.groupConsequences();
-		if (!groups.staleGroups().isEmpty()) lines.add(VersionedText.translatable("automodpack.update.staleSelection").withStyle(ChatFormatting.RED));
+		if (!groups.staleGroups().isEmpty()) lines.add(VersionedText.text("automodpack.update.staleSelection").withStyle(ChatFormatting.RED));
 		else lines.add(UiFormat.plural(groups.resolvedGroups().size(), "automodpack.update.groupsSelected").withStyle(ChatFormatting.GREEN));
 		if (!preview.conflicts().isEmpty())
 			lines.add(UiFormat.plural(preview.conflicts().size(), "automodpack.browser.conflicts").withStyle(ChatFormatting.RED));
 		ChangeSet.Summary summary = changes.summary();
 		lines.addAll(ChangeSummary.diffLines(summary.addedFiles(), summary.modifiedFiles(), summary.removedFiles(), summary.preservedFiles(), summary.unsafeFiles()));
 		if (mode == UpdatePreview.Mode.UPDATE && (summary.addedFiles() > 0 || summary.modifiedFiles() > 0 || preview.uncachedAcquisitionBytes() > 0))
-			lines.add(VersionedText.translatable("automodpack.browser.downloadSummary", UiFormat.formatSize(preview.uncachedAcquisitionBytes()), UiFormat.formatSize(preview.addedBytes() + preview.changedBytes()))
+			lines.add(VersionedText.text("automodpack.browser.downloadSummary", UiFormat.formatSize(preview.uncachedAcquisitionBytes()), UiFormat.formatSize(preview.addedBytes() + preview.changedBytes()))
 					.withStyle(ChatFormatting.GRAY));
 		long otherEffects = changes.effects().stream().filter(effect -> !"restart".equals(effect.category())).count();
-		if (otherEffects > 0) lines.add(VersionedText.translatable("automodpack.summary.otherEffects", otherEffects).withStyle(ChatFormatting.YELLOW));
+		if (otherEffects > 0) lines.add(VersionedText.text("automodpack.summary.otherEffects", otherEffects).withStyle(ChatFormatting.YELLOW));
 		lines.add(blankLine());
 		lines.add(switch (preview.restartDemand()) {
-			case REQUIRED -> VersionedText.translatable("automodpack.summary.restartRequired").withStyle(ChatFormatting.YELLOW);
-			case OFFERED -> VersionedText.translatable("automodpack.summary.restartOffered").withStyle(ChatFormatting.YELLOW);
-			case NONE -> VersionedText.translatable("automodpack.summary.noRestart").withStyle(ChatFormatting.GREEN);
+			case REQUIRED -> VersionedText.text("automodpack.summary.restartRequired").withStyle(ChatFormatting.YELLOW);
+			case OFFERED -> VersionedText.text("automodpack.summary.restartOffered").withStyle(ChatFormatting.YELLOW);
+			case NONE -> VersionedText.text("automodpack.summary.noRestart").withStyle(ChatFormatting.GREEN);
 		});
 		return lines;
 	}
@@ -160,7 +160,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 
 	private void openFiles() {
 		ScreenImpl.setScreen(new ChangeBrowserScreen(this,
-				VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable(reviewKey(mode)), changes, preview.featureNames(), null, List.of(), preview.uncachedAcquisitionBytes(),
+				VersionedText.text("automodpack.browser.previewTitle"), VersionedText.text(reviewKey(mode)), changes, preview.featureNames(), null, List.of(), preview.uncachedAcquisitionBytes(),
 				""));
 	}
 
@@ -171,12 +171,12 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		String title = VersionedText.translatable(modpackName.isBlank() ? titleKey(mode) : namedTitleKey(mode), modpackName).getString();
+		String title = VersionedText.str(modpackName.isBlank() ? titleKey(mode) : namedTitleKey(mode), modpackName);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.BOLD), this.width / 2, titleTop,
 				TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(reviewKey(mode)).withStyle(ChatFormatting.GRAY), this.width / 2, titleTop + LINE_HEIGHT, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text(reviewKey(mode)).withStyle(ChatFormatting.GRAY), this.width / 2, titleTop + LINE_HEIGHT, TextColors.WHITE);
 		if (!origin.isBlank())
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.server", origin).withStyle(ChatFormatting.GRAY), this.width / 2, titleTop + 2 * LINE_HEIGHT,
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.packDetails.server", origin).withStyle(ChatFormatting.GRAY), this.width / 2, titleTop + 2 * LINE_HEIGHT,
 					TextColors.WHITE);
 	}
 

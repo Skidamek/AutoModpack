@@ -53,14 +53,14 @@ coreModules.forEach { module ->
 	val dir = module.replace("-", "/")
 	project.projectDir = file("loader/$dir")
 	when (module) {
+		"universal" -> project.buildFileName = "../loader-universal.gradle.kts"
 		"fabric-core" -> project.buildFileName = "../../loader-fabric-core.gradle.kts"
-		"fabric-shared" -> project.buildFileName = "../../loader-fabric-shared.gradle.kts"
-		"fabric-15", "fabric-16" -> project.buildFileName = "../../loader-fabric.gradle.kts"
 		"forge-fml40", "forge-fml47" -> project.buildFileName = "../../loader-forge.gradle.kts"
 		"forge-earlyservices" -> project.buildFileName = "../../loader-forge-earlyservices.gradle.kts"
+		"neoforge-shared" -> project.buildFileName = "../../loader-neoforge-shared.gradle.kts"
 		"neoforge-earlyservices" -> project.buildFileName = "../../loader-neoforge-earlyservices.gradle.kts"
 		"modlauncher-earlyservices" -> project.buildFileName = "../../loader-modlauncher-earlyservices.gradle.kts"
-		"neoforge-fml4", "neoforge-fml10", "neoforge-fml11" -> project.buildFileName = "../../loader-neoforge.gradle.kts"
+		"neoforge-fml4" -> project.buildFileName = "../../loader-neoforge.gradle.kts"
 	}
 }
 

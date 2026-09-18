@@ -55,7 +55,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	private Future<?> work;
 
 	public PreservationVaultScreen(Screen parent, InstalledModpackController controller, Runnable closedCallback) {
-		super(VersionedText.translatable("automodpack.vault.title"));
+		super(VersionedText.text("automodpack.vault.title"));
 		this.parent = parent;
 		this.controller = controller;
 		this.closedCallback = closedCallback;
@@ -67,21 +67,21 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		if (!loading && snapshots == null) load();
 		PreservationVault.Claim selected = selected();
 		boolean deleteArmed = selected != null && selected.claimId().equals(pendingDeleteClaimId);
-		MutableComponent deleteLabel = VersionedText.translatable("automodpack.vault.delete");
+		MutableComponent deleteLabel = VersionedText.text("automodpack.vault.delete");
 		if (deleteArmed) deleteLabel.withStyle(ChatFormatting.RED);
 		List<ActionRow> actions = new ArrayList<>();
 		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-				primaryAction(VersionedText.translatable("automodpack.vault.restore"), press -> restore()),
-				optionalAction(VersionedText.translatable("automodpack.vault.saveCopy"), press -> saveCopy()),
+				primaryAction(VersionedText.text("automodpack.vault.restore"), press -> restore()),
+				optionalAction(VersionedText.text("automodpack.vault.saveCopy"), press -> saveCopy()),
 				optionalAction(deleteLabel, press -> delete())));
 		List<PlatformReferences.Page> platformPages = selected == null ? List.of() : platformPagesByClaimId.getOrDefault(selected.claimId(), List.of());
 		if (!platformPages.isEmpty()) actions.add(platformRow(platformPages));
 		if (lastResult != null && !restoreFailed) {
 			String key = lastResultRestore ? "automodpack.vault.restoredTo" : "automodpack.vault.savedTo";
-			String confirmation = truncateToWidth(this.font, VersionedText.translatable(key, displayPath(lastResult)).getString(), panelWidth(PANEL_WIDTH) - 12);
+			String confirmation = truncateToWidth(this.font, VersionedText.str(key, displayPath(lastResult)), panelWidth(PANEL_WIDTH) - 12);
 			actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, disabledAction(VersionedText.literal(confirmation).withStyle(ChatFormatting.GREEN))));
 		}
-		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back())));
+		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), press -> back())));
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)) - 8;
 		VaultListWidget list = new VaultListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), LIST_TOP, listBottom, claims(), packNames, this::select);
 		list.selectClaim(selectedClaimId);
@@ -93,21 +93,21 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		restore.active = !busy && selected != null && selected.canRestoreOriginal();
 		setTooltip(restore, restoreTooltip(selected));
 		saveCopy.active = !busy && selected != null;
-		setTooltip(saveCopy, VersionedText.translatable("automodpack.vault.saveCopyMoves"));
+		setTooltip(saveCopy, VersionedText.text("automodpack.vault.saveCopyMoves"));
 		delete.active = !busy && selected != null;
 	}
 
 	/** The gate names itself: why Restore is unavailable for this row, or what it will do. */
 	private MutableComponent restoreTooltip(PreservationVault.Claim selected) {
-		if (selected == null) return VersionedText.translatable("automodpack.vault.restorePickFirst");
+		if (selected == null) return VersionedText.text("automodpack.vault.restorePickFirst");
 		return switch (selected.originalRestore()) {
 			// A pack that is still installed can be activated again; a removed one cannot, so only a copy remains.
 			case INACTIVE_PACK -> packNames.containsKey(selected.modpackId())
-					? VersionedText.translatable("automodpack.vault.restoreInactivePack")
-					: VersionedText.translatable("automodpack.vault.restoreRemovedPack");
-			case NOT_GAME_DIR -> VersionedText.translatable("automodpack.vault.restoreManagedFiles");
-			case STILL_OWNED -> VersionedText.translatable("automodpack.vault.restoreStillOwned");
-			case AVAILABLE -> VersionedText.translatable("automodpack.vault.restoreApplies", selected.originalPath());
+					? VersionedText.text("automodpack.vault.restoreInactivePack")
+					: VersionedText.text("automodpack.vault.restoreRemovedPack");
+			case NOT_GAME_DIR -> VersionedText.text("automodpack.vault.restoreManagedFiles");
+			case STILL_OWNED -> VersionedText.text("automodpack.vault.restoreStillOwned");
+			case AVAILABLE -> VersionedText.text("automodpack.vault.restoreApplies", selected.originalPath());
 		};
 	}
 
@@ -175,7 +175,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 
 	private ActionRow platformRow(List<PlatformReferences.Page> pages) {
 		List<ActionDefinition> definitions = new ArrayList<>();
-		for (PlatformReferences.Page page : pages) definitions.add(optionalAction(VersionedText.translatable("automodpack.browser." + page.platform()), button -> Util.getPlatform().openUri(page.url())));
+		for (PlatformReferences.Page page : pages) definitions.add(optionalAction(VersionedText.text("automodpack.browser." + page.platform()), button -> Util.getPlatform().openUri(page.url())));
 		return actionRow(ActionAreaLayout.RowKind.AUXILIARY, definitions.toArray(ActionDefinition[]::new));
 	}
 
@@ -277,27 +277,27 @@ public final class PreservationVaultScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.title").withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.vault.title").withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
 		String description = loading
-				? VersionedText.translatable("automodpack.vault.loading").getString()
-				: VersionedText.translatable("automodpack.vault.description", claims().size()).getString();
+				? VersionedText.str("automodpack.vault.loading")
+				: VersionedText.str("automodpack.vault.description", claims().size());
 		List<String> descriptionLines = wrapToWidth(this.font, description, this.width - 28, 2);
 		for (int index = 0; index < descriptionLines.size(); index++)
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), this.width / 2, 28 + index * 12, TextColors.WHITE);
-		if (restoreFailed) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.restoreUnavailable").withStyle(ChatFormatting.AQUA), this.width / 2, 52, TextColors.WHITE);
-		else if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
+		if (restoreFailed) drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.vault.restoreUnavailable").withStyle(ChatFormatting.AQUA), this.width / 2, 52, TextColors.WHITE);
+		else if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.vault.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
 		else {
 			PreservationVault.Claim armed = selected();
 			if (armed != null && armed.claimId().equals(pendingDeleteClaimId))
-				drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.deleteArmed", armed.originalPath()).withStyle(ChatFormatting.RED), this.width / 2, 52, TextColors.WHITE);
+				drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.vault.deleteArmed", armed.originalPath()).withStyle(ChatFormatting.RED), this.width / 2, 52, TextColors.WHITE);
 			else
 				if (armed != null)
 					drawCenteredTextWithShadow(matrices, this.font,
-							VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.vault.selected", armed.originalPath()).getString(), this.width - 20)).withStyle(ChatFormatting.YELLOW),
+							VersionedText.literal(truncateToWidth(this.font, VersionedText.str("automodpack.vault.selected", armed.originalPath()), this.width - 20)).withStyle(ChatFormatting.YELLOW),
 							this.width / 2, 52, TextColors.WHITE);
 		}
 		if (!loading && claims().isEmpty() && lastResult == null)
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.vault.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
 	}
 
 	private static String displayPath(Path path) {

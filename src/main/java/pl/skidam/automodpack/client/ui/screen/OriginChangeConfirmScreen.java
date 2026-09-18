@@ -23,7 +23,7 @@ public final class OriginChangeConfirmScreen extends VersionedScreen {
 	private int titleTop;
 
 	public OriginChangeConfirmScreen(String modpackName, String approvedOrigins, String newOrigin, Runnable allowed, Runnable refused) {
-		super(VersionedText.translatable("automodpack.originChange.title"));
+		super(VersionedText.text("automodpack.originChange.title"));
 		this.modpackName = modpackName;
 		this.approvedOrigins = approvedOrigins;
 		this.newOrigin = newOrigin;
@@ -36,16 +36,16 @@ public final class OriginChangeConfirmScreen extends VersionedScreen {
 		super.init();
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
 		List<MutableComponent> lines = new ArrayList<>();
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.originChange.installed", modpackName, approvedOrigins).getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.originChange.installed", modpackName, approvedOrigins), wrapWidth));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.originChange.nowServed", newOrigin).getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.originChange.nowServed", newOrigin), wrapWidth));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.originChange.explain").getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.originChange.explain"), wrapWidth));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.originChange.remember").getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.originChange.remember"), wrapWidth));
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.originChange.refuse"), button -> refused.run()),
-				primaryAction(VersionedText.translatable("automodpack.originChange.allow"), button -> allowed.run()));
+				secondaryAction(VersionedText.text("automodpack.originChange.refuse"), button -> refused.run()),
+				primaryAction(VersionedText.text("automodpack.originChange.allow"), button -> allowed.run()));
 		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, footer);
 		this.titleTop = layout.titleTop();
 		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
@@ -54,7 +54,7 @@ public final class OriginChangeConfirmScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.originChange.title").withStyle(ChatFormatting.BOLD), this.width / 2, titleTop, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.originChange.title").withStyle(ChatFormatting.BOLD), this.width / 2, titleTop, TextColors.WHITE);
 	}
 
 	@Override

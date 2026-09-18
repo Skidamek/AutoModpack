@@ -18,6 +18,10 @@ fun version(name: String): String = versions.getProperty(name)
 
 dependencies {
 	implementation("com.fasterxml.jackson.core:jackson-databind:${version("versionJackson")}") // For JSON parsing e.g. in build.forge.gradle.kts
+	// Precompiled zstd natives for packing the impl solid; the version pins the compressed bytes
+	implementation("com.github.luben:zstd-jni:${version("versionZstdJni")}")
+	// The same decoder the runtime uses, so the build proves the solid is decodable by the client
+	implementation("io.airlift:aircompressor:${version("versionAircompressor")}")
 	implementation(
 		"dev.luna5ama.jar-optimizer:dev.luna5ama.jar-optimizer.gradle.plugin:${version("pluginJarOptimizerVersion")}",
 	)

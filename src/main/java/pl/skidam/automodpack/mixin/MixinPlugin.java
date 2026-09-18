@@ -23,7 +23,22 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
 	@Override
 	public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+		// Fabric-only mixins target vanilla classes that exist on every loader, so the gate is on the
+		// loader being fabric, not on the target class. FabricLoginMixin is the exception: it exists
+		// purely to interop with FAPI when it is co-installed and must stay live on every loader.
+		if (mixinClassName.startsWith("pl.skidam.automodpack.mixin.fabric.")) {
+			return isFabricLoader();
+		}
 		return true;
+	}
+
+	private static boolean isFabricLoader() {
+		try {
+			Class.forName("net.fabricmc.loader.api.FabricLoader", false, MixinPlugin.class.getClassLoader());
+			return true;
+		} catch (ClassNotFoundException e) {
+			return false;
+		}
 	}
 
 	@Override

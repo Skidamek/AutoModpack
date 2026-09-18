@@ -3,13 +3,11 @@ package pl.skidam.automodpack.init;
 /*? if fabric {*/
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
-import pl.skidam.automodpack.modpack.Commands;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 
 import static pl.skidam.automodpack_core.Constants.*;
-import net.fabricmc.fabric.api.command./*? if <1.19.1 {*/ /*v1 *//*?} else {*/ v2 /*?}*/.CommandRegistrationCallback;
 
 public class FabricInit {
 
@@ -29,10 +27,6 @@ public class FabricInit {
 			ModPackets.registerC2SPackets();
 			new AudioManager();
 		}
-
-	CommandRegistrationCallback.EVENT.register((dispatcher, /*? if >=1.19.1 {*/ w, /*?}*/ dedicated) -> {
-	Commands.register(dispatcher);
-});
 
 		LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
 	}

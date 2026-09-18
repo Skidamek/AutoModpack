@@ -13,8 +13,8 @@ public final class WaitingPresentation {
 	private WaitingPresentation() {}
 
 	public static void render(VersionedMatrices matrices, Font font, int width, int height, long elapsedNanos) {
-		VersionedScreen.drawCenteredTextWithShadow(matrices, font, VersionedText.translatable("automodpack.preparing.title").withStyle(ChatFormatting.BOLD), width / 2, height / 2 - 12, TextColors.WHITE);
-		MutableComponent waiting = VersionedText.translatable("automodpack.wait").withStyle(ChatFormatting.GRAY);
+		VersionedScreen.drawCenteredTextWithShadow(matrices, font, VersionedText.text("automodpack.preparing.title").withStyle(ChatFormatting.BOLD), width / 2, height / 2 - 12, TextColors.WHITE);
+		MutableComponent waiting = VersionedText.text("automodpack.wait").withStyle(ChatFormatting.GRAY);
 		MutableComponent dots = VersionedText.literal(LoadingDots.frame(elapsedNanos)).withStyle(ChatFormatting.GRAY);
 		int totalWidth = font.width(waiting) + 4 + font.width(dots);
 		int left = (width - totalWidth) / 2;

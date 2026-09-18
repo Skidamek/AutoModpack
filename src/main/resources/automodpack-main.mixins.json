@@ -12,7 +12,8 @@
     "core.PlayerManagerMixin",
     "core.ServerLoginNetworkHandlerAccessor",
     "core.ServerLoginNetworkHandlerMixin",
-    "core.ServerNetworkIoMixin"
+    "core.ServerNetworkIoMixin",
+    "fabric.CommandsMixin"
   ],
   "client": [
     "core.ClientConnectionAccessor",

@@ -5,6 +5,8 @@ them here registers them in the shared verb registry the executor dispatches on.
 """
 from __future__ import annotations
 
+import io
+import json
 import logging
 import secrets
 import threading
@@ -59,16 +61,34 @@ def _resolve_artifact(target: Target, artifact_dir: Path) -> Path:
             f"Ambiguous artifacts for {target.id} matching {pattern!r}: {names}"
         )
     artifact = matches[0].resolve()
-    with zipfile.ZipFile(artifact) as jar:
-        names = set(jar.namelist())
-    if "META-INF/jarjar/automodpack-mod.jar" in names:
-        with zipfile.ZipFile(artifact) as jar, jar.open("META-INF/jarjar/automodpack-mod.jar") as nested, zipfile.ZipFile(nested) as mod_jar:
-            names.update(mod_jar.namelist())
+    names = _jar_names(artifact)
     if not any(name.startswith("pl/skidam/automodpack/client/autotest/") and name.endswith(".class") for name in names):
         raise RuntimeError(
             f"Artifact {artifact} has no AutoTestBridge classes; rebuild with -Pautomodpack.autotest before running the autotester"
         )
     return artifact
+
+
+def _jar_names(artifact: Path) -> set[str]:
+    """Entry names of the artifact, descending into the one jar's zstd impl solid."""
+    with zipfile.ZipFile(artifact) as jar:
+        names = set(jar.namelist())
+        if "impl/manifest.json" not in names:
+            return names
+        manifest = json.loads(jar.read("impl/manifest.json"))
+        solid = _decompress_solid(jar.read("impl/all.zst"))
+    names.discard("impl/manifest.json")
+    names.discard("impl/all.zst")
+    for entry in manifest["impls"]:
+        with zipfile.ZipFile(io.BytesIO(solid[entry["offset"] : entry["offset"] + entry["length"]])) as impl:
+            names.update(impl.namelist())
+    return names
+
+
+def _decompress_solid(zstd_bytes: bytes) -> bytes:
+    import zstandard
+
+    return zstandard.decompress(zstd_bytes)
 
 
 def run_case(

@@ -1,19 +1,42 @@
 package pl.skidam.automodpack_loader_core_fabric;
 
+import java.nio.file.Path;
+
+import net.fabricmc.api.EnvType;
+import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.LanguageAdapter;
 import net.fabricmc.loader.api.ModContainer;
 
 import pl.skidam.automodpack_core.Preload;
+import pl.skidam.automodpack_core.loader.ImplStore;
 import pl.skidam.automodpack_loader_core_fabric.loader.LoaderManager;
+import pl.skidam.automodpack_loader_core_fabric.mods.FabricLoaderMods;
+import pl.skidam.automodpack_loader_core_fabric.mods.ImplMount;
 import pl.skidam.automodpack_loader_core_fabric.mods.ModpackLoader;
-import pl.skidam.automodpack_loader_fabric_shared.FabricLoaderMods;
 
 public class FabricLanguageAdapter implements LanguageAdapter {
 
 	public FabricLanguageAdapter() throws IllegalAccessException {
 		FabricLoaderMods.install();
 		LoaderManager loaderManager = new LoaderManager();
-		new Preload(loaderManager, new ModpackLoader(loaderManager));
+		mountImpl(loaderManager);
+		new Preload(loaderManager, new ModpackLoader());
+	}
+
+	/**
+	 * Surfaces the one jar's impl for this target explicitly (no {@code jars} metadata anymore): select it
+	 * into the instance's impl cache and add it as a mod before {@link Preload}. This runs mid
+	 * {@code FabricLoaderImpl#load()}, so the loader's own passes pick the impl up like any late-added
+	 * modpack mod: access wideners, mixins and entrypoints all bootstrap after {@code load()} returns.
+	 */
+	private static void mountImpl(LoaderManager loaderManager) {
+		boolean client = FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT;
+		try {
+			Path implJar = ImplStore.select(FabricLanguageAdapter.class, "fabric", loaderManager.getModVersion("minecraft"), client);
+			ImplMount.mount(implJar);
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to stage or mount the AutoModpack impl jar", e);
+		}
 	}
 
 	@Override

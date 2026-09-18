@@ -1,0 +1,5 @@
+{
+  "test.shared": "shared english",
+  "test.onlyEnglish": "only english",
+  "test.formatted": "value is %s and %s"
+}

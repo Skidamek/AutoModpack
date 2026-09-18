@@ -50,7 +50,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 	private Future<?> work;
 
 	public OfflineRepairScreen(Screen parent, String modpackName, ClientOfflineRepair repair, OfflineRepair.Prepared prepared, Runnable updateAction, Runnable closedCallback) {
-		super(VersionedText.translatable("automodpack.repair.title"));
+		super(VersionedText.text("automodpack.repair.title"));
 		this.parent = parent;
 		this.modpackName = modpackName == null ? "" : modpackName;
 		this.repair = repair;
@@ -73,12 +73,12 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		boolean showKeepAll = !candidates.isEmpty() && !selectedEditablePaths.isEmpty();
 		if (showKeepAll)
 			actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-					optionalAction(VersionedText.translatable("automodpack.repair.keepAllEditable"), press -> keepAllEditable())));
+					optionalAction(VersionedText.text("automodpack.repair.keepAllEditable"), press -> keepAllEditable())));
 		List<ActionDefinition> primaryActions = new ArrayList<>();
-		primaryActions.add(primaryAction(VersionedText.translatable("automodpack.repair.apply"), press -> apply()));
-		if (canUpdate) primaryActions.add(optionalAction(VersionedText.translatable("automodpack.repair.updateAndFinish"), press -> updateAndFinish()));
+		primaryActions.add(primaryAction(VersionedText.text("automodpack.repair.apply"), press -> apply()));
+		if (canUpdate) primaryActions.add(optionalAction(VersionedText.text("automodpack.repair.updateAndFinish"), press -> updateAndFinish()));
 		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, primaryActions.toArray(ActionDefinition[]::new)));
-		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back())));
+		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), press -> back())));
 		ActionRow[] actionRows = actions.toArray(ActionRow[]::new);
 		List<RowListWidget.Row> listRows = new ArrayList<>(candidates.size());
 		for (OfflineRepair.EditableResetCandidate candidate : candidates) {
@@ -86,7 +86,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 			// while it consents and checked once the player's changes are kept.
 			boolean resetConsent = selectedEditablePaths.contains(candidate.logicalPath());
 			listRows.add(new RowListWidget.Row(List.of(VersionedText.literal(truncateToWidth(this.font,
-					VersionedText.translatable("automodpack.repair.editableKeep", candidate.logicalPath()).getString(), width - 12))),
+					VersionedText.str("automodpack.repair.editableKeep", candidate.logicalPath()), width - 12))),
 					editableTooltip(resetConsent, candidate.logicalPath()),
 					resetConsent ? CheckboxWidget.State.UNCHECKED : CheckboxWidget.State.CHECKED));
 		}
@@ -110,14 +110,14 @@ public final class OfflineRepairScreen extends VersionedScreen {
 			// The checkbox anchors to the list's real row left, so it and the row checkboxes share one x on every version.
 			int checkboxX = list == null ? x : list.rowLeft();
 			String files = String.join("\n", wrapToWidth(this.font, String.join(", ", prepared.unownedModPaths()), 240, 8));
-			AbstractWidget keep = new CheckboxWidget(this.font, checkboxX, keepCheckboxY(), x + width - checkboxX, VersionedText.translatable("automodpack.confirm.keepExistingMods", prepared.unownedModPaths().size()),
+			AbstractWidget keep = new CheckboxWidget(this.font, checkboxX, keepCheckboxY(), x + width - checkboxX, VersionedText.text("automodpack.confirm.keepExistingMods", prepared.unownedModPaths().size()),
 					keepUnownedMods,
 					value -> {
 						keepUnownedMods = value;
 						rebuild();
 					});
 			keep.active = !busy;
-			VersionedScreen.setTooltip(keep, VersionedText.translatable("automodpack.confirm.leftoverTooltip", files));
+			VersionedScreen.setTooltip(keep, VersionedText.text("automodpack.confirm.leftoverTooltip", files));
 			this.addRenderableWidget(keep);
 		}
 	}
@@ -137,7 +137,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 	/** Where the working/receipt/update-needed line sits: under the wrapped unowned line, never above the fixed band. */
 	private int statusBandTop() {
 		if (prepared.unownedModPaths().isEmpty()) return 66;
-		String unownedState = VersionedText.translatable(keepUnownedMods ? "automodpack.repair.unownedKept" : "automodpack.repair.unownedArchived", prepared.unownedModPaths().size()).getString();
+		String unownedState = VersionedText.str(keepUnownedMods ? "automodpack.repair.unownedKept" : "automodpack.repair.unownedArchived", prepared.unownedModPaths().size());
 		return Math.max(66, 54 + wrapToWidth(this.font, unownedState, this.width - 28, 2).size() * 11 + 1);
 	}
 
@@ -153,7 +153,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 
 	/** Same help for an editable row: unchecked consents to reset, checked keeps the player's changes. */
 	private Component editableTooltip(boolean resetConsent, String path) {
-		return VersionedText.translatable(resetConsent ? "automodpack.repair.editableTooltipReset" : "automodpack.repair.editableTooltipKeep", path);
+		return VersionedText.text(resetConsent ? "automodpack.repair.editableTooltipReset" : "automodpack.repair.editableTooltipKeep", path);
 	}
 
 	private boolean hasRepairWork() {
@@ -246,36 +246,36 @@ public final class OfflineRepairScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		String title = VersionedText.translatable("automodpack.repair.titleNamed", modpackName).getString();
+		String title = VersionedText.str("automodpack.repair.titleNamed", modpackName);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
 		long missing = prepared.findings().stream().filter(finding -> finding.condition() == OfflineRepair.Condition.MISSING).count();
 		long damaged = prepared.findings().stream().filter(finding -> finding.condition() != OfflineRepair.Condition.MISSING).count();
 		long repairable = prepared.findings().stream().filter(OfflineRepair.Finding::locallyRepairable).count();
 		String state = prepared.findings().isEmpty()
-				? VersionedText.translatable("automodpack.repair.healthy").getString()
-				: VersionedText.translatable("automodpack.repair.findings", missing, damaged, repairable).getString();
+				? VersionedText.str("automodpack.repair.healthy")
+				: VersionedText.str("automodpack.repair.findings", missing, damaged, repairable);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, this.width - 20)).withStyle(prepared.findings().isEmpty() ? ChatFormatting.GREEN : ChatFormatting.YELLOW),
 				this.width / 2, 30, TextColors.WHITE);
-		String hashed = VersionedText.translatable("automodpack.repair.hashed", prepared.directlyHashedFileCount(), UiFormat.formatSize(prepared.directlyHashedBytes())).getString();
+		String hashed = VersionedText.str("automodpack.repair.hashed", prepared.directlyHashedFileCount(), UiFormat.formatSize(prepared.directlyHashedBytes()));
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, hashed, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, 42, TextColors.WHITE);
 		if (!prepared.unownedModPaths().isEmpty()) {
-			String unownedState = VersionedText.translatable(keepUnownedMods ? "automodpack.repair.unownedKept" : "automodpack.repair.unownedArchived", prepared.unownedModPaths().size()).getString();
+			String unownedState = VersionedText.str(keepUnownedMods ? "automodpack.repair.unownedKept" : "automodpack.repair.unownedArchived", prepared.unownedModPaths().size());
 			List<String> unownedLines = wrapToWidth(this.font, unownedState, this.width - 28, 2);
 			for (int index = 0; index < unownedLines.size(); index++)
 				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(unownedLines.get(index)).withStyle(keepUnownedMods ? ChatFormatting.YELLOW : ChatFormatting.GRAY),
 						this.width / 2, 54 + index * 11, TextColors.WHITE);
 		} else {
-			String choices = VersionedText.translatable("automodpack.repair.choices", selectedEditablePaths.size(), prepared.editableResetCandidates().size()).getString();
+			String choices = VersionedText.str("automodpack.repair.choices", selectedEditablePaths.size(), prepared.editableResetCandidates().size());
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, choices, this.width - 20)).withStyle(ChatFormatting.AQUA), this.width / 2, 54, TextColors.WHITE);
 		}
-		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.repair.working").withStyle(ChatFormatting.YELLOW), this.width / 2, statusBandTop(), TextColors.WHITE);
+		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.repair.working").withStyle(ChatFormatting.YELLOW), this.width / 2, statusBandTop(), TextColors.WHITE);
 		else if (receipt != null) {
-			String result = VersionedText.translatable("automodpack.repair.receipt", receipt.repairedCasObjects(), receipt.repairedMaterializedFiles(), receipt.resetEditableFiles(), receipt.archivedUnownedMods())
+			String result = VersionedText.text("automodpack.repair.receipt", receipt.repairedCasObjects(), receipt.repairedMaterializedFiles(), receipt.resetEditableFiles(), receipt.archivedUnownedMods())
 					.getString();
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, result, this.width - 20)).withStyle(receipt.complete() ? ChatFormatting.GREEN : ChatFormatting.YELLOW),
 					this.width / 2, statusBandTop(), TextColors.WHITE);
 		} else if (prepared.requiresUpdate()) {
-			String updateMessage = VersionedText.translatable(updateAction == null ? "automodpack.repair.updateNeededOffline" : "automodpack.repair.updateNeeded").getString();
+			String updateMessage = VersionedText.str(updateAction == null ? "automodpack.repair.updateNeededOffline" : "automodpack.repair.updateNeeded");
 			List<String> lines = wrapToWidth(this.font, updateMessage, this.width - 28, 2);
 			for (int index = 0; index < lines.size(); index++)
 				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(lines.get(index)).withStyle(ChatFormatting.YELLOW), this.width / 2, statusBandTop() + index * 12, TextColors.WHITE);

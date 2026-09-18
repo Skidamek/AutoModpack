@@ -62,6 +62,12 @@ import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 
 class DownloadClientTest {
+	/**
+	 * Upper bound for async waits on loopback handshakes that complete in milliseconds when warm.
+	 * Cold CI runners (Windows especially) have blown past five seconds here; a generous bound only
+	 * ever costs time on a genuine hang.
+	 */
+	private static final int AWAIT_SECONDS = 20;
 
 	@Test
 	void fileFrameCopyDoesNotOverflowForSizesAbove2GiB() {
@@ -131,12 +137,12 @@ class DownloadClientTest {
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, null, null);
 			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> decision);
 
-			assertEquals(-1, server.earlyApplicationByte().get(5, TimeUnit.SECONDS));
+			assertEquals(-1, server.earlyApplicationByte().get(AWAIT_SECONDS, TimeUnit.SECONDS));
 			assertFalse(clientFuture.isDone());
 			decision.complete(true);
 
-			try (DownloadClient ignored = clientFuture.get(5, TimeUnit.SECONDS)) {
-				server.configured().get(5, TimeUnit.SECONDS);
+			try (DownloadClient ignored = clientFuture.get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
+				server.configured().get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertEquals(1, server.acceptedConnections());
 			}
 		}
@@ -153,9 +159,9 @@ class DownloadClientTest {
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, null, null);
 			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> decision);
 
-			assertEquals(-1, server.earlyApplicationByte().get(5, TimeUnit.SECONDS));
+			assertEquals(-1, server.earlyApplicationByte().get(AWAIT_SECONDS, TimeUnit.SECONDS));
 			decision.complete(false);
-			assertThrows(Exception.class, () -> clientFuture.get(5, TimeUnit.SECONDS));
+			assertThrows(Exception.class, () -> clientFuture.get(AWAIT_SECONDS, TimeUnit.SECONDS));
 			assertEquals(1, server.acceptedConnections());
 		}
 	}
@@ -178,10 +184,10 @@ class DownloadClientTest {
 			assertFalse(clientFuture.isDone());
 
 			decision.complete(true);
-			try (DownloadClient ignored = clientFuture.get(5, TimeUnit.SECONDS)) {
-				server.configured().get(5, TimeUnit.SECONDS);
+			try (DownloadClient ignored = clientFuture.get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
+				server.configured().get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				// The heartbeat retires with the trust decision: the configured connection hears only silence.
-				assertEquals(-1, server.postConfigurationByte().get(5, TimeUnit.SECONDS));
+				assertEquals(-1, server.postConfigurationByte().get(AWAIT_SECONDS, TimeUnit.SECONDS));
 			}
 			assertEquals(1, server.acceptedConnections());
 		}
@@ -195,13 +201,13 @@ class DownloadClientTest {
 		try (LeasingServer server = new LeasingServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, fingerprint, null);
-			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(5, TimeUnit.SECONDS)) {
+			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
 				CompletableFuture<Path> first = client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("first"), null);
-				assertTrue(server.receivedRequest().await(5, TimeUnit.SECONDS));
+				assertTrue(server.receivedRequest().await(AWAIT_SECONDS, TimeUnit.SECONDS));
 				client.abortTransfers();
-				assertThrows(Exception.class, () -> first.get(5, TimeUnit.SECONDS));
+				assertThrows(Exception.class, () -> first.get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				server.allowResponses(2);
-				assertEquals(directory.resolve("second"), client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("second"), null).get(5, TimeUnit.SECONDS));
+				assertEquals(directory.resolve("second"), client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("second"), null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
 			}
 		}
 	}
@@ -215,21 +221,21 @@ class DownloadClientTest {
 		try (LeasingServer server = new LeasingServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, fingerprint, null);
-			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(5,
+			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS,
 					TimeUnit.SECONDS)) {
 				List<CompletableFuture<Path>> downloads = new ArrayList<>();
 				for (int i = 0; i < 6; i++) downloads.add(client.downloadFile(new byte[0], directory.resolve("download-" + i), null));
 
-				assertTrue(server.firstFiveRequests().await(5, TimeUnit.SECONDS));
+				assertTrue(server.firstFiveRequests().await(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertEquals(5, server.acceptedConnections());
 				assertFalse(server.sixthRequest().isDone());
 
 				server.allowResponses(1);
-				server.sixthRequest().get(5, TimeUnit.SECONDS);
+				server.sixthRequest().get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertEquals(5, server.acceptedConnections());
 
 				server.allowResponses(5);
-				CompletableFuture.allOf(downloads.toArray(CompletableFuture[]::new)).get(5, TimeUnit.SECONDS);
+				CompletableFuture.allOf(downloads.toArray(CompletableFuture[]::new)).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 			}
 		}
 	}

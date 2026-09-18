@@ -32,20 +32,20 @@ public final class SelectionSavedScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
-				primaryAction(VersionedText.translatable("automodpack.selection.restartNow").withStyle(ChatFormatting.BOLD), press -> this.minecraft.stop())));
+				secondaryAction(VersionedText.text("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
+				primaryAction(VersionedText.text("automodpack.selection.restartNow").withStyle(ChatFormatting.BOLD), press -> this.minecraft.stop())));
 	}
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font, header(), this.width / 2, 11, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.saved").withStyle(ChatFormatting.GREEN), this.width / 2, this.height / 2 - 30,
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.selection.saved").withStyle(ChatFormatting.GREEN), this.width / 2, this.height / 2 - 30,
 				TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.restartRequired").withStyle(ChatFormatting.YELLOW), this.width / 2,
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.selection.restartRequired").withStyle(ChatFormatting.YELLOW), this.width / 2,
 				this.height / 2 - 15, TextColors.WHITE);
 		if (clientConfig != null && !clientConfig.updateSelectedModpackOnLaunch) {
 			drawCenteredTextWithShadow(matrices, this.font,
-					VersionedText.translatable("automodpack.selection.updateOnLaunchDisabled").withStyle(ChatFormatting.RED), this.width / 2,
+					VersionedText.text("automodpack.selection.updateOnLaunchDisabled").withStyle(ChatFormatting.RED), this.width / 2,
 					this.height / 2 - 45, TextColors.WHITE);
 		}
 	}

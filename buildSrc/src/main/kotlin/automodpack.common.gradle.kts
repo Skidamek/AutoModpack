@@ -1,10 +1,8 @@
 import dev.luna5ama.jaroptimizer.OptimizeJarTask
+import org.gradle.api.plugins.BasePluginExtension
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.jvm.tasks.Jar
-import java.math.BigInteger
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 
 plugins {
 	idea
@@ -84,127 +82,39 @@ repositories {
 }
 
 tasks.named("build") {
-	val taksToRun = mutableListOf<String>()
-	for (module in getAllDependentLoaderModules(project.name)) {
-		taksToRun.add(":$module:build")
-	}
-	dependsOn(taksToRun)
 	if (isAutotestBuild) {
 		dependsOn(":autotest-fixtures:build")
 	}
-	finalizedBy(tasks.named("mergeJar"))
+	finalizedBy(tasks.named("optimizeModJar"))
 }
 
-val mergedDirPath = rootProject.projectDir.absolutePath + "/merged"
+val libsDirectory = layout.buildDirectory.dir("libs")
+val optimizedLibsDirectory = layout.buildDirectory.dir("libs-optimized")
 
-tasks.named("clean") {
-	finalizedBy("cleanMerged")
-}
-
-tasks.register("cleanMerged") {
-	val mergedDir = mergedDirPath
-	doLast {
-		File(mergedDir).deleteRecursively()
-	}
-}
-
-val mergeJarTask =
-	tasks.register<MergeJarTask>("mergeJar") {
-		this.rootProjectPath.set(project.rootProject.projectDir.absolutePath)
-		this.loaderModuleName.set(getLoaderModuleName(project.name))
-		this.buildMode.set(automodpackBuildMode)
-		this.buildDirectory.set(layout.buildDirectory)
-		this.mergedJar.set(
-			layout.buildDirectory
-				.file(
-					provider {
-						"merged/" +
-							getMergedJarPath(
-								layout.buildDirectory
-									.dir("libs")
-									.get()
-									.asFile,
-							).name
-					},
-				),
-		)
-
-		// Hash the shadow jars where they exist: they're what this task actually merges and
-		// the only outputs that change when a shared subproject (core, an
-		// earlyservices module) changes. The plain `jar` outputs don't contain those classes.
-		val filesToHash = mutableListOf<Any>()
-		(tasks.findByName("shadowJar") ?: tasks.findByName("jar"))?.let { projectJar ->
-			dependsOn(projectJar)
-			filesToHash.add(projectJar)
-		}
-		for (module in getAllDependentLoaderModules(project.name)) {
-			val moduleTasks = rootProject.project(module).tasks
-			(moduleTasks.findByName("shadowJar") ?: moduleTasks.findByName("jar"))?.let { modLoaderJar ->
-				filesToHash.add(modLoaderJar)
-			}
-		}
-
-		// Compute the actual hash of the content of all input jars and the build mode.
-		// We use a provider so this is calculated just before task execution, ensuring files exist.
-		this.inputHash.set(
-			provider {
-				val filesToHash = files(filesToHash)
-				val digest = MessageDigest.getInstance("MD5") // Using MD5 just for speed
-				digest.update(automodpackBuildMode.get().toByteArray(StandardCharsets.UTF_8))
-
-				filesToHash.files.sortedBy { it.name }.forEach { file ->
-					if (file.exists()) {
-						file.inputStream().use { input ->
-							val buffer = ByteArray(8192)
-							var bytesRead = input.read(buffer)
-							while (bytesRead != -1) {
-								digest.update(buffer, 0, bytesRead)
-								bytesRead = input.read(buffer)
-							}
-						}
-					}
-				}
-				BigInteger(1, digest.digest()).toString(16)
+// A per-target build ends at the optimized impl jar; assembling the one jar out of every target's
+// output is the root project's oneJar task, and merged/ is that one jar's output directory only.
+val modJarFileName =
+	extensions
+		.getByType(BasePluginExtension::class.java)
+		.archivesName
+		.zip(providers.provider { version.toString() }) { name, v -> "$name-$v.jar" }
+val optimizeModJar =
+	tasks.register<OptimizeJarTask>("optimizeModJar") {
+		// Resolved when the task joins the graph, after every plugin has applied. The chain's last
+		// writer of the jar differs per loader: reobfJar (forge/neoforge), remapJar (fabric), jar (unobf).
+		dependsOn(
+			providers.provider {
+				tasks.findByName("reobfJar") ?: tasks.findByName("remapJar") ?: tasks.named("jar").get()
 			},
 		)
-	}
-
-val optimizedMergedJar =
-	tasks.register<OptimizeJarTask>("optimizeMergedJar") {
-		dependsOn(mergeJarTask)
-		jarFile.set(mergeJarTask.flatMap { it.mergedJar })
+		// The input is the producer's standard archive path, never a directory scan: on a clean CI
+		// build/libs is still empty when the task graph is built, and a scan there fails the graph
+		// before anything has produced the jar.
+		jarFile.set(modJarFileName.flatMap { fileName -> libsDirectory.map { dir -> dir.file(fileName) } })
 		keeps.add("pl.skidam")
-		destinationDirectory.set(rootProject.layout.projectDirectory.dir("merged"))
-		archiveFileName.set(
-			provider {
-				getMergedJarPath(
-					layout.buildDirectory
-						.dir("libs")
-						.get()
-						.asFile,
-				).name
-			},
-		)
+		destinationDirectory.set(optimizedLibsDirectory)
+		archiveFileName.set(modJarFileName.map { it.removeSuffix(".jar") + "-optimized.jar" })
 	}
-optimizedMergedJar.configure {
+optimizeModJar.configure {
 	inputs.property("automodpackBuildMode", automodpackBuildMode)
-}
-
-val auditMergedJarTask =
-	tasks.register<MergedJarAuditTask>("auditMergedJar") {
-		mergedJar.set(optimizedMergedJar.flatMap { it.archiveFile })
-		inputs.property("automodpackBuildMode", automodpackBuildMode)
-		// Merged jar measured 3732574 bytes with the bossa nova waiting loop; 4 MiB leaves headroom and still trips on dependency bloat.
-		maxJarBytes.set(4L * 1024 * 1024)
-		enforceReleaseSizeBudget.set(!isAutotestBuild)
-		// The waiting loop is the transcribed note-block bossa nova, 550322 bytes as packaged; 1 MiB leaves it headroom and still trips on accidental full songs.
-		maxMusicBytes.set(1024L * 1024)
-	}
-
-mergeJarTask.configure {
-	finalizedBy(optimizedMergedJar)
-}
-
-optimizedMergedJar.configure {
-	finalizedBy(auditMergedJarTask)
 }

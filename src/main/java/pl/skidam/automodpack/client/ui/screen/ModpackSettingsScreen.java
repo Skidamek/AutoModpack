@@ -34,7 +34,7 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 	private boolean upToDate;
 
 	public ModpackSettingsScreen(Screen parent, InstalledModpackController controller, InstalledModpackController.Pack pack) {
-		super(VersionedText.translatable("automodpack.packDetails.title"));
+		super(VersionedText.text("automodpack.packDetails.title"));
 		this.parent = parent;
 		this.controller = controller;
 		this.pack = pack;
@@ -50,13 +50,13 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 		// One action whose label is the sync state itself: stop syncing declares local sovereignty, resume syncing is the explicit attach.
 		if (pack.active())
 			actions.add(pack.detached()
-					? new Action("automodpack.management.resumeSyncing", this::resumeSyncing, VersionedText.translatable("automodpack.management.resumeSyncingTooltip"))
-					: new Action("automodpack.management.stopSyncing", this::stopSyncing, VersionedText.translatable("automodpack.management.stopSyncingTooltip")));
+					? new Action("automodpack.management.resumeSyncing", this::resumeSyncing, VersionedText.text("automodpack.management.resumeSyncingTooltip"))
+					: new Action("automodpack.management.stopSyncing", this::stopSyncing, VersionedText.text("automodpack.management.stopSyncingTooltip")));
 		actions.add(new Action("automodpack.management.groups", this::openGroups));
 		actions.add(new Action("automodpack.management.packFiles", this::openFiles));
 		actions.add(new Action("automodpack.management.history", this::openHistory));
-		if (pack.active()) actions.add(new Action("automodpack.management.deactivate", this::deactivate, VersionedText.translatable("automodpack.management.deactivateTooltip")));
-		actions.add(new Action("automodpack.management.remove", this::remove, VersionedText.translatable("automodpack.management.removeTooltip")));
+		if (pack.active()) actions.add(new Action("automodpack.management.deactivate", this::deactivate, VersionedText.text("automodpack.management.deactivateTooltip")));
+		actions.add(new Action("automodpack.management.remove", this::remove, VersionedText.text("automodpack.management.removeTooltip")));
 		int columns = actionColumns(actions.size());
 		List<ActionRow> rows = new ArrayList<>();
 		for (int index = 0; index < actions.size(); index += columns) {
@@ -64,14 +64,14 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 			List<ActionDefinition> rowActions = new ArrayList<>(end - index);
 			for (int rowIndex = index; rowIndex < end; rowIndex++) {
 				Action action = actions.get(rowIndex);
-				Component message = action.label() != null ? action.label() : VersionedText.translatable(action.labelKey());
+				Component message = action.label() != null ? action.label() : VersionedText.text(action.labelKey());
 				rowActions.add(rowIndex == 0 ? primaryAction(message, button -> action.action().run()) : optionalAction(message, button -> action.action().run()));
 			}
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, rowActions.toArray(ActionDefinition[]::new)));
 		}
 		for (AbstractWidget button : addActionAreaAt(PANEL_WIDTH, actionGridTop(), rows.toArray(ActionRow[]::new))) actionButtons.add(button);
 		// Back sits on the shared bottom rail like on every other screen, so it never reads as one more grid action.
-		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent))));
+		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), button -> ScreenImpl.setScreen(parent))));
 		// Destructive verbs say what they do before the player commits: Deactivate keeps files, Remove deletes them.
 		for (int index = 0; index < actions.size() && index < actionButtons.size(); index++) {
 			Component tooltip = actions.get(index).tooltip();
@@ -188,7 +188,7 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 			actionButtons.get(index).active = !busyVisible && (!primary || !pack.active() || pack.connectionAvailable() && !upToDate);
 		}
 		if (actionButtons.isEmpty() || !pack.active()) return;
-		actionButtons.get(0).setMessage(VersionedText.translatable(upToDate ? "automodpack.management.upToDate" : "automodpack.management.update"));
+		actionButtons.get(0).setMessage(VersionedText.text(upToDate ? "automodpack.management.upToDate" : "automodpack.management.update"));
 	}
 
 	// The header stack: description, state, identity, id, contents, optional connection line, generation.
@@ -227,36 +227,36 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 		MutableComponent name = VersionedText.literal(pack.name()).withStyle(ChatFormatting.BOLD);
 		drawCenteredTextWithShadow(matrices, this.font, name, this.width / 2, 12, TextColors.WHITE);
 		if (pack.connectionAvailable())
-			showHoverTooltip(VersionedText.translatable("automodpack.packDetails.server", pack.connectionOrigin()), this.width / 2 - this.font.width(name) / 2, 12, this.font.width(name), mouseX, mouseY);
+			showHoverTooltip(VersionedText.text("automodpack.packDetails.server", pack.connectionOrigin()), this.width / 2 - this.font.width(name) / 2, 12, this.font.width(name), mouseX, mouseY);
 		int y = HEADER_TOP;
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.description").withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.packDetails.description").withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += STATE_LINE_GAP;
-		String state = pack.active() ? VersionedText.translatable("automodpack.packManager.active", pack.name()).getString() : VersionedText.translatable("automodpack.packManager.noActive").getString();
+		String state = pack.active() ? VersionedText.str("automodpack.packManager.active", pack.name()) : VersionedText.str("automodpack.packManager.noActive");
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, width)).withStyle(pack.active() ? ChatFormatting.GREEN : ChatFormatting.GRAY), this.width / 2, y,
 				TextColors.WHITE);
 		y += IDENTITY_LINE_GAP;
-		String version = VersionedText.translatable("automodpack.packDetails.identity", pack.record().manifest().loader(), pack.record().manifest().loaderVersion(), pack.record().manifest().mcVersion()).getString();
+		String version = VersionedText.str("automodpack.packDetails.identity", pack.record().manifest().loader(), pack.record().manifest().loaderVersion(), pack.record().manifest().mcVersion());
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, version, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += LINE_GAP;
-		String modpackId = VersionedText.translatable("automodpack.packDetails.id", pack.modpackId()).getString();
+		String modpackId = VersionedText.str("automodpack.packDetails.id", pack.modpackId());
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, modpackId, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		showHoverTooltip(VersionedText.literal(pack.modpackId()), this.width / 2 - this.font.width(modpackId) / 2, y, this.font.width(modpackId), mouseX, mouseY);
 		y += LINE_GAP;
-		String contents = VersionedText.translatable("automodpack.packDetails.contents", UiFormat.plural(pack.groupCount(), "automodpack.confirm.groupCount").getString(),
-				UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes())).getString();
+		String contents = VersionedText.str("automodpack.packDetails.contents", UiFormat.plural(pack.groupCount(), "automodpack.confirm.groupCount").getString(),
+				UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes()));
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, contents, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += LINE_GAP;
 		if (pack.connectionDetail() != null) {
-			String connection = VersionedText.translatable("automodpack.packDetails.connection", pack.connectionOrigin(), pack.connectionDetail()).getString();
+			String connection = VersionedText.str("automodpack.packDetails.connection", pack.connectionOrigin(), pack.connectionDetail());
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, connection, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 			y += LINE_GAP;
 		}
 		String contentToken = pack.record().contentToken();
-		String generation = VersionedText.translatable("automodpack.packDetails.generation", contentToken.substring(0, Math.min(contentToken.length(), 7)), UiFormat.formatInstant(pack.record().createdAt())).getString();
+		String generation = VersionedText.str("automodpack.packDetails.generation", contentToken.substring(0, Math.min(contentToken.length(), 7)), UiFormat.formatInstant(pack.record().createdAt()));
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, generation, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		showHoverTooltip(VersionedText.literal(contentToken), this.width / 2 - this.font.width(generation) / 2, y, this.font.width(generation), mouseX, mouseY);
 		if (busyVisible)
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.working").withStyle(ChatFormatting.YELLOW), this.width / 2, this.height - 44, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.packDetails.working").withStyle(ChatFormatting.YELLOW), this.width / 2, this.height - 44, TextColors.WHITE);
 	}
 
 	@Override

@@ -30,7 +30,7 @@ concurrency:
 jobs:
   prepare:
     name: Resolve release and source
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
       tag: ${{ steps.release.outputs.tag }}
@@ -95,7 +95,7 @@ jobs:
   verify:
     name: Verify release version
     needs: [prepare, build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Match build version to destination tag
@@ -115,7 +115,7 @@ jobs:
   publish:
     name: Publish ${{ matrix.subproject }}
     needs: [prepare, build, verify]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: write

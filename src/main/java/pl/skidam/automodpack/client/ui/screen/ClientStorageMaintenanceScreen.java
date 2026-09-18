@@ -42,7 +42,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private int titleTop;
 
 	public ClientStorageMaintenanceScreen(Screen parent, InstalledModpackController controller) {
-		super(VersionedText.translatable("automodpack.storage.title"));
+		super(VersionedText.text("automodpack.storage.title"));
 		this.parent = parent;
 		this.controller = controller;
 	}
@@ -52,20 +52,20 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		super.init();
 		preservedCount = controller.preservedClaimCount();
 		ActionRow maintenanceRow = actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-				optionalAction(VersionedText.translatable("automodpack.storage.verify"), button -> verify()),
-				primaryAction(VersionedText.translatable(compactArmed ? "automodpack.storage.confirmArmed" : "automodpack.storage.confirm"), button -> compactPressed()));
-		ActionRow footerRow = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> closeToParent()));
+				optionalAction(VersionedText.text("automodpack.storage.verify"), button -> verify()),
+				primaryAction(VersionedText.text(compactArmed ? "automodpack.storage.confirmArmed" : "automodpack.storage.confirm"), button -> compactPressed()));
+		ActionRow footerRow = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), button -> closeToParent()));
 
 		// One pinned status line rides with the column, so the busy/complete feedback never moves.
 		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 8);
 		List<MutableComponent> lines = new ArrayList<>();
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.description").getString(), wrapWidth, ChatFormatting.GRAY));
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.removes").getString(), wrapWidth, ChatFormatting.YELLOW));
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.keeps").getString(), wrapWidth, ChatFormatting.GREEN));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.description"), wrapWidth, ChatFormatting.GRAY));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.removes"), wrapWidth, ChatFormatting.YELLOW));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.keeps"), wrapWidth, ChatFormatting.GREEN));
 		lines.addAll(
-				wrapParagraph(this.font, VersionedText.translatable(preservedCount > 0 ? "automodpack.storage.preservedKept" : "automodpack.vault.empty", preservedCount).getString(), wrapWidth, ChatFormatting.GREEN));
+				wrapParagraph(this.font, VersionedText.str(preservedCount > 0 ? "automodpack.storage.preservedKept" : "automodpack.vault.empty", preservedCount), wrapWidth, ChatFormatting.GREEN));
 		for (ClientGenerationStore.CompactionReceipt receipt : controller.compactionReceipts())
-			lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.compacted", UiFormat.formatInstant(receipt.compactedAt()), receipt.boundarySeq()).getString(), wrapWidth,
+			lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.compacted", UiFormat.formatInstant(receipt.compactedAt()), receipt.boundarySeq()), wrapWidth,
 					ChatFormatting.GREEN));
 		if (collectionResult != null) {
 			lines.add(blankLine());
@@ -73,8 +73,8 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 					UiFormat.formatSize(collectionResult.before().objectBytes()), UiFormat.formatSize(collectionResult.after().objectBytes())), wrapWidth));
 		} else if (verificationReport != null) {
 			lines.add(blankLine());
-			lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.verificationReceipt", verificationReport.validReferencedObjectCount(), verificationReport.referencedObjectCount(),
-					UiFormat.formatSize(verificationReport.validReferencedObjectBytes())).getString(), wrapWidth));
+			lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.verificationReceipt", verificationReport.validReferencedObjectCount(), verificationReport.referencedObjectCount(),
+					UiFormat.formatSize(verificationReport.validReferencedObjectBytes())), wrapWidth));
 		}
 		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, LINE_HEIGHT, maintenanceRow, footerRow);
 		this.titleTop = layout.titleTop();
@@ -188,19 +188,19 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.storage.title").withStyle(ChatFormatting.BOLD), this.width / 2, titleTop, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.storage.title").withStyle(ChatFormatting.BOLD), this.width / 2, titleTop, TextColors.WHITE);
 		if (busy) {
 			String message = operation == Operation.VERIFY ? "automodpack.storage.verifying" : "automodpack.storage.running";
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(message).withStyle(ChatFormatting.YELLOW), this.width / 2, statusY, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text(message).withStyle(ChatFormatting.YELLOW), this.width / 2, statusY, TextColors.WHITE);
 		} else if (collectionResult != null) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.storage.complete").withStyle(ChatFormatting.GREEN), this.width / 2, statusY, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.storage.complete").withStyle(ChatFormatting.GREEN), this.width / 2, statusY, TextColors.WHITE);
 		} else if (verificationReport != null) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.storage.verified").withStyle(ChatFormatting.GREEN), this.width / 2, statusY, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.storage.verified").withStyle(ChatFormatting.GREEN), this.width / 2, statusY, TextColors.WHITE);
 		}
 	}
 
 	private String statLine(String labelKey, long countBefore, long countAfter, String sizeBefore, String sizeAfter) {
-		return VersionedText.translatable(labelKey).getString() + ": " + countBefore + " -> " + countAfter + " (" + sizeBefore + " -> " + sizeAfter + ")";
+		return VersionedText.str(labelKey) + ": " + countBefore + " -> " + countAfter + " (" + sizeBefore + " -> " + sizeAfter + ")";
 	}
 
 	@Override

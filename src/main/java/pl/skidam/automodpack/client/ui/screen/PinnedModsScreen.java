@@ -57,7 +57,7 @@ public final class PinnedModsScreen extends VersionedScreen {
 	private boolean closed;
 
 	public PinnedModsScreen(Screen parent) {
-		super(VersionedText.translatable("automodpack.pinnedMods.title"));
+		super(VersionedText.text("automodpack.pinnedMods.title"));
 		this.parent = parent;
 		this.liveMods = scanLiveMods();
 	}
@@ -68,16 +68,16 @@ public final class PinnedModsScreen extends VersionedScreen {
 		int width = panelWidth(PANEL_WIDTH);
 		int x = panelLeft(PANEL_WIDTH);
 		int fieldY = 64;
-		int addWidth = Math.max(64, this.font.width(VersionedText.translatable("automodpack.pinnedMods.add").getString()) + 16);
-		this.idField = fieldWidget(x, fieldY, width - addWidth - ActionAreaLayout.SEAM, VersionedText.translatable("automodpack.pinnedMods.field"), null, 128);
+		int addWidth = Math.max(64, this.font.width(VersionedText.str("automodpack.pinnedMods.add")) + 16);
+		this.idField = fieldWidget(x, fieldY, width - addWidth - ActionAreaLayout.SEAM, VersionedText.text("automodpack.pinnedMods.field"), null, 128);
 		this.idField.setValue(typedId);
 		this.idField.setResponder(value -> typedId = value);
-		this.addRenderableWidget(buttonWidget(x + width - addWidth, fieldY, addWidth, 20, VersionedText.translatable("automodpack.pinnedMods.add"), press -> addTypedId()));
+		this.addRenderableWidget(buttonWidget(x + width - addWidth, fieldY, addWidth, 20, VersionedText.text("automodpack.pinnedMods.add"), press -> addTypedId()));
 
 		List<Row> rows = rows();
 		Row selected = selected(rows);
 		List<PlatformReferences.Page> platformPages = selected == null ? List.of() : platformPagesByRowKey.getOrDefault(key(selected), List.of());
-		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
+		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
 		List<ActionRow> actions = new ArrayList<>();
 		if (!platformPages.isEmpty()) actions.add(platformRow(platformPages));
 		actions.add(footer);
@@ -85,7 +85,7 @@ public final class PinnedModsScreen extends VersionedScreen {
 		int rowWidth = Math.max(1, width - 8);
 		List<RowListWidget.Row> listRows = new ArrayList<>(rows.size());
 		for (Row row : rows) {
-			listRows.add(new RowListWidget.Row(List.of(rowLabel(row, rowWidth)), VersionedText.translatable(row.present ? "automodpack.pinnedMods.liveTooltip" : "automodpack.pinnedMods.missingTooltip"),
+			listRows.add(new RowListWidget.Row(List.of(rowLabel(row, rowWidth)), VersionedText.text(row.present ? "automodpack.pinnedMods.liveTooltip" : "automodpack.pinnedMods.missingTooltip"),
 					row.pinned ? CheckboxWidget.State.CHECKED : CheckboxWidget.State.UNCHECKED));
 		}
 		// The list fills the space between the input row and the pinned actions; only a real overflow scrolls.
@@ -111,8 +111,8 @@ public final class PinnedModsScreen extends VersionedScreen {
 
 	private MutableComponent rowLabel(Row row, int width) {
 		String raw = row.present
-				? VersionedText.translatable("automodpack.pinnedMods.live", row.id, row.fileName).getString()
-				: VersionedText.translatable("automodpack.pinnedMods.missing", row.id).getString();
+				? VersionedText.str("automodpack.pinnedMods.live", row.id, row.fileName)
+				: VersionedText.str("automodpack.pinnedMods.missing", row.id);
 		return VersionedText.literal(truncateToWidth(this.font, raw, Math.max(1, width - 8 - RowListWidget.CHECKBOX_RESERVE))).withStyle(key(row).equals(selectedKey) ? ChatFormatting.GREEN : ChatFormatting.WHITE);
 	}
 
@@ -150,7 +150,7 @@ public final class PinnedModsScreen extends VersionedScreen {
 
 	private ActionRow platformRow(List<PlatformReferences.Page> pages) {
 		List<ActionDefinition> definitions = new ArrayList<>();
-		for (PlatformReferences.Page page : pages) definitions.add(optionalAction(VersionedText.translatable("automodpack.browser." + page.platform()), button -> Util.getPlatform().openUri(page.url())));
+		for (PlatformReferences.Page page : pages) definitions.add(optionalAction(VersionedText.text("automodpack.browser." + page.platform()), button -> Util.getPlatform().openUri(page.url())));
 		return actionRow(ActionAreaLayout.RowKind.AUXILIARY, definitions.toArray(ActionDefinition[]::new));
 	}
 
@@ -182,16 +182,16 @@ public final class PinnedModsScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.pinnedMods.title").withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.pinnedMods.title").withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
 		int width = panelWidth(PANEL_WIDTH);
-		List<String> warning = wrapToWidth(this.font, VersionedText.translatable("automodpack.pinnedMods.warning").getString(), width, 3);
+		List<String> warning = wrapToWidth(this.font, VersionedText.str("automodpack.pinnedMods.warning"), width, 3);
 		int y = 26;
 		for (String line : warning) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(ChatFormatting.YELLOW), this.width / 2, y, TextColors.WHITE);
 			y += 11;
 		}
 		if (rows().isEmpty()) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.pinnedMods.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 94, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.pinnedMods.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 94, TextColors.WHITE);
 		}
 	}
 
