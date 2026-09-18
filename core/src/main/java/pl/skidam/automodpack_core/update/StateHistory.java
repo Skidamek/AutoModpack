@@ -170,7 +170,7 @@ public final class StateHistory {
 				InstanceTree after = InstanceTree.observe(storage, fileKeys(target), cache);
 				if (!sameFiles(after, target)) throw new IOException("Instance restore did not reproduce snapshot " + seq);
 				after.write(storage);
-				ClientStateJournal.open(storage).append(after.sha1(), Kind.RESTORE, target.identity().activeModpackId(), "restore-" + seq);
+				journal.append(after.sha1(), Kind.RESTORE, target.identity().activeModpackId(), "restore-" + seq);
 				return storage.gameDirectory();
 			}
 		});
@@ -195,11 +195,11 @@ public final class StateHistory {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				Snapshot snapshot = ClientStateJournal.open(storage).require(seq);
 				InstanceTree tree = InstanceTree.read(storage, snapshot.treeSha1());
-				TrackedFile file = requireGameFile(tree, root, path);
 				FileGate gate = fileRestoreGate(storage, root, path);
 				if (gate == FileGate.NOT_GAME_DIR) throw new IOException("Only game-directory files can be restored to their original path");
 				if (gate == FileGate.OWNED) throw new IOException("The active modpack still owns " + path);
 				if (gate == FileGate.PROTECTED) throw new IOException("The running AutoModpack jar cannot be restored over");
+				TrackedFile file = requireFile(tree, root, path);
 				Path destination = storage.gamePath(path);
 				if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS) && FileIntegrity.matchesNamed(destination, file.size(), file.sha1(), cache)) return destination;
 				Set<FileKey> extra = Set.of(file.fileKey());
@@ -380,6 +380,7 @@ public final class StateHistory {
 		return true;
 	}
 
+	/** A checkout must reproduce the snapshot's files exactly; the appended row records the state as it actually came back. */
 	private static boolean sameFiles(InstanceTree left, InstanceTree right) {
 		if (left.files().size() != right.files().size()) return false;
 		for (int index = 0; index < left.files().size(); index++) {
@@ -398,11 +399,6 @@ public final class StateHistory {
 
 	private static String diffKey(TrackedFile file) {
 		return file.root().name() + "/" + file.overlayPackId() + "/" + file.path();
-	}
-
-	private static TrackedFile requireGameFile(InstanceTree tree, Root root, String path) throws IOException {
-		if (root != Root.GAME_DIR) throw new IOException("Only game-directory files can be restored to their original path");
-		return requireFile(tree, root, path);
 	}
 
 	private static TrackedFile requireFile(InstanceTree tree, Root root, String path) throws IOException {
