@@ -28,7 +28,6 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
-import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
@@ -121,9 +120,37 @@ class OfflineRepairTest {
 		assertTrue(FileIntegrity.matches(live, expectedBytes.length, hash));
 		assertFalse(Files.exists(extra));
 		assertTrue(Files.exists(protectedJar));
-		Set<PreservationVault.Reason> reasons = PreservationVault.read(storage, target.manifest().modpackId()).claims().stream()
-				.map(PreservationVault.Claim::reason).collect(Collectors.toSet());
-		assertEquals(Set.of(PreservationVault.Reason.EDITABLE_RESET, PreservationVault.Reason.STRICT_REPAIR), reasons);
+		assertFalse(ClientStateJournal.open(storage).entries().isEmpty());
+		assertEquals(ClientStateJournal.Kind.REPAIR, ClientStateJournal.open(storage).head().kind());
+	}
+
+	@Test
+	void repairCheckpointCapturesReplacedBytesWhenATimelineExists() throws Exception {
+		ClientStorage storage = storage();
+		byte[] expectedBytes = "server-default".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(expectedBytes);
+		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", "config", true, hash, expectedBytes.length));
+		write(storage.objectFile(hash), expectedBytes);
+		write(storage.activePath("config/settings.json"), expectedBytes);
+		byte[] editedBytes = "my-local-edit".getBytes(StandardCharsets.UTF_8);
+		write(storage.gamePath("config/settings.json"), editedBytes);
+		Path extra = write(storage.modsDirectory().resolve("extra.jar"), "extra".getBytes(StandardCharsets.UTF_8));
+		String extraHash = HashUtils.getHash(extra);
+		String editedHash = HashUtils.sha1(editedBytes);
+		ClientObjectStore.storeObject(storage, hash, expectedBytes);
+		ClientObjectStore.storeObject(storage, editedHash, editedBytes);
+		ClientObjectStore.storeObject(storage, extraHash, "extra".getBytes(StandardCharsets.UTF_8));
+		InstanceTree tree = InstanceTree.of(InstanceTree.LiveIdentity.empty(), List.of(
+				new InstanceTree.TrackedFile(UpdatePlan.Root.GAME_DIR, "", "config/settings.json", hash, expectedBytes.length)));
+		tree.write(storage);
+		ClientStateJournal.open(storage).append(tree.sha1(), ClientStateJournal.Kind.INSTALL, target.manifest().modpackId(), "txn-1");
+		OfflineRepair repair = new OfflineRepair(storage);
+
+		repair.apply(repair.inspect(new OfflineRepair.Request(target, Set.of(), null)), Set.of("config/settings.json"), Set.of("mods/extra.jar"));
+
+		assertEquals(ClientStateJournal.Kind.REPAIR, ClientStateJournal.open(storage).head().kind());
+		assertTrue(ClientObjectStore.referencedHashes(storage).contains(editedHash));
+		assertTrue(ClientObjectStore.referencedHashes(storage).contains(extraHash));
 	}
 
 	@Test
@@ -189,32 +216,6 @@ class OfflineRepairTest {
 		assertTrue(prepared.healthy());
 		assertEquals(fileCacheBefore, regularFileCount(storage.fileCacheDirectory()));
 		assertEquals(modCacheBefore, regularFileCount(storage.modCacheDirectory()));
-	}
-
-	@Test
-	void verifiesAndRepairsDurablePreservationClaims() throws Exception {
-		ClientStorage storage = storage();
-		byte[] targetBytes = "target".getBytes(StandardCharsets.UTF_8);
-		String targetHash = HashUtils.sha1(targetBytes);
-		SelectedModpackTarget target = install(storage, new FileSpec("config/target.json", "config", false, targetHash, targetBytes.length));
-		write(storage.objectFile(targetHash), targetBytes);
-		write(storage.activePath("config/target.json"), targetBytes);
-		write(storage.gamePath("config/target.json"), targetBytes);
-		byte[] preservedBytes = "preserved".getBytes(StandardCharsets.UTF_8);
-		String preservedHash = HashUtils.sha1(preservedBytes);
-		Path preservedSource = write(storage.gamePath("config/removed.json"), preservedBytes);
-		PreservationVault.preserve(storage, target.manifest().modpackId(), target.packTarget().contentToken(), PreservationVault.Reason.SERVER_REMOVAL, Root.GAME_DIR,
-				"config/removed.json", preservedHash, preservedBytes.length);
-		write(storage.objectFile(preservedHash), "corrupt".getBytes(StandardCharsets.UTF_8));
-		OfflineRepair repair = new OfflineRepair(storage);
-
-		OfflineRepair.Prepared before = repair.inspect(new OfflineRepair.Request(target, Set.of(), null));
-		OfflineRepair.Receipt receipt = repair.apply(before);
-
-		assertTrue(before.findings().stream().anyMatch(finding -> finding.place() == OfflineRepair.Place.CAS && finding.expectedHash().equals(preservedHash) && finding.locallyRepairable()));
-		assertTrue(receipt.complete());
-		assertTrue(FileIntegrity.matches(storage.objectFile(preservedHash), preservedBytes.length, preservedHash));
-		assertTrue(FileIntegrity.matches(preservedSource, preservedBytes.length, preservedHash));
 	}
 
 	@Test

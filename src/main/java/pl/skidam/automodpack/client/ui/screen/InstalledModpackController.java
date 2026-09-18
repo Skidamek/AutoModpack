@@ -3,6 +3,7 @@ package pl.skidam.automodpack.client.ui.screen;
 import static pl.skidam.automodpack_core.Constants.MODPACK_LOADER;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -48,12 +49,15 @@ import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
+import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.OfflineRepair;
-import pl.skidam.automodpack_core.update.PreservationVault;
+import pl.skidam.automodpack_core.update.RecoveredFiles;
+import pl.skidam.automodpack_core.update.StateHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.UriOpener;
 
 /**
  * Owns local installed-pack discovery and lifecycle operations used by the pack manager screens.
@@ -154,17 +158,6 @@ final class InstalledModpackController {
 		return discoveryFailure;
 	}
 
-	int preservedClaimCount() {
-		try {
-			int count = 0;
-			for (PreservationVault.Snapshot snapshot : PreservationVault.snapshots(storage)) count += snapshot.claims().size();
-			return count;
-		} catch (IOException | RuntimeException e) {
-			discoveryFailure = e;
-			return 0;
-		}
-	}
-
 	ClientObjectStore.StorageReport validateStorage() throws IOException {
 		return ClientObjectStore.validate(storage);
 	}
@@ -186,10 +179,6 @@ final class InstalledModpackController {
 		}
 	}
 
-	List<PreservationVault.Snapshot> preservedFiles() throws IOException {
-		return PreservationVault.snapshots(storage);
-	}
-
 	/** One installed pack this origin no longer serves, with its player-facing name or raw id. */
 	record StalePack(String modpackId, String name) {}
 
@@ -199,7 +188,7 @@ final class InstalledModpackController {
 		if (activeId.isBlank()) return List.of();
 		try {
 			List<StalePack> stale = new ArrayList<>();
-			for (String modpackId : ConnectionStore.staleSameOriginPackIds(storage, activeId)) stale.add(new StalePack(modpackId, stalePackName(modpackId)));
+			for (String modpackId : ConnectionStore.staleSameOriginPackIds(storage, activeId)) stale.add(new StalePack(modpackId, packName(modpackId)));
 			return List.copyOf(stale);
 		} catch (IOException | RuntimeException e) {
 			discoveryFailure = e;
@@ -207,7 +196,8 @@ final class InstalledModpackController {
 		}
 	}
 
-	private String stalePackName(String modpackId) {
+	/** The light name lookup: one document read, no catalogue projection. For labels; never for pack actions. */
+	String packName(String modpackId) {
 		try {
 			PackDocument record = new ClientGenerationStore(storage).newestDocument(modpackId);
 			if (record != null) return displayName(record, connectionOrigin(connection(modpackId)));
@@ -249,16 +239,61 @@ final class InstalledModpackController {
 		}
 	}
 
-	Path restorePreservedFile(String modpackId, String claimId) throws IOException {
-		return PreservationVault.restoreOriginal(storage, modpackId, claimId);
+	List<StateHistory.SnapshotView> stateViews() throws IOException {
+		return StateHistory.views(storage);
 	}
 
-	Path savePreservedCopy(String modpackId, String claimId) throws IOException {
-		return PreservationVault.saveCopy(storage, modpackId, claimId);
+	StateHistory.FileGate stateFileGate(UpdatePlan.Root root, String path) throws IOException {
+		return StateHistory.fileRestoreGate(storage, root, path);
 	}
 
-	void deletePreservedFile(String modpackId, String claimId) throws IOException {
-		PreservationVault.delete(storage, modpackId, claimId);
+	Path restoreStateFile(long seq, UpdatePlan.Root root, String path) throws IOException {
+		return StateHistory.restoreFile(storage, seq, root, path);
+	}
+
+	Path saveStateFileCopy(long seq, UpdatePlan.Root root, String overlayPackId, String path) throws IOException {
+		return StateHistory.saveFileCopy(storage, seq, root, overlayPackId, path);
+	}
+
+	/** The recovered-copies folder is where saved copies land; opening it spares the player a path too long for any screen. */
+	void openRecoveredFolder() {
+		ScreenManager.background(() -> {
+			try {
+				Path folder = RecoveredFiles.directory(storage);
+				Files.createDirectories(folder);
+				UriOpener.openPath(folder);
+			} catch (Exception e) {
+				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
+			}
+		});
+	}
+
+	void restoreState(ClientStateJournal.Snapshot snapshot, Runnable released) {
+		ScreenManager.background(() -> {
+			try {
+				StateHistory.checkout(storage, snapshot.seq());
+				releaseOnClient(released);
+			} catch (Exception e) {
+				released.run();
+				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
+			}
+		});
+	}
+
+	void forgetOlderThan(long seq, Runnable released) {
+		ScreenManager.background(() -> {
+			try {
+				StateHistory.forgetOlderThan(storage, seq);
+				releaseOnClient(released);
+			} catch (Exception e) {
+				released.run();
+				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
+			}
+		});
+	}
+
+	void openStateHistory(Screen parent, Runnable released) {
+		ScreenImpl.setScreen(new StateHistoryScreen(parent, this, released));
 	}
 
 	void update(Pack pack, Consumer<Boolean> completed) {
@@ -391,10 +426,6 @@ final class InstalledModpackController {
 		return Map.copyOf(names);
 	}
 
-	void openPreservedFiles(Screen parent, Runnable released) {
-		ScreenImpl.setScreen(new PreservationVaultScreen(parent, this, released));
-	}
-
 	private void removeActive(Pack pack, boolean deactivation, Runnable released, Runnable removed) {
 		ModpackUpdater updater;
 		try {
@@ -429,7 +460,7 @@ final class InstalledModpackController {
 		}
 	}
 
-	private String activeModpackId() {
+	String activeModpackId() {
 		try {
 			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 			return state == null || state.modpackId == null ? "" : state.modpackId;

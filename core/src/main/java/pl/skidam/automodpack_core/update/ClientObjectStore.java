@@ -122,17 +122,13 @@ public final class ClientObjectStore {
 			long metadataBytes,
 			long overlayFileCount,
 			long overlayBytes,
-			long baselineFileCount,
-			long baselineBytes,
-			long preservationFileCount,
-			long preservationBytes,
 			long incomingFileCount,
 			long incomingBytes,
 			long backupFileCount,
 			long backupBytes) {
 		public StorageReport {
 			if (List.of(objectCount, objectBytes, referencedObjectCount, referencedObjectBytes, validReferencedObjectCount, validReferencedObjectBytes, missingReferencedObjectCount, invalidReferencedObjectCount,
-					metadataFileCount, metadataBytes, overlayFileCount, overlayBytes, baselineFileCount, baselineBytes, preservationFileCount, preservationBytes, incomingFileCount, incomingBytes, backupFileCount,
+					metadataFileCount, metadataBytes, overlayFileCount, overlayBytes, incomingFileCount, incomingBytes, backupFileCount,
 					backupBytes).stream().anyMatch(value -> value < 0))
 				throw new IllegalArgumentException("Client storage report values cannot be negative");
 			if (validReferencedObjectCount > referencedObjectCount || missingReferencedObjectCount > referencedObjectCount || invalidReferencedObjectCount > referencedObjectCount - missingReferencedObjectCount)
@@ -163,9 +159,11 @@ public final class ClientObjectStore {
 
 	/**
 	 * Publishes a conservative durable receipt before or after client state changes. One call sweeps every
-	 * journal-mirror entry, overlay, baseline, generated copy, the pending transaction, and repair state — measured
-	 * at ~2ms warm for a 200-entry journal ({@code ClientObjectStoreTest.referenceSweepStaysCheapOnATwoHundredEntryJournal}),
-	 * so callers publish at phase transitions, not per file.
+	 * journal-mirror entry, overlay, generated copy, instance timeline tree, pending transaction, and repair state.
+	 * Measured ~100ms warm for a 200-generation mirror plus a 200-snapshot timeline of a 50-file pack
+	 * (649 hashes; {@code ClientObjectStoreTest.referenceSweepStaysCheapOnATwoHundredEntryJournal}). Callers
+	 * publish at phase transitions, not per file. Timeline pins grow until the player uses Forget older than
+	 * this; there is no automatic prune.
 	 */
 	public static void publishOwnership(ClientStorage storage) throws IOException {
 		publishOwnership(storage, Set.of());
@@ -242,13 +240,11 @@ public final class ClientObjectStore {
 		ObjectStoreMaintenance.FileTotals active = fileTotals(regularFiles(storage.activeDirectory(), "client active projection"));
 		ObjectStoreMaintenance.FileTotals metadata = metadataTotals(storage);
 		ObjectStoreMaintenance.FileTotals overlays = fileTotals(regularFiles(storage.overlaysDirectory(), "client overlays"));
-		ObjectStoreMaintenance.FileTotals baselines = fileTotals(regularFiles(storage.baselinesDirectory(), "client baselines"));
-		ObjectStoreMaintenance.FileTotals preservation = fileTotals(regularFiles(storage.preservationDirectory(), "client preservation vault"));
 		ObjectStoreMaintenance.FileTotals incoming = fileTotals(regularFiles(storage.incomingDirectory(), "client incoming projection"));
 		ObjectStoreMaintenance.FileTotals backup = fileTotals(regularFiles(storage.backupDirectory(), "client projection backups"));
 		return new StorageReport(objects.count(), objects.bytes(), references.hashes().size(), referenceTotals.expectedBytes(), referenceTotals.validCount(), referenceTotals.validBytes(),
 				referenceTotals.missingCount(), referenceTotals.invalidCount(), active.count(), active.bytes(), metadata.count(), metadata.bytes(), overlays.count(), overlays.bytes(),
-				baselines.count(), baselines.bytes(), preservation.count(), preservation.bytes(), incoming.count(), incoming.bytes(), backup.count(), backup.bytes());
+				incoming.count(), incoming.bytes(), backup.count(), backup.bytes());
 	}
 
 	private static ExpectedSizes collectReferences(ClientStorage storage) throws IOException {
@@ -310,22 +306,21 @@ public final class ClientObjectStore {
 		if (disagreements > 0) LOGGER.warn("Local state and the journal mirror disagree about the size of {} objects; keeping the locally verified receipts", disagreements);
 	}
 
-	/** Adds every durable client pin outside the mirror's history: overlays, baselines, generated copies, preservation, the pending transaction, and repair state. */
+	/** Adds every durable client pin outside the mirror's history: overlays, generated copies, the state history, the pending transaction, and repair state. */
 	static void collectNonHistoryReferences(ClientStorage storage, ExpectedSizes retained) throws IOException {
-		collectBaselines(storage, retained);
 		collectOverlays(storage, retained);
 		collectGeneratedCopies(storage, retained);
-		collectPreservation(storage, retained);
+		collectStateJournal(storage, retained);
 		collectTransaction(storage, retained);
 		collectRepair(storage, retained);
 		validateActiveProjection(storage);
 	}
 
-	private static void collectBaselines(ClientStorage storage, ExpectedSizes retained) throws IOException {
-		for (Path modpack : childDirectories(storage.baselinesDirectory(), "client baselines")) {
-			String modpackId = requireModpackId(modpack.getFileName().toString(), "client baseline directory");
-			for (ClientBaseline.Entry entry : ClientBaseline.read(storage, modpackId).entries())
-				if (!entry.absent()) retained.require(entry.objectHash(), entry.size(), "client baseline");
+	/** Every instance-tree file hash is a required pin, so cleanup cannot strand a snapshot. Forget-prefix is the only unpin. */
+	private static void collectStateJournal(ClientStorage storage, ExpectedSizes retained) throws IOException {
+		for (ClientStateJournal.Snapshot snapshot : ClientStateJournal.open(storage).entries()) {
+			InstanceTree tree = InstanceTree.read(storage, snapshot.treeSha1());
+			for (InstanceTree.TrackedFile file : tree.files()) retained.require(file.sha1(), file.size(), "instance timeline");
 		}
 	}
 
@@ -353,14 +348,6 @@ public final class ClientObjectStore {
 			String selectionDigest = path.getFileName().toString().substring(0, HashUtils.SHA1_HEX_LENGTH);
 			GeneratedCopyState state = GeneratedCopyState.read(storage, modpackId, contentToken, selectionDigest);
 			for (GeneratedCopyState.Entry entry : state.entries()) retained.optional(entry.sha1(), entry.size(), "generated-copy state");
-		}
-	}
-
-	private static void collectPreservation(ClientStorage storage, ExpectedSizes retained) throws IOException {
-		for (Path modpack : childDirectories(storage.preservationDirectory(), "client preservation vault")) {
-			String modpackId = requireModpackId(modpack.getFileName().toString(), "client preservation directory");
-			PreservationVault.Snapshot snapshot = PreservationVault.read(storage, modpackId);
-			for (PreservationVault.Claim claim : snapshot.claims()) retained.require(claim.objectHash(), claim.size(), "preservation claim");
 		}
 	}
 

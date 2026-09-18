@@ -24,13 +24,13 @@ Everything else downloads from the modpack host over its TLS connection. Those t
 
 The comparison that matters is between the server's new generation and the generation currently installed. When the server changes an editable file:
 
-1. The player's edited copy is preserved and shown in the "Preserved files" screen.
+1. The instance timeline records the player's copy before AutoModpack writes.
 2. The new server version is applied, exactly once.
-3. Edits made after that are preserved again until the server changes the file once more.
+3. Edits made after that go into the overlay again until the server changes the file once more.
 
 An operator who wants a file's edits to never be replaced simply never changes that file on the server. Every editable file follows the same rule; there is no second list.
 
-The same preservation protects the server in the other direction: a file that is *not* editable but no longer matches the pack is treated as player data, preserved, and replaced by the pack version.
+A file that is *not* editable but no longer matches the pack is treated the same way: the player's bytes are recorded on the instance timeline, then the pack version is written.
 
 ## Deletions are measured
 

@@ -32,6 +32,7 @@ import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.screen.SourceCounts;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
+import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.RestartDemand;
 import pl.skidam.automodpack_core.update.RestartPolicy;
@@ -196,7 +197,10 @@ public class ModpackUpdater implements AutoCloseable {
 	 */
 	void applyGenerationRollback() throws Exception {
 		if (selectedTarget == null) throw new IllegalStateException("Generation rollback was not prepared");
+		UpdateAttempt current = attempt.get();
+		if (!(current instanceof UpdateSession session)) throw new IllegalStateException("Installed modpack switch was not prepared");
 		new ClientGenerationStore(storage).declareDetached(selectedTarget.manifest().modpackId());
+		session.declareStateKind(ClientStateJournal.Kind.ROLLBACK.name());
 		applyInstalledSwitch();
 	}
 

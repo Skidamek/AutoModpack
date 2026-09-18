@@ -148,7 +148,7 @@ class UpdatePlannerTest {
 	}
 
 	@Test
-	void byteIdenticalLiveCopyIsVaultedAndDeletedWithoutAConflictQuestion() {
+	void byteIdenticalLiveCopyIsDeletedWithoutConflictOrVault() {
 		ModpackJsons.ModpackContentFields target = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/server.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
@@ -158,10 +158,9 @@ class UpdatePlannerTest {
 				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())),
 				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
 
-		// The live copy holds the pack's own bytes, so removing it is no conflict question - but it is vaulted,
-		// so a later server removal still leaves the player a restorable copy.
+		// The live copy holds the pack's own bytes, so it is a plain delete: the generation pins the bytes already.
 		assertTrue(plan.conflicts().isEmpty());
-		assertEquals(List.of(new Preservation(Root.GAME_DIR, "mods/server.jar", TARGET_HASH, 9, PreservationProof.PLAYER_CONSENT)), plan.preservations());
+		assertTrue(plan.preservations().isEmpty());
 		assertTrue(plan.restartReasons().contains(RestartReason.REMOVED_DUPLICATE_MODS));
 		Operation delete = plan.operations().stream().filter(operation -> operation.root() == Root.GAME_DIR).findFirst().orElseThrow();
 		assertEquals(OperationType.DELETE, delete.operation());
@@ -299,7 +298,7 @@ class UpdatePlannerTest {
 	void removalCleansOnlyUnmodifiedGeneratedCopies() {
 		ModpackJsons.ModpackContentFields installed = manifest(Map.of("mods/root.jar", item("mods/root.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/root.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
-		ClientBaseline baseline = new ClientBaseline(installed.modpackId, List.of());
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of();
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, "mods/root.jar"), new FileState(TARGET_HASH, 9, true),
 				new FileKey(Root.GAME_DIR, "mods/root.jar"), new FileState(TARGET_HASH, 9, true),
@@ -324,7 +323,7 @@ class UpdatePlannerTest {
 		String path = "test/server-owned.mp4";
 		ModpackJsons.ModpackContentFields installed = manifest(Map.of(path, item(path, TARGET_HASH, 9, "other")),
 				ledger(entry(path, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
-		ClientBaseline baseline = new ClientBaseline(installed.modpackId, List.of());
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of();
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, path), new FileState(TARGET_HASH, 9, true),
 				new FileKey(Root.GAME_DIR, path), new FileState(TARGET_HASH, 9, true));
@@ -393,7 +392,7 @@ class UpdatePlannerTest {
 		ModpackJsons.ModpackContentFields installed = manifest(Map.of("config/connector.json", item("config/connector.json", OLD_HASH, 8, "config")),
 				ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
 		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
-		ClientBaseline baseline = new ClientBaseline(installed.modpackId, List.of(new ClientBaseline.Entry("config/connector.json", OLD_HASH, 8, false, "")));
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of("config/connector.json", new InstanceTree.TrackedFile(Root.GAME_DIR, "", "config/connector.json", OLD_HASH, 8));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/connector.json"), new FileState(OLD_HASH, 8, true));
 		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.modpackId, installed, Map.of(), baseline, Set.of(OLD_HASH));
 
@@ -410,7 +409,7 @@ class UpdatePlannerTest {
 				ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
 		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
 		String baselineHash = "4444444444444444444444444444444444444444";
-		ClientBaseline baseline = new ClientBaseline(installed.modpackId, List.of(new ClientBaseline.Entry("config/connector.json", baselineHash, 8, false, "")));
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of("config/connector.json", new InstanceTree.TrackedFile(Root.GAME_DIR, "", "config/connector.json", baselineHash, 8));
 		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.modpackId, installed, Map.of(), baseline, Set.of(baselineHash));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target,

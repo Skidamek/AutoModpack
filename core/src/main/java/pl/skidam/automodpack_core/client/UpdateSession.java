@@ -62,6 +62,7 @@ final class UpdateSession implements UpdateAttempt {
 	private ClientUpdatePlanBuilder.PreparedPlan prepared;
 	private ReviewedUpdatePlan review;
 	private UpdatePlan appliedPlan;
+	private String stateKind;
 
 	UpdateSession(ClientStorage storage, ClientUpdatePlanBuilder planBuilder, ModpackObjectAcquisition objectAcquisition, SourceCatalogue sourceCatalogue,
 			Changelogs changelogs, ConnectionJsons.ConnectionInfo connectionInfo, SelectedModpackTarget target, boolean firstConnection,
@@ -253,7 +254,18 @@ final class UpdateSession implements UpdateAttempt {
 
 	private UpdateTransactionExecutor.Execution commitPlanObjects(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
 		planBuilder.preparePlanObjects(prepared.plan(), target.flatTarget());
-		return UpdateTransactionSupport.executor().commit(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig());
+		UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig());
+		transaction.stateKind = stateKind == null ? "" : stateKind;
+		return UpdateTransactionSupport.executor().commit(transaction, target);
+	}
+
+	/**
+	 * Declares this session's state-history story for the entry its commit will append: the flow that knows the
+	 * mutation's meaning better than the purpose mapping - the generation rollback - labels it here, and the label
+	 * survives replans because it rides the session, not the plan.
+	 */
+	void declareStateKind(String kind) {
+		this.stateKind = Objects.requireNonNull(kind, "kind");
 	}
 
 	/** Rebuilds the reviewed plan from the mutable inputs after a replan-required commit, and rechecks it against the player's review. */
@@ -310,7 +322,10 @@ final class UpdateSession implements UpdateAttempt {
 			if (!ReviewedUpdatePlan.outcomeCompatible(pending.plan(), prepared.plan()))
 				throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending update outcome; a new review is required");
 			builder.preparePlanObjects(prepared.plan(), target.flatTarget());
-			return UpdateTransactionSupport.executor().commit(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig());
+			// The rebuilt transaction must keep the pending one's state-history story, or a resumed rollback lands mislabeled.
+			UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig());
+			transaction.stateKind = pending.stateKind;
+			return UpdateTransactionSupport.executor().commit(transaction, target);
 		}
 	}
 

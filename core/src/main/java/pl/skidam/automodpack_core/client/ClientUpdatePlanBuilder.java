@@ -24,13 +24,14 @@ import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
-import pl.skidam.automodpack_core.update.ClientBaseline;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientOverlaySnapshot;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
+import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.GeneratedCopyState;
-import pl.skidam.automodpack_core.update.PreservationVault;
+import pl.skidam.automodpack_core.update.InstanceTree;
+import pl.skidam.automodpack_core.update.StateHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
@@ -55,7 +56,7 @@ import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
  *
  * <p>
  * <strong>Reconciliation</strong> is the explicit mutating counterpart, {@link #reconcileEditableState}: it deletes
- * superseded overlay files, vaults edited or drifted bytes as {@link PreservationVault} replace claims, rewrites
+ * superseded overlay files, checkpoints drifted-file resets into the state history, rewrites
  * overlay tombstones, and silently resets drifted server-owned non-mod files. Callers run it immediately before
  * {@link #buildPlan} so the plan observes post-reconciliation state.
  * </p>
@@ -69,7 +70,7 @@ import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
  *
  * <p>
  * The only other durable client mutation point is UpdateTransactionExecutor committing the reviewed plan (plus the
- * PreservationVault and CAS helpers it drives under the mutation lock).
+ * state history and CAS helpers it drives under the mutation lock).
  * </p>
  */
 final class ClientUpdatePlanBuilder {
@@ -112,7 +113,7 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	record RemovalPreparation(UpdatePlan plan, ModpackJsons.ModpackContentFields installed,
-			ClientBaseline baseline, SelectionIntent expectedPriorIntent, ClientConfigJsons.ClientConfigFieldsV3 currentConfig,
+			Map<String, InstanceTree.TrackedFile> priorGameDir, SelectionIntent expectedPriorIntent, ClientConfigJsons.ClientConfigFieldsV3 currentConfig,
 			ClientConfigJsons.ClientConfigFieldsV3 plannedConfig, Map<UpdatePlan.FileKey, UpdatePlan.FileState> files,
 			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
 		RemovalPreparation {
@@ -121,7 +122,7 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	private record AvailableBaseline(ClientBaseline baseline, Set<String> objectHashes) {}
+	private record AvailablePreInstall(Map<String, InstanceTree.TrackedFile> priorGameDir, Set<String> objectHashes) {}
 
 	/** Inspection phase: observes live, overlay and projection state and produces the plan; expects {@link #reconcileEditableState} to have run already. */
 	PreparedPlan buildPlan(Input input, FileCache cache, ModFileCache modCache) throws IOException {
@@ -169,17 +170,16 @@ final class ClientUpdatePlanBuilder {
 		SelectionIntent expectedPriorIntent = new ClientSelectionStore(storage.selectionFile()).get(installed.modpackId).orElse(null);
 
 		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
-			AvailableBaseline availableBaseline = readAvailableBaseline(installed.modpackId, cache);
-			ClientBaseline baseline = availableBaseline.baseline();
+			AvailablePreInstall availablePreInstall = readAvailablePreInstall(installed.modpackId, cache);
 			ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
-			// Deliberate, documented side effect: the baseline above had to observe pre-reconciliation state, while the inspection below must observe post-reconciliation state.
+			// The state history is immutable, so this read is reconciliation-order safe, unlike the old baseline file.
 			reconcileEditableState(cache, projection, null);
 			GeneratedCopyState generatedCopies = projection.generatedCopies();
 			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null, projection,
 					generatedCopies == null ? List.of() : generatedCopies.nestedCopies(), cache,
 					Map.of(installed.modpackId, storage.overlaySnapshot(installed.modpackId, cache)));
-			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, availableBaseline.objectHashes(), generatedCopies, plannedConfig));
-			return new RemovalPreparation(plan, installed, baseline, expectedPriorIntent, currentConfig, plannedConfig, files, expectedClientConfig);
+			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, availablePreInstall.priorGameDir(), files, availablePreInstall.objectHashes(), generatedCopies, plannedConfig));
+			return new RemovalPreparation(plan, installed, availablePreInstall.priorGameDir(), expectedPriorIntent, currentConfig, plannedConfig, files, expectedClientConfig);
 		}
 	}
 
@@ -241,23 +241,23 @@ final class ClientUpdatePlanBuilder {
 			snapshot = storage.overlaySnapshot(previousId, cache);
 			overlaySnapshots.put(previousId, snapshot);
 		}
-		AvailableBaseline baseline = readAvailableBaseline(previousId, cache);
-		return new UpdatePlanner.SelectionContext(previousId, previousManifest, snapshot.files(), baseline.baseline(), baseline.objectHashes());
+		AvailablePreInstall preInstall = readAvailablePreInstall(previousId, cache);
+		return new UpdatePlanner.SelectionContext(previousId, previousManifest, snapshot.files(), preInstall.priorGameDir(), preInstall.objectHashes());
 	}
 
-	private AvailableBaseline readAvailableBaseline(String modpackId, FileCache cache) throws IOException {
-		ClientBaseline baseline = ClientBaseline.read(storage, modpackId);
+	private AvailablePreInstall readAvailablePreInstall(String modpackId, FileCache cache) throws IOException {
+		Map<String, InstanceTree.TrackedFile> priorGameDir = StateHistory.priorGameDir(storage, modpackId);
 		Set<String> availableObjects = new HashSet<>();
-		for (ClientBaseline.Entry entry : baseline.entries())
-			if (!entry.absent() && FileIntegrity.matchesNamed(storage.objectFile(entry.objectHash()), entry.size(), entry.objectHash(), cache)) availableObjects.add(entry.objectHash());
-		return new AvailableBaseline(baseline, Set.copyOf(availableObjects));
+		for (InstanceTree.TrackedFile file : priorGameDir.values())
+			if (FileIntegrity.matchesNamed(storage.objectFile(file.sha1()), file.size(), file.sha1(), cache)) availableObjects.add(file.sha1());
+		return new AvailablePreInstall(priorGameDir, Set.copyOf(availableObjects));
 	}
 
 	/**
 	 * Reconciles mutable editable client state against the active generation: deletes superseded overlay files,
-	 * vaults edited or drifted bytes as {@link PreservationVault} replace claims, rewrites overlay tombstones, and
-	 * silently resets drifted server-owned non-mod files. This is the deliberate mutating counterpart of
-	 * {@link #buildPlan}; callers run it immediately before planning so the plan observes post-reconciliation state.
+	 * rewrites overlay tombstones, and silently resets drifted server-owned non-mod files. The instance timeline
+	 * already snapshotted live if it was dirty; drift does not add another row. Callers run this immediately before
+	 * planning so the plan observes post-reconciliation state.
 	 *
 	 * @param target
 	 *            the modpack the plan will install, used to detect server-side replacements of editable files; {@code null} for removal planning
@@ -266,10 +266,13 @@ final class ClientUpdatePlanBuilder {
 		reconcileEditableState(cache, ClientProjectionView.open(storage).snapshot(cache), target);
 	}
 
-	/** Same reconciliation against a caller-held projection snapshot, for callers whose baseline reads must stay pre-reconciliation. */
+	/** Same reconciliation against a caller-held projection snapshot. */
 	void reconcileEditableState(FileCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields target) throws IOException {
 		ModpackJsons.ModpackContentFields activeTarget = projection.target();
 		if (activeTarget == null || activeTarget.list == null) return;
+		Set<InstanceTree.Key> extra = new TreeSet<>(InstanceTree.Key.ORDER);
+		for (var item : activeTarget.list) extra.add(new InstanceTree.Key(UpdatePlan.Root.GAME_DIR, "", LogicalPath.normalize(item.file)));
+		StateHistory.snapshotIfDirty(storage, extra, ClientStateJournal.Kind.LIVE, activeTarget.modpackId, "before-reconcile");
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = new HashMap<>();
 		if (target != null && target.list != null) target.list.forEach(item -> targetItems.put(LogicalPath.normalize(item.file), item));
 		boolean sameModpackTarget = target != null && target.modpackId.equals(activeTarget.modpackId);
@@ -298,12 +301,10 @@ final class ClientUpdatePlanBuilder {
 			}
 			var targetItem = sameModpackTarget ? targetItems.get(LogicalPath.normalize(item.file)) : null;
 			if (targetItem != null && !targetItem.sha1.equalsIgnoreCase(item.sha1)) {
-				// The pack owner replaced the file: vault the player's edited bytes and let the plan install the new server version once; edits after that are preserved again.
+				// The pack owner replaced the file: leave the player's bytes in place and let the plan install the new
+				// server version once; the update entry's captures pin the replaced bytes for the state history.
 				Files.deleteIfExists(overlay);
 				deletedPaths.remove(LogicalPath.normalize(item.file));
-				Path object = storage.objectFile(hash);
-				if (!FileIntegrity.matchesNamed(object, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(live, object, size, hash, cache);
-				PreservationVault.replaceClaim(storage, activeTarget.modpackId, activeTarget.contentToken, PreservationVault.Reason.EDITABLE_RESET, UpdatePlan.Root.GAME_DIR, item.file, hash, size);
 				continue;
 			}
 			Path object = storage.objectFile(hash);
@@ -314,23 +315,24 @@ final class ClientUpdatePlanBuilder {
 		storage.writeOverlayState(activeTarget.modpackId, deletedPaths);
 	}
 
-	/** A drifted file the pack owns: the drifted bytes go to the vault and the live file gets the pack version back, without a review. */
-	private UpdatePlan.FileState resetDriftedFile(FileCache cache, ModpackJsons.ModpackContentFields activeTarget, ModpackJsons.ModpackContentFields.ModpackContentItem item,
-			Path live, UpdatePlan.FileState drift, PreservationVault.Reason reason) throws IOException {
+	/** A drifted file the pack owns: the drifted bytes are acquired for the state history and the live file gets the pack version back, without a review. */
+	private UpdatePlan.FileState resetDriftedFile(FileCache cache, ModpackJsons.ModpackContentFields.ModpackContentItem item, Path live, UpdatePlan.FileState drift) throws IOException {
 		long packSize = item.size;
 		Path object = storage.objectFile(item.sha1);
 		if (!FileIntegrity.matchesNamed(object, packSize, item.sha1, cache)) {
 			LOGGER.warn("Pack version is unavailable locally; keeping the drifted file in place: {}", item.file);
 			return null;
 		}
-		PreservationVault.replaceClaim(storage, activeTarget.modpackId, activeTarget.contentToken, reason, UpdatePlan.Root.GAME_DIR, item.file, drift.sha1(), drift.size());
+		Path driftObject = storage.objectFile(drift.sha1());
+		if (!FileIntegrity.matchesNamed(driftObject, drift.size(), drift.sha1(), cache)) VerifiedFileTransfer.copyAtomicImmutable(live, driftObject, drift.size(), drift.sha1(), cache);
 		VerifiedFileTransfer.copyAtomic(object, live, packSize, item.sha1, cache);
 		return new UpdatePlan.FileState(item.sha1, packSize, true);
 	}
 
 	/** Silently resets client-side drift of an unchanged server-provided non-mod file so it never becomes an update prompt; the server changing the file stays a reviewable update. */
 	private void resetDriftedServerFile(FileCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields activeTarget,
-			Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, ModpackJsons.ModpackContentFields.ModpackContentItem item) throws IOException {
+			Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, ModpackJsons.ModpackContentFields.ModpackContentItem item)
+			throws IOException {
 		if (targetItems.isEmpty()) return;
 		String relative = LogicalPath.normalize(item.file);
 		var targetItem = targetItems.get(relative);
@@ -343,7 +345,7 @@ final class ClientUpdatePlanBuilder {
 		UpdatePlan.FileState state = new UpdatePlan.FileState(cache.getOrComputeHash(live), size, true);
 		if (projection.matchesPendingGameState(item.file, state)) return;
 		if (state.sha1().equalsIgnoreCase(item.sha1) && packSize == state.size()) return;
-		resetDriftedFile(cache, activeTarget, item, live, state, PreservationVault.Reason.LOCAL_DRIFT);
+		resetDriftedFile(cache, item, live, state);
 	}
 
 	private Path livePath(ModpackJsons.ModpackContentFields.ModpackContentItem item) {

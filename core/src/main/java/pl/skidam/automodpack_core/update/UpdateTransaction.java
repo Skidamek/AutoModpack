@@ -45,6 +45,8 @@ public final class UpdateTransaction {
 	public String overlayDigest;
 	public ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig;
 	public GenerationJsons.OwnershipLedgerFields ownershipLedger;
+	/** The state-history kind of this mutation when the flow itself knows it better than the purpose mapping: rollbacks declare it, everything else derives. */
+	public String stateKind = "";
 	public Status resultStatus;
 	public String resultOperation;
 	public String resultPath;

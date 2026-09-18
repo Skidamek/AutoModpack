@@ -31,9 +31,10 @@ class DurableGsonTypesTest {
 		for (Class<?> type : List.of(UpdateTransaction.class, ClientConfigJsons.ClientConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3.class, AuthJsons.SecretsFields.class,
 				IssuedSecret.class, Secrets.Secret.class, ConnectionJsons.ConnectionRecordFields.class, ConnectionJsons.KnownHostsFields.class, ConnectionJsons.KnownHostsBootstrapFields.class,
 				SelectionJsons.ClientSelectionStoreFields.class, GenerationJsons.HeadDocumentFields.class, GenerationJsons.JournalEntryFields.class, ModpackJsons.CompleteModpackContentFields.class,
-				ModpackJsons.ModpackContentFields.class, StorageJsons.ObjectOwnershipFields.class, StorageJsons.SelfUpdateFields.class, ClientStorageJsons.ClientBaselineFields.class,
-				ClientStorageJsons.ClientGeneratedCopiesFields.class, ClientStorageJsons.ClientGenerationStateFields.class, ClientStorageJsons.ClientPreservationVaultFields.class,
-				ClientStorageJsons.ClientOverlayFields.class, ClientStorageJsons.ClientCompactionReceiptFields.class, ClientStorageJsons.OfflineRepairJournalFields.class, FileCache.CachedFile.class,
+				ModpackJsons.ModpackContentFields.class, StorageJsons.ObjectOwnershipFields.class, StorageJsons.SelfUpdateFields.class, ClientStorageJsons.ClientGeneratedCopiesFields.class,
+				ClientStorageJsons.ClientGenerationStateFields.class, ClientStorageJsons.SnapshotFields.class, ClientStorageJsons.InstanceTreeFields.class, ClientStorageJsons.ClientOverlayFields.class,
+				ClientStorageJsons.ClientCompactionReceiptFields.class,
+				ClientStorageJsons.OfflineRepairJournalFields.class, FileCache.CachedFile.class,
 				PlatformCache.Record.class))
 			assertNoRecords(type, visited);
 	}

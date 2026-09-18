@@ -364,12 +364,6 @@ public final class UpdateTransactionValidator {
 		List<Preservation> sorted = transaction.plan().preservations().stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal())
 				.thenComparing(Preservation::relativePath).thenComparing(Preservation::expectedHash).thenComparingLong(Preservation::expectedSize)).toList();
 		if (!transaction.plan().preservations().equals(sorted)) throw new IOException("Preservations are not deterministically ordered");
-		// The vault snapshot answers every player-consent row of this pass; it is read only when such a row can reach it.
-		PreservationVault.Snapshot vault = activeState != null && activeState.modpackId.equals(transaction.plan().modpackId())
-				&& activeState.contentToken.equals(transaction.plan().packTarget().contentToken())
-				&& transaction.plan().preservations().stream().anyMatch(preservation -> preservation != null && preservation.proof() == PreservationProof.PLAYER_CONSENT)
-						? PreservationVault.read(storage, transaction.plan().modpackId())
-						: null;
 		Set<FileKey> preservationKeys = new HashSet<>();
 		for (Preservation preservation : sorted) {
 			if (preservation == null || preservation.root() != Root.GAME_DIR)
@@ -392,8 +386,7 @@ public final class UpdateTransactionValidator {
 				boolean replaceProof = installation != null && installation.expectedExistingHash() != null
 						&& preservation.expectedHash().equalsIgnoreCase(installation.expectedExistingHash());
 				if (!deleteProof && !replaceProof) throw new IOException("Player-consent preservation has no matching hash-pinned operation");
-				if (activeState != null && !(activeState.modpackId.equals(transaction.plan().modpackId()) && activeState.contentToken.equals(transaction.plan().packTarget().contentToken())
-						&& hasPlayerConsentClaim(transaction, vault, preservation, relative)))
+				if (activeState != null && !(activeState.modpackId.equals(transaction.plan().modpackId()) && activeState.contentToken.equals(transaction.plan().packTarget().contentToken())))
 					throw new IOException("Player-consent preservation is only valid on a first install");
 				ProjectedFile projected = finalState.get(new FileKey(preservation.root(), relative));
 				if (projected == null || (deleteProof && projected.present()) || (replaceProof && !projected.present()))
@@ -416,12 +409,6 @@ public final class UpdateTransactionValidator {
 		}
 	}
 
-	private boolean hasPlayerConsentClaim(UpdateTransaction transaction, PreservationVault.Snapshot vault, Preservation preservation, String relative) {
-		return vault.claims().stream().anyMatch(claim -> claim.sourceRoot() == Root.GAME_DIR
-				&& claim.originalPath().equals(relative) && claim.objectHash().equalsIgnoreCase(preservation.expectedHash()) && claim.size() == preservation.expectedSize()
-				&& claim.reason() == PreservationVault.Reason.PLAYER_CONSENT && claim.contentToken().equals(transaction.plan().packTarget().contentToken()));
-	}
-
 	private void validateConflicts(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, ModpackJsons.ModpackContentFields target) throws IOException {
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE) {
 			if (!transaction.plan().conflicts().isEmpty()) throw new IOException("Only modpack updates may contain conflicts");
@@ -439,7 +426,6 @@ public final class UpdateTransactionValidator {
 		List<Conflict> sorted = transaction.plan().conflicts().stream().sorted(Comparator.comparing(Conflict::conflictId)).toList();
 		if (!transaction.plan().conflicts().equals(sorted)) throw new IOException("Conflicts are not deterministically ordered");
 		OwnershipLedger activeLedger = activeLedger(storage.readActiveState());
-		PreservationVault.read(storage, transaction.plan().modpackId());
 		Set<String> targetPaths = new HashSet<>();
 		for (var item : target.list) targetPaths.add(normalizeManifestPath(item.file));
 		Set<String> conflictIds = new HashSet<>();

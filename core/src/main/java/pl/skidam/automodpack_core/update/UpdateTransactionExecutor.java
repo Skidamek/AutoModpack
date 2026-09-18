@@ -9,8 +9,6 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -33,12 +31,10 @@ import pl.skidam.automodpack_core.update.UpdatePlan.ConflictAction;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
-import pl.skidam.automodpack_core.update.UpdatePlan.PreservationProof;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
-import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.WindowsLockProbe;
@@ -102,6 +98,11 @@ public final class UpdateTransactionExecutor {
 		return commitPrepared(transaction, null);
 	}
 
+	/** Commits an already-built transaction against the target it was created for; the session builds transactions to decorate them with their state-history story. */
+	public Execution commit(UpdateTransaction transaction, SelectedModpackTarget unpublishedTarget) throws IOException {
+		return commitPrepared(transaction, unpublishedTarget);
+	}
+
 	/**
 	 * The one commit-with-replan: applies the current plan once, and on a replan-required result rebuilds the plan from
 	 * mutable inputs through {@code replan} and retries exactly once. A second replan-required result is terminal and
@@ -140,7 +141,10 @@ public final class UpdateTransactionExecutor {
 		UpdateTransaction pending = UpdateTransaction.read(storage.transactionFile());
 		if (pending == null) return;
 		if (pending.phase == UpdateTransaction.Phase.COMMITTED) {
+			// A crash can land after the COMMITTED marker but before its state-history checkpoint; replaying the tail here
+			// records the entry (idempotent by transaction id) before the record that produced it retires.
 			cleanupTransactionDirectories(pending);
+			recordStateHistory(pending);
 			Files.deleteIfExists(storage.transactionFile());
 			return;
 		}
@@ -258,17 +262,48 @@ public final class UpdateTransactionExecutor {
 
 	/**
 	 * The one durable commit tail, shared by the live path and the recovery of a crash after the COMMITTED phase
-	 * persisted: drop the working directories, retire the journal, and refresh the ownership receipt. The receipt
-	 * published at commit start names every object the journal pinned, and retiring it is the only reference loss
-	 * since, so the stale on-disk receipt protected everything until this refresh replaces it with exactly the
-	 * durable set. A publish is a full-state sweep (~2ms over a 200-entry journal, pinned by
+	 * persisted: drop the working directories, checkpoint the state history, retire the journal, and refresh the
+	 * ownership receipt. The receipt published at commit start names every object the journal pinned, and retiring it
+	 * is the only reference loss since, so the stale on-disk receipt protected everything until this refresh replaces
+	 * it with exactly the durable set. A publish is a full-state sweep (~2ms over a 200-entry journal, pinned by
 	 * {@code ClientObjectStoreTest}), so a commit publishes at its start and here, and never per file.
 	 */
 	private Execution finalizeCommitted(UpdateTransaction transaction) throws IOException {
 		cleanupTransactionDirectories(transaction);
+		recordStateHistory(transaction);
 		Files.deleteIfExists(context.storage().transactionFile());
 		ClientObjectStore.publishOwnership(context.storage());
 		return new Execution(UpdateTransaction.Status.SUCCESS, transaction, null, null, null, null);
+	}
+
+	/**
+	 * The instance state history entry of a committed transaction: one complete checkpoint of every tracked file plus
+	 * the changes and before-state captures that produced it. The append lands before the transaction record retires
+	 * and dedupes on the transaction id, so a crash between append and retirement replays to the same single entry,
+	 * and the checkpoint is always durable before the record that produced it can be forgotten.
+	 */
+	private void recordStateHistory(UpdateTransaction transaction) throws IOException {
+		StateHistory.snapshotIfDirty(context.storage(), StateHistory.planPaths(transaction.plan()), snapshotKind(transaction), transaction.plan().modpackId(), transaction.transactionId);
+	}
+
+	private void snapshotBefore(UpdateTransaction transaction) throws IOException {
+		StateHistory.snapshotIfDirty(context.storage(), StateHistory.planPaths(transaction.plan()), ClientStateJournal.Kind.LIVE, transaction.plan().modpackId(), transaction.transactionId,
+				transaction.plan());
+	}
+
+	private ClientStateJournal.Kind snapshotKind(UpdateTransaction transaction) throws IOException {
+		ClientStateJournal.Kind declared = ClientStateJournal.Kind.parseDeclared(transaction.stateKind);
+		if (declared != null) return declared;
+		return switch (transaction.purpose) {
+			case MODPACK_UPDATE -> {
+				String modpackId = transaction.plan().modpackId();
+				boolean seen = ClientStateJournal.open(context.storage()).entries().stream()
+						.anyMatch(entry -> entry.modpackId().equals(modpackId) && (entry.kind() == ClientStateJournal.Kind.INSTALL || entry.kind() == ClientStateJournal.Kind.UPDATE));
+				yield seen ? ClientStateJournal.Kind.UPDATE : ClientStateJournal.Kind.INSTALL;
+			}
+			case MODPACK_DEACTIVATION -> ClientStateJournal.Kind.DEACTIVATION;
+			case MODPACK_REMOVAL -> ClientStateJournal.Kind.REMOVAL;
+		};
 	}
 
 	/** The modpack apply sequence: pre-mutation captures, live operations, projection publication, and durable finalization. */
@@ -276,12 +311,10 @@ public final class UpdateTransactionExecutor {
 			boolean preserveNewerSelection) throws IOException {
 		if (!publicationStarted && validator.mutableInputDrift(transaction).configuration())
 			throw new UpdateReplanRequiredException(null, "Client configuration changed after planning the update");
-		captureBaselines(transaction);
-		// The ledger-driven batch is bookkeeping; the conflict resolutions are the player's last review
-		// decisions and must become the newest vault claims, which the vault surfaces first.
-		PreservationVault.LiveOwnership ownership = PreservationVault.LiveOwnership.read(context.storage());
-		preserveBeforeMutation(transaction, ownership);
-		preserveConflicts(transaction, ownership);
+		snapshotBefore(transaction);
+		capturePreStates(transaction);
+		capturePreservations(transaction);
+		captureConflicts(transaction);
 		if (!liveAlreadyApplied) applyOperations(transaction, current);
 		current.set(null);
 		if (!publicationStarted) {
@@ -323,7 +356,6 @@ public final class UpdateTransactionExecutor {
 		} else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
 			FileTrees.delete(context.storage().generatedCopiesGenerationDirectory(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken()));
 			context.storage().clearActiveState();
-			Files.deleteIfExists(context.storage().baselineFile(transaction.plan().modpackId()));
 		} else {
 			context.storage().clearActiveState();
 		}
@@ -388,38 +420,28 @@ public final class UpdateTransactionExecutor {
 			throw new UpdateReplanRequiredException(target, described + " target changed after planning: " + target);
 	}
 
-	private void preserveBeforeMutation(UpdateTransaction transaction, PreservationVault.LiveOwnership ownership) throws IOException {
+	/** Acquires every planned preservation's bytes before mutation, so the state entry's change hashes name real objects. */
+	private void capturePreservations(UpdateTransaction transaction) throws IOException {
 		for (Preservation preservation : transaction.plan().preservations()) {
-			PreservationOrigin origin = preservationOrigin(transaction, preservation, ownership);
-			PreservationVault.preserve(context.storage(), ownership, origin.modpackId(), origin.contentToken(), origin.reason(), preservation.root(),
-					preservation.relativePath(), preservation.expectedHash().toLowerCase(Locale.ROOT), preservation.expectedSize(), Instant.now());
+			Path source = resolve(preservation.root(), preservation.relativePath(), transaction);
+			if (!FileIntegrity.matches(source, preservation.expectedSize(), preservation.expectedHash(), fileCache))
+				throw new IOException("Preserved source changed: " + source);
+			Path object = context.storage().objectFile(preservation.expectedHash().toLowerCase(Locale.ROOT));
+			VerifiedFileTransfer.copyAtomicImmutable(source, object, preservation.expectedSize(), preservation.expectedHash(), fileCache);
 		}
 	}
 
-	private void preserveConflicts(UpdateTransaction transaction, PreservationVault.LiveOwnership ownership) throws IOException {
-		for (Conflict conflict : transaction.plan().conflicts())
-			if (conflict.action() == ConflictAction.PRESERVE_LOCAL)
-				PreservationVault.preserveConflict(context.storage(), ownership, transaction.plan().packTarget().contentToken(), conflict);
-	}
-
-	private PreservationOrigin preservationOrigin(UpdateTransaction transaction, Preservation preservation, PreservationVault.LiveOwnership ownership) throws IOException {
-		ClientStorageJsons.ClientGenerationStateFields active = ownership.activeState();
-		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL)
-			return new PreservationOrigin(transaction.plan().modpackId(), active == null ? transaction.plan().packTarget().contentToken() : HashUtils.normalizeSha1(active.contentToken),
-					PreservationVault.Reason.MODPACK_REMOVAL);
-		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION)
-			return new PreservationOrigin(transaction.plan().modpackId(), active == null ? transaction.plan().packTarget().contentToken() : HashUtils.normalizeSha1(active.contentToken),
-					PreservationVault.Reason.MODPACK_DEACTIVATION);
-		if (preservation.proof() == PreservationProof.ACTIVE_LEDGER && active != null) {
-			PreservationVault.Reason reason = transaction.plan().modpackId().equals(active.modpackId) ? PreservationVault.Reason.SERVER_REMOVAL : PreservationVault.Reason.MODPACK_DEACTIVATION;
-			return new PreservationOrigin(active.modpackId, HashUtils.normalizeSha1(active.contentToken), reason);
+	/** Acquires the local side of every preserve-local conflict before the pack's version overwrites it. */
+	private void captureConflicts(UpdateTransaction transaction) throws IOException {
+		for (Conflict conflict : transaction.plan().conflicts()) {
+			if (conflict.action() != ConflictAction.PRESERVE_LOCAL) continue;
+			Path source = context.storage().gamePath(conflict.sourcePath());
+			if (!FileIntegrity.matches(source, conflict.sourceSize(), conflict.sourceHash(), fileCache))
+				throw new IOException("Conflict source changed: " + source);
+			Path object = context.storage().objectFile(conflict.sourceHash().toLowerCase(Locale.ROOT));
+			VerifiedFileTransfer.copyAtomicImmutable(source, object, conflict.sourceSize(), conflict.sourceHash(), fileCache);
 		}
-		if (preservation.proof() == PreservationProof.PLAYER_CONSENT)
-			return new PreservationOrigin(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken(), PreservationVault.Reason.PLAYER_CONSENT);
-		return new PreservationOrigin(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken(), PreservationVault.Reason.SERVER_REMOVAL);
 	}
-
-	private record PreservationOrigin(String modpackId, String contentToken, PreservationVault.Reason reason) {}
 
 	private void verifyManagedFinalState(UpdateTransaction transaction) throws IOException {
 		for (ProjectedFile projected : transaction.plan().projectedFinalState()) {
@@ -518,30 +540,19 @@ public final class UpdateTransactionExecutor {
 		FileTrees.delete(context.storage().backupDirectory());
 	}
 
-	private void captureBaselines(UpdateTransaction transaction) throws IOException {
+	/** Verifies every planned capture against the live file and acquires its bytes into the object store; the entry's captures then pin them. */
+	private void capturePreStates(UpdateTransaction transaction) throws IOException {
 		if (transaction.plan().baselineCaptures().isEmpty()) return;
-		ClientBaseline baseline = ClientBaseline.read(context.storage(), transaction.plan().modpackId());
-		Map<String, ClientBaseline.Entry> entries = new TreeMap<>(baseline.entriesByPath());
-		boolean changed = false;
 		for (BaselineCapture capture : transaction.plan().baselineCaptures()) {
-			String logicalPath = capture.relativePath();
-			if (entries.containsKey(logicalPath)) continue;
 			Path source = resolve(capture.root(), capture.relativePath(), transaction);
-			ClientBaseline.Entry entry;
 			if (capture.absent()) {
-				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Baseline path was expected to be absent: " + source);
-				entry = new ClientBaseline.Entry(logicalPath, "", -1, true, "");
-			} else {
-				if (!FileIntegrity.matches(source, capture.expectedSize(), capture.expectedHash(), fileCache)) throw new IOException("Baseline source changed: " + source);
-				Path object = context.storage().objectFile(capture.expectedHash());
-				VerifiedFileTransfer.copyAtomicImmutable(source, object, capture.expectedSize(), capture.expectedHash(), fileCache);
-				entry = new ClientBaseline.Entry(logicalPath, capture.expectedHash().toLowerCase(Locale.ROOT), capture.expectedSize(), false, "");
+				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Captured path was expected to be absent: " + source);
+				continue;
 			}
-			entries.put(logicalPath, entry);
-			changed = true;
+			if (!FileIntegrity.matches(source, capture.expectedSize(), capture.expectedHash(), fileCache)) throw new IOException("Captured source changed: " + source);
+			Path object = context.storage().objectFile(capture.expectedHash());
+			VerifiedFileTransfer.copyAtomicImmutable(source, object, capture.expectedSize(), capture.expectedHash(), fileCache);
 		}
-		if (!changed) return;
-		new ClientBaseline(transaction.plan().modpackId(), new ArrayList<>(entries.values())).write(context.storage());
 	}
 
 	private void claimSelection(UpdateTransaction transaction) throws IOException {

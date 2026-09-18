@@ -15,13 +15,12 @@ public final class StoragePaths {
 	public static final Path AUTOMODPACK_DIR = Path.of("automodpack");
 	public static final Path CLIENT_DIR = AUTOMODPACK_DIR.resolve("client");
 	public static final Path CLIENT_OVERLAYS_DIR = CLIENT_DIR.resolve("overlays");
-	public static final Path CLIENT_BASELINES_DIR = CLIENT_DIR.resolve("baselines");
 	public static final Path CLIENT_GENERATED_COPIES_DIR = CLIENT_DIR.resolve("generated-copies");
 	public static final Path CLIENT_ACTIVE_DIR = CLIENT_DIR.resolve("active");
 	public static final Path CLIENT_INCOMING_DIR = CLIENT_DIR.resolve("incoming");
 	public static final Path CLIENT_BACKUP_DIR = CLIENT_DIR.resolve("backup");
-	public static final Path CLIENT_PRESERVATION_DIR = CLIENT_DIR.resolve("preservation");
 	public static final Path CLIENT_HISTORY_DIR = CLIENT_DIR.resolve("history");
+	public static final Path CLIENT_STATE_HISTORY_DIR = CLIENT_DIR.resolve("state-history");
 	public static final Path RECOVERED_DIR = AUTOMODPACK_DIR.resolve("recovered");
 	public static final Path CLIENT_ACTIVE_STATE_FILE = CLIENT_DIR.resolve("active-state.json");
 	public static final Path CLIENT_SELECTION_FILE = CLIENT_DIR.resolve("selections.json");

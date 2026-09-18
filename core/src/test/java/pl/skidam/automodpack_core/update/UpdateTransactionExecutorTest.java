@@ -123,7 +123,7 @@ class UpdateTransactionExecutorTest {
 
 		assertTrue(execution.success());
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/existing.jar"), bytes.length, hash));
-		assertFalse(Files.exists(storage.objectFile(hash)));
+		assertTrue(Files.exists(storage.objectFile(hash)), "the instance snapshot pins projection bytes in CAS");
 		assertEquals(target.packTarget().contentToken(), storage.readActiveState().contentToken);
 	}
 
@@ -452,9 +452,6 @@ class UpdateTransactionExecutorTest {
 		assertTrue(execution.success());
 		assertFalse(Files.exists(local));
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/server-sodium.jar"), serverBytes.length, serverHash));
-		PreservationVault.Snapshot preservation = PreservationVault.read(storage, target.manifest().modpackId());
-		assertEquals(1, preservation.claims().size());
-		assertEquals(PreservationVault.Reason.LOCAL_CONFLICT, preservation.claims().get(0).reason());
 		assertTrue(FileIntegrity.matches(storage.objectFile(localHash), localBytes.length, localHash));
 	}
 
@@ -476,9 +473,6 @@ class UpdateTransactionExecutorTest {
 		assertTrue(commit(storage, plan, target).success());
 
 		assertTrue(FileIntegrity.matches(local, serverBytes.length, serverHash));
-		PreservationVault.Claim claim = PreservationVault.read(storage, target.manifest().modpackId()).claims().get(0);
-		assertEquals(PreservationVault.Reason.PLAYER_CONSENT, claim.reason());
-		assertEquals(localHash, claim.objectHash());
 		assertTrue(FileIntegrity.matches(storage.objectFile(localHash), localBytes.length, localHash));
 	}
 
@@ -630,7 +624,7 @@ class UpdateTransactionExecutorTest {
 		assertTrue(commit(storage, installedPlan, installed).success());
 		Files.delete(storage.objectFile(serverHash));
 
-		ClientBaseline baseline = new ClientBaseline(installed.manifest().modpackId(), List.of(new ClientBaseline.Entry(restoredPath, baselineHash, baselineBytes.length, false, "")));
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of(restoredPath, new InstanceTree.TrackedFile(Root.GAME_DIR, "", restoredPath, baselineHash, baselineBytes.length));
 		ModpackJsons.CompleteModpackContentFields targetFields = fields("config/pack-b.json", "config", false, targetHash, targetBytes.length);
 		targetFields.modpackId = "def5678";
 		PackDocument switchedDocument = TestPacks.document(GroupManifestValidator.validate(targetFields));
@@ -650,9 +644,6 @@ class UpdateTransactionExecutorTest {
 		assertTrue(commit(storage, switchPlan, target).success());
 		assertArrayEquals(baselineBytes, Files.readAllBytes(storage.gameDirectory().resolve(restoredPath)));
 		assertTrue(FileIntegrity.matches(storage.objectFile(serverHash), serverBytes.length, serverHash));
-		PreservationVault.Claim preserved = PreservationVault.read(storage, installed.manifest().modpackId()).claims().get(0);
-		assertEquals(installed.packTarget().contentToken(), preserved.contentToken());
-		assertEquals(PreservationVault.Reason.MODPACK_DEACTIVATION, preserved.reason());
 	}
 
 	@Test
@@ -677,7 +668,7 @@ class UpdateTransactionExecutorTest {
 				UpdateTransaction.digest(expected), List.of(new GeneratedCopyState.Entry("mods/generated-remove.jar", generatedHash, generatedBytes.length)));
 		generatedCopies.write(storage);
 
-		ClientBaseline baseline = new ClientBaseline(target.manifest().modpackId(), List.of(new ClientBaseline.Entry("mods/remove.jar", "", -1, true, "")));
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of();
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(
 				new UpdatePlan.FileKey(Root.PROJECTION, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true),
 				new UpdatePlan.FileKey(Root.GAME_DIR, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true),
@@ -696,7 +687,6 @@ class UpdateTransactionExecutorTest {
 		assertFalse(Files.exists(generatedLive));
 		assertFalse(Files.exists(storage.generatedCopiesFile(target.manifest().modpackId(), target.packTarget().contentToken(), UpdateTransaction.digest(expected))));
 		assertTrue(FileIntegrity.matches(storage.objectFile(hash), bytes.length, hash));
-		assertEquals(PreservationVault.Reason.MODPACK_REMOVAL, PreservationVault.read(storage, target.manifest().modpackId()).claims().get(0).reason());
 		assertTrue(Files.isDirectory(storage.activeDirectory()));
 		try (var paths = Files.list(storage.activeDirectory())) {
 			assertEquals(List.of(), paths.toList());
@@ -724,8 +714,7 @@ class UpdateTransactionExecutorTest {
 		Path overlay = storage.overlayFile(target.manifest().modpackId(), "config/options.txt");
 		Files.createDirectories(overlay.getParent());
 		Files.writeString(overlay, "player-edit", StandardCharsets.UTF_8);
-		ClientBaseline baseline = new ClientBaseline(target.manifest().modpackId(), List.of(new ClientBaseline.Entry(managedPath, "", -1, true, "")));
-		baseline.write(storage);
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of();
 		SelectionIntent expected = target.selection().intent();
 		GeneratedCopyState generatedCopies = new GeneratedCopyState(target.manifest().modpackId(), target.packTarget().contentToken(),
 				UpdateTransaction.digest(expected), List.of());
@@ -747,7 +736,6 @@ class UpdateTransactionExecutorTest {
 		assertTrue(Files.exists(storage.historyJournalFile(target.manifest().modpackId())), "Deactivation keeps the pack's mirror history");
 		assertEquals(expected, new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).orElseThrow());
 		assertTrue(Files.exists(storage.generatedCopiesFile(target.manifest().modpackId(), target.packTarget().contentToken(), UpdateTransaction.digest(expected))));
-		assertTrue(Files.exists(storage.baselineFile(target.manifest().modpackId())));
 		assertEquals("player-edit", Files.readString(overlay, StandardCharsets.UTF_8));
 	}
 

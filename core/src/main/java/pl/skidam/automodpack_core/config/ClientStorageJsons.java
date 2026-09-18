@@ -3,20 +3,6 @@ package pl.skidam.automodpack_core.config;
 import java.util.List;
 
 public class ClientStorageJsons {
-	public static class ClientBaselineFields {
-		public int schemaVersion = 1;
-		public String modpackId = "";
-		public List<EntryFields> entries = List.of();
-
-		public static class EntryFields {
-			public String logicalPath = "";
-			public String objectHash = "";
-			public long size = -1;
-			public boolean absent;
-			public String baselineGenerationId = "";
-		}
-	}
-
 	public static class ClientGeneratedCopiesFields {
 		public int schemaVersion = 1;
 		public String modpackId = "";
@@ -45,21 +31,39 @@ public class ClientStorageJsons {
 		public boolean detached = false;
 	}
 
-	public static class ClientPreservationVaultFields {
-		public int schemaVersion = 1;
+	/** One line of the instance timeline journal: parent, tree hash, and event. The tree document is a sibling file. */
+	public static class SnapshotFields {
+		public long seq = -1;
+		public long parentSeq = 0;
+		public String treeSha1 = "";
+		public String kind = "";
 		public String modpackId = "";
-		public List<ClaimFields> claims = List.of();
+		public String transactionId = "";
+		public String createdAt = "";
+	}
 
-		public static class ClaimFields {
-			public String claimId = "";
-			public String originalPath = "";
-			public String sourceRoot = "";
-			public String objectHash = "";
-			public long size = -1;
+	/** One instance tree document: live identity plus every tracked file at that moment. */
+	public static class InstanceTreeFields {
+		public String activeModpackId = "";
+		public String contentToken = "";
+		public boolean detached;
+		public List<String> requestedGroups = List.of();
+		public List<String> requestedCategories = List.of();
+		public List<String> excludedGroups = List.of();
+		public List<TombstoneFields> tombstones = List.of();
+		public List<FileFields> files = List.of();
+
+		public static class TombstoneFields {
 			public String modpackId = "";
-			public String contentToken = "";
-			public String reason = "";
-			public String preservedAt = "";
+			public List<String> deletedPaths = List.of();
+		}
+
+		public static class FileFields {
+			public String root = "";
+			public String overlayPackId = "";
+			public String path = "";
+			public String sha1 = "";
+			public long size = -1;
 		}
 	}
 

@@ -42,7 +42,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 	private OfflineRepair.Prepared prepared;
 	private OfflineRepair.Receipt receipt;
 	// Checkbox convention: [x] checked keeps the files in place; unchecked is the removal consent
-	// (copies are preserved in the vault, then removed). Same meaning on every screen.
+	// (copies land in the recovered folder). Same meaning on every screen.
 	private boolean keepUnownedMods;
 	private boolean busy;
 	private boolean presentingFailure;
