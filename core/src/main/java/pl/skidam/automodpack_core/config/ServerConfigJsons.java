@@ -22,7 +22,7 @@ public class ServerConfigJsons {
 		public boolean autoExcludeUnnecessaryFiles = true;
 		public boolean requireModpack = true;
 		public boolean nagUnModdedClients = true;
-		public String nagMessage = "AutoModpack mod for {loader} modloader is required to play on this server!";
+		public String nagMessage = "Install the AutoModpack mod for {loader} to get this server's modpack!";
 		public String nagClickableMessage = "Click here to get the AutoModpack!";
 		public String nagClickableLink = "https://modrinth.com/project/automodpack";
 		public String bindAddress = "";
