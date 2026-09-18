@@ -18,6 +18,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -147,8 +148,9 @@ abstract class OneJarTask : DefaultTask() {
             putStored(output, ZipEntry(ImplManifestFormat.MANIFEST_ENTRY).apply { time = 0L }, manifest)
             putStored(output, ZipEntry(ImplManifestFormat.SOLID_ENTRY).apply { time = 0L }, zstdBinary)
         }
+        val percentSmaller = "%.1f%%".format(Locale.ROOT, (1 - zstdBinary.size.toDouble() / solidBytes.size) * 100)
         println(
-            "Packed ${outputFile.name}: ${outputFile.length()} bytes, ${manifestEntries.size} impls, solid ${solidBytes.size} bytes -> zstd ${zstdBinary.size} bytes (zstd-jni ${zstdVersion.get()}, level $ZSTD_LEVEL)" +
+            "Packed ${outputFile.parentFile.name}/${outputFile.name}: ${outputFile.length()} bytes, ${manifestEntries.size} impls, solid ${solidBytes.size} bytes -> zstd ${zstdBinary.size} bytes ($percentSmaller smaller, zstd-jni ${zstdVersion.get()}, level $ZSTD_LEVEL)" +
                 " (${manifestEntries.sumOf { it.length }} impl bytes), took ${System.currentTimeMillis() - startTime}ms",
         )
     }
