@@ -82,7 +82,7 @@ public class ModpackLoader implements ModpackLoaderService {
 				}
 			}
 		} catch (Exception e) {
-			e.printStackTrace();
+			LOGGER.error("Failed to discover nested modpack conflicts", e);
 		}
 
 		modpackNestedMods = getOnlyNewestMods(modpackNestedMods);
