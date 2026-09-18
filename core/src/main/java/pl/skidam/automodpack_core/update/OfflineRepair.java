@@ -188,9 +188,9 @@ public final class OfflineRepair {
 	private Receipt executeJournal(Prepared prepared, Analysis current, ClientStorageJsons.OfflineRepairJournalFields journal, FileCache fileCache)
 			throws IOException {
 		PinnedGeneration pinned = PinnedGeneration.read(storage, current.prepared().request().activeTarget().platform());
-		Set<UpdatePlan.FileKey> extra = new TreeSet<>(UpdatePlan.FileKey.ORDER);
-		for (var reset : journal.editableResets) extra.add(new UpdatePlan.FileKey(Root.GAME_DIR, reset.logicalPath));
-		for (var mod : journal.unownedMods) extra.add(new UpdatePlan.FileKey(Root.GAME_DIR, mod.logicalPath));
+		Set<InstanceTree.Key> extra = new TreeSet<>(InstanceTree.Key.ORDER);
+		for (var reset : journal.editableResets) extra.add(new InstanceTree.Key(Root.GAME_DIR, "", reset.logicalPath));
+		for (var mod : journal.unownedMods) extra.add(new InstanceTree.Key(Root.GAME_DIR, "", mod.logicalPath));
 		StateHistory.snapshotIfDirty(storage, extra, ClientStateJournal.Kind.LIVE, prepared.modpackId(), "repair");
 		RepairCounts repaired = repairLocally(current, pinned, fileCache);
 		int resetEdits = resetJournalEditable(current.prepared().request(), journal, pinned, fileCache);

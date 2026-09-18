@@ -270,8 +270,8 @@ final class ClientUpdatePlanBuilder {
 	void reconcileEditableState(FileCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields target) throws IOException {
 		ModpackJsons.ModpackContentFields activeTarget = projection.target();
 		if (activeTarget == null || activeTarget.list == null) return;
-		Set<UpdatePlan.FileKey> extra = new TreeSet<>(UpdatePlan.FileKey.ORDER);
-		for (var item : activeTarget.list) extra.add(new UpdatePlan.FileKey(UpdatePlan.Root.GAME_DIR, LogicalPath.normalize(item.file)));
+		Set<InstanceTree.Key> extra = new TreeSet<>(InstanceTree.Key.ORDER);
+		for (var item : activeTarget.list) extra.add(new InstanceTree.Key(UpdatePlan.Root.GAME_DIR, "", LogicalPath.normalize(item.file)));
 		StateHistory.snapshotIfDirty(storage, extra, ClientStateJournal.Kind.LIVE, activeTarget.modpackId, "before-reconcile");
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = new HashMap<>();
 		if (target != null && target.list != null) target.list.forEach(item -> targetItems.put(LogicalPath.normalize(item.file), item));

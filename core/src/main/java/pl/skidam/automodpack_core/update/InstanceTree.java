@@ -10,11 +10,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 
 import com.google.gson.Gson;
@@ -53,8 +51,21 @@ public final class InstanceTree {
 			if (size < 0) throw new IllegalArgumentException("Negative tree file size for " + path);
 		}
 
-		public UpdatePlan.FileKey fileKey() {
-			return new UpdatePlan.FileKey(root, path);
+		public Key key() {
+			return new Key(root, overlayPackId, path);
+		}
+	}
+
+	/** Where a tracked file lives: the root, the pack owning an overlay row, and the root-relative path. */
+	public record Key(Root root, String overlayPackId, String path) {
+		public static final Comparator<Key> ORDER = Comparator.comparing((Key key) -> key.root().ordinal()).thenComparing(Key::overlayPackId).thenComparing(Key::path);
+
+		public Key {
+			Objects.requireNonNull(root, "root");
+			overlayPackId = overlayPackId == null || overlayPackId.isBlank() ? "" : ModpackId.requireValid(overlayPackId);
+			if (root == Root.OVERLAY && overlayPackId.isEmpty()) throw new IllegalArgumentException("Overlay locations need a pack id: " + path);
+			if (root != Root.OVERLAY && !overlayPackId.isEmpty()) throw new IllegalArgumentException("Only overlay locations carry a pack id: " + path);
+			path = LogicalPath.requireCanonical(path);
 		}
 	}
 
@@ -98,6 +109,12 @@ public final class InstanceTree {
 
 	public List<TrackedFile> files() {
 		return files;
+	}
+
+	public Set<Key> keys() {
+		Set<Key> keys = new TreeSet<>(Key.ORDER);
+		for (TrackedFile file : files) keys.add(file.key());
+		return keys;
 	}
 
 	public TrackedFile file(Root root, String overlayPackId, String path) {
@@ -146,32 +163,20 @@ public final class InstanceTree {
 		}
 	}
 
-	static InstanceTree observe(ClientStorage storage, Set<UpdatePlan.FileKey> extraPaths, FileCache cache) throws IOException {
-		Map<UpdatePlan.FileKey, String> overlayPackByKey = new TreeMap<>(UpdatePlan.FileKey.ORDER);
-		Set<UpdatePlan.FileKey> paths = new TreeSet<>(UpdatePlan.FileKey.ORDER);
+	static InstanceTree observe(ClientStorage storage, Set<Key> extraPaths, FileCache cache) throws IOException {
+		Set<Key> paths = new TreeSet<>(Key.ORDER);
 		paths.addAll(extraPaths);
 		ClientStateJournal journal = ClientStateJournal.open(storage);
-		if (!journal.entries().isEmpty()) {
-			InstanceTree head = read(storage, journal.head().treeSha1());
-			for (TrackedFile file : head.files()) {
-				UpdatePlan.FileKey key = file.fileKey();
-				paths.add(key);
-				if (file.root() == Root.OVERLAY) overlayPackByKey.put(key, file.overlayPackId());
-			}
-		}
-		LiveIdentity identity = observeIdentity(storage);
-		String overlayPack = identity.activeModpackId();
+		if (!journal.entries().isEmpty()) paths.addAll(read(storage, journal.head().treeSha1()).keys());
 		List<TrackedFile> files = new ArrayList<>();
-		for (UpdatePlan.FileKey key : paths) {
-			String pack = key.root() == Root.OVERLAY ? overlayPackByKey.getOrDefault(key, overlayPack) : "";
-			if (key.root() == Root.OVERLAY && (pack == null || pack.isEmpty())) continue;
-			Path disk = storage.rootedPath(key.root(), pack, key.relativePath());
+		for (Key key : paths) {
+			Path disk = storage.rootedPath(key.root(), key.overlayPackId(), key.path());
 			if (!Files.isRegularFile(disk, LinkOption.NOFOLLOW_LINKS) || isRunningModJar(disk)) continue;
 			long size = Files.size(disk);
 			String hash = FileIntegrity.observedHash(disk, size, null, cache);
-			files.add(new TrackedFile(key.root(), pack, key.relativePath(), HashUtils.normalizeSha1(hash), size));
+			files.add(new TrackedFile(key.root(), key.overlayPackId(), key.path(), HashUtils.normalizeSha1(hash), size));
 		}
-		return of(identity, files);
+		return of(observeIdentity(storage), files);
 	}
 
 	/** The running AutoModpack jar is the updater itself: it is never tracked, never restored over, and never deleted by a checkout. */

@@ -264,7 +264,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 		TrackedFile file = selectedFile();
 		if (file == null || busy) return;
 		beginWork();
-		runFileOp(() -> controller.saveStateFileCopy(selectedEntry().seq(), file.root(), file.path()), WorkResult.SAVED);
+		runFileOp(() -> controller.saveStateFileCopy(selectedEntry().seq(), file.root(), file.overlayPackId(), file.path()), WorkResult.SAVED);
 	}
 
 	/** Starts a mutation: the working line replaces any stale result line, so the two never draw over each other. */

@@ -19,6 +19,7 @@ import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Kind;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Snapshot;
+import pl.skidam.automodpack_core.update.InstanceTree.Key;
 import pl.skidam.automodpack_core.update.InstanceTree.LiveIdentity;
 import pl.skidam.automodpack_core.update.InstanceTree.TrackedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
@@ -54,16 +55,16 @@ class ClientStateJournalTest {
 		String hash = HashUtils.sha1(bytes);
 		ClientObjectStore.storeObject(storage, hash, bytes);
 
-		StateHistory.snapshotIfDirty(storage, Set.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/player.jar")), Kind.LIVE, "", "before");
+		StateHistory.snapshotIfDirty(storage, Set.of(new Key(Root.GAME_DIR, "", "mods/player.jar")), Kind.LIVE, "", "before");
 		assertEquals(1, StateHistory.entries(storage).size());
-		StateHistory.snapshotIfDirty(storage, Set.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/player.jar")), Kind.LIVE, "", "before");
+		StateHistory.snapshotIfDirty(storage, Set.of(new Key(Root.GAME_DIR, "", "mods/player.jar")), Kind.LIVE, "", "before");
 		assertEquals(1, StateHistory.entries(storage).size(), "Identical live is not a second row");
 
 		Files.write(storage.gamePath("mods/player.jar"), "changed".getBytes(StandardCharsets.UTF_8));
 		byte[] changed = "changed".getBytes(StandardCharsets.UTF_8);
 		String changedHash = HashUtils.sha1(changed);
 		ClientObjectStore.storeObject(storage, changedHash, changed);
-		StateHistory.snapshotIfDirty(storage, Set.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/player.jar")), Kind.UPDATE, "abc1234", "after");
+		StateHistory.snapshotIfDirty(storage, Set.of(new Key(Root.GAME_DIR, "", "mods/player.jar")), Kind.UPDATE, "abc1234", "after");
 		assertEquals(2, StateHistory.entries(storage).size());
 
 		StateHistory.forgetOlderThan(storage, StateHistory.entries(storage).get(1).seq());
@@ -88,7 +89,7 @@ class ClientStateJournalTest {
 
 		Files.writeString(restored, "changed by hand", StandardCharsets.UTF_8);
 		assertThrows(Exception.class, () -> StateHistory.restoreFile(storage, 1, Root.GAME_DIR, "oldmods/player.jar"));
-		Path copy = StateHistory.saveFileCopy(storage, 1, Root.GAME_DIR, "oldmods/player.jar");
+		Path copy = StateHistory.saveFileCopy(storage, 1, Root.GAME_DIR, "", "oldmods/player.jar");
 		assertEquals("player-mod", Files.readString(copy, StandardCharsets.UTF_8));
 	}
 
@@ -103,7 +104,7 @@ class ClientStateJournalTest {
 		Path previousThisModJar = Constants.THIS_MOD_JAR;
 		Constants.THIS_MOD_JAR = runningJar;
 		try {
-			Set<UpdatePlan.FileKey> extra = Set.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/automodpack-9.9.9.jar"));
+			Set<Key> extra = Set.of(new Key(Root.GAME_DIR, "", "mods/automodpack-9.9.9.jar"));
 			StateHistory.snapshotIfDirty(storage, extra, Kind.LIVE, "", "txn-1");
 			InstanceTree head = InstanceTree.read(storage, ClientStateJournal.open(storage).head().treeSha1());
 			assertEquals(List.of(), head.files());

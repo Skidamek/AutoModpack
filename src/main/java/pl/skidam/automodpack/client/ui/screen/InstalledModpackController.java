@@ -251,8 +251,8 @@ final class InstalledModpackController {
 		return StateHistory.restoreFile(storage, seq, root, path);
 	}
 
-	Path saveStateFileCopy(long seq, UpdatePlan.Root root, String path) throws IOException {
-		return StateHistory.saveFileCopy(storage, seq, root, path);
+	Path saveStateFileCopy(long seq, UpdatePlan.Root root, String overlayPackId, String path) throws IOException {
+		return StateHistory.saveFileCopy(storage, seq, root, overlayPackId, path);
 	}
 
 	/** The recovered-copies folder is where saved copies land; opening it spares the player a path too long for any screen. */

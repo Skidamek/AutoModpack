@@ -23,8 +23,8 @@ import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Kind;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Snapshot;
+import pl.skidam.automodpack_core.update.InstanceTree.Key;
 import pl.skidam.automodpack_core.update.InstanceTree.TrackedFile;
-import pl.skidam.automodpack_core.update.UpdatePlan.FileKey;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
@@ -66,11 +66,11 @@ public final class StateHistory {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				ClientStateJournal journal = ClientStateJournal.open(storage);
 				Map<String, InstanceTree> trees = new HashMap<>();
-				Set<FileKey> extra = new TreeSet<>(FileKey.ORDER);
+				Set<Key> extra = new TreeSet<>(Key.ORDER);
 				for (Snapshot snapshot : journal.entries()) {
 					InstanceTree tree = InstanceTree.read(storage, snapshot.treeSha1());
 					trees.put(snapshot.treeSha1(), tree);
-					extra.addAll(fileKeys(tree));
+					extra.addAll(tree.keys());
 				}
 				InstanceTree live = InstanceTree.observe(storage, extra, cache);
 				List<SnapshotView> views = new ArrayList<>();
@@ -85,15 +85,15 @@ public final class StateHistory {
 	}
 
 	static List<FileDiff> diff(InstanceTree parent, InstanceTree current) {
-		Map<String, TrackedFile> before = new TreeMap<>();
-		if (parent != null) for (TrackedFile file : parent.files()) before.put(diffKey(file), file);
-		Map<String, TrackedFile> after = new TreeMap<>();
-		for (TrackedFile file : current.files()) after.put(diffKey(file), file);
-		Set<String> keys = new TreeSet<>();
+		Map<Key, TrackedFile> before = new HashMap<>();
+		if (parent != null) for (TrackedFile file : parent.files()) before.put(file.key(), file);
+		Map<Key, TrackedFile> after = new HashMap<>();
+		for (TrackedFile file : current.files()) after.put(file.key(), file);
+		Set<Key> keys = new TreeSet<>(Key.ORDER);
 		keys.addAll(before.keySet());
 		keys.addAll(after.keySet());
 		List<FileDiff> diffs = new ArrayList<>();
-		for (String key : keys) {
+		for (Key key : keys) {
 			TrackedFile left = before.get(key);
 			TrackedFile right = after.get(key);
 			if (left != null && right != null && left.sha1().equals(right.sha1()) && left.size() == right.size()) continue;
@@ -119,7 +119,7 @@ public final class StateHistory {
 	}
 
 	/** Snapshot live if it differs from head. Kind is LIVE when this is a dirty-before row. */
-	public static void snapshotIfDirty(ClientStorage storage, Set<FileKey> extraPaths, Kind kind, String modpackId, String transactionId) throws IOException {
+	public static void snapshotIfDirty(ClientStorage storage, Set<Key> extraPaths, Kind kind, String modpackId, String transactionId) throws IOException {
 		snapshotIfDirty(storage, extraPaths, kind, modpackId, transactionId, null);
 	}
 
@@ -128,7 +128,7 @@ public final class StateHistory {
 	 * matches {@code toward} on every path that differs from head. Reconcile can move drifted files onto the pack
 	 * version without a second timeline row; leftover player files that the plan will delete still snapshot.
 	 */
-	public static void snapshotIfDirty(ClientStorage storage, Set<FileKey> extraPaths, Kind kind, String modpackId, String transactionId, UpdatePlan toward) throws IOException {
+	public static void snapshotIfDirty(ClientStorage storage, Set<Key> extraPaths, Kind kind, String modpackId, String transactionId, UpdatePlan toward) throws IOException {
 		ClientStorageMutation.run(storage, () -> {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				InstanceTree live = InstanceTree.observe(storage, extraPaths, cache);
@@ -137,7 +137,7 @@ public final class StateHistory {
 					InstanceTree head = InstanceTree.read(storage, journal.head().treeSha1());
 					if (live.sameAs(head) || toward != null && alreadyMovedTowardPlan(live, head, toward)) return null;
 				}
-				acquireTreeBlobs(storage, live, extraPaths, cache);
+				acquireTreeBlobs(storage, live, cache);
 				live.write(storage);
 				journal.append(live.sha1(), kind, modpackId, transactionId);
 				return null;
@@ -145,7 +145,7 @@ public final class StateHistory {
 		});
 	}
 
-	public static void aroundMutation(ClientStorage storage, Set<FileKey> extraPaths, Kind kind, String modpackId, String transactionId, ClientStorageMutation.Operation<?> mutation) throws IOException {
+	public static void aroundMutation(ClientStorage storage, Set<Key> extraPaths, Kind kind, String modpackId, String transactionId, ClientStorageMutation.Operation<?> mutation) throws IOException {
 		ClientStorageMutation.run(storage, () -> {
 			snapshotIfDirty(storage, extraPaths, Kind.LIVE, modpackId, transactionId);
 			mutation.run();
@@ -162,12 +162,12 @@ public final class StateHistory {
 				InstanceTree target = withoutRunningJar(InstanceTree.read(storage, snapshot.treeSha1()), storage);
 				if (!blobsPresent(storage, target, cache)) throw new IOException("Instance snapshot " + seq + " is missing file data on this computer");
 				if (!identityFeasible(storage, target.identity())) throw new IOException("Pack history has no generation " + target.identity().contentToken() + " for " + target.identity().activeModpackId());
-				InstanceTree live = InstanceTree.observe(storage, fileKeys(target), cache);
+				InstanceTree live = InstanceTree.observe(storage, target.keys(), cache);
 				if (live.sameAs(target)) return storage.gameDirectory();
 				applyTree(storage, live, target, cache);
 				applyIdentity(storage, target.identity());
 				detachInstalled(storage);
-				InstanceTree after = InstanceTree.observe(storage, fileKeys(target), cache);
+				InstanceTree after = InstanceTree.observe(storage, target.keys(), cache);
 				if (!sameFiles(after, target)) throw new IOException("Instance restore did not reproduce snapshot " + seq);
 				after.write(storage);
 				journal.append(after.sha1(), Kind.RESTORE, target.identity().activeModpackId(), "restore-" + seq);
@@ -199,10 +199,10 @@ public final class StateHistory {
 				if (gate == FileGate.NOT_GAME_DIR) throw new IOException("Only game-directory files can be restored to their original path");
 				if (gate == FileGate.OWNED) throw new IOException("The active modpack still owns " + path);
 				if (gate == FileGate.PROTECTED) throw new IOException("The running AutoModpack jar cannot be restored over");
-				TrackedFile file = requireFile(tree, root, path);
+				TrackedFile file = requireFile(tree, root, "", path);
 				Path destination = storage.gamePath(path);
 				if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS) && FileIntegrity.matchesNamed(destination, file.size(), file.sha1(), cache)) return destination;
-				Set<FileKey> extra = Set.of(file.fileKey());
+				Set<Key> extra = Set.of(file.key());
 				String transactionId = "file-restore-" + seq;
 				snapshotIfDirty(storage, extra, Kind.LIVE, snapshot.modpackId(), transactionId);
 				copyWithoutOverwrite(storage.gameDirectory(), storage.objectFile(file.sha1()), destination, file.size(), file.sha1(), cache);
@@ -212,11 +212,11 @@ public final class StateHistory {
 		});
 	}
 
-	public static Path saveFileCopy(ClientStorage storage, long seq, Root root, String path) throws IOException {
+	public static Path saveFileCopy(ClientStorage storage, long seq, Root root, String overlayPackId, String path) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				InstanceTree tree = InstanceTree.read(storage, ClientStateJournal.open(storage).require(seq).treeSha1());
-				TrackedFile file = requireFile(tree, root, path);
+				TrackedFile file = requireFile(tree, root, overlayPackId, path);
 				Path destination = RecoveredFiles.destination(storage, path, file.sha1());
 				copyWithoutOverwrite(storage.gameDirectory(), storage.objectFile(file.sha1()), destination, file.size(), file.sha1(), cache);
 				return destination;
@@ -246,12 +246,17 @@ public final class StateHistory {
 		});
 	}
 
-	static Set<FileKey> planPaths(UpdatePlan plan) {
-		Set<FileKey> paths = new TreeSet<>(FileKey.ORDER);
-		for (UpdatePlan.ProjectedFile projected : plan.projectedFinalState()) paths.add(new FileKey(projected.root(), projected.relativePath()));
-		for (UpdatePlan.Operation operation : plan.operations()) paths.add(new FileKey(operation.root(), operation.relativePath()));
-		for (UpdatePlan.Preservation preservation : plan.preservations()) paths.add(new FileKey(preservation.root(), preservation.relativePath()));
+	/** Every location the plan touches, as tree keys: the plan is single-pack, so its overlay rows belong to the plan's pack. */
+	static Set<Key> planPaths(UpdatePlan plan) {
+		Set<Key> paths = new TreeSet<>(Key.ORDER);
+		for (UpdatePlan.ProjectedFile projected : plan.projectedFinalState()) paths.add(plannedKey(plan, projected.root(), projected.relativePath()));
+		for (UpdatePlan.Operation operation : plan.operations()) paths.add(plannedKey(plan, operation.root(), operation.relativePath()));
+		for (UpdatePlan.Preservation preservation : plan.preservations()) paths.add(plannedKey(plan, preservation.root(), preservation.relativePath()));
 		return paths;
+	}
+
+	private static Key plannedKey(UpdatePlan plan, Root root, String relativePath) {
+		return new Key(root, root == Root.OVERLAY ? plan.modpackId() : "", relativePath);
 	}
 
 	static void copyWithoutOverwrite(Path constrainedRoot, Path source, Path destination, long size, String hash, FileCache cache) throws IOException {
@@ -268,11 +273,11 @@ public final class StateHistory {
 	}
 
 	private static void applyTree(ClientStorage storage, InstanceTree live, InstanceTree target, FileCache cache) throws IOException {
-		Set<String> wanted = new HashSet<>();
+		Set<Key> wanted = new HashSet<>();
 		for (TrackedFile file : target.files()) {
 			Path destination = storage.rootedPath(file.root(), file.overlayPackId(), file.path());
 			if (InstanceTree.isRunningModJar(destination)) continue;
-			wanted.add(diffKey(file));
+			wanted.add(file.key());
 			Path object = storage.objectFile(file.sha1());
 			if (FileIntegrity.matchesNamed(destination, file.size(), file.sha1(), cache)) continue;
 			FileTrees.requireNoSymbolicLinkDescendants(storage.root(file.root(), file.overlayPackId().isEmpty() ? "_" : file.overlayPackId()), destination, "instance restore");
@@ -280,7 +285,7 @@ public final class StateHistory {
 			else VerifiedFileTransfer.copyAtomic(object, destination, file.size(), file.sha1(), cache);
 		}
 		for (TrackedFile file : live.files()) {
-			if (wanted.contains(diffKey(file))) continue;
+			if (wanted.contains(file.key())) continue;
 			Path destination = storage.rootedPath(file.root(), file.overlayPackId(), file.path());
 			if (InstanceTree.isRunningModJar(destination)) continue;
 			Files.deleteIfExists(destination);
@@ -346,7 +351,7 @@ public final class StateHistory {
 		storage.setDetached(active.modpackId, true);
 	}
 
-	private static void acquireTreeBlobs(ClientStorage storage, InstanceTree tree, Set<FileKey> extraPaths, FileCache cache) throws IOException {
+	private static void acquireTreeBlobs(ClientStorage storage, InstanceTree tree, FileCache cache) throws IOException {
 		for (TrackedFile file : tree.files()) {
 			Path object = storage.objectFile(file.sha1());
 			if (FileIntegrity.matchesNamed(object, file.size(), file.sha1(), cache)) continue;
@@ -363,14 +368,14 @@ public final class StateHistory {
 	}
 
 	private static boolean alreadyMovedTowardPlan(InstanceTree live, InstanceTree head, UpdatePlan plan) {
-		Map<FileKey, UpdatePlan.ProjectedFile> projected = new HashMap<>();
-		for (UpdatePlan.ProjectedFile file : plan.projectedFinalState()) projected.put(new FileKey(file.root(), file.relativePath()), file);
-		Map<FileKey, TrackedFile> liveFiles = new HashMap<>();
-		for (TrackedFile file : live.files()) liveFiles.put(file.fileKey(), file);
-		Map<FileKey, TrackedFile> headFiles = new HashMap<>();
-		for (TrackedFile file : head.files()) headFiles.put(file.fileKey(), file);
+		Map<Key, UpdatePlan.ProjectedFile> projected = new HashMap<>();
+		for (UpdatePlan.ProjectedFile file : plan.projectedFinalState()) projected.put(plannedKey(plan, file.root(), file.relativePath()), file);
+		Map<Key, TrackedFile> liveFiles = new HashMap<>();
+		for (TrackedFile file : live.files()) liveFiles.put(file.key(), file);
+		Map<Key, TrackedFile> headFiles = new HashMap<>();
+		for (TrackedFile file : head.files()) headFiles.put(file.key(), file);
 		if (!liveFiles.keySet().equals(headFiles.keySet())) return false;
-		for (FileKey key : liveFiles.keySet()) {
+		for (Key key : liveFiles.keySet()) {
 			TrackedFile now = liveFiles.get(key);
 			TrackedFile before = headFiles.get(key);
 			if (now.sha1().equals(before.sha1()) && now.size() == before.size()) continue;
@@ -391,22 +396,8 @@ public final class StateHistory {
 		return true;
 	}
 
-	private static Set<FileKey> fileKeys(InstanceTree tree) {
-		Set<FileKey> keys = new TreeSet<>(FileKey.ORDER);
-		for (TrackedFile file : tree.files()) keys.add(file.fileKey());
-		return keys;
-	}
-
-	private static String diffKey(TrackedFile file) {
-		return file.root().name() + "/" + file.overlayPackId() + "/" + file.path();
-	}
-
-	private static TrackedFile requireFile(InstanceTree tree, Root root, String path) throws IOException {
-		TrackedFile file = tree.file(root, "", path);
-		if (file == null && root == Root.OVERLAY) {
-			for (TrackedFile candidate : tree.files())
-				if (candidate.root() == root && candidate.path().equals(path)) return candidate;
-		}
+	private static TrackedFile requireFile(InstanceTree tree, Root root, String overlayPackId, String path) throws IOException {
+		TrackedFile file = tree.file(root, overlayPackId, path);
 		if (file == null) throw new IOException("Instance tree does not track " + path);
 		return file;
 	}
