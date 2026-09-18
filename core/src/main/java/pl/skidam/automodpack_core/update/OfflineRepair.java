@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -499,10 +500,21 @@ public final class OfflineRepair {
 			observations.put(normalized, unsupported);
 			return unsupported;
 		}
-		String hash = fileCache.hash(normalized);
-		Observation observation = new Observation(normalized, hash, Files.size(normalized), false);
+		// The repair distrusts persisted hashes, but the projection is a hardlink twin of the CAS object on most
+		// systems: the same bytes read twice. One fresh hash per distinct file this run is still a full check.
+		Object fileKey = fileKey(normalized);
+		if (fileKey != null) for (Observation seen : observations.values()) if (fileKey.equals(seen.fileKey())) return seen;
+		Observation observation = new Observation(normalized, fileCache.hash(normalized), Files.size(normalized), false, fileKey);
 		observations.put(normalized, observation);
 		return observation;
+	}
+
+	private static Object fileKey(Path file) throws IOException {
+		try {
+			return Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS).fileKey();
+		} catch (UnsupportedOperationException e) {
+			return null;
+		}
 	}
 
 	private void assertPinned(Request request, PinnedGeneration pinned) throws IOException {
@@ -561,7 +573,11 @@ public final class OfflineRepair {
 		}
 	}
 
-	private record Observation(Path path, String hash, long size, boolean unsupported) {}
+	private record Observation(Path path, String hash, long size, boolean unsupported, Object fileKey) {
+		private Observation(Path path, String hash, long size, boolean unsupported) {
+			this(path, hash, size, unsupported, null);
+		}
+	}
 
 	private record Analysis(Prepared prepared, Map<Path, Expected> expected, Map<Path, Observation> observations, Map<Content, List<Path>> sources) {}
 
