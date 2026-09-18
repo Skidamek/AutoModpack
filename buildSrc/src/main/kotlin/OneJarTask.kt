@@ -1,3 +1,4 @@
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.luben.zstd.Zstd
 import io.airlift.compress.zstd.ZstdDecompressor
 import org.gradle.api.DefaultTask
@@ -19,6 +20,7 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.charset.StandardCharsets
 import java.util.Locale
+import java.util.TreeMap
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -34,9 +36,14 @@ import java.util.zip.ZipOutputStream
  * carries the uncompressed size the runtime's aircompressor decode relies on. `impl/manifest.json`
  * indexes the solid. Both entries are appended AFTER the optimizer ran, and appended as STORE -
  * that ordering is what keeps them uncompressed, because the optimizer never sees the impl entries.
+ * `mc-protocols.json` carries each covered Minecraft version's vanilla protocol number for the
+ * holepunch handshake.
  */
 /** One-shot level 20: the measured sweet spot on the shipped solid (-19 gave up 4.9 KB more, -21/-22 under 100 bytes each, --max 905 bytes for 12 s) and single-threaded by nature, so the bytes cannot drift with core count. */
 private const val ZSTD_LEVEL = 20
+
+/** The packed vanilla protocol table (covered Minecraft version to number), read by core's MinecraftProtocols for the holepunch handshake. */
+const val PROTOCOLS_ENTRY = "mc-protocols.json"
 
 abstract class OneJarTask : DefaultTask() {
     /** Target id (e.g. "1.20.1-fabric") to its optimized impl jar path; explicit paths so a convention drift fails loudly instead of packing stale bytes. */
@@ -46,6 +53,10 @@ abstract class OneJarTask : DefaultTask() {
     /** Target id to the exact Minecraft versions that target covers (its `publish_versions`); the manifest's version-resolution source of truth. */
     @get:Input
     abstract val implVersions: MapProperty<String, List<String>>
+
+    /** Covered Minecraft version to its vanilla protocol number, packed as [PROTOCOLS_ENTRY] for the holepunch handshake. */
+    @get:Input
+    abstract val protocols: MapProperty<String, Int>
 
     /** The pinned zstd-jni release; an input, so bumping the compressor repacks the jar. */
     @get:Input
@@ -127,6 +138,15 @@ abstract class OneJarTask : DefaultTask() {
                 }
             }
         }
+        // The protocol table answers for exactly the versions the manifest covers: drift either way
+        // ships a version whose holepunch handshake has no number to send, or packs a dead one.
+        val coveredVersions = manifestEntries.flatMap { it.versions }.toSet()
+        val packedProtocols = protocols.get()
+        val protocolDiff = coveredVersions - packedProtocols.keys
+        val protocolExtra = packedProtocols.keys - coveredVersions
+        if (protocolDiff.isNotEmpty() || protocolExtra.isNotEmpty()) {
+            throw GradleException("The [protocols] table disagrees with the shipped versions - no protocol for ${protocolDiff.sorted()}, protocol for unshipped ${protocolExtra.sorted()}")
+        }
 
         val solidBytes = solid.toByteArray()
         val zstdBinary = Zstd.compress(solidBytes, ZSTD_LEVEL)
@@ -147,6 +167,7 @@ abstract class OneJarTask : DefaultTask() {
             for ((name, bytes) in outerAssets.entries.sortedBy { it.key }) putDeflated(output, ZipEntry(name).apply { time = 0L }, bytes)
             putStored(output, ZipEntry(ImplManifestFormat.MANIFEST_ENTRY).apply { time = 0L }, manifest)
             putStored(output, ZipEntry(ImplManifestFormat.SOLID_ENTRY).apply { time = 0L }, zstdBinary)
+            putStored(output, ZipEntry(PROTOCOLS_ENTRY).apply { time = 0L }, ObjectMapper().writeValueAsString(TreeMap(protocols.get())).toByteArray(StandardCharsets.UTF_8))
         }
         val percentSmaller = "%.1f%%".format(Locale.ROOT, (1 - zstdBinary.size.toDouble() / solidBytes.size) * 100)
         println(

@@ -2,12 +2,15 @@ import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
+import com.fasterxml.jackson.core.type.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
 import java.util.jar.JarFile
 import java.util.zip.ZipEntry
 
@@ -27,6 +30,10 @@ abstract class OneJarAuditTask : DefaultTask() {
     /** The target ids the manifest must carry, exactly. */
     @get:Input
     abstract val expectedIds: ListProperty<String>
+
+    /** The protocol table the packed jar must carry, exactly. */
+    @get:Input
+    abstract val expectedProtocols: MapProperty<String, Int>
 
     @get:Input
     abstract val maxJarBytes: Property<Long>
@@ -65,6 +72,18 @@ abstract class OneJarAuditTask : DefaultTask() {
             val actual = manifest.entries.map { it.id }.sorted()
             if (actual != expected) {
                 throw GradleException("${ImplManifestFormat.MANIFEST_ENTRY} carries ${actual.joinToString()} but the build selected ${expected.joinToString()}")
+            }
+
+            val protocolsEntry = jar.getEntry(PROTOCOLS_ENTRY)
+                ?: throw GradleException("$PROTOCOLS_ENTRY is missing from ${jarFile.name}")
+            if (protocolsEntry.method != ZipEntry.STORED) throw GradleException("$PROTOCOLS_ENTRY must be STORE, not method ${protocolsEntry.method}")
+            val packedProtocols: Map<String, Int> =
+                ObjectMapper().readValue(
+                    jar.getInputStream(protocolsEntry),
+                    object : TypeReference<Map<String, Int>>() {},
+                )
+            if (packedProtocols != expectedProtocols.get()) {
+                throw GradleException("$PROTOCOLS_ENTRY carries $packedProtocols but the build resolved ${expectedProtocols.get()}")
             }
 
             jar.entries().asSequence().filterNot { it.isDirectory }.forEach { entry ->

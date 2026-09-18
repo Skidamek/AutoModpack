@@ -1,33 +1,51 @@
 package pl.skidam.automodpack_core.protocol;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.Collections;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+
+import com.google.gson.JsonParser;
+
+import pl.skidam.automodpack_core.utils.JarUtils;
+
 /**
  * Vanilla protocol numbers of the Minecraft versions AutoModpack ships for, sent in the holepunch
- * Handshake. The holepunch login dialect itself is version independent.
+ * Handshake. The holepunch login dialect itself is version independent. The table is packed by the
+ * oneJar build from stonecutter.properties.toml, which fails the build when it drifts from the
+ * manifest's covered versions - so this code works in preload too, where Minecraft classes cannot
+ * be loaded.
  */
 public final class MinecraftProtocols {
+	private static final String ENTRY = "mc-protocols.json";
+
 	private MinecraftProtocols() {}
 
 	public static int forVersion(String minecraftVersion) {
-		return switch (minecraftVersion) {
-			case "1.18.2" -> 758;
-			case "1.19.2" -> 760;
-			case "1.19.4" -> 762;
-			case "1.20", "1.20.1" -> 763;
-			case "1.20.2" -> 764;
-			case "1.20.3", "1.20.4" -> 765;
-			case "1.20.5", "1.20.6" -> 766;
-			case "1.21", "1.21.1" -> 767;
-			case "1.21.2", "1.21.3" -> 768;
-			case "1.21.4" -> 769;
-			case "1.21.5" -> 770;
-			case "1.21.6", "1.21.7" -> 771;
-			case "1.21.8" -> 772;
-			case "1.21.9", "1.21.10" -> 773;
-			case "1.21.11" -> 774;
-			case "26.1", "26.1.1", "26.1.2" -> 775;
-			case "26.2" -> 776;
-			case "26.3" -> 777;
-			default -> throw new IllegalArgumentException("Unsupported Minecraft version: " + minecraftVersion);
-		};
+		Map<String, Integer> protocols = load();
+		Integer protocol = protocols.get(minecraftVersion);
+		if (protocol == null) {
+			throw new IllegalArgumentException("Unsupported Minecraft version: " + minecraftVersion + "; shipped: " + String.join(", ", protocols.keySet()));
+		}
+		return protocol;
+	}
+
+	private static Map<String, Integer> load() {
+		Path outerJar = JarUtils.getJarPath(MinecraftProtocols.class);
+		try (ZipFile zip = new ZipFile(outerJar.toFile())) {
+			ZipEntry entry = zip.getEntry(ENTRY);
+			if (entry == null) throw new IllegalStateException("Outer jar " + outerJar + " carries no protocol table at " + ENTRY);
+			Map<String, Integer> protocols = new TreeMap<>();
+			for (var field : JsonParser.parseString(new String(zip.getInputStream(entry).readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject().entrySet()) {
+				protocols.put(field.getKey(), field.getValue().getAsInt());
+			}
+			return Collections.unmodifiableMap(protocols);
+		} catch (IOException e) {
+			throw new IllegalStateException("Cannot read " + ENTRY + " from " + outerJar, e);
+		}
 	}
 }

@@ -31,6 +31,14 @@ fun structuredString(vararg path: String): String =
 		.asPrimitive()
 		.content as String
 
+fun structuredProtocol(version: String): Int =
+	stonecutter.properties
+		.raw("protocols", version)
+		.asPrimitive()
+		.content
+		.toString()
+		.toInt()
+
 // What each loader module compiles against: the oldest platform API floor that has everything the
 // module calls, so newer-API slips are compile errors here instead of LinkageErrors on a user's
 // install. loader-fabric-latest is not a module, it is a pin alias for the autotest fixtures, which
@@ -248,6 +256,19 @@ val oneJarTask =
 				selectedTargets.associateWith { target -> structuredString(target.substringBeforeLast('-'), "publish_versions").split('\n').filter(String::isNotBlank) }
 			},
 		)
+		// Vanilla protocol per covered Minecraft version (the [protocols] table), packed as
+		// mc-protocols.json for the holepunch handshake: a covered version without a protocol fails
+		// the build here instead of a player's connect screen.
+		protocols.set(
+			providers.provider {
+				implVersions
+					.get()
+					.values
+					.flatten()
+					.distinct()
+					.associateWith(::structuredProtocol)
+			},
+		)
 		oneJar.set(layout.projectDirectory.file("merged/$modName-$modVersion.jar"))
 		dependsOn(":loader-universal:optimizeUniversalJar")
 		dependsOn(selectedTargets.map { ":$it:optimizeModJar" })
@@ -259,9 +280,10 @@ val oneJarTask =
 val auditOneJarTask =
 	tasks.register<OneJarAuditTask>("auditOneJar") {
 		group = "verification"
-		description = "Audits the packed one jar: size budget, manifest ids, STORE entries, assets, no nested jarjar."
+		description = "Audits the packed one jar: size budget, manifest ids, protocol table, STORE entries, assets, no nested jarjar."
 		oneJar.set(oneJarTask.flatMap { it.oneJar })
 		expectedIds.set(selectedTargets.sorted())
+		expectedProtocols.set(oneJarTask.flatMap { it.protocols })
 		// The size tripwire; the measured receipts that justify the budget live on OneJarAuditTask.
 		maxJarBytes.set(5L * 1024 * 1024)
 		enforceReleaseSizeBudget.set(automodpackBuildMode.map { it != "autotest" })

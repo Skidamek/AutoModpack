@@ -135,3 +135,30 @@ deps.fabric-loader = "0.19.5"
 
 ["loader-modules"]
 fabric = "0.16.1"
+
+# The vanilla protocol number of every shipped Minecraft version, packed as mc-protocols.json for
+# the holepunch handshake. The oneJar build fails when this table drifts from the publish_versions
+# coverage in either direction.
+["protocols"]
+"1.18" = 757
+"1.18.1" = 757
+"1.18.2" = 758
+"1.19" = 759
+"1.19.1" = 760
+"1.19.2" = 760
+"1.20" = 763
+"1.20.1" = 763
+"1.21" = 767
+"1.21.1" = 767
+"1.21.4" = 769
+"1.21.5" = 770
+"1.21.6" = 771
+"1.21.7" = 771
+"1.21.8" = 772
+"1.21.10" = 773
+"1.21.11" = 774
+"26.1" = 775
+"26.1.1" = 775
+"26.1.2" = 775
+"26.2" = 776
+"26.3" = 777
