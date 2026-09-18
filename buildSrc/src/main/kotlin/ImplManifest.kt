@@ -1,87 +1,72 @@
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import java.nio.charset.StandardCharsets
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
+import java.security.MessageDigest
+import java.util.HexFormat
 
 /**
- * Build-side codec for `impl/manifest.bin`, the little-endian index of the one jar's solid impl
- * blob: magic `AMP1`, the 20-byte SHA-1 generation of `impl/all.zst`, a u16 entry count, then per
- * entry the u16-length-prefixed id, a u16 count of u16-length-prefixed Minecraft versions that
- * target covers, a u32 offset and u32 STORE length inside the uncompressed solid, and the 20-byte
- * SHA-1 of that slice. The runtime's parser (core ImplManifest) is an independent implementation of
- * the same contract, so a writer bug here fails loudly there instead of both sides agreeing on a
- * wrong format.
+ * Build-side codec for `impl/manifest.json`, the index of the one jar's solid impl blob: the
+ * generation - the SHA-1 of the UNCOMPRESSED solid, so a compressor bump cannot invalidate every
+ * install's cache - and per impl its id, the Minecraft versions its target covers, its offset and
+ * STORE length inside the solid, and the SHA-1 of that slice. Bare data, no version field: the
+ * manifest ships inside the same jar as the parser that reads it, so reader and writer can never
+ * skew. The runtime's parser (core ImplManifest) is an independent implementation of the same
+ * contract, so a writer bug here fails loudly there instead of both sides agreeing on a wrong
+ * format.
  */
 object ImplManifestFormat {
-    const val MANIFEST_ENTRY = "impl/manifest.bin"
+    const val MANIFEST_ENTRY = "impl/manifest.json"
     const val SOLID_ENTRY = "impl/all.zst"
-    val MAGIC: List<Byte> = listOf('A'.code.toByte(), 'M'.code.toByte(), 'P'.code.toByte(), '1'.code.toByte())
-    const val SHA1_BYTES = 20
 
-    data class Entry(val id: String, val versions: List<String>, val offset: Long, val length: Long, val sha1: ByteArray)
+    data class Entry(val id: String, val versions: List<String>, val offset: Long, val length: Long, val sha1: String)
 
-    fun write(generationSha1: ByteArray, entries: List<Entry>): ByteArray {
-        val versionsBytes = entries.sumOf { entry -> 2 + entry.versions.sumOf { it.length + 2 } }
-        val buffer = ByteBuffer.allocate(64 + entries.sumOf { it.id.length + 2 + 8 + SHA1_BYTES } + versionsBytes).order(ByteOrder.LITTLE_ENDIAN)
-        buffer.put(MAGIC.toByteArray()).put(generationSha1).putShort(entries.size.toShort())
-        for (entry in entries) {
-            val id = entry.id.toByteArray(StandardCharsets.UTF_8)
-            buffer.putShort(id.size.toShort()).put(id)
-            buffer.putShort(entry.versions.size.toShort())
-            for (version in entry.versions) {
-                val encoded = version.toByteArray(StandardCharsets.UTF_8)
-                buffer.putShort(encoded.size.toShort()).put(encoded)
-            }
-            buffer.putInt(entry.offset.toInt()).putInt(entry.length.toInt()).put(entry.sha1)
-        }
-        return buffer.array().copyOf(buffer.position())
-    }
+    private val writer = ObjectMapper().writerWithDefaultPrettyPrinter()
 
-    class ParsedManifest(val generationSha1: ByteArray, val entries: List<Entry>) {
-        fun generationHex(): String = generationSha1.toHex()
-    }
+    fun write(generation: String, entries: List<Entry>): ByteArray =
+        writer.writeValueAsBytes(
+            linkedMapOf<String, Any>(
+                "generation" to generation,
+                "impls" to entries.map { entry ->
+                    linkedMapOf<String, Any>(
+                        "id" to entry.id,
+                        "versions" to entry.versions,
+                        "offset" to entry.offset,
+                        "length" to entry.length,
+                        "sha1" to entry.sha1,
+                    )
+                },
+            ),
+        )
 
-    /** Strict parse for the audit: bad magic, truncation or trailing garbage all fail with a reason. */
+    class ParsedManifest(val generation: String, val entries: List<Entry>)
+
+    /** Strict parse for the audit: any missing, mistyped or malformed field fails with a reason. */
     fun parse(bytes: ByteArray): ParsedManifest {
-        fun fail(reason: String): Nothing = error("impl/manifest.bin is invalid: $reason")
-        try {
-            val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-            val magic = ByteArray(MAGIC.size)
-            buffer.get(magic)
-            if (magic.toList() != MAGIC) fail("bad magic ${magic.toHex()}")
-            val generation = ByteArray(SHA1_BYTES)
-            buffer.get(generation)
-            val count = buffer.short.toUnsignedInt()
-            val entries = ArrayList<Entry>(count)
-            repeat(count) {
-                val idLength = buffer.short.toUnsignedInt()
-                val id = ByteArray(idLength)
-                buffer.get(id)
-                val versionCount = buffer.short.toUnsignedInt()
-                val versions = ArrayList<String>(versionCount)
-                repeat(versionCount) {
-                    val versionLength = buffer.short.toUnsignedInt()
-                    val version = ByteArray(versionLength)
-                    buffer.get(version)
-                    versions.add(String(version, StandardCharsets.UTF_8))
-                }
-                val offset = buffer.int.toUnsignedLong()
-                val length = buffer.int.toUnsignedLong()
-                val sha1 = ByteArray(SHA1_BYTES)
-                buffer.get(sha1)
-                entries.add(Entry(String(id, StandardCharsets.UTF_8), versions, offset, length, sha1))
-            }
-            if (buffer.hasRemaining()) fail("${buffer.remaining()} trailing bytes after $count entries")
-            return ParsedManifest(generation, entries)
-        } catch (e: java.nio.BufferUnderflowException) {
-            fail("truncated at ${bytes.size} bytes")
+        fun fail(reason: String): Nothing = error("impl/manifest.json is invalid: $reason")
+
+        val root = try {
+            ObjectMapper().readTree(bytes)
+        } catch (e: Exception) {
+            fail(e.message ?: e.javaClass.simpleName)
         }
+        if (root == null || !root.isObject) fail("not a JSON object")
+        val generation = root.get("generation")?.takeIf { it.isTextual } ?: fail("no usable generation")
+        if (!generation.textValue().matches(Regex("[0-9a-f]{40}"))) fail("generation ${generation.textValue()} is not a SHA-1 hex digest")
+        val impls = root.get("impls")?.takeIf { it.isArray } ?: fail("no impls array")
+        val entries = impls.mapIndexed { position, node ->
+            fun field(name: String): JsonNode = node.get(name) ?: fail("impl $position carries no $name")
+            val id = field("id").takeIf { it.isTextual }?.textValue() ?: fail("impl $position carries no usable id")
+            val versions = field("versions").takeIf { it.isArray }?.map { version ->
+                version.takeIf { it.isTextual }?.textValue() ?: fail("impl $id carries a non-string version")
+            } ?: fail("impl $id carries no versions array")
+            val offset = field("offset").takeIf { it.canConvertToLong() }?.longValue() ?: fail("impl $id carries no usable offset")
+            val length = field("length").takeIf { it.canConvertToLong() }?.longValue() ?: fail("impl $id carries no usable length")
+            if (offset < 0 || length < 0) fail("impl $id carries a negative offset or length")
+            val sha1 = field("sha1").takeIf { it.isTextual }?.textValue() ?: fail("impl $id carries no usable sha1")
+            if (!sha1.matches(Regex("[0-9a-f]{40}"))) fail("impl $id carries sha1 $sha1, not a SHA-1 hex digest")
+            Entry(id, versions, offset, length, sha1)
+        }
+        return ParsedManifest(generation.textValue(), entries)
     }
 
-    private fun List<Byte>.toByteArray() = ByteArray(size) { this[it] }
-
-    private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
-
-    private fun Short.toUnsignedInt() = toInt() and 0xFFFF
-
-    private fun Int.toUnsignedLong() = toLong() and 0xFFFFFFFFL
+    fun sha1Hex(bytes: ByteArray): String = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-1").digest(bytes))
 }

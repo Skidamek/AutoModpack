@@ -27,7 +27,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * Selects this launch's game impl out of the one jar's solid blob ({@code impl/all.zst} + {@code
- * impl/manifest.bin}) into the instance's impl-cache worktree and hands back the real-file Path the
+ * impl/manifest.json}) into the instance's impl-cache worktree and hands back the real-file Path the
  * loaders mount. The hit path is one stamp read plus one git-stat per impl ({@code
  * FileIntegrity.matchesNamed} never reads bytes); any miss regenerates the whole generation, since
  * a solid frame is all-or-nothing: inflate once, verify every slice against the manifest, stage,
@@ -35,7 +35,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * becomes a stamp hit because the stamp travels inside the renamed tree.
  */
 public final class ImplStore {
-	private static final String MANIFEST_ENTRY = "impl/manifest.bin";
+	private static final String MANIFEST_ENTRY = "impl/manifest.json";
 	private static final String SOLID_ENTRY = "impl/all.zst";
 	private static final String STAMP_FILE = "stamp.json";
 	/** Stat records of the impl jars; inside the cache directory so a generation wipe takes them along. */
@@ -118,7 +118,7 @@ public final class ImplStore {
 			ZipEntry solidEntry = zip.getEntry(SOLID_ENTRY);
 			if (solidEntry == null) throw new IllegalStateException("Outer jar " + outerJar + " carries no solid impl blob at " + SOLID_ENTRY);
 			byte[] compressed = zip.getInputStream(solidEntry).readAllBytes();
-			// The manifest's lengths sum to the solid size: build-side zstd -19 ran over a file, so the
+			// The manifest's lengths sum to the solid size: build-side zstd ran over a file, so the
 			// frame carries the size too - the manifest is the source of truth and the slice bounds.
 			solid = new byte[Math.toIntExact(manifest.totalSize())];
 			int decompressed = new ZstdDecompressor().decompress(compressed, 0, compressed.length, solid, 0, solid.length);

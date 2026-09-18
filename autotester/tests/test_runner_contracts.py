@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import struct
 import threading
 import time
 import types
@@ -30,24 +29,22 @@ def _target(**kw):
     return types.SimpleNamespace(**base)
 
 
-def _manifest(entries: list[tuple[str, int, int, bytes]]) -> bytes:
-    out = io.BytesIO()
-    out.write(b"AMP1")
-    out.write(b"\x00" * 20)
-    out.write(struct.pack("<H", len(entries)))
-    for target_id, offset, length, sha1 in entries:
-        encoded = target_id.encode("utf-8")
-        out.write(struct.pack("<H", len(encoded)))
-        out.write(encoded)
-        versions = [target_id.rsplit("-", 1)[0].split(".")[0]]  # shape only; the runner skips the bytes
-        out.write(struct.pack("<H", len(versions)))
-        for version in versions:
-            encoded_version = version.encode("utf-8")
-            out.write(struct.pack("<H", len(encoded_version)))
-            out.write(encoded_version)
-        out.write(struct.pack("<II", offset, length))
-        out.write(sha1)
-    return out.getvalue()
+def _manifest(entries: list[tuple[str, int, int, str]]) -> bytes:
+    return json.dumps(
+        {
+            "generation": "0" * 40,  # shape only; the runner reads only the impl bounds
+            "impls": [
+                {
+                    "id": target_id,
+                    "versions": [target_id.rsplit("-", 1)[0].split(".")[0]],  # shape only
+                    "offset": offset,
+                    "length": length,
+                    "sha1": sha1,
+                }
+                for target_id, offset, length, sha1 in entries
+            ],
+        }
+    ).encode("utf-8")
 
 
 def _zstd_compress(data: bytes) -> bytes:
@@ -372,7 +369,7 @@ def test_artifact_resolution_descends_into_the_impl_solid(tmp_path):
     artifact = tmp_path / "automodpack-4.0.5-test.jar"
     with zipfile.ZipFile(artifact, "w") as jar:
         jar.writestr("fabric.mod.json", "{}")
-        jar.writestr("impl/manifest.bin", _manifest([("1.20.1-fabric", 0, len(impl_bytes), b"\x00" * 20)]))
+        jar.writestr("impl/manifest.json", _manifest([("1.20.1-fabric", 0, len(impl_bytes), "0" * 40)]))
         jar.writestr("impl/all.zst", _zstd_compress(impl_bytes))
 
     assert runner._resolve_artifact(target, tmp_path) == artifact.resolve()
@@ -387,7 +384,7 @@ def test_artifact_resolution_rejects_release_mode_artifact(tmp_path):
     artifact = tmp_path / "automodpack-4.0.5-test.jar"
     with zipfile.ZipFile(artifact, "w") as jar:
         jar.writestr("fabric.mod.json", "{}")
-        jar.writestr("impl/manifest.bin", _manifest([("1.20.1-fabric", 0, len(impl_bytes), b"\x00" * 20)]))
+        jar.writestr("impl/manifest.json", _manifest([("1.20.1-fabric", 0, len(impl_bytes), "0" * 40)]))
         jar.writestr("impl/all.zst", _zstd_compress(impl_bytes))
 
     with pytest.raises(RuntimeError, match="rebuild with -Pautomodpack.autotest"):

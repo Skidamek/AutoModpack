@@ -19,7 +19,6 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -32,10 +31,9 @@ import java.util.zip.ZipOutputStream
  * from the impls while stripping (byte-identical across targets, which is checked, not assumed).
  * `impl/all.zst` is one-shot zstd level 20 over the whole solid, compressed by the pinned zstd-jni
  * natives (single-threaded by nature, one version everywhere, no CLI on PATH); the frame header
- * carries the uncompressed size the runtime's aircompressor decode relies on. `impl/manifest.bin`
- * indexes the solid. Both entries
- * are appended AFTER the optimizer ran, and appended as STORE - that ordering is what keeps them
- * uncompressed, because the optimizer never sees the impl entries.
+ * carries the uncompressed size the runtime's aircompressor decode relies on. `impl/manifest.json`
+ * indexes the solid. Both entries are appended AFTER the optimizer ran, and appended as STORE -
+ * that ordering is what keeps them uncompressed, because the optimizer never sees the impl entries.
  */
 /** One-shot level 20: the measured sweet spot on the shipped solid (-19 gave up 4.9 KB more, -21/-22 under 100 bytes each, --max 905 bytes for 12 s) and single-threaded by nature, so the bytes cannot drift with core count. */
 private const val ZSTD_LEVEL = 20
@@ -112,7 +110,7 @@ abstract class OneJarTask : DefaultTask() {
                 }
             }
             val bytes = normalized.toByteArray()
-            manifestEntries.add(ImplManifestFormat.Entry(id, versionsById.getValue(id), solid.size().toLong(), bytes.size.toLong(), sha1(bytes)))
+            manifestEntries.add(ImplManifestFormat.Entry(id, versionsById.getValue(id), solid.size().toLong(), bytes.size.toLong(), ImplManifestFormat.sha1Hex(bytes)))
             solid.write(bytes)
         }
         if (outerAssets.isEmpty()) throw GradleException("No impl jar carried assets/ - the outer would ship without lang, textures or sounds")
@@ -133,7 +131,9 @@ abstract class OneJarTask : DefaultTask() {
         val solidBytes = solid.toByteArray()
         val zstdBinary = Zstd.compress(solidBytes, ZSTD_LEVEL)
         verifyRuntimeDecodable(zstdBinary, solidBytes)
-        val generation = sha1(zstdBinary)
+        // The generation is the UNCOMPRESSED solid's hash: it changes only when the impls change, so
+        // bumping zstd-jni or the level repacks the jar without wiping every install's impl cache.
+        val generation = ImplManifestFormat.sha1Hex(solidBytes)
         val manifest = ImplManifestFormat.write(generation, manifestEntries)
 
         val outputFile = oneJar.get().asFile
@@ -204,5 +204,4 @@ abstract class OneJarTask : DefaultTask() {
         }
     }
 
-    private fun sha1(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-1").digest(bytes)
 }

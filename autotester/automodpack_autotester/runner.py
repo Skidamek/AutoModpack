@@ -6,9 +6,9 @@ them here registers them in the shared verb registry the executor dispatches on.
 from __future__ import annotations
 
 import io
+import json
 import logging
 import secrets
-import struct
 import threading
 import time
 import zipfile
@@ -73,40 +73,16 @@ def _jar_names(artifact: Path) -> set[str]:
     """Entry names of the artifact, descending into the one jar's zstd impl solid."""
     with zipfile.ZipFile(artifact) as jar:
         names = set(jar.namelist())
-        if "impl/manifest.bin" not in names:
+        if "impl/manifest.json" not in names:
             return names
-        entries = _manifest_entries(jar.read("impl/manifest.bin"))
+        manifest = json.loads(jar.read("impl/manifest.json"))
         solid = _decompress_solid(jar.read("impl/all.zst"))
-    names.discard("impl/manifest.bin")
+    names.discard("impl/manifest.json")
     names.discard("impl/all.zst")
-    for _id, offset, length, _sha1 in entries:
-        with zipfile.ZipFile(io.BytesIO(solid[offset : offset + length])) as impl:
+    for entry in manifest["impls"]:
+        with zipfile.ZipFile(io.BytesIO(solid[entry["offset"] : entry["offset"] + entry["length"]])) as impl:
             names.update(impl.namelist())
     return names
-
-
-def _manifest_entries(manifest: bytes) -> list[tuple[str, int, int, bytes]]:
-    if manifest[:4] != b"AMP1":
-        raise RuntimeError(f"{manifest[:4]!r} is not an impl manifest (expected AMP1)")
-    (count,) = struct.unpack_from("<H", manifest, 24)
-    entries = []
-    pos = 26
-    for _ in range(count):
-        (id_len,) = struct.unpack_from("<H", manifest, pos)
-        pos += 2
-        target_id = manifest[pos : pos + id_len].decode("utf-8")
-        pos += id_len
-        (version_count,) = struct.unpack_from("<H", manifest, pos)
-        pos += 2
-        for _ in range(version_count):
-            (version_len,) = struct.unpack_from("<H", manifest, pos)
-            pos += 2 + version_len
-        offset, length = struct.unpack_from("<II", manifest, pos)
-        pos += 8
-        sha1 = manifest[pos : pos + 20]
-        pos += 20
-        entries.append((target_id, offset, length, sha1))
-    return entries
 
 
 def _decompress_solid(zstd_bytes: bytes) -> bytes:

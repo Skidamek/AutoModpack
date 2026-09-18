@@ -1,26 +1,26 @@
 package pl.skidam.automodpack_core.loader;
 
-import java.nio.BufferUnderflowException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HexFormat;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 /**
- * The index of the one jar's solid impl blob ({@code impl/manifest.bin}). Little-endian, hand-rolled:
- * magic {@code AMP1}, the 20-byte SHA-1 generation of {@code impl/all.zst}, an entry count, then per
- * entry the target id, the Minecraft versions that target covers, its offset and STORE length inside
- * the uncompressed solid, and the SHA-1 of that slice. Parsing is total: any corruption, truncation or
- * trailing garbage is a broken outer jar and crashes instead of answering a partial question.
+ * The index of the one jar's solid impl blob ({@code impl/manifest.json}): the generation - the
+ * SHA-1 of the UNCOMPRESSED solid, so a compressor bump cannot invalidate every install's impl
+ * cache - and per impl its id, the Minecraft versions that target covers, its offset and STORE
+ * length inside the solid, and the SHA-1 of that slice. Bare data, no version field: the manifest
+ * ships inside the same jar as this parser, so reader and writer can never skew, and any malformed
+ * content is a broken outer jar that crashes instead of answering a partial question.
  */
 public final class ImplManifest {
-	/** {@code AMP1} - the only magic this format ever answers to. */
-	public static final byte[] MAGIC = {'A', 'M', 'P', '1'};
-	public static final int SHA1_BYTES = 20;
+	private static final Pattern SHA1_HEX = Pattern.compile("[0-9a-f]{40}");
 
 	private final String generation;
 	private final List<Entry> entries;
@@ -35,39 +35,30 @@ public final class ImplManifest {
 
 	/** Parses the manifest bytes; throws {@link IllegalStateException} on anything that is not exactly one well-formed manifest. */
 	public static ImplManifest parse(byte[] bytes) {
+		JsonObject root;
 		try {
-			ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
-			byte[] magic = new byte[MAGIC.length];
-			buffer.get(magic);
-			if (!Arrays.equals(magic, MAGIC)) throw new IllegalStateException("Impl manifest magic is " + HexFormat.of().formatHex(magic) + ", expected AMP1");
-			byte[] generation = new byte[SHA1_BYTES];
-			buffer.get(generation);
-			int count = Short.toUnsignedInt(buffer.getShort());
-			List<Entry> entries = new ArrayList<>(count);
-			for (int i = 0; i < count; i++) {
-				byte[] id = new byte[Short.toUnsignedInt(buffer.getShort())];
-				buffer.get(id);
-				int versionCount = Short.toUnsignedInt(buffer.getShort());
-				List<String> versions = new ArrayList<>(versionCount);
-				for (int v = 0; v < versionCount; v++) {
-					byte[] version = new byte[Short.toUnsignedInt(buffer.getShort())];
-					buffer.get(version);
-					versions.add(new String(version, StandardCharsets.UTF_8));
-				}
-				long offset = Integer.toUnsignedLong(buffer.getInt());
-				long length = Integer.toUnsignedLong(buffer.getInt());
-				byte[] sha1 = new byte[SHA1_BYTES];
-				buffer.get(sha1);
-				entries.add(new Entry(new String(id, StandardCharsets.UTF_8), List.copyOf(versions), offset, length, HexFormat.of().formatHex(sha1)));
-			}
-			if (buffer.hasRemaining()) throw new IllegalStateException("Impl manifest carries " + buffer.remaining() + " trailing bytes after " + count + " entries");
-			return new ImplManifest(HexFormat.of().formatHex(generation), List.copyOf(entries));
-		} catch (BufferUnderflowException e) {
-			throw new IllegalStateException("Impl manifest is truncated at " + (bytes == null ? 0 : bytes.length) + " bytes", e);
+			root = JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8)).getAsJsonObject();
+		} catch (Exception e) {
+			throw new IllegalStateException("Impl manifest is not a JSON object: " + message(e), e);
 		}
+		String generation = string(root, "generation");
+		if (!SHA1_HEX.matcher(generation).matches()) throw new IllegalStateException("Impl manifest generation " + generation + " is not a SHA-1 hex digest");
+		JsonArray impls = array(root, "impls");
+		List<Entry> entries = new ArrayList<>(impls.size());
+		for (JsonElement element : impls) {
+			JsonObject impl = object(element, "impl");
+			Entry entry = new Entry(
+					string(impl, "id"),
+					List.copyOf(strings(impl, "versions")),
+					positive(impl, "offset"),
+					positive(impl, "length"),
+					sha1(impl));
+			entries.add(entry);
+		}
+		return new ImplManifest(generation, List.copyOf(entries));
 	}
 
-	/** The SHA-1 of {@code impl/all.zst} as lowercase hex - the impl-cache generation key. */
+	/** The SHA-1 of the uncompressed solid as lowercase hex - the impl-cache generation key. */
 	public String generation() {
 		return generation;
 	}
@@ -95,6 +86,54 @@ public final class ImplManifest {
 	/** The uncompressed solid size the manifest describes. */
 	public long totalSize() {
 		return entries.stream().mapToLong(Entry::length).sum();
+	}
+
+	private static String string(JsonObject object, String field) {
+		JsonElement element = object.get(field);
+		if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString())
+			throw new IllegalStateException("Impl manifest carries no usable " + field + " in " + object);
+		return element.getAsString();
+	}
+
+	private static String sha1(JsonObject impl) {
+		String sha1 = string(impl, "sha1");
+		if (!SHA1_HEX.matcher(sha1).matches()) throw new IllegalStateException("Impl manifest slice digest " + sha1 + " is not a SHA-1 hex digest");
+		return sha1;
+	}
+
+	private static List<String> strings(JsonObject object, String field) {
+		JsonArray array = array(object, field);
+		List<String> values = new ArrayList<>(array.size());
+		for (JsonElement element : array) {
+			if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString())
+				throw new IllegalStateException("Impl manifest " + field + " carries a non-string entry in " + object);
+			values.add(element.getAsString());
+		}
+		return values;
+	}
+
+	private static long positive(JsonObject object, String field) {
+		JsonElement element = object.get(field);
+		if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber())
+			throw new IllegalStateException("Impl manifest carries no usable " + field + " in " + object);
+		long value = element.getAsLong();
+		if (value < 0) throw new IllegalStateException("Impl manifest carries a negative " + field + " in " + object);
+		return value;
+	}
+
+	private static JsonArray array(JsonObject object, String field) {
+		JsonElement element = object.get(field);
+		if (element == null || !element.isJsonArray()) throw new IllegalStateException("Impl manifest carries no " + field + " array in " + object);
+		return element.getAsJsonArray();
+	}
+
+	private static JsonObject object(JsonElement element, String what) {
+		if (!element.isJsonObject()) throw new IllegalStateException("Impl manifest " + what + " is not an object: " + element);
+		return element.getAsJsonObject();
+	}
+
+	private static String message(Exception e) {
+		return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
 	}
 
 	private String ids() {
