@@ -17,7 +17,7 @@ class UpdateLoopDetectorTest {
 	Path tempDir;
 
 	@Test
-	void suppressesThirdRapidRestartAcrossInstances() {
+	void suppressesThirdRapidRestartAcrossInstances() throws IOException {
 		Path stateFile = tempDir.resolve("restart-state.json");
 		AtomicLong now = new AtomicLong(1_000);
 
@@ -29,7 +29,7 @@ class UpdateLoopDetectorTest {
 	}
 
 	@Test
-	void countsRestartsUpToTheCap() {
+	void countsRestartsUpToTheCap() throws IOException {
 		Path stateFile = tempDir.resolve("restart-state.json");
 		AtomicLong now = new AtomicLong(1_000);
 		UpdateLoopDetector detector = detector(stateFile, now);
@@ -47,7 +47,7 @@ class UpdateLoopDetectorTest {
 	}
 
 	@Test
-	void changedOrExpiredStateStartsNewSequence() {
+	void changedOrExpiredStateStartsNewSequence() throws IOException {
 		Path stateFile = tempDir.resolve("restart-state.json");
 		AtomicLong now = new AtomicLong(1_000);
 		UpdateLoopDetector detector = detector(stateFile, now);
@@ -73,7 +73,7 @@ class UpdateLoopDetectorTest {
 	}
 
 	@Test
-	void customPolicyWithoutWindowDoesNotExpire() {
+	void customPolicyWithoutWindowDoesNotExpire() throws IOException {
 		Path stateFile = tempDir.resolve("stuck-transaction-state.json");
 		AtomicLong now = new AtomicLong(1_000);
 

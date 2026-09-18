@@ -60,7 +60,8 @@ public class ServerLoginNetworkAddon implements PacketSender {
 
 			try {
 				future.get();
-			} catch (Exception ignored) {
+			} catch (Exception e) {
+				LOGGER.error("A login synchronizer failed; the login proceeds without its result", e);
 			}
 
 			return true;

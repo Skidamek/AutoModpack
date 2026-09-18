@@ -62,7 +62,7 @@ public class Preload {
 		}
 	}
 
-	private void updateAll() {
+	private void updateAll() throws Exception {
 		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
 			SelfUpdater.update();
 			return;

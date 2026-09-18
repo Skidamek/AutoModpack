@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -66,16 +64,13 @@ final class RestartDecision {
 		return reasons.contains(UpdatePlan.RestartReason.SELECTED_MODPACK) ? UpdateType.SELECT : fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
 	}
 
-	/** Fingerprint of the applied correction state so two rapid automatic restarts for the same state can be suppressed. */
-	static String stateFingerprint(ClientStorage storage, ApplyResult applyResult) {
-		String contentToken;
-		try {
-			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-			contentToken = state == null ? "none" : state.contentToken;
-		} catch (IOException e) {
-			LOGGER.warn("Cannot track rapid modpack restarts because active client state is unavailable", e);
-			return null;
-		}
+	/**
+	 * Fingerprint of the applied correction state so two rapid automatic restarts for the same state can be suppressed. The active pointer's unusable content fails the flow instead of silently disabling loop
+	 * suppression.
+	 */
+	static String stateFingerprint(ClientStorage storage, ApplyResult applyResult) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+		String contentToken = state == null ? "none" : state.contentToken;
 		return String.join("\n", storage.activeDirectory().toAbsolutePath().normalize().toString(), contentToken, String.join(",", applyResult.reasonIds()));
 	}
 }

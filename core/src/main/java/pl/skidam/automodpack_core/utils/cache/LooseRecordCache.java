@@ -3,8 +3,7 @@ package pl.skidam.automodpack_core.utils.cache;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,19 +38,23 @@ abstract class LooseRecordCache<T> implements AutoCloseable {
 		return recordsDirectory.resolve(key.substring(0, 2)).resolve(key.substring(2) + RECORD_SUFFIX);
 	}
 
+	/**
+	 * The record for {@code key}, or null when none is persisted. Unusable content is set aside as
+	 * evidence and reads as absent; physical IO trouble cannot read as a miss and escapes as
+	 * {@link UncheckedIOException}.
+	 */
 	protected T readRecord(String key, Class<T> type) {
 		T hot = hotRecords.get(key);
 		if (hot != null && validate(hot, key)) return hot;
-		Path recordPath = recordPath(key);
-		if (!Files.isRegularFile(recordPath, LinkOption.NOFOLLOW_LINKS)) return null;
 		try {
-			T record = ConfigTools.read(recordPath, type).orElse(null);
-			if (record == null || !validate(record, key)) return null;
-			hotRecords.put(key, record);
+			T record = ConfigTools.readState(recordPath(key), type, description + " cache record", fields -> {
+				if (!validate(fields, key)) throw new IllegalArgumentException("Cache record does not belong to " + key);
+				return fields;
+			}).orElse(null);
+			if (record != null) hotRecords.put(key, record);
 			return record;
-		} catch (RuntimeException e) {
-			LOGGER.debug("Ignoring invalid {} cache record: {}", description, recordPath);
-			return null;
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
 		}
 	}
 

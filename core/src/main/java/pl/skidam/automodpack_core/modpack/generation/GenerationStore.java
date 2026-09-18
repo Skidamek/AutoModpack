@@ -109,23 +109,24 @@ public final class GenerationStore {
 
 	/**
 	 * Rebuilds the current state from the projection view when it still matches the journal head:
-	 * the view carries the folded ledger, so the common boot never replays the journal.
+	 * the view carries the folded ledger, so the common boot never replays the journal. A stale
+	 * view is the normal cache miss and reads as absent; unreadable content is set aside with a
+	 * loud log before the rebuild below recreates the projection.
 	 */
 	private Current loadFromProjection() throws IOException {
-		if (!Files.exists(projectionFile)) return null;
-		GenerationJsons.HeadDocumentFields fields;
-		try {
-			fields = ConfigTools.read(projectionFile, GenerationJsons.HeadDocumentFields.class).orElse(null);
-		} catch (RuntimeException e) {
-			return null;
-		}
-		if (fields == null || fields.policy == null || fields.ownershipLedger == null) return null;
+		GenerationJsons.HeadDocumentFields fields = ConfigTools.readState(projectionFile, GenerationJsons.HeadDocumentFields.class, "Server generation projection",
+				document -> {
+					if (document.policy == null || document.ownershipLedger == null) throw new IllegalArgumentException("Projection document is missing its policy or ownership ledger");
+					return document;
+				}).orElse(null);
+		if (fields == null) return null;
 		JournalEntry head = journal.head();
 		if (fields.journalHead != head.seq() || !fields.contentToken.equals(head.contentToken()) || !fields.policySha1.equals(head.policySha1())) return null;
 		GroupManifest manifest;
 		try {
 			manifest = GroupManifestValidator.validate(fields.policy);
 		} catch (RuntimeException e) {
+			LOGGER.warn("The projection's policy document is invalid; rebuilding the projection from the journal", e);
 			return null;
 		}
 		ContentTree tree = ContentTree.fromManifest(manifest);

@@ -27,7 +27,7 @@ public class ModpackUtils {
 	public record UpdateCheckResult(boolean requiresUpdate, Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {}
 
 	// Checks if the modpack is up to date without modifying anything on disk
-	public static UpdateCheckResult isUpdate(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
+	public static UpdateCheckResult isUpdate(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) throws IOException {
 		if (serverModpackContent == null || serverModpackContent.list == null) throw new IllegalArgumentException("Server modpack content list is null");
 		if (verificationCannotDecide(serverModpackContent, storage)) return new UpdateCheckResult(true, serverModpackContent.list);
 
@@ -66,7 +66,7 @@ public class ModpackUtils {
 	}
 
 	// Re-applies the filesystem's immutability to active files that already match the server content; the update verdict above stays read-only
-	public static void reprotectActiveFiles(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
+	public static void reprotectActiveFiles(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) throws IOException {
 		if (serverModpackContent == null || serverModpackContent.list == null) throw new IllegalArgumentException("Server modpack content list is null");
 		if (verificationCannotDecide(serverModpackContent, storage)) return;
 		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
@@ -79,25 +79,19 @@ public class ModpackUtils {
 				String relative = LogicalPath.normalize(serverItem.file);
 				if (verifyActiveItem(serverItem, relative, live) == FileVerification.MATCH) ImmutableFiles.protect(storage.activePath(relative));
 			}
-		} catch (Exception e) {
-			LOGGER.warn("Failed to re-protect the matching active files", e);
 		}
 	}
 
-	// True when the per-file scan cannot decide anything and every file must be treated as an update: without an active projection nothing can match, and differing content digests can never pass the per-file scan
-	private static boolean verificationCannotDecide(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
-		try {
-			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-			if (state == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return true;
-			if (!serverModpackContent.contentToken.isBlank() && !serverModpackContent.contentToken.equals(state.contentToken)) {
-				LOGGER.info("Server modpack content differs from the installed modpack; skipping the per-file verification");
-				return true;
-			}
-			return false;
-		} catch (IOException e) {
-			LOGGER.warn("Cannot read active client generation state", e);
+	// True when the per-file scan cannot decide anything and every file must be treated as an update: without an active projection nothing can match, and differing content digests can never pass the per-file scan.
+	// The active pointer is unique state whose unusable content fails the boot in place, so its read failure propagates instead of reading as cannot-decide.
+	private static boolean verificationCannotDecide(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+		if (state == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return true;
+		if (!serverModpackContent.contentToken.isBlank() && !serverModpackContent.contentToken.equals(state.contentToken)) {
+			LOGGER.info("Server modpack content differs from the installed modpack; skipping the per-file verification");
 			return true;
 		}
+		return false;
 	}
 
 	private enum FileVerification {

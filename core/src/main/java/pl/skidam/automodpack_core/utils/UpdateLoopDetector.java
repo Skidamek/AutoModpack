@@ -1,9 +1,8 @@
 package pl.skidam.automodpack_core.utils;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 
-import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -51,7 +50,7 @@ public final class UpdateLoopDetector {
 	 * One same-fingerprint event. {@code restarts} is the 1-based count the event recorded, or the reached cap
 	 * when the decision is SUPPRESS. A null or blank fingerprint counts as the first restart.
 	 */
-	public Outcome evaluateAndRecord(String fingerprint) {
+	public Outcome evaluateAndRecord(String fingerprint) throws IOException {
 		if (fingerprint == null || fingerprint.isBlank()) return new Outcome(Decision.RESTART, 1, maxAllowedRestarts);
 
 		long now = currentTimeMillis.getAsLong();
@@ -79,15 +78,12 @@ public final class UpdateLoopDetector {
 		return elapsed >= 0 && elapsed <= window.toMillis();
 	}
 
-	private State load() {
-		try {
-			if (!Files.isRegularFile(stateFile)) return null;
-			State state = GSON.fromJson(Files.readString(stateFile, StandardCharsets.UTF_8), State.class);
-			return isValid(this, state) ? state : null;
-		} catch (Exception e) {
-			LOGGER.warn("Failed to load restart-loop state; allowing restart", e);
-			return null;
-		}
+	/** The persisted suppression state, or null when none is persisted; unusable content is set aside as evidence and reads as absent. */
+	private State load() throws IOException {
+		return ConfigTools.readState(stateFile, State.class, "Restart-loop state", state -> {
+			if (!isValid(this, state)) throw new IllegalArgumentException("Restart-loop state is invalid");
+			return state;
+		}).orElse(null);
 	}
 
 	private void write(State state) {

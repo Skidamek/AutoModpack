@@ -92,7 +92,8 @@ public class DataS2CPacket {
 				if (fingerprint != null) LOGGER.warn("Server certificate fingerprint: {}", fingerprint);
 			}
 		} catch (Exception e) {
-			LOGGER.error("Error while handling DataS2CPacket", e);
+			LOGGER.error("Error while handling the modpack verification response", e);
+			disconnect(handler, VersionedText.literal("[AutoModpack] Your modpack verification response was unreadable. Reconnect, and if it repeats ask the server administrator to check the server log."));
 		}
 	}
 

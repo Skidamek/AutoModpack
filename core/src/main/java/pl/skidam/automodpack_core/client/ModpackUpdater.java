@@ -405,7 +405,7 @@ public class ModpackUpdater implements AutoCloseable {
 		close();
 	}
 
-	private void finishLaunchApply(ApplyResult applyResult) {
+	private void finishLaunchApply(ApplyResult applyResult) throws IOException {
 		if (!preload) {
 			restartAfterApply(applyResult);
 			return;

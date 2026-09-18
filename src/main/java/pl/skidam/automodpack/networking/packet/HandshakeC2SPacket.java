@@ -11,6 +11,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.FriendlyByteBuf;
 
+import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.networking.client.ClientLoginDisconnect;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack_core.client.SelfUpdater;
@@ -40,7 +41,8 @@ public class HandshakeC2SPacket {
 
 			return CompletableFuture.completedFuture(outBuf);
 		} catch (Exception e) {
-			LOGGER.error("Error while handling HandshakeC2SPacket", e);
+			LOGGER.error("The server handshake is unreadable; disconnecting instead of joining unenforced", e);
+			ClientLoginDisconnect.disconnect(handler, VersionedText.literal("[AutoModpack] The server sent an unreadable handshake. Ask the server administrator to check the server and AutoModpack versions."));
 			return CompletableFuture.completedFuture(outBuf);
 		}
 	}

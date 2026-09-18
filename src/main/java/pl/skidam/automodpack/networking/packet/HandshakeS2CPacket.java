@@ -138,6 +138,9 @@ public class HandshakeS2CPacket {
 			sender.sendPacket(DATA, outBuf);
 		} catch (Exception e) {
 			LOGGER.error("Error while handling handshake for {}", GameHelpers.getPlayerName(profile), e);
+			Component reason = VersionedText.literal("[AutoModpack] The server failed to process your handshake. Ask the server administrator to check the server log.");
+			connection.send(new ClientboundLoginDisconnectPacket(reason));
+			connection.disconnect(reason);
 		}
 	}
 

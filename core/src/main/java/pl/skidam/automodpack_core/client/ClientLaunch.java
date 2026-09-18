@@ -39,7 +39,7 @@ public final class ClientLaunch {
 		this.rolledBackStuckUpdate = rolledBackStuckUpdate;
 	}
 
-	public void run() {
+	public void run() throws Exception {
 		if (rolledBackStuckUpdate) {
 			LOGGER.info("Booting the restored modpack without contacting the server");
 			boolean projectionActive = hasActiveProjection();
@@ -90,7 +90,7 @@ public final class ClientLaunch {
 		}
 	}
 
-	private void syncFromServer(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
+	private void syncFromServer(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) throws Exception {
 		var manifestResult = ManifestFetcher.requestServerModpackContent(storage, connectionInfo, secret, false);
 		if (!manifestResult.successful()) {
 			// An unreachable server is a normal boot condition, not a failure: the installed pack keeps working and the
@@ -128,52 +128,39 @@ public final class ClientLaunch {
 		else updater.processModpackUpdate(true);
 	}
 
-	private void bootLocalOrSelfUpdate(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
+	private void bootLocalOrSelfUpdate(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) throws Exception {
 		boolean projectionActive = hasActiveProjection();
 		if (projectionActive) loadLocalModpack(connectionInfo, secret, projectionActive);
 		else SelfUpdater.update();
 	}
 
-	private void loadLocalModpack(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean projectionActive) {
+	private void loadLocalModpack(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean projectionActive) throws Exception {
 		if (!projectionActive) return;
-		try {
-			new ModpackUpdater(connectionInfo, secret, storage).loadModpack();
-		} catch (Exception e) {
-			LOGGER.error("Failed to load local modpack", e);
-		}
+		new ModpackUpdater(connectionInfo, secret, storage).loadModpack();
 	}
 
-	private boolean hasActiveProjection() {
-		try {
-			if (!clientConfig.hasSelectedModpack()) return false;
-			if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
-				LOGGER.warn("Skipping active modpack load because the configured selected modpack ID is invalid: {}", clientConfig.selectedModpackId);
-				return false;
-			}
-			if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return false;
-			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-			if (state == null) {
-				LOGGER.warn("Skipping active modpack load because the active projection has no active state");
-				return false;
-			}
-			if (!clientConfig.selectedModpackId.equals(state.modpackId)) {
-				LOGGER.warn("Skipping active modpack load because active state belongs to {}, but the selected modpack is {}", state.modpackId, clientConfig.selectedModpackId);
-				return false;
-			}
-			return true;
-		} catch (IOException e) {
-			LOGGER.warn("Cannot read active client projection state", e);
+	/** The active pointer is unique state whose unusable content fails the boot in place, so its read failure propagates instead of reading as no projection. */
+	private boolean hasActiveProjection() throws IOException {
+		if (!clientConfig.hasSelectedModpack()) return false;
+		if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
+			LOGGER.warn("Skipping active modpack load because the configured selected modpack ID is invalid: {}", clientConfig.selectedModpackId);
 			return false;
 		}
+		if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return false;
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+		if (state == null) {
+			LOGGER.warn("Skipping active modpack load because the active projection has no active state");
+			return false;
+		}
+		if (!clientConfig.selectedModpackId.equals(state.modpackId)) {
+			LOGGER.warn("Skipping active modpack load because active state belongs to {}, but the selected modpack is {}", state.modpackId, clientConfig.selectedModpackId);
+			return false;
+		}
+		return true;
 	}
 
-	private boolean isDetachedFromServer() {
-		try {
-			return new ClientGenerationStore(storage).isDetached(clientConfig.selectedModpackId);
-		} catch (IOException | RuntimeException e) {
-			LOGGER.warn("Cannot read the detached flag of the selected modpack", e);
-			return false;
-		}
+	private boolean isDetachedFromServer() throws IOException {
+		return new ClientGenerationStore(storage).isDetached(clientConfig.selectedModpackId);
 	}
 
 	private static void writeConfig(Path path, Object value) {
