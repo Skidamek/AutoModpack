@@ -458,9 +458,11 @@ public class ModpackUpdater implements AutoCloseable {
 	/**
 	 * Post-apply restart for a running game. {@link RestartPolicy#inGame} chooses required, offered, or none.
 	 * Required and offered both open the restart screen with a way back; none returns to the multiplayer hub.
+	 * File-changing applies mark content as not loaded so a failed join before a world exists can nudge a restart.
 	 */
 	void restartAfterApply(ApplyResult applyResult) {
 		Set<String> paths = changelogs.changedOrRemovedPaths();
+		if (!paths.isEmpty()) SessionUpdateState.markAppliedContentNotLoaded();
 		RestartDemand demand = RestartPolicy.inGame(applyResult.restartReasons(), paths);
 		if (demand == RestartDemand.NONE) {
 			updateLoopDetector.clear();
