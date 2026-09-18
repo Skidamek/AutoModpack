@@ -41,25 +41,9 @@ public final class EarlyServiceReplay {
 	 */
 	public static void runCandidateLocators(List<Path> jars, Function<Path, List<String>> implsFor, Function<Path, ClassLoader> loaderFor, ILaunchContext context,
 			IDiscoveryPipeline pipeline) {
-		List<IModFileCandidateLocator> locators = new ArrayList<>();
-		for (Path jar : jars) {
-			ClassLoader cl = loaderFor.apply(jar);
-			if (cl == null) continue;
-			for (String impl : implsFor.apply(jar)) {
-				try {
-					locators.add((IModFileCandidateLocator) Class.forName(impl, true, cl).getDeclaredConstructor().newInstance());
-				} catch (Throwable t) {
-					LOGGER.error("[AutoModpack] Failed to load candidate locator {} from {}", impl, jar.getFileName(), t);
-				}
-			}
-		}
-		// Highest priority first (IOrderedProvider order) across ALL hosted jars, so a replayed
-		// locator's declared priority is honoured relative to the others; raw staging (filesystem)
-		// order would silently drop it.
-		locators.sort(Comparator.comparingInt(IModFileCandidateLocator::getPriority).reversed());
-		for (IModFileCandidateLocator locator : locators) {
+		for (IModFileCandidateLocator locator : instantiate(jars, "candidate locator", implsFor, loaderFor, IModFileCandidateLocator.class)) {
 			try {
-				LOGGER.debug("[AutoModpack] Running in-place candidate locator {} (priority {})", locator.getClass().getName(), locator.getPriority());
+				LOGGER.debug("[AutoModpack] Running in-place candidate locator {} (priority {})", locator.getClass().getName(), priority(locator));
 				locator.findCandidates(context, pipeline);
 			} catch (Throwable t) {
 				LOGGER.error("[AutoModpack] Failed to run candidate locator {}", locator.getClass().getName(), t);
@@ -74,27 +58,37 @@ public final class EarlyServiceReplay {
 	 */
 	public static void runDependencyLocators(List<Path> jars, Function<Path, List<String>> implsFor, Function<Path, ClassLoader> loaderFor, List<IModFile> loadedMods,
 			IDiscoveryPipeline pipeline) {
-		List<IDependencyLocator> locators = new ArrayList<>();
-		for (Path jar : jars) {
-			ClassLoader cl = loaderFor.apply(jar);
-			if (cl == null) continue;
-			for (String impl : implsFor.apply(jar)) {
-				try {
-					locators.add((IDependencyLocator) Class.forName(impl, true, cl).getDeclaredConstructor().newInstance());
-				} catch (Throwable t) {
-					LOGGER.error("[AutoModpack] Failed to load dependency locator {} from {}", impl, jar.getFileName(), t);
-				}
-			}
-		}
-		locators.sort(Comparator.comparingInt(IDependencyLocator::getPriority).reversed());
-		for (IDependencyLocator locator : locators) {
+		for (IDependencyLocator locator : instantiate(jars, "dependency locator", implsFor, loaderFor, IDependencyLocator.class)) {
 			try {
-				LOGGER.debug("[AutoModpack] Running in-place dependency locator {} (priority {})", locator.getClass().getName(), locator.getPriority());
+				LOGGER.debug("[AutoModpack] Running in-place dependency locator {} (priority {})", locator.getClass().getName(), priority(locator));
 				locator.scanMods(loadedMods, pipeline);
 			} catch (Throwable t) {
 				LOGGER.error("[AutoModpack] Failed to run dependency locator {}", locator.getClass().getName(), t);
 			}
 		}
+	}
+
+	/**
+	 * Instantiates every declared impl of {@code type} across the hosted jars, highest priority
+	 * first (IOrderedProvider order) across ALL of them, so a replayed provider's declared priority
+	 * is honoured relative to the others; raw staging (filesystem) order would silently drop it.
+	 * Each instantiation is isolated, so one misbehaving impl cannot abort the replay.
+	 */
+	private static <T> List<T> instantiate(List<Path> jars, String kind, Function<Path, List<String>> implsFor, Function<Path, ClassLoader> loaderFor, Class<T> type) {
+		List<T> providers = new ArrayList<>();
+		for (Path jar : jars) {
+			ClassLoader cl = loaderFor.apply(jar);
+			if (cl == null) continue;
+			for (String impl : implsFor.apply(jar)) {
+				try {
+					providers.add(type.cast(Class.forName(impl, true, cl).getDeclaredConstructor().newInstance()));
+				} catch (Throwable t) {
+					LOGGER.error("[AutoModpack] Failed to load {} {} from {}", kind, impl, jar.getFileName(), t);
+				}
+			}
+		}
+		providers.sort(Comparator.comparingInt(EarlyServiceReplay::priority).reversed());
+		return providers;
 	}
 
 	/**
@@ -125,7 +119,7 @@ public final class EarlyServiceReplay {
 			List<Object> merged = new ArrayList<>(current);
 			merged.addAll(readers);
 			// ModDiscoverer sorts readers by IOrderedProvider.getPriority(), highest first.
-			merged.sort(Comparator.comparingInt(EarlyServiceReplay::providerPriority).reversed());
+			merged.sort(Comparator.comparingInt(EarlyServiceReplay::priority).reversed());
 			readersField.set(modDiscoverer, List.copyOf(merged));
 			LOGGER.debug("[AutoModpack] Forwarded {} in-place IModFileReader(s) from {} into mod discovery", readers.size(), source);
 		} catch (Throwable t) {
@@ -133,8 +127,8 @@ public final class EarlyServiceReplay {
 		}
 	}
 
-	/** {@code IOrderedProvider.getPriority()} of a reader, or the default (0) if it can't be read. */
-	private static int providerPriority(Object provider) {
+	/** {@code IOrderedProvider.getPriority()} of a replayed provider, or the default (0) if it can't be read. */
+	private static int priority(Object provider) {
 		try {
 			return (int) provider.getClass().getMethod("getPriority").invoke(provider);
 		} catch (Throwable t) {
