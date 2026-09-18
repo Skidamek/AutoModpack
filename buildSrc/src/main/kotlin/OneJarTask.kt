@@ -131,10 +131,10 @@ abstract class OneJarTask : DefaultTask() {
         val solidBytes = solid.toByteArray()
         val zstdBinary = Zstd.compress(solidBytes, ZSTD_LEVEL)
         verifyRuntimeDecodable(zstdBinary, solidBytes)
-        // The generation is the UNCOMPRESSED solid's hash: it changes only when the impls change, so
+        // The digest is the UNCOMPRESSED solid's hash: it changes only when the impls change, so
         // bumping zstd-jni or the level repacks the jar without wiping every install's impl cache.
-        val generation = ImplManifestFormat.sha1Hex(solidBytes)
-        val manifest = ImplManifestFormat.write(generation, manifestEntries)
+        val digest = ImplManifestFormat.sha1Hex(solidBytes)
+        val manifest = ImplManifestFormat.write(digest, manifestEntries)
 
         val outputFile = oneJar.get().asFile
         // The one jar owns merged/: drop stale jars that are not this output, never the autotest

@@ -10,7 +10,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ImplManifestTest {
-	private static final String GENERATION = "a".repeat(40);
+	private static final String DIGEST = "a".repeat(40);
 	private static final String SLICE_A_SHA1 = "b".repeat(40);
 	private static final String SLICE_B_SHA1 = "c".repeat(40);
 
@@ -18,7 +18,7 @@ class ImplManifestTest {
 	void parsesEntries() {
 		ImplManifest manifest = parse(manifestJson(2));
 
-		assertEquals(GENERATION, manifest.generation());
+		assertEquals(DIGEST, manifest.digest());
 		assertEquals(2, manifest.entries().size());
 		ImplManifest.Entry first = manifest.entry("1.20.1-fabric");
 		assertEquals(List.of("1.20", "1.20.1"), first.versions());
@@ -59,16 +59,16 @@ class ImplManifestTest {
 	@Test
 	void rejectsMalformedManifests() {
 		assertThrows(IllegalStateException.class, () -> parse("not json"));
-		assertThrows(IllegalStateException.class, () -> parse("{\"generation\":\"a\"}"));
+		assertThrows(IllegalStateException.class, () -> parse("{\"digest\":\"a\"}"));
 		assertThrows(IllegalStateException.class, () -> parse("{\"impls\":[]}"));
 		assertThrows(IllegalStateException.class,
-				() -> parse("{\"generation\":\"" + GENERATION + "\",\"impls\":[{\"id\":\"x\",\"versions\":[],\"offset\":0}]}"));
+				() -> parse("{\"digest\":\"" + DIGEST + "\",\"impls\":[{\"id\":\"x\",\"versions\":[],\"offset\":0}]}"));
 		assertThrows(IllegalStateException.class,
-				() -> parse("{\"generation\":\"" + GENERATION + "\",\"impls\":[{\"id\":\"x\",\"versions\":[],\"offset\":-1,\"length\":1,\"sha1\":\"" + SLICE_A_SHA1 + "\"}]}"));
+				() -> parse("{\"digest\":\"" + DIGEST + "\",\"impls\":[{\"id\":\"x\",\"versions\":[],\"offset\":-1,\"length\":1,\"sha1\":\"" + SLICE_A_SHA1 + "\"}]}"));
 		assertThrows(IllegalStateException.class,
-				() -> parse("{\"generation\":\"zz\",\"impls\":[]}"));
+				() -> parse("{\"digest\":\"zz\",\"impls\":[]}"));
 		assertThrows(IllegalStateException.class,
-				() -> parse("{\"generation\":\"" + GENERATION + "\",\"impls\":[{\"id\":\"x\",\"versions\":[],\"offset\":0,\"length\":1,\"sha1\":\"zz\"}]}"));
+				() -> parse("{\"digest\":\"" + DIGEST + "\",\"impls\":[{\"id\":\"x\",\"versions\":[],\"offset\":0,\"length\":1,\"sha1\":\"zz\"}]}"));
 	}
 
 	private static ImplManifest parse(String json) {
@@ -78,7 +78,7 @@ class ImplManifestTest {
 	/** One manifest with {@code count} impls of the fixed test shapes. */
 	private static String manifestJson(int count) {
 		StringBuilder json = new StringBuilder();
-		json.append("{\"generation\":\"").append(GENERATION).append("\",\"impls\":[");
+		json.append("{\"digest\":\"").append(DIGEST).append("\",\"impls\":[");
 		entry(json, "1.20.1-fabric", List.of("1.20", "1.20.1"), 1024, 8192, SLICE_A_SHA1);
 		if (count > 1) {
 			json.append(',');

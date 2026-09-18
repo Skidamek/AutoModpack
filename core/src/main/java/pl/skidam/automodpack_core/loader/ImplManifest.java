@@ -12,7 +12,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 /**
- * The index of the one jar's solid impl blob ({@code impl/manifest.json}): the generation - the
+ * The index of the one jar's solid impl blob ({@code impl/manifest.json}): the digest - the
  * SHA-1 of the UNCOMPRESSED solid, so a compressor bump cannot invalidate every install's impl
  * cache - and per impl its id, the Minecraft versions that target covers, its offset and STORE
  * length inside the solid, and the SHA-1 of that slice. Bare data, no version field: the manifest
@@ -22,14 +22,14 @@ import com.google.gson.JsonParser;
 public final class ImplManifest {
 	private static final Pattern SHA1_HEX = Pattern.compile("[0-9a-f]{40}");
 
-	private final String generation;
+	private final String digest;
 	private final List<Entry> entries;
 
 	/** The build's target spelling plus the exact Minecraft releases its {@code publish_versions} cover - the only source of truth for version resolution. */
 	public record Entry(String id, List<String> versions, long offset, long length, String sha1) {}
 
-	private ImplManifest(String generation, List<Entry> entries) {
-		this.generation = generation;
+	private ImplManifest(String digest, List<Entry> entries) {
+		this.digest = digest;
 		this.entries = entries;
 	}
 
@@ -41,8 +41,8 @@ public final class ImplManifest {
 		} catch (Exception e) {
 			throw new IllegalStateException("Impl manifest is not a JSON object: " + message(e), e);
 		}
-		String generation = string(root, "generation");
-		if (!SHA1_HEX.matcher(generation).matches()) throw new IllegalStateException("Impl manifest generation " + generation + " is not a SHA-1 hex digest");
+		String digest = string(root, "digest");
+		if (!SHA1_HEX.matcher(digest).matches()) throw new IllegalStateException("Impl manifest digest " + digest + " is not a SHA-1 hash");
 		JsonArray impls = array(root, "impls");
 		List<Entry> entries = new ArrayList<>(impls.size());
 		for (JsonElement element : impls) {
@@ -55,12 +55,12 @@ public final class ImplManifest {
 					sha1(impl));
 			entries.add(entry);
 		}
-		return new ImplManifest(generation, List.copyOf(entries));
+		return new ImplManifest(digest, List.copyOf(entries));
 	}
 
-	/** The SHA-1 of the uncompressed solid as lowercase hex - the impl-cache generation key. */
-	public String generation() {
-		return generation;
+	/** The SHA-1 of the uncompressed solid as lowercase hex - the impl-cache digest key. */
+	public String digest() {
+		return digest;
 	}
 
 	public List<Entry> entries() {
@@ -97,7 +97,7 @@ public final class ImplManifest {
 
 	private static String sha1(JsonObject impl) {
 		String sha1 = string(impl, "sha1");
-		if (!SHA1_HEX.matcher(sha1).matches()) throw new IllegalStateException("Impl manifest slice digest " + sha1 + " is not a SHA-1 hex digest");
+		if (!SHA1_HEX.matcher(sha1).matches()) throw new IllegalStateException("Impl manifest slice digest " + sha1 + " is not a SHA-1 hash");
 		return sha1;
 	}
 

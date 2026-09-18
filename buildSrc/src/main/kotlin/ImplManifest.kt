@@ -5,7 +5,7 @@ import java.util.HexFormat
 
 /**
  * Build-side codec for `impl/manifest.json`, the index of the one jar's solid impl blob: the
- * generation - the SHA-1 of the UNCOMPRESSED solid, so a compressor bump cannot invalidate every
+ * digest - the SHA-1 of the UNCOMPRESSED solid, so a compressor bump cannot invalidate every
  * install's cache - and per impl its id, the Minecraft versions its target covers, its offset and
  * STORE length inside the solid, and the SHA-1 of that slice. Bare data, no version field: the
  * manifest ships inside the same jar as the parser that reads it, so reader and writer can never
@@ -21,10 +21,10 @@ object ImplManifestFormat {
 
     private val writer = ObjectMapper().writerWithDefaultPrettyPrinter()
 
-    fun write(generation: String, entries: List<Entry>): ByteArray =
+    fun write(digest: String, entries: List<Entry>): ByteArray =
         writer.writeValueAsBytes(
             linkedMapOf<String, Any>(
-                "generation" to generation,
+                "digest" to digest,
                 "impls" to entries.map { entry ->
                     linkedMapOf<String, Any>(
                         "id" to entry.id,
@@ -37,7 +37,7 @@ object ImplManifestFormat {
             ),
         )
 
-    class ParsedManifest(val generation: String, val entries: List<Entry>)
+    class ParsedManifest(val digest: String, val entries: List<Entry>)
 
     /** Strict parse for the audit: any missing, mistyped or malformed field fails with a reason. */
     fun parse(bytes: ByteArray): ParsedManifest {
@@ -49,8 +49,8 @@ object ImplManifestFormat {
             fail(e.message ?: e.javaClass.simpleName)
         }
         if (root == null || !root.isObject) fail("not a JSON object")
-        val generation = root.get("generation")?.takeIf { it.isTextual } ?: fail("no usable generation")
-        if (!generation.textValue().matches(Regex("[0-9a-f]{40}"))) fail("generation ${generation.textValue()} is not a SHA-1 hex digest")
+        val digest = root.get("digest")?.takeIf { it.isTextual } ?: fail("no usable digest")
+        if (!digest.textValue().matches(Regex("[0-9a-f]{40}"))) fail("digest ${digest.textValue()} is not a SHA-1 hash")
         val impls = root.get("impls")?.takeIf { it.isArray } ?: fail("no impls array")
         val entries = impls.mapIndexed { position, node ->
             fun field(name: String): JsonNode = node.get(name) ?: fail("impl $position carries no $name")
@@ -65,7 +65,7 @@ object ImplManifestFormat {
             if (!sha1.matches(Regex("[0-9a-f]{40}"))) fail("impl $id carries sha1 $sha1, not a SHA-1 hex digest")
             Entry(id, versions, offset, length, sha1)
         }
-        return ParsedManifest(generation.textValue(), entries)
+        return ParsedManifest(digest.textValue(), entries)
     }
 
     fun sha1Hex(bytes: ByteArray): String = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-1").digest(bytes))

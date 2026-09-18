@@ -29,7 +29,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * Selects this launch's game impl out of the one jar's solid blob ({@code impl/all.zst} + {@code
  * impl/manifest.json}) into the instance's impl-cache worktree and hands back the real-file Path the
  * loaders mount. The hit path is one stamp read plus one git-stat per impl ({@code
- * FileIntegrity.matchesNamed} never reads bytes); any miss regenerates the whole generation, since
+ * FileIntegrity.matchesNamed} never reads bytes); any miss restages the whole tree, since
  * a solid frame is all-or-nothing: inflate once, verify every slice against the manifest, stage,
  * then publish by renaming the staging directory over the cache directory - a crash mid-write never
  * becomes a stamp hit because the stamp travels inside the renamed tree.
@@ -38,9 +38,9 @@ public final class ImplStore {
 	private static final String MANIFEST_ENTRY = "impl/manifest.json";
 	private static final String SOLID_ENTRY = "impl/all.zst";
 	private static final String STAMP_FILE = "stamp.json";
-	/** Stat records of the impl jars; inside the cache directory so a generation wipe takes them along. */
+	/** Stat records of the impl jars; inside the cache directory so a full wipe takes them along. */
 	private static final String RECORDS_DIR = "records";
-	/** Sibling staging directory the next generation is built in; published by one rename. */
+	/** Sibling staging directory the next staged set is built in; published by one rename. */
 	private static final String STAGING_SUFFIX = ".staging";
 	/** Cross-process lock file guarding the wipe-and-restage, derived from the cache directory name. */
 	private static final String LOCK_SUFFIX = ".lock";
@@ -64,7 +64,7 @@ public final class ImplStore {
 
 		try (FileCache cache = FileCache.open(cacheDir.resolve(RECORDS_DIR))) {
 			if (stampHits(cacheDir, manifest, cache)) {
-				LOGGER.info("AutoModpack impl cache hit for generation {}", manifest.generation());
+				LOGGER.info("AutoModpack impl cache hit for digest {}", manifest.digest());
 				return implJar;
 			}
 			// One lock file per cache directory serializes concurrent restages (a helper process could
@@ -72,7 +72,7 @@ public final class ImplStore {
 			// the new one, and a boot that already mounted a jar keeps its open file until it exits.
 			FileLocks.withLock(lockFile, () -> {
 				if (stampHits(cacheDir, manifest, cache)) return implJar;
-				LOGGER.info("AutoModpack impl cache miss - restaging all {} impls for generation {}", manifest.entries().size(), manifest.generation());
+				LOGGER.info("AutoModpack impl cache miss - restaging all {} impls for digest {}", manifest.entries().size(), manifest.digest());
 				restage(outerJar, manifest, cacheDir, cache);
 				return implJar;
 			});
@@ -83,7 +83,7 @@ public final class ImplStore {
 	/**
 	 * Same, from the launch facts a loader generation captured into {@link EarlyLaunchEnvironment}:
 	 * crashes before any mount when the launch never captured them ({@code TargetId} owns the
-	 * unusable-version crash), so every generation's mount site is one call.
+	 * unusable-version crash), so every loader's mount site is one call.
 	 */
 	public static Path select(Class<?> outerClass, String loader) throws IOException {
 		Boolean client = EarlyLaunchEnvironment.IS_CLIENT;
@@ -99,13 +99,13 @@ public final class ImplStore {
 		}
 	}
 
-	/** Whether the cached worktree is exactly this manifest's generation: the stamp must agree and every impl must pass its stat tripwire. */
+	/** Whether the cached worktree is exactly this manifest's digest: the stamp must agree and every impl must pass its stat tripwire. */
 	private static boolean stampHits(Path cacheDir, ImplManifest manifest, FileCache cache) throws IOException {
 		StampFields stamp = ConfigTools.readState(cacheDir.resolve(STAMP_FILE), StampFields.class, "Impl cache stamp", fields -> {
-			if (fields.generation == null || fields.generation.isBlank()) throw new IllegalArgumentException("Impl cache stamp carries no generation");
+			if (fields.digest == null || fields.digest.isBlank()) throw new IllegalArgumentException("Impl cache stamp carries no digest");
 			return fields;
 		}).orElse(null);
-		if (stamp == null || !manifest.generation().equalsIgnoreCase(stamp.generation)) return false;
+		if (stamp == null || !manifest.digest().equalsIgnoreCase(stamp.digest)) return false;
 		for (ImplManifest.Entry entry : manifest.entries()) {
 			if (!FileIntegrity.matchesNamed(cacheDir.resolve(entry.id() + ".jar"), entry.length(), entry.sha1(), cache)) return false;
 		}
@@ -136,10 +136,10 @@ public final class ImplStore {
 			Files.write(staging.resolve(entry.id() + ".jar"), slice);
 		}
 		StampFields stamp = new StampFields();
-		stamp.generation = manifest.generation();
+		stamp.digest = manifest.digest();
 		DurableFiles.writeVolatile(staging.resolve(STAMP_FILE), ConfigTools.GSON.toJson(stamp).getBytes(StandardCharsets.UTF_8));
 
-		// Publish is the rename: nothing at the live path until the whole generation is on disk.
+		// Publish is the rename: nothing at the live path until the whole tree is on disk.
 		// On Windows a concurrent reader holding an impl open makes this delete fail - that is a loud
 		// crash, never a half-published tree.
 		FileTrees.delete(cacheDir);
@@ -152,10 +152,10 @@ public final class ImplStore {
 	}
 
 	/**
-	 * The persisted cache stamp: the one generation this tree was staged for. Regenerable, so a corrupt one is set aside and costs one restage. Document class, not record: this graph lands on disk where the game's Gson
+	 * The persisted cache stamp: the one digest this tree was staged for. Regenerable, so a corrupt one is set aside and costs one restage. Document class, not record: this graph lands on disk where the game's Gson
 	 * cannot read records.
 	 */
 	public static class StampFields {
-		public String generation = "";
+		public String digest = "";
 	}
 }

@@ -32,7 +32,7 @@ def _target(**kw):
 def _manifest(entries: list[tuple[str, int, int, str]]) -> bytes:
     return json.dumps(
         {
-            "generation": "0" * 40,  # shape only; the runner reads only the impl bounds
+            "digest": "0" * 40,  # shape only; the runner reads only the impl bounds
             "impls": [
                 {
                     "id": target_id,
