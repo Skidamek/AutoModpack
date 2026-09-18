@@ -22,6 +22,7 @@ import pl.skidam.automodpack_core.utils.JarUtils;
  */
 public final class MinecraftProtocols {
 	private static final String ENTRY = "mc-protocols.json";
+	private static volatile Map<String, Integer> table;
 
 	private MinecraftProtocols() {}
 
@@ -35,6 +36,16 @@ public final class MinecraftProtocols {
 	}
 
 	private static Map<String, Integer> load() {
+		Map<String, Integer> cached = table;
+		if (cached != null) return cached;
+		synchronized (MinecraftProtocols.class) {
+			if (table == null) table = readFromJar();
+			return table;
+		}
+	}
+
+	/** A failed read stays uncached so a retried handshake can succeed once the jar is readable. */
+	private static Map<String, Integer> readFromJar() {
 		Path outerJar = JarUtils.getJarPath(MinecraftProtocols.class);
 		try (ZipFile zip = new ZipFile(outerJar.toFile())) {
 			ZipEntry entry = zip.getEntry(ENTRY);
