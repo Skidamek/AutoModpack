@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -123,6 +124,34 @@ class OfflineRepairTest {
 		// The repair has no state history behind it on this fresh install, so the checkpoint is skipped; the changed
 		// files' receipts are the record.
 		assertTrue(ClientStateJournal.open(storage.stateHistoryJournalFile()).entries().isEmpty());
+	}
+
+	@Test
+	void repairCheckpointCapturesReplacedBytesWhenATimelineExists() throws Exception {
+		ClientStorage storage = storage();
+		byte[] expectedBytes = "server-default".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(expectedBytes);
+		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", "config", true, hash, expectedBytes.length));
+		write(storage.objectFile(hash), expectedBytes);
+		write(storage.activePath("config/settings.json"), expectedBytes);
+		byte[] editedBytes = "my-local-edit".getBytes(StandardCharsets.UTF_8);
+		write(storage.gamePath("config/settings.json"), editedBytes);
+		Path extra = write(storage.modsDirectory().resolve("extra.jar"), "extra".getBytes(StandardCharsets.UTF_8));
+		String extraHash = HashUtils.getHash(extra);
+		String editedHash = HashUtils.sha1(editedBytes);
+		ClientStateJournal journal = ClientStateJournal.open(storage.stateHistoryJournalFile());
+		journal.append(new ClientStateJournal.StateEntry(1, "txn-1", ClientStateJournal.Kind.INSTALL, target.manifest().modpackId(), target.document().contentToken(), Instant.parse("2026-09-17T12:00:00Z"),
+				ClientStateJournal.StateEntry.NO_RESTORE, List.of(new ClientStateJournal.TrackedFile(UpdatePlan.Root.GAME_DIR, "config/settings.json", hash, expectedBytes.length)), List.of(), List.of()));
+		OfflineRepair repair = new OfflineRepair(storage);
+
+		repair.apply(repair.inspect(new OfflineRepair.Request(target, Set.of(), null)), Set.of("config/settings.json"), Set.of("mods/extra.jar"));
+
+		ClientStateJournal.StateEntry checkpoint = ClientStateJournal.open(storage.stateHistoryJournalFile()).head();
+		assertEquals(ClientStateJournal.Kind.REPAIR, checkpoint.kind());
+		assertTrue(checkpoint.captures().stream().anyMatch(capture -> editedHash.equals(capture.sha1())));
+		assertTrue(checkpoint.captures().stream().anyMatch(capture -> extraHash.equals(capture.sha1())));
+		assertTrue(ClientObjectStore.referencedHashes(storage).contains(editedHash));
+		assertTrue(ClientObjectStore.referencedHashes(storage).contains(extraHash));
 	}
 
 	@Test

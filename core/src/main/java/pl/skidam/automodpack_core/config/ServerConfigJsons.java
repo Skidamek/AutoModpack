@@ -9,6 +9,8 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 public class ServerConfigJsons {
 
 	public static final String LOADER_PLACEHOLDER = "{loader}";
+	public static final String DEFAULT_REQUIRED_MESSAGE = "AutoModpack mod for {loader} modloader is required to play on this server!";
+	public static final String DEFAULT_NAG_MESSAGE = "This server provides dedicated modpack through AutoModpack!";
 
 	public static class ServerConfigFieldsV3 {
 		public int DO_NOT_CHANGE_IT = 3; // file version
@@ -22,7 +24,7 @@ public class ServerConfigJsons {
 		public boolean autoExcludeUnnecessaryFiles = true;
 		public boolean requireModpack = true;
 		public boolean nagUnModdedClients = true;
-		public String nagMessage = "AutoModpack mod for {loader} modloader is required to play on this server!";
+		public String nagMessage = "";
 		public String nagClickableMessage = "Click here to get the AutoModpack!";
 		public String nagClickableLink = "https://modrinth.com/project/automodpack";
 		public String bindAddress = "";

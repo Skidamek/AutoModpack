@@ -208,9 +208,9 @@ public final class ClientGenerationStore {
 	 * Manually compacts the local history per decision 11: per pack it keeps the active and the newest generation's
 	 * content objects plus every mirror entry's policy document, and deletes the content objects only older generations
 	 * still name, together with the trimmed generations' generated-copy state. The mirror, the active state, overlays,
-	 * baselines, preservation claims, and restored copies are never touched, so the history UI's live restorable checks
-	 * stay the only truth about what can still be restored. Refuses while an update transaction is active, and writes
-	 * each pack's boundary marker after the objects are reclaimed.
+	 * and every instance state-history pin are never touched, so a checkpoint the timeline still names cannot lose its
+	 * bytes. Refuses while an update transaction is active, and writes each pack's boundary marker after the objects
+	 * are reclaimed.
 	 */
 	public CompactionResult compact() throws IOException {
 		return ClientStorageMutation.run(storage, this::compactLocked);

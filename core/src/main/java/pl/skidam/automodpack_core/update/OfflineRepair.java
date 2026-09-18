@@ -5,7 +5,6 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -191,14 +190,15 @@ public final class OfflineRepair {
 			throws IOException {
 		PinnedGeneration pinned = PinnedGeneration.read(storage, current.prepared().request().activeTarget().platform());
 		RepairCounts repaired = repairLocally(current, pinned, fileCache);
-		List<ClientStateJournal.Change> resetEdits = resetJournalEditable(current.prepared().request(), journal, pinned, fileCache);
-		List<ClientStateJournal.Change> archivedUnowned = archiveJournalUnowned(current.prepared().request(), journal, pinned, fileCache);
+		List<ClientStateJournal.Capture> captures = new ArrayList<>();
+		List<ClientStateJournal.Change> resetEdits = resetJournalEditable(current.prepared().request(), journal, pinned, fileCache, captures);
+		List<ClientStateJournal.Change> archivedUnowned = archiveJournalUnowned(current.prepared().request(), journal, pinned, fileCache, captures);
 		Prepared after = analyze(current.prepared().request(), fileCache).prepared();
 		requireSamePinnedIdentity(prepared, after);
 		Files.deleteIfExists(storage.repairJournalFile());
 		List<ClientStateJournal.Change> applied = new ArrayList<>(resetEdits);
 		applied.addAll(archivedUnowned);
-		recordRepairCheckpoint(current.prepared(), applied);
+		recordRepairCheckpoint(current.prepared(), applied, captures);
 		FileTrees.forceDirectory(storage.clientDirectory());
 		ClientObjectStore.publishOwnership(storage);
 		return new Receipt(current.prepared(), after, repaired.casObjects(), repaired.materializedFiles(), resetEdits.size(), archivedUnowned.size());
@@ -209,18 +209,15 @@ public final class OfflineRepair {
 	 * files back to what the generation already said they should be - but the change list records every tracked file
 	 * the repair touched and pins the bytes it replaced.
 	 */
-	private void recordRepairCheckpoint(Prepared prepared, List<ClientStateJournal.Change> applied) throws IOException {
+	private void recordRepairCheckpoint(Prepared prepared, List<ClientStateJournal.Change> applied, List<ClientStateJournal.Capture> captures) throws IOException {
 		if (applied.isEmpty()) return;
 		ClientStorageMutation.run(storage, () -> {
 			ClientStateJournal journal = ClientStateJournal.open(storage.stateHistoryJournalFile());
 			if (journal.entries().isEmpty()) return null;
 			ClientStateJournal.StateEntry head = journal.head();
 			if (!head.modpackId().equals(prepared.modpackId())) throw new IOException("The repair belongs to " + prepared.modpackId() + " but the state history head is " + head.modpackId());
-			List<ClientStateJournal.Change> changes = new ArrayList<>(applied);
-			changes.sort(ClientStateJournal.StateEntry.CHANGE_ORDER);
-			ClientStateJournal.StateEntry checkpoint = new ClientStateJournal.StateEntry(head.seq() + 1, "repair-" + UUID.randomUUID(), ClientStateJournal.Kind.REPAIR,
-					head.modpackId(), head.contentToken(), Instant.now(), ClientStateJournal.StateEntry.NO_RESTORE, head.state(), changes, List.of());
-			journal.append(checkpoint);
+			journal.appendCheckpoint("repair-" + UUID.randomUUID(), ClientStateJournal.Kind.REPAIR, head.modpackId(), head.contentToken(), ClientStateJournal.StateEntry.NO_RESTORE, head.state(), applied,
+					captures);
 			return null;
 		});
 	}
@@ -326,8 +323,8 @@ public final class OfflineRepair {
 		return fields;
 	}
 
-	private List<ClientStateJournal.Change> resetJournalEditable(Request request, ClientStorageJsons.OfflineRepairJournalFields journal, PinnedGeneration pinned, FileCache fileCache)
-			throws IOException {
+	private List<ClientStateJournal.Change> resetJournalEditable(Request request, ClientStorageJsons.OfflineRepairJournalFields journal, PinnedGeneration pinned, FileCache fileCache,
+			List<ClientStateJournal.Capture> captures) throws IOException {
 		List<ClientStateJournal.Change> applied = new ArrayList<>();
 		if (journal.editableResets.isEmpty()) return applied;
 		TreeSet<String> tombstones = new TreeSet<>(storage.readOverlayState(journal.modpackId).deletedPaths);
@@ -344,11 +341,11 @@ public final class OfflineRepair {
 				}
 				assertPinned(request, pinned);
 				if (!fields.absent) {
-					// The drifted bytes land in the object store before the reset; the repair entry's change pins them.
 					Path drifted = storage.objectFile(fields.currentHash).normalize();
 					if (!FileIntegrity.matchesNamed(drifted, fields.currentSize, fields.currentHash, fileCache))
 						VerifiedFileTransfer.copyAtomicImmutable(live, drifted, fields.currentSize, fields.currentHash, fileCache);
 					applied.add(ClientStateJournal.Change.install(Root.GAME_DIR, fields.logicalPath, fields.currentHash, fields.defaultHash, fields.defaultSize));
+					captures.add(new ClientStateJournal.Capture(Root.GAME_DIR, fields.logicalPath, fields.currentHash, fields.currentSize, false));
 					FileTrees.requireNoSymbolicLinkDescendants(storage.gameDirectory(), live, "Repair path");
 					VerifiedFileTransfer.copyAtomic(object, live, fields.defaultSize, fields.defaultHash, fileCache);
 				}
@@ -360,8 +357,8 @@ public final class OfflineRepair {
 		return applied;
 	}
 
-	private List<ClientStateJournal.Change> archiveJournalUnowned(Request request, ClientStorageJsons.OfflineRepairJournalFields journal, PinnedGeneration pinned, FileCache fileCache)
-			throws IOException {
+	private List<ClientStateJournal.Change> archiveJournalUnowned(Request request, ClientStorageJsons.OfflineRepairJournalFields journal, PinnedGeneration pinned, FileCache fileCache,
+			List<ClientStateJournal.Capture> captures) throws IOException {
 		List<ClientStateJournal.Change> applied = new ArrayList<>();
 		if (journal.unownedMods.isEmpty()) return applied;
 		for (var fields : journal.unownedMods) {
@@ -382,6 +379,7 @@ public final class OfflineRepair {
 			Files.delete(source);
 			FileTrees.pruneEmptyAncestors(source, storage.modsDirectory());
 			applied.add(ClientStateJournal.Change.removal(Root.GAME_DIR, fields.logicalPath, fields.objectHash));
+			captures.add(new ClientStateJournal.Capture(Root.GAME_DIR, fields.logicalPath, fields.objectHash, fields.size, false));
 		}
 		return applied;
 	}

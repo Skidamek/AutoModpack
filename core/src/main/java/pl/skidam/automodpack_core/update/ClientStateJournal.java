@@ -133,7 +133,10 @@ public final class ClientStateJournal {
 			Objects.requireNonNull(values, description + " is missing");
 			List<T> sorted = values.stream().sorted(order).toList();
 			if (!sorted.equals(values)) throw new IllegalArgumentException("The " + description + " is not canonically sorted");
-			if (uniquePaths && sorted.stream().distinct().count() != values.size()) throw new IllegalArgumentException("The " + description + " repeats a path");
+			if (uniquePaths) {
+				for (int index = 1; index < sorted.size(); index++)
+					if (order.compare(sorted.get(index - 1), sorted.get(index)) == 0) throw new IllegalArgumentException("The " + description + " repeats a path");
+			}
 			return List.copyOf(values);
 		}
 
@@ -298,16 +301,31 @@ public final class ClientStateJournal {
 		return entries.stream().filter(entry -> entry.transactionId().equals(transaction.transactionId)).findFirst()
 				.orElseGet(() -> {
 					try {
-						UpdatePlan plan = transaction.plan();
-						long seq = entries.isEmpty() ? 1 : entries.get(entries.size() - 1).seq() + 1;
-						return append(entryFor(transaction, plan, seq));
+						return appendCheckpointFrom(transaction);
 					} catch (IOException e) {
 						throw new UncheckedIOException(e);
 					}
 				});
 	}
 
-	private StateEntry entryFor(UpdateTransaction transaction, UpdatePlan plan, long seq) {
+	/**
+	 * Appends one checkpoint after the current head. Callers supply the mutation; this assigns the next sequence and
+	 * the canonical sort the entry contract requires.
+	 */
+	public synchronized StateEntry appendCheckpoint(String transactionId, Kind kind, String modpackId, String contentToken, long restoreOfSeq, List<TrackedFile> state, List<Change> changes,
+			List<Capture> captures) throws IOException {
+		List<TrackedFile> sortedState = new ArrayList<>(state);
+		sortedState.sort(StateEntry.STATE_ORDER);
+		List<Change> sortedChanges = new ArrayList<>(changes);
+		sortedChanges.sort(StateEntry.CHANGE_ORDER);
+		List<Capture> sortedCaptures = new ArrayList<>(captures);
+		sortedCaptures.sort(StateEntry.CAPTURE_ORDER);
+		long seq = entries.isEmpty() ? 1 : entries.get(entries.size() - 1).seq() + 1;
+		return append(new StateEntry(seq, transactionId, kind, modpackId, contentToken, Instant.now(), restoreOfSeq, sortedState, sortedChanges, sortedCaptures));
+	}
+
+	private StateEntry appendCheckpointFrom(UpdateTransaction transaction) throws IOException {
+		UpdatePlan plan = transaction.plan();
 		List<TrackedFile> state = new ArrayList<>();
 		for (ProjectedFile projected : plan.projectedFinalState())
 			if (projected.present()) state.add(new TrackedFile(projected.root(), projected.relativePath(), HashUtils.normalizeSha1(projected.expectedHash()), projected.expectedSize()));
@@ -322,14 +340,18 @@ public final class ClientStateJournal {
 		List<Capture> captures = new ArrayList<>();
 		for (BaselineCapture capture : plan.baselineCaptures())
 			captures.add(new Capture(capture.root(), capture.relativePath(), capture.absent() ? null : HashUtils.normalizeSha1(capture.expectedHash()), capture.absent() ? 0 : capture.expectedSize(), capture.absent()));
-		// The planner's canonical order leads with the operation type; the entry's own canonical order is root-then-path.
-		state.sort(StateEntry.STATE_ORDER);
-		changes.sort(StateEntry.CHANGE_ORDER);
-		captures.sort(StateEntry.CAPTURE_ORDER);
 		String contentToken = plan.packTarget().contentToken() == null ? null : HashUtils.normalizeSha1(plan.packTarget().contentToken());
-		// A flow that knows its own story better than the purpose mapping - the rollback - labels the entry itself.
-		Kind kind = transaction.stateKind == null || transaction.stateKind.isBlank() ? kindFor(plan.modpackId(), transaction.purpose) : Kind.valueOf(transaction.stateKind);
-		return new StateEntry(seq, transaction.transactionId, kind, plan.modpackId(), contentToken, Instant.now(), transaction.stateRestoreOfSeq, state, changes, captures);
+		return appendCheckpoint(transaction.transactionId, declaredKind(transaction.stateKind, plan.modpackId(), transaction.purpose), plan.modpackId(), contentToken, transaction.stateRestoreOfSeq, state,
+				changes, captures);
+	}
+
+	private Kind declaredKind(String name, String modpackId, UpdateTransaction.Purpose purpose) {
+		if (name == null || name.isBlank()) return kindFor(modpackId, purpose);
+		try {
+			return Kind.valueOf(name);
+		} catch (IllegalArgumentException e) {
+			throw new IllegalArgumentException("Unknown state entry kind '" + name + "'", e);
+		}
 	}
 
 	private Kind kindFor(String modpackId, UpdateTransaction.Purpose purpose) {

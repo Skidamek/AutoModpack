@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -191,13 +190,14 @@ public final class StateHistory {
 
 	private static void appendFileRestore(ClientStateJournal journal, StateEntry source, TrackedFile file) throws IOException {
 		StateEntry head = journal.head();
+		TrackedFile previous = head.state().stream().filter(existing -> existing.root() == file.root() && existing.path().equals(file.path())).findFirst().orElse(null);
 		List<TrackedFile> state = new ArrayList<>(head.state());
 		state.removeIf(existing -> existing.root() == file.root() && existing.path().equals(file.path()));
 		state.add(file);
-		state.sort(StateEntry.STATE_ORDER);
-		StateEntry checkpoint = new StateEntry(head.seq() + 1, "file-restore-" + UUID.randomUUID(), Kind.FILE_RESTORE, head.modpackId(), head.contentToken(), Instant.now(), source.seq(), state,
-				List.of(Change.install(file.root(), file.path(), null, file.sha1(), file.size())), List.of());
-		journal.append(checkpoint);
+		String fromHash = previous == null ? null : previous.sha1();
+		long fromSize = previous == null ? 0 : previous.size();
+		journal.appendCheckpoint("file-restore-" + UUID.randomUUID(), Kind.FILE_RESTORE, head.modpackId(), head.contentToken(), source.seq(), state,
+				List.of(new Change(file.root(), file.path(), fromHash, fromSize, file.sha1(), file.size())), List.of());
 	}
 
 	private static StateEntry requireEntry(ClientStateJournal journal, long seq) throws IOException {

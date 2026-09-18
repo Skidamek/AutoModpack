@@ -232,11 +232,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 					rebuild();
 				});
 			} catch (Exception e) {
-				this.minecraft.execute(() -> {
-					if (closed) return;
-					restorabilityBySeq.put(entry.seq(), new StateHistory.RestoreOption(StateHistory.Restorability.MIXED, null));
-					rebuild();
-				});
+				this.minecraft.execute(() -> fail(e));
 			}
 		});
 	}
@@ -261,11 +257,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 					rebuild();
 				});
 			} catch (Exception e) {
-				this.minecraft.execute(() -> {
-					if (closed) return;
-					fileGates.put(gateKey(selected, file), StateHistory.FileGate.OWNED);
-					rebuild();
-				});
+				this.minecraft.execute(() -> fail(e));
 			}
 		});
 	}

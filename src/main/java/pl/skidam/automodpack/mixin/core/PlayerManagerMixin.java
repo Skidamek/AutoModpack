@@ -49,7 +49,8 @@ original.call(netManager, player);
 
 		if (serverConfig.nagUnModdedClients && !Common.players.get(playerName)) {
 			// Send chat nag message which is clickable and opens the link
-			Component nagText = VersionedText.literal(serverConfig.nagMessage.replace(ServerConfigJsons.LOADER_PLACEHOLDER, LOADER)).withStyle(style -> style.withBold(true));
+			String message = serverConfig.nagMessage.isBlank() ? ServerConfigJsons.DEFAULT_NAG_MESSAGE : serverConfig.nagMessage;
+			Component nagText = VersionedText.literal(message.replace(ServerConfigJsons.LOADER_PLACEHOLDER, LOADER)).withStyle(style -> style.withBold(true));
 			Component nagClickableText = VersionedText.literal(serverConfig.nagClickableMessage).withStyle(style -> style.withUnderlined(true).withColor(TextColor.fromLegacyFormat(ChatFormatting.BLUE))
 					/*? if >=1.21.5 {*/
 					.withClickEvent(new ClickEvent.OpenUrl(URI.create(serverConfig.nagClickableLink))));

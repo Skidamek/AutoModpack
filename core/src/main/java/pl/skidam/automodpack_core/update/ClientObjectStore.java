@@ -159,8 +159,8 @@ public final class ClientObjectStore {
 
 	/**
 	 * Publishes a conservative durable receipt before or after client state changes. One call sweeps every
-	 * journal-mirror entry, overlay, baseline, generated copy, the pending transaction, and repair state — measured
-	 * at ~2ms warm for a 200-entry journal ({@code ClientObjectStoreTest.referenceSweepStaysCheapOnATwoHundredEntryJournal}),
+	 * journal-mirror entry, overlay, generated copy, instance state history, pending transaction, and repair state —
+	 * measured at ~2ms warm for a 200-entry journal ({@code ClientObjectStoreTest.referenceSweepStaysCheapOnATwoHundredEntryJournal}),
 	 * so callers publish at phase transitions, not per file.
 	 */
 	public static void publishOwnership(ClientStorage storage) throws IOException {

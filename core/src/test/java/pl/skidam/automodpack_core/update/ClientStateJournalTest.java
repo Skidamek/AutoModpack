@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
+import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Capture;
@@ -104,6 +105,9 @@ class ClientStateJournalTest {
 				() -> new StateEntry(1, "txn-1", Kind.INSTALL, MODPACK_ID, hash("token"), CREATED, StateEntry.NO_RESTORE, List.of(second, first), List.of(), List.of()));
 		assertThrows(IllegalArgumentException.class,
 				() -> new StateEntry(1, "txn-1", Kind.INSTALL, MODPACK_ID, hash("token"), CREATED, StateEntry.NO_RESTORE, List.of(first, first), List.of(), List.of()));
+		TrackedFile samePathDifferentHash = new TrackedFile(Root.PROJECTION, "mods/a.jar", hash("other"), 1);
+		assertThrows(IllegalArgumentException.class,
+				() -> new StateEntry(1, "txn-1", Kind.INSTALL, MODPACK_ID, hash("token"), CREATED, StateEntry.NO_RESTORE, List.of(first, samePathDifferentHash), List.of(), List.of()));
 	}
 
 	@Test
@@ -151,6 +155,8 @@ class ClientStateJournalTest {
 		assertEquals(Kind.FILE_RESTORE, entries.get(1).kind());
 		assertEquals(1, entries.get(1).restoreOfSeq());
 		assertEquals(hash, entries.get(1).state().get(0).sha1());
+		assertEquals(JournalEntry.Change.Kind.CHANGED, entries.get(1).changes().get(0).kind());
+		assertEquals(hash, entries.get(1).changes().get(0).fromSha1());
 
 		// Restoring refuses to overwrite a different live file.
 		Files.writeString(restored, "changed by hand", StandardCharsets.UTF_8);

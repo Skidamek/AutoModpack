@@ -7,7 +7,6 @@ import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -353,9 +352,8 @@ final class ClientUpdatePlanBuilder {
 				changes.add(ClientStateJournal.Change.install(UpdatePlan.Root.GAME_DIR, reset.path(), reset.driftHash(), reset.packHash(), reset.packSize()));
 				captures.add(new ClientStateJournal.Capture(UpdatePlan.Root.GAME_DIR, reset.path(), reset.driftHash(), reset.driftSize(), false));
 			}
-			ClientStateJournal.StateEntry checkpoint = new ClientStateJournal.StateEntry(head.seq() + 1, "drift-reset-" + UUID.randomUUID(), ClientStateJournal.Kind.DRIFT_RESET,
-					head.modpackId(), head.contentToken(), Instant.now(), ClientStateJournal.StateEntry.NO_RESTORE, head.state(), changes, captures);
-			journal.append(checkpoint);
+			journal.appendCheckpoint("drift-reset-" + UUID.randomUUID(), ClientStateJournal.Kind.DRIFT_RESET, head.modpackId(), head.contentToken(), ClientStateJournal.StateEntry.NO_RESTORE, head.state(),
+					changes, captures);
 			return null;
 		});
 	}
