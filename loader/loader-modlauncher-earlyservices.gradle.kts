@@ -1,5 +1,6 @@
 plugins {
 	kotlin("jvm")
+	id("automodpack.loader")
 	id("net.neoforged.moddev.legacyforge")
 }
 
@@ -13,12 +14,6 @@ val selectedForgeVersion = loaderVersion()
 // dependency and NeoForge's own cpw.mods:modlauncher republishes the identical cpw.mods.* package,
 // so this module's compiled output is equally valid raw .class input for the universal jar whether
 // it ends up serving :loader-forge-earlyservices or :loader-neoforge-fml4.
-base {
-	archivesName = property("mod.id") as String + "-" + project.name
-	version = property("mod_version") as String
-	group = property("mod.group") as String
-}
-
 legacyForge {
 	enable {
 		forgeVersion = selectedForgeVersion
@@ -36,8 +31,4 @@ java {
 	sourceCompatibility = JavaVersion.VERSION_17
 	targetCompatibility = JavaVersion.VERSION_17
 	toolchain.languageVersion.set(JavaLanguageVersion.of(17))
-}
-
-tasks.withType<JavaCompile> {
-	options.encoding = "UTF-8"
 }

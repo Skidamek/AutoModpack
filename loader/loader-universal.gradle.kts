@@ -6,28 +6,30 @@ import org.gradle.api.file.DuplicatesStrategy
 // metadata files (fabric.mod.json, mods.toml, neoforge.mods.toml), published under every target.
 // The root project's oneJar task optimizes this jar, then appends every target's impl as the
 // solid impl/manifest.bin + impl/all.zst pair - no nested jarjar discovery anywhere.
-evaluationDependsOn(":core")
-evaluationDependsOn(":loader-fabric-core")
-evaluationDependsOn(":loader-modlauncher-earlyservices")
-evaluationDependsOn(":loader-forge-earlyservices")
-evaluationDependsOn(":loader-forge-fml40")
-evaluationDependsOn(":loader-forge-fml47")
-evaluationDependsOn(":loader-neoforge-shared")
-evaluationDependsOn(":loader-neoforge-earlyservices")
-evaluationDependsOn(":loader-neoforge-fml4")
 
 plugins {
 	kotlin("jvm")
 	id("automodpack.utils")
+	id("automodpack.loader")
 	id("com.gradleup.shadow")
 	id("dev.luna5ama.jar-optimizer")
 }
 
-base {
-	archivesName = property("mod.id") as String + "-loader-universal"
-	version = property("mod_version") as String
-	group = property("mod.group") as String
-}
+// Every module whose compiled output the shadowJar below bundles; evaluated first so their
+// sourceSets are there when the shadowJar wires its inputs.
+val bundledModules =
+	listOf(
+		":core",
+		":loader-fabric-core",
+		":loader-modlauncher-earlyservices",
+		":loader-forge-earlyservices",
+		":loader-forge-fml40",
+		":loader-forge-fml47",
+		":loader-neoforge-shared",
+		":loader-neoforge-earlyservices",
+		":loader-neoforge-fml4",
+	)
+bundledModules.forEach { evaluationDependsOn(it) }
 
 repositories {
 	mavenCentral()
@@ -76,19 +78,7 @@ tasks.named<ShadowJar>("shadowJar") {
 	// Combine every loader generation's output. The packages are split per generation, so the only
 	// resource these modules may still share is nothing - all metadata and services live in THIS
 	// module's resources, exactly once.
-	val subprojects =
-		listOf(
-			":core",
-			":loader-fabric-core",
-			":loader-modlauncher-earlyservices",
-			":loader-forge-earlyservices",
-			":loader-forge-fml40",
-			":loader-forge-fml47",
-			":loader-neoforge-shared",
-			":loader-neoforge-earlyservices",
-			":loader-neoforge-fml4",
-		)
-	subprojects.forEach {
+	bundledModules.forEach {
 		from(
 			project(it)
 				.sourceSets.main
@@ -129,10 +119,6 @@ java {
 	targetCompatibility = JavaVersion.VERSION_17
 	toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 	withSourcesJar()
-}
-
-tasks.withType<JavaCompile> {
-	options.encoding = "UTF-8"
 }
 
 tasks.named<Jar>("jar") {

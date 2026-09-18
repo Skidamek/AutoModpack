@@ -1,11 +1,6 @@
 plugins {
 	kotlin("jvm")
-}
-
-base {
-	archivesName = property("mod.id") as String + "-" + project.name
-	version = property("mod_version") as String
-	group = property("mod.group") as String
+	id("automodpack.loader")
 }
 
 repositories {
@@ -31,8 +26,4 @@ java {
 	targetCompatibility = JavaVersion.VERSION_17
 	toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 	withSourcesJar()
-}
-
-tasks.withType<JavaCompile> {
-	options.encoding = "UTF-8"
 }

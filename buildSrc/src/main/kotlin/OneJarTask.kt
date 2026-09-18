@@ -137,8 +137,9 @@ abstract class OneJarTask : DefaultTask() {
         val manifest = ImplManifestFormat.write(generation, manifestEntries)
 
         val outputFile = oneJar.get().asFile
-        // The one jar owns merged/: drop stale versions of itself, never the autotest fixtures beside them.
-        outputFile.parentFile.listFiles()?.filter { it.name.startsWith("automodpack-") && it.name.endsWith(".jar") }?.forEach { it.delete() }
+        // The one jar owns merged/: drop stale jars that are not this output, never the autotest
+        // fixtures beside them (those live in a subdirectory listFiles never returns).
+        outputFile.parentFile.listFiles()?.filter { it.isFile && it.name.endsWith(".jar") && it.name != outputFile.name }?.forEach { it.delete() }
         outputFile.parentFile.mkdirs()
         ZipOutputStream(FileOutputStream(outputFile).buffered()).use { output ->
             copyOuter(output)

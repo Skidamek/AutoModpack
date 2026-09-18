@@ -8,18 +8,13 @@ evaluationDependsOn(":loader-modlauncher-earlyservices")
 
 plugins {
 	kotlin("jvm")
+	id("automodpack.loader")
 	id("net.neoforged.moddev.legacyforge")
 }
 
 val selectedForgeVersion = loaderVersion()
 val gsonVersion = versionProperty("versionLoaderGson")
 val log4jVersion = versionProperty("versionLoaderPlatformLog4j")
-
-base {
-	archivesName = property("mod.id") as String + "-" + project.name
-	version = property("mod_version") as String
-	group = property("mod.group") as String
-}
 
 legacyForge {
 	enable {
@@ -43,8 +38,4 @@ java {
 	targetCompatibility = JavaVersion.VERSION_17
 	toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 	withSourcesJar()
-}
-
-tasks.withType<JavaCompile> {
-	options.encoding = "UTF-8"
 }
