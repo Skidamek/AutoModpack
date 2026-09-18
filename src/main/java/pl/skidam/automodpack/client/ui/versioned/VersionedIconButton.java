@@ -16,7 +16,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
  * the gui atlas: vanilla's SpriteIconButton and ImageButton read their pixels through resource packs on the versions
  * we support, and no server-pushed pack may stand in for our icons.
  */
-public class VersionedIconButton extends Button {
+public final class VersionedIconButton extends Button {
 	private final Identifier texture;
 	private final int spriteWidth;
 

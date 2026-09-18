@@ -78,7 +78,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		if (!platformPages.isEmpty()) actions.add(platformRow(platformPages));
 		if (lastResult != null && !restoreFailed) {
 			String key = lastResultRestore ? "automodpack.vault.restoredTo" : "automodpack.vault.savedTo";
-			String confirmation = truncateToWidth(this.font, VersionedText.text(key, displayPath(lastResult)).getString(), panelWidth(PANEL_WIDTH) - 12);
+			String confirmation = truncateToWidth(this.font, VersionedText.str(key, displayPath(lastResult)), panelWidth(PANEL_WIDTH) - 12);
 			actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, disabledAction(VersionedText.literal(confirmation).withStyle(ChatFormatting.GREEN))));
 		}
 		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), press -> back())));
@@ -279,8 +279,8 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.vault.title").withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
 		String description = loading
-				? VersionedText.text("automodpack.vault.loading").getString()
-				: VersionedText.text("automodpack.vault.description", claims().size()).getString();
+				? VersionedText.str("automodpack.vault.loading")
+				: VersionedText.str("automodpack.vault.description", claims().size());
 		List<String> descriptionLines = wrapToWidth(this.font, description, this.width - 28, 2);
 		for (int index = 0; index < descriptionLines.size(); index++)
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), this.width / 2, 28 + index * 12, TextColors.WHITE);
@@ -293,7 +293,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 			else
 				if (armed != null)
 					drawCenteredTextWithShadow(matrices, this.font,
-							VersionedText.literal(truncateToWidth(this.font, VersionedText.text("automodpack.vault.selected", armed.originalPath()).getString(), this.width - 20)).withStyle(ChatFormatting.YELLOW),
+							VersionedText.literal(truncateToWidth(this.font, VersionedText.str("automodpack.vault.selected", armed.originalPath()), this.width - 20)).withStyle(ChatFormatting.YELLOW),
 							this.width / 2, 52, TextColors.WHITE);
 		}
 		if (!loading && claims().isEmpty() && lastResult == null)

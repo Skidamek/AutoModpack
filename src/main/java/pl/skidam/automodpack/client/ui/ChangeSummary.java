@@ -24,12 +24,12 @@ public final class ChangeSummary {
 	/** "+1 added ~4 changed -6 removed 3 kept !0 unsafe" — zero segments are omitted. */
 	public static String diffLine(int added, int modified, int removed, int preserved, int unsafe) {
 		List<String> parts = new ArrayList<>();
-		if (added > 0) parts.add("+" + added + " " + VersionedText.text("automodpack.summary.kind.added").getString());
-		if (modified > 0) parts.add("~" + modified + " " + VersionedText.text("automodpack.summary.kind.modified").getString());
-		if (removed > 0) parts.add("-" + removed + " " + VersionedText.text("automodpack.summary.kind.removed").getString());
-		if (preserved > 0) parts.add(VersionedText.text("automodpack.summary.kind.kept", preserved).getString());
-		if (unsafe > 0) parts.add("!" + unsafe + " " + VersionedText.text("automodpack.summary.kind.unsafe").getString());
-		return parts.isEmpty() ? VersionedText.text("automodpack.summary.noChanges").getString() : String.join("  ", parts);
+		if (added > 0) parts.add("+" + added + " " + VersionedText.str("automodpack.summary.kind.added"));
+		if (modified > 0) parts.add("~" + modified + " " + VersionedText.str("automodpack.summary.kind.modified"));
+		if (removed > 0) parts.add("-" + removed + " " + VersionedText.str("automodpack.summary.kind.removed"));
+		if (preserved > 0) parts.add(VersionedText.str("automodpack.summary.kind.kept", preserved));
+		if (unsafe > 0) parts.add("!" + unsafe + " " + VersionedText.str("automodpack.summary.kind.unsafe"));
+		return parts.isEmpty() ? VersionedText.str("automodpack.summary.noChanges") : String.join("  ", parts);
 	}
 
 	/** One line per non-zero diff kind in canonical order and color; a single gray line when nothing changed. */
@@ -50,6 +50,6 @@ public final class ChangeSummary {
 	}
 
 	private static String kind(String kind) {
-		return VersionedText.text("automodpack.summary.kind." + kind).getString();
+		return VersionedText.str("automodpack.summary.kind." + kind);
 	}
 }

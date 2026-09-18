@@ -171,7 +171,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		String title = VersionedText.text(modpackName.isBlank() ? titleKey(mode) : namedTitleKey(mode), modpackName).getString();
+		String title = VersionedText.str(modpackName.isBlank() ? titleKey(mode) : namedTitleKey(mode), modpackName);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.BOLD), this.width / 2, titleTop,
 				TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text(reviewKey(mode)).withStyle(ChatFormatting.GRAY), this.width / 2, titleTop + LINE_HEIGHT, TextColors.WHITE);

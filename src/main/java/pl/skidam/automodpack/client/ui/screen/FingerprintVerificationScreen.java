@@ -65,19 +65,19 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
 		originDisplay = truncateToWidth(this.font, PackConfirmCopy.displayOrigin(originFull), wrapWidth);
 		List<MutableComponent> prose = new ArrayList<>();
-		prose.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.validation.identity.purpose").getString(), wrapWidth));
+		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.identity.purpose"), wrapWidth));
 		prose.add(blankLine());
-		prose.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.validation.identity.paste").getString(), wrapWidth));
+		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.identity.paste"), wrapWidth));
 		prose.add(blankLine());
-		prose.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.validation.identity.notPack").getString(), wrapWidth));
+		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.identity.notPack"), wrapWidth));
 		prose.add(blankLine());
-		prose.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.validation.identity.publiclyTrusted").getString(), wrapWidth, ChatFormatting.GRAY));
+		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.identity.publiclyTrusted"), wrapWidth, ChatFormatting.GRAY));
 		// The fingerprint pins with the field it feeds: paste instruction, caption, value, then the field and its method hint.
-		List<MutableComponent> stack = new ArrayList<>(wrapParagraph(this.font, VersionedText.text("automodpack.validation.confirm.text").getString(), wrapWidth, ChatFormatting.GRAY));
-		stack.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.validation.fingerprint.label").getString(), wrapWidth, ChatFormatting.GRAY));
+		List<MutableComponent> stack = new ArrayList<>(wrapParagraph(this.font, VersionedText.str("automodpack.validation.confirm.text"), wrapWidth, ChatFormatting.GRAY));
+		stack.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.fingerprint.label"), wrapWidth, ChatFormatting.GRAY));
 		stack.add(VersionedText.literal(getConcatenatedFingerprint()).withStyle(ChatFormatting.GRAY));
 		stackLines = List.copyOf(stack);
-		hintLines = wrapParagraph(this.font, VersionedText.text("automodpack.validation.identity.methodHint").getString(), wrapWidth, ChatFormatting.GRAY);
+		hintLines = wrapParagraph(this.font, VersionedText.str("automodpack.validation.identity.methodHint"), wrapWidth, ChatFormatting.GRAY);
 
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.text("automodpack.back"), button -> {

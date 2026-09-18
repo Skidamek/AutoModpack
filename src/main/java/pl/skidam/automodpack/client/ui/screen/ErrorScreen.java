@@ -64,10 +64,10 @@ public class ErrorScreen extends VersionedScreen {
 		int headerLines = 2 + (copied ? 1 : 0);
 		int wrapWidth = Math.max(1, this.width - 30);
 		List<MutableComponent> lines = new ArrayList<>();
-		String summary = VersionedText.text(request.messageKey(), request.translationArguments()).getString();
+		String summary = VersionedText.str(request.messageKey(), request.translationArguments());
 		lines.addAll(wrapParagraph(this.font, summary, wrapWidth, ChatFormatting.GRAY));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.error.details").getString(), wrapWidth, ChatFormatting.GRAY));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.error.details"), wrapWidth, ChatFormatting.GRAY));
 		DialogLayout layout = layoutDialogWithActions(28, headerLines * LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, rows.toArray(ActionRow[]::new));
 		this.titleTop = layout.titleTop();
 		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new));
@@ -100,7 +100,7 @@ public class ErrorScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.text("automodpack.error.titleLine", VersionedText.text("automodpack.error").getString()).withStyle(ChatFormatting.RED),
+				VersionedText.text("automodpack.error.titleLine", VersionedText.str("automodpack.error")).withStyle(ChatFormatting.RED),
 				this.width / 2, titleTop, TextColors.WHITE);
 		if (copied) drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.error.copied").withStyle(ChatFormatting.GREEN), this.width / 2, titleTop + LINE_HEIGHT, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.error.category", VersionedText.text(request.category().translationKey())).withStyle(ChatFormatting.GRAY),

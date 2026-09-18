@@ -91,14 +91,14 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	/** One journal entry as a self-contained row: date, first note lines, and the diff summary. */
 	private RowListWidget.Row row(JournalEntry entry, int width) {
 		List<MutableComponent> lines = new ArrayList<>();
-		String updated = VersionedText.text("automodpack.history.updated", UiFormat.formatInstant(entry.createdAt())).getString();
+		String updated = VersionedText.str("automodpack.history.updated", UiFormat.formatInstant(entry.createdAt()));
 		MutableComponent header = VersionedText.literal(truncateToWidth(this.font, updated, width)).withStyle(ChatFormatting.GRAY);
 		if (isCurrent(entry)) {
-			MutableComponent badge = VersionedText.literal(VersionedText.text("automodpack.history.current").getString() + " · ").withStyle(ChatFormatting.GREEN);
+			MutableComponent badge = VersionedText.literal(VersionedText.str("automodpack.history.current") + " · ").withStyle(ChatFormatting.GREEN);
 			badge.append(VersionedText.literal(truncateToWidth(this.font, updated, width - this.font.width(badge))).withStyle(ChatFormatting.GRAY));
 			header = badge;
 		} else if (restore != null && !restorableSeqs.contains(entry.seq())) {
-			String badge = " · " + VersionedText.text("automodpack.history.notRestorable").getString();
+			String badge = " · " + VersionedText.str("automodpack.history.notRestorable");
 			MutableComponent marked = VersionedText.literal(truncateToWidth(this.font, updated, width - this.font.width(badge))).withStyle(ChatFormatting.GRAY);
 			marked.append(VersionedText.literal(badge).withStyle(ChatFormatting.DARK_GRAY));
 			header = marked;
@@ -175,7 +175,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		String title = VersionedText.text(modpackName.isBlank() ? "automodpack.history.title" : "automodpack.history.titleNamed", modpackName).getString();
+		String title = VersionedText.str(modpackName.isBlank() ? "automodpack.history.title" : "automodpack.history.titleNamed", modpackName);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.BOLD), this.width / 2, 10, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.history.description").withStyle(ChatFormatting.GRAY), this.width / 2, 25, TextColors.WHITE);
 		if (entries.isEmpty())

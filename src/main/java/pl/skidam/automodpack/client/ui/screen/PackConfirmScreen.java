@@ -204,7 +204,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 		bottomLines.addAll(wrapParagraph(this.font, PackConfirmCopy.sharedCommands(), wrapWidth, ChatFormatting.YELLOW));
 		if (laterPreview != null && laterPreview.mode() == UpdatePreview.Mode.ROLLBACK) {
 			bottomLines.add(blankLine());
-			bottomLines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.update.rollbackDetaches").getString(), wrapWidth, ChatFormatting.YELLOW));
+			bottomLines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.update.rollbackDetaches"), wrapWidth, ChatFormatting.YELLOW));
 		}
 
 		int topHeight = topLines.size() * LINE_HEIGHT;

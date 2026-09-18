@@ -39,13 +39,13 @@ public final class DetachedJoinPromptScreen extends VersionedScreen {
 		super.init();
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
 		List<MutableComponent> lines = new ArrayList<>();
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.detached.localState", modpackName).getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.detached.localState", modpackName), wrapWidth));
 		lines.add(blankLine());
 		lines.addAll(headMatchesActive
-				? wrapParagraph(this.font, VersionedText.text("automodpack.detached.sameGeneration").getString(), wrapWidth)
-				: wrapParagraph(this.font, VersionedText.text("automodpack.detached.risk").getString(), wrapWidth, ChatFormatting.RED));
+				? wrapParagraph(this.font, VersionedText.str("automodpack.detached.sameGeneration"), wrapWidth)
+				: wrapParagraph(this.font, VersionedText.str("automodpack.detached.risk"), wrapWidth, ChatFormatting.RED));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.detached.syncAnytime").getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.detached.syncAnytime"), wrapWidth));
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.detached.continueJoin"), button -> continuePlaying()),
 				primaryAction(VersionedText.text("automodpack.detached.syncNow"), button -> syncToServer()));
 		int headerLines = modpackName.isBlank() ? 1 : 2;

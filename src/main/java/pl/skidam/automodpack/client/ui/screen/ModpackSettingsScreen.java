@@ -231,28 +231,28 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 		int y = HEADER_TOP;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.packDetails.description").withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += STATE_LINE_GAP;
-		String state = pack.active() ? VersionedText.text("automodpack.packManager.active", pack.name()).getString() : VersionedText.text("automodpack.packManager.noActive").getString();
+		String state = pack.active() ? VersionedText.str("automodpack.packManager.active", pack.name()) : VersionedText.str("automodpack.packManager.noActive");
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, width)).withStyle(pack.active() ? ChatFormatting.GREEN : ChatFormatting.GRAY), this.width / 2, y,
 				TextColors.WHITE);
 		y += IDENTITY_LINE_GAP;
-		String version = VersionedText.text("automodpack.packDetails.identity", pack.record().manifest().loader(), pack.record().manifest().loaderVersion(), pack.record().manifest().mcVersion()).getString();
+		String version = VersionedText.str("automodpack.packDetails.identity", pack.record().manifest().loader(), pack.record().manifest().loaderVersion(), pack.record().manifest().mcVersion());
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, version, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += LINE_GAP;
-		String modpackId = VersionedText.text("automodpack.packDetails.id", pack.modpackId()).getString();
+		String modpackId = VersionedText.str("automodpack.packDetails.id", pack.modpackId());
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, modpackId, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		showHoverTooltip(VersionedText.literal(pack.modpackId()), this.width / 2 - this.font.width(modpackId) / 2, y, this.font.width(modpackId), mouseX, mouseY);
 		y += LINE_GAP;
-		String contents = VersionedText.text("automodpack.packDetails.contents", UiFormat.plural(pack.groupCount(), "automodpack.confirm.groupCount").getString(),
-				UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes())).getString();
+		String contents = VersionedText.str("automodpack.packDetails.contents", UiFormat.plural(pack.groupCount(), "automodpack.confirm.groupCount").getString(),
+				UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes()));
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, contents, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += LINE_GAP;
 		if (pack.connectionDetail() != null) {
-			String connection = VersionedText.text("automodpack.packDetails.connection", pack.connectionOrigin(), pack.connectionDetail()).getString();
+			String connection = VersionedText.str("automodpack.packDetails.connection", pack.connectionOrigin(), pack.connectionDetail());
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, connection, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 			y += LINE_GAP;
 		}
 		String contentToken = pack.record().contentToken();
-		String generation = VersionedText.text("automodpack.packDetails.generation", contentToken.substring(0, Math.min(contentToken.length(), 7)), UiFormat.formatInstant(pack.record().createdAt())).getString();
+		String generation = VersionedText.str("automodpack.packDetails.generation", contentToken.substring(0, Math.min(contentToken.length(), 7)), UiFormat.formatInstant(pack.record().createdAt()));
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, generation, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		showHoverTooltip(VersionedText.literal(contentToken), this.width / 2 - this.font.width(generation) / 2, y, this.font.width(generation), mouseX, mouseY);
 		if (busyVisible)

@@ -59,13 +59,13 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		// One pinned status line rides with the column, so the busy/complete feedback never moves.
 		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 8);
 		List<MutableComponent> lines = new ArrayList<>();
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.storage.description").getString(), wrapWidth, ChatFormatting.GRAY));
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.storage.removes").getString(), wrapWidth, ChatFormatting.YELLOW));
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.storage.keeps").getString(), wrapWidth, ChatFormatting.GREEN));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.description"), wrapWidth, ChatFormatting.GRAY));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.removes"), wrapWidth, ChatFormatting.YELLOW));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.keeps"), wrapWidth, ChatFormatting.GREEN));
 		lines.addAll(
-				wrapParagraph(this.font, VersionedText.text(preservedCount > 0 ? "automodpack.storage.preservedKept" : "automodpack.vault.empty", preservedCount).getString(), wrapWidth, ChatFormatting.GREEN));
+				wrapParagraph(this.font, VersionedText.str(preservedCount > 0 ? "automodpack.storage.preservedKept" : "automodpack.vault.empty", preservedCount), wrapWidth, ChatFormatting.GREEN));
 		for (ClientGenerationStore.CompactionReceipt receipt : controller.compactionReceipts())
-			lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.storage.compacted", UiFormat.formatInstant(receipt.compactedAt()), receipt.boundarySeq()).getString(), wrapWidth,
+			lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.compacted", UiFormat.formatInstant(receipt.compactedAt()), receipt.boundarySeq()), wrapWidth,
 					ChatFormatting.GREEN));
 		if (collectionResult != null) {
 			lines.add(blankLine());
@@ -73,8 +73,8 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 					UiFormat.formatSize(collectionResult.before().objectBytes()), UiFormat.formatSize(collectionResult.after().objectBytes())), wrapWidth));
 		} else if (verificationReport != null) {
 			lines.add(blankLine());
-			lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.storage.verificationReceipt", verificationReport.validReferencedObjectCount(), verificationReport.referencedObjectCount(),
-					UiFormat.formatSize(verificationReport.validReferencedObjectBytes())).getString(), wrapWidth));
+			lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.verificationReceipt", verificationReport.validReferencedObjectCount(), verificationReport.referencedObjectCount(),
+					UiFormat.formatSize(verificationReport.validReferencedObjectBytes())), wrapWidth));
 		}
 		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, LINE_HEIGHT, maintenanceRow, footerRow);
 		this.titleTop = layout.titleTop();
@@ -200,7 +200,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	}
 
 	private String statLine(String labelKey, long countBefore, long countAfter, String sizeBefore, String sizeAfter) {
-		return VersionedText.text(labelKey).getString() + ": " + countBefore + " -> " + countAfter + " (" + sizeBefore + " -> " + sizeAfter + ")";
+		return VersionedText.str(labelKey) + ": " + countBefore + " -> " + countAfter + " (" + sizeBefore + " -> " + sizeAfter + ")";
 	}
 
 	@Override

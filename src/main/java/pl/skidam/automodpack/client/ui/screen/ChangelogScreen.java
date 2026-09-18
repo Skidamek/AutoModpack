@@ -35,7 +35,7 @@ public final class ChangelogScreen extends ChangeBrowserScreen {
 
 	private static String latestNote(Changelogs changelogs) {
 		String notes = changelogs.latestPatchNotes();
-		if (notes.isBlank()) return VersionedText.text("automodpack.patchNotes.none").getString();
+		if (notes.isBlank()) return VersionedText.str("automodpack.patchNotes.none");
 		return notes.split("\\R", -1)[0];
 	}
 }

@@ -72,7 +72,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		List<RowListWidget.Row> rows = new ArrayList<>(entries.size());
 		for (int index = 0; index < entries.size(); index++) {
 			InstalledModpackController.Pack entry = entries.get(index);
-			String source = VersionedText.text(entry.connectionAvailable() ? "automodpack.packManager.sourceServer" : "automodpack.packManager.sourceLocal").getString();
+			String source = VersionedText.str(entry.connectionAvailable() ? "automodpack.packManager.sourceServer" : "automodpack.packManager.sourceLocal");
 			// State is carried by color, not bracket markers: green = active pack, white = installed pack.
 			rows.add(new RowListWidget.Row(List.of(
 					VersionedText.literal(truncateToWidth(this.font, entry.name(), rowWidth)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE),
@@ -101,8 +101,8 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.packManager.title").withStyle(ChatFormatting.BOLD), this.width / 2, 16, TextColors.WHITE);
 		boolean hasEntries = !entries.isEmpty();
 		String description = !hasEntries
-				? VersionedText.text("automodpack.packManager.empty").getString()
-				: VersionedText.text("automodpack.packManager.description").getString();
+				? VersionedText.str("automodpack.packManager.empty")
+				: VersionedText.str("automodpack.packManager.description");
 		List<String> descriptionLines = wrapToWidth(this.font, description, this.width - 20, 2);
 		int descriptionY = descriptionLines.size() > 1 ? 28 : 32;
 		for (String line : descriptionLines) {
@@ -111,8 +111,8 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		}
 		if (!entries.isEmpty()) {
 			String active = entries.stream().filter(InstalledModpackController.Pack::active).findFirst()
-					.map(entry -> VersionedText.text("automodpack.packManager.active", entry.name()).getString())
-					.orElse(VersionedText.text("automodpack.packManager.noActive").getString());
+					.map(entry -> VersionedText.str("automodpack.packManager.active", entry.name()))
+					.orElse(VersionedText.str("automodpack.packManager.noActive"));
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, active, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2,
 					descriptionLines.size() > 1 ? 50 : 44, TextColors.WHITE);
 		}

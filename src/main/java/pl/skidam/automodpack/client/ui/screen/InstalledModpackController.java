@@ -98,8 +98,8 @@ final class InstalledModpackController {
 			GroupSelectionResolver.ConflictReplacement replacement = GroupSelectionResolver.replaceConflicts(manifest, next, preferredGroups, platform, exception.resolution()).orElse(null);
 			if (replacement != null) return new SelectionChange(next, null, replacement, null);
 			return new SelectionChange(next, null, null, preferredGroups.isEmpty()
-					? VersionedText.text("automodpack.selection.changeInvalid").getString()
-					: VersionedText.text("automodpack.selection.cannotSelect", preferredName).getString());
+					? VersionedText.str("automodpack.selection.changeInvalid")
+					: VersionedText.str("automodpack.selection.cannotSelect", preferredName));
 		}
 	}
 
@@ -387,7 +387,7 @@ final class InstalledModpackController {
 	static Map<String, String> groupNames(GroupManifest manifest) {
 		Map<String, String> names = new TreeMap<>();
 		manifest.groups().forEach((groupId, group) -> names.put(groupId,
-				group.displayName().isBlank() ? VersionedText.text("automodpack.browser.unknownGroup").getString() : group.displayName()));
+				group.displayName().isBlank() ? VersionedText.str("automodpack.browser.unknownGroup") : group.displayName()));
 		return Map.copyOf(names);
 	}
 

@@ -19,23 +19,23 @@ final class PackConfirmCopy {
 	private PackConfirmCopy() {}
 
 	static String computerRisk() {
-		return VersionedText.text("automodpack.confirm.computerRisk").getString();
+		return VersionedText.str("automodpack.confirm.computerRisk");
 	}
 
 	static String sharedCommands() {
-		return VersionedText.text("automodpack.confirm.commands").getString();
+		return VersionedText.str("automodpack.confirm.commands");
 	}
 
 	static String matchedHonesty() {
-		return VersionedText.text("automodpack.confirm.matchedHonesty").getString();
+		return VersionedText.str("automodpack.confirm.matchedHonesty");
 	}
 
 	static String unverifiedExplain() {
-		return VersionedText.text("automodpack.confirm.unverifiedExplain").getString();
+		return VersionedText.str("automodpack.confirm.unverifiedExplain");
 	}
 
 	static String intro(String origin) {
-		return VersionedText.text("automodpack.confirm.intro", origin).getString();
+		return VersionedText.str("automodpack.confirm.intro", origin);
 	}
 
 	static String displayOrigin(String originFull) {
@@ -52,7 +52,7 @@ final class PackConfirmCopy {
 	}
 
 	static String selectedSummary(SelectedModpackTarget target) {
-		return VersionedText.text("automodpack.firstConnect.selectedSummary", target.selection().selectedGroups().size(), target.flatTarget().list.size(), UiFormat.formatSize(selectedBytes(target))).getString();
+		return VersionedText.str("automodpack.firstConnect.selectedSummary", target.selection().selectedGroups().size(), target.flatTarget().list.size(), UiFormat.formatSize(selectedBytes(target)));
 	}
 
 	/** The selected target's size for one file path, or 0 when the path is not part of the target. */
@@ -64,27 +64,27 @@ final class PackConfirmCopy {
 
 	static String requestedGroups(SelectedModpackTarget target) {
 		if (target.selection().intent().requestedGroups().isEmpty()) return "";
-		return VersionedText.text("automodpack.firstConnect.requestedGroups", groupNames(target.manifest(), target.selection().intent().requestedGroups())).getString();
+		return VersionedText.str("automodpack.firstConnect.requestedGroups", groupNames(target.manifest(), target.selection().intent().requestedGroups()));
 	}
 
 	static String includedGroups(SelectedModpackTarget target) {
 		if (target.selection().selectedGroups().isEmpty()) return "";
-		return VersionedText.text("automodpack.firstConnect.includedGroups", groupNames(target.manifest(), target.selection().selectedGroups())).getString();
+		return VersionedText.str("automodpack.firstConnect.includedGroups", groupNames(target.manifest(), target.selection().selectedGroups()));
 	}
 
 	static String requestedUnavailableGroups(SelectedModpackTarget target) {
 		if (target.selection().requestedUnavailableGroups().isEmpty()) return "";
-		return VersionedText.text("automodpack.firstConnect.requestedUnavailable", groupNames(target.manifest(), target.selection().requestedUnavailableGroups())).getString();
+		return VersionedText.str("automodpack.firstConnect.requestedUnavailable", groupNames(target.manifest(), target.selection().requestedUnavailableGroups()));
 	}
 
 	static String staleRequestedGroups(SelectedModpackTarget target) {
 		if (target.selection().staleRequestedGroups().isEmpty()) return "";
-		return VersionedText.text("automodpack.firstConnect.unavailableOldChoices", groupNames(target.manifest(), target.selection().staleRequestedGroups())).getString();
+		return VersionedText.str("automodpack.firstConnect.unavailableOldChoices", groupNames(target.manifest(), target.selection().staleRequestedGroups()));
 	}
 
 	static String existingMods(boolean keep, int count) {
 		if (count <= 0) return "";
-		return VersionedText.text(keep ? "automodpack.firstConnect.existingModsKeep" : "automodpack.firstConnect.existingModsArchive", count).getString();
+		return VersionedText.str(keep ? "automodpack.firstConnect.existingModsKeep" : "automodpack.firstConnect.existingModsArchive", count);
 	}
 
 	private static String groupNames(GroupManifest manifest, Iterable<String> ids) {
@@ -101,13 +101,13 @@ final class PackConfirmCopy {
 	}
 
 	static String unverifiedCount(int unverified, int jars) {
-		return VersionedText.text("automodpack.confirm.unverifiedCount", unverified, jars).getString();
+		return VersionedText.str("automodpack.confirm.unverifiedCount", unverified, jars);
 	}
 
 	/** The per-source breakdown line; empty when the target has no jars, so the stat hides instead of reading zeros. */
 	static String sourceCounts(SourceCounts counts) {
 		if (counts == null || (counts.modrinth() == 0 && counts.curseforge() == 0 && counts.serverOnly() == 0)) return "";
-		return VersionedText.text("automodpack.confirm.sourceCounts", counts.modrinth(), counts.curseforge(), counts.serverOnly()).getString();
+		return VersionedText.str("automodpack.confirm.sourceCounts", counts.modrinth(), counts.curseforge(), counts.serverOnly());
 	}
 
 	static int selectedJarCount(SelectedModpackTarget target) {

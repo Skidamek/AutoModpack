@@ -37,9 +37,9 @@ public final class ModpackOfferScreen extends VersionedScreen {
 		super.init();
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
 		List<MutableComponent> lines = new ArrayList<>();
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.offer.serverModpack").getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.offer.serverModpack"), wrapWidth));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.offer.syncAnytime").getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.offer.syncAnytime"), wrapWidth));
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.offer.joinWithout"), button -> joinWithoutIt()),
 				optionalAction(VersionedText.text("automodpack.back"), button -> cancelJoin()),
 				primaryAction(VersionedText.text("automodpack.offer.syncModpack"), button -> syncToServer()));

@@ -124,37 +124,37 @@ public class AudioManager {
 			}
 		}
 
-	/** Feeds the source's buffer ring until stopped: refill processed buffers from the PCM, wrapping at its end; a source that starved to AL_STOPPED just gets replayed. */
-	private void streamLoop(byte[] pcm, int format, Output output) {
-		// alBufferData reads straight from the buffer's native address, so the staging buffer must be direct - a heap
-		// ByteBuffer.wrap carries address 0 and the driver copies from null.
-		ByteBuffer staging = ByteBuffer.allocateDirect(WRITE_CHUNK);
-		int position = 0;
-		for (int buffer : output.buffers()) {
-			position = fill(pcm, format, buffer, staging, position);
-			output.queue(buffer);
-		}
-		output.play();
-		while (!stopped) {
-			for (int buffer : output.takeProcessed()) {
+		/** Feeds the source's buffer ring until stopped: refill processed buffers from the PCM, wrapping at its end; a source that starved to AL_STOPPED just gets replayed. */
+		private void streamLoop(byte[] pcm, int format, Output output) {
+			// alBufferData reads straight from the buffer's native address, so the staging buffer must be direct - a heap
+			// ByteBuffer.wrap carries address 0 and the driver copies from null.
+			ByteBuffer staging = ByteBuffer.allocateDirect(WRITE_CHUNK);
+			int position = 0;
+			for (int buffer : output.buffers()) {
 				position = fill(pcm, format, buffer, staging, position);
 				output.queue(buffer);
 			}
-			if (output.stoppedByStarvation()) output.play();
-			output.applyVolume();
-			sleepWhile();
+			output.play();
+			while (!stopped) {
+				for (int buffer : output.takeProcessed()) {
+					position = fill(pcm, format, buffer, staging, position);
+					output.queue(buffer);
+				}
+				if (output.stoppedByStarvation()) output.play();
+				output.applyVolume();
+				sleepWhile();
+			}
+			output.stopSource();
 		}
-		output.stopSource();
-	}
 
-	/** Copies one WRITE_CHUNK of PCM through the direct staging buffer into the AL buffer, wrapping back to the top when the loop point passes; returns the position after this fill. */
-	private int fill(byte[] pcm, int format, int buffer, ByteBuffer staging, int position) {
-		if (position >= pcm.length) position = 0;
-		int size = Math.min(WRITE_CHUNK, pcm.length - position);
-		staging.clear().put(pcm, position, size).flip();
-		AL10.alBufferData(buffer, format, staging, (int) this.format.getSampleRate());
-		return position + size;
-	}
+		/** Copies one WRITE_CHUNK of PCM through the direct staging buffer into the AL buffer, wrapping back to the top when the loop point passes; returns the position after this fill. */
+		private int fill(byte[] pcm, int format, int buffer, ByteBuffer staging, int position) {
+			if (position >= pcm.length) position = 0;
+			int size = Math.min(WRITE_CHUNK, pcm.length - position);
+			staging.clear().put(pcm, position, size).flip();
+			AL10.alBufferData(buffer, format, staging, (int) this.format.getSampleRate());
+			return position + size;
+		}
 
 		private void sleepWhile() {
 			try {
@@ -165,13 +165,54 @@ public class AudioManager {
 			}
 		}
 
+		/** Maps the decoded format onto OpenAL's s16 constants; the bundled ogg is 32kHz stereo s16 little-endian, which AL takes natively. */
+		private int openAlFormat(AudioFormat format) {
+			if (format == null) return AL10.AL_NONE;
+			if (format.getSampleSizeInBits() != 16 || (format.getChannels() != 1 && format.getChannels() != 2)) {
+				Constants.LOGGER.error("Unsupported waiting music format ({} bits, {} channels); skipping it", format.getSampleSizeInBits(), format.getChannels());
+				return AL10.AL_NONE;
+			}
+			return format.getChannels() == 1 ? AL10.AL_FORMAT_MONO16 : AL10.AL_FORMAT_STEREO16;
+		}
+
+		/** Decodes the whole ogg through Minecraft's vorbis decoder; the PCM stays resident so looping never re-decodes. */
+		private byte[] decode() {
+			try (InputStream input = Assets.stream(MUSIC_PATH); AudioStream stream = openStream(input)) {
+				this.format = stream.getFormat();
+				ByteArrayOutputStream pcm = new ByteArrayOutputStream();
+				ByteBuffer chunk;
+				while ((chunk = stream.read(WRITE_CHUNK)) != null && chunk.hasRemaining()) {
+					byte[] bytes = new byte[chunk.remaining()];
+					chunk.get(bytes);
+					pcm.write(bytes);
+				}
+				if (pcm.size() == 0) {
+					Constants.LOGGER.error("The bundled waiting music decoded to no audio from {}", MUSIC_PATH);
+					return null;
+				}
+				return pcm.toByteArray();
+			} catch (Exception e) {
+				Constants.LOGGER.error("Failed to decode the bundled waiting music from {}", MUSIC_PATH, e);
+				return null;
+			}
+		}
+
+		private AudioStream openStream(InputStream input) throws Exception {
+			/*? if <1.21.1 {*/
+			/*return new OggAudioStream(input);
+			*//*?} else {*/
+			return new JOrbisAudioStream(input);
+			/*?}*/
+		}
+
 		/** Our private OpenAL stack: device, context current on the music thread only, one source and its buffer ring. */
 		private record Output(long device, long context, int source, int[] buffers) implements AutoCloseable {
 
-			/** Mirrors Minecraft's blaze3d Library init on the default output device; null means the machine has no usable audio output and the music is skipped. */
+				/** Mirrors Minecraft's blaze3d Library init on the default output device; null means the machine has no usable audio output and the music is skipped. */
 			static Output open() {
 				long device = 0;
 				long context = 0;
+				boolean opened = false;
 				try {
 					device = ALC10.alcOpenDevice((ByteBuffer) null);
 					if (device == 0) {
@@ -183,14 +224,11 @@ public class AudioManager {
 						// Without the thread-local extension the only way to make a context current is the
 						// process-global slot, which would steal it from the game's own sound engine.
 						Constants.LOGGER.error("OpenAL on this machine lacks ALC_EXT_thread_local_context; skipping the waiting music");
-						ALC10.alcCloseDevice(device);
 						return null;
 					}
 					context = ALC10.alcCreateContext(device, (IntBuffer) null);
 					if (context == 0 || !threadLocalContext(alc, context)) {
 						Constants.LOGGER.error("No OpenAL context for the waiting music; skipping it");
-						ALC10.alcDestroyContext(context);
-						ALC10.alcCloseDevice(device);
 						return null;
 					}
 					int source = AL10.alGenSources();
@@ -204,17 +242,20 @@ public class AudioManager {
 						Constants.LOGGER.error("OpenAL gave no voice for the waiting music (source {}, buffers {}); skipping it", source, buffers);
 						AL10.alDeleteSources(source);
 						AL10.alDeleteBuffers(buffers);
-						ALC10.alcDestroyContext(context);
-						ALC10.alcCloseDevice(device);
 						return null;
 					}
+					opened = true;
 					return new Output(device, context, source, buffers);
 				} catch (Exception e) {
 					// A machine with no audio output must not take the mod down with it; the music is optional by nature.
 					Constants.LOGGER.error("Failed to open OpenAL for the waiting music", e);
-					ALC10.alcDestroyContext(context);
-					ALC10.alcCloseDevice(device);
 					return null;
+				} finally {
+					// Whatever failed above, this thread owns device and context: release the parts already built.
+					if (!opened) {
+						if (context != 0) ALC10.alcDestroyContext(context);
+						if (device != 0) ALC10.alcCloseDevice(device);
+					}
 				}
 			}
 
@@ -271,46 +312,6 @@ public class AudioManager {
 				ALC10.alcDestroyContext(this.context);
 				ALC10.alcCloseDevice(this.device);
 			}
-		}
-
-		/** Maps the decoded format onto OpenAL's s16 constants; the bundled ogg is 32kHz stereo s16 little-endian, which AL takes natively. */
-		private int openAlFormat(AudioFormat format) {
-			if (format == null) return AL10.AL_NONE;
-			if (format.getSampleSizeInBits() != 16 || (format.getChannels() != 1 && format.getChannels() != 2)) {
-				Constants.LOGGER.error("Unsupported waiting music format ({} bits, {} channels); skipping it", format.getSampleSizeInBits(), format.getChannels());
-				return AL10.AL_NONE;
-			}
-			return format.getChannels() == 1 ? AL10.AL_FORMAT_MONO16 : AL10.AL_FORMAT_STEREO16;
-		}
-
-		/** Decodes the whole ogg through Minecraft's vorbis decoder; the PCM stays resident so looping never re-decodes. */
-		private byte[] decode() {
-			try (InputStream input = Assets.stream(MUSIC_PATH); AudioStream stream = openStream(input)) {
-				this.format = stream.getFormat();
-				ByteArrayOutputStream pcm = new ByteArrayOutputStream();
-				ByteBuffer chunk;
-				while ((chunk = stream.read(WRITE_CHUNK)) != null && chunk.hasRemaining()) {
-					byte[] bytes = new byte[chunk.remaining()];
-					chunk.get(bytes);
-					pcm.write(bytes);
-				}
-				if (pcm.size() == 0) {
-					Constants.LOGGER.error("The bundled waiting music decoded to no audio from {}", MUSIC_PATH);
-					return null;
-				}
-				return pcm.toByteArray();
-			} catch (Exception e) {
-				Constants.LOGGER.error("Failed to decode the bundled waiting music from {}", MUSIC_PATH, e);
-				return null;
-			}
-		}
-
-		private AudioStream openStream(InputStream input) throws Exception {
-			/*? if <1.21.1 {*/
-			/*return new OggAudioStream(input);
-			*//*?} else {*/
-			return new JOrbisAudioStream(input);
-			/*?}*/
 		}
 	}
 }

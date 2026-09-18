@@ -68,7 +68,7 @@ public final class PinnedModsScreen extends VersionedScreen {
 		int width = panelWidth(PANEL_WIDTH);
 		int x = panelLeft(PANEL_WIDTH);
 		int fieldY = 64;
-		int addWidth = Math.max(64, this.font.width(VersionedText.text("automodpack.pinnedMods.add").getString()) + 16);
+		int addWidth = Math.max(64, this.font.width(VersionedText.str("automodpack.pinnedMods.add")) + 16);
 		this.idField = fieldWidget(x, fieldY, width - addWidth - ActionAreaLayout.SEAM, VersionedText.text("automodpack.pinnedMods.field"), null, 128);
 		this.idField.setValue(typedId);
 		this.idField.setResponder(value -> typedId = value);
@@ -111,8 +111,8 @@ public final class PinnedModsScreen extends VersionedScreen {
 
 	private MutableComponent rowLabel(Row row, int width) {
 		String raw = row.present
-				? VersionedText.text("automodpack.pinnedMods.live", row.id, row.fileName).getString()
-				: VersionedText.text("automodpack.pinnedMods.missing", row.id).getString();
+				? VersionedText.str("automodpack.pinnedMods.live", row.id, row.fileName)
+				: VersionedText.str("automodpack.pinnedMods.missing", row.id);
 		return VersionedText.literal(truncateToWidth(this.font, raw, Math.max(1, width - 8 - RowListWidget.CHECKBOX_RESERVE))).withStyle(key(row).equals(selectedKey) ? ChatFormatting.GREEN : ChatFormatting.WHITE);
 	}
 
@@ -184,7 +184,7 @@ public final class PinnedModsScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.pinnedMods.title").withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
 		int width = panelWidth(PANEL_WIDTH);
-		List<String> warning = wrapToWidth(this.font, VersionedText.text("automodpack.pinnedMods.warning").getString(), width, 3);
+		List<String> warning = wrapToWidth(this.font, VersionedText.str("automodpack.pinnedMods.warning"), width, 3);
 		int y = 26;
 		for (String line : warning) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(ChatFormatting.YELLOW), this.width / 2, y, TextColors.WHITE);

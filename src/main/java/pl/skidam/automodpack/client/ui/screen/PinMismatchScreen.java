@@ -42,16 +42,16 @@ public final class PinMismatchScreen extends VersionedScreen {
 		super.init();
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
 		List<MutableComponent> lines = new ArrayList<>();
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.pinMismatch.happened", origin).getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.pinMismatch.happened", origin), wrapWidth));
 		lines.add(blankLine());
-		lines.addAll(wrappedFingerprint(VersionedText.text("automodpack.pinMismatch.pinned").getString(), expectedFingerprint, wrapWidth));
-		lines.addAll(wrappedFingerprint(VersionedText.text("automodpack.pinMismatch.presented").getString(), presentedFingerprint, wrapWidth));
+		lines.addAll(wrappedFingerprint(VersionedText.str("automodpack.pinMismatch.pinned"), expectedFingerprint, wrapWidth));
+		lines.addAll(wrappedFingerprint(VersionedText.str("automodpack.pinMismatch.presented"), presentedFingerprint, wrapWidth));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.pinMismatch.meaning").getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.pinMismatch.meaning"), wrapWidth));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.pinMismatch.do").getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.pinMismatch.do"), wrapWidth));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.pinMismatch.dont").getString(), wrapWidth, ChatFormatting.RED));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.pinMismatch.dont"), wrapWidth, ChatFormatting.RED));
 		ActionRow copyRow = actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.error.copyDetails"), button -> copyDetails()),
 				optionalAction(VersionedText.text("automodpack.learnmore"), button -> Util.getPlatform().openUri(SECURITY_DOCS_URL + "#certificate-mismatch")));
 		ActionRow footerRow = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), button -> ScreenImpl.setScreen(parent)));

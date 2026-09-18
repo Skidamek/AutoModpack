@@ -61,8 +61,8 @@ public class RestartScreen extends VersionedScreen {
 	private List<MutableComponent> buildBodyLines() {
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
 		List<MutableComponent> lines = new ArrayList<>();
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.restart.description").getString(), wrapWidth));
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.restart.secDescription").getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.restart.description"), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.restart.secDescription"), wrapWidth));
 		if (changelogs != null) {
 			ChangeSet.Summary summary = changelogs.changeSet().summary();
 			boolean hasDiff = summary.addedFiles() > 0 || summary.modifiedFiles() > 0 || summary.removedFiles() > 0 || summary.preservedFiles() > 0 || summary.unsafeFiles() > 0;
@@ -73,18 +73,18 @@ public class RestartScreen extends VersionedScreen {
 			List<String> reasons = changelogs.restartReasons();
 			if (!reasons.isEmpty()) {
 				lines.add(blankLine());
-				lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.restart.reasonsTitle").getString(), wrapWidth, ChatFormatting.YELLOW));
+				lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.restart.reasonsTitle"), wrapWidth, ChatFormatting.YELLOW));
 				for (String reason : reasons)
-					lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.restart.reason." + reason).getString(), wrapWidth, ChatFormatting.GRAY));
+					lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.restart.reason." + reason), wrapWidth, ChatFormatting.GRAY));
 			}
 			if (summary.preservedFiles() > 0) {
 				lines.add(blankLine());
-				lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.restart.preservedFiles", summary.preservedFiles()).getString(), wrapWidth, ChatFormatting.GRAY));
+				lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.restart.preservedFiles", summary.preservedFiles()), wrapWidth, ChatFormatting.GRAY));
 			}
 			String notes = changelogs.latestPatchNotes();
 			if (!notes.isBlank()) {
 				lines.add(blankLine());
-				lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.patchNotes.latest").getString(), wrapWidth, ChatFormatting.YELLOW));
+				lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.patchNotes.latest"), wrapWidth, ChatFormatting.YELLOW));
 				lines.addAll(wrapParagraph(this.font, notes, wrapWidth));
 			}
 		}

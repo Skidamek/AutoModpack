@@ -39,7 +39,12 @@ public class VersionedText {
 	 * Embedded components are flattened to their text the way the vanilla formatter would render them.
 	 */
 	public static MutableComponent text(String key, Object... args) {
-		return literal(L10n.get(languageCode(), key, flatten(args)));
+		return literal(str(key, args));
+	}
+
+	/** The rendered string of {@link #text} - what every call site that only needs the String should use. */
+	public static String str(String key, Object... args) {
+		return L10n.get(languageCode(), key, flatten(args));
 	}
 
 	private static Object[] flatten(Object... args) {

@@ -113,7 +113,7 @@ public final class VaultListWidget extends ChromelessList<VaultListWidget.Entry>
 		}
 
 		private String reason() {
-			return VersionedText.text("automodpack.vault.reason." + claim.reason().name().toLowerCase(Locale.ROOT)).getString();
+			return VersionedText.str("automodpack.vault.reason." + claim.reason().name().toLowerCase(Locale.ROOT));
 		}
 
 		@Override

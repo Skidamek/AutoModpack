@@ -36,13 +36,13 @@ public final class OriginChangeConfirmScreen extends VersionedScreen {
 		super.init();
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
 		List<MutableComponent> lines = new ArrayList<>();
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.originChange.installed", modpackName, approvedOrigins).getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.originChange.installed", modpackName, approvedOrigins), wrapWidth));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.originChange.nowServed", newOrigin).getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.originChange.nowServed", newOrigin), wrapWidth));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.originChange.explain").getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.originChange.explain"), wrapWidth));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.originChange.remember").getString(), wrapWidth));
+		lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.originChange.remember"), wrapWidth));
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.text("automodpack.originChange.refuse"), button -> refused.run()),
 				primaryAction(VersionedText.text("automodpack.originChange.allow"), button -> allowed.run()));

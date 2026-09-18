@@ -113,7 +113,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.browserTop = (narrow ? 83 : 59) + preambleHeight;
 		this.searchField = fieldWidget(panelLeft, searchY, searchWidth, VersionedText.text("automodpack.browser.search"), null, Integer.MAX_VALUE);
 		this.searchField.setValue(search);
-		String searchHint = VersionedText.text("automodpack.browser.search").getString();
+		String searchHint = VersionedText.str("automodpack.browser.search");
 		this.searchField.setSuggestion(search.isEmpty() ? searchHint : "");
 		this.searchField.setResponder(value -> {
 			search = value;
@@ -143,7 +143,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private void refreshDropdowns() {
 		if (contentDropdown != null) {
 			contentDropdown.setMessage(VersionedText.text("automodpack.browser.contentFilter",
-					selectedContent.isBlank() ? VersionedText.text("automodpack.browser.all").getString() : VersionedText.text("automodpack.browser.content." + selectedContent).getString()));
+					selectedContent.isBlank() ? VersionedText.str("automodpack.browser.all") : VersionedText.str("automodpack.browser.content." + selectedContent)));
 			List<String> ids = new ArrayList<>();
 			ids.add("");
 			ids.addAll(contentKinds());
@@ -155,7 +155,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		if (groupDropdown != null) {
 			groupDropdown.active = !groupIds().isEmpty();
 			groupDropdown.setMessage(VersionedText.text("automodpack.browser.groupFilter",
-					selectedGroup.isBlank() ? VersionedText.text("automodpack.browser.allGroups").getString() : groupName(selectedGroup)));
+					selectedGroup.isBlank() ? VersionedText.str("automodpack.browser.allGroups") : groupName(selectedGroup)));
 			List<String> optionIds = new ArrayList<>();
 			optionIds.add("");
 			List<String> ids = new ArrayList<>(groupIds());
@@ -169,8 +169,8 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		if (sourceDropdown != null) {
 			sourceDropdown.setMessage(VersionedText.text("automodpack.browser.sourceFilter",
 					selectedSource == null
-							? VersionedText.text("automodpack.browser.all").getString()
-							: VersionedText.text(selectedSource.booleanValue() ? "automodpack.browser.source.published" : "automodpack.browser.source.custom").getString()));
+							? VersionedText.str("automodpack.browser.all")
+							: VersionedText.str(selectedSource.booleanValue() ? "automodpack.browser.source.published" : "automodpack.browser.source.custom")));
 			List<Boolean> ids = Arrays.asList(null, Boolean.TRUE, Boolean.FALSE);
 			sourceDropdown.setOptions(List.of(
 					VersionedText.text("automodpack.browser.all"),
@@ -245,7 +245,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		if (!currentProjection.effects().isEmpty()) summary += " | " + UiFormat.plural(currentProjection.effects().size(), "automodpack.browser.effectsSummary").getString();
 		long custom = currentProjection.files().stream().filter(ChangeBrowserScreen::isUnreferencedJar).count();
 		if (custom > 0) summary += " · " + UiFormat.plural(custom, "automodpack.browser.customSummary").getString();
-		if (downloadBytes > 0) summary += " · " + VersionedText.text("automodpack.browser.downloadCost", UiFormat.formatSize(downloadBytes)).getString();
+		if (downloadBytes > 0) summary += " · " + VersionedText.str("automodpack.browser.downloadCost", UiFormat.formatSize(downloadBytes));
 		this.summaryText = summary;
 	}
 
@@ -291,7 +291,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	private String groupName(String groupId) {
 		String name = groupNames.get(groupId);
-		return name == null || name.isBlank() ? VersionedText.text("automodpack.browser.unknownGroup").getString() : name;
+		return name == null || name.isBlank() ? VersionedText.str("automodpack.browser.unknownGroup") : name;
 	}
 
 	private void resolveCachedReferences() {

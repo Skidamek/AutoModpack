@@ -56,15 +56,15 @@ public class SkipVerificationScreen extends VersionedScreen {
 		assert this.minecraft != null;
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
 		List<MutableComponent> prose = new ArrayList<>();
-		prose.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.validation.skip.warning1").getString(), wrapWidth));
+		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.skip.warning1"), wrapWidth));
 		prose.add(blankLine());
-		prose.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.validation.skip.warning2").getString(), wrapWidth, ChatFormatting.RED));
+		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.skip.warning2"), wrapWidth, ChatFormatting.RED));
 		prose.add(blankLine());
-		prose.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.validation.identity.publiclyTrusted").getString(), wrapWidth, ChatFormatting.GRAY));
+		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.identity.publiclyTrusted"), wrapWidth, ChatFormatting.GRAY));
 		prose.add(blankLine());
-		prose.addAll(wrapParagraph(this.font, VersionedText.text("automodpack.validation.skip.instruction").getString(), wrapWidth));
+		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.skip.instruction"), wrapWidth));
 		// The typed phrase pins with the field that must receive it: confirm label, phrase, field, countdown hint.
-		List<MutableComponent> stack = new ArrayList<>(wrapParagraph(this.font, VersionedText.text("automodpack.validation.skip.confirm.text").getString(), wrapWidth, ChatFormatting.GRAY));
+		List<MutableComponent> stack = new ArrayList<>(wrapParagraph(this.font, VersionedText.str("automodpack.validation.skip.confirm.text"), wrapWidth, ChatFormatting.GRAY));
 		stack.add(VersionedText.literal("\"" + REQUIRED_TEXT + "\"").withStyle(ChatFormatting.ITALIC));
 		stackLines = List.copyOf(stack);
 
