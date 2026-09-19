@@ -1,6 +1,8 @@
 package pl.skidam.automodpack_core.config;
 
 import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -9,38 +11,58 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 public class ServerConfigJsons {
 
 	public static class ServerConfigFieldsV3 {
-		public int DO_NOT_CHANGE_IT = 3; // file version
+		@HconfConfigs.Comment("file version - do not change")
+		public int DO_NOT_CHANGE_IT = 3;
+		@HconfConfigs.Comment("name shown to players joining the modpack")
 		public String modpackName = "";
+		@HconfConfigs.Comment("serve the modpack to clients from this server")
 		public boolean modpackHost = true;
+		@HconfConfigs.Comment("scan and regenerate the modpack on every server start")
 		public boolean generateModpackOnStart = true;
 		// Category name -> group id -> declaration. The group id is referenced by requires/breaksWith and by the client's saved selection; the category name is the player-facing section label.
+		@HconfConfigs.Comment("modpack groups and their file rules; the braced form nests, rules are group-relative globs")
 		public Map<String, Map<String, GroupDeclaration>> modpack = Map.of("General", Map.of("main", mainGroupDeclaration()));
+		@HconfConfigs.Comment("leave mods marked as server-side out of the synced modpack")
 		public boolean autoExcludeServerSideMods = true;
+		@HconfConfigs.Comment("require clients to install the modpack")
 		public boolean requireModpack = true;
+		@HconfConfigs.Comment("show a message to players joining without the mod")
 		public boolean nagUnModdedClients = true;
+		@HconfConfigs.Comment("message shown to unmodded players")
 		public String nagMessage = "Install the AutoModpack mod to get this server's modpack!";
+		@HconfConfigs.Comment("text of the clickable nag message")
 		public String nagClickableMessage = "Click here to get the AutoModpack!";
+		@HconfConfigs.Comment("link the nag message opens")
 		public String nagClickableLink = "https://modrinth.com/project/automodpack";
+		@HconfConfigs.Comment("address the modpack host binds to; empty = all interfaces")
 		public String bindAddress = "";
+		@HconfConfigs.Comment("port the modpack host binds to; -1 = same as the server port")
 		public int bindPort = -1;
+		@HconfConfigs.Comment("host advertised to clients; empty = automatic")
 		public String advertisedEndpointHost = "";
+		@HconfConfigs.Comment("port advertised to clients; -1 = same as the bind port")
 		public int advertisedEndpointPort = -1;
+		@HconfConfigs.Comment("disable the built-in TLS listener")
 		public boolean disableInternalTLS = false;
-		/** Honor HAProxy PROXY protocol headers on dedicated listeners; enable only when a trusted proxy fronts AutoModpack, since a claimed source address feeds IP bans and audit logs. */
+		@HconfConfigs.Comment("honor HAProxy PROXY protocol headers; enable only behind a trusted proxy")
 		public boolean acceptProxyProtocol = false;
+		@HconfConfigs.Comment("HOLEPUNCH, MAGIC or DIRECT")
 		public ModpackConnectionMode connectionMode = ModpackConnectionMode.HOLEPUNCH;
-		/** Cap on per-client transfer speed in MiB/s; 0 disables limiting. */
+		@HconfConfigs.Comment("per-client transfer cap in MiB/s; 0 = unlimited")
 		public int bandwidthLimit = 0;
+		@HconfConfigs.Comment("require clients to hold a server-issued secret")
 		public boolean validateSecrets = true;
-		public long secretLifetime = 336; // 336 hours = 14 days
-		/** Non-empty: the URL-contract tree (head, journal, objects/) is exported to this directory after every publish, ready to serve with any static HTTPS host. */
+		@HconfConfigs.Comment("secret lifetime in hours; 336 = 14 days")
+		public long secretLifetime = 336;
+		@HconfConfigs.Comment("export the URL-contract tree (head, journal, objects/) to this directory after every publish for any static HTTPS host; empty = off")
 		public String exportHttpDirectory = "";
-		/** Include every object in the HTTP contract export even when Modrinth or CurseForge serves it, keeping the host as the backstop for platform link rot. */
+		@HconfConfigs.Comment("include every object in the HTTP export even when Modrinth or CurseForge serves it; keeps the host as a backstop for link rot")
 		public boolean exportHttpIncludeAll = false;
+		@HconfConfigs.Comment("let the mod update itself")
 		public boolean selfUpdater = false;
-		/** Loaders a client may run the modpack with; seeded with this server's loader on first load only, never re-added after the admin edits the set. */
+		@HconfConfigs.Comment("loaders a client may run the modpack with; seeded once, then yours to edit")
 		public Set<String> acceptedLoaders = new HashSet<>();
-		/** Advertise this pack's version metadata (modloader, loader version, Minecraft version) so clients switch their launcher instance to match; when false, clients treat the pack as files-only. */
+		@HconfConfigs.Comment("advertise the pack's loader and Minecraft versions so clients switch their instance to match; off = files-only pack")
 		public boolean advertiseVersionsToSync = true;
 	}
 
@@ -57,16 +79,16 @@ public class ServerConfigJsons {
 		return config;
 	}
 
-	// Default group for a fresh config.
+	// Default group for a fresh config. The sets are linked so a generated file is byte-identical across runs (§7.4 determinism).
 	private static GroupDeclaration mainGroupDeclaration() {
 		GroupDeclaration declaration = new GroupDeclaration();
 		declaration.displayName = "Main";
 		declaration.description = "Core modpack files";
 		declaration.required = true;
 		declaration.defaultSelected = true;
-		declaration.syncedFiles = Set.of("mods/*.jar", "kubejs/**", "emotes/*");
-		declaration.excludedFiles = Set.of(".*", ".*/**", "**/.*", "**/.*/**", "*.tmp", "**/*.tmp", "*.disabled", "**/*.disabled", "*.bak", "**/*.bak", "kubejs/server_scripts/**");
-		declaration.allowEditsInFiles = Set.of("options.txt", "config/**");
+		declaration.syncedFiles = new LinkedHashSet<>(List.of("mods/*.jar", "kubejs/**", "emotes/*"));
+		declaration.excludedFiles = new LinkedHashSet<>(List.of(".*", ".*/**", "**/.*", "**/.*/**", "*.tmp", "**/*.tmp", "*.disabled", "**/*.disabled", "*.bak", "**/*.bak", "kubejs/server_scripts/**"));
+		declaration.allowEditsInFiles = new LinkedHashSet<>(List.of("options.txt", "config/**"));
 		return declaration;
 	}
 

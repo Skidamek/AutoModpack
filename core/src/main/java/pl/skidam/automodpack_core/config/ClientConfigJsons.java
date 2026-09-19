@@ -9,14 +9,23 @@ import pl.skidam.automodpack_core.loader.PinnedMods;
 public class ClientConfigJsons {
 
 	public static class ClientConfigFieldsV3 {
-		public int DO_NOT_CHANGE_IT = 3; // file version
+		@HconfConfigs.Comment("file version - do not change")
+		public int DO_NOT_CHANGE_IT = 3;
+		@HconfConfigs.Comment("currently selected modpack; empty = none")
 		public String selectedModpackId = "";
+		@HconfConfigs.Comment("switch to the server's current modpack on launch")
 		public boolean updateSelectedModpackOnLaunch = true;
+		@HconfConfigs.Comment("let the mod update itself")
 		public boolean selfUpdater = false;
+		@HconfConfigs.Comment("keep the automodpack version in sync with the server's")
 		public boolean syncAutoModpackVersion = true;
+		@HconfConfigs.Comment("keep the loader version in sync with the server's")
 		public boolean syncLoaderVersion = true;
+		@HconfConfigs.Comment("play the modpack's music")
 		public boolean playMusic = true;
+		@HconfConfigs.Comment("show the modpack settings button")
 		public boolean showModpackSettingsButton = true;
+		@HconfConfigs.Comment("mods pinned to stay installed regardless of modpack changes")
 		public List<String> pinnedModIds = new ArrayList<>();
 
 		public ClientConfigFieldsV3() {}

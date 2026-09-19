@@ -11,6 +11,7 @@ import java.nio.file.LinkOption;
 import pl.skidam.automodpack_core.config.BootstrapInstaller;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.HconfConfigs;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
@@ -47,7 +48,7 @@ public final class BootRecovery {
 
 	private void loadClientConfig() {
 		long startTime = System.currentTimeMillis();
-		clientConfig = ConfigTools.readOrCreate(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		clientConfig = HconfConfigs.readOrCreate(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 		if (clientConfig == null) throw new RuntimeException("Failed to load config!");
 		LOGGER.info("Loaded config! took {}ms", System.currentTimeMillis() - startTime);
 	}
@@ -145,7 +146,7 @@ public final class BootRecovery {
 		}
 		UpdateRecovery.clearDeferredGuard(storage);
 		if (deferred.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
-			clientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+			clientConfig = HconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 					.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing"));
 		}
 		LOGGER.info("Recovered update transaction {}", deferred.transactionId);

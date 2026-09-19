@@ -10,9 +10,11 @@ import java.nio.file.Path;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.config.HconfConfigs;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -177,9 +179,9 @@ public final class ClientLaunch {
 		return new ClientGenerationStore(storage).isDetached(clientConfig.selectedModpackId);
 	}
 
-	private static void writeConfig(Path path, Object value) {
+	private static void writeConfig(Path path, ClientConfigJsons.ClientConfigFieldsV3 value) {
 		try {
-			ConfigTools.writeAtomic(path, value);
+			HconfConfigs.save(path, value, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Failed to save configuration " + path.toAbsolutePath().normalize(), e);
 		}

@@ -43,6 +43,7 @@ repositories {
 val bouncyCastleVersion = versionProperty("versionBouncyCastle")
 val nettyVersion = versionProperty("versionNetty")
 val mcholepunchVersion = versionProperty("versionMcholepunch")
+val hconfVersion = versionProperty("versionHconf")
 val aircompressorVersion = versionProperty("versionAircompressor")
 
 dependencies {
@@ -58,6 +59,10 @@ dependencies {
 	// the root classpath (needed by the preload-stage client).
 	implementation(":mcholepunch-core:$mcholepunchVersion")
 	implementation(":mcholepunch-server-netty:$mcholepunchVersion")
+
+	// hconf — the config format/edit layer for the human-editable configs (core's compile dep,
+	// declared here too so the shadow picks it up; relocated with the other third-party libs).
+	implementation(":hconf:$hconfVersion")
 }
 
 configurations {
@@ -94,6 +99,7 @@ tasks.named<ShadowJar>("shadowJar") {
 	}
 
 	val reloc = "amp_libs"
+	relocate("hconf", "$reloc.hconf")
 	relocate("io.airlift.compress", "$reloc.io.airlift.compress")
 	relocate("org.checkerframework", "$reloc.org.checkerframework")
 	relocate("org.slf4j", "$reloc.org.slf4j")

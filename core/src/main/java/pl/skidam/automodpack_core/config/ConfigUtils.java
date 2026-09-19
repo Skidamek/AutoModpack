@@ -16,7 +16,7 @@ public class ConfigUtils {
 
 	/** Reads, normalizes and saves the server config file, then swaps it into the running global; empty when the file is unreadable. */
 	public static Optional<ReloadedServerConfig> reloadServerConfig() {
-		Optional<ServerConfigJsons.ServerConfigFieldsV3> read = ConfigTools.read(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class);
+		Optional<ServerConfigJsons.ServerConfigFieldsV3> read = HconfConfigs.read(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class);
 		if (read.isEmpty()) return Optional.empty();
 		ServerConfigJsons.ServerConfigFieldsV3 config = read.get();
 		normalizeServerConfig(config, true);
@@ -32,30 +32,27 @@ public class ConfigUtils {
 	}
 
 	public static ServerConfigJsons.ServerConfigFieldsV3 loadOrCreateServerConfig() {
-		ServerConfigJsons.ServerConfigFieldsV3 config = ConfigTools.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
+		ServerConfigJsons.ServerConfigFieldsV3 config = HconfConfigs.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
 		String before = ConfigTools.GSON.toJson(config);
 		// Seeded on first load only; an admin-edited set is honored as-is, including one that dropped this server's loader.
 		if (config.acceptedLoaders == null || config.acceptedLoaders.isEmpty()) config.acceptedLoaders = new HashSet<>(Set.of(LOADER));
 		normalizeServerConfig(config);
-		if (!before.equals(ConfigTools.GSON.toJson(config))) {
-			try {
-				ConfigTools.writeAtomic(SERVER_CONFIG_FILE, config);
-			} catch (IOException e) {
-				throw new ConfigTools.ConfigException("Failed to save server configuration", e);
-			}
-		}
+		if (!before.equals(ConfigTools.GSON.toJson(config))) saveServerConfig(config);
 		return config;
+	}
+
+	/** Saves by reconciliation: the admin's comments and layout survive; only real value changes splice. */
+	private static void saveServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config) {
+		try {
+			HconfConfigs.save(SERVER_CONFIG_FILE, config, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to save server configuration", e);
+		}
 	}
 
 	public static void normalizeServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config, boolean saveAfter) {
 		normalizeServerConfig(config);
-		if (saveAfter) {
-			try {
-				ConfigTools.writeAtomic(SERVER_CONFIG_FILE, config);
-			} catch (IOException e) {
-				throw new ConfigTools.ConfigException("Failed to save server configuration", e);
-			}
-		}
+		if (saveAfter) saveServerConfig(config);
 	}
 
 	public static void normalizeServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config) {
