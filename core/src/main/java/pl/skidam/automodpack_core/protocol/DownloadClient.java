@@ -8,50 +8,36 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Deque;
-import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
-import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManager;
 
-import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
-import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.Throwables;
 import pl.skidam.mcholepunch.HolepunchClient;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchOptions;
 import pl.skidam.mcholepunch.HolepunchRoute;
 
-public class DownloadClient implements AutoCloseable {
+public class DownloadClient implements PackTransport {
 
 	/** The transport's own async callbacks (connection IO, manifest and platform fetches); app work belongs to the app's executor. */
 	public static final ExecutorService NET_EXECUTOR = Executors.newCachedThreadPool(r -> {
@@ -60,22 +46,21 @@ public class DownloadClient implements AutoCloseable {
 		return t;
 	});
 
-	/** One daemon thread heartbeats every candidate parked on a certificate-trust decision. */
-	private static final ScheduledExecutorService PRE_CONFIGURATION_KEEPALIVE_EXECUTOR = Executors.newSingleThreadScheduledExecutor(
-			new CustomThreadFactoryBuilder().setNameFormat("AutoModpack PreConfigurationKeepalive #%d").setDaemon(true).build());
-
 	private static final int MAX_CONNECTIONS = 5;
 
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
-	private final byte[] secretBytes;
+	private final String secret;
 	private final Function<X509Certificate, CompletableFuture<Boolean>> trustCallback;
 	private final Duration preConfigurationKeepaliveInterval;
 	private final CustomizableTrustManager.SessionTrust sessionTrust;
 	private final TransportRoute route;
 	private final Object poolLock = new Object();
-	private final Deque<Connection> availableConnections = new ArrayDeque<>();
-	private final Deque<CompletableFuture<Connection>> connectionWaiters = new ArrayDeque<>();
-	private final Set<Connection> allConnections = Collections.newSetFromMap(new IdentityHashMap<>());
+	// The lanes, in creation order: worker i submits to lane i when it has a free slot, so the scheduler's largest-first
+	// dispatch puts concurrent big files on distinct lanes while small files fill each lane's depth. ≤ 8 × 10 KB = 80 KB
+	// can queue behind one large response; the scheduler dispatches large files to their own workers first, and a
+	// non-draining peer trips the 90 s stall window on its lane alone.
+	private final List<Connection> lanes = new ArrayList<>();
+	private final Deque<SlotWaiter<?>> slotWaiters = new ArrayDeque<>();
 	private int openingConnections;
 	private volatile boolean closed;
 
@@ -83,33 +68,32 @@ public class DownloadClient implements AutoCloseable {
 
 	private record TlsCandidate(SSLSocket socket, Socket transport, CustomizableTrustManager trustManager) {}
 
-	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback,
+	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, String secret, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback,
 			Duration preConfigurationKeepaliveInterval, TransportRoute route) {
 		this.connectionInfo = connectionInfo;
-		this.secretBytes = secretBytes == null ? null : secretBytes.clone();
+		this.secret = secret;
 		this.trustCallback = trustCallback;
 		this.preConfigurationKeepaliveInterval = preConfigurationKeepaliveInterval;
 		this.route = route;
 		this.sessionTrust = new CustomizableTrustManager.SessionTrust(AddressHelpers.formatAddress(connectionInfo.origin), connectionInfo.expectedFingerprint);
 	}
 
-	public static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes,
+	public static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, String secret,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
-		return createAsync(connectionInfo, secretBytes, trustCallback, PRE_CONFIGURATION_KEEPALIVE_INTERVAL);
+		return createAsync(connectionInfo, secret, trustCallback, PRE_CONFIGURATION_KEEPALIVE_INTERVAL);
 	}
 
 	/** The keepalive interval is injectable so tests can observe heartbeats at a fast cadence; production runs at {@link NetUtils#PRE_CONFIGURATION_KEEPALIVE_INTERVAL}. */
-	static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes,
+	static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, String secret,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, Duration preConfigurationKeepaliveInterval) {
 		if (connectionInfo == null || !connectionInfo.isComplete())
 			return CompletableFuture.failedFuture(new IllegalArgumentException("Connection origin or endpoint is missing"));
 
 		return resolveRouteAsync(connectionInfo).thenCompose(route -> {
-			DownloadClient client = new DownloadClient(connectionInfo, secretBytes, trustCallback, preConfigurationKeepaliveInterval, route);
+			DownloadClient client = new DownloadClient(connectionInfo, secret, trustCallback, preConfigurationKeepaliveInterval, route);
 			return client.openConnectionAsync().thenApply(connection -> {
 				synchronized (client.poolLock) {
-					client.allConnections.add(connection);
-					client.availableConnections.add(connection);
+					client.lanes.add(connection);
 				}
 				return client;
 			}).whenComplete((ignored, error) -> {
@@ -155,13 +139,13 @@ public class DownloadClient implements AutoCloseable {
 		} catch (Exception e) {
 			throw new IOException("Failed to initialize certificate trust", e);
 		}
-		SSLContext context = createSSLContext(trustManager);
+		SSLContext context = CandidateTrustValidation.newSslContext(trustManager);
 		Socket plainSocket = connectTransport();
 
 		try {
 			plainSocket.setSoTimeout(NETWORK_TIMEOUT_MILLIS);
 			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC) performMagicHandshake(plainSocket);
-			SSLSocket tlsSocket = wrapWithTls(plainSocket, context);
+			SSLSocket tlsSocket = CandidateTrustValidation.wrapWithTls(plainSocket, context, connectionInfo.origin.getHostString(), connectionInfo.endpoint.getPort());
 			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket);
 			tlsSocket.setSoTimeout(0);
 			return new TlsCandidate(tlsSocket, plainSocket, trustManager);
@@ -238,167 +222,62 @@ public class DownloadClient implements AutoCloseable {
 		if (handshakeResponse != MAGIC_AMOK) throw new IOException("Invalid response from server: " + handshakeResponse);
 	}
 
-	private SSLSocket wrapWithTls(Socket plainSocket, SSLContext context) throws IOException {
-		SSLSocketFactory factory = context.getSocketFactory();
-		String originHost = connectionInfo.origin.getHostString();
-		SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, originHost, connectionInfo.endpoint.getPort(), true);
-		sslSocket.setEnabledProtocols(new String[]{"TLSv1.3"});
-		sslSocket.setEnabledCipherSuites(new String[]{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"});
-
-		SSLParameters parameters = new SSLParameters();
-		parameters.setEndpointIdentificationAlgorithm("HTTPS");
-		sslSocket.setSSLParameters(parameters);
-
-		try {
-			sslSocket.startHandshake();
-			return sslSocket;
-		} catch (IOException e) {
-			closeQuietly(sslSocket);
-			throw e;
-		}
-	}
-
+	/** The shared candidate trust ladder; completion means the certificate is pinned into this session's trust. */
 	private CompletableFuture<TlsCandidate> validateCandidate(TlsCandidate candidate) {
-		X509Certificate certificate = candidate.trustManager().getDeferredCertificate();
-		if (certificate == null) return CompletableFuture.completedFuture(candidate);
-
-		try {
-			certificate.checkValidity();
-		} catch (CertificateException e) {
-			return rejectCandidate(candidate, new IOException("Untrusted certificate is not valid", e));
-		}
-
-		CompletableFuture<TlsCandidate> validation = DnsPinResolver.resolvePinAsync(connectionInfo.origin.getHostString()).thenCompose(result -> {
-			if (result instanceof DnsPinResolver.Authoritative authoritative) {
-				try {
-					String fingerprint = getFingerprint(certificate);
-					if (!authoritative.fingerprint().equals(fingerprint)) {
-						return rejectCandidate(candidate,
-								new IOException("Certificate does not match the DNSSEC fingerprint for " + connectionInfo.origin.getHostString()));
-					}
-					sessionTrust.accept(certificate);
-					LOGGER.info("Trusting the self-signed certificate from {} because it matches the DNSSEC fingerprint for {}",
-							connectionInfo.endpoint.getHostString(), connectionInfo.origin.getHostString());
-					return CompletableFuture.completedFuture(candidate);
-				} catch (CertificateException e) {
-					return rejectCandidate(candidate, new IOException("Failed to validate DNSSEC-pinned certificate", e));
-				}
-			}
-			if (result instanceof DnsPinResolver.Misconfigured misconfigured) {
-				return rejectCandidate(candidate, new IOException(
-						"Invalid DNSSEC AutoModpack fingerprint for " + connectionInfo.origin.getHostString() + ": " + misconfigured.reason()));
-			}
-			return requestManualTrust(candidate, certificate);
-		});
-		return validation.whenComplete((ignored, error) -> {
-			if (error != null) closeQuietly(candidate.socket());
-		});
+		return CandidateTrustValidation.validate(new CandidateTrustValidation.Candidate(candidate.socket(), candidate.trustManager(), sessionTrust, connectionInfo.origin.getHostString(),
+				connectionInfo.endpoint.getHostString(), trustCallback, () -> !closed, hostHeader(), secret), preConfigurationKeepaliveInterval).thenApply(ignored -> candidate);
 	}
 
-	private CompletableFuture<TlsCandidate> requestManualTrust(TlsCandidate candidate, X509Certificate certificate) {
-		if (trustCallback == null) {
-			CertificateException failure = candidate.trustManager().getDeferredFailure();
-			return rejectCandidate(candidate, failure == null ? new IOException("Certificate is not trusted") : failure);
-		}
-
-		CompletableFuture<Boolean> decision;
-		try {
-			decision = Objects.requireNonNull(trustCallback.apply(certificate), "trust callback result");
-		} catch (Exception e) {
-			return rejectCandidate(candidate, new IOException("Certificate trust callback failed", e));
-		}
-
-		BooleanSupplier clientAlive = () -> !closed;
-		PreConfigurationKeepalive keepalive = new PreConfigurationKeepalive(candidate.socket(), preConfigurationKeepaliveInterval, PRE_CONFIGURATION_KEEPALIVE_EXECUTOR, clientAlive);
-		return decision.handle((trusted, error) -> {
-			// The heartbeat must be gone before the negotiation writes start, so a straggler keepalive record can
-			// never land after the configuration echo and misframe the configured connection.
-			keepalive.retire();
-			if (error != null) {
-				closeQuietly(candidate.socket());
-				Throwable cause = Throwables.unwrap(error);
-				if (cause instanceof CertificateTrustCancelledException cancelled) throw new CompletionException(cancelled);
-				throw new CompletionException(new IOException("Certificate trust decision failed", cause));
-			}
-			if (!trusted) {
-				closeQuietly(candidate.socket());
-				throw new CompletionException(new IOException("User rejected certificate"));
-			}
-			try {
-				sessionTrust.accept(certificate);
-				return candidate;
-			} catch (CertificateException e) {
-				closeQuietly(candidate.socket());
-				throw new CompletionException(e);
-			}
-		});
-	}
-
-	/** Turns a validated candidate into a configured connection, releasing the socket when the negotiation fails. */
+	/** Turns a validated candidate into a pooled connection, releasing the socket when construction fails. */
 	private Connection configuredConnection(TlsCandidate candidate) throws IOException {
 		try {
 			candidate.socket().setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
-			return new Connection(candidate.socket(), candidate.transport(), secretBytes, NET_EXECUTOR);
+			return new Connection(candidate.socket(), candidate.transport(), secret, hostHeader(), NET_EXECUTOR, this::slotFreed);
 		} catch (IOException e) {
 			closeQuietly(candidate.socket());
 			throw e;
 		}
 	}
 
-	private static <T> CompletableFuture<T> rejectCandidate(TlsCandidate candidate, Throwable error) {
-		closeQuietly(candidate.socket());
-		return CompletableFuture.failedFuture(error);
+	private String hostHeader() {
+		return connectionInfo.endpoint.getHostString() + ":" + connectionInfo.endpoint.getPort();
 	}
 
-	private static SSLContext createSSLContext(CustomizableTrustManager trustManager) {
-		try {
-			SSLContext context = SSLContext.getInstance("TLSv1.3");
-			context.init(null, new TrustManager[]{trustManager}, new SecureRandom());
-			return context;
-		} catch (NoSuchAlgorithmException | KeyManagementException e) {
-			throw new RuntimeException("Failed to initialize SSLContext", e);
-		}
-	}
-
-	private CompletableFuture<Connection> acquireConnection() {
-		CompletableFuture<Connection> waiter = new CompletableFuture<>();
+	/** Queues a submit on a lane with a free slot; a new lane opens when all of them are full, past which the waiter waits. */
+	private <T> CompletableFuture<T> withSlot(int lane, Function<Connection, CompletableFuture<T>> operation) {
+		CompletableFuture<T> future = new CompletableFuture<>();
 		synchronized (poolLock) {
-			if (closed) return CompletableFuture.failedFuture(new IOException("Download client is closed"));
-			connectionWaiters.add(waiter);
+			if (closed) {
+				future.completeExceptionally(new IOException("Download client is closed"));
+				return future;
+			}
+			slotWaiters.add(new SlotWaiter<>(lane, operation, future));
 			pumpPool();
 		}
-		return waiter;
+		return future;
 	}
 
 	private void pumpPool() {
-		while (!availableConnections.isEmpty()) {
-			Connection connection = availableConnections.peek();
-			if (connection.isActive()) break;
-			availableConnections.remove();
-			allConnections.remove(connection);
-			closeQuietly(connection);
+		reapLanes();
+		while (!slotWaiters.isEmpty()) {
+			Connection connection = pick(slotWaiters.peek().lane());
+			if (connection == null) break;
+			slotWaiters.remove().dispatch(connection);
 		}
-
-		while (!connectionWaiters.isEmpty() && !availableConnections.isEmpty()) {
-			CompletableFuture<Connection> waiter = connectionWaiters.remove();
-			Connection connection = availableConnections.remove();
-			waiter.complete(connection);
-		}
-
-		while (!closed && !connectionWaiters.isEmpty() && allConnections.size() + openingConnections < MAX_CONNECTIONS) {
-			CompletableFuture<Connection> waiter = connectionWaiters.remove();
+		while (!closed && !slotWaiters.isEmpty() && lanes.size() + openingConnections < MAX_CONNECTIONS) {
+			SlotWaiter<?> waiter = slotWaiters.remove();
 			openingConnections++;
 			openConnectionAsync().whenComplete((connection, error) -> {
 				synchronized (poolLock) {
 					openingConnections--;
 					if (closed) {
 						if (connection != null) closeQuietly(connection);
-						waiter.completeExceptionally(new IOException("Download client is closed"));
+						waiter.future().completeExceptionally(new IOException("Download client is closed"));
 					} else if (error != null) {
-						waiter.completeExceptionally(Throwables.unwrap(error));
+						waiter.future().completeExceptionally(Throwables.unwrap(error));
 					} else {
-						allConnections.add(connection);
-						waiter.complete(connection);
+						lanes.add(connection);
+						waiter.dispatch(connection);
 					}
 					pumpPool();
 				}
@@ -406,43 +285,77 @@ public class DownloadClient implements AutoCloseable {
 		}
 	}
 
-	private <T> CompletableFuture<T> withConnection(Function<Connection, CompletableFuture<T>> operation) {
-		return acquireConnection().thenCompose(connection -> {
-			CompletableFuture<T> future;
-			try {
-				future = operation.apply(connection);
-			} catch (Exception e) {
-				future = CompletableFuture.failedFuture(e);
-			}
-			return future.whenComplete((ignored, error) -> releaseConnection(connection, error == null));
-		});
+	/** Lane i serves waiter i when it has a free slot; otherwise the first lane with one does. Null means every lane is full or gone. */
+	private Connection pick(int lane) {
+		if (lanes.isEmpty()) return null;
+		if (lane < lanes.size() && lanes.get(lane).hasFreeSlot()) return lanes.get(lane);
+		for (Connection connection : lanes) {
+			if (connection.hasFreeSlot()) return connection;
+		}
+		return null;
 	}
 
-	private void releaseConnection(Connection connection, boolean healthy) {
-		synchronized (poolLock) {
-			if (closed || !healthy || !connection.isActive()) {
-				allConnections.remove(connection);
-				availableConnections.remove(connection);
+	private void reapLanes() {
+		for (Iterator<Connection> iterator = lanes.iterator(); iterator.hasNext();) {
+			Connection connection = iterator.next();
+			if (!connection.isActive()) {
+				iterator.remove();
 				closeQuietly(connection);
-			} else {
-				availableConnections.add(connection);
 			}
-			pumpPool();
+		}
+	}
+
+	/** A response completed somewhere, so a slot freed; waiters queued on the pool get their chance. */
+	private void slotFreed() {
+		synchronized (poolLock) {
+			if (!closed) pumpPool();
+		}
+	}
+
+	private record SlotWaiter<T>(int lane, Function<Connection, CompletableFuture<T>> operation, CompletableFuture<T> future) {
+		void dispatch(Connection connection) {
+			CompletableFuture<T> result;
+			try {
+				result = operation.apply(connection);
+			} catch (Exception e) {
+				result = CompletableFuture.failedFuture(e);
+			}
+			result.whenComplete((value, error) -> {
+				if (error != null) future.completeExceptionally(error);
+				else future.complete(value);
+			});
 		}
 	}
 
 	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
-		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback));
+		return downloadFile(fileHash, destination, 0, chunkCallback, 0);
+	}
+
+	@Override
+	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, IntConsumer chunkCallback) {
+		return downloadFile(fileHash, destination, offset, chunkCallback, 0);
+	}
+
+	@Override
+	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, IntConsumer chunkCallback, int lane) {
+		// A stale range already surfaces as StaleRangeException from the response parse; no mapping happens here.
+		return withSlot(lane, connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback, offset));
+	}
+
+	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers 304 and {@code destination} is not written. */
+	@Override
+	public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer chunkCallback) {
+		return withSlot(0, connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex, chunkCallback));
 	}
 
 	/** Drops every pooled and in-flight transfer connection so a cancelled run cannot poison the next one. */
+	@Override
 	public void abortTransfers() {
 		List<Connection> connections;
 		synchronized (poolLock) {
 			if (closed) return;
-			connections = new ArrayList<>(allConnections);
-			allConnections.clear();
-			availableConnections.clear();
+			connections = new ArrayList<>(lanes);
+			lanes.clear();
 		}
 		connections.forEach(DownloadClient::closeQuietly);
 		synchronized (poolLock) {
@@ -451,28 +364,24 @@ public class DownloadClient implements AutoCloseable {
 	}
 
 	static void closeQuietly(AutoCloseable closeable) {
-		try {
-			closeable.close();
-		} catch (Exception ignored) {
-		}
+		CandidateTrustValidation.closeQuietly(closeable);
 	}
 
 	@Override
 	public void close() {
 		List<Connection> connections;
-		List<CompletableFuture<Connection>> waiters;
+		List<SlotWaiter<?>> waiters;
 		synchronized (poolLock) {
 			if (closed) return;
 			closed = true;
-			connections = new ArrayList<>(allConnections);
-			waiters = new ArrayList<>(connectionWaiters);
-			allConnections.clear();
-			availableConnections.clear();
-			connectionWaiters.clear();
+			connections = new ArrayList<>(lanes);
+			waiters = new ArrayList<>(slotWaiters);
+			lanes.clear();
+			slotWaiters.clear();
 		}
 
 		IOException closedError = new IOException("Download client is closed");
-		waiters.forEach(waiter -> waiter.completeExceptionally(closedError));
+		waiters.forEach(waiter -> waiter.future().completeExceptionally(closedError));
 		connections.forEach(DownloadClient::closeQuietly);
 	}
 }

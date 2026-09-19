@@ -367,21 +367,31 @@ def assert_bootstrap_import(ctx, _step):
 
 @verb("assert_authenticated_secret")
 def assert_authenticated_secret(ctx, _step):
-    """Assert that authenticated login persisted the same non-anonymous secret on both sides."""
+    """Assert the connection mode's honest secret state: custom modes persist an issued secret, HTTP persists none."""
     modpack_id = str(ctx.vars.get("bootstrap_modpack_id", ""))
     origin = str(ctx.vars.get("bootstrap_origin", ""))
     if not modpack_id or not origin:
         raise AssertionError("bootstrap identity was not captured before authenticated secret assertion")
     connection_path = ctx.game_dir / "automodpack" / "client" / "data" / "packs" / modpack_id / "connection.json"
-    server_secrets_path = ctx.server_dir / "automodpack" / "server" / "secrets.json"
     try:
         connection = json.loads(connection_path.read_text(encoding="utf-8"))
-        server_secrets = json.loads(server_secrets_path.read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"authenticated secret state is not readable: {error}") from error
     client_secret = (connection.get("secrets", {}) or {}).get(origin)
+    mode = str((ctx.scenario.get("connectionPath") or {}).get("mode", "")).upper()
+    if mode == "HTTP":
+        # HTTP serves a fully public pack: no secret is issued, so absence persisted as absence is the receipt.
+        if client_secret is not None:
+            raise AssertionError("HTTP login unexpectedly persisted a client secret for the bootstrap origin")
+        ctx.vars["authenticated_secret_persisted"] = False
+        return
     if not isinstance(client_secret, dict):
         raise AssertionError("authenticated login did not persist a client secret for the bootstrap origin")
+    server_secrets_path = ctx.server_dir / "automodpack" / "server" / "secrets.json"
+    try:
+        server_secrets = json.loads(server_secrets_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AssertionError(f"authenticated secret state is not readable: {error}") from error
     value = client_secret.get("secret")
     timestamp = client_secret.get("timestamp")
     anonymous = base64.urlsafe_b64encode(bytes(32)).decode("ascii").rstrip("=")

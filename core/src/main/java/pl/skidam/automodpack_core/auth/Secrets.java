@@ -25,10 +25,6 @@ public class Secrets {
 			return secret;
 		}
 
-		public byte[] secretBytes() {
-			return Base64.getUrlDecoder().decode(secret);
-		}
-
 		public Long timestamp() {
 			return timestamp;
 		}
@@ -38,10 +34,6 @@ public class Secrets {
 			// The raw secret is a bearer credential; logging a Secret object must never print it.
 			return "Secret{secret=<redacted>, timestamp=" + timestamp + '}';
 		}
-	}
-
-	public static Secret anonymousSecret() {
-		return new Secret(Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[BYTE_LENGTH]), 0L);
 	}
 
 	public static Secret generateSecret() {

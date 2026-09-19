@@ -6,10 +6,13 @@ import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
 import pl.skidam.automodpack_core.modpack.candidate.ExcludedCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
@@ -23,6 +26,7 @@ import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
+import pl.skidam.automodpack_core.platforms.PlatformSourceLookup;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
@@ -43,15 +47,24 @@ public class ModpackExecutor {
 	private final DataRootResolver.Layout dataLayout;
 	private final CandidateScan candidateScan;
 	private final HostingBinder hostingBinder;
+	private final Supplier<ServerConfigJsons.ServerConfigFieldsV3> config;
+	private final PlatformSourceLookup platformSourceLookup;
 
 	public ModpackExecutor() {
-		this(GameDirectory.current(), HOST_MODPACK_DIR, GameDirectory.current().resolve(SERVER_DIR));
+		this(GameDirectory.current(), HOST_MODPACK_DIR, GameDirectory.current().resolve(SERVER_DIR), PlatformSourceLookup.resolving());
 	}
 
 	public ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot) {
+		this(serverRoot, groupRoot, generationRoot, PlatformSourceLookup.none());
+	}
+
+	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, PlatformSourceLookup platformSourceLookup) {
 		this(serverRoot, groupRoot, generationRoot, new GenerationStore(generationRoot, DataRootResolver.resolve(serverRoot).layout().objectsDirectory()), new ModpackCandidateScanner()::scan,
 				(ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2),
-						new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build()));
+						new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build()),
+				hosting -> {
+					if (hostServer != null) hostServer.replacePaths(hosting);
+				}, platformSourceLookup);
 	}
 
 	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, GenerationStore generationStore, CandidateScan candidateScan,
@@ -63,6 +76,16 @@ public class ModpackExecutor {
 
 	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, GenerationStore generationStore, CandidateScan candidateScan,
 			ThreadPoolExecutor creationExecutor, HostingBinder hostingBinder) {
+		this(serverRoot, groupRoot, generationRoot, generationStore, candidateScan, creationExecutor, hostingBinder, () -> serverConfig, PlatformSourceLookup.none());
+	}
+
+	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, GenerationStore generationStore, CandidateScan candidateScan,
+			ThreadPoolExecutor creationExecutor, HostingBinder hostingBinder, PlatformSourceLookup platformSourceLookup) {
+		this(serverRoot, groupRoot, generationRoot, generationStore, candidateScan, creationExecutor, hostingBinder, () -> serverConfig, platformSourceLookup);
+	}
+
+	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, GenerationStore generationStore, CandidateScan candidateScan,
+			ThreadPoolExecutor creationExecutor, HostingBinder hostingBinder, Supplier<ServerConfigJsons.ServerConfigFieldsV3> config, PlatformSourceLookup platformSourceLookup) {
 		this.serverRoot = serverRoot.toAbsolutePath().normalize();
 		this.groupRoot = groupRoot.toAbsolutePath().normalize();
 		this.generationRoot = generationRoot.toAbsolutePath().normalize();
@@ -72,6 +95,8 @@ public class ModpackExecutor {
 		this.candidateScan = Objects.requireNonNull(candidateScan);
 		this.creationExecutor = Objects.requireNonNull(creationExecutor);
 		this.hostingBinder = Objects.requireNonNull(hostingBinder);
+		this.config = Objects.requireNonNull(config);
+		this.platformSourceLookup = Objects.requireNonNull(platformSourceLookup);
 	}
 
 	@FunctionalInterface
@@ -154,6 +179,64 @@ public class ModpackExecutor {
 
 	public List<JournalEntry> technicalHistory(int limit) throws IOException {
 		return generationStore.history(limit);
+	}
+
+	/**
+	 * Writes the URL-contract tree (head, journal, objects/&lt;sha1&gt;) as byte-for-byte copies of the hosted files, ready for
+	 * any static HTTPS host. Objects the platforms still serve themselves are pruned unless {@code includeAll} or
+	 * {@code exportHttpIncludeAll} keeps them as the host-side backstop; the returned receipt carries the counts. Nothing
+	 * already in the target directory is ever deleted, so stale objects from old generations may accumulate there; the
+	 * operator owns the directory. Orthogonal to hosting: works in every connection mode.
+	 */
+	public ExportHttpResult exportHttp(Path targetDirectory) throws IOException {
+		return exportHttp(targetDirectory, false);
+	}
+
+	public ExportHttpResult exportHttp(Path targetDirectory, boolean includeAll) throws IOException {
+		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
+		if (serverConfig != null && serverConfig.validateSecrets)
+			return new ExportHttpResult.Rejected("The pack validates download secrets, which a public mirror cannot enforce", null);
+		Path target = (targetDirectory.isAbsolute() ? targetDirectory : serverRoot.resolve(targetDirectory)).normalize();
+		boolean exportEverything = includeAll || serverConfig != null && serverConfig.exportHttpIncludeAll;
+		GenerationHosting hosting = generationStore.hosting();
+		Map<String, Path> objects = new TreeMap<>();
+		for (String key : hosting.asMap().keySet()) {
+			if (key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY)) continue;
+			if (!HashUtils.isSha1(key)) throw new IOException("Unexpected hosting key in the generation store: " + key);
+			objects.put(HashUtils.normalizeSha1(key), hosting.get(key));
+		}
+		Map<String, Long> platformServed = Map.of();
+		if (!exportEverything && !objects.isEmpty()) {
+			List<PlatformSourceLookup.Query> queries = new ArrayList<>();
+			for (Map.Entry<String, Path> object : objects.entrySet())
+				queries.add(new PlatformSourceLookup.Query(object.getKey(), Files.size(object.getValue()), object.getValue()));
+			try {
+				Map<String, Long> resolved = platformSourceLookup.platformSizes(queries);
+				if (resolved != null) platformServed = resolved;
+			} catch (RuntimeException e) {
+				LOGGER.warn("Platform source resolution failed; exporting every object", e);
+			}
+		}
+		int written = 0, omitted = 0, unresolvable = 0;
+		for (Map.Entry<String, Path> entry : hosting.asMap().entrySet()) {
+			String key = entry.getKey();
+			Path destination;
+			if (key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY)) destination = target.resolve(key);
+			else {
+				String sha1 = HashUtils.normalizeSha1(key);
+				Long served = platformServed.get(sha1);
+				if (served != null && served.longValue() == Files.size(entry.getValue())) {
+					omitted++;
+					continue;
+				}
+				if (!exportEverything) unresolvable++;
+				destination = target.resolve("objects").resolve(sha1);
+			}
+			Files.createDirectories(destination.getParent());
+			Files.copy(entry.getValue(), destination, StandardCopyOption.REPLACE_EXISTING);
+			written++;
+		}
+		return new ExportHttpResult.Exported(written, omitted, unresolvable);
 	}
 
 	public GenerationStore.StorageReport storageReport() throws IOException {
@@ -287,15 +370,31 @@ public class ModpackExecutor {
 	 */
 	private <R extends HostingOutcome> R bindHosting(R result) {
 		if (!(result instanceof CommittedOutcome committed)) return result;
+		R bound = result;
 		try {
 			hostingBinder.bind(committed.hosting());
 		} catch (Exception e) {
 			LOGGER.error("The generation committed, but the hosting swap failed", e);
 			@SuppressWarnings("unchecked")
 			R failed = (R) committed.withHostingFailure(e);
-			return failed;
+			bound = failed;
 		}
-		return result;
+		autoExportHttp();
+		return bound;
+	}
+
+	/** Publish-time mirror of the URL contract for static hosting; a failed or refused export is logged loudly but never fails the committed publication. */
+	private void autoExportHttp() {
+		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
+		String directory = serverConfig == null || serverConfig.exportHttpDirectory == null ? "" : serverConfig.exportHttpDirectory.trim();
+		if (directory.isEmpty()) return;
+		try {
+			ExportHttpResult result = exportHttp(Path.of(directory), false);
+			if (result instanceof ExportHttpResult.Exported exported) LOGGER.info(exported.receipt(directory));
+			else if (result instanceof ExportHttpResult.Rejected refused) LOGGER.warn("Refused to export the HTTP contract tree to {}: {}", directory, refused.detail());
+		} catch (Exception e) {
+			LOGGER.error("Failed to export the HTTP contract tree to {}", directory, e);
+		}
 	}
 
 	private void consumePatchNotes(GenerationPatchNotes.Resolution notes) {
@@ -500,6 +599,29 @@ public class ModpackExecutor {
 
 		/** The load produced no generation; the detail explains the refusal or failure. */
 		record Rejected(String detail, Throwable cause) implements LoadResult {
+			public Rejected {
+				detail = Objects.requireNonNull(detail);
+			}
+		}
+	}
+
+	public sealed interface ExportHttpResult permits ExportHttpResult.Exported, ExportHttpResult.Rejected {
+
+		record Exported(int exportedCount, int omittedCount, int unresolvableCount) implements ExportHttpResult {
+			public Exported {
+				if (exportedCount < 0 || omittedCount < 0 || unresolvableCount < 0) throw new IllegalArgumentException("Negative export count");
+			}
+
+			public String receipt(String directory) {
+				String breakdown = omittedCount == 0 && unresolvableCount == 0
+						? ""
+						: " (" + omittedCount + " objects omitted: served by Modrinth/CurseForge; " + unresolvableCount + " unresolvable → included)";
+				return "Exported " + exportedCount + " files to " + directory + breakdown;
+			}
+		}
+
+		/** The export produced no tree; the detail explains the refusal. */
+		record Rejected(String detail, Throwable cause) implements ExportHttpResult {
 			public Rejected {
 				detail = Objects.requireNonNull(detail);
 			}

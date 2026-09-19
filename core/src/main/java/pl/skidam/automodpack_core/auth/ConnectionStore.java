@@ -5,7 +5,6 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -20,7 +19,6 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.FileLocks;
-import pl.skidam.automodpack_core.utils.FileTrees;
 
 /** Shared per-user route and client-secret state keyed by modpack identity. */
 public final class ConnectionStore {
@@ -59,9 +57,15 @@ public final class ConnectionStore {
 		return read(storage, modpackId).secrets.get(AddressHelpers.formatAddress(origin));
 	}
 
+	/** Persists the origin's client secret; a null secret removes the stored one, because absence is stored as absence. */
 	public static void saveClientSecret(ClientStorage storage, String modpackId, InetSocketAddress origin, Secrets.Secret secret) throws IOException {
-		if (origin == null || secret == null || secret.secret().isBlank()) throw new IllegalArgumentException("Origin and secret are required");
-		update(storage, modpackId, fields -> fields.secrets.put(AddressHelpers.formatAddress(origin), secret));
+		if (origin == null) throw new IllegalArgumentException("Origin is required");
+		if (secret != null && secret.secret().isBlank()) throw new IllegalArgumentException("Secret is blank");
+		update(storage, modpackId, fields -> {
+			String formattedOrigin = AddressHelpers.formatAddress(origin);
+			if (secret == null) fields.secrets.remove(formattedOrigin);
+			else fields.secrets.put(formattedOrigin, secret);
+		});
 	}
 
 	/**
@@ -110,12 +114,10 @@ public final class ConnectionStore {
 	}
 
 	private static ConnectionJsons.ConnectionRecordFields readUnlocked(Path file) throws IOException {
-		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return new ConnectionJsons.ConnectionRecordFields();
-		FileTrees.requireRegularFile(file, "Connection record");
-		ConnectionJsons.ConnectionRecordFields fields = ConfigTools.read(file, ConnectionJsons.ConnectionRecordFields.class)
-				.orElseThrow(() -> new IOException("Connection record is empty: " + file));
-		normalize(fields);
-		return fields;
+		return ConfigTools.readState(file, ConnectionJsons.ConnectionRecordFields.class, "Connection record", fields -> {
+			normalize(fields);
+			return fields;
+		}).orElseGet(ConnectionJsons.ConnectionRecordFields::new);
 	}
 
 	private static void normalize(ConnectionJsons.ConnectionRecordFields fields) {

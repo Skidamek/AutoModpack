@@ -8,28 +8,28 @@ import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.update.ClientStorage;
 
-/** Owns one authenticated transfer session opened from a stored per-modpack route. */
+/** Owns one transfer session opened from a stored per-modpack route. */
 public final class StoredModpackConnection implements AutoCloseable {
 	private final String modpackId;
 	private final ConnectionJsons.ConnectionInfo connection;
 	private final Secrets.Secret secret;
 	private final GenerationJsons.HeadDocumentFields advertisedDocument;
-	private DownloadClient client;
+	private PackTransport transport;
 
 	private StoredModpackConnection(String modpackId, ConnectionJsons.ConnectionInfo connection, Secrets.Secret secret, GenerationJsons.HeadDocumentFields advertisedDocument,
-			DownloadClient client) {
+			PackTransport transport) {
 		this.modpackId = modpackId;
 		this.connection = connection;
 		this.secret = secret;
 		this.advertisedDocument = advertisedDocument;
-		this.client = client;
+		this.transport = transport;
 	}
 
-	/** A stored connection seeded with its exact certificate pin and the client secret for its origin. */
-	public record Seeded(ConnectionJsons.ConnectionInfo connection, Secrets.Secret secret, boolean anonymousSecret) {}
+	/** A stored connection seeded with its exact certificate pin and, for the custom modes, the client secret of its origin; HTTP packs carry no secret. */
+	public record Seeded(ConnectionJsons.ConnectionInfo connection, Secrets.Secret secret) {}
 
 	/** Loads the stored connection route and seeds its fingerprint-checked connection and secret; null when no complete connection is stored. */
 	public static Seeded seed(ClientStorage storage, String modpackId) throws IOException {
@@ -38,8 +38,7 @@ public final class StoredModpackConnection implements AutoCloseable {
 		ConnectionJsons.ConnectionInfo connection = new ConnectionJsons.ConnectionInfo(stored.origin, stored.endpoint, stored.connectionMode,
 				CertificateTrustStore.getFingerprint(stored.origin), null);
 		stored.approvedOrigins().forEach(connection::approveOrigin);
-		Secrets.Secret secret = ConnectionStore.getClientSecret(storage, modpackId, stored.origin);
-		return new Seeded(connection, secret == null ? Secrets.anonymousSecret() : secret, secret == null);
+		return new Seeded(connection, ConnectionStore.getClientSecret(storage, modpackId, stored.origin));
 	}
 
 	public static StoredModpackConnection open(ClientStorage storage, String modpackId, boolean allowAskingUser) throws Exception {
@@ -47,18 +46,18 @@ public final class StoredModpackConnection implements AutoCloseable {
 		if (seeded == null) throw new IOException("Saved modpack connection is unavailable");
 		ConnectionJsons.ConnectionInfo connection = seeded.connection();
 		Secrets.Secret secret = seeded.secret();
-		ManifestFetcher.ManifestFetchResult result = ManifestFetcher.requestServerModpackContent(storage, connection, secret, allowAskingUser);
+		ManifestFetcher.ManifestFetchResult result = ManifestFetcher.requestServerModpackContent(storage, connection, secret, allowAskingUser, modpackId);
 		if (!result.successful())
 			throw new IOException(result.failure() == null ? "Could not fetch the latest modpack generation" : result.failure().getMessage(), result.failure());
-		DownloadClient client = result.client();
+		PackTransport fetchedTransport = result.transport();
 		try {
 			PackDocument advertised = PackDocument.fromFields(result.content());
 			if (!modpackId.equals(advertised.manifest().modpackId())) throw new IOException("Connected modpack identity does not match the installed pack");
-			StoredModpackConnection session = new StoredModpackConnection(modpackId, connection, secret, result.content(), client);
-			client = null;
+			StoredModpackConnection session = new StoredModpackConnection(modpackId, connection, secret, result.content(), fetchedTransport);
+			fetchedTransport = null;
 			return session;
 		} finally {
-			if (client != null) client.close();
+			if (fetchedTransport != null) fetchedTransport.close();
 		}
 	}
 
@@ -67,20 +66,20 @@ public final class StoredModpackConnection implements AutoCloseable {
 		return advertisedDocument;
 	}
 
-	/** Transfers this session's client ownership to an updater. This connection becomes empty. */
+	/** Transfers this session's transport ownership to an updater. This connection becomes empty. */
 	public synchronized ModpackUpdater newUpdater(SelectedModpackTarget target, ClientStorage storage) throws IOException {
 		if (!modpackId.equals(target.manifest().modpackId())) throw new IOException("Selected modpack identity does not match the connected pack");
-		if (client == null) throw new IllegalStateException("Stored modpack transfer session was already consumed");
-		DownloadClient transferred = client;
-		client = null;
+		if (transport == null) throw new IllegalStateException("Stored modpack transfer session was already consumed");
+		PackTransport transferred = transport;
+		transport = null;
 		return new ModpackUpdater(target, connection, secret, storage, transferred);
 	}
 
 	@Override
 	public synchronized void close() {
-		if (client != null) {
-			client.close();
-			client = null;
+		if (transport != null) {
+			transport.close();
+			transport = null;
 		}
 	}
 }

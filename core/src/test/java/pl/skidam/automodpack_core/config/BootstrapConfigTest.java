@@ -2,6 +2,8 @@ package pl.skidam.automodpack_core.config;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Base64;
+
 import org.junit.jupiter.api.Test;
 
 import pl.skidam.automodpack_core.auth.Secrets;
@@ -53,6 +55,31 @@ class BootstrapConfigTest {
 	}
 
 	@Test
+	void httpBootstrapValidatesAndInstallsWithoutSecret() {
+		ConnectionJsons.KnownHostsBootstrapFields fields = ConfigTools.parse("""
+				{
+				  "origin": "Play.Example.com",
+				  "modpackId": "abc1234",
+				  "endpoint": "Downloads.Example.com:25564",
+				  "connectionMode": "HTTP"
+				}
+				""", ConnectionJsons.KnownHostsBootstrapFields.class);
+
+		BootstrapConfig.Validated validated = BootstrapConfig.validate(fields);
+		assertEquals("play.example.com:25565", AddressHelpers.formatAddress(validated.origin()));
+		assertEquals("downloads.example.com:25564", AddressHelpers.formatAddress(validated.endpoint()));
+		assertEquals("abc1234", validated.modpackId());
+		assertEquals(ModpackConnectionMode.HTTP, validated.connectionMode());
+		assertTrue(validated.installsModpack());
+		assertFalse(validated.hasSecret());
+		assertNull(validated.fingerprint());
+
+		ConnectionJsons.KnownHostsBootstrapFields installed = BootstrapConfig.install(validated.origin(), null, validated.modpackId(), validated.endpoint(), ModpackConnectionMode.HTTP, null);
+		assertEquals(ModpackConnectionMode.HTTP, installed.connectionMode);
+		assertNull(installed.secret);
+	}
+
+	@Test
 	void originAloneIsValidWithoutFingerprint() {
 		ConnectionJsons.KnownHostsBootstrapFields fields = new ConnectionJsons.KnownHostsBootstrapFields();
 		fields.origin = "play.example.com";
@@ -79,7 +106,7 @@ class BootstrapConfigTest {
 		fields.modpackId = "abc1234";
 		fields.endpoint = "downloads.example.com:25564";
 		fields.connectionMode = ModpackConnectionMode.HOLEPUNCH;
-		fields.secret = Secrets.anonymousSecret().secret();
+		fields.secret = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[Secrets.BYTE_LENGTH]);
 		assertThrows(IllegalArgumentException.class, () -> BootstrapConfig.validate(fields));
 	}
 

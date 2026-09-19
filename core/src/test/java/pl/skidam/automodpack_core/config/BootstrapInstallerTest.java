@@ -31,7 +31,7 @@ class BootstrapInstallerTest {
 		ClientStorage storage = TestDataRoot.open(game, data);
 		String secret = Secrets.generateSecret().secret();
 		ConnectionJsons.KnownHostsBootstrapFields fields = BootstrapConfig.install(AddressHelpers.parseOrigin("play.example.com"), FINGERPRINT, "abc1234",
-				AddressHelpers.parseEndpoint("downloads.example.com:25564"), ModpackConnectionMode.DIRECT, secret, "Pack Server");
+				AddressHelpers.parseEndpoint("downloads.example.com:25564"), ModpackConnectionMode.HTTP, secret, "Pack Server");
 		ConfigTools.writeAtomic(storage.bootstrapFile(), fields);
 
 		ClientConfigJsons.ClientConfigFieldsV3 clientConfig = new ClientConfigJsons.ClientConfigFieldsV3();
