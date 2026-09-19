@@ -90,7 +90,7 @@ flow:
   - do: wait_for
     name: show the restart nudge toast on the pre-world disconnect
     timeout: 30s
-    until: { toast: Modpack updated }
+    until: { toast: Restart might fix this }
   - do: quit
     name: stop after the installed group switch succeeded
 
