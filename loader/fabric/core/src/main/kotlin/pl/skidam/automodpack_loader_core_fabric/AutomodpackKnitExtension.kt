@@ -16,6 +16,10 @@ import xyz.bluspring.knit.loader.api.KnitNativeModCompatExtension
  * unselected projection is never exposed. Kilt sees exactly the directory AutoModpack
  * would load from.
  *
+ * The handover is the raw directory, and dedup against the standard mods directory is
+ * Kilt's own (mods already discovered natively are skipped) - that is also what lets a
+ * mod the player pinned there keep shadowing the projection's copy.
+ *
  * Discovered through META-INF/services; runs inside Kilt's scan setup, before any
  * directory is walked. Without Kilt this class is never loaded.
  */

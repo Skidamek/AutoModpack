@@ -43,6 +43,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  */
 public final class ClientStorage {
 	private static final Map<Path, WeakReference<ClientStorage>> OPEN_STORAGE = new HashMap<>();
+	private static volatile IOException scanTimeStateFailure;
 	private final Path gameDirectory;
 	private final Path automodpackDirectory;
 	private final Path clientDirectory;
@@ -437,10 +438,6 @@ public final class ClientStorage {
 	}
 
 	/**
-	 * The active pack pointer, or null when none was persisted yet. Unusable content fails this boot in place and
-	 * fails this boot: the pointer carries the detach flag, so continuing as empty would silently rejoin enforcement.
-	 */
-	/**
 	 * Scan-time approximation of the projection gate in the projection loader: whether an active
 	 * projection exists that the on-disk selection would load. Runs before preload, so it reads
 	 * files only; the authoritative decision applies the boot-recovered configuration later.
@@ -458,17 +455,42 @@ public final class ClientStorage {
 			state = ConfigTools.readUnique(gameDirectory.resolve(CLIENT_ACTIVE_STATE_FILE).normalize(),
 					ClientStorageJsons.ClientGenerationStateFields.class, "Client active state", ClientStorage::validatedActiveState).orElse(null);
 		} catch (IOException e) {
-			LOGGER.debug("Failed to read the client active state, not exposing the projection to directory-scanning loaders", e);
+			// The state is durable, so this is a locked or unreadable file, not corrupt content. The gate cannot decide,
+			// and returning null quietly would let preload load a projection the directory-scanning loaders never
+			// received, so the failure is recorded and the authoritative load refuses to run on this boot.
+			LOGGER.error("Failed to read the client active state; not exposing the projection to directory-scanning loaders", e);
+			scanTimeStateFailure = e;
 			return null;
 		}
 		if (state == null) return null;
 
 		ClientConfigJsons.ClientConfigFieldsV3 config = ConfigTools.read(gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize(), ClientConfigJsons.ClientConfigFieldsV3.class).orElse(null);
-		if (config == null || !config.hasSelectedModpack()) return null;
-		if (!ModpackId.isValid(config.selectedModpackId) || !config.selectedModpackId.equals(state.modpackId)) return null;
+		if (activeSelectionMismatch(config, state) != null) return null;
 		return activeModsDirectory;
 	}
 
+	/** Why the persisted active selection does not match the configured one, or null when the projection would load. */
+	public static String activeSelectionMismatch(ClientConfigJsons.ClientConfigFieldsV3 config, ClientStorageJsons.ClientGenerationStateFields state) {
+		if (config == null || !config.hasSelectedModpack()) return "no modpack is selected";
+		if (!ModpackId.isValid(config.selectedModpackId)) return "the configured selected modpack ID is invalid: " + config.selectedModpackId;
+		if (state == null) return "the active state is missing";
+		if (!config.selectedModpackId.equals(state.modpackId)) return "the active state belongs to " + state.modpackId + ", but the selected modpack is " + config.selectedModpackId;
+		return null;
+	}
+
+	/**
+	 * The scan-time gate's active-state read failure, when it could not decide whether the projection would load. The
+	 * authoritative load refuses to run on a boot where this is set: the projection would load without the loaders that
+	 * discover mods by directory ever receiving it.
+	 */
+	public static IOException scanTimeStateFailure() {
+		return scanTimeStateFailure;
+	}
+
+	/**
+	 * The active pack pointer, or null when none was persisted yet. Unusable content fails this boot in place and is
+	 * never set aside: the pointer carries the detach flag, so continuing as empty would silently rejoin enforcement.
+	 */
 	public ClientStorageJsons.ClientGenerationStateFields readActiveState() throws IOException {
 		return ConfigTools.readUnique(stateFile, ClientStorageJsons.ClientGenerationStateFields.class, "Client active state", ClientStorage::validatedActiveState).orElse(null);
 	}

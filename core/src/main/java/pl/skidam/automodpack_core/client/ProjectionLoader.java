@@ -19,7 +19,6 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoadSelection;
 import pl.skidam.automodpack_core.loader.PinnedMods;
-import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -61,19 +60,15 @@ final class ProjectionLoader {
 		if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return;
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null) return;
-		if (!clientConfig.hasSelectedModpack()) {
-			LOGGER.warn("Skipping active modpack load after preload because an active projection exists but no modpack is selected");
+		String mismatch = ClientStorage.activeSelectionMismatch(clientConfig, state);
+		if (mismatch != null) {
+			LOGGER.warn("Skipping active modpack load after preload because {}", mismatch);
 			return;
 		}
-		if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
-			LOGGER.warn("Skipping active modpack load after preload because the configured selected modpack ID is invalid: {}", clientConfig.selectedModpackId);
-			return;
-		}
-		if (!clientConfig.selectedModpackId.equals(state.modpackId)) {
-			LOGGER.warn("Skipping active modpack load after preload because active state belongs to {}, but the selected modpack is {}", state.modpackId,
-					clientConfig.selectedModpackId);
-			return;
-		}
+		// The scan-time gate could not decide, so the loaders that discover mods by directory never received the
+		// projection; loading only through the loader API would hide that half-loaded state, so fail the boot instead.
+		IOException scanFailure = ClientStorage.scanTimeStateFailure();
+		if (scanFailure != null) throw new IOException("The scan-time projection gate could not read the client active state, so directory-scanning loaders did not receive the projection", scanFailure);
 		loadModpack();
 	}
 
