@@ -378,13 +378,14 @@ public final class OfflineRepair {
 		assertPinned(request, PinnedGeneration.read(storage, request.activeTarget().platform()));
 		Map<Path, Expected> expected = new LinkedHashMap<>();
 		Map<Path, Observation> observations = new HashMap<>();
+		Map<Object, Observation> observationsByFileKey = new HashMap<>();
 		Map<String, EditableResetCandidate> editable = new TreeMap<>();
 		String modpackId = request.activeTarget().manifest().modpackId();
 		String contentToken = request.activeTarget().packTarget().contentToken();
 
 		// The state reader validates editable tombstone identity and canonical paths.
 		storage.readOverlayState(modpackId);
-		Map<String, Observation> overlays = inspectOverlay(modpackId, fileCache, observations);
+		Map<String, Observation> overlays = inspectOverlay(modpackId, fileCache, observations, observationsByFileKey);
 		for (var item : request.activeTarget().flatTarget().list.stream().sorted(Comparator.comparing(value -> LogicalPath.normalize(value.file))).toList()) {
 			String logicalPath = LogicalPath.normalize(item.file);
 			Content content = new Content(item.sha1, item.size);
@@ -393,7 +394,7 @@ public final class OfflineRepair {
 
 			Path livePath = storage.gamePath(logicalPath);
 			if (item.editable) {
-				Observation live = observe(livePath, storage.gameDirectory(), fileCache, observations);
+				Observation live = observe(livePath, storage.gameDirectory(), fileCache, observations, observationsByFileKey);
 				if (!matches(live, content))
 					editable.put(logicalPath, new EditableResetCandidate(logicalPath, content.hash(), content.size(), live == null ? null : live.hash(), live == null ? -1 : live.size(), live == null));
 				Observation overlay = overlays.get(logicalPath);
@@ -416,8 +417,8 @@ public final class OfflineRepair {
 
 		Set<String> ownedLiveMods = new TreeSet<>();
 		for (Expected value : expected.values()) if ((value.place() == Place.LIVE || value.place() == Place.GENERATED_COPY) && ModpackPathPolicy.isModPath(value.logicalPath())) ownedLiveMods.add(value.logicalPath());
-		List<String> unownedMods = inspectMods(request.protectedModPath(), ownedLiveMods, fileCache, observations);
-		for (Expected value : expected.values()) observe(value.path(), value.root(), fileCache, observations);
+		List<String> unownedMods = inspectMods(request.protectedModPath(), ownedLiveMods, fileCache, observations, observationsByFileKey);
+		for (Expected value : expected.values()) observe(value.path(), value.root(), fileCache, observations, observationsByFileKey);
 
 		Map<Content, List<Path>> sources = new HashMap<>();
 		for (Observation observation : observations.values())
@@ -440,7 +441,7 @@ public final class OfflineRepair {
 		return new Analysis(prepared, Map.copyOf(expected), Map.copyOf(observations), immutableSources(sources));
 	}
 
-	private Map<String, Observation> inspectOverlay(String modpackId, FileCache fileCache, Map<Path, Observation> observations) throws IOException {
+	private Map<String, Observation> inspectOverlay(String modpackId, FileCache fileCache, Map<Path, Observation> observations, Map<Object, Observation> observationsByFileKey) throws IOException {
 		Path root = storage.overlayDirectory(modpackId);
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return Map.of();
 		if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client editable overlay root is not a directory: " + root);
@@ -450,14 +451,14 @@ public final class OfflineRepair {
 				if (Files.isSymbolicLink(path)) throw new IOException("Client editable overlay contains a symbolic link: " + path);
 				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 				String relative = LogicalPath.normalize(root.relativize(path).toString());
-				Observation observation = observe(path, root, fileCache, observations);
+				Observation observation = observe(path, root, fileCache, observations, observationsByFileKey);
 				if (observation != null) result.put(relative, observation);
 			}
 		}
 		return Map.copyOf(result);
 	}
 
-	private List<String> inspectMods(Path protectedModPath, Set<String> ownedLiveMods, FileCache fileCache, Map<Path, Observation> observations) throws IOException {
+	private List<String> inspectMods(Path protectedModPath, Set<String> ownedLiveMods, FileCache fileCache, Map<Path, Observation> observations, Map<Object, Observation> observationsByFileKey) throws IOException {
 		Path root = storage.modsDirectory();
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
 		if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Mods path is not a directory: " + root);
@@ -467,14 +468,14 @@ public final class OfflineRepair {
 				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(path)) continue;
 				Path normalized = path.toAbsolutePath().normalize();
 				String logicalPath = LogicalPath.normalize(storage.gameDirectory().relativize(normalized).toString());
-				observe(normalized, storage.gameDirectory(), fileCache, observations);
+				observe(normalized, storage.gameDirectory(), fileCache, observations, observationsByFileKey);
 				if (!ownedLiveMods.contains(logicalPath) && !normalized.equals(protectedModPath)) unowned.add(logicalPath);
 			}
 		}
 		return List.copyOf(unowned);
 	}
 
-	private Observation observe(Path path, Path root, FileCache fileCache, Map<Path, Observation> observations) throws IOException {
+	private Observation observe(Path path, Path root, FileCache fileCache, Map<Path, Observation> observations, Map<Object, Observation> observationsByFileKey) throws IOException {
 		Path normalized = path.toAbsolutePath().normalize();
 		if (observations.containsKey(normalized)) return observations.get(normalized);
 		if (!FileTrees.hasNoSymbolicLinkDescendants(root, normalized)) {
@@ -491,9 +492,13 @@ public final class OfflineRepair {
 		// The repair distrusts persisted hashes, but the projection is a hardlink twin of the CAS object on most
 		// systems: the same bytes read twice. One fresh hash per distinct file this run is still a full check.
 		Object fileKey = fileKey(normalized);
-		if (fileKey != null) for (Observation seen : observations.values()) if (fileKey.equals(seen.fileKey())) return seen;
+		if (fileKey != null) {
+			Observation seen = observationsByFileKey.get(fileKey);
+			if (seen != null) return seen;
+		}
 		Observation observation = new Observation(normalized, fileCache.hash(normalized), Files.size(normalized), false, fileKey);
 		observations.put(normalized, observation);
+		if (fileKey != null) observationsByFileKey.put(fileKey, observation);
 		return observation;
 	}
 
