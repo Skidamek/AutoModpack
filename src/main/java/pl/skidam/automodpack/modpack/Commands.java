@@ -76,7 +76,9 @@ public class Commands {
 			.then(literal("history").executes(Commands::generationHistory))
 			.then(generateStorageNode)
 			.then(literal("export-http")
-					.then(argument("directory", StringArgumentType.greedyString()).executes(Commands::exportHttpTree)));
+					.then(argument("directory", StringArgumentType.greedyString()).executes(Commands::exportHttpTree))
+					.then(literal("--all")
+							.then(argument("directory", StringArgumentType.greedyString()).executes(Commands::exportHttpTreeAll))));
 		var automodpackNode = dispatcher.register(
 				literal("automodpack")
 						.executes(Commands::about)
@@ -409,7 +411,7 @@ public class Commands {
 		send(context, "/automodpack generate preview [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate if-content <content-token> [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate revert <seq> confirm [notes <text...>]", ChatFormatting.YELLOW, false);
-		send(context, "/automodpack generate history/storage [collect confirm]/export-http <dir>", ChatFormatting.YELLOW, false);
+		send(context, "/automodpack generate history/storage [collect confirm]/export-http [--all] <dir>", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack host start/stop/restart/connections/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
@@ -551,12 +553,24 @@ public class Commands {
 	}
 
 	private static int exportHttpTree(CommandContext<CommandSourceStack> context) {
+		return exportHttpTree(context, false);
+	}
+
+	private static int exportHttpTreeAll(CommandContext<CommandSourceStack> context) {
+		return exportHttpTree(context, true);
+	}
+
+	private static int exportHttpTree(CommandContext<CommandSourceStack> context, boolean includeAll) {
 		String directory = StringArgumentType.getString(context, "directory");
 		Util.backgroundExecutor().execute(() -> {
 			send(context, "Exporting the HTTP contract tree...", ChatFormatting.YELLOW, true);
 			try {
-				int written = modpackExecutor.exportHttp(Path.of(directory));
-				send(context, "Exported the HTTP contract tree", ChatFormatting.GREEN, written + " files, " + directory, ChatFormatting.WHITE, true);
+				ModpackExecutor.ExportHttpResult result = modpackExecutor.exportHttp(Path.of(directory), includeAll);
+				if (result instanceof ModpackExecutor.ExportHttpResult.Exported exported) {
+					send(context, exported.receipt(directory), ChatFormatting.GREEN, true);
+				} else if (result instanceof ModpackExecutor.ExportHttpResult.Rejected refused) {
+					send(context, "FAILED: " + refused.detail(), ChatFormatting.RED, true);
+				}
 			} catch (IOException e) {
 				send(context, "FAILED: could not export the HTTP contract tree: " + e.getMessage(), ChatFormatting.RED, true);
 			}

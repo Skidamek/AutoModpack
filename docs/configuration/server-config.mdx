@@ -87,6 +87,7 @@ When a client cannot detect a platform at all, groups without `compatiblePlatfor
 | `validateSecrets` | `true` | Requires a per-player secret, issued through the Minecraft login, for pack downloads. See [security](../security#download-authorization). A standalone host process has no login to provision secrets, so a fresh standalone config defaults this to `false`. |
 | `secretLifetime` | `336` | How long a download secret stays valid, in hours. 336 hours is 14 days. |
 | `exportHttpDirectory` | `""` | Non-empty: after every publish, the URL-contract tree (`head`, `journal`, `objects/`) is exported to this directory, ready to serve with any static HTTPS host. See [HTTP contract export](../how-it-works/hosting#http-contract-export). |
+| `exportHttpIncludeAll` | `false` | Keeps every object in the HTTP contract export, including files Modrinth or CurseForge still serve to clients directly. Off, the platforms carry those downloads and your mirror holds no fallback for a file a platform later deletes; on, the exported tree stays complete. See [HTTP contract export](../how-it-works/hosting#http-contract-export). |
 
 Setting `modpackHost` to `false` turns off every built-in listener while clients keep receiving connection information. AutoModpack cannot validate external routing from the Minecraft server process, so a reverse proxy setup is your responsibility; the [proxies page](../compatibility/proxies) covers known-good setups.
 

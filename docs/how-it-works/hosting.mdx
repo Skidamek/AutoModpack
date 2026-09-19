@@ -37,6 +37,10 @@ Setting `modpackHost` to `false` turns off every built-in listener and holepunch
 
 The whole URL contract is three GET routes — `/head`, `/journal`, and `/objects/<sha1>` — so any static HTTPS host can serve it. `/automodpack generate export-http <directory>` writes the tree as byte-for-byte copies of the hosted files: point nginx, S3, or any dumb file host at the directory and clients cannot tell it apart from the embedded listener. The export works in every connection mode and needs no listener, and nothing already in the directory is ever deleted, so stale objects from old generations are yours to collect. Setting `exportHttpDirectory` in the [server config](../configuration/server-config#network-and-hosting) does the same export automatically after every publish.
 
+By default the export also resolves each object against Modrinth and CurseForge and leaves out the files those platforms still serve themselves — clients download those from the platforms' own CDNs, exactly as they do for the built-in host. A hit only counts when the platform reports the same file size as the hosted object, and anything unresolvable, including API failures, stays in the tree. The command reports the outcome as `Exported N files to <dir> (M objects omitted: served by Modrinth/CurseForge; K unresolvable → included)`; the automatic export after a publish logs the same line. Set `exportHttpIncludeAll` or pass `--all` to the export command to keep every object in the tree, restoring your host as the backstop for platform link rot.
+
+The exported tree is public to whoever the static host serves, and everything in it is published under your license responsibility. Pruned objects are fetched by clients directly from the platforms' own CDNs, not from your mirror, but a file a platform later deletes has no fallback on a pruned mirror.
+
 ## Bandwidth
 
 `bandwidthLimit` caps upload speed per client in MiB/s; `0` disables the cap. Much of the typical download never touches your server in the first place, because clients fetch files from Modrinth and CurseForge where possible, as described in [client updates](client-updates#where-files-come-from).

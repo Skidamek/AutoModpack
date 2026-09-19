@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,9 +26,11 @@ import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
+import pl.skidam.automodpack_core.platforms.PlatformSourceLookup;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.StoragePaths;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 class ModpackExecutorTest {
 	@TempDir
@@ -324,26 +327,153 @@ class ModpackExecutorTest {
 			assertTrue(Files.exists(autoExport.resolve(GenerationHosting.JOURNAL_KEY)));
 
 			Path exportRoot = tempDir.resolve("manual-export");
-			int written = executor.exportHttp(exportRoot);
+			ModpackExecutor.ExportHttpResult.Exported exported = assertInstanceOf(ModpackExecutor.ExportHttpResult.Exported.class, executor.exportHttp(exportRoot));
 			GenerationStore store = new GenerationStore(generationRoot, DataRootResolver.resolve(server).layout().objectsDirectory());
 			var hosting = store.hosting().asMap();
-			assertEquals(hosting.size(), written);
+			assertEquals(hosting.size(), exported.exportedCount());
+			assertEquals(0, exported.omittedCount());
+			assertEquals(hosting.size() - 2, exported.unresolvableCount());
 			for (Map.Entry<String, Path> entry : hosting.entrySet()) {
-				Path exported = entry.getKey().equals(GenerationHosting.HEAD_DOCUMENT_KEY) || entry.getKey().equals(GenerationHosting.JOURNAL_KEY)
+				Path exportedPath = entry.getKey().equals(GenerationHosting.HEAD_DOCUMENT_KEY) || entry.getKey().equals(GenerationHosting.JOURNAL_KEY)
 						? exportRoot.resolve(entry.getKey())
 						: exportRoot.resolve("objects").resolve(entry.getKey().toLowerCase(Locale.ROOT));
-				assertArrayEquals(Files.readAllBytes(entry.getValue()), Files.readAllBytes(exported), entry.getKey());
+				assertArrayEquals(Files.readAllBytes(entry.getValue()), Files.readAllBytes(exportedPath), entry.getKey());
 			}
 
 			// Deterministic and idempotent, with a relative target resolved against the server root.
-			assertEquals(written, executor.exportHttp(exportRoot));
-			assertEquals(written, executor.exportHttp(Path.of("relative-export")));
+			assertEquals(exported, executor.exportHttp(exportRoot));
+			assertEquals(exported, executor.exportHttp(Path.of("relative-export")));
 			assertTrue(Files.exists(server.resolve("relative-export").resolve(GenerationHosting.HEAD_DOCUMENT_KEY)));
 		} finally {
 			executor.stop();
 			snapshot.restore();
 			if (previous == null) System.clearProperty(StoragePaths.DATA_ROOT_PROPERTY);
 			else System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, previous);
+		}
+	}
+
+	@Test
+	void exportHttpPrunesPlatformServedObjectsAndReportsTheReceipt() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("host-modpack");
+		Path generationRoot = tempDir.resolve("host-generations");
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.writeString(groups.resolve("main/config/platform-served.txt"), "platform-served", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/host-only.txt"), "host-only", StandardCharsets.UTF_8);
+
+		ConstantsSnapshot snapshot = new ConstantsSnapshot();
+		ServerConfigJsons.ServerConfigFieldsV3 fixture = config();
+		fixture.autoExcludeUnnecessaryFiles = true;
+		Constants.serverConfig = fixture;
+		Constants.AM_VERSION = "test";
+		Constants.LOADER = "test";
+		Constants.LOADER_VERSION = "test";
+		Constants.MC_VERSION = "test";
+		Map<String, Long> platformServed = new HashMap<>();
+		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
+		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot, new GenerationStore(generationRoot, tempDir.resolve("objects")),
+				new ModpackCandidateScanner()::scan, creation, hosting -> {}, () -> fixture, queries -> {
+					Map<String, Long> hits = new HashMap<>();
+					for (PlatformSourceLookup.Query query : queries) if (platformServed.containsKey(query.sha1())) hits.put(query.sha1(), platformServed.get(query.sha1()));
+					return hits;
+				});
+		try {
+			assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
+
+			Map<String, Path> objects = new HashMap<>();
+			for (Map.Entry<String, Path> entry : new GenerationStore(generationRoot, tempDir.resolve("objects")).hosting().asMap().entrySet())
+				if (!entry.getKey().equals(GenerationHosting.HEAD_DOCUMENT_KEY) && !entry.getKey().equals(GenerationHosting.JOURNAL_KEY))
+					objects.put(HashUtils.normalizeSha1(entry.getKey()), entry.getValue());
+			assertEquals(3, objects.size());
+			String platformSha = HashUtils.sha1("platform-served".getBytes(StandardCharsets.UTF_8));
+			String hostOnlySha = HashUtils.sha1("host-only".getBytes(StandardCharsets.UTF_8));
+			assertTrue(objects.keySet().containsAll(Set.of(platformSha, hostOnlySha)));
+
+			// A platform hit with a matching size prunes the object from the tree.
+			platformServed.put(platformSha, Files.size(objects.get(platformSha)));
+			Path mirror = tempDir.resolve("mirror");
+			ModpackExecutor.ExportHttpResult.Exported exported = assertInstanceOf(ModpackExecutor.ExportHttpResult.Exported.class, executor.exportHttp(mirror));
+			assertEquals(4, exported.exportedCount());
+			assertEquals(1, exported.omittedCount());
+			assertEquals(2, exported.unresolvableCount());
+			assertTrue(Files.exists(mirror.resolve(GenerationHosting.HEAD_DOCUMENT_KEY)));
+			assertTrue(Files.exists(mirror.resolve(GenerationHosting.JOURNAL_KEY)));
+			assertTrue(Files.notExists(mirror.resolve("objects").resolve(platformSha)));
+			assertArrayEquals(Files.readAllBytes(objects.get(hostOnlySha)), Files.readAllBytes(mirror.resolve("objects").resolve(hostOnlySha)));
+			assertEquals("Exported 4 files to " + mirror + " (1 objects omitted: served by Modrinth/CurseForge; 2 unresolvable → included)", exported.receipt(mirror.toString()));
+
+			// Deterministic and idempotent.
+			assertEquals(exported, executor.exportHttp(mirror));
+
+			// A hit whose reported size differs is a collision: the object stays in the tree as unresolvable.
+			platformServed.put(platformSha, Files.size(objects.get(platformSha)) + 1);
+			ModpackExecutor.ExportHttpResult.Exported mismatched = assertInstanceOf(ModpackExecutor.ExportHttpResult.Exported.class, executor.exportHttp(tempDir.resolve("mirror-mismatch")));
+			assertEquals(5, mismatched.exportedCount());
+			assertEquals(0, mismatched.omittedCount());
+			assertEquals(3, mismatched.unresolvableCount());
+			assertTrue(Files.exists(tempDir.resolve("mirror-mismatch").resolve("objects").resolve(platformSha)));
+
+			// No platform resolves anything: every object is included as unresolvable.
+			platformServed.clear();
+			ModpackExecutor.ExportHttpResult.Exported unresolvable = assertInstanceOf(ModpackExecutor.ExportHttpResult.Exported.class, executor.exportHttp(tempDir.resolve("mirror-unresolvable")));
+			assertEquals(5, unresolvable.exportedCount());
+			assertEquals(0, unresolvable.omittedCount());
+			assertEquals(3, unresolvable.unresolvableCount());
+
+			// The command's --all flag exports everything the platforms would serve.
+			platformServed.put(platformSha, Files.size(objects.get(platformSha)));
+			ModpackExecutor.ExportHttpResult.Exported flagAll = assertInstanceOf(ModpackExecutor.ExportHttpResult.Exported.class, executor.exportHttp(tempDir.resolve("mirror-flag-all"), true));
+			assertEquals(5, flagAll.exportedCount());
+			assertEquals(0, flagAll.omittedCount());
+			assertEquals(0, flagAll.unresolvableCount());
+			assertTrue(Files.exists(tempDir.resolve("mirror-flag-all").resolve("objects").resolve(platformSha)));
+
+			// The config flag keeps the same backstop without the command flag.
+			fixture.exportHttpIncludeAll = true;
+			ModpackExecutor.ExportHttpResult.Exported configAll = assertInstanceOf(ModpackExecutor.ExportHttpResult.Exported.class, executor.exportHttp(tempDir.resolve("mirror-config-all")));
+			assertEquals(flagAll, configAll);
+			assertTrue(Files.exists(tempDir.resolve("mirror-config-all").resolve("objects").resolve(platformSha)));
+		} finally {
+			executor.stop();
+			creation.shutdownNow();
+			snapshot.restore();
+		}
+	}
+
+	@Test
+	void exportHttpRefusesPrivatePacks() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("host-modpack");
+		Path generationRoot = tempDir.resolve("host-generations");
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.writeString(groups.resolve("main/config/example.txt"), "content", StandardCharsets.UTF_8);
+
+		ConstantsSnapshot snapshot = new ConstantsSnapshot();
+		ServerConfigJsons.ServerConfigFieldsV3 fixture = config();
+		fixture.validateSecrets = true;
+		fixture.exportHttpDirectory = tempDir.resolve("auto-export").toString();
+		Constants.serverConfig = fixture;
+		Constants.AM_VERSION = "test";
+		Constants.LOADER = "test";
+		Constants.LOADER_VERSION = "test";
+		Constants.MC_VERSION = "test";
+		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
+		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot, new GenerationStore(generationRoot, tempDir.resolve("objects")),
+				new ModpackCandidateScanner()::scan, creation, hosting -> {}, () -> fixture, PlatformSourceLookup.none());
+		try {
+			assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
+
+			// The publish-time hook refuses instead of exporting a private pack's contract.
+			assertTrue(Files.notExists(tempDir.resolve("auto-export").resolve(GenerationHosting.HEAD_DOCUMENT_KEY)));
+
+			ModpackExecutor.ExportHttpResult.Rejected refused = assertInstanceOf(ModpackExecutor.ExportHttpResult.Rejected.class, executor.exportHttp(tempDir.resolve("mirror")));
+			assertEquals("The pack validates download secrets, which a public mirror cannot enforce", refused.detail());
+			assertNull(refused.cause());
+			assertTrue(Files.notExists(tempDir.resolve("mirror")));
+		} finally {
+			executor.stop();
+			creation.shutdownNow();
+			snapshot.restore();
 		}
 	}
 
@@ -355,6 +485,7 @@ class ModpackExecutorTest {
 		config.modpack = Map.of("General", Map.of("main", main));
 		config.autoExcludeUnnecessaryFiles = false;
 		config.autoExcludeServerSideMods = false;
+		config.validateSecrets = false;
 		return config;
 	}
 
