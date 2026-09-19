@@ -7,6 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.DosFileAttributeView;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -243,6 +247,92 @@ class OfflineRepairTest {
 		assertTrue(storage.isDetached(target.manifest().modpackId()), "repair keeps the pack detached");
 		assertEquals(target.document().contentToken(), storage.readActiveState().contentToken);
 		assertEquals(journalBefore, new JournalMirror(storage).entries(target.manifest().modpackId()), "repair never rewrites the mirror");
+	}
+
+	@Test
+	void leavesOnlyUnavailableFindingsAfterApplyingEveryLocalRepair() throws Exception {
+		ClientStorage storage = storage();
+		byte[] alpha = "amp-autotest-alpha-v2\n".getBytes(StandardCharsets.UTF_8);
+		byte[] beta = "{\"id\":\"beta\",\"value\":43}".getBytes(StandardCharsets.UTF_8);
+		byte[] delta = "delta-v2\n".getBytes(StandardCharsets.UTF_8);
+		byte[] shared = "pack-a-default\n".getBytes(StandardCharsets.UTF_8);
+		byte[] edited = "pack-a-local\n".getBytes(StandardCharsets.UTF_8);
+		String alphaHash = HashUtils.sha1(alpha);
+		String betaHash = HashUtils.sha1(beta);
+		String deltaHash = HashUtils.sha1(delta);
+		SelectedModpackTarget target = install(storage,
+				new FileSpec("config/alpha.txt", "config", false, alphaHash, alpha.length),
+				new FileSpec("config/beta.json", "config", false, betaHash, beta.length),
+				new FileSpec("config/delta.txt", "config", false, deltaHash, delta.length),
+				new FileSpec("config/shared.txt", "config", true, HashUtils.sha1(shared), shared.length));
+		String modpackId = target.manifest().modpackId();
+		for (byte[] content : List.of(alpha, beta, delta, shared)) {
+			String hash = HashUtils.sha1(content);
+			write(storage.objectFile(hash), content);
+		}
+		link(storage.objectFile(alphaHash), storage.activePath("config/alpha.txt"));
+		link(storage.objectFile(betaHash), storage.activePath("config/beta.json"));
+		link(storage.objectFile(deltaHash), storage.activePath("config/delta.txt"));
+		link(storage.objectFile(HashUtils.sha1(shared)), storage.activePath("config/shared.txt"));
+		write(storage.gamePath("config/alpha.txt"), alpha);
+		write(storage.gamePath("config/beta.json"), beta);
+		write(storage.gamePath("config/delta.txt"), delta);
+		write(storage.gamePath("config/shared.txt"), shared);
+		Path unowned = write(storage.modsDirectory().resolve("local-unowned.jar"), "unowned".getBytes(StandardCharsets.UTF_8));
+		StateHistory.snapshotIfDirty(storage, Set.of(), ClientStateJournal.Kind.INSTALL, modpackId, "install");
+		write(storage.gamePath("config/shared.txt"), edited);
+		write(storage.overlayFile(modpackId, "config/shared.txt"), edited);
+		ClientObjectStore.storeObject(storage, HashUtils.sha1(edited), edited);
+		byte[] corrupt = "AutoModpack autotester deliberate corruption\n".getBytes(StandardCharsets.UTF_8);
+		corruptInPlace(storage.objectFile(alphaHash), corrupt);
+		corruptInPlace(storage.gamePath("config/beta.json"), corrupt);
+		Files.deleteIfExists(storage.objectFile(deltaHash));
+		Files.deleteIfExists(storage.activePath("config/delta.txt"));
+		Files.deleteIfExists(storage.gamePath("config/delta.txt"));
+		OfflineRepair repair = new OfflineRepair(storage);
+
+		OfflineRepair.Prepared before = repair.inspect(new OfflineRepair.Request(target, Set.of(), null));
+		OfflineRepair.Receipt receipt = repair.apply(before, Set.of("config/shared.txt"), Set.of("mods/local-unowned.jar"));
+
+		assertEquals(List.of("mods/local-unowned.jar"), before.unownedModPaths());
+		OfflineRepair.Prepared after = receipt.after();
+		Set<String> repairable = after.findings().stream().filter(OfflineRepair.Finding::locallyRepairable)
+				.map(finding -> finding.place() + " " + finding.logicalPath()).collect(Collectors.toSet());
+		assertEquals(Set.of(), repairable, "every locally repairable byte must be repaired");
+		assertTrue(after.findings().stream().allMatch(finding -> finding.condition() == OfflineRepair.Condition.MISSING && finding.logicalPath().equals("config/delta.txt")),
+				() -> "only the unavailable delta may remain: " + after.findings());
+		assertTrue(after.editableResetCandidates().isEmpty());
+		assertTrue(after.unownedModPaths().isEmpty());
+		assertTrue(after.requiresUpdate());
+		assertFalse(Files.exists(unowned));
+		assertEquals("pack-a-default\n", Files.readString(storage.gamePath("config/shared.txt"), StandardCharsets.UTF_8));
+		assertEquals("amp-autotest-alpha-v2\n", Files.readString(storage.gamePath("config/alpha.txt"), StandardCharsets.UTF_8));
+		assertEquals("{\"id\":\"beta\",\"value\":43}", Files.readString(storage.gamePath("config/beta.json"), StandardCharsets.UTF_8));
+	}
+
+	private void link(Path existing, Path linkPath) throws Exception {
+		Files.createDirectories(linkPath.getParent());
+		Files.createLink(linkPath, existing);
+	}
+
+	private void corruptInPlace(Path path, byte[] payload) throws Exception {
+		PosixFileAttributeView posix = Files.getFileAttributeView(path, PosixFileAttributeView.class);
+		DosFileAttributeView dos = Files.getFileAttributeView(path, DosFileAttributeView.class);
+		Set<PosixFilePermission> original = posix == null ? null : posix.readAttributes().permissions();
+		boolean readOnly = dos != null && dos.readAttributes().isReadOnly();
+		if (posix != null) {
+			Set<PosixFilePermission> writable = EnumSet.copyOf(original);
+			writable.add(PosixFilePermission.OWNER_WRITE);
+			posix.setPermissions(writable);
+		} else if (readOnly) {
+			dos.setReadOnly(false);
+		}
+		try {
+			Files.write(path, payload);
+		} finally {
+			if (posix != null) posix.setPermissions(original);
+			else if (readOnly) dos.setReadOnly(true);
+		}
 	}
 
 	private ClientStorage storage() throws Exception {

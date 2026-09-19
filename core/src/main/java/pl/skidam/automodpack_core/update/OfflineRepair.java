@@ -491,10 +491,14 @@ public final class OfflineRepair {
 		}
 		// The repair distrusts persisted hashes, but the projection is a hardlink twin of the CAS object on most
 		// systems: the same bytes read twice. One fresh hash per distinct file this run is still a full check.
+		// The twin's observation must also be recorded under this path, or the findings pass reads the path as missing.
 		Object fileKey = fileKey(normalized);
 		if (fileKey != null) {
 			Observation seen = observationsByFileKey.get(fileKey);
-			if (seen != null) return seen;
+			if (seen != null) {
+				observations.put(normalized, seen);
+				return seen;
+			}
 		}
 		Observation observation = new Observation(normalized, fileCache.hash(normalized), Files.size(normalized), false, fileKey);
 		observations.put(normalized, observation);
