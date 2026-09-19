@@ -30,6 +30,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
+import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.JournalMirror;
 import pl.skidam.automodpack_core.update.ReviewedUpdatePlan;
@@ -62,7 +63,7 @@ final class UpdateSession implements UpdateAttempt {
 	private ClientUpdatePlanBuilder.PreparedPlan prepared;
 	private ReviewedUpdatePlan review;
 	private UpdatePlan appliedPlan;
-	private String stateKind;
+	private ClientStateJournal.Kind stateKind;
 
 	UpdateSession(ClientStorage storage, ClientUpdatePlanBuilder planBuilder, ModpackObjectAcquisition objectAcquisition, SourceCatalogue sourceCatalogue,
 			Changelogs changelogs, ConnectionJsons.ConnectionInfo connectionInfo, SelectedModpackTarget target, boolean firstConnection,
@@ -255,7 +256,7 @@ final class UpdateSession implements UpdateAttempt {
 	private UpdateTransactionExecutor.Execution commitPlanObjects(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
 		planBuilder.preparePlanObjects(prepared.plan(), target.flatTarget());
 		UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig());
-		transaction.stateKind = stateKind == null ? "" : stateKind;
+		transaction.stateKind = stateKind == null ? "" : stateKind.name();
 		return UpdateTransactionSupport.executor().commit(transaction, target);
 	}
 
@@ -264,7 +265,7 @@ final class UpdateSession implements UpdateAttempt {
 	 * mutation's meaning better than the purpose mapping - the generation rollback - labels it here, and the label
 	 * survives replans because it rides the session, not the plan.
 	 */
-	void declareStateKind(String kind) {
+	void declareStateKind(ClientStateJournal.Kind kind) {
 		this.stateKind = Objects.requireNonNull(kind, "kind");
 	}
 

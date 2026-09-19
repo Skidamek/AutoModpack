@@ -200,7 +200,7 @@ public class ModpackUpdater implements AutoCloseable {
 		UpdateAttempt current = attempt.get();
 		if (!(current instanceof UpdateSession session)) throw new IllegalStateException("Installed modpack switch was not prepared");
 		new ClientGenerationStore(storage).declareDetached(selectedTarget.manifest().modpackId());
-		session.declareStateKind(ClientStateJournal.Kind.ROLLBACK.name());
+		session.declareStateKind(ClientStateJournal.Kind.ROLLBACK);
 		applyInstalledSwitch();
 	}
 
@@ -419,6 +419,7 @@ public class ModpackUpdater implements AutoCloseable {
 			LOGGER.error("Automatic restart loop detected. AutoModpack already requested two rapid restarts for the same correction state.");
 			LOGGER.error("Corrections were applied but still require a restart: {}", String.join(", ", applyResult.reasonDescriptions()));
 			LOGGER.error("Another automatic restart was suppressed. The modpack may not be fully active; inspect the surrounding logs and report recurring issues at https://github.com/Skidamek/AutoModpack/issues");
+			if (!changelogs.changedOrRemovedPaths().isEmpty()) SessionUpdateState.markAppliedContentNotLoaded();
 			return;
 		}
 		new ReLauncher(RestartDecision.launchRestartType(review.firstConnection(), applyResult.restartReasons()), changelogs).restart(true);
