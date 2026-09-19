@@ -43,12 +43,6 @@ public class NetUtils {
 	// surfaces faster through its own 60 s read deadline closing the socket. 90 s is 1.5x that
 	// window, so the stall fuse is never the first thing to fire on a healthy connection.
 	public static final Duration TRANSFER_WRITE_STALL_TIMEOUT = Duration.ofSeconds(90);
-	// The pre-configuration lifetime tripwire: while the human decides on certificate trust the server must never reap
-	// the socket for idleness, so pre-configuration sockets are bounded only by this one window. It sits an order of
-	// magnitude past the transfer idle deadline (60 s) and far past the connect-grade network timeout (15 s) - generous
-	// for a slow human reading the fingerprint plus a slow first TLS handshake, tight enough that a client which died at
-	// the screen cannot pin a server socket forever.
-	public static final Duration PRE_CONFIGURATION_LIFETIME = Duration.ofMinutes(10);
 	// Pre-configuration keepalive cadence: NAT mappings and holepunch relay bindings typically decay after 30-60s of
 	// silence, so a 20s heartbeat sits well inside that band while costing the parked client one tiny ranged GET.
 	public static final Duration PRE_CONFIGURATION_KEEPALIVE_INTERVAL = Duration.ofSeconds(20);

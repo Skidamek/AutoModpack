@@ -40,6 +40,7 @@ public class DownloadManager implements DownloadView {
 	/** Finished acquisitions so far: files acquired successfully, then files failed for good. Survives {@link #cancelAllAndShutdown()}. */
 	public record AcquisitionProgress(long acquired, long failed) {}
 
+	// Matches DownloadClient.MAX_CONNECTIONS so every download worker owns one pipeline lane; big files never queue behind another on the same lane.
 	private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
 	private static final int MAX_DOWNLOAD_ATTEMPTS = 2;
 	// Domain label for transfers served by the attached AutoModpack host client instead of a remote platform source.

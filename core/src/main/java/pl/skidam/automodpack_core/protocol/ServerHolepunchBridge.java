@@ -73,7 +73,7 @@ public final class ServerHolepunchBridge {
 		pipeline.addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, NettyServer.HTTP_IDLE_REAP_SECONDS));
 		pipeline.addLast("traffic-shaper", server.trafficHandler());
 		server.installContractHandlers(pipeline);
-		SslHandler sslHandler = (SslHandler) pipeline.get("tls");
+		SslHandler sslHandler = pipeline.get(SslHandler.class);
 		if (sslHandler != null) {
 			sslHandler.handshakeFuture().addListener(future -> {
 				if (future.isSuccess()) {

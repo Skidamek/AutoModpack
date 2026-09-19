@@ -559,6 +559,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		try {
 			channel.eventLoop().execute(action);
 		} catch (RejectedExecutionException rejected) {
+			// The loop is shutting down with its channel; there is no stream left to finish.
 		}
 	}
 }

@@ -45,6 +45,7 @@ class Connection implements AutoCloseable {
 
 	private static final byte[] CRLF = {'\r', '\n'};
 	private static final String ACCEPT_ENCODING = "Accept-Encoding: zstd\r\n";
+	// Our own server never redirects; the cap exists for foreign static hosts, so only a misconfigured redirect loop touches it.
 	private static final int MAX_REDIRECTS = 3;
 	// Response header lines are tiny; a line past this or a block of this many lines is a hostile or broken peer.
 	private static final int MAX_HEADER_LINE_BYTES = 8 * 1024;
