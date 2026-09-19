@@ -463,8 +463,7 @@ public final class ClientStorage {
 		}
 		if (state == null) return null;
 
-		ClientConfigJsons.ClientConfigFieldsV3 config =
-				ConfigTools.read(gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize(), ClientConfigJsons.ClientConfigFieldsV3.class).orElse(null);
+		ClientConfigJsons.ClientConfigFieldsV3 config = ConfigTools.read(gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize(), ClientConfigJsons.ClientConfigFieldsV3.class).orElse(null);
 		if (config == null || !config.hasSelectedModpack()) return null;
 		if (!ModpackId.isValid(config.selectedModpackId) || !config.selectedModpackId.equals(state.modpackId)) return null;
 		return activeModsDirectory;
