@@ -359,7 +359,7 @@ def assert_bootstrap_import(ctx, _step):
 
 @verb("assert_authenticated_secret")
 def assert_authenticated_secret(ctx, _step):
-    """Assert the connection mode's honest secret state: custom modes persist an issued secret, HTTP persists none."""
+    """Assert the login persisted the secret it issued, in every connection mode; only login-less preload shapes store absence."""
     modpack_id = str(ctx.vars.get("bootstrap_modpack_id", ""))
     origin = str(ctx.vars.get("bootstrap_origin", ""))
     if not modpack_id or not origin:
@@ -370,13 +370,6 @@ def assert_authenticated_secret(ctx, _step):
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"authenticated secret state is not readable: {error}") from error
     client_secret = (connection.get("secrets", {}) or {}).get(origin)
-    mode = str((ctx.scenario.get("connectionPath") or {}).get("mode", "")).upper()
-    if mode == "HTTP":
-        # HTTP serves a fully public pack: no secret is issued, so absence persisted as absence is the receipt.
-        if client_secret is not None:
-            raise AssertionError("HTTP login unexpectedly persisted a client secret for the bootstrap origin")
-        ctx.vars["authenticated_secret_persisted"] = False
-        return
     if not isinstance(client_secret, dict):
         raise AssertionError("authenticated login did not persist a client secret for the bootstrap origin")
     server_secrets_path = ctx.server_dir / "automodpack" / "server" / "secrets.json"
@@ -394,7 +387,6 @@ def assert_authenticated_secret(ctx, _step):
         raise AssertionError("server did not persist the secret issued during authenticated login")
     if not any(isinstance(entry.get("name"), str) and entry.get("name") for entry in matching_server_secrets):
         raise AssertionError("server persisted the secret without the player name it was issued to")
-    ctx.vars["authenticated_secret_persisted"] = True
 
 
 @verb("seed_unowned_local_file")

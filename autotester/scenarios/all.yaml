@@ -10,8 +10,8 @@ renderClient: true
 # Run the complete release gate independently through each supported opening.
 # MAGIC shares the Minecraft listener behind the pre-TLS handshake while
 # HOLEPUNCH takes over the marked Login stream; HTTP runs the dedicated
-# listener and serves the pack over plain HTTPS file semantics for a fully
-# public pack. Every mode serves the same HTTP wire after the opening.
+# listener. Every mode serves the same HTTP wire after the opening, with the
+# same per-request bearer-secret validation.
 connectionPaths:
   - mode: MAGIC
     bindPort: -1
@@ -170,7 +170,7 @@ flow:
     patchNotes: "Initial release: core content and optional client groups."
     timeout: 300s
   - do: assert_authenticated_secret
-    name: verify the login persisted the connection mode's honest secret state
+    name: verify the login persisted the issued secret
   - do: assert_generation
     name: verify advanced group metadata and latest notes were installed
     groups:
