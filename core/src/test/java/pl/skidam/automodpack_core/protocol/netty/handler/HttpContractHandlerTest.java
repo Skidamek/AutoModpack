@@ -2,10 +2,13 @@ package pl.skidam.automodpack_core.protocol.netty.handler;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -16,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import io.airlift.compress.zstd.ZstdInputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
@@ -157,6 +161,97 @@ class HttpContractHandlerTest {
 			assertEquals(new String(headBytes, StandardCharsets.UTF_8), bodyOf(full));
 		}
 		assertTrue(channel.isOpen());
+	}
+
+	@Test
+	void documentsCompressForZstdClientsAndDecodeToIdentity() throws Exception {
+		Fixture fixture = fixture();
+		byte[] headBytes = Files.readAllBytes(fixture.headPath());
+		EmbeddedChannel channel = channel();
+
+		byte[] response = exchangeBytes(channel, request("/head", "Accept-Encoding: zstd"));
+		String head = headOf(response);
+		byte[] body = bodyOf(response);
+		assertTrue(head.startsWith("HTTP/1.1 200 OK\r\n"), head);
+		assertTrue(head.contains("Content-Encoding: zstd\r\n"), head);
+		assertTrue(head.contains("Vary: Accept-Encoding\r\n"), head);
+		assertTrue(head.contains("Content-Length: " + body.length + "\r\n"), head);
+		assertArrayEquals(headBytes, zstdDecode(body));
+
+		// A header listing several encodings with q-values still token-matches zstd.
+		byte[] listed = exchangeBytes(channel, request("/head", "Accept-Encoding: gzip;q=1.0, identity;q=0.5, zstd"));
+		assertTrue(headOf(listed).contains("Content-Encoding: zstd\r\n"), headOf(listed));
+
+		// Objects stay identity so Range and resume stay trivial.
+		byte[] object = exchangeBytes(channel, request("/objects/" + fixture.objectHash(), "Accept-Encoding: zstd"));
+		assertFalse(headOf(object).contains("Content-Encoding"), headOf(object));
+		assertArrayEquals(fixture.objectContent().getBytes(StandardCharsets.UTF_8), bodyOf(object));
+		assertTrue(channel.isOpen());
+	}
+
+	@Test
+	void aNotModifiedAnswerStaysBodylessUnderAnyEncoding() throws Exception {
+		Fixture fixture = fixture();
+		String etag = HashUtils.getHash(fixture.headPath());
+		EmbeddedChannel channel = channel();
+
+		String response = exchange(channel, request("/head", "If-None-Match: \"" + etag + "\"", "Accept-Encoding: zstd"));
+		assertTrue(response.startsWith("HTTP/1.1 304 Not Modified\r\n"), response);
+		assertFalse(response.contains("Content-Encoding"), response);
+		assertEquals("", bodyOf(response));
+	}
+
+	@Test
+	void documentsWithoutTheEncodingHeaderStayIdentity() throws Exception {
+		Fixture fixture = fixture();
+		EmbeddedChannel channel = channel();
+
+		String response = exchange(channel, request("/head"));
+		assertTrue(response.startsWith("HTTP/1.1 200 OK\r\n"), response);
+		assertFalse(response.contains("Content-Encoding"), response);
+		assertFalse(response.contains("Vary:"), response);
+	}
+
+	private static byte[] zstdDecode(byte[] compressed) throws Exception {
+		try (ZstdInputStream zstd = new ZstdInputStream(new ByteArrayInputStream(compressed))) {
+			return zstd.readAllBytes();
+		}
+	}
+
+	private static byte[] exchangeBytes(EmbeddedChannel channel, String request) {
+		channel.writeInbound(Unpooled.wrappedBuffer(request.getBytes(StandardCharsets.UTF_8)));
+		channel.runPendingTasks();
+		ByteArrayOutputStream response = new ByteArrayOutputStream();
+		Object message;
+		while ((message = channel.readOutbound()) != null) {
+			try {
+				ByteBuf buffer = (ByteBuf) message;
+				byte[] bytes = new byte[buffer.readableBytes()];
+				buffer.readBytes(bytes);
+				response.writeBytes(bytes);
+			} finally {
+				ReferenceCountUtil.release(message);
+			}
+		}
+		return response.toByteArray();
+	}
+
+	private static String headOf(byte[] response) {
+		for (int i = 0; i < response.length - 3; i++) {
+			if (response[i] == '\r' && response[i + 1] == '\n' && response[i + 2] == '\r' && response[i + 3] == '\n') {
+				return new String(response, 0, i + 4, StandardCharsets.UTF_8);
+			}
+		}
+		return new String(response, StandardCharsets.UTF_8);
+	}
+
+	private static byte[] bodyOf(byte[] response) {
+		for (int i = 0; i < response.length - 3; i++) {
+			if (response[i] == '\r' && response[i + 1] == '\n' && response[i + 2] == '\r' && response[i + 3] == '\n') {
+				return Arrays.copyOfRange(response, i + 4, response.length);
+			}
+		}
+		return new byte[0];
 	}
 
 	@Test

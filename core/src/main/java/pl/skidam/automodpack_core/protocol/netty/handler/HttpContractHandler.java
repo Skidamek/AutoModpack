@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.Constants.serverConfig;
 import static pl.skidam.automodpack_core.protocol.NetUtils.DEFAULT_CHUNK_SIZE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.TRANSFER_WRITE_STALL_TIMEOUT;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
@@ -19,6 +20,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
+import io.airlift.compress.zstd.ZstdOutputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -41,8 +43,11 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  */
 public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
-	/** Tripwire past any real request header block; only broken things or unbounded pipeliners touch it. */
+	/** Tripwire past any real request header block; an honest client holds ≤ 8 requests ≈ 2 KB of headers in flight, 4× under this cap; only a pipelining abuser touches it. */
 	private static final int MAX_HEADER_BLOCK_BYTES = 8 * 1024;
+
+	/** Compressed-document buffer tripwire: a 3000-file pack's head is ~1 MB, so this sits past any real head or journal; only a broken or adversarial document touches it. */
+	private static final int MAX_COMPRESSED_DOCUMENT_BYTES = 16 * 1024 * 1024;
 
 	private static final String BEARER_PREFIX = "Bearer ";
 
@@ -60,7 +65,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	private final NettyServer server;
 	private final Executor senders;
 	private ByteBuf cumulation;
-	private boolean streaming;
+	private volatile boolean streaming;
 
 	public HttpContractHandler(NettyServer server, Executor senders) {
 		this.server = server;
@@ -181,6 +186,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		String ifNoneMatch = null;
 		String range = null;
 		String authorization = null;
+		String acceptEncoding = null;
 		for (int i = 1; i < lines.length; i++) {
 			int colon = lines[i].indexOf(':');
 			if (colon <= 0) continue;
@@ -189,6 +195,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			if (name.equals("if-none-match")) ifNoneMatch = value;
 			else if (name.equals("range")) range = value;
 			else if (name.equals("authorization")) authorization = value;
+			else if (name.equals("accept-encoding")) acceptEncoding = value;
 			else if (name.equals("connection")) {
 				String connection = value.toLowerCase(Locale.ROOT);
 				if (connection.contains("close")) keepAlive = false;
@@ -243,17 +250,28 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		if (length == 0) return respondOrClose(ctx, status, 0, etag, contentRange, keepAlive);
 
+		// Token matching on the lowercased header (multiple encodings and q-values included) is deliberately a contains check: zstd is the only encoding either end negotiates.
+		if (document && byteRange == null && acceptEncoding != null && acceptEncoding.toLowerCase(Locale.ROOT).contains("zstd")) {
+			return serveCompressedDocument(ctx, file, total, etag, keepAlive);
+		}
+
+		return serveIdentity(ctx, file, offset, length, status, etag, contentRange, keepAlive);
+	}
+
+	/** The plain body path: objects, ranged responses, and documents for clients that did not offer zstd. */
+	private boolean serveIdentity(ChannelHandlerContext ctx, Path file, long offset, long length, String status, String etag, String contentRange, boolean keepAlive) {
 		FileChannel channel = null;
 		try {
 			channel = FileChannel.open(file, StandardOpenOption.READ);
 			channel.position(offset);
 		} catch (IOException e) {
 			closeQuietly(channel);
+			streaming = false;
 			return respondOrClose(ctx, STATUS_404, 0, null, null, keepAlive);
 		}
 
 		// The head is in flight from here on, so the only honest completion of a mid-stream failure is dropping the connection.
-		ChannelFuture headWritten = ctx.writeAndFlush(response(status, length, etag, contentRange));
+		ChannelFuture headWritten = ctx.writeAndFlush(response(status, length, etag, contentRange, null));
 		streaming = true;
 		final FileChannel opened = channel;
 		final boolean responseKeepAlive = keepAlive;
@@ -264,6 +282,59 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			ctx.close();
 		}
 		return false;
+	}
+
+	/**
+	 * Document bodies may be negotiated per request: the head cannot precede the compressed length, so the whole document
+	 * is compressed off the event loop first and the stall window covers the buffer drain like any streamed body. Over the
+	 * buffer tripwire or on any compression failure the identity body is served instead.
+	 */
+	private boolean serveCompressedDocument(ChannelHandlerContext ctx, Path file, long total, String etag, boolean keepAlive) {
+		streaming = true;
+		try {
+			senders.execute(() -> {
+				byte[] compressed = compress(file);
+				if (compressed == null) {
+					serveIdentity(ctx, file, 0, total, STATUS_200, etag, null, keepAlive);
+					return;
+				}
+				Channel channel = ctx.channel();
+				ChannelFuture headWritten = channel.writeAndFlush(response(STATUS_200, compressed.length, etag, null, "zstd"));
+				Throwable failure = awaitWritten(channel, headWritten);
+				if (failure == null && !headWritten.isSuccess()) failure = causeOf(headWritten);
+				if (failure == null) failure = writeBody(channel, compressed);
+				Throwable finalFailure = failure;
+				executeOnLoop(channel, () -> finishStream(ctx, compressed.length, finalFailure, keepAlive));
+			});
+		} catch (RejectedExecutionException rejected) {
+			streaming = false;
+			ctx.close();
+		}
+		return false;
+	}
+
+	/** Streams a document through zstd into a capped buffer; null means the cap tripped or compression failed, and identity wins. */
+	private static byte[] compress(Path file) {
+		ByteArrayOutputStream buffer = new ByteArrayOutputStream(64 * 1024);
+		try (ZstdOutputStream zstd = new ZstdOutputStream(buffer); FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+			ByteBuffer chunk = ByteBuffer.allocate(64 * 1024);
+			while (channel.read(chunk) != -1) {
+				zstd.write(chunk.array(), 0, chunk.position());
+				chunk.clear();
+				if (buffer.size() > MAX_COMPRESSED_DOCUMENT_BYTES) return null;
+			}
+		} catch (IOException e) {
+			LOGGER.debug("Failed to compress document {}; serving identity", file, e);
+			return null;
+		}
+		return buffer.toByteArray();
+	}
+
+	private static Throwable writeBody(Channel channel, byte[] body) {
+		ChannelFuture written = channel.writeAndFlush(Unpooled.wrappedBuffer(body));
+		Throwable failure = awaitWritten(channel, written);
+		if (failure == null && !written.isSuccess()) failure = causeOf(written);
+		return failure;
 	}
 
 	/**
@@ -337,18 +408,23 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		}
 
 		Throwable finalFailure = failure;
-		executeOnLoop(channel, () -> {
-			streaming = false;
-			if (finalFailure != null) {
-				// Body bytes are already in flight: an error status cannot follow them, the log is the only receipt.
-				LOGGER.error("HTTP response of {} bytes failed: {}", length, finalFailure.getMessage(), finalFailure);
-				channel.close();
-			} else if (keepAlive && channel.isActive()) {
-				serveLoop(ctx);
-			} else {
-				channel.close();
-			}
-		});
+		executeOnLoop(channel, () -> finishStream(ctx, length, finalFailure, keepAlive));
+	}
+
+	private void finishStream(ChannelHandlerContext ctx, long length, Throwable failure, boolean keepAlive) {
+		Channel channel = ctx.channel();
+		if (failure != null) {
+			// Body bytes are already in flight: an error status cannot follow them, the log is the only receipt.
+			LOGGER.error("HTTP response of {} bytes failed: {}", length, failure.getMessage(), failure);
+			channel.close();
+			return;
+		}
+		streaming = false;
+		if (keepAlive && channel.isActive()) {
+			serveLoop(ctx);
+		} else {
+			channel.close();
+		}
 	}
 
 	/**
@@ -418,12 +494,17 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	}
 
 	private static ByteBuf response(String status, long contentLength, String etag, String contentRange) {
+		return response(status, contentLength, etag, contentRange, null);
+	}
+
+	private static ByteBuf response(String status, long contentLength, String etag, String contentRange, String contentEncoding) {
 		StringBuilder head = new StringBuilder(160);
 		head.append("HTTP/1.1 ").append(status).append("\r\n");
 		head.append("Content-Length: ").append(contentLength).append("\r\n");
 		head.append("Content-Type: ").append(CONTENT_TYPE).append("\r\n");
 		if (etag != null) head.append("ETag: \"").append(etag).append("\"\r\n");
 		if (contentRange != null) head.append("Content-Range: ").append(contentRange).append("\r\n");
+		if (contentEncoding != null) head.append("Content-Encoding: ").append(contentEncoding).append("\r\n").append("Vary: Accept-Encoding\r\n");
 		head.append("\r\n");
 		return Unpooled.wrappedBuffer(head.toString().getBytes(StandardCharsets.UTF_8));
 	}
