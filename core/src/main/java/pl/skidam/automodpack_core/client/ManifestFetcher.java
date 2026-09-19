@@ -22,10 +22,8 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DocumentFetch;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
-import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.PackTransport;
-import pl.skidam.automodpack_core.protocol.http.HttpContractClient;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
@@ -73,7 +71,7 @@ public final class ManifestFetcher {
 			return CompletableFuture.completedFuture(new ManifestFetchResult(connectionFailedState, null, null, new IllegalArgumentException("Connection origin or endpoint is missing")));
 		}
 
-		return createTransport(connectionInfo, secret == null ? null : secret.secretBytes(), manualValidationCallbackAsync(connectionInfo, allowAskingUser))
+		return createTransport(connectionInfo, secret == null ? null : secret.secret(), manualValidationCallbackAsync(connectionInfo, allowAskingUser))
 				.thenCompose(transport -> fetchModpackContentAsync(storage, transport, ModpackId.isValid(selectedModpackId) ? selectedModpackId : null).handle((fetched, error) -> {
 					if (error != null || fetched == null) {
 						transport.close();
@@ -194,11 +192,9 @@ public final class ManifestFetcher {
 				});
 	}
 
-	private static CompletableFuture<PackTransport> createTransport(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes,
+	private static CompletableFuture<PackTransport> createTransport(ConnectionJsons.ConnectionInfo connectionInfo, String secret,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
-		CompletableFuture<? extends PackTransport> transport = connectionInfo.connectionMode == ModpackConnectionMode.HTTP
-				? HttpContractClient.createAsync(connectionInfo, trustCallback)
-				: DownloadClient.createAsync(connectionInfo, secretBytes, trustCallback);
+		CompletableFuture<DownloadClient> transport = DownloadClient.createAsync(connectionInfo, secret, trustCallback);
 		return transport.thenApply(created -> {
 			if (connectionInfo.trustReason != null) {
 				CertificateTrustStore.save(connectionInfo.origin, connectionInfo.expectedFingerprint, CertificateTrustStore.Reason.valueOf(connectionInfo.trustReason));

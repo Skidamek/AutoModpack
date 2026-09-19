@@ -1,20 +1,19 @@
 package pl.skidam.automodpack_core.protocol;
 
-import static pl.skidam.automodpack_core.protocol.NetUtils.*;
+import static pl.skidam.automodpack_core.protocol.NetUtils.DEFAULT_CHUNK_SIZE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.USER_AGENT;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.Socket;
-import java.nio.ByteBuffer;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
@@ -22,209 +21,288 @@ import java.util.function.IntConsumer;
 
 import javax.net.ssl.SSLSocket;
 
-import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
-import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
-import pl.skidam.automodpack_core.protocol.compression.CompressionType;
-import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationChunkSizeMessage;
-import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationCompressionMessage;
-import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationEchoMessage;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
-/** One configured TLS connection to the modpack server: negotiates compression and chunk size, then serves serialized file downloads. */
+/**
+ * One pooled TLS connection speaking minimal HTTP/1.1 against the modpack contract: {@code GET /<document>} and
+ * {@code GET /objects/<sha1>}. The parser survives foreign static hosts on a tiny fixed response subset - status
+ * line, Content-Length, Content-Range, Content-Encoding, ETag, Connection, Location - and fails loudly on anything
+ * else (chunked included): our server never sends it and hand-rolled chunk decoding is not worth the risk.
+ */
 class Connection implements AutoCloseable {
 
-	private byte protocolVersion = LATEST_SUPPORTED_PROTOCOL_VERSION;
-	// ZSTD stays the default on purpose: packs carry plenty of non-jar content (configs, scripts) that compresses well, and zstd costs a fraction of the transfer it saves.
-	private CompressionType compressionType = CompressionType.ZSTD;
-	private int chunkSize = DEFAULT_CHUNK_SIZE;
-	private final byte[] secretBytes;
+	private static final byte[] CRLF = {'\r', '\n'};
+	private static final int MAX_REDIRECTS = 3;
+	// Response header lines are tiny; a line past this or a block of this many lines is a hostile or broken peer.
+	private static final int MAX_HEADER_LINE_BYTES = 8 * 1024;
+	private static final int MAX_HEADER_LINES = 128;
+	/** The document verdict for one conditional response; the body hash decides, never the status alone. */
+	private record ResponseHead(int status, Long contentLength, String contentRange, String contentEncoding, String etag, String location, boolean connectionClose, boolean chunked) {}
+
 	private final SSLSocket socket;
 	private final Socket transport;
-	private final DataInputStream in;
-	private final DataOutputStream out;
-	private CompressionCodec compressionCodec;
-	private final ProtocolFrameCodec.FrameScratch frameScratch = new ProtocolFrameCodec.FrameScratch();
 	private final Executor executor;
+	private final BufferedInputStream in;
+	private final BufferedOutputStream out;
+	// The request head around the path, encoded once per connection: the request line, Host, User-Agent, and the Bearer secret when held.
+	private final byte[] requestLinePrefix;
+	private final byte[] requestLineSuffix;
+	private volatile boolean unhealthy;
 
-	public Connection(SSLSocket socket, Socket transport, byte[] secretBytes, Executor executor) throws IOException {
+	Connection(SSLSocket socket, Socket transport, String secret, String hostHeader, Executor executor) throws IOException {
 		if (socket == null || socket.isClosed()) throw new IOException("Server connection is closed");
 		if (transport != null && transport.isClosed()) throw new IOException("Server connection is closed");
 		this.socket = socket;
 		this.transport = transport;
-		// Absence is absence on the wire too: a client with no secret sends the zero field the protocol shape reserves,
-		// which the server rejects as unauthenticated. One zero array per connection, never per message.
-		this.secretBytes = secretBytes == null ? new byte[Secrets.BYTE_LENGTH] : secretBytes;
 		this.executor = executor;
-
-		this.in = new DataInputStream(new BufferedInputStream(this.socket.getInputStream()));
-		this.out = new DataOutputStream(new BufferedOutputStream(this.socket.getOutputStream()));
-
-		if (!CompressionFactory.isAvailable(compressionType)) compressionType = CompressionType.GZIP;
-		compressionType = sendCompressionConfig(compressionType);
-		compressionCodec = CompressionFactory.createCodec(compressionType);
-		chunkSize = sendChunkSizeConfig(DEFAULT_CHUNK_SIZE);
-		sendEchoConfig();
+		this.in = new BufferedInputStream(socket.getInputStream());
+		this.out = new BufferedOutputStream(socket.getOutputStream());
+		this.requestLinePrefix = "GET ".getBytes(StandardCharsets.UTF_8);
+		String authorization = secret == null ? "" : "Authorization: Bearer " + secret + "\r\n";
+		this.requestLineSuffix = (" HTTP/1.1\r\nHost: " + hostHeader + "\r\nUser-Agent: " + USER_AGENT + "\r\n" + authorization).getBytes(StandardCharsets.UTF_8);
 	}
 
-	public boolean isActive() {
-		return !socket.isClosed() && (transport == null || !transport.isClosed());
+	boolean isActive() {
+		return !unhealthy && !socket.isClosed() && (transport == null || !transport.isClosed());
 	}
 
-	private CompressionCodec getCompressionCodec() {
-		return compressionCodec;
-	}
-
-	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
-		return sendDownloadFile(fileHash, destination, chunkCallback, null, 0, null);
-	}
-
-	/** Object request with an optional conditional hash and an inclusive range ({@code endInclusive} requires {@code offset} on the wire). */
-	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback, byte[] expectedSha1, long offset, Long endInclusive) {
-		return sendRequest(fileHash, destination, expectedSha1, offset, endInclusive, false, chunkCallback).thenApply(fetch -> {
-			if (fetch.unchanged()) throw new CompletionException(new IOException("Server answered UNCHANGED to an object request"));
-			return fetch.path();
-		});
-	}
-
-	/** Document request (reserved keys); a non-null expected hash may be answered with UNCHANGED instead of the document body. */
-	public CompletableFuture<DocumentFetch> sendDownloadDocument(byte[] key, Path destination, byte[] expectedSha1, IntConsumer chunkCallback) {
-		return sendRequest(key, destination, expectedSha1, 0, null, true, chunkCallback);
-	}
-
-	private CompletableFuture<DocumentFetch> sendRequest(byte[] fileHash, Path destination, byte[] expectedSha1, long offset, Long endInclusive, boolean document,
-			IntConsumer chunkCallback) {
-		if (destination == null) throw new IllegalArgumentException("Destination cannot be null");
-
+	/** Object request by sha1; a positive offset resumes from there and is answered append-only behind a validated start. */
+	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback, long offset) {
 		return CompletableFuture.supplyAsync(() -> {
-			Exception exception = null;
 			try {
-				ByteArrayOutputStream baos = new ByteArrayOutputStream(64 + fileHash.length);
-				DataOutputStream dos = new DataOutputStream(baos);
-				dos.writeByte(protocolVersion);
-				dos.writeByte(FILE_REQUEST_TYPE);
-				dos.write(secretBytes);
-				dos.writeInt(fileHash.length);
-				dos.write(fileHash);
-				byte flags = 0;
-				if (expectedSha1 != null) flags |= FILE_REQUEST_EXPECTED_SHA1_FLAG;
-				if (offset != 0 || endInclusive != null) flags |= FILE_REQUEST_OFFSET_FLAG;
-				if (endInclusive != null) flags |= FILE_REQUEST_END_FLAG;
-				dos.writeByte(flags);
-				if (expectedSha1 != null) dos.write(expectedSha1);
-				if ((flags & FILE_REQUEST_OFFSET_FLAG) != 0) dos.writeLong(offset);
-				if ((flags & FILE_REQUEST_END_FLAG) != 0) dos.writeLong(endInclusive);
-
-				writeProtocolMessage(baos.toByteArray());
-				// A conditional document's body hash is the ground truth, so a host that streams instead of answering
-				// UNCHANGED still reads as unchanged when the bytes match the expectation.
-				return readFileResponse(destination, offset, expectedSha1 != null && document ? expectedSha1 : null, chunkCallback);
-			} catch (Exception e) {
-				exception = e;
+				return fetchObject("/objects/" + new String(fileHash, StandardCharsets.UTF_8), destination, offset, chunkCallback);
+			} catch (IOException e) {
 				throw new CompletionException(e);
-			} finally {
-				finalBlock(exception);
 			}
 		}, executor);
 	}
 
-	private void finalBlock(Exception exception) {
-		try {
-			int available;
-			while ((available = in.available()) > 0) {
-				in.skipBytes(available);
+	/** Document request (reserved keys); a non-null expected hash may be answered 304, and the 200 body hash is the ground truth. */
+	public CompletableFuture<DocumentFetch> sendDownloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer chunkCallback) {
+		return CompletableFuture.supplyAsync(() -> {
+			try {
+				return fetchDocument("/" + new String(key, StandardCharsets.UTF_8), destination, expectedSha1Hex, chunkCallback);
+			} catch (IOException e) {
+				throw new CompletionException(e);
 			}
-		} catch (IOException e) {
-			if (exception == null) throw new CompletionException(e);
+		}, executor);
+	}
+
+	private Path fetchObject(String path, Path destination, long offset, IntConsumer chunkCallback) throws IOException {
+		boolean ranged = offset > 0;
+		String range = ranged ? "Range: bytes=" + offset + "-\r\n" : null;
+		String current = path;
+		int redirects = 0;
+		while (true) {
+			ResponseHead head = request(current, range);
+			if (isRedirect(head)) {
+				discardBody(head);
+				if (++redirects > MAX_REDIRECTS) throw new IOException("More than " + MAX_REDIRECTS + " redirects for " + path);
+				current = redirectTarget(current, head);
+				continue;
+			}
+			if (head.status() == 206) {
+				// A 206 may only be appended behind the stored prefix when the server actually resumed at the requested offset; anything else fails fast instead of splicing together bytes that promotion would only
+				// reject after the fact.
+				if (head.contentLength() == null) throw new IOException("HTTP 206 without Content-Length");
+				requireResumeStart(head, offset);
+				consumeBody(head, destination, true, chunkCallback, null);
+				return destination;
+			}
+			if (head.status() == 200) {
+				// A server that ignores Range answers 200 with the full body and no Content-Range; the truncate is the correct result then.
+				boolean append = ranged && head.contentRange() != null;
+				if (append) requireResumeStart(head, offset);
+				consumeBody(head, destination, append, chunkCallback, null);
+				return destination;
+			}
+			discardBody(head);
+			throw statusFailure(head, ranged);
 		}
 	}
 
-	private void writeProtocolMessage(byte[] payload) throws IOException {
-		ProtocolFrameCodec.write(out, getCompressionCodec(), payload, chunkSize);
-	}
-
-	private ProtocolFrameCodec.Frame readProtocolMessageFrame() throws IOException {
-		return ProtocolFrameCodec.read(in, getCompressionCodec(), chunkSize, frameScratch);
-	}
-
-	private DocumentFetch readFileResponse(Path destination, long offset, byte[] expectedSha1, IntConsumer chunkCallback) throws IOException {
-		ProtocolFrameCodec.Frame header = readProtocolMessageFrame();
-		ByteBuffer headerWrap = ByteBuffer.wrap(header.data(), 0, header.length());
-
-		byte version = headerWrap.get();
-		byte messageType = headerWrap.get();
-
-		if (messageType == ERROR) {
-			int errLen = headerWrap.getInt();
-			byte[] errBytes = new byte[errLen];
-			headerWrap.get(errBytes);
-			// The trailing code byte is the machine-readable half of the error; a frame without one is generic.
-			if (headerWrap.remaining() >= 1 && headerWrap.get() == ERROR_CODE_STALE_RANGE) throw new StaleRangeException();
-			throw new IOException("Server error: " + new String(errBytes, StandardCharsets.UTF_8));
+	private DocumentFetch fetchDocument(String path, Path destination, String expectedSha1Hex, IntConsumer chunkCallback) throws IOException {
+		String conditional = expectedSha1Hex == null ? null : "If-None-Match: \"" + expectedSha1Hex + "\"\r\n";
+		String current = path;
+		int redirects = 0;
+		while (true) {
+			ResponseHead head = request(current, conditional);
+			if (isRedirect(head)) {
+				discardBody(head);
+				if (++redirects > MAX_REDIRECTS) throw new IOException("More than " + MAX_REDIRECTS + " redirects for " + path);
+				current = redirectTarget(current, head);
+				continue;
+			}
+			if (head.status() == 304) {
+				if (expectedSha1Hex == null) throw new IOException("HTTP 304 without a sent If-None-Match");
+				return new DocumentFetch(null, true);
+			}
+			if (head.status() == 200) {
+				if (expectedSha1Hex == null) {
+					consumeBody(head, destination, false, chunkCallback, null);
+					return new DocumentFetch(destination, false);
+				}
+				// A conditional document's body hash is the ground truth, so a host that ignores the condition still reads as unchanged when the bytes match the expectation.
+				MessageDigest hash = HashUtils.newSha1Digest();
+				consumeBody(head, destination, false, chunkCallback, hash);
+				if (HexFormat.of().formatHex(hash.digest()).equals(expectedSha1Hex)) return new DocumentFetch(destination, true);
+				return new DocumentFetch(destination, false);
+			}
+			discardBody(head);
+			throw statusFailure(head, false);
 		}
+	}
 
-		if (messageType == UNCHANGED_TYPE) return new DocumentFetch(null, true);
+	private static boolean isRedirect(ResponseHead head) {
+		// 304 is a 3xx that is never a redirect; it carries no Location and is answered as its own verdict.
+		return head.status() >= 300 && head.status() < 400 && head.status() != 304;
+	}
 
-		if (messageType == END_OF_TRANSMISSION) return new DocumentFetch(destination, false);
+	/** The re-issued GET path: the Location resolved against the current request path, authority dropped - the connection is pinned to one TLS peer. */
+	private static String redirectTarget(String requestPath, ResponseHead head) throws IOException {
+		if (head.location() == null || head.location().isBlank()) throw new IOException("Redirect without a Location header");
+		URI resolved = URI.create("https://automodpack.invalid" + requestPath).resolve(URI.create(head.location()));
+		String target = resolved.getPath();
+		if (target == null || target.isEmpty()) throw new IOException("Redirect Location without a path: " + head.location());
+		return target;
+	}
 
-		if (messageType != FILE_RESPONSE_TYPE) throw new IOException("Unexpected message type: " + messageType);
+	private IOException statusFailure(ResponseHead head, boolean ranged) {
+		return switch (head.status()) {
+			case 401 -> new UnauthorizedException();
+			case 404, 410 -> new IOException("HTTP " + head.status());
+			case 416 -> ranged ? new StaleRangeException() : new IOException("HTTP 416 without a sent Range");
+			default -> new IOException("HTTP " + head.status());
+		};
+	}
 
-		long expectedFileSize = headerWrap.getLong();
-		if (expectedFileSize < 0) throw new IOException("Negative file size: " + expectedFileSize);
-		long receivedBytes = 0;
-		// A ranged request's length is the remaining suffix, so it appends into the stored partial; a zero-length
-		// answer to a range leaves the partial untouched, and an unconditional empty object still creates its file.
-		MessageDigest hash = expectedSha1 == null ? null : HashUtils.newSha1Digest();
-		if (expectedFileSize > 0 || offset == 0) {
-			try (OutputStream fos = offset == 0 ? LocalFileWriter.open(destination) : LocalFileWriter.openAppending(destination)) {
-				while (receivedBytes < expectedFileSize) {
-					ProtocolFrameCodec.Frame dataFrame = readProtocolMessageFrame();
-					int toWrite = ProtocolFrameCodec.writableFrameBytes(dataFrame.length(), expectedFileSize - receivedBytes);
-					if (toWrite <= 0) throw new IOException("File frame did not advance the download");
-					fos.write(dataFrame.data(), 0, toWrite);
-					if (hash != null) hash.update(dataFrame.data(), 0, toWrite);
-					receivedBytes += toWrite;
-					if (chunkCallback != null) chunkCallback.accept(toWrite);
+	private void requireResumeStart(ResponseHead head, long offset) throws IOException {
+		String contentRange = head.contentRange();
+		if (contentRange == null) throw new StaleRangeException();
+		String spec = contentRange.trim();
+		if (!spec.startsWith("bytes ")) throw new IOException("Unparseable Content-Range: " + contentRange);
+		int dash = spec.indexOf('-');
+		if (dash < 0) throw new IOException("Unparseable Content-Range: " + contentRange);
+		long start;
+		try {
+			start = Long.parseLong(spec.substring("bytes ".length(), dash).trim());
+		} catch (NumberFormatException e) {
+			throw new IOException("Unparseable Content-Range: " + contentRange);
+		}
+		if (start != offset) throw new StaleRangeException();
+	}
+
+	private ResponseHead request(String path, String extraHeaders) throws IOException {
+		out.write(requestLinePrefix);
+		out.write(path.getBytes(StandardCharsets.UTF_8));
+		out.write(requestLineSuffix);
+		if (extraHeaders != null) out.write(extraHeaders.getBytes(StandardCharsets.UTF_8));
+		out.write(CRLF);
+		out.flush();
+		return parseResponseHead();
+	}
+
+	private ResponseHead parseResponseHead() throws IOException {
+		String statusLine = readLine();
+		if (!statusLine.startsWith("HTTP/1.1 ")) throw new IOException("Not an HTTP/1.1 response: " + statusLine);
+		String[] parts = statusLine.split(" ", 3);
+		int status;
+		try {
+			status = Integer.parseInt(parts[1]);
+		} catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
+			throw new IOException("Unparseable HTTP status line: " + statusLine);
+		}
+		Long contentLength = null;
+		String contentRange = null;
+		String contentEncoding = null;
+		String etag = null;
+		String location = null;
+		boolean connectionClose = false;
+		boolean chunked = false;
+		int lines = 0;
+		while (lines++ < MAX_HEADER_LINES) {
+			String header = readLine();
+			if (header.isEmpty()) return new ResponseHead(status, contentLength, contentRange, contentEncoding, etag, location, connectionClose, chunked);
+			int colon = header.indexOf(':');
+			if (colon <= 0) continue;
+			String name = header.substring(0, colon).trim().toLowerCase(Locale.ROOT);
+			String value = header.substring(colon + 1).trim();
+			switch (name) {
+				case "content-length" -> contentLength = parseContentLength(value, header);
+				case "content-range" -> contentRange = value;
+				case "content-encoding" -> contentEncoding = value;
+				case "etag" -> etag = value;
+				case "location" -> location = value;
+				case "connection" -> connectionClose = value.toLowerCase(Locale.ROOT).contains("close");
+				case "transfer-encoding" -> chunked = true;
+				default -> {
 				}
 			}
 		}
-
-		ProtocolFrameCodec.Frame eot = readProtocolMessageFrame();
-		if (eot.length() < 2 || eot.data()[0] != version || eot.data()[1] != END_OF_TRANSMISSION) throw new IOException("Invalid EOT frame");
-		if (hash != null && HexFormat.of().formatHex(hash.digest()).equals(new String(expectedSha1, StandardCharsets.UTF_8))) return new DocumentFetch(destination, true);
-		return new DocumentFetch(destination, false);
+		throw new IOException("Response header block exceeded " + MAX_HEADER_LINES + " lines");
 	}
 
-	private CompressionType sendCompressionConfig(CompressionType desiredCompression) throws IOException {
-		writeAndFlush(new ConfigurationCompressionMessage(protocolVersion, desiredCompression).toBytes());
-
-		byte version = readConfigResponseHeader(CONFIGURATION_COMPRESSION_TYPE);
-		return ConfigurationCompressionMessage.readFrom(version, in).getCompressionType();
+	private static long parseContentLength(String value, String header) throws IOException {
+		try {
+			long length = Long.parseLong(value);
+			if (length < 0) throw new NumberFormatException();
+			return length;
+		} catch (NumberFormatException e) {
+			throw new IOException("Unparseable Content-Length: " + header);
+		}
 	}
 
-	private int sendChunkSizeConfig(int desiredChunkSize) throws IOException {
-		writeAndFlush(new ConfigurationChunkSizeMessage(protocolVersion, desiredChunkSize).toBytes());
-
-		byte version = readConfigResponseHeader(CONFIGURATION_CHUNK_SIZE_TYPE);
-		return ConfigurationChunkSizeMessage.readFrom(version, in).getChunkSize();
+	/** Reads one CRLF-terminated header line; TLS already framed the records, so only a hostile peer can stretch a line. */
+	private String readLine() throws IOException {
+		StringBuilder line = new StringBuilder(64);
+		int previous = -1;
+		while (true) {
+			int read = in.read();
+			if (read < 0) throw new IOException("Connection ended inside a response header");
+			if (previous == '\r' && read == '\n') return line.substring(0, line.length() - 1);
+			line.append((char) read);
+			if (line.length() > MAX_HEADER_LINE_BYTES) throw new IOException("Response header line exceeded " + MAX_HEADER_LINE_BYTES + " bytes");
+			previous = read;
+		}
 	}
 
-	private void sendEchoConfig() throws IOException {
-		writeAndFlush(new ConfigurationEchoMessage(protocolVersion).toBytes());
+	/** Writes the body per the framing rules; a bodyless status consumes nothing. Called with a null destination to discard an error body. */
+	private void consumeBody(ResponseHead head, Path destination, boolean append, IntConsumer chunkCallback, MessageDigest hash) throws IOException {
+		if (head.chunked()) throw new IOException("Chunked responses are not supported");
+		if (head.status() == 204 || head.status() == 304) return;
+		if (head.contentLength() != null) {
+			transfer(destination, append, chunkCallback, hash, head.contentLength());
+			if (head.connectionClose()) unhealthy = true;
+			return;
+		}
+		if (head.status() == 200) {
+			// Close-framed body from an exotic static host: read to EOF, and the connection dies with the response.
+			unhealthy = true;
+			transfer(destination, append, chunkCallback, hash, null);
+			return;
+		}
 	}
 
-	private void writeAndFlush(byte[] payload) throws IOException {
-		out.write(payload);
-		out.flush();
+	private void transfer(Path destination, boolean append, IntConsumer chunkCallback, MessageDigest hash, Long exactLength) throws IOException {
+		byte[] buffer = new byte[DEFAULT_CHUNK_SIZE];
+		long remaining = exactLength == null ? Long.MAX_VALUE : exactLength;
+		try (OutputStream fos = destination == null ? null : append ? LocalFileWriter.openAppending(destination) : LocalFileWriter.open(destination)) {
+			while (remaining > 0) {
+				int read = in.read(buffer, 0, (int) Math.min(buffer.length, remaining));
+				if (read < 0) {
+					if (exactLength != null) throw new IOException("Response body ended before the promised Content-Length");
+					return;
+				}
+				if (fos != null) fos.write(buffer, 0, read);
+				if (hash != null) hash.update(buffer, 0, read);
+				if (chunkCallback != null) chunkCallback.accept(read);
+				remaining -= read;
+			}
+		}
 	}
 
-	/** Reads and verifies the [version][type] header of one configuration reply; both ends ship together, so any version other than ours fails loudly. */
-	private byte readConfigResponseHeader(byte expectedType) throws IOException {
-		byte version = in.readByte();
-		if (version != protocolVersion) throw new IOException("Protocol version mismatch: " + version);
-		byte type = in.readByte();
-		if (type != expectedType) throw new IOException("Unexpected response: " + type);
-		return version;
+	private void discardBody(ResponseHead head) throws IOException {
+		consumeBody(head, null, false, null, null);
 	}
 
 	@Override

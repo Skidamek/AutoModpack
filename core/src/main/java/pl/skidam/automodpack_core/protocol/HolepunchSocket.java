@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.protocol;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.protocol.NetUtils.MAX_CHUNK_SIZE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.NETWORK_TIMEOUT;
 
 import java.io.IOException;
@@ -28,8 +27,8 @@ import pl.skidam.mcholepunch.HolepunchFailure;
 import pl.skidam.mcholepunch.HolepunchHandler;
 
 public class HolepunchSocket extends Socket {
-	// Tripwire: one max protocol chunk. File requests never reach this; only a stalled consumer does.
-	static final int MAX_QUEUED_READ_BYTES = MAX_CHUNK_SIZE;
+	// Tripwire sized by the old chunk-size negotiation it outlived: a healthy TLS peer drains continuously, so only a stalled consumer queues this much.
+	static final int MAX_QUEUED_READ_BYTES = 8 * 1024 * 1024;
 	private volatile HolepunchConnection connection;
 	private final HolepunchInputStream in;
 	private volatile HolepunchOutputStream out;

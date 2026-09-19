@@ -43,7 +43,7 @@ public final class CandidateTrustValidation {
 
 	/** One transport candidate: its probe socket, the trust manager that handed it over, and who may accept the certificate. */
 	public record Candidate(SSLSocket socket, CustomizableTrustManager trustManager, CustomizableTrustManager.SessionTrust sessionTrust, String originHost, String endpointHost,
-			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, BooleanSupplier clientAlive) {}
+			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, BooleanSupplier clientAlive, String hostHeader, String secret) {}
 
 	private CandidateTrustValidation() {}
 
@@ -126,11 +126,16 @@ public final class CandidateTrustValidation {
 			return reject(candidate, new IOException("Certificate trust callback failed", e));
 		}
 
-		PreConfigurationKeepalive keepalive = new PreConfigurationKeepalive(candidate.socket(), preConfigurationKeepaliveInterval, PRE_CONFIGURATION_KEEPALIVE_EXECUTOR,
-				candidate.clientAlive());
+		PreConfigurationKeepalive keepalive;
+		try {
+			keepalive = new PreConfigurationKeepalive(candidate.socket(), candidate.hostHeader(), candidate.secret(), preConfigurationKeepaliveInterval,
+					PRE_CONFIGURATION_KEEPALIVE_EXECUTOR, candidate.clientAlive());
+		} catch (IOException e) {
+			closeQuietly(candidate.socket());
+			return CompletableFuture.failedFuture(e);
+		}
 		return decision.handle((trusted, error) -> {
-			// The heartbeat must be gone before the negotiation writes start, so a straggler keepalive record can
-			// never land after the configuration echo and misframe the configured connection.
+			// The heartbeat must be gone before the connection's own requests start, so a straggler heartbeat record can never misframe the first response.
 			keepalive.retire();
 			if (error != null) {
 				closeQuietly(candidate.socket());
