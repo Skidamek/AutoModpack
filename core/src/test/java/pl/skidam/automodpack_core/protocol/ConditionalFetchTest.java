@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -34,7 +35,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLSocket;
 
 import org.bouncycastle.asn1.x500.X500Name;
@@ -170,7 +170,7 @@ class ConditionalFetchTest {
 
 	private static DownloadClient client(ContractServer server, byte[] secretBytes) throws Exception {
 		ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-				new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, server.fingerprint(), null);
+				new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, server.fingerprint(), null);
 		return DownloadClient.createAsync(connectionInfo, secretBytes, ignored -> CompletableFuture.completedFuture(false)).get(5, TimeUnit.SECONDS);
 	}
 
@@ -190,7 +190,8 @@ class ConditionalFetchTest {
 
 	/** One TLS server speaking the FILE_REQUEST side of the protocol against an in-memory object store. */
 	static final class ContractServer implements AutoCloseable {
-		private final SSLServerSocket server;
+		private final ServerSocket server;
+		private final SSLContext context;
 		private final ExecutorService executor = Executors.newCachedThreadPool();
 		private final Map<String, byte[]> store = new ConcurrentHashMap<>();
 
@@ -206,8 +207,8 @@ class ConditionalFetchTest {
 		ContractServer() throws Exception {
 			KeyPair keyPair = NetUtils.generateKeyPair();
 			certificate = selfSigned(keyPair);
-			server = (SSLServerSocket) serverContext(keyPair, certificate).getServerSocketFactory().createServerSocket(0, 5, InetAddress.getLoopbackAddress());
-			server.setEnabledProtocols(new String[]{"TLSv1.3"});
+			context = serverContext(keyPair, certificate);
+			server = new ServerSocket(0, 5, InetAddress.getLoopbackAddress());
 			executor.execute(this::acceptConnections);
 		}
 
@@ -233,7 +234,7 @@ class ConditionalFetchTest {
 		private void acceptConnections() {
 			while (!closed) {
 				try {
-					SSLSocket socket = (SSLSocket) server.accept();
+					SSLSocket socket = MagicTls.accept(server, context);
 					executor.execute(() -> serve(socket));
 				} catch (IOException e) {
 					if (!closed) return;
