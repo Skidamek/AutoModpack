@@ -22,6 +22,8 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
+import pl.skidam.automodpack_core.protocol.netty.ActivityTracker;
+import pl.skidam.automodpack_core.utils.ByteFormat;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.storage.StoragePaths;
@@ -30,6 +32,9 @@ import pl.skidam.automodpack_core.utils.Throwables;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -98,9 +103,9 @@ public class Commands {
 										.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
 										.executes(Commands::restartModpackHost)
 								)
-								.then(literal("connections")
+								.then(literal("activity")
 										.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-										.executes(Commands::connections)
+										.executes(Commands::activity)
 								)
 								.then(literal("fingerprint")
 										.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
@@ -318,9 +323,78 @@ public class Commands {
 		}
 	}
 
-	private static int connections(CommandContext<CommandSourceStack> context) {
-		send(context, "AutoModpack serves the HTTP contract without tracking connections; per-player download activity stays in the server log.", ChatFormatting.YELLOW, false);
+	private static final DateTimeFormatter ACTIVITY_CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT);
+	private static final DateTimeFormatter ACTIVITY_PRECISE_CLOCK = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT);
+	private static final int ACTIVITY_SHOWN_ENTRIES = 5;
+
+	private static int activity(CommandContext<CommandSourceStack> context) {
+		Util.backgroundExecutor().execute(() -> {
+			try {
+				VersionedCommandSource.sendFeedback(context, activityMessage(hostServer.activitySnapshot()), false);
+			} catch (Exception e) {
+				LOGGER.error("Failed to collect modpack activity", e);
+				send(context, "Failed to collect modpack activity: " + e.getMessage(), ChatFormatting.RED, false);
+			}
+		});
 		return Command.SINGLE_SUCCESS;
+	}
+
+	private static MutableComponent activityMessage(ActivityTracker.Snapshot snapshot) {
+		MutableComponent message = VersionedText.literal("Activity since " + ACTIVITY_CLOCK.format(Instant.ofEpochMilli(snapshot.startedMillis())) + ": " + snapshot.totalRequests() + " requests · " + ByteFormat.formatSize(snapshot.totalBytes()) + " from "
+				+ snapshot.players().size() + " players · 401s: " + snapshot.unauthorized() + " · unchanged checks: " + snapshot.unchangedChecks()).withStyle(ChatFormatting.YELLOW);
+		List<String> playerLines = new ArrayList<>();
+		for (ActivityTracker.PlayerStats player : snapshot.players())
+			playerLines.add(player.name() + ": " + player.requests() + " requests · " + ByteFormat.formatSize(player.bytes()) + " · last " + ACTIVITY_PRECISE_CLOCK.format(Instant.ofEpochMilli(player.lastMillis())));
+		if (!playerLines.isEmpty()) hover(message, String.join("\n", playerLines));
+		if (!snapshot.recent().isEmpty()) {
+			message.append(VersionedText.literal("\nLast: ").withStyle(ChatFormatting.YELLOW));
+			for (int i = 0; i < Math.min(ACTIVITY_SHOWN_ENTRIES, snapshot.recent().size()); i++) {
+				if (i > 0) message.append(VersionedText.literal(" · ").withStyle(ChatFormatting.WHITE));
+				message.append(activityEntry(snapshot.recent().get(i), false));
+			}
+		}
+		if (!snapshot.inFlight().isEmpty()) {
+			message.append(VersionedText.literal("\nIn flight (" + snapshot.inFlight().size() + "): ").withStyle(ChatFormatting.YELLOW));
+			for (int i = 0; i < Math.min(ACTIVITY_SHOWN_ENTRIES, snapshot.inFlight().size()); i++) {
+				if (i > 0) message.append(VersionedText.literal(" · ").withStyle(ChatFormatting.WHITE));
+				message.append(activityEntry(snapshot.inFlight().get(i), true));
+			}
+		}
+		return message;
+	}
+
+	private static MutableComponent activityEntry(ActivityTracker.Entry entry, boolean inFlight) {
+		long endMillis = inFlight ? System.currentTimeMillis() : entry.endMillis();
+		long seconds = (endMillis - entry.startMillis()) / 1000;
+		List<String> hover = new ArrayList<>();
+		hover.add("started " + ACTIVITY_PRECISE_CLOCK.format(Instant.ofEpochMilli(entry.startMillis())));
+		hover.add(entry.displayName());
+		if (entry.routeKey() != null && entry.routeKey().length() == 40) hover.add("sha1 " + entry.routeKey());
+		hover.add("address " + entry.address());
+		String visible = ACTIVITY_CLOCK.format(Instant.ofEpochMilli(entry.startMillis())) + " " + (entry.actor() != null ? entry.actor() : entry.address()) + " " + ByteFormat.formatETA(seconds) + " " + ByteFormat.formatSize(entry.bytes()) + " " + condensedName(entry);
+		if (inFlight) {
+			hover.add("in flight");
+		} else {
+			hover.add("finished " + ACTIVITY_PRECISE_CLOCK.format(Instant.ofEpochMilli(entry.endMillis())));
+			visible += entry.status() == ActivityTracker.STATUS_DROPPED ? " (cut)" : " (" + entry.status() + ")";
+		}
+		return hover(VersionedText.literal(visible), String.join("\n", hover));
+	}
+
+	/** Shows {@code component}, hover-shows the multi-line {@code text}. */
+	private static MutableComponent hover(MutableComponent component, String text) {
+		return component.withStyle(style -> style
+				/*? if >=1.21.5 {*/
+				.withHoverEvent(new HoverEvent.ShowText(VersionedText.literal(text))));
+				/*?} else {*/
+				/*.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.literal(text))));
+				*//*?}*/
+	}
+
+	private static String condensedName(ActivityTracker.Entry entry) {
+		String name = entry.displayName();
+		int slash = name.lastIndexOf('/');
+		return slash < 0 ? name : name.substring(slash + 1);
 	}
 
 	private static int reload(CommandContext<CommandSourceStack> context) {

@@ -31,7 +31,9 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.timeout.IdleStateEvent;
 
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
+import pl.skidam.automodpack_core.protocol.netty.ActivityTracker;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
@@ -64,12 +66,16 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 	private final NettyServer server;
 	private final Executor senders;
+	private final ActivityTracker tracker;
 	private ByteBuf cumulation;
 	private volatile boolean streaming;
+	// The one response body currently streaming; the connection drops must end its span even when finishStream never runs.
+	private ActivityTracker.Span inFlightSpan;
 
 	public HttpContractHandler(NettyServer server, Executor senders) {
 		this.server = server;
 		this.senders = senders;
+		this.tracker = server.activityTracker();
 	}
 
 	@Override
@@ -100,6 +106,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 	@Override
 	public void channelInactive(ChannelHandlerContext ctx) {
+		if (inFlightSpan != null) tracker.completeDropped(inFlightSpan);
 		releaseCumulation();
 	}
 
@@ -164,21 +171,23 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		ctx.close();
 	}
 
-	private boolean rejectGarbage(ChannelHandlerContext ctx) {
+	private boolean rejectGarbage(ChannelHandlerContext ctx, ActivityTracker.Span span) {
 		LOGGER.debug("Unparseable HTTP request; closing the connection");
+		tracker.complete(span, 400, 0);
 		ctx.close();
 		return false;
 	}
 
 	/** Handles one fully-buffered request head; false means the connection closes or the response body streams. */
 	private boolean handleRequest(ChannelHandlerContext ctx, int headerEnd) {
+		ActivityTracker.Span span = tracker.start(String.valueOf(addressOf(ctx.channel())));
 		String request = cumulation.readCharSequence(headerEnd, StandardCharsets.UTF_8).toString();
 		cumulation.skipBytes(4);
 		cumulation.discardReadBytes();
 
 		String[] lines = request.split("\r\n", -1);
 		String[] requestLine = lines[0].split(" ");
-		if (requestLine.length != 3 || (!requestLine[2].equals("HTTP/1.1") && !requestLine[2].equals("HTTP/1.0"))) return rejectGarbage(ctx);
+		if (requestLine.length != 3 || (!requestLine[2].equals("HTTP/1.1") && !requestLine[2].equals("HTTP/1.0"))) return rejectGarbage(ctx, span);
 
 		String method = requestLine[0];
 		String target = requestLine[1];
@@ -203,26 +212,24 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			}
 		}
 
-		if (serverConfig.validateSecrets && !authorized(ctx, authorization)) return false;
+		if (serverConfig.validateSecrets && !authorized(ctx, authorization, span)) return false;
 
-		if (!method.equals("GET")) return respondOrClose(ctx, STATUS_405, 0, null, null, keepAlive);
+		if (!method.equals("GET")) return finishBodyless(ctx, span, STATUS_405, 0, null, null, keepAlive);
 
 		// The contract paths carry no encoding, so a percent-encoded target cannot name a route.
-		if (target.indexOf('%') >= 0) {
-			respondThenClose(ctx, STATUS_400, 0, null, null);
-			return false;
-		}
+		if (target.indexOf('%') >= 0) return finishBodyless(ctx, span, STATUS_400, 0, null, null, false);
 
 		String key = routeKey(target);
+		span.routeKey = key;
 		Optional<Path> path = key == null ? Optional.<Path>empty() : server.getPath(key);
-		if (path.isEmpty()) return respondOrClose(ctx, STATUS_404, 0, null, null, keepAlive);
+		if (path.isEmpty()) return finishBodyless(ctx, span, STATUS_404, 0, null, null, keepAlive);
 
 		Path file = path.get();
 		long total;
 		try {
 			total = Files.size(file);
 		} catch (IOException e) {
-			return respondOrClose(ctx, STATUS_404, 0, null, null, keepAlive);
+			return finishBodyless(ctx, span, STATUS_404, 0, null, null, keepAlive);
 		}
 
 		// Objects already are their hash. A document is only hashed when a validator actually asks, keeping the SHA-1
@@ -231,16 +238,16 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		String etag = document ? null : key;
 		if (ifNoneMatch != null) {
 			etag = document ? HashUtils.getHash(file) : key;
-			if (etag == null) return respondOrClose(ctx, STATUS_404, 0, null, null, keepAlive);
+			if (etag == null) return finishBodyless(ctx, span, STATUS_404, 0, null, null, keepAlive);
 		}
 
 		if (ifNoneMatch != null && (ifNoneMatch.equals(etag) || ifNoneMatch.equals("\"" + etag + "\""))) {
-			return respondOrClose(ctx, STATUS_304, 0, etag, null, keepAlive);
+			return finishBodyless(ctx, span, STATUS_304, 0, etag, null, keepAlive);
 		}
 
 		ByteRange byteRange = range == null ? null : parseRange(range, total);
 		if (byteRange != null && !byteRange.satisfiable) {
-			return respondOrClose(ctx, STATUS_416, 0, etag, "bytes */" + total, keepAlive);
+			return finishBodyless(ctx, span, STATUS_416, 0, etag, "bytes */" + total, keepAlive);
 		}
 
 		long offset = byteRange == null ? 0 : byteRange.start;
@@ -248,18 +255,28 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		String status = byteRange == null ? STATUS_200 : STATUS_206;
 		String contentRange = byteRange == null ? null : "bytes " + byteRange.start + "-" + byteRange.endInclusive + "/" + total;
 
-		if (length == 0) return respondOrClose(ctx, status, 0, etag, contentRange, keepAlive);
+		if (length == 0) return finishBodyless(ctx, span, status, 0, etag, contentRange, keepAlive);
 
 		// Token matching on the lowercased header (multiple encodings and q-values included) is deliberately a contains check: zstd is the only encoding either end negotiates.
 		if (document && byteRange == null && acceptEncoding != null && acceptEncoding.toLowerCase(Locale.ROOT).contains("zstd")) {
-			return serveCompressedDocument(ctx, file, total, etag, keepAlive);
+			return serveCompressedDocument(ctx, file, total, etag, keepAlive, span, status);
 		}
 
-		return serveIdentity(ctx, file, offset, length, status, etag, contentRange, keepAlive);
+		return serveIdentity(ctx, file, offset, length, status, etag, contentRange, keepAlive, span);
+	}
+
+	/** Ends a bodyless response: the tracker entry closes with the status before the head goes out. */
+	private boolean finishBodyless(ChannelHandlerContext ctx, ActivityTracker.Span span, String status, long contentLength, String etag, String contentRange, boolean keepAlive) {
+		tracker.complete(span, statusNumber(status), contentLength);
+		return respondOrClose(ctx, status, contentLength, etag, contentRange, keepAlive);
+	}
+
+	private static int statusNumber(String status) {
+		return Integer.parseInt(status.substring(0, 3));
 	}
 
 	/** The plain body path: objects, ranged responses, and documents for clients that did not offer zstd. */
-	private boolean serveIdentity(ChannelHandlerContext ctx, Path file, long offset, long length, String status, String etag, String contentRange, boolean keepAlive) {
+	private boolean serveIdentity(ChannelHandlerContext ctx, Path file, long offset, long length, String status, String etag, String contentRange, boolean keepAlive, ActivityTracker.Span span) {
 		FileChannel channel = null;
 		try {
 			channel = FileChannel.open(file, StandardOpenOption.READ);
@@ -267,18 +284,21 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		} catch (IOException e) {
 			closeQuietly(channel);
 			streaming = false;
+			tracker.complete(span, 404, 0);
 			return respondOrClose(ctx, STATUS_404, 0, null, null, keepAlive);
 		}
 
 		// The head is in flight from here on, so the only honest completion of a mid-stream failure is dropping the connection.
 		ChannelFuture headWritten = ctx.writeAndFlush(response(status, length, etag, contentRange, null));
 		streaming = true;
+		inFlightSpan = span;
 		final FileChannel opened = channel;
 		final boolean responseKeepAlive = keepAlive;
 		try {
-			senders.execute(() -> streamBody(ctx, opened, length, headWritten, responseKeepAlive));
+			senders.execute(() -> streamBody(ctx, opened, length, headWritten, responseKeepAlive, span, status));
 		} catch (RejectedExecutionException rejected) {
 			closeQuietly(opened);
+			tracker.complete(span, statusNumber(status), 0);
 			ctx.close();
 		}
 		return false;
@@ -289,13 +309,14 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	 * is compressed off the event loop first and the stall window covers the buffer drain like any streamed body. Over the
 	 * buffer tripwire or on any compression failure the identity body is served instead.
 	 */
-	private boolean serveCompressedDocument(ChannelHandlerContext ctx, Path file, long total, String etag, boolean keepAlive) {
+	private boolean serveCompressedDocument(ChannelHandlerContext ctx, Path file, long total, String etag, boolean keepAlive, ActivityTracker.Span span, String status) {
 		streaming = true;
+		inFlightSpan = span;
 		try {
 			senders.execute(() -> {
 				byte[] compressed = compress(file);
 				if (compressed == null) {
-					serveIdentity(ctx, file, 0, total, STATUS_200, etag, null, keepAlive);
+					serveIdentity(ctx, file, 0, total, STATUS_200, etag, null, keepAlive, span);
 					return;
 				}
 				Channel channel = ctx.channel();
@@ -304,10 +325,11 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 				if (failure == null && !headWritten.isSuccess()) failure = causeOf(headWritten);
 				if (failure == null) failure = writeBody(channel, compressed);
 				Throwable finalFailure = failure;
-				executeOnLoop(channel, () -> finishStream(ctx, compressed.length, finalFailure, keepAlive));
+				executeOnLoop(channel, () -> finishStream(ctx, span, status, compressed.length, finalFailure, keepAlive));
 			});
 		} catch (RejectedExecutionException rejected) {
 			streaming = false;
+			tracker.complete(span, statusNumber(status), 0);
 			ctx.close();
 		}
 		return false;
@@ -342,13 +364,20 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	 * revocation and expiry apply to the next request without touching the connection. A failed validation never
 	 * releases the connection.
 	 */
-	private boolean authorized(ChannelHandlerContext ctx, String authorization) {
+	private boolean authorized(ChannelHandlerContext ctx, String authorization, ActivityTracker.Span span) {
 		SocketAddress address = addressOf(ctx.channel());
 		if (authorization == null || !authorization.startsWith(BEARER_PREFIX) || authorization.length() == BEARER_PREFIX.length()) {
 			LOGGER.warn("Rejecting a modpack download request from {} without a bearer secret", address);
-			return rejectUnauthorized(ctx);
+			rejectUnauthorized(ctx, span);
+			return false;
 		}
-		if (!Secrets.isSecretValid(authorization.substring(BEARER_PREFIX.length()), address)) return rejectUnauthorized(ctx);
+		String secret = authorization.substring(BEARER_PREFIX.length());
+		if (!Secrets.isSecretValid(secret, address)) {
+			rejectUnauthorized(ctx, span);
+			return false;
+		}
+		var issued = SecretsStore.getHostSecret(secret);
+		span.actor = issued == null ? null : issued.getValue().name();
 		return true;
 	}
 
@@ -357,9 +386,9 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		return real != null ? real : channel.remoteAddress();
 	}
 
-	private boolean rejectUnauthorized(ChannelHandlerContext ctx) {
+	private void rejectUnauthorized(ChannelHandlerContext ctx, ActivityTracker.Span span) {
+		tracker.complete(span, 401, 0);
 		respondThenClose(ctx, STATUS_401, 0, null, null);
-		return false;
 	}
 
 	/** Writes one bodyless response, honoring a client's close preference on responses that would otherwise keep the connection open. */
@@ -372,7 +401,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		return false;
 	}
 
-	private void streamBody(ChannelHandlerContext ctx, FileChannel file, long length, ChannelFuture headWritten, boolean keepAlive) {
+	private void streamBody(ChannelHandlerContext ctx, FileChannel file, long length, ChannelFuture headWritten, boolean keepAlive, ActivityTracker.Span span, String status) {
 		Channel channel = ctx.channel();
 		Throwable failure = awaitWritten(channel, headWritten);
 		if (failure == null && !headWritten.isSuccess()) failure = causeOf(headWritten);
@@ -397,6 +426,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 					throw e;
 				}
 				ChannelFuture written = channel.writeAndFlush(chunk);
+				tracker.progress(span, sent);
 				failure = awaitWritten(channel, written);
 				if (failure == null && !written.isSuccess()) failure = causeOf(written);
 			}
@@ -408,14 +438,17 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		}
 
 		Throwable finalFailure = failure;
-		executeOnLoop(channel, () -> finishStream(ctx, length, finalFailure, keepAlive));
+		long sentBytes = sent;
+		executeOnLoop(channel, () -> finishStream(ctx, span, status, sentBytes, finalFailure, keepAlive));
 	}
 
-	private void finishStream(ChannelHandlerContext ctx, long length, Throwable failure, boolean keepAlive) {
+	private void finishStream(ChannelHandlerContext ctx, ActivityTracker.Span span, String status, long bytesSent, Throwable failure, boolean keepAlive) {
 		Channel channel = ctx.channel();
+		inFlightSpan = null;
+		tracker.complete(span, statusNumber(status), bytesSent);
 		if (failure != null) {
 			// Body bytes are already in flight: an error status cannot follow them, the log is the only receipt.
-			LOGGER.error("HTTP response of {} bytes failed: {}", length, failure.getMessage(), failure);
+			LOGGER.error("HTTP response of {} bytes failed: {}", bytesSent, failure.getMessage(), failure);
 			channel.close();
 			return;
 		}

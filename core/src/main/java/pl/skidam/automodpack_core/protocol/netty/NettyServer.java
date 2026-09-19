@@ -29,6 +29,7 @@ import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import io.netty.util.AttributeKey;
 
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
@@ -38,6 +39,7 @@ import pl.skidam.automodpack_core.protocol.netty.handler.HttpContractHandler;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProxyProtocolHandler;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ModpackContentTools;
 
 public class NettyServer {
 
@@ -97,6 +99,22 @@ public class NettyServer {
 
 	private static Optional<Path> regularPath(Path path) {
 		return path != null && !Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) ? Optional.of(path) : Optional.empty();
+	}
+
+	private final ActivityTracker activityTracker = new ActivityTracker();
+
+	public ActivityTracker activityTracker() {
+		return activityTracker;
+	}
+
+	/** The activity command's read model, with object hashes resolved against the current generation's pack paths. */
+	public ActivityTracker.Snapshot activitySnapshot() {
+		Map<String, String> names = new HashMap<>();
+		getPath(GenerationHosting.HEAD_DOCUMENT_KEY).ifPresent(head -> {
+			GenerationJsons.HeadDocumentFields document = ModpackContentTools.readHeadDocument(head);
+			if (document != null) document.policy.categories.forEach((category, groups) -> groups.forEach((group, fields) -> fields.files.forEach((path, file) -> names.put(file.sha1, path))));
+		});
+		return activityTracker.snapshot(names);
 	}
 
 	public synchronized Optional<ChannelFuture> start() {

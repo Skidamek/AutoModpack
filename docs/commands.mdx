@@ -14,7 +14,6 @@
 - `/automodpack generate storage` - Reports how many bytes the journal and the object store hold.
 - `/automodpack generate export-http [--all] <directory>` - Writes the URL-contract tree (`head`, `journal`, `objects/<sha1>`) as byte-for-byte copies of the hosted files, ready for any static HTTPS host. Objects Modrinth or CurseForge still serve themselves are left out; `--all` keeps every object in the tree. The command reports what was exported, omitted, and unresolvable. Works in every connection mode and never deletes anything from the directory.
 - `/automodpack generate storage collect confirm` - Deletes every object the current generation does not serve. Older generations stay listed in the journal but can no longer be restored.
-- `/automodpack generate export-http [--all] <directory>` - Writes the pack as plain files (`head`, `journal`, `objects/<sha1>`) that any static HTTPS host can serve. Files that Modrinth or CurseForge still serve themselves are pruned. `--all` keeps everything. The export refuses while `validateSecrets` is on, because a static host cannot check download secrets. See [hosting](how-it-works/hosting#serving-the-pack-from-a-static-https-host).
 
 Patch notes for the next publish can also be written to `automodpack/host-modpack/patch-notes.md`; the file is read and cleared when a generation publishes. Publishing, rollbacks, and storage are explained in [generations](how-it-works/generations).
 
@@ -22,7 +21,7 @@ Patch notes for the next publish can also be written to `automodpack/host-modpac
 
 - `/automodpack host` - Hosting status.
 - `/automodpack host start`, `stop`, `restart` - Control the modpack host.
-- `/automodpack host activity` - One-line summary of requests, transferred bytes, connected players, and refused (401) downloads, plus the last finished transfers and the downloads currently in flight. Hover a line for per-player details.
+- `/automodpack host activity` - Shows modpack request activity since startup: totals, recent transfers, in-flight downloads; hover for per-player stats.
 - `/automodpack host fingerprint` - Prints the [certificate fingerprint](security#how-clients-verify-a-server) of the modpack host.
 - `/automodpack host fingerprint dns <minecraft-hostname>` - Prints a DNSSEC record that lets clients verify a self-signed certificate automatically.
 - `/automodpack host fingerprint share <minecraft-address>` - Prints a plain and a pinned copyable join address.
