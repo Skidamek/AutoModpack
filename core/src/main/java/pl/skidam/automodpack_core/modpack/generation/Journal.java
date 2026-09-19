@@ -1,19 +1,12 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
 import java.io.IOException;
-import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.TreeMap;
-
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
@@ -31,8 +24,6 @@ public final class Journal {
 			super(message);
 		}
 	}
-
-	private static final Gson COMPACT = ConfigTools.strictEnums(new GsonBuilder().disableHtmlEscaping()).create();
 
 	private final Path file;
 	private List<JournalEntry> entries;
@@ -54,7 +45,7 @@ public final class Journal {
 
 	private static List<JournalEntry> parse(Path file, boolean tolerateTornTail) throws IOException {
 		try {
-			return JsonLines.read(file, "journal", line -> JournalEntry.fromFields(COMPACT.fromJson(line, GenerationJsons.JournalEntryFields.class)), tolerateTornTail);
+			return JsonLines.read(file, "journal", line -> JournalEntry.fromFields(ConfigTools.COMPACT.fromJson(line, GenerationJsons.JournalEntryFields.class)), tolerateTornTail);
 		} catch (JsonLines.UnusableContentException e) {
 			throw new UnusableContentException(e.getMessage(), e);
 		}
@@ -86,14 +77,9 @@ public final class Journal {
 		Objects.requireNonNull(entry, "entry");
 		long expected = entries.isEmpty() ? 1 : entries.get(entries.size() - 1).seq() + 1;
 		if (entry.seq() != expected) throw new IOException("Journal entry " + entry.seq() + " does not follow " + (expected - 1));
-		String line = COMPACT.toJson(entry.toFields());
-		Files.createDirectories(file.getParent());
-		Files.writeString(file, line + "\n", StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
 		// The publication order is journal first, projection second: the appended entry must reach stable storage
 		// before the projection that names it is forced, or a power cut rolls the published head back one generation.
-		try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
-			channel.force(true);
-		}
+		JsonLines.appendLine(file, ConfigTools.COMPACT.toJson(entry.toFields()));
 		List<JournalEntry> updated = new ArrayList<>(entries);
 		updated.add(entry);
 		entries = List.copyOf(updated);

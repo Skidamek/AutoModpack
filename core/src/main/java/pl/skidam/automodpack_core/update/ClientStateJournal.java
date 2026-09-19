@@ -4,19 +4,14 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.utils.HashUtils.isCanonicalSha1;
 
 import java.io.IOException;
-import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -29,7 +24,6 @@ import pl.skidam.automodpack_core.utils.JsonLines;
  * live beside it; file bytes stay in shared CAS.
  */
 public final class ClientStateJournal {
-	private static final Gson COMPACT = ConfigTools.strictEnums(new GsonBuilder().disableHtmlEscaping()).create();
 	public static final long NO_PARENT = 0;
 
 	public enum Kind {
@@ -101,7 +95,7 @@ public final class ClientStateJournal {
 
 	public static ClientStateJournal open(Path file) throws IOException {
 		try {
-			return new ClientStateJournal(file, JsonLines.read(file, "instance timeline", line -> Snapshot.fromFields(COMPACT.fromJson(line, ClientStorageJsons.SnapshotFields.class)), true));
+			return new ClientStateJournal(file, JsonLines.read(file, "instance timeline", line -> Snapshot.fromFields(ConfigTools.COMPACT.fromJson(line, ClientStorageJsons.SnapshotFields.class)), true));
 		} catch (JsonLines.UnusableContentException e) {
 			LOGGER.error("The instance timeline is corrupt and was moved aside; earlier snapshots are no longer restorable from it: {}", file, e);
 			DurableFiles.setAside(file, "Instance timeline", e);
@@ -128,12 +122,7 @@ public final class ClientStateJournal {
 		if (entry.seq() != expected) throw new IOException("Snapshot " + entry.seq() + " does not follow " + (expected - 1));
 		long expectedParent = entries.isEmpty() ? NO_PARENT : entries.get(entries.size() - 1).seq();
 		if (entry.parentSeq() != expectedParent) throw new IOException("Snapshot " + entry.seq() + " parent does not match the timeline head");
-		String line = COMPACT.toJson(entry.toFields());
-		Files.createDirectories(file.getParent());
-		Files.writeString(file, line + "\n", StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-		try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
-			channel.force(true);
-		}
+		JsonLines.appendLine(file, ConfigTools.COMPACT.toJson(entry.toFields()));
 		List<Snapshot> updated = new ArrayList<>(entries);
 		updated.add(entry);
 		entries = List.copyOf(updated);
@@ -156,7 +145,7 @@ public final class ClientStateJournal {
 			rewritten.add(new Snapshot(entry.seq(), parent, entry.treeSha1(), entry.kind(), entry.modpackId(), entry.transactionId(), entry.createdAt()));
 		}
 		StringBuilder text = new StringBuilder();
-		for (Snapshot entry : rewritten) text.append(COMPACT.toJson(entry.toFields())).append('\n');
+		for (Snapshot entry : rewritten) text.append(ConfigTools.COMPACT.toJson(entry.toFields())).append('\n');
 		Files.createDirectories(file.getParent());
 		DurableFiles.writeAtomic(file, text.toString().getBytes(StandardCharsets.UTF_8));
 		entries = List.copyOf(rewritten);

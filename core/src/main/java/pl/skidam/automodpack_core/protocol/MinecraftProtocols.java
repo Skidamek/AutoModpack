@@ -19,8 +19,11 @@ import pl.skidam.automodpack_core.utils.JarUtils;
  * oneJar build from stonecutter.properties.toml as the verbatim mirror of the manifest's covers -
  * one key per cover, a tilde key declaring that its number answers the whole patch line, which is
  * stripped on read so a covered patch release walks up its dotted prefix onto it ({@code 26.1.3}
- * rides {@code ~26.1}'s number). The build fails when the table drifts from the covers in either
- * direction - so this code works in preload too, where Minecraft classes cannot be loaded.
+ * rides {@code ~26.1}'s number). Exact covers and tilde covers share one keyspace after the strip,
+ * but that stays exact: a version no cover names crashes in {@code ImplManifest.entryFor} before
+ * reaching this class, so only tilde-covered patch releases ever walk. The build fails when the
+ * table drifts from the covers in either direction - so this code works in preload too, where
+ * Minecraft classes cannot be loaded.
  */
 public final class MinecraftProtocols {
 	private static final String ENTRY = "mc-protocols.json";

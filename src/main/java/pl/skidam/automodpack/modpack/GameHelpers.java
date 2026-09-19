@@ -8,7 +8,21 @@ import java.util.UUID;
 import net.minecraft.server.players.NameAndId;
 /*?}*/
 
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.TextColor;
+import net.minecraft.server.level.ServerPlayer;
+
+import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
+
+/*? if >=1.21.5 {*/
+import java.net.URI;
+/*?}*/
+
 import static pl.skidam.automodpack.init.Common.server;
+import static pl.skidam.automodpack_core.Constants.LOADER;
 
 public class GameHelpers {
 
@@ -50,6 +64,29 @@ public class GameHelpers {
 		return profile.id();
 		/*?} else {*/
 		/*return profile.getId();
+		*//*?}*/
+	}
+
+	/** The unmodded-client nag text with the {loader} placeholder substituted; the login kick and the chat nag render the same message. */
+	public static String nagMessage(ServerConfigJsons.ServerConfigFieldsV3 config) {
+		return config.nagMessage.replace(ServerConfigJsons.LOADER_PLACEHOLDER, LOADER);
+	}
+
+	/** Sends the post-join chat nag: the bold nag message plus the clickable download row. */
+	public static void sendNag(ServerPlayer player, ServerConfigJsons.ServerConfigFieldsV3 config) {
+		Component nagText = VersionedText.literal(nagMessage(config)).withStyle(style -> style.withBold(true));
+		Component nagClickableText = VersionedText.literal(config.nagClickableMessage).withStyle(style -> style.withUnderlined(true).withColor(TextColor.fromLegacyFormat(ChatFormatting.BLUE))
+				/*? if >=1.21.5 {*/
+				.withClickEvent(new ClickEvent.OpenUrl(URI.create(config.nagClickableLink))));
+				/*?} else {*/
+				/*.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, config.nagClickableLink)));
+				*//*?}*/
+		/*? if >=26.1 {*/
+		player.sendSystemMessage(nagText, false);
+		player.sendSystemMessage(nagClickableText, false);
+		/*?} else {*/
+		/*player.displayClientMessage(nagText, false);
+		player.displayClientMessage(nagClickableText, false);
 		*//*?}*/
 	}
 }

@@ -145,15 +145,6 @@ public final class StateHistory {
 		});
 	}
 
-	public static void aroundMutation(ClientStorage storage, Set<Key> extraPaths, Kind kind, String modpackId, String transactionId, ClientStorageMutation.Operation<?> mutation) throws IOException {
-		ClientStorageMutation.run(storage, () -> {
-			snapshotIfDirty(storage, extraPaths, Kind.LIVE, modpackId, transactionId);
-			mutation.run();
-			snapshotIfDirty(storage, extraPaths, kind, modpackId, transactionId);
-			return null;
-		});
-	}
-
 	public static Path checkout(ClientStorage storage, long seq) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {

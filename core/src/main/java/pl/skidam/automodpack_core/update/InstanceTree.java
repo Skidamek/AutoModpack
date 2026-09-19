@@ -15,9 +15,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -36,7 +33,6 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * {@code state-history/trees/<sha1>}; file bytes stay in shared CAS.
  */
 public final class InstanceTree {
-	private static final Gson COMPACT = ConfigTools.strictEnums(new GsonBuilder().disableHtmlEscaping()).create();
 	static final Comparator<TrackedFile> FILE_ORDER = Comparator.comparing((TrackedFile file) -> file.root().ordinal()).thenComparing(TrackedFile::overlayPackId).thenComparing(TrackedFile::path);
 	private static final Comparator<Tombstone> TOMBSTONE_ORDER = Comparator.comparing(Tombstone::modpackId);
 
@@ -128,7 +124,7 @@ public final class InstanceTree {
 		for (int index = 1; index < sorted.size(); index++)
 			if (FILE_ORDER.compare(sorted.get(index - 1), sorted.get(index)) == 0) throw new IllegalArgumentException("The instance tree repeats a path");
 		LiveIdentity canonical = Objects.requireNonNull(identity, "identity");
-		String sha1 = HashUtils.sha1(COMPACT.toJson(toFields(canonical, List.copyOf(sorted))).getBytes(StandardCharsets.UTF_8));
+		String sha1 = HashUtils.sha1(ConfigTools.COMPACT.toJson(toFields(canonical, List.copyOf(sorted))).getBytes(StandardCharsets.UTF_8));
 		return new InstanceTree(sha1, canonical, List.copyOf(sorted));
 	}
 

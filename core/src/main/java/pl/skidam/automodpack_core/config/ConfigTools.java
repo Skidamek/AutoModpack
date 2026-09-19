@@ -59,6 +59,9 @@ public final class ConfigTools {
 
 	public static final Gson GSON = buildGson();
 
+	/** Strict-enums Gson without pretty printing, for JSON-lines documents where one line is one record. */
+	public static final Gson COMPACT = strictEnums(new GsonBuilder().disableHtmlEscaping()).create();
+
 	private ConfigTools() {}
 
 	private static Gson buildGson() {

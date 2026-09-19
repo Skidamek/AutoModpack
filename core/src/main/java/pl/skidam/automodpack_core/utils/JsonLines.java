@@ -82,4 +82,13 @@ public final class JsonLines {
 			channel.force(true);
 		}
 	}
+
+	/** Appends one line durably: the bytes reach stable storage before the call returns, so a crash never corrupts the journal head. */
+	public static void appendLine(Path file, String line) throws IOException {
+		Files.createDirectories(file.getParent());
+		Files.writeString(file, line + "\n", StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+		try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
+			channel.force(true);
+		}
+	}
 }
