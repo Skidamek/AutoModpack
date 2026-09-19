@@ -18,10 +18,10 @@ from automodpack_autotester.config import (
 )
 from automodpack_autotester.engine.steps_io import (
     assert_client_object,
-    assert_preservation_claim,
+    assert_timeline_file,
     mutate_active_object,
     mutate_client_file,
-    mutate_preservation_object,
+    mutate_timeline_object,
     seed_unowned_local_file,
     write_file,
 )
@@ -211,9 +211,8 @@ def test_active_object_mutation_and_assertion_use_installed_manifest(make_ctx):
     assert_client_object(ctx, {"path": "config/owned.txt", "valid": False})
 
 
-def test_preservation_claim_filters_do_not_rely_on_corrupt_object_bytes(make_ctx):
+def test_timeline_assertion_and_mutation_track_the_journal_tree(make_ctx):
     ctx = make_ctx()
-    pack_id = "fixture7"
     payload = b"preserved bytes\n"
     object_hash = hashlib.sha1(payload).hexdigest()
     objects = ctx.game_dir / "automodpack/client/data/objects"
@@ -221,15 +220,20 @@ def test_preservation_claim_filters_do_not_rely_on_corrupt_object_bytes(make_ctx
     object_path = client_steps.cas_object(objects, object_hash)
     object_path.parent.mkdir(parents=True, exist_ok=True)
     object_path.write_bytes(payload)
-    claims = ctx.game_dir / f"automodpack/client/preservation/{pack_id}/claims.json"
-    claims.parent.mkdir(parents=True)
-    claims.write_text(json.dumps({"claims": [{"originalPath": "mods/local.jar", "objectHash": object_hash, "size": len(payload), "reason": "STRICT_REPAIR"}]}), encoding="utf-8")
-    selector = {"packId": pack_id, "originalPath": "mods/local.jar", "reason": "STRICT_REPAIR", "content": payload.decode("utf-8")}
+    tree_sha1 = "a" * 40
+    trees = ctx.game_dir / "automodpack/client/state-history/trees"
+    trees.mkdir(parents=True)
+    (trees / tree_sha1).write_text(json.dumps({"files": [{"root": "GAME_DIR", "overlayPackId": "", "path": "mods/local.jar", "sha1": object_hash, "size": len(payload)}]}), encoding="utf-8")
+    journal = ctx.game_dir / "automodpack/client/state-history/journal.jsonl"
+    journal.write_text(json.dumps({"seq": 1, "parentSeq": 0, "treeSha1": tree_sha1, "kind": "LIVE", "modpackId": "fixture7", "transactionId": "tx", "createdAt": "2026-09-19T00:00:00Z"}) + "\n", encoding="utf-8")
+    selector = {"path": "mods/local.jar", "content": payload.decode("utf-8")}
 
-    assert_preservation_claim(ctx, selector)
-    mutate_preservation_object(ctx, {**selector, "action": "corrupt"})
-    assert_preservation_claim(ctx, {**selector, "objectValid": False})
-    assert_preservation_claim(ctx, {"packId": pack_id, "reason": "EDITABLE_RESET", "present": False})
+    assert_timeline_file(ctx, selector)
+    mutate_timeline_object(ctx, {**selector, "action": "corrupt"})
+    with pytest.raises(AssertionError, match="do not match their hash"):
+        assert_timeline_file(ctx, selector)
+    with pytest.raises(AssertionError, match="no timeline snapshot tracks"):
+        assert_timeline_file(ctx, {"path": "mods/absent.jar"})
 
 
 def test_metadata_only_fixture_uses_no_code_loader_metadata():

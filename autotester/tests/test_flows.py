@@ -247,14 +247,14 @@ _BUILTIN_VERBS = {
     "mutate_client_file": steps_io.mutate_client_file,
     "mutate_active_object": steps_io.mutate_active_object,
     "assert_client_object": steps_io.assert_client_object,
-    "mutate_preservation_object": steps_io.mutate_preservation_object,
+    "mutate_timeline_object": steps_io.mutate_timeline_object,
     "assert_bootstrap_import": steps_io.assert_bootstrap_import,
     "assert_authenticated_secret": steps_io.assert_authenticated_secret,
     "seed_unowned_local_file": steps_io.seed_unowned_local_file,
     "seed_same_path_conflict": steps_io.seed_same_path_conflict,
     "seed_mod_fixture": steps_io.seed_mod_fixture,
     "assert_mod_fixture": steps_io.assert_mod_fixture,
-    "assert_preservation_claim": steps_io.assert_preservation_claim,
+    "assert_timeline_file": steps_io.assert_timeline_file,
     "assert_generation": steps_io.assert_generation,
     "click": steps_ui.click,
     "type": steps_ui.type_,
@@ -425,8 +425,14 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
     bridge.click(100)
     assert bridge.gui()["screenClass"] == "ModpackSettingsScreen"
 
-    # Storage verification returns to the same screen after a corrupt claimed object fails.
-    object_path = bridge._vault_claim("packaaa", "config/amp-autotest-gamma.cfg", b"gamma", "SERVER_REMOVAL")
+    # Storage verification returns to the same screen after a corrupt timeline-tracked object fails.
+    gamma = ctx.game_dir / "config/amp-autotest-gamma.cfg"
+    gamma.parent.mkdir(parents=True, exist_ok=True)
+    gamma.write_bytes(b"gamma")
+    bridge._timeline_snapshot("UPDATE")
+    object_path = client_steps.cas_object(
+        ctx.game_dir / "automodpack/client/data/objects", hashlib.sha1(b"gamma").hexdigest()
+    )
     bridge.screen = "storage"
     bridge.click(91)
     assert bridge.storage_verified
@@ -448,21 +454,16 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
     bridge.click(46)
     assert any(button["text"] == "Clean local storage" and button["enabled"] for button in bridge.gui()["buttons"])
 
-    # Restore refuses to overwrite an active owned path. Save-copy and two-click deletion remain available.
-    active_owned = ctx.game_dir / "automodpack/client/active/config/amp-autotest-gamma.cfg"
-    active_owned.parent.mkdir(parents=True, exist_ok=True)
-    active_owned.write_bytes(b"server")
-    object_path.write_bytes(b"gamma")
-    bridge.screen = "preservation"
-    bridge.click(83)
-    bridge.click(84)
-    assert bridge.gui()["screenClass"] == "ErrorScreen"
-    bridge.click(94)
-    assert bridge.gui()["screenClass"] == "PreservationVaultScreen"
-    bridge.click(83)  # Reselecting a row cancels any pending destructive action.
-    bridge.click(90)
-    bridge.click(90)
-    assert not (ctx.game_dir / "automodpack/client/preservation/packaaa/claims.json").exists()
+    # The timeline screen: selecting a snapshot row enables Forget older, and Back returns to the manager.
+    bridge.screen = "manager"
+    bridge.click(105)
+    assert bridge.gui()["screenClass"] == "StateHistoryScreen"
+    rows = [element for element in bridge.gui()["other"] if element.get("type") == "ListRow"]
+    assert rows, "the timeline must render its snapshots"
+    bridge.click(rows[0]["id"])
+    assert any(button["text"] == "Forget older" and button["enabled"] for button in bridge.gui()["buttons"])
+    bridge.click(87)
+    assert bridge.gui()["screenClass"] == "InstalledModpacksScreen"
 
 
 def test_release_gate_flow(make_ctx, flow_verbs):

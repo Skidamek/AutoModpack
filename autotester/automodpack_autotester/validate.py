@@ -28,7 +28,7 @@ _RELEASE_GATE_CAPABILITIES = frozenset({
     "pack-switching",
     "generation-update",
     "conflict-preservation",
-    "preservation-vault",
+    "instance-timeline",
     "storage-maintenance",
     "server-generation-rollback",
     "server-object-gc",
@@ -194,13 +194,12 @@ def _walk(steps, macros, problems, stack, scoped_targets):
                 _check_publish_generation(step, problems, label)
             elif verb == "assert_generation":
                 _check_generation_assertion(step, problems, label)
-            elif verb in ("assert_file_content", "wait_file_content", "write_file", "mutate_client_file", "mutate_active_object", "assert_client_object", "mutate_preservation_object", "seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_preservation_claim"):
+            elif verb in ("assert_file_content", "wait_file_content", "write_file", "mutate_client_file", "mutate_active_object", "assert_client_object", "mutate_timeline_object", "seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_timeline_file"):
                 if not isinstance(step.get("path"), str) or not step["path"].strip():
-                    if verb not in ("assert_preservation_claim", "mutate_preservation_object"):
-                        problems.append(f"{label}.path: expected a non-empty relative path")
+                    problems.append(f"{label}.path: expected a non-empty relative path")
                 if verb in ("wait_file_content", "write_file") and not isinstance(step.get("content"), str):
                     problems.append(f"{label}.content: expected a string")
-                if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_preservation_claim", "mutate_preservation_object") and step.get("fixture") is not None:
+                if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_timeline_file", "mutate_timeline_object") and step.get("fixture") is not None:
                     _check_mod_fixture(step.get("fixture"), problems, f"{label}.fixture")
                 if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture") and step.get("fixture") is not None and isinstance(step.get("path"), str) and not step["path"].lower().endswith(".jar"):
                     problems.append(f"{label}.path: valid mod fixtures must use a .jar path")

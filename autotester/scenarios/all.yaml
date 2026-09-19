@@ -30,7 +30,7 @@ releaseGate:
     - pack-switching
     - generation-update
     - conflict-preservation
-    - preservation-vault
+    - instance-timeline
     - storage-maintenance
     - server-generation-rollback
     - server-object-gc
@@ -238,7 +238,7 @@ flow:
   - use: open_multiplayer
   - use: open_pack_manager
   - do: seed_unowned_local_file
-    name: seed an unowned local file for preservation coverage
+    name: seed an unowned local file for timeline coverage
     path: mods/local-unowned.jar
     fixture: { modId: amp_autotest_unowned, version: "1.0.0-local-unowned", marker: unowned-local }
   - do: seed_same_path_conflict
@@ -328,9 +328,9 @@ flow:
     name: verify the server-owned valid mod is active for Pack B
     path: "${active_dir}/mods/amp-autotest-conflict.jar"
     fixture: { modId: amp_autotest_conflict, version: "2.0.0-server", marker: server }
-  - do: assert_preservation_claim
-    name: verify the local collision payload was preserved in preservation
-    packId: packbbb
+  - do: assert_timeline_file
+    name: verify the switch preserved the local collision payload in the instance timeline
+    path: mods/amp-autotest-conflict.jar
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
   - do: assert
     name: verify the local same-ID source was moved out of mods
@@ -387,36 +387,26 @@ flow:
     name: return to the installed pack list before preserved files
     select: { text: Back }
   - do: wait_for
-    name: show preserved files on the installed pack list
-    until:
-      all:
-        - screen: InstalledModpacksScreen
-        - element: { text: Preserved files }
+    name: show the installed pack list
+    until: { screen: InstalledModpacksScreen }
   - do: screenshot
     name: capture the installed pack list
     file: all-installed-packs
   - do: click
-    name: open the owned conflict in preserved files from the pack list
-    select: { text: Preserved files }
-  - do: click
-    name: select the still-owned local conflict
-    select: { text: amp-autotest-conflict.jar }
+    name: open the instance timeline from the pack list
+    select: { key: automodpack.management.stateHistory }
   - do: wait_for
-    name: keep the Pack B claim's restore locked while Pack B is inactive
-    until:
-      all:
-        - screen: PreservationVaultScreen
-        - element: { text: amp-autotest-conflict.jar, enabled: true }
-        - element: { text: Restore, enabled: false }
-        - element: { text: Save copy, enabled: true }
+    name: show the instance timeline
+    timeout: 30s
+    until: { screen: StateHistoryScreen }
   - do: screenshot
-    name: capture the locked still-owned claim in preserved files
-    file: all-vault-locked-restore
+    name: capture the instance timeline
+    file: all-state-history
   - do: click
-    name: leave the preservation vault
+    name: leave the instance timeline
     select: { text: Back }
   - do: wait_for
-    name: return to the installed pack list from the vault
+    name: return to the installed pack list from the timeline
     until: { screen: InstalledModpacksScreen }
   - do: click
     name: leave the installed pack manager
@@ -511,7 +501,7 @@ flow:
     that: { file_gone: "${active_dir}/config/pack-b.txt" }
 
   # Publish a newer record for the same Pack B identity without the conflicting
-  # mod. Its old preservation is now safe to restore because the active target no
+  # mod. Its old bytes are now safe to restore from the timeline because the active target no
   # longer owns the source path.
   - do: stage_modpack
     name: stage Pack B v2 without the conflicting mod
@@ -523,7 +513,7 @@ flow:
       - { path: config/pack-b.txt, content: "pack-b-v2\n" }
       - { path: config/pack-shared-editable.txt, content: "pack-b-v2-default\n", editable: true }
   - do: disconnect
-    name: leave Pack A before the safe preservation restore switch
+    name: leave Pack A before the local-payload recovery switch
   - use: open_multiplayer
   - use: open_pack_manager
   - do: click
@@ -600,64 +590,7 @@ flow:
     name: return to Pack B details after history
     until: { screen: ModpackSettingsScreen }
   - do: click
-    name: return to the installed pack list before preserved files restore
-    select: { text: Back }
-  - do: wait_for
-    name: show preserved files on the pack list after history
-    until:
-      all:
-        - screen: InstalledModpacksScreen
-        - element: { text: Preserved files }
-  - do: screenshot
-    name: capture Pack B preservation action
-    file: all-preservation-settings
-  - do: click
-    name: open the preservation archive
-    select: { text: Preserved files }
-  # The vault is a scrolling vanilla list; the bridge scrolls a clicked row into view,
-  # so no page turns are needed to reach older claims.
-  - do: wait_for
-    name: show the preserved local conflict in the vault
-    until:
-      all:
-        - screen: PreservationVaultScreen
-        - element: { text: amp-autotest-conflict.jar, enabled: true }
-  - do: click
-    name: select the preserved local conflict
-    select: { text: amp-autotest-conflict.jar }
-  - do: wait_for
-    name: show the safe preservation restore action
-    until:
-      all:
-        - screen: PreservationVaultScreen
-        - element: { text: Restore, enabled: true }
-  - do: screenshot
-    name: capture the preservation restore screen
-    file: all-preservation-restore
-  - do: click
-    name: restore the no-longer-owned local conflict
-    select: { text: Restore }
-  - do: wait_for
-    name: show the restored path and drop the claim from the list
-    until:
-      all:
-        - screen: PreservationVaultScreen
-        - element: { text: Restored to mods/amp-autotest-conflict.jar }
-        - no_element: { text: amp-autotest-conflict.jar, enabled: true }
-  - do: wait_file
-    name: wait for the restored local mod
-    path: mods/amp-autotest-conflict.jar
-  - do: assert_mod_fixture
-    name: verify preservation restore returned the original local mod
-    path: mods/amp-autotest-conflict.jar
-    fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
-  - do: assert_preservation_claim
-    name: verify restore released the preservation claim
-    packId: packbbb
-    fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
-    present: false
-  - do: click
-    name: return from preservation to the installed pack list
+    name: return to the installed pack list after history
     select: { text: Back }
   - do: wait_for
     name: return to the installed pack list after restore
@@ -697,15 +630,10 @@ flow:
     name: verify cleanup kept the active Pack B v2 projection
     path: "${active_dir}/config/pack-b.txt"
     content: "pack-b-v2\n"
-  - do: assert_mod_fixture
-    name: verify cleanup kept the restored local preservation payload
+  - do: assert_timeline_file
+    name: verify cleanup kept the collision payload recoverable from the timeline
     path: mods/amp-autotest-conflict.jar
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
-  - do: assert_preservation_claim
-    name: verify cleanup did not recreate the consumed preservation claim
-    packId: packbbb
-    fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
-    present: false
   - do: screenshot
     name: capture client local storage after cleanup
     file: all-local-storage-after
@@ -751,11 +679,6 @@ flow:
   - do: wait_client_exit
     name: wait for return to Pack A restart
   - use: rejoin
-  - do: assert_mod_fixture
-    name: verify the restored local mod remains unowned after switching back
-    path: mods/amp-autotest-conflict.jar
-    fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
-
   - do: publish_server_generation
     name: publish changed and removed files with new patch notes
     generation: 1
@@ -845,21 +768,18 @@ flow:
       all:
         - screen: InstalledModpacksScreen
         - element: { text: Pack A, enabled: true }
-        - element: { text: Preserved files }
   - do: click
-    name: open the recovered archive from the pack list
-    select: { text: Preserved files }
+    name: open the instance timeline from the pack list
+    select: { key: automodpack.management.stateHistory }
   - do: wait_for
-    name: show the removed file as recoverable
-    until:
-      all:
-        - screen: PreservationVaultScreen
-        - element: { text: amp-autotest-gamma.cfg, enabled: true }
+    name: show the instance timeline for the removed file
+    timeout: 30s
+    until: { screen: StateHistoryScreen }
   - do: screenshot
-    name: capture available recovered files
+    name: capture available recovered files in the timeline
     file: all-recovered-available
   - do: click
-    name: return to the pack list with the removed-file claim still held
+    name: return to the pack list with the removed file still tracked
     select: { text: Back }
   - do: wait_for
     name: return to the installed pack list before corrupting client storage
@@ -903,7 +823,7 @@ flow:
       all:
         - screen: OfflineRepairScreen
         - element: { text: "Keep changes in config/pack-shared-editable.txt", enabled: true, checked: false }
-        - element: { text: "Keep 2 existing mod files", enabled: true }
+        - element: { text: "Keep 1 existing mod files", enabled: true }
         - element: { text: Repair, enabled: true }
         - element: { text: Update and finish repair, enabled: true }
   - do: screenshot
@@ -914,7 +834,7 @@ flow:
     until:
       all:
         - element: { text: "Keep changes in config/pack-shared-editable.txt", enabled: true, checked: false }
-        - element: { text: "Keep 2 existing mod files", enabled: true }
+        - element: { text: "Keep 1 existing mod files", enabled: true }
         - element: { text: Keep all editable changes, enabled: true }
   - do: click
     name: opt into keeping the edited file
@@ -930,13 +850,13 @@ flow:
     until: { element: { text: "Keep changes in config/pack-shared-editable.txt", enabled: true, checked: false } }
   - do: click
     name: opt into keeping the unowned mods
-    select: { text: "Keep 2 existing mod files" }
+    select: { text: "Keep 1 existing mod files" }
   - do: wait_for
     name: show the keep choice checked on the unowned row
-    until: { element: { text: "Keep 2 existing mod files", enabled: true, checked: true } }
+    until: { element: { text: "Keep 1 existing mod files", enabled: true, checked: true } }
   - do: click
     name: return to removal consent before leaving
-    select: { text: "Keep 2 existing mod files", checked: true }
+    select: { text: "Keep 1 existing mod files", checked: true }
   - do: click
     name: cancel repair after exercising every choice
     select: { text: Back }
@@ -955,13 +875,13 @@ flow:
     until:
       all:
         - element: { text: "Keep changes in config/pack-shared-editable.txt", enabled: true, checked: false }
-        - element: { text: "Keep 2 existing mod files", enabled: true }
+        - element: { text: "Keep 1 existing mod files", enabled: true }
   - do: wait_for
     name: hold both rows at removal consent while keeping is one click away
     until:
       all:
         - element: { text: "Keep changes in config/pack-shared-editable.txt", enabled: true, checked: false }
-        - element: { text: "Keep 2 existing mod files", enabled: true }
+        - element: { text: "Keep 1 existing mod files", enabled: true }
         - element: { text: Repair, enabled: true }
   - do: click
     name: repair every locally available byte before updating
@@ -991,16 +911,9 @@ flow:
   - do: assert
     name: verify repair removed the restored conflict only after consent
     that: { file_gone: mods/amp-autotest-conflict.jar }
-  - do: assert_preservation_claim
-    name: verify editable reset preserved the player copy
-    packId: "${bootstrap_modpack_id}"
-    originalPath: config/pack-shared-editable.txt
-    reason: EDITABLE_RESET
-  - do: assert_preservation_claim
-    name: verify repair cleanup preserved both unowned mods
-    packId: "${bootstrap_modpack_id}"
-    reason: STRICT_REPAIR
-    count: 2
+  - do: assert_timeline_file
+    name: verify repair cleanup kept the unowned mod recoverable from the timeline
+    path: mods/local-unowned.jar
   - do: click
     name: use update to fetch the bytes unavailable to offline repair
     select: { text: Update and finish repair }
@@ -1034,10 +947,9 @@ flow:
     name: reset to title before the post-repair verification cycle
   - use: open_multiplayer
   - use: open_pack_manager
-  - do: mutate_preservation_object
-    name: corrupt the archived unowned mod's CAS object while its claim remains
-    packId: "${bootstrap_modpack_id}"
-    originalPath: mods/local-unowned.jar
+  - do: mutate_timeline_object
+    name: corrupt the archived unowned mod's CAS object while the timeline tracks it
+    path: mods/local-unowned.jar
     action: corrupt
   - do: click
     name: open client storage verification with corrupt required preservation bytes
@@ -1065,45 +977,27 @@ flow:
     name: reach the installed pack list before discarding the corrupted claim
     until: { screen: InstalledModpacksScreen }
   - do: click
-    name: open the vault to discard the corrupted preserved file
-    select: { text: Preserved files }
-  # The archived unowned mod was preserved last by the repair, so the vault's newest-first
-  # list opens on it.
+    name: open the instance timeline to forget the corrupted snapshots
+    select: { key: automodpack.management.stateHistory }
   - do: wait_for
-    name: show the corrupted preserved file first in the vault
-    until:
-      all:
-        - screen: PreservationVaultScreen
-        - element: { text: local-unowned.jar, enabled: true }
+    name: show the instance timeline before forgetting
+    timeout: 30s
+    until: { screen: StateHistoryScreen }
   - do: click
-    name: select the corrupted preserved file
-    select: { text: local-unowned.jar }
+    name: select the newest repair checkpoint
+    select: { text: Repaired }
   - do: click
-    name: arm deletion of the corrupted preserved file
-    select: { text: Delete }
+    name: forget the older snapshots holding the corrupted bytes
+    select: { text: Forget older }
+  - do: screenshot
+    name: capture the timeline after forgetting older snapshots
+    file: all-timeline-forgot-older
   - do: click
-    name: cancel the deletion by reselecting the file
-    select: { text: local-unowned.jar }
-  - do: click
-    name: arm deletion of the corrupted preserved file again
-    select: { text: Delete }
-  - do: click
-    name: discard the corrupted preserved file on the second click
-    select: { text: Delete }
-  - do: wait_for
-    name: drop the discarded preserved file from the vault
-    until:
-      all:
-        - screen: PreservationVaultScreen
-        - no_element: { text: local-unowned.jar, enabled: true }
-  - do: assert_preservation_claim
-    name: verify the discard released the corrupted preserved claim
-    packId: "${bootstrap_modpack_id}"
-    originalPath: mods/local-unowned.jar
-    present: false
-  - do: click
-    name: return to the pack list after the discard
+    name: leave the instance timeline after forgetting
     select: { text: Back }
+  - do: wait_for
+    name: return to the installed pack list after forgetting
+    until: { screen: InstalledModpacksScreen }
   - do: click
     name: verify repaired client storage
     select: { text: Local storage }
@@ -1122,40 +1016,6 @@ flow:
         - element: { text: Verify storage, enabled: true }
   - do: click
     name: return to the manager after successful verification
-    select: { text: Back }
-  - do: click
-    name: reopen the preservation vault after repair
-    select: { text: Preserved files }
-  # The vault is a scrolling vanilla list now, so the surviving claim is reachable
-  # without page turns even though it sits behind the newer discarded claim.
-  - do: wait_for
-    name: show the surviving editable-reset claim
-    timeout: 30s
-    until:
-      all:
-        - screen: PreservationVaultScreen
-        - element: { text: pack-shared-editable.txt, enabled: true }
-  - do: click
-    name: select the editable-reset claim to save a copy
-    select: { text: pack-shared-editable.txt }
-  - do: click
-    name: save a copy of the editable-reset claim
-    select: { text: Save copy }
-  - do: wait_for
-    name: show the saved copy path and drop the editable-reset claim
-    until:
-      all:
-        - screen: PreservationVaultScreen
-        - element: { text: Saved a copy to automodpack/recovered/ }
-        - no_element: { text: pack-shared-editable.txt, enabled: true }
-  - do: assert_preservation_claim
-    name: verify save-copy released the editable-reset claim
-    packId: "${bootstrap_modpack_id}"
-    originalPath: config/pack-shared-editable.txt
-    reason: EDITABLE_RESET
-    present: false
-  - do: click
-    name: return to the installed pack manager after deletion
     select: { text: Back }
   - do: click
     name: return to multiplayer after repair and vault review
@@ -1313,11 +1173,14 @@ flow:
   - do: assert
     name: verify approved first-install cleanup removed the unowned local mod
     that: { file_gone: mods/local-unowned.jar }
-  - do: assert_preservation_claim
-    name: verify first-install cleanup preserved both removed mods
-    packId: "${bootstrap_modpack_id}"
-    reason: PLAYER_CONSENT
-    count: 2
+  - do: assert_timeline_file
+    name: verify first-install cleanup kept the fresh unowned mod recoverable from the timeline
+    path: mods/local-unowned.jar
+    fixture: { modId: amp_local_unowned, version: "9.9.9-local", marker: local-only }
+  - do: assert_timeline_file
+    name: verify first-install cleanup kept the old published mod recoverable from the timeline
+    path: mods/amp-autotest-removed.jar
+    fixture: { modId: amp_autotest_removed, version: "1.0.0-published", marker: published }
   - do: disconnect
     name: return from the server to the vanilla title screen before removal
   - use: open_multiplayer
@@ -1379,11 +1242,6 @@ flow:
   - do: assert
     name: verify Pack A editable overlay was removed
     that: { file_gone: "automodpack/client/overlays/${bootstrap_modpack_id}/config/pack-shared-editable.txt" }
-  - do: assert_preservation_claim
-    name: verify Pack A removal retained explicit first-install preservation claims
-    packId: "${bootstrap_modpack_id}"
-    reason: PLAYER_CONSENT
-    count: 2
   # The server-maintenance steps run after the client assertions.
   - do: rollback_server_generation
     name: roll back through the real RCON command to a retained server ancestor

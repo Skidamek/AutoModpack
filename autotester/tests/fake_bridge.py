@@ -77,6 +77,7 @@ class FakeBridge:
         self.selected_claim_path: str | None = None
         self.selected_claim_pack: str | None = None
         self.repair_expected: dict[str, bytes] = {}
+        self.selected_snapshot: int | None = None
 
     # --- snapshot ---------------------------------------------------------
     def render_frame(self) -> None:
@@ -182,22 +183,18 @@ class FakeBridge:
                             {"id": 94, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
-            "preservation": {
-                "screenClass": "PreservationVaultScreen",
-                # Vault claims are selection-list rows (ListRow), not buttons; the real
-                # bridge emits them always enabled with the row's narration text.
+            "state_history": {
+                "screenClass": "StateHistoryScreen",
+                # Snapshot entries are selection-list rows (ListRow); the real bridge emits
+                # them always enabled with the row's narration text (the snapshot kind).
                 "buttons": [
-                    {"id": 84, "text": "Restore", "enabled": self._selected_claim_restorable(), "visible": True},
-                    {"id": 85, "text": "Save copy", "enabled": bool(self.vault_claim_selected), "visible": True},
-                    {"id": 90, "text": "Delete", "enabled": bool(self.vault_claim_selected), "visible": True},
-                    *([{"id": 108, "text": self.vault_message, "enabled": False, "visible": True}] if self.vault_message else []),
-                    {"id": 86, "text": "Back", "enabled": True, "visible": True},
+                    {"id": 88, "text": "Files...", "enabled": self.selected_snapshot is not None, "visible": True},
+                    {"id": 86, "text": "Forget older", "enabled": self.selected_snapshot is not None, "visible": True},
+                    {"id": 87, "text": "Back", "enabled": True, "visible": True},
                 ],
                 "other": [
-                    {"id": 83, "text": "amp-autotest-gamma.cfg", "enabled": True, "visible": self._claim_exists("packaaa", "config/amp-autotest-gamma.cfg"), "type": "ListRow"},
-                    {"id": 49, "text": "amp-autotest-conflict.jar", "enabled": True, "visible": self._claim_exists("packbbb", self.ctx.vars.get("same_path_conflict_path", "mods/amp-autotest-conflict.jar")), "type": "ListRow"},
-                    {"id": 107, "text": "pack-shared-editable.txt", "enabled": True, "visible": self._claim_exists("packaaa", "config/pack-shared-editable.txt"), "type": "ListRow"},
-                    {"id": 109, "text": "local-unowned.jar", "enabled": True, "visible": self._claim_exists("packaaa", "mods/local-unowned.jar"), "type": "ListRow"},
+                    {"id": 1000 + entry["seq"], "text": entry["text"], "enabled": True, "visible": True, "type": "ListRow"}
+                    for entry in self._timeline_rows()
                 ],
                 "textFields": [],
             },
@@ -363,6 +360,7 @@ class FakeBridge:
             self.alternative_selected = False
         elif element_id == 5:
             if self.screen == "preview":
+                self._timeline_snapshot("LIVE")
                 if self.pending_pack is not None:
                     self._capture_editable_overlay(self.selected_pack)
                     self.selected_pack = self.pending_pack
@@ -451,40 +449,24 @@ class FakeBridge:
         elif element_id == 16:
             self.screen = "restart"
         elif element_id == 42:
+            self._timeline_snapshot("LIVE")
             self._remove_active_pack()
+            self._timeline_snapshot("REMOVAL")
             self.screen = "manager"
-        elif element_id == 105:
-            self.vault_claim_selected = False
-            self.selected_claim_path = None
-            self.selected_claim_pack = None
-            self.vault_message = None
-            self.conflict_jar_unowned = True
-            self.screen = "preservation"
-        elif element_id == 83 and self.screen == "preservation":
-            self._select_vault_claim("packaaa", "config/amp-autotest-gamma.cfg")
-        elif element_id == 49 and self.screen == "preservation":
-            self._select_vault_claim("packbbb", self.ctx.vars.get("same_path_conflict_path", "mods/amp-autotest-conflict.jar"))
-        elif element_id == 107 and self.screen == "preservation":
-            self._select_vault_claim("packaaa", "config/pack-shared-editable.txt")
-        elif element_id == 109 and self.screen == "preservation":
-            self._select_vault_claim("packaaa", "mods/local-unowned.jar")
-        elif element_id == 84 and self.screen == "preservation":
-            if self._active_pack_owns_selected_claim(self.selected_claim_pack):
-                self.error_parent = "preservation"
-                self.screen = "error"
-            else:
-                self._restore_selected_claim()
-        elif element_id == 85 and self.screen == "preservation":
-            self._save_selected_claim_copy()
-        elif element_id == 90 and self.screen == "preservation":
-            if self.vault_claim_selected == "delete-pending":
-                self._delete_selected_claim(self.selected_claim_pack)
-                self.vault_claim_selected = False
-                self.selected_claim_path = None
-                self.selected_claim_pack = None
-            else:
-                self.vault_claim_selected = "delete-pending"
-        elif element_id == 86 and self.screen == "preservation":
+        elif element_id == 105 and self.screen == "manager":
+            self.selected_snapshot = None
+            self.screen = "state_history"
+        elif element_id >= 1000 and self.screen == "state_history":
+            seq = element_id - 1000
+            entry = next((row for row in self._timeline_entries() if row["seq"] == seq), None)
+            if entry is None:
+                raise AssertionError(f"timeline row for snapshot {seq} is not rendered")
+            self.selected_snapshot = seq
+        elif element_id == 86 and self.screen == "state_history":
+            if self.selected_snapshot is None:
+                raise AssertionError("fake timeline forget requested without a selected snapshot")
+            self._forget_older(self.selected_snapshot)
+        elif element_id == 87 and self.screen == "state_history":
             self.screen = "manager"
         elif element_id == 46:
             if self.screen == "manager":
@@ -503,7 +485,7 @@ class FakeBridge:
             self.screen = self.storage_parent if self.screen == "storage" else "multiplayer"
         elif element_id == 91:
             self.storage_compact_armed = False
-            if self._has_damaged_preservation_object():
+            if self._has_damaged_timeline_object():
                 self.error_parent = "storage"
                 self.screen = "error"
             else:
@@ -569,6 +551,7 @@ class FakeBridge:
         shutil.copy2(overlay, target)
 
     def _confirm_download(self) -> None:
+        self._timeline_snapshot("LIVE")
         """Download on the first-install confirm applies the pack and restarts."""
         if self.pending_pack is not None:
             self._capture_editable_overlay(self.selected_pack)
@@ -639,6 +622,7 @@ class FakeBridge:
         return False
 
     def _apply_offline_repair(self) -> None:
+        self._timeline_snapshot("LIVE")
         active = self.ctx.game_dir / "automodpack" / "client" / "active"
         objects = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects"
         for logical_path, payload in self.repair_expected.items():
@@ -659,19 +643,16 @@ class FakeBridge:
             source = active / "config/pack-shared-editable.txt"
             if source.is_file():
                 destination = self.ctx.path("config/pack-shared-editable.txt")
-                if destination.is_file() and destination.read_bytes() != source.read_bytes():
-                    self._vault_claim(self._pack_id(self.selected_pack), "config/pack-shared-editable.txt", destination.read_bytes(), "EDITABLE_RESET")
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, destination)
-        self._repair_preservation_objects()
         if not self.repair_keep_unowned:
             for source in self._repair_unowned_mods():
-                self._vault_claim(self._pack_id(self.selected_pack), f"mods/{source.name}", source.read_bytes(), "STRICT_REPAIR")
                 source.unlink()
         self.repair_mutations.clear()
         self.repair_applied = True
         self.repair_editable_reset = False
         self.repair_keep_unowned = False
+        self._timeline_snapshot("REPAIR")
 
     def _repair_preservation_objects(self) -> None:
         objects = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects"
@@ -699,12 +680,16 @@ class FakeBridge:
         selected = next((claim for claim in claims if claim.get("originalPath") == self.selected_claim_path), claims[0] if claims else None)
         return selected is not None and self.selected_pack == {"packaaa": "A", "packbbb": "B"}.get(pack_id) and (self.ctx.game_dir / "automodpack" / "client" / "active" / selected["originalPath"]).is_file()
 
-    def _has_damaged_preservation_object(self) -> bool:
-        for pack_id in ("packaaa", "packbbb"):
-            _manifest, claims = self._claims(pack_id)
-            for claim in claims:
-                object_path = cas_object(self.ctx.game_dir / "automodpack" / "client" / "data" / "objects", claim["objectHash"])
-                if not object_path.is_file() or hashlib.sha1(object_path.read_bytes()).hexdigest() != claim["objectHash"]:
+    def _has_damaged_timeline_object(self) -> bool:
+        objects = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects"
+        for entry in self._timeline_entries():
+            tree_file = self.ctx.game_dir / "automodpack" / "client" / "state-history" / "trees" / entry["treeSha1"]
+            if not tree_file.is_file():
+                continue
+            for file in json.loads(tree_file.read_text(encoding="utf-8")).get("files", []):
+                digest = str(file.get("sha1", "")).lower()
+                object_path = cas_object(objects, digest)
+                if not object_path.is_file() or hashlib.sha1(object_path.read_bytes()).hexdigest() != digest:
                     return True
         return False
 
@@ -757,7 +742,6 @@ class FakeBridge:
         # The checkbox is "Keep existing mod files": checked = keep, unchecked = removal consent.
         if not self.first_install_archive_existing:
             for source in self._first_install_local_mods():
-                self._vault_claim("packaaa", f"mods/{source.name}", source.read_bytes(), "PLAYER_CONSENT")
                 source.unlink()
         root = self.ctx.game_dir / "automodpack" / "client" / "active"
         if root.exists():
@@ -771,7 +755,6 @@ class FakeBridge:
         if self.selected_pack == "B":
             files = self.pack_b_files
         elif self.update_available:
-            self._vault_claim("packaaa", "config/amp-autotest-gamma.cfg", b"amp-autotest-gamma-v1\n", "SERVER_REMOVAL")
             files = [(Path("config/amp-autotest-alpha.txt"), "amp-autotest-alpha-v2\n"),
                      (Path("config/amp-autotest-beta.json"), '{"id":"beta","value":43}'),
                      (Path("config/amp-autotest-baseline.json"), "server-baseline-v2\n"),
@@ -830,9 +813,7 @@ class FakeBridge:
         if self.selected_pack == "A":
             self.pack_removed = False
         self.update_available = False
-        if self.selected_pack == "B" and self._pack_b_owns_conflict() and not self.preservation_restored:
-            payload = valid_mod_jar_bytes(self.ctx.vars["same_path_conflict_fixture"], self.ctx.target.minecraft)
-            self._vault_claim("packbbb", self.ctx.vars["same_path_conflict_path"], payload, "LOCAL_CONFLICT")
+        if self.selected_pack == "B" and self._pack_b_owns_conflict():
             source = self.ctx.path(self.ctx.vars["same_path_conflict_path"])
             source.unlink(missing_ok=True)
         self._write_manifest()
@@ -947,13 +928,80 @@ class FakeBridge:
     def _preserved_claim_count(self) -> int:
         return sum(len(self._claims(pack_id)[1]) for pack_id in ("packaaa", "packbbb"))
 
+    # --- instance timeline model -----------------------------------------
+    _TIMELINE_TITLES = {
+        "LIVE": "Your files before a change",
+        "INSTALL": "Installed modpack",
+        "UPDATE": "Updated modpack",
+        "ROLLBACK": "Rolled back",
+        "RESTORE": "Restored this instance",
+        "REMOVAL": "Removed modpack",
+        "DEACTIVATION": "Deactivated modpack",
+        "REPAIR": "Repaired",
+        "FILE_RESTORE": "Restored a file",
+    }
+
+    def _timeline_entries(self) -> list[dict]:
+        journal = self.ctx.game_dir / "automodpack" / "client" / "state-history" / "journal.jsonl"
+        if not journal.is_file():
+            return []
+        return [json.loads(line) for line in journal.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+    def _timeline_rows(self) -> list[dict]:
+        return [{"seq": entry["seq"], "text": self._TIMELINE_TITLES[entry["kind"]]} for entry in reversed(self._timeline_entries())]
+
+    def _timeline_snapshot(self, kind: str) -> None:
+        """Model the client snapshotting the instance: tracked files hash into CAS, one journal line records the tree."""
+        import hashlib as _hashlib
+
+        client = self.ctx.game_dir / "automodpack" / "client"
+        state = client / "state-history"
+        state.mkdir(parents=True, exist_ok=True)
+        journal = state / "journal.jsonl"
+        entries = [json.loads(line) for line in journal.read_text(encoding="utf-8").splitlines() if line.strip()] if journal.is_file() else []
+        seq = (entries[-1]["seq"] + 1) if entries else 1
+        game = self.ctx.game_dir
+        files = []
+        for base, root, pack in ((game / "mods", "GAME_DIR", ""), (game / "config", "GAME_DIR", ""), (client / "overlays", "OVERLAY", "per-pack")):
+            if not base.is_dir():
+                continue
+            for path in sorted(base.rglob("*")):
+                if not path.is_file():
+                    continue
+                data = path.read_bytes()
+                digest = _hashlib.sha1(data).hexdigest()
+                object_path = cas_object(game / "automodpack/client/data/objects", digest)
+                object_path.parent.mkdir(parents=True, exist_ok=True)
+                object_path.write_bytes(data)
+                overlay_pack = pack if pack != "per-pack" else path.relative_to(base).parts[0]
+                relative = path.relative_to(game).as_posix() if root == "GAME_DIR" else path.relative_to(pack_dir_parent := base / overlay_pack).as_posix()
+                files.append({"root": root, "overlayPackId": overlay_pack, "path": relative, "sha1": digest, "size": len(data)})
+        tree_sha1 = _hashlib.sha1(json.dumps(files, sort_keys=True).encode("utf-8")).hexdigest()
+        trees = state / "trees"
+        trees.mkdir(parents=True, exist_ok=True)
+        (trees / tree_sha1).write_text(json.dumps({"files": files}), encoding="utf-8")
+        entry = {"seq": seq, "parentSeq": seq - 1 if entries else 0, "treeSha1": tree_sha1, "kind": kind, "modpackId": "packaaa", "transactionId": f"tx-{seq}", "createdAt": "2026-09-19T00:00:00Z"}
+        with journal.open("a", encoding="utf-8") as out:
+            out.write(json.dumps(entry) + "\n")
+
+    def _forget_older(self, seq: int) -> None:
+        state = self.ctx.game_dir / "automodpack" / "client" / "state-history"
+        journal = state / "journal.jsonl"
+        entries = [entry for entry in self._timeline_entries() if entry["seq"] >= seq]
+        kept_trees = {entry["treeSha1"] for entry in entries}
+        journal.write_text("".join(json.dumps(entry) + "\n" for entry in entries), encoding="utf-8")
+        trees = state / "trees"
+        if trees.is_dir():
+            for tree in trees.iterdir():
+                if tree.name not in kept_trees:
+                    tree.unlink()
+
     def _manager_buttons(self) -> list[dict]:
-        count = self._preserved_claim_count()
-        preserved = {"id": 105, "text": f"{count} preserved files" if count else "Preserved files", "enabled": True, "visible": True}
+        timeline = {"id": 105, "text": "Instance timeline", "enabled": True, "visible": True, "key": "automodpack.management.stateHistory"}
         if self.pack_removed:
             return [{"id": 47, "text": "Back", "enabled": True, "visible": True},
                     {"id": 46, "text": "Local storage", "enabled": True, "visible": True},
-                    preserved]
+                    timeline]
         if not self.secondary_pack:
             rows = [{"id": 9, "text": f"Pack A  [{'active' if self.selected_pack == 'A' else 'switch'}] · server", "enabled": True, "visible": True}]
         else:
@@ -963,7 +1011,7 @@ class FakeBridge:
                     {"id": 11, "text": f"Pack B  [{b_state}] · local", "enabled": True, "visible": True}]
         return rows + [{"id": 47, "text": "Back", "enabled": True, "visible": True},
                        {"id": 46, "text": "Local storage", "enabled": True, "visible": True},
-                       preserved]
+                       timeline]
 
     def _details_buttons(self) -> list[dict]:
         pack = self.detail_pack or self.selected_pack

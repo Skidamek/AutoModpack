@@ -115,17 +115,6 @@ def _object_path(ctx, object_hash):
     return ctx.game_dir / "automodpack" / "client" / "data" / "objects" / digest[:2] / digest[2:]
 
 
-def _claim_fields(ctx, step):
-    pack_id = str(ctx.resolve(step["packId"]))
-    manifest = ctx.game_dir / "automodpack" / "client" / "preservation" / pack_id / "claims.json"
-    if not manifest.is_file():
-        return manifest, []
-    try:
-        claims = json.loads(manifest.read_text(encoding="utf-8")).get("claims", [])
-    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
-        raise AssertionError(f"preservation manifest is invalid: {manifest}") from error
-    if not isinstance(claims, list):
-        raise AssertionError(f"preservation manifest has no claim list: {manifest}")
     original_path = step.get("originalPath")
     reason = step.get("reason")
     fixture = ctx.resolve(step.get("fixture"))
@@ -319,16 +308,41 @@ def assert_client_object(ctx, step):
         raise AssertionError(f"client object for {logical_path!r} validity was {valid}, expected {expected_valid}")
 
 
-@verb("mutate_preservation_object")
-def mutate_preservation_object(ctx, step):
-    """Deliberately delete or corrupt the CAS object for one uniquely selected vault claim."""
-    manifest, matches = _claim_fields(ctx, step)
-    if len(matches) != 1:
-        raise AssertionError(f"expected one matching preservation claim under {manifest}, found {len(matches)}")
-    object_hash = str(matches[0].get("objectHash", ""))
-    if not re.fullmatch(r"[0-9a-f]{40}", object_hash):
-        raise AssertionError(f"matching preservation claim has an invalid object hash: {object_hash!r}")
+@verb("mutate_timeline_object")
+def mutate_timeline_object(ctx, step):
+    """Deliberately delete or corrupt the CAS object of one uniquely hashed timeline-tracked file."""
+    tracked = _timeline_tracked(ctx, str(step["path"]))
+    hashes = {str(entry["sha1"]).lower() for entry in tracked}
+    if len(hashes) != 1:
+        raise AssertionError(f"expected exactly one tracked version of {step['path']!r} in the timeline, found {len(hashes)}")
+    object_hash = hashes.pop()
     _mutate_file(_object_path(ctx, object_hash), str(step["action"]))
+
+
+def _timeline_tracked(ctx, logical_path):
+    """Every timeline tree entry of one game-dir path, oldest snapshot first; missing journal reads as an empty timeline."""
+    logical_path = logical_path.lstrip("/")
+    client_dir = ctx.game_dir / "automodpack" / "client"
+    journal = client_dir / "state-history" / "journal.jsonl"
+    tracked = []
+    seen_trees = set()
+    if journal.is_file():
+        for line in journal.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            snapshot = json.loads(line)
+            tree_sha1 = str(snapshot.get("treeSha1", "")).lower()
+            if not re.fullmatch(r"[0-9a-f]{40}", tree_sha1) or tree_sha1 in seen_trees:
+                continue
+            seen_trees.add(tree_sha1)
+            tree_file = client_dir / "state-history" / "trees" / tree_sha1
+            if not tree_file.is_file():
+                continue
+            tree = json.loads(tree_file.read_text(encoding="utf-8"))
+            for file in tree.get("files", []):
+                if isinstance(file, dict) and str(file.get("root", "")) == "GAME_DIR" and str(file.get("path", "")).lstrip("/") == logical_path:
+                    tracked.append(file)
+    return tracked
 
 
 @verb("assert_bootstrap_import")
@@ -457,65 +471,45 @@ def assert_mod_fixture(ctx, step):
         raise AssertionError(f"mod fixture {path} is not readable: {error}") from error
 
 
-@verb("assert_preservation_claim")
-def assert_preservation_claim(ctx, step):
-    """Assert filtered vault claims and verify that their claimed CAS bytes are sound.
-
-    Vault mutations (delete, save-copy, restore, repair) run on the client's background executor and surface through
-    a render-thread refresh, so a one-shot read right after a UI wait can observe the pre-mutation file. The
-    expectation is therefore awaited (default 30s, override with ``timeout``); passing states return immediately,
-    so the wait only costs time when the state is actually wrong.
-    """
-    raw_timeout = step.get("timeout")
-    timeout = 30.0 if raw_timeout is None else parse_duration(raw_timeout, default=30.0)
-    if timeout <= 0:
-        error = _preservation_claim_mismatch(ctx, step)
-        if error is not None:
-            raise error
+@verb("assert_timeline_file")
+def assert_timeline_file(ctx, step):
+    """Assert the instance timeline tracks a path and its claimed CAS bytes stay recoverable: hash-and-size intact, and matching the fixture or content when one is requested."""
+    root = str(step.get("root", "GAME_DIR")).upper()
+    overlay_pack_id = str(ctx.resolve(step["overlayPackId"])) if "overlayPackId" in step else None
+    logical_path = str(step["path"]).lstrip("/")
+    tracked = [entry for entry in _timeline_tracked(ctx, logical_path) if str(entry.get("root", "")) == root
+               and (overlay_pack_id is None or str(entry.get("overlayPackId", "")) == overlay_pack_id)]
+    if not tracked:
+        journal = ctx.game_dir / "automodpack" / "client" / "state-history" / "journal.jsonl"
+        snapshots = [(json.loads(line)["seq"], json.loads(line)["kind"]) for line in journal.read_text(encoding="utf-8").splitlines() if line.strip()] if journal.is_file() else []
+        raise AssertionError(f"no timeline snapshot tracks {logical_path!r} under root {root}; snapshots={snapshots}")
+    fixture = ctx.resolve(step.get("fixture"))
+    content = ctx.resolve(step["content"]).encode("utf-8") if "content" in step else None
+    if fixture is not None and not isinstance(fixture, dict):
+        raise ValueError("timeline file assertion fixture must be a mapping")
+    # Recoverable means the newest tracked bytes are the payload; earlier versions may legitimately differ.
+    entry = tracked[-1]
+    digest = str(entry.get("sha1", "")).lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", digest):
+        raise AssertionError(f"tracked timeline entry for {logical_path!r} has an invalid hash: {digest!r}")
+    payload = _object_path(ctx, digest)
+    if not payload.is_file():
+        raise AssertionError(f"tracked bytes for {logical_path!r} are missing from the object store: {payload}")
+    if payload.stat().st_size != int(entry.get("size", -1)) or hashlib.sha1(payload.read_bytes()).hexdigest() != digest:
+        raise AssertionError(f"tracked bytes for {logical_path!r} do not match their hash {digest}")
+    if fixture is None and content is None:
         return
-    state: dict = {}
 
-    def _pred():
-        error = _preservation_claim_mismatch(ctx, step)
-        if error is None:
-            return True
-        state["error"] = error
-        ctx.assert_client_running()
-        return None
-
-    try:
-        await_condition(_pred, timeout, step.get("poll"), f"preservation claim assertion under {step.get('packId')}")
-    except TimeoutError as timeout_error:
-        raise state.get("error", timeout_error) from timeout_error
-
-
-def _preservation_claim_mismatch(ctx, step):
-    """Return an AssertionError describing the mismatch, or None when the expectation holds."""
-    try:
-        manifest, matches = _claim_fields(ctx, step)
-    except AssertionError as error:
-        return error
-    expected_present = step.get("present", True)
-    expected_count = step.get("count")
-    if expected_count is not None:
-        if len(matches) != expected_count:
-            return AssertionError(f"matching preservation claim count under {manifest} was {len(matches)}, expected {expected_count}")
-    elif bool(matches) != expected_present:
-        return AssertionError(f"matching preservation claim presence under {manifest} was {bool(matches)}, expected {expected_present}")
-    if not expected_present or not matches:
-        return None
-    expected_valid = step.get("objectValid", True)
-    for claim in matches:
-        object_hash = str(claim.get("objectHash", ""))
-        payload = _object_path(ctx, object_hash)
-        try:
-            size = int(claim.get("size", -1))
-        except (TypeError, ValueError):
-            size = -1
-        valid = re.fullmatch(r"[0-9a-f]{40}", object_hash) is not None and payload.is_file() and payload.stat().st_size == size and hashlib.sha1(payload.read_bytes()).hexdigest() == object_hash
-        if valid != expected_valid:
-            return AssertionError(f"preservation object {object_hash!r} validity was {valid}, expected {expected_valid}")
-    return None
+        if content is not None and payload.read_bytes() != content:
+            raise AssertionError(f"tracked timeline bytes for {logical_path!r} do not match the expected content")
+        if isinstance(fixture, dict):
+            try:
+                assert_valid_mod_fixture(payload.read_bytes(), fixture, ctx.target.minecraft)
+            except AssertionError as error:
+                raise AssertionError(
+                    f"tracked timeline bytes for {logical_path!r} are not the requested fixture: {error}; "
+                    f"tracked versions: {[{'sha1': str(e.get('sha1'))[:8], 'size': e.get('size')} for e in tracked]}"
+                ) from error
 
 
 @verb("assert_generation")

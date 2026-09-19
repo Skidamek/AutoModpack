@@ -111,15 +111,15 @@ def test_validation_rejects_invalid_runtime_mutation():
     assert any("mutate_active_object.action: expected 'corrupt' or 'delete'" in problem for problem in problems)
 
 
-def test_validation_requires_preservation_mutation_identity():
+def test_validation_requires_timeline_mutation_path():
     scenario = {
-        "id": "bad-preservation-mutation",
-        "flow": [{"do": "mutate_preservation_object", "action": "corrupt"}],
+        "id": "bad-timeline-mutation",
+        "flow": [{"do": "mutate_timeline_object", "action": "corrupt"}],
     }
 
     problems = validate_scenario(scenario, load_macros(), load_targets())
 
-    assert any("mutate_preservation_object.packId: expected a non-empty pack ID" in problem for problem in problems)
+    assert any("mutate_timeline_object.path: expected a non-empty relative path" in problem for problem in problems)
 
 
 def test_validation_rejects_plain_text_unowned_jar_seed():
