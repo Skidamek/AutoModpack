@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
@@ -73,6 +74,11 @@ public class DownloadManager implements DownloadView {
 	private final Semaphore semaphore = new Semaphore(0);
 	private final Speedometer speedometer = new Speedometer();
 	private final DataRootResolver.Layout dataLayout;
+	// Worker i submits to lane i (see PackTransport's lane hint): the pool threads are fixed, so a thread-local index
+	// handed out round-robin is stable for the run, and the scheduler's largest-first dispatch puts concurrent big files
+	// on distinct lanes while small files fill each lane's depth.
+	private final AtomicInteger laneCounter = new AtomicInteger();
+	private final ThreadLocal<Integer> lane = ThreadLocal.withInitial(() -> Math.floorMod(laneCounter.getAndIncrement(), MAX_DOWNLOADS_IN_PROGRESS));
 
 	public DownloadManager(long bytesToDownload, DataRootResolver.Layout dataLayout, PlatformCache platformCache) {
 		this.totalBytesToDownload.set(bytesToDownload);
@@ -405,7 +411,7 @@ public class DownloadManager implements DownloadView {
 				return;
 			}
 		}
-		var future = transport.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), partial, offset, progressAction);
+		var future = transport.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), partial, offset, progressAction, lane.get());
 		try {
 			future.get();
 		} catch (InterruptedException e) {

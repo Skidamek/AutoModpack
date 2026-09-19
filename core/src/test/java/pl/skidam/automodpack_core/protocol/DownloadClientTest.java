@@ -203,7 +203,7 @@ class DownloadClientTest {
 	}
 
 	@Test
-	void lazyPoolCapsAtFiveAndQueuesSixthRequest(@TempDir Path directory) throws Exception {
+	void sixConcurrentRequestsPipelineOntoOneConnection(@TempDir Path directory) throws Exception {
 		KeyPair keyPair = NetUtils.generateKeyPair();
 		X509Certificate certificate = NetUtils.selfSign(keyPair);
 		String fingerprint = NetUtils.getFingerprint(certificate);
@@ -215,16 +215,57 @@ class DownloadClientTest {
 				List<CompletableFuture<Path>> downloads = new ArrayList<>();
 				for (int i = 0; i < 6; i++) downloads.add(client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), null));
 
-				assertTrue(server.firstFiveRequests().await(AWAIT_SECONDS, TimeUnit.SECONDS));
-				assertEquals(5, server.acceptedConnections());
-				assertFalse(server.sixthRequest().isDone());
+				server.awaitRequests(6);
+				assertEquals(1, server.acceptedConnections(), "a lane holds eight in flight, so six requests share one connection");
 
-				server.allowResponses(1);
-				server.sixthRequest().get(AWAIT_SECONDS, TimeUnit.SECONDS);
-				assertEquals(5, server.acceptedConnections());
-
-				server.allowResponses(5);
+				server.allowResponses(6);
 				CompletableFuture.allOf(downloads.toArray(CompletableFuture[]::new)).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertEquals(1, server.acceptedConnections());
+			}
+		}
+	}
+
+	@Test
+	void laneDepthOverflowOpensASecondConnection(@TempDir Path directory) throws Exception {
+		KeyPair keyPair = NetUtils.generateKeyPair();
+		X509Certificate certificate = NetUtils.selfSign(keyPair);
+		String fingerprint = NetUtils.getFingerprint(certificate);
+
+		try (LeasingServer server = new LeasingServer(keyPair, certificate)) {
+			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
+			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
+				List<CompletableFuture<Path>> downloads = new ArrayList<>();
+				for (int i = 0; i < 9; i++) downloads.add(client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), null));
+
+				server.awaitRequests(9);
+				assertEquals(2, server.acceptedConnections(), "the ninth request passes the depth of eight and opens the next lane");
+
+				server.allowResponses(9);
+				CompletableFuture.allOf(downloads.toArray(CompletableFuture[]::new)).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+			}
+		}
+	}
+
+	@Test
+	void theLanePoolCapsAtFiveConnections(@TempDir Path directory) throws Exception {
+		KeyPair keyPair = NetUtils.generateKeyPair();
+		X509Certificate certificate = NetUtils.selfSign(keyPair);
+		String fingerprint = NetUtils.getFingerprint(certificate);
+
+		try (LeasingServer server = new LeasingServer(keyPair, certificate)) {
+			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
+			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
+				List<CompletableFuture<Path>> downloads = new ArrayList<>();
+				for (int i = 0; i < 41; i++) downloads.add(client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), null));
+
+				server.awaitRequests(40);
+				assertEquals(5, server.acceptedConnections(), "5 lanes × 8 slots cap the in-flight requests; request 41 waits");
+
+				server.allowResponses(41);
+				CompletableFuture.allOf(downloads.toArray(CompletableFuture[]::new)).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertEquals(5, server.acceptedConnections());
 			}
 		}
 	}
@@ -293,9 +334,8 @@ class DownloadClientTest {
 		private final ExecutorService executor = Executors.newCachedThreadPool();
 		private final List<SSLSocket> sockets = new CopyOnWriteArrayList<>();
 		private final AtomicInteger acceptedConnections = new AtomicInteger();
+		private final AtomicInteger requestsArrived = new AtomicInteger();
 		private final CountDownLatch receivedRequest = new CountDownLatch(1);
-		private final CountDownLatch firstFiveRequests = new CountDownLatch(5);
-		private final CompletableFuture<Void> sixthRequest = new CompletableFuture<>();
 		private final Semaphore responsePermits = new Semaphore(0);
 		private volatile boolean closed;
 
@@ -317,12 +357,11 @@ class DownloadClientTest {
 			return receivedRequest;
 		}
 
-		CountDownLatch firstFiveRequests() {
-			return firstFiveRequests;
-		}
-
-		CompletableFuture<Void> sixthRequest() {
-			return sixthRequest;
+		/** Waits for the server to have read that many requests; pipelined requests are all read before any permit is granted. */
+		void awaitRequests(int count) throws InterruptedException {
+			long deadline = System.currentTimeMillis() + AWAIT_SECONDS * 1000L;
+			while (requestsArrived.get() < count && System.currentTimeMillis() < deadline) Thread.sleep(10);
+			assertTrue(requestsArrived.get() >= count, "expected " + count + " requests, saw " + requestsArrived.get());
 		}
 
 		void allowResponses(int count) {
@@ -337,12 +376,14 @@ class DownloadClientTest {
 					acceptedConnections.incrementAndGet();
 					executor.execute(() -> serve(socket));
 				} catch (IOException e) {
-					if (!closed) sixthRequest.completeExceptionally(e);
+					if (!closed) return;
 				}
 			}
 		}
 
 		private void serve(SSLSocket socket) {
+			// The read loop never waits on a response, so pipelined requests are all read the moment they arrive; responses serialize on one thread per connection, in read order.
+			ExecutorService responder = Executors.newSingleThreadExecutor();
 			try {
 				socket.setEnabledProtocols(new String[]{"TLSv1.3"});
 				socket.startHandshake();
@@ -352,18 +393,20 @@ class DownloadClientTest {
 					HttpRequest request = readRequest(in);
 					if (request == null) return;
 					receivedRequest.countDown();
-					if (firstFiveRequests.getCount() > 0) {
-						firstFiveRequests.countDown();
-					} else {
-						sixthRequest.complete(null);
-					}
-					responsePermits.acquire();
-					respond(out, "200 OK", new byte[0]);
+					requestsArrived.incrementAndGet();
+					responder.execute(() -> {
+						try {
+							responsePermits.acquire();
+							respond(out, "200 OK", new byte[0]);
+						} catch (InterruptedException e) {
+							Thread.currentThread().interrupt();
+						} catch (IOException ignored) {
+						}
+					});
 				}
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
 			} catch (IOException ignored) {
 			} finally {
+				responder.shutdownNow();
 				try {
 					socket.close();
 				} catch (IOException ignored) {
@@ -375,7 +418,7 @@ class DownloadClientTest {
 		public void close() throws Exception {
 			closed = true;
 			server.close();
-			responsePermits.release(6);
+			responsePermits.release(64);
 			for (SSLSocket socket : sockets) socket.close();
 			executor.shutdownNow();
 		}

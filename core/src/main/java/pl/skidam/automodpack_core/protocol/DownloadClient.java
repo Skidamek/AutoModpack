@@ -12,11 +12,9 @@ import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Deque;
-import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
@@ -57,9 +55,12 @@ public class DownloadClient implements PackTransport {
 	private final CustomizableTrustManager.SessionTrust sessionTrust;
 	private final TransportRoute route;
 	private final Object poolLock = new Object();
-	private final Deque<Connection> availableConnections = new ArrayDeque<>();
-	private final Deque<CompletableFuture<Connection>> connectionWaiters = new ArrayDeque<>();
-	private final Set<Connection> allConnections = Collections.newSetFromMap(new IdentityHashMap<>());
+	// The lanes, in creation order: worker i submits to lane i when it has a free slot, so the scheduler's largest-first
+	// dispatch puts concurrent big files on distinct lanes while small files fill each lane's depth. ≤ 8 × 10 KB = 80 KB
+	// can queue behind one large response; the scheduler dispatches large files to their own workers first, and a
+	// non-draining peer trips the 90 s stall window on its lane alone.
+	private final List<Connection> lanes = new ArrayList<>();
+	private final Deque<SlotWaiter<?>> slotWaiters = new ArrayDeque<>();
 	private int openingConnections;
 	private volatile boolean closed;
 
@@ -92,8 +93,7 @@ public class DownloadClient implements PackTransport {
 			DownloadClient client = new DownloadClient(connectionInfo, secret, trustCallback, preConfigurationKeepaliveInterval, route);
 			return client.openConnectionAsync().thenApply(connection -> {
 				synchronized (client.poolLock) {
-					client.allConnections.add(connection);
-					client.availableConnections.add(connection);
+					client.lanes.add(connection);
 				}
 				return client;
 			}).whenComplete((ignored, error) -> {
@@ -232,7 +232,7 @@ public class DownloadClient implements PackTransport {
 	private Connection configuredConnection(TlsCandidate candidate) throws IOException {
 		try {
 			candidate.socket().setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
-			return new Connection(candidate.socket(), candidate.transport(), secret, hostHeader(), NET_EXECUTOR);
+			return new Connection(candidate.socket(), candidate.transport(), secret, hostHeader(), NET_EXECUTOR, this::slotFreed);
 		} catch (IOException e) {
 			closeQuietly(candidate.socket());
 			throw e;
@@ -243,45 +243,41 @@ public class DownloadClient implements PackTransport {
 		return connectionInfo.endpoint.getHostString() + ":" + connectionInfo.endpoint.getPort();
 	}
 
-	private CompletableFuture<Connection> acquireConnection() {
-		CompletableFuture<Connection> waiter = new CompletableFuture<>();
+	/** Queues a submit on a lane with a free slot; a new lane opens when all of them are full, past which the waiter waits. */
+	private <T> CompletableFuture<T> withSlot(int lane, Function<Connection, CompletableFuture<T>> operation) {
+		CompletableFuture<T> future = new CompletableFuture<>();
 		synchronized (poolLock) {
-			if (closed) return CompletableFuture.failedFuture(new IOException("Download client is closed"));
-			connectionWaiters.add(waiter);
+			if (closed) {
+				future.completeExceptionally(new IOException("Download client is closed"));
+				return future;
+			}
+			slotWaiters.add(new SlotWaiter<>(lane, operation, future));
 			pumpPool();
 		}
-		return waiter;
+		return future;
 	}
 
 	private void pumpPool() {
-		while (!availableConnections.isEmpty()) {
-			Connection connection = availableConnections.peek();
-			if (connection.isActive()) break;
-			availableConnections.remove();
-			allConnections.remove(connection);
-			closeQuietly(connection);
+		reapLanes();
+		while (!slotWaiters.isEmpty()) {
+			Connection connection = pick(slotWaiters.peek().lane());
+			if (connection == null) break;
+			slotWaiters.remove().dispatch(connection);
 		}
-
-		while (!connectionWaiters.isEmpty() && !availableConnections.isEmpty()) {
-			CompletableFuture<Connection> waiter = connectionWaiters.remove();
-			Connection connection = availableConnections.remove();
-			waiter.complete(connection);
-		}
-
-		while (!closed && !connectionWaiters.isEmpty() && allConnections.size() + openingConnections < MAX_CONNECTIONS) {
-			CompletableFuture<Connection> waiter = connectionWaiters.remove();
+		while (!closed && !slotWaiters.isEmpty() && lanes.size() + openingConnections < MAX_CONNECTIONS) {
+			SlotWaiter<?> waiter = slotWaiters.remove();
 			openingConnections++;
 			openConnectionAsync().whenComplete((connection, error) -> {
 				synchronized (poolLock) {
 					openingConnections--;
 					if (closed) {
 						if (connection != null) closeQuietly(connection);
-						waiter.completeExceptionally(new IOException("Download client is closed"));
+						waiter.future().completeExceptionally(new IOException("Download client is closed"));
 					} else if (error != null) {
-						waiter.completeExceptionally(Throwables.unwrap(error));
+						waiter.future().completeExceptionally(Throwables.unwrap(error));
 					} else {
-						allConnections.add(connection);
-						waiter.complete(connection);
+						lanes.add(connection);
+						waiter.dispatch(connection);
 					}
 					pumpPool();
 				}
@@ -289,45 +285,67 @@ public class DownloadClient implements PackTransport {
 		}
 	}
 
-	private <T> CompletableFuture<T> withConnection(Function<Connection, CompletableFuture<T>> operation) {
-		return acquireConnection().thenCompose(connection -> {
-			CompletableFuture<T> future;
-			try {
-				future = operation.apply(connection);
-			} catch (Exception e) {
-				future = CompletableFuture.failedFuture(e);
-			}
-			return future.whenComplete((ignored, error) -> releaseConnection(connection, error == null));
-		});
+	/** Lane i serves waiter i when it has a free slot; otherwise the first lane with one does. Null means every lane is full or gone. */
+	private Connection pick(int lane) {
+		if (lanes.isEmpty()) return null;
+		if (lane < lanes.size() && lanes.get(lane).hasFreeSlot()) return lanes.get(lane);
+		for (Connection connection : lanes) {
+			if (connection.hasFreeSlot()) return connection;
+		}
+		return null;
 	}
 
-	private void releaseConnection(Connection connection, boolean healthy) {
-		synchronized (poolLock) {
-			if (closed || !healthy || !connection.isActive()) {
-				allConnections.remove(connection);
-				availableConnections.remove(connection);
+	private void reapLanes() {
+		for (Iterator<Connection> iterator = lanes.iterator(); iterator.hasNext();) {
+			Connection connection = iterator.next();
+			if (!connection.isActive()) {
+				iterator.remove();
 				closeQuietly(connection);
-			} else {
-				availableConnections.add(connection);
 			}
-			pumpPool();
+		}
+	}
+
+	/** A response completed somewhere, so a slot freed; waiters queued on the pool get their chance. */
+	private void slotFreed() {
+		synchronized (poolLock) {
+			if (!closed) pumpPool();
+		}
+	}
+
+	private record SlotWaiter<T>(int lane, Function<Connection, CompletableFuture<T>> operation, CompletableFuture<T> future) {
+		void dispatch(Connection connection) {
+			CompletableFuture<T> result;
+			try {
+				result = operation.apply(connection);
+			} catch (Exception e) {
+				result = CompletableFuture.failedFuture(e);
+			}
+			result.whenComplete((value, error) -> {
+				if (error != null) future.completeExceptionally(error);
+				else future.complete(value);
+			});
 		}
 	}
 
 	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
-		return downloadFile(fileHash, destination, 0, chunkCallback);
+		return downloadFile(fileHash, destination, 0, chunkCallback, 0);
 	}
 
 	@Override
 	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, IntConsumer chunkCallback) {
+		return downloadFile(fileHash, destination, offset, chunkCallback, 0);
+	}
+
+	@Override
+	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, IntConsumer chunkCallback, int lane) {
 		// A stale range already surfaces as StaleRangeException from the response parse; no mapping happens here.
-		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback, offset));
+		return withSlot(lane, connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback, offset));
 	}
 
 	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers 304 and {@code destination} is not written. */
 	@Override
 	public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer chunkCallback) {
-		return withConnection(connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex, chunkCallback));
+		return withSlot(0, connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex, chunkCallback));
 	}
 
 	/** Drops every pooled and in-flight transfer connection so a cancelled run cannot poison the next one. */
@@ -336,9 +354,8 @@ public class DownloadClient implements PackTransport {
 		List<Connection> connections;
 		synchronized (poolLock) {
 			if (closed) return;
-			connections = new ArrayList<>(allConnections);
-			allConnections.clear();
-			availableConnections.clear();
+			connections = new ArrayList<>(lanes);
+			lanes.clear();
 		}
 		connections.forEach(DownloadClient::closeQuietly);
 		synchronized (poolLock) {
@@ -353,19 +370,18 @@ public class DownloadClient implements PackTransport {
 	@Override
 	public void close() {
 		List<Connection> connections;
-		List<CompletableFuture<Connection>> waiters;
+		List<SlotWaiter<?>> waiters;
 		synchronized (poolLock) {
 			if (closed) return;
 			closed = true;
-			connections = new ArrayList<>(allConnections);
-			waiters = new ArrayList<>(connectionWaiters);
-			allConnections.clear();
-			availableConnections.clear();
-			connectionWaiters.clear();
+			connections = new ArrayList<>(lanes);
+			waiters = new ArrayList<>(slotWaiters);
+			lanes.clear();
+			slotWaiters.clear();
 		}
 
 		IOException closedError = new IOException("Download client is closed");
-		waiters.forEach(waiter -> waiter.completeExceptionally(closedError));
+		waiters.forEach(waiter -> waiter.future().completeExceptionally(closedError));
 		connections.forEach(DownloadClient::closeQuietly);
 	}
 }

@@ -28,11 +28,13 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -44,6 +46,8 @@ import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import io.airlift.compress.zstd.ZstdOutputStream;
 
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
@@ -151,6 +155,72 @@ class ConditionalFetchTest {
 				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, HashUtils.sha1(head), null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertEquals(destination, fetch.path());
 				assertTrue(fetch.unchanged());
+				assertArrayEquals(head, Files.readAllBytes(destination));
+			}
+		}
+	}
+
+	@Test
+	void zstdDocumentDecodesToIdentityBytes(@TempDir Path directory) throws Exception {
+		try (ContractServer server = new ContractServer()) {
+			server.compressDocuments.set(true);
+			byte[] head = "a-repetitive-head-document-that-compresses-well\n".repeat(8).getBytes(StandardCharsets.UTF_8);
+			server.store.put("head", head);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("head");
+				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, null, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertEquals(destination, fetch.path());
+				assertFalse(fetch.unchanged());
+				assertArrayEquals(head, Files.readAllBytes(destination));
+				assertTrue(server.sawAcceptEncoding.get(), "the client offered zstd on document GETs");
+				assertTrue(server.lastResponseZstd.get(), "the server answered with a compressed body");
+			}
+		}
+	}
+
+	@Test
+	void zstdBodyHashIsTheGroundTruthWhenTheHostIgnoresTheCondition(@TempDir Path directory) throws Exception {
+		try (ContractServer server = new ContractServer()) {
+			server.compressDocuments.set(true);
+			server.cooperate.set(false);
+			byte[] head = "a-repetitive-head-document-that-compresses-well\n".repeat(8).getBytes(StandardCharsets.UTF_8);
+			server.store.put("head", head);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("head");
+				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, HashUtils.sha1(head), null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertEquals(destination, fetch.path());
+				assertTrue(fetch.unchanged(), "the decoded body hash still reads as unchanged");
+				assertArrayEquals(head, Files.readAllBytes(destination));
+			}
+		}
+	}
+
+	@Test
+	void objectRequestsAreNeverCompressed(@TempDir Path directory) throws Exception {
+		try (ContractServer server = new ContractServer()) {
+			server.compressDocuments.set(true);
+			byte[] object = "object-bytes-that-would-compress-but-must-not".getBytes(StandardCharsets.UTF_8);
+			String sha1 = HashUtils.sha1(object);
+			server.store.put(sha1, object);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("object");
+				client.downloadFile(sha1.getBytes(StandardCharsets.UTF_8), destination, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertFalse(server.lastResponseZstd.get(), "objects stay identity so Range and resume stay trivial");
+			}
+		}
+	}
+
+	@Test
+	void aHostThatIgnoresTheEncodingServesIdentityUndecoded(@TempDir Path directory) throws Exception {
+		try (ContractServer server = new ContractServer()) {
+			byte[] head = "plain-identity-head-document".getBytes(StandardCharsets.UTF_8);
+			server.store.put("head", head);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("head");
+				client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, null, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertTrue(server.sawAcceptEncoding.get(), "the client offered zstd even to a host that ignores it");
+				assertFalse(server.lastResponseZstd.get());
 				assertArrayEquals(head, Files.readAllBytes(destination));
 			}
 		}
@@ -290,11 +360,18 @@ class ConditionalFetchTest {
 		final AtomicBoolean cooperate = new AtomicBoolean(true);
 		final AtomicBoolean requireAuth = new AtomicBoolean(false);
 		final AtomicBoolean lieAboutResumeStart = new AtomicBoolean(false);
+		final AtomicBoolean compressDocuments = new AtomicBoolean(false);
+		final AtomicBoolean lastResponseZstd = new AtomicBoolean(false);
+		final AtomicBoolean sawAcceptEncoding = new AtomicBoolean(false);
+		final AtomicInteger connections = new AtomicInteger();
 		final CompletableFuture<String> firstAuthorization = new CompletableFuture<>();
 		final List<String> requests = new CopyOnWriteArrayList<>();
 		private final AtomicBoolean secretRecorded = new AtomicBoolean();
 		private final X509Certificate certificate;
 		volatile String bearerSecret;
+		private volatile CountDownLatch expectedPipeline;
+		private volatile boolean pipelineArrived;
+		private volatile long responseDelayMillis;
 		private volatile boolean closed;
 
 		ContractServer() throws Exception {
@@ -324,10 +401,24 @@ class ConditionalFetchTest {
 			return store;
 		}
 
+		/** Before its first response the server waits for this many requests to arrive, proving the client had them all in flight. */
+		void expectPipeline(int count) {
+			expectedPipeline = new CountDownLatch(count);
+		}
+
+		boolean pipelineArrived() {
+			return pipelineArrived;
+		}
+
+		void setResponseDelayMillis(long delay) {
+			responseDelayMillis = delay;
+		}
+
 		private void acceptConnections() {
 			while (!closed) {
 				try {
 					SSLSocket socket = MagicTls.accept(server, context);
+					connections.incrementAndGet();
 					executor.execute(() -> serve(socket));
 				} catch (IOException e) {
 					if (!closed) return;
@@ -336,11 +427,14 @@ class ConditionalFetchTest {
 		}
 
 		private void serve(SSLSocket socket) {
+			// Responses serialize on one thread per connection, in read order; the read loop never waits on a response, so pipelined requests are all read the moment they arrive.
+			ExecutorService responder = Executors.newSingleThreadExecutor();
 			try {
 				socket.setEnabledProtocols(new String[]{"TLSv1.3"});
 				socket.startHandshake();
 				BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
 				BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream());
+				AtomicBoolean answering = new AtomicBoolean();
 				while (!closed && !socket.isClosed()) {
 					Request request;
 					try {
@@ -351,46 +445,78 @@ class ConditionalFetchTest {
 					if (request == null) return;
 					requests.add(request.path);
 					if (secretRecorded.compareAndSet(false, true)) firstAuthorization.complete(request.authorization);
-					if (requireAuth.get() && !("Bearer " + bearerSecret).equals(request.authorization)) {
-						respond(out, "401 Unauthorized", new byte[0], "Connection: close");
-						return;
-					}
-					String location = redirects.get(request.path);
-					if (location != null) {
-						respond(out, "302 Found", new byte[0], "Location: " + location);
-						continue;
-					}
-					String key = routeKey(request.path);
-					byte[] content = key == null ? null : store.get(key);
-					if (content == null) {
-						respond(out, "404 Not Found", new byte[0]);
-						continue;
-					}
-					if (!request.path.startsWith("/objects/") && request.ifNoneMatch != null && cooperate.get()
-							&& HashUtils.sha1(content).equals(request.ifNoneMatch.replace("\"", ""))) {
-						respond(out, "304 Not Modified", new byte[0]);
-						continue;
-					}
-					Long offset = parseRangeStart(request.range);
-					if (offset != null && offset >= content.length) {
-						respond(out, "416 Range Not Satisfiable", new byte[0], "Content-Range: bytes */" + content.length);
-						continue;
-					}
-					if (offset != null) {
-						long start = lieAboutResumeStart.get() ? offset + 5 : offset;
-						respond(out, "206 Partial Content", Arrays.copyOfRange(content, offset.intValue(), content.length),
-								"Content-Range: bytes " + start + "-" + (content.length - 1) + "/" + content.length);
-						continue;
-					}
-					respond(out, "200 OK", content);
+					if (request.acceptEncoding != null) sawAcceptEncoding.set(true);
+					CountDownLatch pipeline = expectedPipeline;
+					if (pipeline != null) pipeline.countDown();
+					responder.execute(() -> answer(socket, out, request, pipeline, answering));
 				}
 			} catch (Exception ignored) {
 			} finally {
+				responder.shutdownNow();
 				try {
 					socket.close();
 				} catch (IOException ignored) {
 				}
 			}
+		}
+
+		private void answer(SSLSocket socket, BufferedOutputStream out, Request request, CountDownLatch pipeline, AtomicBoolean answering) {
+			try {
+				if (answering.compareAndSet(false, true) && pipeline != null) {
+					pipeline.await(10, TimeUnit.SECONDS);
+					pipelineArrived = pipeline.getCount() == 0;
+				}
+				if (responseDelayMillis > 0) Thread.sleep(responseDelayMillis);
+				if (requireAuth.get() && !("Bearer " + bearerSecret).equals(request.authorization)) {
+					respond(out, "401 Unauthorized", new byte[0], "Connection: close");
+					socket.close();
+					return;
+				}
+				String location = redirects.get(request.path);
+				if (location != null) {
+					respond(out, "302 Found", new byte[0], "Location: " + location);
+					return;
+				}
+				String key = routeKey(request.path);
+				byte[] content = key == null ? null : store.get(key);
+				if (content == null) {
+					respond(out, "404 Not Found", new byte[0]);
+					return;
+				}
+				if (!request.path.startsWith("/objects/") && request.ifNoneMatch != null && cooperate.get()
+						&& HashUtils.sha1(content).equals(request.ifNoneMatch.replace("\"", ""))) {
+					respond(out, "304 Not Modified", new byte[0]);
+					return;
+				}
+				Long offset = parseRangeStart(request.range);
+				if (offset != null && offset >= content.length) {
+					respond(out, "416 Range Not Satisfiable", new byte[0], "Content-Range: bytes */" + content.length);
+					return;
+				}
+				if (offset != null) {
+					long start = lieAboutResumeStart.get() ? offset + 5 : offset;
+					respond(out, "206 Partial Content", Arrays.copyOfRange(content, offset.intValue(), content.length),
+							"Content-Range: bytes " + start + "-" + (content.length - 1) + "/" + content.length);
+					return;
+				}
+				lastResponseZstd.set(false);
+				if (compressDocuments.get() && !request.path.startsWith("/objects/") && request.acceptEncoding != null
+						&& request.acceptEncoding.toLowerCase(Locale.ROOT).contains("zstd")) {
+					lastResponseZstd.set(true);
+					respond(out, "200 OK", zstdCompress(content), "Content-Encoding: zstd");
+					return;
+				}
+				respond(out, "200 OK", content);
+			} catch (Exception ignored) {
+			}
+		}
+
+		private static byte[] zstdCompress(byte[] content) throws IOException {
+			ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+			try (ZstdOutputStream zstd = new ZstdOutputStream(buffer)) {
+				zstd.write(content);
+			}
+			return buffer.toByteArray();
 		}
 
 		private static String routeKey(String path) {
@@ -423,7 +549,7 @@ class ConditionalFetchTest {
 			out.flush();
 		}
 
-		private record Request(String path, String authorization, String ifNoneMatch, String range) {}
+		private record Request(String path, String authorization, String ifNoneMatch, String range, String acceptEncoding) {}
 
 		private static Request parseRequest(String head) {
 			String[] lines = head.split("\r\n", -1);
@@ -432,6 +558,7 @@ class ConditionalFetchTest {
 			String authorization = null;
 			String ifNoneMatch = null;
 			String range = null;
+			String acceptEncoding = null;
 			for (int i = 1; i < lines.length - 1; i++) {
 				int colon = lines[i].indexOf(':');
 				if (colon <= 0) continue;
@@ -440,8 +567,9 @@ class ConditionalFetchTest {
 				if (name.equals("authorization")) authorization = value;
 				else if (name.equals("if-none-match")) ifNoneMatch = value;
 				else if (name.equals("range")) range = value;
+				else if (name.equals("accept-encoding")) acceptEncoding = value;
 			}
-			return new Request(requestLine[1], authorization, ifNoneMatch, range);
+			return new Request(requestLine[1], authorization, ifNoneMatch, range, acceptEncoding);
 		}
 
 		private static String readHead(BufferedInputStream in) throws IOException {

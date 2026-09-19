@@ -18,6 +18,15 @@ public interface PackTransport extends AutoCloseable {
 	 */
 	CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, IntConsumer progress);
 
+	/**
+	 * The same fetch with a preferred pipeline lane: worker i submits to lane i when it has a free slot, so concurrent
+	 * large transfers land on distinct lanes while small files fill each lane's depth. Transports without a lane pool
+	 * ignore the hint.
+	 */
+	default CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, IntConsumer progress, int lane) {
+		return downloadFile(key, destination, offset, progress);
+	}
+
 	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the answer is {@code unchanged} and no body may follow. */
 	CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer progress);
 
