@@ -28,6 +28,8 @@ public final class ActivityTracker {
 		public final String address;
 		public String routeKey;
 		public String actor;
+		/** The response size when the route's length is known up front, so in-flight progress reads as a fraction. */
+		public long totalBytes;
 		private long bytes;
 		private boolean completed;
 
@@ -37,13 +39,14 @@ public final class ActivityTracker {
 	}
 
 	/** One finished request; displayName resolves the sha1 route key against the current generation. */
-	public record Entry(long startMillis, long endMillis, long bytes, int status, String routeKey, String displayName, String actor, String address) {}
+	public record Entry(long startMillis, long endMillis, long bytes, long totalBytes, int status, String routeKey, String displayName, String actor, String address) {}
 
 	public record PlayerStats(String name, long requests, long bytes, long lastMillis) {}
 
-	public record Snapshot(long startedMillis, long totalRequests, long totalBytes, long unchangedChecks, long unauthorized, List<PlayerStats> players, List<Entry> inFlight, List<Entry> recent) {}
+	public record Snapshot(long startedMillis, long totalRequests, long totalBytes, long unchangedChecks, long unauthorized, long lastUnauthorizedMillis, long writeThroughput, List<PlayerStats> players,
+			List<Entry> inFlight, List<Entry> recent) {}
 
-	private record Completed(long startMillis, long endMillis, long bytes, int status, String routeKey, String actor, String address) {}
+	private record Completed(long startMillis, long endMillis, long bytes, long totalBytes, int status, String routeKey, String actor, String address) {}
 
 	private final long startedMillis = System.currentTimeMillis();
 	private final Object lock = new Object();
@@ -54,6 +57,8 @@ public final class ActivityTracker {
 	private long totalBytes;
 	private long unchangedChecks;
 	private long unauthorized;
+	private long lastUnauthorizedMillis;
+	private long writeThroughput;
 
 	/** Starts one span; the reference is only handed to the connection's own call chain. */
 	public Span start(String address) {
@@ -83,8 +88,11 @@ public final class ActivityTracker {
 			if (status == STATUS_UNCHANGED) {
 				unchangedChecks++;
 			} else {
-				if (status == 401) unauthorized++;
-				ring.addLast(new Completed(span.startMillis, endMillis, bytes, status, span.routeKey, span.actor, span.address));
+				if (status == 401) {
+					unauthorized++;
+					lastUnauthorizedMillis = endMillis;
+				}
+				ring.addLast(new Completed(span.startMillis, endMillis, bytes, span.totalBytes, status, span.routeKey, span.actor, span.address));
 				while (ring.size() > RING_CAPACITY) ring.removeFirst();
 			}
 			if (span.actor != null) {
@@ -103,21 +111,28 @@ public final class ActivityTracker {
 		complete(span, STATUS_DROPPED, bytes);
 	}
 
+	/** Publishes the shaper's current outbound rate for the summary line; zero hides the field. */
+	public void writeThroughput(long bytesPerSecond) {
+		synchronized (lock) {
+			writeThroughput = bytesPerSecond;
+		}
+	}
+
 	/** The command's read model; names resolve object hashes against the names of the current generation. */
 	public Snapshot snapshot(Map<String, String> names) {
 		synchronized (lock) {
 			List<Entry> inFlightEntries = new ArrayList<>();
 			for (Span span : inFlight) {
-				inFlightEntries.add(new Entry(span.startMillis, 0, span.bytes, STATUS_DROPPED, span.routeKey, displayName(span.routeKey, names), span.actor, span.address));
+				inFlightEntries.add(new Entry(span.startMillis, 0, span.bytes, span.totalBytes, STATUS_DROPPED, span.routeKey, displayName(span.routeKey, names), span.actor, span.address));
 			}
 			List<Entry> recent = new ArrayList<>(ring.size());
 			for (Completed completed : ring) {
-				recent.add(new Entry(completed.startMillis(), completed.endMillis(), completed.bytes(), completed.status(), completed.routeKey(),
+				recent.add(new Entry(completed.startMillis(), completed.endMillis(), completed.bytes(), completed.totalBytes(), completed.status(), completed.routeKey(),
 						displayName(completed.routeKey(), names), completed.actor(), completed.address()));
 			}
 			Collections.reverse(recent);
 			List<PlayerStats> playerStats = players.values().stream().sorted(Comparator.comparingLong(PlayerStats::bytes).reversed()).toList();
-			return new Snapshot(startedMillis, totalRequests, totalBytes, unchangedChecks, unauthorized, playerStats, inFlightEntries, recent);
+			return new Snapshot(startedMillis, totalRequests, totalBytes, unchangedChecks, unauthorized, lastUnauthorizedMillis, writeThroughput, playerStats, inFlightEntries, recent);
 		}
 	}
 

@@ -114,6 +114,7 @@ public class NettyServer {
 			GenerationJsons.HeadDocumentFields document = ModpackContentTools.readHeadDocument(head);
 			if (document != null) document.policy.categories.forEach((category, groups) -> groups.forEach((group, fields) -> fields.files.forEach((path, file) -> names.put(file.sha1, path))));
 		});
+		if (trafficShaper != null) activityTracker.writeThroughput(trafficShaper.handler().trafficCounter().lastWriteThroughput());
 		return activityTracker.snapshot(names);
 	}
 

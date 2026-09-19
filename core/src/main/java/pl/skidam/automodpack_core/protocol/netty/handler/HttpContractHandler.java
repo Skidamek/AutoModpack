@@ -291,6 +291,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		// The head is in flight from here on, so the only honest completion of a mid-stream failure is dropping the connection.
 		ChannelFuture headWritten = ctx.writeAndFlush(response(status, length, etag, contentRange, null));
 		streaming = true;
+		span.totalBytes = length;
 		inFlightSpan = span;
 		final FileChannel opened = channel;
 		final boolean responseKeepAlive = keepAlive;
@@ -319,6 +320,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 					serveIdentity(ctx, file, 0, total, STATUS_200, etag, null, keepAlive, span);
 					return;
 				}
+				span.totalBytes = compressed.length;
 				Channel channel = ctx.channel();
 				ChannelFuture headWritten = channel.writeAndFlush(response(STATUS_200, compressed.length, etag, null, "zstd"));
 				Throwable failure = awaitWritten(channel, headWritten);

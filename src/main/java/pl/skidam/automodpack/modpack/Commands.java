@@ -340,8 +340,11 @@ public class Commands {
 	}
 
 	private static MutableComponent activityMessage(ActivityTracker.Snapshot snapshot) {
-		MutableComponent message = VersionedText.literal("Activity since " + ACTIVITY_CLOCK.format(Instant.ofEpochMilli(snapshot.startedMillis())) + ": " + snapshot.totalRequests() + " requests · " + ByteFormat.formatSize(snapshot.totalBytes()) + " from "
-				+ snapshot.players().size() + " players · 401s: " + snapshot.unauthorized() + " · unchanged checks: " + snapshot.unchangedChecks()).withStyle(ChatFormatting.YELLOW);
+		String summary = "Activity since " + ACTIVITY_CLOCK.format(Instant.ofEpochMilli(snapshot.startedMillis())) + ": " + snapshot.totalRequests() + " requests · " + ByteFormat.formatSize(snapshot.totalBytes()) + " from " + snapshot.players().size() + " players";
+		if (snapshot.writeThroughput() > 0) summary += " · " + ByteFormat.formatSpeed(snapshot.writeThroughput()) + " out";
+		summary += " · 401s: " + snapshot.unauthorized() + (snapshot.lastUnauthorizedMillis() == 0 ? "" : " (last " + ACTIVITY_CLOCK.format(Instant.ofEpochMilli(snapshot.lastUnauthorizedMillis())) + ")");
+		summary += " · unchanged checks: " + snapshot.unchangedChecks();
+		MutableComponent message = VersionedText.literal(summary).withStyle(ChatFormatting.YELLOW);
 		List<String> playerLines = new ArrayList<>();
 		for (ActivityTracker.PlayerStats player : snapshot.players())
 			playerLines.add(player.name() + ": " + player.requests() + " requests · " + ByteFormat.formatSize(player.bytes()) + " · last " + ACTIVITY_PRECISE_CLOCK.format(Instant.ofEpochMilli(player.lastMillis())));
@@ -371,7 +374,9 @@ public class Commands {
 		hover.add(entry.displayName());
 		if (entry.routeKey() != null && entry.routeKey().length() == 40) hover.add("sha1 " + entry.routeKey());
 		hover.add("address " + entry.address());
-		String visible = ACTIVITY_CLOCK.format(Instant.ofEpochMilli(entry.startMillis())) + " " + (entry.actor() != null ? entry.actor() : entry.address()) + " " + ByteFormat.formatETA(seconds) + " " + ByteFormat.formatSize(entry.bytes()) + " " + condensedName(entry);
+		String size = ByteFormat.formatSize(entry.bytes());
+		if (inFlight && entry.totalBytes() > 0 && entry.totalBytes() != entry.bytes()) size += " / " + ByteFormat.formatSize(entry.totalBytes());
+		String visible = ACTIVITY_CLOCK.format(Instant.ofEpochMilli(entry.startMillis())) + " " + (entry.actor() != null ? entry.actor() : entry.address()) + " " + ByteFormat.formatETA(seconds) + " " + size + " " + condensedName(entry);
 		if (inFlight) {
 			hover.add("in flight");
 		} else {

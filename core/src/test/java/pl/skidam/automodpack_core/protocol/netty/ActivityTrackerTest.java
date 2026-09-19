@@ -55,6 +55,16 @@ class ActivityTrackerTest {
 	}
 
 	@Test
+	void unauthorizedSpansStampTheLastSeenTimeWithoutAnActor() {
+		ActivityTracker tracker = new ActivityTracker();
+		tracker.complete(span(tracker, null, null), 401, 0);
+		ActivityTracker.Snapshot snapshot = tracker.snapshot(Map.of());
+		assertEquals(1, snapshot.unauthorized());
+		assertTrue(snapshot.lastUnauthorizedMillis() > 0);
+		assertNull(snapshot.recent().get(0).actor());
+	}
+
+	@Test
 	void droppedSpansCompleteOnceAndResolveNamesAgainstTheGeneration() {
 		ActivityTracker tracker = new ActivityTracker();
 		String sha1 = "a".repeat(40);
