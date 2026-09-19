@@ -196,7 +196,7 @@ public class NettyServer {
 						ch.pipeline().addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, HTTP_IDLE_REAP_SECONDS));
 						ch.pipeline().addLast("traffic-shaper", NettyServer.this.trafficHandler());
 						if (connectionMode == ModpackConnectionMode.MAGIC) {
-							ch.pipeline().addLast(MOD_ID, new AmmhGateHandler(NettyServer.this, senderExecutor, false));
+							ch.pipeline().addLast(MOD_ID + "-magic-gate", new AmmhGateHandler(NettyServer.this, senderExecutor, false));
 							return;
 						}
 						installContractHandlers(ch.pipeline());

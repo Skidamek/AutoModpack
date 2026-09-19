@@ -91,7 +91,9 @@ class AmmhGateHandlerTest {
 
 	@Test
 	void sharedNonMagicTrafficPassesThroughToMinecraftUntouched() {
-		EmbeddedChannel channel = new EmbeddedChannel(new AmmhGateHandler(server, Runnable::run, true));
+		EmbeddedChannel channel = new EmbeddedChannel();
+		// The production name: the contract handler is added as "automodpack" during the swap, so the gate must not hold it.
+		channel.pipeline().addFirst("automodpack-magic-gate", new AmmhGateHandler(server, Runnable::run, true));
 		byte[] minecraftHandshake = {0x10, 0x00, 0x01, 0x02, 0x03};
 
 		assertTrue(channel.writeInbound(Unpooled.wrappedBuffer(minecraftHandshake)));
@@ -114,7 +116,8 @@ class AmmhGateHandlerTest {
 		fixture();
 		EmbeddedChannel channel = new EmbeddedChannel();
 		CountingVanillaHandler vanilla = new CountingVanillaHandler();
-		channel.pipeline().addLast(new AmmhGateHandler(server, Runnable::run, true));
+		// The production name: the swap adds the contract handler as "automodpack", so the gate must not hold that name.
+		channel.pipeline().addFirst("automodpack-magic-gate", new AmmhGateHandler(server, Runnable::run, true));
 		channel.pipeline().addLast(vanilla);
 
 		channel.writeInbound(Unpooled.wrappedBuffer(magicPacket("automodpack.example", request("/head"))));
