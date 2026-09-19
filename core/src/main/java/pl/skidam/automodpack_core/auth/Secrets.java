@@ -25,10 +25,6 @@ public class Secrets {
 			return secret;
 		}
 
-		public byte[] secretBytes() {
-			return Base64.getUrlDecoder().decode(secret);
-		}
-
 		public Long timestamp() {
 			return timestamp;
 		}

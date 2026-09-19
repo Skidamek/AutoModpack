@@ -50,17 +50,8 @@ public class NetUtils {
 	// the screen cannot pin a server socket forever.
 	public static final Duration PRE_CONFIGURATION_LIFETIME = Duration.ofMinutes(10);
 	// Pre-configuration keepalive cadence: NAT mappings and holepunch relay bindings typically decay after 30-60s of
-	// silence, so a 20s heartbeat sits well inside that band while costing the parked client one two-byte write.
+	// silence, so a 20s heartbeat sits well inside that band while costing the parked client one tiny ranged GET.
 	public static final Duration PRE_CONFIGURATION_KEEPALIVE_INTERVAL = Duration.ofSeconds(20);
-	// The configured-but-unauthenticated lifetime: every honest client sends its secret in its first protocol message,
-	// so the honest gap between configuration and authentication is machine-speed, and any byte sent after configuration
-	// either authenticates or closes the connection - the deadline cannot be stretched. 60s sits two orders of magnitude
-	// past that gap while bounding how long an unauthenticated peer can pin a host socket.
-	public static final Duration UNAUTHENTICATED_LIFETIME = Duration.ofSeconds(60);
-	// The authenticated all-idle bound: transfers and requests reset it continuously and an honest human pause between
-	// negotiation and confirmation fits inside it with room to spare, so only a zombie holding a revoked or leaked
-	// secret pays it - at the cost of one reconnect for a player who walks away for over an hour mid-review.
-	public static final Duration AUTHENTICATED_IDLE_TIMEOUT = Duration.ofHours(1);
 	public static final Duration HTTP_TIMEOUT = Duration.ofSeconds(5);
 	public static final int NETWORK_TIMEOUT_MILLIS = Math.toIntExact(NETWORK_TIMEOUT.toMillis());
 	public static final int TRANSFER_IDLE_TIMEOUT_MILLIS = Math.toIntExact(TRANSFER_IDLE_TIMEOUT.toMillis());
@@ -69,44 +60,8 @@ public class NetUtils {
 	public static final int MAGIC_AMMH = 0x414D4D48;
 	public static final int MAGIC_AMOK = 0x414D4F4B;
 
-	public static final byte LATEST_SUPPORTED_PROTOCOL_VERSION = 0x02;
-
-	// Message types and configuration message types should not overlap
-	public static final byte ECHO_TYPE = 0x00;
-	public static final byte FILE_REQUEST_TYPE = 0x01;
-	public static final byte FILE_RESPONSE_TYPE = 0x02;
-	// Answer to a conditional document request whose expected hash still matches the served document; documents only, objects never.
-	public static final byte UNCHANGED_TYPE = 0x03;
-	public static final byte END_OF_TRANSMISSION = 0x04;
-	public static final byte ERROR = 0x05;
-
-	// Machine-readable ERROR codes, the trailing byte of every ERROR frame this protocol version writes. The message
-	// stays for logs and humans; the code is what a client may branch on without parsing prose.
-	public static final byte ERROR_CODE_GENERIC = 0x00;
-	public static final byte ERROR_CODE_STALE_RANGE = 0x01;
-
-	// FILE_REQUEST trailing extension flags (protocol 0x02): a set bit means the field follows the flags byte, in bit order; the end offset requires the range offset.
-	public static final byte FILE_REQUEST_EXPECTED_SHA1_FLAG = 0x01;
-	public static final byte FILE_REQUEST_OFFSET_FLAG = 0x02;
-	public static final byte FILE_REQUEST_END_FLAG = 0x04;
-	public static final byte FILE_REQUEST_KNOWN_FLAGS = FILE_REQUEST_EXPECTED_SHA1_FLAG | FILE_REQUEST_OFFSET_FLAG | FILE_REQUEST_END_FLAG;
-
-	public static final byte CONFIGURATION_ECHO_TYPE = 0x40;
-	public static final byte CONFIGURATION_COMPRESSION_TYPE = 0x41;
-	public static final byte CONFIGURATION_CHUNK_SIZE_TYPE = 0x42;
-	// A client parked on its certificate-trust decision heartbeats these; the server absorbs them silently.
-	public static final byte CONFIGURATION_KEEPALIVE_TYPE = 0x4F;
-
+	// The body chunk both ends stream in; the client reads one buffer of it per syscall loop and the server streams file bodies through it.
 	public static final int DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB
-	public static final int MIN_CHUNK_SIZE = 1024 * 1024; // 1 MiB
-	public static final int MAX_CHUNK_SIZE = 8 * 1024 * 1024; // 8 MiB
-
-	// Protocol message field tripwires. The decoder reads these lengths pre-authentication, so they must
-	// never trust a client length near the buffer sizes: an honest echo carries a small nonce and an
-	// honest file request carries one hex SHA-1, so both caps sit an order of magnitude past any good
-	// client while staying thousands of bytes below one frame.
-	public static final int MAX_ECHO_PAYLOAD_BYTES = 1024;
-	public static final int MAX_FILE_HASH_BYTES = 128;
 
 	private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
 	private static final AlgorithmIdentifier SIGNATURE_ALGORITHM_IDENTIFIER = new AlgorithmIdentifier(PKCSObjectIdentifiers.sha256WithRSAEncryption, DERNull.INSTANCE);

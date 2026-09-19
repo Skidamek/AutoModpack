@@ -1,11 +1,14 @@
 package pl.skidam.automodpack_core.protocol;
 
-import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_KEEPALIVE_TYPE;
-import static pl.skidam.automodpack_core.protocol.NetUtils.LATEST_SUPPORTED_PROTOCOL_VERSION;
+import static pl.skidam.automodpack_core.protocol.NetUtils.NETWORK_TIMEOUT_MILLIS;
+import static pl.skidam.automodpack_core.protocol.NetUtils.USER_AGENT;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -14,22 +17,30 @@ import java.util.function.BooleanSupplier;
 import javax.net.ssl.SSLSocket;
 
 /**
- * One parked candidate's heartbeat while the human decides on certificate trust: every interval it writes a
- * configuration-phase keepalive the server absorbs silently, so idle NAT mappings and relay bindings never
- * decay under the parked connection. It self-retires on the trust decision, a dead socket, or a closed
- * client; the write gate makes retirement wait for an in-flight keepalive write.
+ * One parked candidate's heartbeat while the human decides on certificate trust: every interval it writes a one-byte
+ * ranged {@code GET /head} the server answers with a 206, so idle NAT mappings and relay bindings never decay under
+ * the parked connection. It self-retires on the trust decision, a dead socket, or a closed client; the write gate
+ * makes retirement wait for an in-flight heartbeat, including its consumed response, so the connection is always
+ * byte-aligned when the trust decision hands it over.
  */
 final class PreConfigurationKeepalive {
 
 	private final SSLSocket socket;
 	private final BooleanSupplier alive;
 	private final ScheduledFuture<?> task;
+	private final byte[] heartbeat;
+	private final BufferedInputStream in;
 	private final Object writeGate = new Object();
 	private boolean retired;
 
-	PreConfigurationKeepalive(SSLSocket socket, Duration interval, ScheduledExecutorService executor, BooleanSupplier alive) {
+	PreConfigurationKeepalive(SSLSocket socket, String hostHeader, String secret, Duration interval, ScheduledExecutorService executor, BooleanSupplier alive) throws IOException {
 		this.socket = socket;
 		this.alive = alive;
+		// The Authorization header rides the heartbeat too: a host with validateSecrets on answers an unauthenticated heartbeat with a 401 and a close, killing the connection the heartbeat exists to keep alive.
+		String authorization = secret == null ? "" : "Authorization: Bearer " + secret + "\r\n";
+		this.heartbeat = ("GET /head HTTP/1.1\r\nHost: " + hostHeader + "\r\nUser-Agent: " + USER_AGENT + "\r\n" + authorization + "Range: bytes=0-0\r\n\r\n")
+				.getBytes(StandardCharsets.UTF_8);
+		this.in = new BufferedInputStream(socket.getInputStream());
 		this.task = executor.scheduleWithFixedDelay(this::tick, interval.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS);
 	}
 
@@ -37,21 +48,76 @@ final class PreConfigurationKeepalive {
 		boolean dead;
 		synchronized (writeGate) {
 			dead = retired || !alive.getAsBoolean() || socket.isClosed();
-			if (!dead) {
-				try {
-					OutputStream out = socket.getOutputStream();
-					out.write(new byte[]{LATEST_SUPPORTED_PROTOCOL_VERSION, CONFIGURATION_KEEPALIVE_TYPE});
-					out.flush();
-				} catch (IOException died) {
-					dead = true;
-				}
-			}
+			if (!dead) dead = !beat();
 			if (dead) retired = true;
 		}
 		if (dead) retireTask();
 	}
 
-	/** Stops the heartbeat and returns only after any in-flight keepalive write has finished. */
+	private boolean beat() {
+		int previousTimeout = -1;
+		try {
+			OutputStream out = socket.getOutputStream();
+			out.write(heartbeat);
+			out.flush();
+			// The server answers every heartbeat, so the response must be consumed before the next request or the first
+			// application read would misframe against a stale 206. The bounded read can never wedge the scheduler.
+			previousTimeout = socket.getSoTimeout();
+			socket.setSoTimeout(NETWORK_TIMEOUT_MILLIS);
+			discardResponse();
+			return true;
+		} catch (IOException died) {
+			return false;
+		} finally {
+			if (previousTimeout >= 0) {
+				try {
+					socket.setSoTimeout(previousTimeout);
+				} catch (IOException ignored) {
+				}
+			}
+		}
+	}
+
+	private void discardResponse() throws IOException {
+		Long contentLength = null;
+		for (int lines = 0; lines++ < 128;) {
+			String header = readLine();
+			if (header.isEmpty()) break;
+			int colon = header.indexOf(':');
+			if (colon <= 0) continue;
+			if (header.substring(0, colon).trim().toLowerCase(Locale.ROOT).equals("content-length")) {
+				try {
+					contentLength = Long.parseLong(header.substring(colon + 1).trim());
+				} catch (NumberFormatException e) {
+					throw new IOException("Unparseable keepalive response: " + header);
+				}
+			}
+		}
+		if (contentLength == null) throw new IOException("Keepalive response without a Content-Length");
+		for (long remaining = contentLength; remaining > 0;) {
+			long skipped = in.skip(remaining);
+			if (skipped <= 0) {
+				if (in.read() < 0) throw new IOException("Keepalive response ended before its Content-Length");
+				skipped = 1;
+			}
+			remaining -= skipped;
+		}
+	}
+
+	private String readLine() throws IOException {
+		StringBuilder line = new StringBuilder(64);
+		int previous = -1;
+		while (true) {
+			int read = in.read();
+			if (read < 0) throw new IOException("Connection ended inside a keepalive response");
+			if (previous == '\r' && read == '\n') return line.substring(0, line.length() - 1);
+			line.append((char) read);
+			if (line.length() > 8 * 1024) throw new IOException("Keepalive response header line exceeded 8 KiB");
+			previous = read;
+		}
+	}
+
+	/** Stops the heartbeat and returns only after any in-flight heartbeat, response consumption included, has finished. */
 	void retire() {
 		synchronized (writeGate) {
 			retired = true;

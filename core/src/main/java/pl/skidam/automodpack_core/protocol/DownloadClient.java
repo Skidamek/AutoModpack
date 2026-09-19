@@ -51,7 +51,7 @@ public class DownloadClient implements PackTransport {
 	private static final int MAX_CONNECTIONS = 5;
 
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
-	private final byte[] secretBytes;
+	private final String secret;
 	private final Function<X509Certificate, CompletableFuture<Boolean>> trustCallback;
 	private final Duration preConfigurationKeepaliveInterval;
 	private final CustomizableTrustManager.SessionTrust sessionTrust;
@@ -67,29 +67,29 @@ public class DownloadClient implements PackTransport {
 
 	private record TlsCandidate(SSLSocket socket, Socket transport, CustomizableTrustManager trustManager) {}
 
-	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback,
+	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, String secret, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback,
 			Duration preConfigurationKeepaliveInterval, TransportRoute route) {
 		this.connectionInfo = connectionInfo;
-		this.secretBytes = secretBytes == null ? null : secretBytes.clone();
+		this.secret = secret;
 		this.trustCallback = trustCallback;
 		this.preConfigurationKeepaliveInterval = preConfigurationKeepaliveInterval;
 		this.route = route;
 		this.sessionTrust = new CustomizableTrustManager.SessionTrust(AddressHelpers.formatAddress(connectionInfo.origin), connectionInfo.expectedFingerprint);
 	}
 
-	public static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes,
+	public static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, String secret,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
-		return createAsync(connectionInfo, secretBytes, trustCallback, PRE_CONFIGURATION_KEEPALIVE_INTERVAL);
+		return createAsync(connectionInfo, secret, trustCallback, PRE_CONFIGURATION_KEEPALIVE_INTERVAL);
 	}
 
 	/** The keepalive interval is injectable so tests can observe heartbeats at a fast cadence; production runs at {@link NetUtils#PRE_CONFIGURATION_KEEPALIVE_INTERVAL}. */
-	static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes,
+	static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, String secret,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, Duration preConfigurationKeepaliveInterval) {
 		if (connectionInfo == null || !connectionInfo.isComplete())
 			return CompletableFuture.failedFuture(new IllegalArgumentException("Connection origin or endpoint is missing"));
 
 		return resolveRouteAsync(connectionInfo).thenCompose(route -> {
-			DownloadClient client = new DownloadClient(connectionInfo, secretBytes, trustCallback, preConfigurationKeepaliveInterval, route);
+			DownloadClient client = new DownloadClient(connectionInfo, secret, trustCallback, preConfigurationKeepaliveInterval, route);
 			return client.openConnectionAsync().thenApply(connection -> {
 				synchronized (client.poolLock) {
 					client.allConnections.add(connection);
@@ -225,18 +225,22 @@ public class DownloadClient implements PackTransport {
 	/** The shared candidate trust ladder; completion means the certificate is pinned into this session's trust. */
 	private CompletableFuture<TlsCandidate> validateCandidate(TlsCandidate candidate) {
 		return CandidateTrustValidation.validate(new CandidateTrustValidation.Candidate(candidate.socket(), candidate.trustManager(), sessionTrust, connectionInfo.origin.getHostString(),
-				connectionInfo.endpoint.getHostString(), trustCallback, () -> !closed), preConfigurationKeepaliveInterval).thenApply(ignored -> candidate);
+				connectionInfo.endpoint.getHostString(), trustCallback, () -> !closed, hostHeader(), secret), preConfigurationKeepaliveInterval).thenApply(ignored -> candidate);
 	}
 
-	/** Turns a validated candidate into a configured connection, releasing the socket when the negotiation fails. */
+	/** Turns a validated candidate into a pooled connection, releasing the socket when construction fails. */
 	private Connection configuredConnection(TlsCandidate candidate) throws IOException {
 		try {
 			candidate.socket().setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
-			return new Connection(candidate.socket(), candidate.transport(), secretBytes, NET_EXECUTOR);
+			return new Connection(candidate.socket(), candidate.transport(), secret, hostHeader(), NET_EXECUTOR);
 		} catch (IOException e) {
 			closeQuietly(candidate.socket());
 			throw e;
 		}
+	}
+
+	private String hostHeader() {
+		return connectionInfo.endpoint.getHostString() + ":" + connectionInfo.endpoint.getPort();
 	}
 
 	private CompletableFuture<Connection> acquireConnection() {
@@ -317,13 +321,13 @@ public class DownloadClient implements PackTransport {
 	@Override
 	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, IntConsumer chunkCallback) {
 		// A stale range already surfaces as StaleRangeException from the response parse; no mapping happens here.
-		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback, null, offset, null));
+		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback, offset));
 	}
 
-	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers UNCHANGED and {@code destination} is not written. */
+	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers 304 and {@code destination} is not written. */
 	@Override
 	public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer chunkCallback) {
-		return withConnection(connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex == null ? null : expectedSha1Hex.getBytes(StandardCharsets.UTF_8), chunkCallback));
+		return withConnection(connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex, chunkCallback));
 	}
 
 	/** Drops every pooled and in-flight transfer connection so a cancelled run cannot poison the next one. */
