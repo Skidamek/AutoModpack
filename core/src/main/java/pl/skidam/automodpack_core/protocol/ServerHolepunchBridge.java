@@ -70,7 +70,7 @@ public final class ServerHolepunchBridge {
 		// them, outbound records camouflage after TLS encrypts them.
 		pipeline.addLast("holepunch-camouflage-encoder", new CamouflageEncoder(connection));
 		pipeline.addLast("holepunch-camouflage-decoder", new CamouflageDecoder(connection));
-		pipeline.addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, NettyServer.HTTP_IDLE_REAP_SECONDS));
+		pipeline.addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, HTTP_IDLE_REAP_SECONDS));
 		pipeline.addLast("traffic-shaper", server.trafficHandler());
 		server.installContractHandlers(pipeline);
 		SslHandler sslHandler = pipeline.get(SslHandler.class);

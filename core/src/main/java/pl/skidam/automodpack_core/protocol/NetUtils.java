@@ -43,6 +43,10 @@ public class NetUtils {
 	// surfaces faster through its own 60 s read deadline closing the socket. 90 s is 1.5x that
 	// window, so the stall fuse is never the first thing to fire on a healthy connection.
 	public static final Duration TRANSFER_WRITE_STALL_TIMEOUT = Duration.ofSeconds(90);
+	// The idle reap for public contract connections, in seconds of no reads and no writes. It sits far past any
+	// client's keep-alive reuse window while staying inside a minute-scale patience for silent sockets; a streaming
+	// response writes continuously, so the reap can never interrupt a live transfer.
+	public static final int HTTP_IDLE_REAP_SECONDS = 60;
 	// Pre-configuration keepalive cadence: NAT mappings and holepunch relay bindings typically decay after 30-60s of
 	// silence, so a 20s heartbeat sits well inside that band while costing the parked client one tiny ranged GET.
 	public static final Duration PRE_CONFIGURATION_KEEPALIVE_INTERVAL = Duration.ofSeconds(20);

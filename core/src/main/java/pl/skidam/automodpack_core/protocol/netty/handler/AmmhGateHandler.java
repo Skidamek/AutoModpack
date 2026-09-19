@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.protocol.netty.handler;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.protocol.NetUtils.HTTP_IDLE_REAP_SECONDS;
 import static pl.skidam.automodpack_core.protocol.NetUtils.MAGIC_AMOK;
 
 import java.util.List;
@@ -72,7 +73,7 @@ public class AmmhGateHandler extends ByteToMessageDecoder {
 			pipeline.toMap().forEach((name, handler) -> {
 				if (handler != this) pipeline.remove(handler);
 			});
-			pipeline.addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, NettyServer.HTTP_IDLE_REAP_SECONDS));
+			pipeline.addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, HTTP_IDLE_REAP_SECONDS));
 			pipeline.addLast("traffic-shaper", server.trafficHandler());
 		}
 		server.installContractHandlers(pipeline);

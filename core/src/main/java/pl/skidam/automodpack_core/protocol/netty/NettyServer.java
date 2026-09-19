@@ -99,13 +99,6 @@ public class NettyServer {
 		return path != null && !Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) ? Optional.of(path) : Optional.empty();
 	}
 
-	/**
-	 * The idle reap for public contract connections, in seconds of no reads and no writes. It sits far past any
-	 * client's keep-alive reuse window while staying inside a minute-scale patience for silent sockets; a streaming
-	 * response writes continuously, so the reap can never interrupt a live transfer.
-	 */
-	public static final int HTTP_IDLE_REAP_SECONDS = 60;
-
 	public synchronized Optional<ChannelFuture> start() {
 		if (isRunning()) {
 			LOGGER.warn("Modpack hosting is already running");
@@ -193,7 +186,7 @@ public class NettyServer {
 						// The contract listener is public, so fully silent connections are reaped: the all-idle bound sits
 						// far past any client's keep-alive reuse window, and a streaming response keeps writing, so the
 						// reap can never interrupt a live transfer.
-						ch.pipeline().addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, HTTP_IDLE_REAP_SECONDS));
+						ch.pipeline().addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, NetUtils.HTTP_IDLE_REAP_SECONDS));
 						ch.pipeline().addLast("traffic-shaper", NettyServer.this.trafficHandler());
 						if (connectionMode == ModpackConnectionMode.MAGIC) {
 							ch.pipeline().addLast(MOD_ID + "-magic-gate", new AmmhGateHandler(NettyServer.this, senderExecutor, false));
