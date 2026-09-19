@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,7 +21,12 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.util.ReferenceCountUtil;
 
+import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.loader.GameCallService;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
@@ -33,13 +39,22 @@ class HttpContractHandlerTest {
 	@TempDir
 	Path tempDir;
 
+	private ServerConfigJsons.ServerConfigFieldsV3 previousConfig;
 	private NettyServer server;
 	private final List<EmbeddedChannel> channels = new ArrayList<>();
+
+	@BeforeEach
+	void setUp() {
+		previousConfig = Constants.serverConfig;
+		Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
+		Constants.serverConfig.validateSecrets = false;
+	}
 
 	@AfterEach
 	void tearDown() {
 		for (EmbeddedChannel channel : channels) channel.finishAndReleaseAll();
 		if (server != null) server.stop();
+		Constants.serverConfig = previousConfig;
 	}
 
 	@Test
@@ -173,6 +188,58 @@ class HttpContractHandlerTest {
 		garbage.writeInbound(Unpooled.wrappedBuffer("NOT-HTTP AT ALL\r\n\r\n".getBytes(StandardCharsets.UTF_8)));
 		garbage.runPendingTasks();
 		assertFalse(garbage.isOpen());
+	}
+
+	@Test
+	void theAuthorizationHeaderIsIgnoredWhenSecretValidationIsOff() throws Exception {
+		fixture();
+		EmbeddedChannel channel = channel();
+
+		assertTrue(exchange(channel, request("/head", "Authorization: Bearer not-a-secret")).startsWith("HTTP/1.1 200 OK\r\n"));
+		assertTrue(channel.isOpen());
+	}
+
+	@Test
+	void missingMalformedAndUnknownBearerSecretsAreUnauthorized() throws Exception {
+		fixture();
+		Constants.serverConfig.validateSecrets = true;
+
+		EmbeddedChannel missing = channel();
+		assertTrue(exchange(missing, request("/head")).startsWith("HTTP/1.1 401 Unauthorized\r\n"));
+		assertFalse(missing.isOpen());
+
+		EmbeddedChannel malformed = channel();
+		assertTrue(exchange(malformed, request("/head", "Authorization: Basic dXNlcjpwYXNz")).startsWith("HTTP/1.1 401 Unauthorized\r\n"));
+		assertFalse(malformed.isOpen());
+
+		EmbeddedChannel emptyBearer = channel();
+		assertTrue(exchange(emptyBearer, request("/head", "Authorization: Bearer ")).startsWith("HTTP/1.1 401 Unauthorized\r\n"));
+		assertFalse(emptyBearer.isOpen());
+
+		EmbeddedChannel unknown = channel();
+		Secrets.Secret secret = Secrets.generateSecret();
+		String unknownResponse = exchange(unknown, request("/head", "Authorization: Bearer " + secret.secret()));
+		assertTrue(unknownResponse.startsWith("HTTP/1.1 401 Unauthorized\r\n"), unknownResponse);
+		assertEquals("", bodyOf(unknownResponse));
+		assertFalse(unknown.isOpen());
+	}
+
+	@Test
+	void aValidBearerSecretIsAccepted() throws Exception {
+		fixture();
+		Constants.serverConfig.validateSecrets = true;
+		GameCallService previousGameCall = Constants.GAME_CALL;
+		Constants.GAME_CALL = (address, id, playerName) -> true;
+		Secrets.Secret secret = Secrets.generateSecret();
+		SecretsStore.saveHostSecret("test-player", secret, "Test Player");
+
+		try {
+			EmbeddedChannel channel = channel();
+			assertTrue(exchange(channel, request("/head", "Authorization: Bearer " + secret.secret())).startsWith("HTTP/1.1 200 OK\r\n"));
+			assertTrue(channel.isOpen());
+		} finally {
+			Constants.GAME_CALL = previousGameCall;
+		}
 	}
 
 	private EmbeddedChannel channel() {

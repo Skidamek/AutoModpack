@@ -43,11 +43,6 @@ public class NetUtils {
 	// surfaces faster through its own 60 s read deadline closing the socket. 90 s is 1.5x that
 	// window, so the stall fuse is never the first thing to fire on a healthy connection.
 	public static final Duration TRANSFER_WRITE_STALL_TIMEOUT = Duration.ofSeconds(90);
-	// Per-connection concurrent file transfer tripwire: an honest client pipelines exactly one
-	// request per connection, so this sits 4x past any good component and only a broken or hostile
-	// one touches it. It bounds the sender workers (one thread plus ~16 MiB of buffers each) a
-	// single authenticated connection can pin with pipelined file requests.
-	public static final int MAX_CONCURRENT_TRANSFERS_PER_CONNECTION = 4;
 	// The pre-configuration lifetime tripwire: while the human decides on certificate trust the server must never reap
 	// the socket for idleness, so pre-configuration sockets are bounded only by this one window. It sits an order of
 	// magnitude past the transfer idle deadline (60 s) and far past the connect-grade network timeout (15 s) - generous

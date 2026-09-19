@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -43,7 +44,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLSocket;
 
 import org.bouncycastle.asn1.x500.X500Name;
@@ -134,7 +134,7 @@ class DownloadClientTest {
 
 		try (TransferServer server = new TransferServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, null, null);
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null, null);
 			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> decision);
 
 			assertEquals(-1, server.earlyApplicationByte().get(AWAIT_SECONDS, TimeUnit.SECONDS));
@@ -156,7 +156,7 @@ class DownloadClientTest {
 
 		try (TransferServer server = new TransferServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, null, null);
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null, null);
 			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> decision);
 
 			assertEquals(-1, server.earlyApplicationByte().get(AWAIT_SECONDS, TimeUnit.SECONDS));
@@ -174,7 +174,7 @@ class DownloadClientTest {
 
 		try (TransferServer server = new TransferServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, null, null);
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null, null);
 			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> decision, Duration.ofMillis(100));
 
 			long deadline = System.currentTimeMillis() + 5000;
@@ -200,7 +200,7 @@ class DownloadClientTest {
 		String fingerprint = NetUtils.getFingerprint(certificate);
 		try (LeasingServer server = new LeasingServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, fingerprint, null);
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
 				CompletableFuture<Path> first = client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("first"), null);
 				assertTrue(server.receivedRequest().await(AWAIT_SECONDS, TimeUnit.SECONDS));
@@ -220,7 +220,7 @@ class DownloadClientTest {
 
 		try (LeasingServer server = new LeasingServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, fingerprint, null);
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS,
 					TimeUnit.SECONDS)) {
 				List<CompletableFuture<Path>> downloads = new ArrayList<>();
@@ -263,7 +263,8 @@ class DownloadClientTest {
 	}
 
 	private static final class LeasingServer implements AutoCloseable {
-		private final SSLServerSocket server;
+		private final ServerSocket server;
+		private final SSLContext context;
 		private final ExecutorService executor = Executors.newCachedThreadPool();
 		private final List<SSLSocket> sockets = new CopyOnWriteArrayList<>();
 		private final AtomicInteger acceptedConnections = new AtomicInteger();
@@ -274,9 +275,8 @@ class DownloadClientTest {
 		private volatile boolean closed;
 
 		LeasingServer(KeyPair keyPair, X509Certificate certificate) throws Exception {
-			server = (SSLServerSocket) serverContext(keyPair, certificate).getServerSocketFactory().createServerSocket(0, 5,
-					InetAddress.getLoopbackAddress());
-			server.setEnabledProtocols(new String[]{"TLSv1.3"});
+			context = serverContext(keyPair, certificate);
+			server = new ServerSocket(0, 5, InetAddress.getLoopbackAddress());
 			executor.execute(this::acceptConnections);
 		}
 
@@ -307,7 +307,7 @@ class DownloadClientTest {
 		private void acceptConnections() {
 			while (!closed) {
 				try {
-					SSLSocket socket = (SSLSocket) server.accept();
+					SSLSocket socket = MagicTls.accept(server, context);
 					sockets.add(socket);
 					acceptedConnections.incrementAndGet();
 					executor.execute(() -> serve(socket));
@@ -389,7 +389,8 @@ class DownloadClientTest {
 	}
 
 	private static final class TransferServer implements AutoCloseable {
-		private final SSLServerSocket server;
+		private final ServerSocket server;
+		private final SSLContext context;
 		private final ExecutorService executor = Executors.newSingleThreadExecutor();
 		private final AtomicInteger acceptedConnections = new AtomicInteger();
 		private final AtomicInteger keepalivesAbsorbed = new AtomicInteger();
@@ -399,9 +400,8 @@ class DownloadClientTest {
 		private volatile SSLSocket socket;
 
 		TransferServer(KeyPair keyPair, X509Certificate certificate) throws Exception {
-			server = (SSLServerSocket) serverContext(keyPair, certificate).getServerSocketFactory().createServerSocket(0, 5,
-					InetAddress.getLoopbackAddress());
-			server.setEnabledProtocols(new String[]{"TLSv1.3"});
+			context = serverContext(keyPair, certificate);
+			server = new ServerSocket(0, 5, InetAddress.getLoopbackAddress());
 			executor.execute(this::serve);
 		}
 
@@ -431,10 +431,8 @@ class DownloadClientTest {
 
 		private void serve() {
 			try {
-				socket = (SSLSocket) server.accept();
+				socket = MagicTls.accept(server, context);
 				acceptedConnections.incrementAndGet();
-				socket.setEnabledProtocols(new String[]{"TLSv1.3"});
-				socket.startHandshake();
 				DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
 				DataOutputStream out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 

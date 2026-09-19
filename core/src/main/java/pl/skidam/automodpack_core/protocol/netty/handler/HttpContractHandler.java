@@ -1,10 +1,12 @@
 package pl.skidam.automodpack_core.protocol.netty.handler;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.Constants.serverConfig;
 import static pl.skidam.automodpack_core.protocol.NetUtils.DEFAULT_CHUNK_SIZE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.TRANSFER_WRITE_STALL_TIMEOUT;
 
 import java.io.IOException;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
@@ -26,6 +28,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.timeout.IdleStateEvent;
 
+import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -41,10 +44,13 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	/** Tripwire past any real request header block; only broken things or unbounded pipeliners touch it. */
 	private static final int MAX_HEADER_BLOCK_BYTES = 8 * 1024;
 
+	private static final String BEARER_PREFIX = "Bearer ";
+
 	private static final String STATUS_200 = "200 OK";
 	private static final String STATUS_206 = "206 Partial Content";
 	private static final String STATUS_304 = "304 Not Modified";
 	private static final String STATUS_400 = "400 Bad Request";
+	private static final String STATUS_401 = "401 Unauthorized";
 	private static final String STATUS_404 = "404 Not Found";
 	private static final String STATUS_405 = "405 Method Not Allowed";
 	private static final String STATUS_416 = "416 Range Not Satisfiable";
@@ -174,6 +180,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		boolean keepAlive = requestLine[2].equals("HTTP/1.1");
 		String ifNoneMatch = null;
 		String range = null;
+		String authorization = null;
 		for (int i = 1; i < lines.length; i++) {
 			int colon = lines[i].indexOf(':');
 			if (colon <= 0) continue;
@@ -181,12 +188,15 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			String value = lines[i].substring(colon + 1).trim();
 			if (name.equals("if-none-match")) ifNoneMatch = value;
 			else if (name.equals("range")) range = value;
+			else if (name.equals("authorization")) authorization = value;
 			else if (name.equals("connection")) {
 				String connection = value.toLowerCase(Locale.ROOT);
 				if (connection.contains("close")) keepAlive = false;
 				else if (connection.contains("keep-alive")) keepAlive = true;
 			}
 		}
+
+		if (serverConfig.validateSecrets && !authorized(ctx, authorization)) return false;
 
 		if (!method.equals("GET")) return respondOrClose(ctx, STATUS_405, 0, null, null, keepAlive);
 
@@ -253,6 +263,31 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			closeQuietly(opened);
 			ctx.close();
 		}
+		return false;
+	}
+
+	/**
+	 * Bearer-secret gate on every request: the login-issued (or provisioning) secret rides per request, so instant
+	 * revocation and expiry apply to the next request without touching the connection. A failed validation never
+	 * releases the connection.
+	 */
+	private boolean authorized(ChannelHandlerContext ctx, String authorization) {
+		SocketAddress address = addressOf(ctx.channel());
+		if (authorization == null || !authorization.startsWith(BEARER_PREFIX) || authorization.length() == BEARER_PREFIX.length()) {
+			LOGGER.warn("Rejecting a modpack download request from {} without a bearer secret", address);
+			return rejectUnauthorized(ctx);
+		}
+		if (!Secrets.isSecretValid(authorization.substring(BEARER_PREFIX.length()), address)) return rejectUnauthorized(ctx);
+		return true;
+	}
+
+	private static SocketAddress addressOf(Channel channel) {
+		SocketAddress real = channel.attr(NettyServer.REAL_REMOTE_ADDR).get();
+		return real != null ? real : channel.remoteAddress();
+	}
+
+	private boolean rejectUnauthorized(ChannelHandlerContext ctx) {
+		respondThenClose(ctx, STATUS_401, 0, null, null);
 		return false;
 	}
 
@@ -393,7 +428,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		return Unpooled.wrappedBuffer(head.toString().getBytes(StandardCharsets.UTF_8));
 	}
 
-	/** FileSend's stall window: a peer that stops draining cannot pin the connection past the timeout without progress. */
+	/** The transfer stall window: a peer that stops draining cannot pin the connection past the timeout without progress. */
 	private static Throwable awaitWritten(Channel channel, ChannelFuture written) {
 		long stallWindowNanos = TRANSFER_WRITE_STALL_TIMEOUT.toNanos();
 		long progressDeadline = System.nanoTime() + stallWindowNanos;

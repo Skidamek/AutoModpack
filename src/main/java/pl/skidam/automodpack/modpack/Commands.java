@@ -12,9 +12,7 @@ import net.minecraft.server.permissions.PermissionLevel;
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
-import pl.skidam.automodpack_core.auth.IssuedSecret;
 import pl.skidam.automodpack_core.auth.ProvisioningSecretStore;
-import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.auth.ServerAddressPin;
 import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -35,7 +33,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.Set;
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
 import net.minecraft.commands.CommandSourceStack;
@@ -248,8 +245,7 @@ public class Commands {
 		try {
 			InetSocketAddress origin = AddressHelpers.parseOrigin(StringArgumentType.getString(context, "origin"));
 			InetSocketAddress endpoint = AddressHelpers.parseEndpoint(StringArgumentType.getString(context, "endpoint"));
-			ModpackConnectionMode connectionMode = ModpackConnectionMode.valueOf(
-					StringArgumentType.getString(context, "connection-mode").toUpperCase(Locale.ROOT));
+			ModpackConnectionMode connectionMode = parseConnectionMode(StringArgumentType.getString(context, "connection-mode"));
 			return writeBootstrap(context,
 					BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), endpoint, connectionMode, requireProvisioningSecret()), true);
 		} catch (IllegalArgumentException e) {
@@ -312,26 +308,16 @@ public class Commands {
 		*//*?}*/
 	}
 
+	private static ModpackConnectionMode parseConnectionMode(String value) {
+		try {
+			return ModpackConnectionMode.valueOf(value.toUpperCase(Locale.ROOT));
+		} catch (IllegalArgumentException e) {
+			throw new IllegalArgumentException("Unknown connection mode '" + value + "'; valid values: HOLEPUNCH, MAGIC, HTTP");
+		}
+	}
+
 	private static int connections(CommandContext<CommandSourceStack> context) {
-		Util.backgroundExecutor().execute(() -> {
-			var connections = hostServer.getConnections();
-			var uniqueSecrets = Set.copyOf(connections.values());
-
-			send(context, String.format(Locale.ROOT, "Active connections: %d Unique connections: %d ", connections.size(), uniqueSecrets.size()), ChatFormatting.YELLOW, false);
-
-			for (String secret : uniqueSecrets) {
-				var playerSecretPair = SecretsStore.getHostSecret(secret);
-				if (playerSecretPair == null) continue;
-
-				IssuedSecret issued = playerSecretPair.getValue();
-				if (issued == null || issued.name() == null) continue;
-
-				long connNum = connections.values().stream().filter(secret::equals).count();
-
-				send(context, String.format(Locale.ROOT, "Player: %s (%s) is downloading modpack using %d connections", issued.name(), playerSecretPair.getKey(), connNum), ChatFormatting.GREEN, false);
-			}
-		});
-
+		send(context, "AutoModpack serves the HTTP contract without tracking connections; per-player download activity stays in the server log.", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
 	}
 
@@ -405,8 +391,6 @@ public class Commands {
 			send(context, "Built-in modpack hosting is disabled by modpackHost.", ChatFormatting.YELLOW, false);
 		} else if (serverConfig.connectionMode == ModpackConnectionMode.HTTP && serverConfig.bindPort == -1) {
 			send(context, "HTTP with bindPort -1 is only advertised; the URL contract must be served externally over HTTPS.", ChatFormatting.YELLOW, false);
-		} else if (serverConfig.connectionMode == ModpackConnectionMode.DIRECT && serverConfig.bindPort == -1) {
-			send(context, "DIRECT with bindPort -1 uses only the advertised external endpoint; no built-in listener was started.", ChatFormatting.YELLOW, false);
 		} else {
 			send(context, "Couldn't start server!", ChatFormatting.RED, true);
 		}
