@@ -107,9 +107,9 @@ def test_connection_path_matrix_runs_every_path(monkeypatch, tmp_path):
     result = cli._run_target_cases(
         _target(),
         [
-            {"id": "all-direct", "connectionPath": {"mode": "DIRECT"}},
             {"id": "all-magic", "connectionPath": {"mode": "MAGIC"}},
             {"id": "all-holepunch", "connectionPath": {"mode": "HOLEPUNCH"}},
+            {"id": "all-http", "connectionPath": {"mode": "HTTP"}},
         ],
         out_dir=tmp_path,
         artifact_dir=tmp_path,
@@ -118,7 +118,7 @@ def test_connection_path_matrix_runs_every_path(monkeypatch, tmp_path):
         resource_scope="scope",
     )
 
-    assert seen == ["DIRECT", "MAGIC", "HOLEPUNCH"]
+    assert seen == ["MAGIC", "HOLEPUNCH", "HTTP"]
     assert result["ok"] is True
     assert [path["connectionMode"] for path in result["connectionPaths"]] == seen
 
