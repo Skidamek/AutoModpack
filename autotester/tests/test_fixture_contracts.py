@@ -407,7 +407,7 @@ def test_offline_update_fallback_writes_the_production_connection_record(make_ct
         "connection": {
             "origin": "127.0.0.1:25565",
             "endpoint": "127.0.0.1:25565",
-            "connectionMode": "DIRECT",
+            "connectionMode": "HTTP",
         },
         "secrets": {},
     }

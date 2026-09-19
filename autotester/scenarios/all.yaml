@@ -8,14 +8,11 @@ description: |
 renderClient: true
 
 # Run the complete release gate independently through each supported opening.
-# DIRECT and HTTP use dedicated listeners while MAGIC shares the Minecraft
-# listener and HOLEPUNCH takes over the marked Login stream. HTTP serves the
-# pack over plain HTTPS file semantics for a fully public pack and carries no
-# secret.
+# MAGIC shares the Minecraft listener behind the pre-TLS handshake while
+# HOLEPUNCH takes over the marked Login stream; HTTP runs the dedicated
+# listener and serves the pack over plain HTTPS file semantics for a fully
+# public pack. Every mode serves the same HTTP wire after the opening.
 connectionPaths:
-  - mode: DIRECT
-    bindPort: 25566
-    endpointPort: 25566
   - mode: MAGIC
     bindPort: -1
     endpointPort: 25565

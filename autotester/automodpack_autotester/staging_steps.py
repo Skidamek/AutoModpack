@@ -398,7 +398,7 @@ def _v_stage_modpack(ctx: Context, step):
                     "connection": {
                         "origin": addr,
                         "endpoint": addr,
-                        "connectionMode": "DIRECT",
+                        "connectionMode": "HTTP",
                     },
                     "secrets": {},
                 },
