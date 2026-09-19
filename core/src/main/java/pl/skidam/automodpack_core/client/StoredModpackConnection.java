@@ -28,7 +28,7 @@ public final class StoredModpackConnection implements AutoCloseable {
 		this.transport = transport;
 	}
 
-	/** A stored connection seeded with its exact certificate pin and, for the custom modes, the client secret of its origin; HTTP packs carry no secret. */
+	/** A stored connection seeded with its exact certificate pin and the client secret its login issued, when it issued one. */
 	public record Seeded(ConnectionJsons.ConnectionInfo connection, Secrets.Secret secret) {}
 
 	/** Loads the stored connection route and seeds its fingerprint-checked connection and secret; null when no complete connection is stored. */
