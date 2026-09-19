@@ -5,6 +5,8 @@ dedicated verb is needed for them.
 """
 from __future__ import annotations
 
+from automodpack_autotester import hconf_min
+
 import base64
 import hashlib
 import json
@@ -317,7 +319,10 @@ def assert_bootstrap_import(ctx, _step):
     if bootstrap_path.exists():
         raise AssertionError(f"Preload did not delete imported bootstrap file: {bootstrap_path}")
     try:
-        client_config = json.loads((ctx.game_dir / "automodpack" / "client-config.json").read_text(encoding="utf-8"))
+        client_config_path = ctx.game_dir / "automodpack" / "client-config.hconf"
+        if not client_config_path.exists():
+            client_config_path = ctx.game_dir / "automodpack" / "client-config.json"
+        client_config = (json.loads if client_config_path.suffix == ".json" else hconf_min.read_hconf)(client_config_path)
         known_hosts = json.loads((ctx.game_dir / "automodpack" / "client" / "data" / "known-hosts.json").read_text(encoding="utf-8"))
         connection = json.loads((ctx.game_dir / "automodpack" / "client" / "data" / "packs" / expected["modpackId"] / "connection.json").read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:

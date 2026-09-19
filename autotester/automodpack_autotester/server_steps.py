@@ -1,6 +1,8 @@
 """Server lifecycle verbs and live server-state inspection (journal, projection, object store)."""
 from __future__ import annotations
 
+from automodpack_autotester import hconf_min
+
 import hashlib
 import json
 import re
@@ -456,10 +458,12 @@ def _v_seed_bootstrap(ctx: Context, step):
     if not fingerprint:
         raise RuntimeError("seed_bootstrap requires read_server_fingerprint first")
     projection_path = ctx.server_dir / "automodpack" / "server" / "current-projection.json"
-    config_path = ctx.server_dir / "automodpack" / "server-config.json"
+    config_path = ctx.server_dir / "automodpack" / "server-config.hconf"
+    if not config_path.exists():
+        config_path = ctx.server_dir / "automodpack" / "server-config.json"
     try:
         projection = json.loads(projection_path.read_text(encoding="utf-8"))
-        server_config = json.loads(config_path.read_text(encoding="utf-8"))
+        server_config = (json.loads if config_path.suffix == ".json" else hconf_min.read_hconf)(config_path)
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise RuntimeError(f"live server bootstrap state is not readable: {error}") from error
     modpack_id = str((projection.get("policy", {}) or {}).get("modpackId", "")).strip()

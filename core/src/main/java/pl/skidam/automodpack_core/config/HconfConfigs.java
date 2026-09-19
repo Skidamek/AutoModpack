@@ -53,16 +53,17 @@ public final class HconfConfigs {
 
 	private static final String BANNER = "AutoModpack configuration - your edits and comments survive updates";
 
-	/** Reads one human config; empty when the file does not exist yet, {@link ConfigTools.ConfigParseException} with position when it is corrupt. */
+	/** Reads one human config; empty when neither it nor its pre-hconf {@code .json} predecessor exists, {@link ConfigTools.ConfigParseException} with position when it is corrupt. */
 	public static <T> Optional<T> read(Path path, Class<T> type) {
-		if (!Files.isRegularFile(path)) return Optional.empty();
+		Path effective = Files.isRegularFile(path) ? path : legacyPath(path);
+		if (!Files.isRegularFile(effective)) return Optional.empty();
 		byte[] bytes;
 		try {
-			bytes = Files.readAllBytes(path);
+			bytes = Files.readAllBytes(effective);
 		} catch (IOException e) {
-			throw new ConfigTools.ConfigException("Failed to read configuration " + path.toAbsolutePath().normalize(), e);
+			throw new ConfigTools.ConfigException("Failed to read configuration " + effective.toAbsolutePath().normalize(), e);
 		}
-		String json = parseJson(path, bytes);
+		String json = parseJson(effective, bytes);
 		List<String> unknown = ConfigTools.unknownKeys(json, type);
 		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
 		return Optional.of(ConfigTools.parse(json, type));
@@ -84,9 +85,22 @@ public final class HconfConfigs {
 	 * regenerating it would hide the defect.
 	 */
 	public static <T> void save(Path path, T model, Class<T> type, Supplier<T> defaults) throws IOException {
-		byte[] bytes = Files.isRegularFile(path) ? Files.readAllBytes(path) : null;
+		Path legacy = legacyPath(path);
+		byte[] legacyBytes = !Files.isRegularFile(path) && Files.isRegularFile(legacy) ? Files.readAllBytes(legacy) : null;
+		byte[] bytes = Files.isRegularFile(path) ? Files.readAllBytes(path) : legacyBytes;
 		Document document;
 		if (bytes == null) {
+			document = freshDocument(model, type);
+		} else if (legacyBytes != null) {
+			// format migration (one-time, json -> hconf): the model was read through the legacy
+			// fallback, so generating fresh carries every current value into the documented canonical
+			// file; the old file goes away only after the new one is written
+			ParseResult legacyResult = Hconf.parse(legacyBytes);
+			if (!legacyResult.isOk()) {
+				hconf.ParseError error = legacyResult.error();
+				throw new ConfigTools.ConfigParseException("Cannot migrate " + legacy.getFileName() + ": the file is corrupt at line " + error.line() + ":"
+						+ error.column() + " (" + error.kind() + "): " + error.message() + "; fix or remove the file and retry");
+			}
 			document = freshDocument(model, type);
 		} else {
 			ParseResult result = Hconf.parse(bytes);
@@ -101,6 +115,14 @@ public final class HconfConfigs {
 		ensureDeclared(document, type, defaults.get());
 		OsPaths.requirePublishableConfig(path);
 		DurableFiles.writeAtomic(path, document.text());
+		if (legacyBytes != null) Files.deleteIfExists(legacy);
+	}
+
+	/** The pre-hconf {@code .json} name of a config file; the read fallback and the save migration source. */
+	private static Path legacyPath(Path path) {
+		String name = path.getFileName().toString();
+		int dot = name.lastIndexOf('.');
+		return path.resolveSibling((dot > 0 ? name.substring(0, dot) : name) + ".json");
 	}
 
 	/** Generates one fresh document: canonical hconf with the banner and the {@link Comment} declarations. */

@@ -22,6 +22,10 @@ class HconfConfigsTest {
 	Path dir;
 
 	private Path serverConfig() {
+		return dir.resolve("server-config.hconf");
+	}
+
+	private Path legacyServerConfig() {
 		return dir.resolve("server-config.json");
 	}
 
@@ -51,7 +55,7 @@ class HconfConfigsTest {
 				  "connectionMode": "HOLEPUNCH",
 				  "secretLifetime": 336
 				}""";
-		Files.write(serverConfig(), legacy.getBytes(StandardCharsets.UTF_8));
+		Files.write(legacyServerConfig(), legacy.getBytes(StandardCharsets.UTF_8));
 		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
 		assertEquals(2, config.DO_NOT_CHANGE_IT);
 		assertEquals(25590, config.bindPort);
@@ -130,6 +134,21 @@ class HconfConfigsTest {
 		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertTrue(text.contains("someFutureOption: true"), "stale key not left alone:\n" + text);
+	}
+
+	@Test
+	void legacyJsonMigratesToHconfOnFirstSave() throws IOException {
+		String legacy = "modpackName: \"Carried Pack\"\nbindPort: 25590\n";
+		Files.write(legacyServerConfig(), legacy.getBytes(StandardCharsets.UTF_8));
+		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		assertEquals("Carried Pack", config.modpackName);
+		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		assertFalse(Files.exists(legacyServerConfig()), "legacy .json not removed after migration");
+		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
+		assertTrue(text.startsWith("# "), "migrated file lacks the banner:\n" + text);
+		assertTrue(text.contains("modpackName: \"Carried Pack\""), "value not carried:\n" + text);
+		assertTrue(text.contains("bindPort: 25590"), "value not carried:\n" + text);
+		assertTrue(text.contains("# honor HAProxy PROXY protocol headers"), "fresh comments missing:\n" + text);
 	}
 
 	@Test
