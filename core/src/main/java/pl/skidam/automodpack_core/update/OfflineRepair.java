@@ -425,9 +425,12 @@ public final class OfflineRepair {
 		List<String> unownedMods = inspectMods(request.protectedModPath(), ownedLiveMods, fileCache, observations, observationsByFileKey);
 		for (Expected value : expected.values()) observe(value.path(), value.root(), fileCache, observations, observationsByFileKey);
 
+		// Twins recorded under both paths share one Observation, so the distinct view is the honest source list and
+		// direct-hash receipt: one entry per file actually hashed, not one per path that saw the hash.
+		List<Observation> hashed = observations.values().stream().filter(observation -> !observation.unsupported()).distinct().toList();
 		Map<Content, List<Path>> sources = new HashMap<>();
-		for (Observation observation : observations.values())
-			if (!observation.unsupported()) sources.computeIfAbsent(new Content(observation.hash(), observation.size()), ignoredContent -> new ArrayList<>()).add(observation.path());
+		for (Observation observation : hashed)
+			sources.computeIfAbsent(new Content(observation.hash(), observation.size()), ignoredContent -> new ArrayList<>()).add(observation.path());
 		for (List<Path> paths : sources.values()) paths.sort(Comparator.comparing(Path::toString));
 		List<Finding> findings = new ArrayList<>();
 		for (Expected value : expected.values()) {
@@ -440,9 +443,8 @@ public final class OfflineRepair {
 		}
 		List<EditableResetCandidate> editableCandidates = editable.values().stream().sorted(EDITABLE_ORDER).toList();
 		long bytes = 0;
-		for (Observation observation : observations.values()) if (!observation.unsupported()) bytes = Math.addExact(bytes, observation.size());
-		Prepared prepared = new Prepared(modpackId, contentToken, selectionDigest, request, findings, editableCandidates, unownedMods,
-				observations.values().stream().filter(observation -> !observation.unsupported()).count(), bytes);
+		for (Observation observation : hashed) bytes = Math.addExact(bytes, observation.size());
+		Prepared prepared = new Prepared(modpackId, contentToken, selectionDigest, request, findings, editableCandidates, unownedMods, hashed.size(), bytes);
 		return new Analysis(prepared, Map.copyOf(expected), Map.copyOf(observations), immutableSources(sources));
 	}
 
