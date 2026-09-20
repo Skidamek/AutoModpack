@@ -10,7 +10,9 @@ import java.lang.annotation.Target;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -21,10 +23,11 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 
+import hconf.Comments;
 import hconf.Document;
 import hconf.Hconf;
 import hconf.ParseResult;
-import hconf.tree.Value;
+import hconf.Value;
 
 import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.OsPaths;
@@ -128,12 +131,12 @@ public final class HconfConfigs {
 	/** Generates one fresh document: canonical hconf with the banner and the {@link Comment} declarations. */
 	private static <T> Document freshDocument(T model, Class<T> type) {
 		Value.Obj root = modelTree(model);
-		root.banner(BANNER);
+		Map<String, String> byKey = new LinkedHashMap<>();
 		for (Field field : type.getDeclaredFields()) {
 			Comment comment = field.getAnnotation(Comment.class);
-			if (comment != null) root.comment(field.getName(), comment.value());
+			if (comment != null) byKey.put(field.getName(), comment.value());
 		}
-		return Hconf.parse(Hconf.canonical(root)).document();
+		return Hconf.parse(Hconf.canonical(root, Comments.of(BANNER, byKey))).document();
 	}
 
 	/** Ensures every {@link Comment} field declared in {@code type} exists in the document, materializing with the declared default and comment. */
