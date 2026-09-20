@@ -8,12 +8,15 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntConsumer;
 import java.util.zip.GZIPOutputStream;
 
@@ -58,6 +61,7 @@ class DownloadManagerPlatformTest {
 		CONTENTS.put("chunk-exact.bin", deterministic("chunk-exact", 4_194_304));
 		CONTENTS.put("chunk-over.bin", deterministic("chunk-over", 4_194_305));
 		CONTENTS.put("multi-chunk.bin", deterministic("multi-chunk", 12_582_912));
+		CONTENTS.put("two-point-five-chunks.bin", deterministic("two-point-five-chunks", 10_485_760));
 		CONTENTS.put("validates-ünïcode.jar", deterministic("unicode", 4096));
 		server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 		server.createContext("/good", exchange -> {
@@ -109,6 +113,48 @@ class DownloadManagerPlatformTest {
 		Path stored = downloadViaPlatform(name, name, "/good/" + name, transport);
 		assertArrayEquals(expected, Files.readAllBytes(stored));
 		assertEquals(List.of(), transport.fetches, "the host wire must stay idle while the platform serves");
+	}
+
+	static List<String> hostChunkedFiles() {
+		return List.of("chunk-over.bin", "two-point-five-chunks.bin");
+	}
+
+	/**
+	 * The host wire's chunked takes must tile any size exactly: a whole-chunk tail walk past a non-chunk-multiple size
+	 * once orphaned the bytes between the first chunk and the aligned tail, so no request ever covered them and the run
+	 * waited forever with everything idle.
+	 */
+	@ParameterizedTest
+	@MethodSource("hostChunkedFiles")
+	void hostWireTakesTileNonChunkMultipleSizesExactly(String name) throws Exception {
+		byte[] expected = CONTENTS.get(name);
+		FakeTransport transport = new FakeTransport(expected);
+		assertTimeoutPreemptively(Duration.ofSeconds(30), () -> {
+			Path stored = downloadViaHostWire(name, transport);
+			assertArrayEquals(expected, Files.readAllBytes(stored));
+		}, "the host-wire download must finish: an unfinished one means takes left bytes uncovered");
+		assertEquals(0, transport.failures.get());
+		long next = 0;
+		for (long[] range : transport.ranges.stream().sorted(Comparator.comparingLong(range -> range[0])).toList()) {
+			assertEquals(next, range[0], "a take must start exactly where the coverage ends");
+			next = range[1] + 1;
+		}
+		assertEquals(expected.length, next, "the takes must cover every byte of the file exactly once");
+	}
+
+	private Path downloadViaHostWire(String name, FakeTransport transport) throws Exception {
+		layout = new DataRootResolver.Layout(tempDir.resolve("data"));
+		Path destination = tempDir.resolve("active").resolve(name);
+		byte[] content = CONTENTS.get(name);
+		PlatformCache cache = PlatformCache.open(tempDir.resolve("platform-cache"));
+		DownloadManager manager = new DownloadManager(content.length, layout, cache);
+		manager.attachTransport(transport);
+		String sha1 = HashUtils.getHash(writeExpected(name, content));
+		manager.download(destination, sha1, null, "config", List.of(), content.length, () -> {}, category -> {});
+		manager.joinAll();
+		manager.finish();
+		cache.close();
+		return layout.objectFile(sha1);
 	}
 
 	@Test
@@ -172,6 +218,8 @@ class DownloadManagerPlatformTest {
 	private static final class FakeTransport implements PackTransport {
 		private final byte[] servedBytes;
 		private final List<String> fetches = new ArrayList<>();
+		private final List<long[]> ranges = new CopyOnWriteArrayList<>();
+		private final AtomicInteger failures = new AtomicInteger();
 
 		FakeTransport(byte[] servedBytes) {
 			this.servedBytes = servedBytes;
@@ -180,9 +228,13 @@ class DownloadManagerPlatformTest {
 		@Override
 		public CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, long endInclusive, IntConsumer progress, int lane) {
 			fetches.add(new String(key, StandardCharsets.UTF_8));
-			if (servedBytes == null) return CompletableFuture.failedFuture(new IOException("no host wire in this test"));
+			if (servedBytes == null) {
+				failures.incrementAndGet();
+				return CompletableFuture.failedFuture(new IOException("no host wire in this test"));
+			}
 			try {
 				int end = endInclusive < 0 ? servedBytes.length - 1 : (int) endInclusive;
+				ranges.add(new long[]{offset, end});
 				byte[] suffix = new byte[end + 1 - (int) offset];
 				System.arraycopy(servedBytes, (int) offset, suffix, 0, suffix.length);
 				if (offset > 0) {
@@ -195,6 +247,7 @@ class DownloadManagerPlatformTest {
 				progress.accept(suffix.length);
 				return CompletableFuture.completedFuture(destination);
 			} catch (IOException e) {
+				failures.incrementAndGet();
 				return CompletableFuture.failedFuture(e);
 			}
 		}

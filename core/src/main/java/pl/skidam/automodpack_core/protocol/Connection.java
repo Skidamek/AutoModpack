@@ -173,7 +173,14 @@ class Connection implements AutoCloseable {
 				synchronized (gate) {
 					pending.pollFirst();
 				}
-				onSlotFreed.run();
+				try {
+					onSlotFreed.run();
+				} catch (Throwable failure) {
+					// The slot is freed at the connection, but a dead pool callback would strand the rest of this
+					// pipeline silently - the reader would die with slots still counted. Fail the lane loudly instead.
+					failPending(new IOException("Slot-free callback failed", failure));
+					return;
+				}
 			}
 		}
 	}
@@ -426,28 +433,31 @@ class Connection implements AutoCloseable {
 	/**
 	 * Writes the body per the framing rules; a bodyless status consumes nothing. Called with a null destination to
 	 * discard an error body. The framed source - Content-Length, chunked, or close - ends exactly where the next
-	 * pipelined response head begins, so a coded body decodes on the way in without losing alignment.
+	 * pipelined response head begins, so alignment is the frame's business, never the codec's: a decoder is free to
+	 * stop at its own stream end (gzip peeks the wire via available(), which loses to a terminator still in flight),
+	 * and the frame drain below consumes whatever framing bytes the decoder left behind.
 	 */
 	private void consumeBody(ResponseHead head, Path destination, long writeOffset, IntConsumer chunkCallback, MessageDigest hash, OutputStream tap) throws IOException {
 		if (head.status() == 204 || head.status() == 304) return;
-		InputStream source;
+		InputStream framed;
 		boolean closeFramed = false;
 		if (head.chunked()) {
-			source = new ChunkedBody();
+			framed = new ChunkedBody();
 		} else if (head.contentLength() != null) {
-			source = new BoundedBody(head.contentLength());
+			framed = new BoundedBody(head.contentLength());
 		} else {
 			if (head.status() != 200) return;
-			source = in;
+			framed = in;
 			closeFramed = true;
 		}
 		String encoding = head.contentEncoding() == null ? "" : head.contentEncoding().trim().toLowerCase(Locale.ROOT);
 		WireCodec codec = WireCodec.negotiate(encoding);
 		if (codec == null && !encoding.isEmpty()) throw new IOException("Unsupported Content-Encoding: " + head.contentEncoding());
-		if (codec != null) source = codec.unwrap(source);
+		InputStream source = codec == null ? framed : codec.unwrap(framed);
 		if (closeFramed) unhealthy = true;
 		transfer(source, destination, writeOffset, chunkCallback, hash, head.contentLength(), tap);
-		if (source instanceof BoundedBody bounded && bounded.remaining() > 0) throw new IOException("Response body ended before the promised Content-Length");
+		if (framed instanceof ChunkedBody chunked) chunked.drainToFrameEnd();
+		if (framed instanceof BoundedBody bounded && bounded.remaining() > 0) throw new IOException("Response body ended before the promised Content-Length");
 		if (head.connectionClose()) unhealthy = true;
 	}
 
@@ -537,6 +547,32 @@ class Connection implements AutoCloseable {
 			return read;
 		}
 
+		/**
+		 * Consumes the rest of the body's frame after the decoder has hit EOF: chunk bytes it never asked for, the
+		 * terminator, and the trailers. The terminator arriving after the last coding byte must still land here, so the
+		 * next response head starts exactly behind this body.
+		 */
+		void drainToFrameEnd() throws IOException {
+			while (!done) {
+				if (chunkRemaining == 0) {
+					long size = parseChunkSize(readLine());
+					if (size == 0) {
+						consumeTrailers();
+						done = true;
+						return;
+					}
+					chunkRemaining = size;
+				}
+				long skipped = in.skip(chunkRemaining);
+				if (skipped <= 0) {
+					if (in.read() < 0) throw new IOException("Connection ended inside a chunked body");
+					skipped = 1;
+				}
+				chunkRemaining -= skipped;
+				if (chunkRemaining == 0) expectCrlf();
+			}
+		}
+
 		private long parseChunkSize(String line) throws IOException {
 			String hex = line.indexOf(';') >= 0 ? line.substring(0, line.indexOf(';')).trim() : line.trim();
 			try {
@@ -558,11 +594,6 @@ class Connection implements AutoCloseable {
 			while (!readLine().isEmpty()) {
 				if (++lines > MAX_HEADER_LINES) throw new IOException("Chunked trailer block exceeded " + MAX_HEADER_LINES + " lines");
 			}
-		}
-
-		@Override
-		public int available() throws IOException {
-			return in.available();
 		}
 	}
 

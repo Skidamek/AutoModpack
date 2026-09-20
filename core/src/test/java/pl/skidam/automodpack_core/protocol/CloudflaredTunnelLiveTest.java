@@ -2,7 +2,6 @@ package pl.skidam.automodpack_core.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -11,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -91,16 +91,13 @@ class CloudflaredTunnelLiveTest {
 							.get(AWAIT_SECONDS, TimeUnit.SECONDS);
 					assertArrayEquals(object, Files.readAllBytes(objectDestination));
 
-					// A resumed take lands exactly where the offset says, through the same tunnel.
+					// A resumed take appends exactly behind the stored prefix, through the same tunnel.
 					Path rangedDestination = directory.resolve("object-ranged");
 					long offset = 4096;
+					Files.write(rangedDestination, Arrays.copyOf(object, (int) offset));
 					client.downloadFile(objectHash.getBytes(StandardCharsets.UTF_8), rangedDestination, offset, null)
 							.get(AWAIT_SECONDS, TimeUnit.SECONDS);
-					byte[] suffix = Files.readAllBytes(rangedDestination);
-					assertTrue(suffix.length > 0);
-					byte[] expected = new byte[object.length - (int) offset];
-					System.arraycopy(object, (int) offset, expected, 0, expected.length);
-					assertArrayEquals(expected, suffix);
+					assertArrayEquals(object, Files.readAllBytes(rangedDestination));
 				} finally {
 					client.close();
 				}

@@ -532,17 +532,22 @@ public class DownloadManager implements DownloadView {
 				// The task lock decides take vs finish, exactly as the barrier's done check reads it: once the cursor
 				// sits at the first chunk there is nothing left to take, so a finished task is never joined.
 				synchronized (task) {
-					long floor = data.hostOffset + chunk; // never take the first chunk; the streamer owns it
-					long stealFrom = task.stealCursor - chunk;
-					if (stealFrom < floor) continue;
+					// The cursor is the task's one uncovered-tail pointer: the streamer owns [offset, floor) and every
+					// take claims exactly [stealFrom, old cursor - 1], so the final take may be short - a whole-chunk walk
+					// past a non-chunk-multiple size would orphan bytes no request ever covers and the barrier would
+					// never fire.
+					long floor = data.hostOffset + chunk;
+					if (task.stealCursor <= floor) continue;
+					long takeEnd = task.stealCursor - 1;
+					long stealFrom = Math.max(floor, task.stealCursor - chunk);
 					Path partial = task.partialFile;
 					if (partial == null) continue;
 					task.stealCursor = stealFrom;
 					task.resumeValid = false; // a positioned take makes the partial's size meaningless for resume
 					task.pendingItems++;
 					int lane = Math.floorMod(laneCounter.getAndIncrement(), MAX_DOWNLOADS_IN_PROGRESS);
-					LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", lane, stealFrom, stealFrom + chunk - 1, task.file.getFileName());
-					submitHostItem(data.key, task, data, partial, stealFrom, stealFrom + chunk - 1, lane);
+					LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", lane, stealFrom, takeEnd, task.file.getFileName());
+					submitHostItem(data.key, task, data, partial, stealFrom, takeEnd, lane);
 				}
 				stole = true;
 				break;

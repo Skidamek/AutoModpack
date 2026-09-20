@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntConsumer;
+import java.util.zip.GZIPOutputStream;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -197,6 +198,30 @@ class ConditionalFetchTest {
 				client.downloadDocument("journal".getBytes(StandardCharsets.UTF_8), journalDestination, null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertArrayEquals(journal, Files.readAllBytes(journalDestination));
 				assertEquals(1, server.connections.get(), "both chunked responses rode one connection");
+			}
+		}
+	}
+
+	@Test
+	void gzipChunkedBodyWithLateTerminatorKeepsTheConnectionAligned(@TempDir Path directory) throws Exception {
+		try (ContractServer server = new ContractServer()) {
+			server.gzipDocuments.set(true);
+			server.chunkedDocuments.set(true);
+			server.delayFinalChunk.set(true);
+			byte[] head = "a-repetitive-head-document-streamed-in-gzip-chunks\n".repeat(8).getBytes(StandardCharsets.UTF_8);
+			byte[] journal = "a-repetitive-journal-document-streamed-in-gzip-chunks\n".repeat(8).getBytes(StandardCharsets.UTF_8);
+			server.store.put("head", head);
+			server.store.put("journal", journal);
+			try (DownloadClient client = client(server, "test-secret")) {
+				// gzip ends its stream before the chunked terminator reaches the wire; the next response rides the same
+				// connection, so the frame drain decides whether alignment survives.
+				Path headDestination = directory.resolve("head");
+				client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), headDestination, null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertArrayEquals(head, Files.readAllBytes(headDestination));
+				Path journalDestination = directory.resolve("journal");
+				client.downloadDocument("journal".getBytes(StandardCharsets.UTF_8), journalDestination, null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertArrayEquals(journal, Files.readAllBytes(journalDestination));
+				assertEquals(1, server.connections.get(), "both responses rode one connection past the late terminator");
 			}
 		}
 	}
@@ -384,7 +409,9 @@ class ConditionalFetchTest {
 		final AtomicBoolean requireAuth = new AtomicBoolean(false);
 		final AtomicBoolean lieAboutResumeStart = new AtomicBoolean(false);
 		final AtomicBoolean compressDocuments = new AtomicBoolean(false);
+		final AtomicBoolean gzipDocuments = new AtomicBoolean(false);
 		final AtomicBoolean chunkedDocuments = new AtomicBoolean(false);
+		final AtomicBoolean delayFinalChunk = new AtomicBoolean(false);
 		final AtomicBoolean lastResponseZstd = new AtomicBoolean(false);
 		final AtomicBoolean sawAcceptEncoding = new AtomicBoolean(false);
 		final AtomicInteger connections = new AtomicInteger();
@@ -528,8 +555,13 @@ class ConditionalFetchTest {
 						&& request.acceptEncoding.toLowerCase(Locale.ROOT).contains("zstd")) {
 					lastResponseZstd.set(true);
 					byte[] compressed = zstdCompress(content);
-					if (chunkedDocuments.get()) respondChunked(out, "200 OK", compressed, "Content-Encoding: zstd");
+					if (chunkedDocuments.get()) respondChunked(out, "200 OK", compressed, 0, "Content-Encoding: zstd");
 					else respond(out, "200 OK", compressed, "Content-Encoding: zstd");
+					return;
+				}
+				if (gzipDocuments.get() && !request.path.startsWith("/objects/") && request.acceptEncoding != null) {
+					byte[] compressed = gzipCompress(content);
+					respondChunked(out, "200 OK", compressed, delayFinalChunk.get() ? 1500 : 0, "Content-Encoding: gzip");
 					return;
 				}
 				respond(out, "200 OK", content);
@@ -545,8 +577,16 @@ class ConditionalFetchTest {
 			return buffer.toByteArray();
 		}
 
-		/** The same body in chunked framing, cut into odd-sized frames so the de-framer sees several. */
-		private static void respondChunked(BufferedOutputStream out, String status, byte[] body, String... headers) throws IOException {
+		private static byte[] gzipCompress(byte[] content) throws IOException {
+			ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+			try (GZIPOutputStream gzip = new GZIPOutputStream(buffer)) {
+				gzip.write(content);
+			}
+			return buffer.toByteArray();
+		}
+
+		/** The same body in chunked framing, cut into odd-sized frames so the de-framer sees several; the terminator may be held back past the body's end. */
+		private static void respondChunked(BufferedOutputStream out, String status, byte[] body, long finalChunkDelayMillis, String... headers) throws IOException {
 			StringBuilder head = new StringBuilder(128);
 			head.append("HTTP/1.1 ").append(status).append("\r\n");
 			head.append("Transfer-Encoding: chunked\r\n");
@@ -559,6 +599,15 @@ class ConditionalFetchTest {
 				out.write((Integer.toHexString(frame.length) + "\r\n").getBytes(StandardCharsets.UTF_8));
 				out.write(frame);
 				out.write("\r\n".getBytes(StandardCharsets.UTF_8));
+			}
+			out.flush();
+			if (finalChunkDelayMillis > 0) {
+				try {
+					Thread.sleep(finalChunkDelayMillis);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					throw new IOException("Interrupted while holding the final chunk", e);
+				}
 			}
 			out.write("0\r\n\r\n".getBytes(StandardCharsets.UTF_8));
 			out.flush();
