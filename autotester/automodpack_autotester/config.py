@@ -190,10 +190,34 @@ def generated_content(path: str, size_bytes: int) -> str:
     return (unit * (size_bytes // len(unit) + 1))[:size_bytes]
 
 
+def write_generated(path: Path, name: str, size_bytes: int) -> None:
+    """Streams ``generated_content`` to disk in chunks: gigabyte fixtures never sit in RAM."""
+    unit = f"{name.encode('ascii', 'backslashreplace').decode('ascii')}:{size_bytes}\n"
+    if not unit:
+        Path(path).write_bytes(b"")
+        return
+    with open(path, "wb") as handle:
+        written = 0
+        while written < size_bytes:
+            chunk = unit * min(len(unit), (size_bytes - written) // len(unit) + 1)
+            chunk = chunk[: size_bytes - written]
+            handle.write(chunk.encode("utf-8"))
+            written += len(chunk)
+
+
 def _hosted_content(item: dict) -> str:
     if "sizeBytes" not in item:
         return str(item.get("content", ""))
     return generated_content(str(item["path"]), item["sizeBytes"])
+
+
+@dataclass(frozen=True)
+class HostedFile:
+    """One hosted fixture: literal content, or a deterministic fill of ``size_bytes`` bytes."""
+
+    path: Path
+    content: str | None = None
+    size_bytes: int | None = None
 
 
 @dataclass(frozen=True)
@@ -202,7 +226,7 @@ class ServerFiles:
 
     modpack_name: str
     marker: Path
-    files: list[tuple[Path, str]] = field(default_factory=list)
+    files: list[HostedFile] = field(default_factory=list)
     expected_mods: list[str] = field(default_factory=list)
 
 
@@ -211,6 +235,10 @@ def parse_server_files(scenario: dict) -> ServerFiles:
     return ServerFiles(
         modpack_name=str(sf.get("modpackName", "amp-autotest")),
         marker=Path(str(sf.get("marker", "config/amp-autotest-marker.json"))),
-        files=[(Path(str(f["path"])), _hosted_content(f)) for f in sf.get("files", [])],
+        files=[HostedFile(
+            Path(str(f["path"])),
+            content=None if "sizeBytes" in f else str(f.get("content", "")),
+            size_bytes=f["sizeBytes"] if "sizeBytes" in f else None,
+        ) for f in sf.get("files", [])],
         expected_mods=[str(m) for m in sf.get("expectedMods", [])],
     )

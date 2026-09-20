@@ -155,7 +155,7 @@ def wait_files(ctx, step):
 def verify_files(ctx, step):
     """Wait until every file declared in the scenario's ``serverFiles`` is present."""
     root = ctx.game_dir / ctx.resolve(str(step.get("root", "${active_dir}")))
-    rels = [str(rel) for rel, _ in ctx.scenario_files]
+    rels = [str(hosted.path) for hosted in ctx.scenario_files]
     _await_exist(ctx, root, rels, step, f"modpack files missing under {root}", 120)
 
 

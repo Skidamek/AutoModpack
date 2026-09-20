@@ -10,7 +10,7 @@ from pathlib import Path
 from .mod_fixtures import write_valid_mod_fixture
 from .supervisor import resource_labels
 from .client_steps import cas_object
-from .config import server_cache_volume
+from .config import server_cache_volume, write_generated
 from .docker_harness import _container, _container_logs, _ensure_volume, _exec_output, _remove_volume, _run_container, _uid, _gid, _wait_for_log
 from .engine import Context
 from .engine.registry import verb
@@ -49,7 +49,15 @@ def _server_generation(ctx: Context, index: int) -> dict:
     if not generations:
         if index != 0:
             raise ValueError(f"scenario has no server generation {index}")
-        return {"files": [{"path": str(path), "content": content} for path, content in ctx.scenario_files]}
+        files = []
+        for hosted in ctx.scenario_files:
+            item = {"path": str(hosted.path)}
+            if hosted.size_bytes is not None:
+                item["sizeBytes"] = hosted.size_bytes
+            else:
+                item["content"] = hosted.content
+            files.append(item)
+        return {"files": files}
     if not isinstance(generations, list) or index < 0 or index >= len(generations):
         raise ValueError(f"server generation index {index} is outside the declared generations")
     generation = generations[index]
@@ -92,6 +100,12 @@ def _write_server_generation(ctx: Context, index: int) -> None:
             if not isinstance(fixture, dict):
                 raise ValueError(f"server generation fixture for {rel} must be a mapping")
             write_valid_mod_fixture(f, fixture, ctx.target.minecraft)
+        elif "sizeBytes" in item:
+            size_bytes = item["sizeBytes"]
+            if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or size_bytes < 0:
+                raise ValueError(f"server generation sizeBytes for {rel} must be a non-negative integer")
+            generated_name = str(rel).encode("ascii", "backslashreplace").decode("ascii")
+            write_generated(f, f"{generated_name}:{size_bytes}", size_bytes)
         else:
             f.write_text(str(item.get("content", "")), encoding="utf-8")
     patch_notes = generation.get("patchNotes", "")

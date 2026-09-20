@@ -29,7 +29,7 @@ class Context:
     artifact: Path
     modpack_name: str
     marker_rel: Path
-    scenario_files: list  # list[(Path, str)]
+    scenario_files: list  # list[HostedFile]
     expected_mods: list
     # Address the client uses to reach the server. On bridge networking this is
     # the server container name; on host networking it's localhost.

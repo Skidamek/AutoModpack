@@ -576,8 +576,8 @@ class FakeBridge:
         config["selectedModpackId"] = ""
         client_config.parent.mkdir(parents=True, exist_ok=True)
         client_config.write_text(json.dumps(config), encoding="utf-8")
-        for rel, _content in self.ctx.scenario_files:
-            self.ctx.path(rel).unlink(missing_ok=True)
+        for hosted in self.ctx.scenario_files:
+            self.ctx.path(hosted.path).unlink(missing_ok=True)
         for rel, content in self.baseline_snapshots.items():
             target = self.ctx.path(rel)
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -745,7 +745,8 @@ class FakeBridge:
             fixture_files = self._generation_fixture_files(0)
         if self.selected_pack == "A":
             self._apply_server_owned_baselines(1 if self.update_available or self.ctx.vars.get("client_generation_reset") else 0)
-        for rel, content in files:
+        for entry in files:
+            rel, content = (entry.path, entry.content) if hasattr(entry, "path") else entry
             f = root / rel
             f.parent.mkdir(parents=True, exist_ok=True)
             if isinstance(content, bytes):

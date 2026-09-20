@@ -717,7 +717,7 @@ def _v_seed_cas(ctx: Context, _step):
     objects = _ensure_client_data_root(ctx.game_dir) / "objects"
     objects.mkdir(parents=True, exist_ok=True)
     payloads = [json.dumps({"marker": ctx.modpack_name}).encode("utf-8") + b"\n"]
-    payloads.extend(content.encode("utf-8") for _, content in ctx.scenario_files)
+    payloads.extend(hosted.content.encode("utf-8") for hosted in ctx.scenario_files if hosted.content is not None)
     for payload in payloads:
         object_path = cas_object(objects, hashlib.sha1(payload).hexdigest())
         object_path.parent.mkdir(parents=True, exist_ok=True)
