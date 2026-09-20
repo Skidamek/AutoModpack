@@ -110,9 +110,22 @@ public class DownloadClient implements PackTransport {
 
 		return CompletableFuture.supplyAsync(() -> {
 			String host = connectionInfo.endpoint.getHostString();
-			InetSocketAddress address = new InetSocketAddress(host, connectionInfo.endpoint.getPort());
-			if (address.isUnresolved()) throw new CompletionException(new IOException("Failed to resolve endpoint host: " + host));
-			return new TransportRoute(address, null);
+			// Freshly-cut DNS records (quick tunnels cut their name seconds before the first player connects) can lag
+			// the advertisement; retry briefly before declaring the endpoint unresolvable.
+			IOException failure = new IOException("Failed to resolve endpoint host: " + host);
+			for (int attempt = 0; attempt < 3; attempt++) {
+				if (attempt > 0) {
+					try {
+						Thread.sleep(1500);
+					} catch (InterruptedException e) {
+						Thread.currentThread().interrupt();
+						throw new CompletionException(failure);
+					}
+				}
+				InetSocketAddress address = new InetSocketAddress(host, connectionInfo.endpoint.getPort());
+				if (!address.isUnresolved()) return new TransportRoute(address, null);
+			}
+			throw new CompletionException(failure);
 		}, DownloadClient.NET_EXECUTOR);
 	}
 
@@ -145,7 +158,10 @@ public class DownloadClient implements PackTransport {
 		try {
 			plainSocket.setSoTimeout(NETWORK_TIMEOUT_MILLIS);
 			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC) performMagicHandshake(plainSocket);
-			SSLSocket tlsSocket = CandidateTrustValidation.wrapWithTls(plainSocket, context, connectionInfo.origin.getHostString(), connectionInfo.endpoint.getPort());
+			// TLS identity follows the endpoint - the host this socket actually reaches - so proxied frontends like
+			// tunnels present their own valid certificate (SNI and name check); the origin stays the trust root via
+			// its fingerprint pin, and the self-signed deferral ladder is unaffected.
+			SSLSocket tlsSocket = CandidateTrustValidation.wrapWithTls(plainSocket, context, connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort());
 			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket);
 			tlsSocket.setSoTimeout(0);
 			return new TlsCandidate(tlsSocket, plainSocket, trustManager);
