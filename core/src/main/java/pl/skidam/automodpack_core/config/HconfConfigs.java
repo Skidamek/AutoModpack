@@ -23,14 +23,15 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 
-import hconf.Comments;
-import hconf.Document;
-import hconf.Hconf;
-import hconf.ParseResult;
-import hconf.Value;
-
 import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.OsPaths;
+import pl.skidam.hconf.Comments;
+import pl.skidam.hconf.ConfigPath;
+import pl.skidam.hconf.Document;
+import pl.skidam.hconf.Hconf;
+import pl.skidam.hconf.ParseError;
+import pl.skidam.hconf.ParseResult;
+import pl.skidam.hconf.Value;
 
 /**
  * The hconf-backed store for the human-editable configs (server and client config; the embedding contract of
@@ -100,7 +101,7 @@ public final class HconfConfigs {
 			// file; the old file goes away only after the new one is written
 			ParseResult legacyResult = Hconf.parse(legacyBytes);
 			if (!legacyResult.isOk()) {
-				hconf.ParseError error = legacyResult.error();
+				ParseError error = legacyResult.error();
 				throw new ConfigTools.ConfigParseException("Cannot migrate " + legacy.getFileName() + ": the file is corrupt at line " + error.line() + ":"
 						+ error.column() + " (" + error.kind() + "): " + error.message() + "; fix or remove the file and retry");
 			}
@@ -108,7 +109,7 @@ public final class HconfConfigs {
 		} else {
 			ParseResult result = Hconf.parse(bytes);
 			if (!result.isOk()) {
-				hconf.ParseError error = result.error();
+				ParseError error = result.error();
 				throw new ConfigTools.ConfigParseException("Cannot save " + path.getFileName() + ": the file is corrupt at line " + error.line() + ":"
 						+ error.column() + " (" + error.kind() + "): " + error.message() + "; fix or remove the file and retry");
 			}
@@ -116,7 +117,7 @@ public final class HconfConfigs {
 		}
 		Value.Obj tree = modelTree(model);
 		document.reconcile(tree);
-		setArrays(document, tree, document.tree(), hconf.Path.root());
+		setArrays(document, tree, document.tree(), ConfigPath.root());
 		ensureDeclared(document, type, defaults.get());
 		OsPaths.requirePublishableConfig(path);
 		DurableFiles.writeAtomic(path, document.text());
@@ -130,7 +131,8 @@ public final class HconfConfigs {
 	 * and letting it stand would resurrect it on the next read. The model carries the user's own elements untouched;
 	 * only the program's deletions are applied.
 	 */
-	private static void setArrays(Document document, Value model, Value current, hconf.Path path) {
+	// the hconf path type cannot take the short name here: java.nio.file.Path owns it in this class
+	private static void setArrays(Document document, Value model, Value current, ConfigPath path) {
 		if (model instanceof Value.Arr arr) {
 			if (current instanceof Value.Arr) document.set(path, arr);
 			return;
@@ -168,7 +170,7 @@ public final class HconfConfigs {
 			if (comment == null) continue;
 			try {
 				Value defaultValue = toJsonValue(ConfigTools.GSON.toJsonTree(field.get(defaults)));
-				document.ensure(hconf.Path.of(field.getName()), defaultValue, comment.value());
+				document.ensure(ConfigPath.of(field.getName()), defaultValue, comment.value());
 			} catch (IllegalAccessException e) {
 				throw new ConfigTools.ConfigException("Cannot read default of annotated config field " + field.getName(), e);
 			}
@@ -195,7 +197,7 @@ public final class HconfConfigs {
 	private static String parseJson(Path path, byte[] bytes) {
 		ParseResult result = Hconf.parse(bytes);
 		if (!result.isOk()) {
-			hconf.ParseError error = result.error();
+			ParseError error = result.error();
 			throw new ConfigTools.ConfigParseException("Invalid configuration " + path.getFileName() + " at line " + error.line() + ":" + error.column() + " ("
 					+ error.kind() + "): " + error.message());
 		}
