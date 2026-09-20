@@ -115,6 +115,78 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void pinnedLiveJarSurvivesThePackDroppingTheMod() {
+		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
+		config.pinnedModIds = List.of("sodium");
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of("mods/server.jar", item("mods/server.jar", OLD_HASH, 8, "mod")),
+				ledger(entry("mods/server.jar", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("mods/server.jar", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(OLD_HASH, 8, true),
+				new FileKey(Root.GAME_DIR, "mods/server.jar"), new FileState(OLD_HASH, 8, true));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Set.of(), List.of(),
+				List.of(new ModInfo("mods/server.jar", OLD_HASH, 8, Set.of("sodium"), Set.of())), List.of(), List.of(), null, config));
+
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/server.jar")));
+		assertTrue(plan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.PROJECTION && file.relativePath().equals("mods/server.jar") && !file.present()));
+		assertTrue(plan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals("mods/server.jar") && file.present()));
+	}
+
+	@Test
+	void pinnedEditedLiveJarSurvivesThePackDroppingTheMod() {
+		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
+		config.pinnedModIds = List.of("sodium");
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of("mods/server.jar", editableItem("mods/server.jar", OLD_HASH, 8, "mod")),
+				ledger(entry("mods/server.jar", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("mods/server.jar", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(OLD_HASH, 8, true),
+				new FileKey(Root.GAME_DIR, "mods/server.jar"), new FileState(OTHER_HASH, 8, true),
+				new FileKey(Root.OVERLAY, "mods/server.jar"), new FileState(OTHER_HASH, 8, true));
+		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.modpackId, installed,
+				Map.of("mods/server.jar", new FileState(OTHER_HASH, 8, true)));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Set.of(), List.of(),
+				List.of(new ModInfo("mods/server.jar", OTHER_HASH, 8, Set.of("sodium"), Set.of())), List.of(), List.of(), selection, config));
+
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/server.jar")));
+		assertTrue(plan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals("mods/server.jar")
+				&& OTHER_HASH.equals(file.expectedHash())));
+	}
+
+	@Test
+	void unpinnedEditedLiveCopyStillFollowsThePackOffTheModsDirectory() {
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of("mods/server.jar", editableItem("mods/server.jar", OLD_HASH, 8, "mod")),
+				ledger(entry("mods/server.jar", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("mods/server.jar", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(OLD_HASH, 8, true),
+				new FileKey(Root.GAME_DIR, "mods/server.jar"), new FileState(OTHER_HASH, 8, true),
+				new FileKey(Root.OVERLAY, "mods/server.jar"), new FileState(OTHER_HASH, 8, true));
+		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.modpackId, installed,
+				Map.of("mods/server.jar", new FileState(OTHER_HASH, 8, true)));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Set.of(), List.of(),
+				List.of(new ModInfo("mods/server.jar", OTHER_HASH, 8, Set.of("sodium"), Set.of())), List.of(), List.of(), selection,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/server.jar")
+				&& operation.operation() == OperationType.DELETE && OTHER_HASH.equals(operation.expectedExistingHash())));
+	}
+
+	@Test
+	void freshClientKeepsAPinnedJarThatMatchesAServerTombstone() {
+		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
+		config.pinnedModIds = List.of("sodium");
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("mods/removed.jar", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/removed.jar"), new FileState(OLD_HASH, 8, true));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(),
+				List.of(new ModInfo("mods/removed.jar", OLD_HASH, 8, Set.of("sodium"), Set.of())), List.of(), List.of(), null, config));
+
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/removed.jar")));
+		assertTrue(plan.preservations().isEmpty());
+	}
+
+	@Test
 	void firstInstallConsentSkipsAPinnedLiveMod() {
 		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
 		config.pinnedModIds = List.of("controlify");

@@ -169,15 +169,15 @@ public final class UpdatePlanner {
 		PlanningSession session = new PlanningSession(input.files());
 		Map<String, ModInfo> targetModsByPath = modsByPath(input.targetMods());
 		Map<String, ModInfo> standardModsByPath = modsByPath(input.standardMods());
+		Set<String> listedPins = listedPins(input);
 		planConsentedLocalMods(input, standardModsByPath, session);
-		planInstalledRemovals(input, target.modpackId, targetItems, installedItems, session);
+		planInstalledRemovals(input, target.modpackId, targetItems, installedItems, listedPins, standardModsByPath, session);
 		if (installedLedger != null)
-			planLedgerCleanup(installedLedger, installedItems.keySet(), targetItems.keySet(), input.selection(), !input.installedManifest().modpackId.equals(target.modpackId), session);
+			planLedgerCleanup(installedLedger, installedItems.keySet(), targetItems.keySet(), input.selection(), !input.installedManifest().modpackId.equals(target.modpackId), listedPins, standardModsByPath, session);
 		else
-			planServerKnownCleanup(ledger, targetItems.keySet(), session);
+			planServerKnownCleanup(ledger, targetItems.keySet(), listedPins, standardModsByPath, session);
 		planSelectionChange(input, target, session);
 		Set<String> liveCopyPaths = liveCopyPaths(targetItems, input.forceCopyServicePaths());
-		Set<String> listedPins = listedPins(input);
 		Set<String> protectedIds = PinnedMods.protectedIds(listedPins, input.standardMods().stream().map(ModInfo::ids).toList());
 		planTargetInstalls(input, targetItems, liveCopyPaths, protectedIds, targetModsByPath, session);
 		List<NestedCopy> generatedCopies = ownedNestedCopies(input.nestedCopies());
@@ -187,9 +187,9 @@ public final class UpdatePlanner {
 		return session.finalState(target.modpackId, packTarget, input.plannedClientConfig(), input.files(), target, ledger, false, null, generatedCopies);
 	}
 
-	/** Removes installed content the target no longer ships: its projection entry, its overlay, and its player-edited live copy. */
+	/** Removes installed content the target no longer ships: its projection entry, its overlay, and its player-edited live copy - unless a pin keeps the live jar. */
 	private static void planInstalledRemovals(Input input, String targetModpackId, Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems,
-			Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> installedItems, PlanningSession session) {
+			Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> installedItems, Set<String> listedPins, Map<String, ModInfo> standardModsByPath, PlanningSession session) {
 		for (var entry : installedItems.entrySet()) {
 			if (targetItems.containsKey(entry.getKey())) continue;
 			FileKey modpackKey = new FileKey(Root.PROJECTION, LogicalPath.normalize(entry.getKey()));
@@ -202,6 +202,7 @@ public final class UpdatePlanner {
 			FileState live = session.projected(liveKey);
 			FileState previousOverlay = input.selection() == null ? null : input.selection().previousEditableOverlays().get(entry.getKey());
 			if (previousOverlay != null && previousOverlay.regularFile() && live != null && hashesEqual(live.sha1(), previousOverlay.sha1())) {
+				if (pinnedLiveMod(listedPins, standardModsByPath, entry.getKey())) continue;
 				session.delete(liveKey, previousOverlay.sha1());
 				noteStandardModsMutation(liveKey, true, session);
 			}
@@ -287,7 +288,7 @@ public final class UpdatePlanner {
 			FileState observed = entry.getValue();
 			if (observed == null || !observed.regularFile() || !HashUtils.isSha1(observed.sha1()) || observed.size() < 0)
 				throw new IllegalArgumentException("First-install consent file metadata is invalid: " + relative);
-			if (PinnedMods.matches(listedPins, idsForPath(standardModsByPath, relative))) continue;
+			if (pinnedLiveMod(listedPins, standardModsByPath, relative)) continue;
 			FileKey key = new FileKey(Root.GAME_DIR, relative);
 			FileState current = session.projected(key);
 			if (!matches(current, observed.sha1(), observed.size())) throw new IllegalArgumentException("First-install consent file changed after scanning: " + relative);
@@ -373,10 +374,11 @@ public final class UpdatePlanner {
 	}
 
 	private static void planLedgerCleanup(OwnershipLedger ledger, Set<String> installedPaths, Set<String> targetPaths, SelectionContext selection, boolean preserveReplacedBytes,
-			PlanningSession session) {
+			Set<String> listedPins, Map<String, ModInfo> standardModsByPath, PlanningSession session) {
 		Map<String, InstanceTree.TrackedFile> priorGameDir = selection == null || selection.priorGameDir() == null ? Map.of() : selection.priorGameDir();
 		for (OwnershipLedger.Entry entry : ledger.entries().values()) {
 			if (!installedPaths.contains(entry.logicalPath()) || targetPaths.contains(entry.logicalPath())) continue;
+			if (pinnedLiveMod(listedPins, standardModsByPath, entry.logicalPath())) continue;
 			Optional<FileKey> candidateKey = managedCleanupKey(entry.logicalPath());
 			if (candidateKey.isEmpty()) continue;
 			FileKey key = candidateKey.get();
@@ -413,9 +415,10 @@ public final class UpdatePlanner {
 		return true;
 	}
 
-	private static void planServerKnownCleanup(OwnershipLedger ledger, Set<String> targetPaths, PlanningSession session) {
+	private static void planServerKnownCleanup(OwnershipLedger ledger, Set<String> targetPaths, Set<String> listedPins, Map<String, ModInfo> standardModsByPath, PlanningSession session) {
 		for (OwnershipLedger.Entry entry : ledger.entries().values()) {
 			if (entry.currentStatus() != OwnershipLedger.Status.TOMBSTONE || targetPaths.contains(entry.logicalPath())) continue;
+			if (pinnedLiveMod(listedPins, standardModsByPath, entry.logicalPath())) continue;
 			Optional<FileKey> candidateKey = managedCleanupKey(entry.logicalPath());
 			if (candidateKey.isEmpty()) continue;
 			FileKey key = candidateKey.get();
@@ -718,6 +721,11 @@ public final class UpdatePlanner {
 	private static Set<String> idsForPath(Map<String, ModInfo> modsByPath, String relative) {
 		ModInfo mod = modsByPath.get(relative);
 		return mod == null ? Set.of() : mod.ids();
+	}
+
+	/** Whether a scanned live jar on the path carries a listed pin; a pin only acts on a jar actually present in the standard mods directory. */
+	private static boolean pinnedLiveMod(Set<String> listedPins, Map<String, ModInfo> standardModsByPath, String relative) {
+		return PinnedMods.matches(listedPins, idsForPath(standardModsByPath, relative));
 	}
 
 }
