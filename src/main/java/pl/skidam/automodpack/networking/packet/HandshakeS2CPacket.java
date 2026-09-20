@@ -38,6 +38,19 @@ public class HandshakeS2CPacket {
 	}
 
 	private static void handlePacket(ServerLoginPacketListenerImpl handler, boolean understood, FriendlyByteBuf buf, PacketSender sender) {
+		try {
+			processHandshake(handler, understood, buf, sender);
+		} catch (Exception e) {
+			// Fail closed: this check gates requireModpack enforcement, so an error here must never admit the player.
+			LOGGER.error("Failed to process the AutoModpack handshake", e);
+			Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
+			Component reason = VersionedText.literal("[AutoModpack] The server failed to process your handshake. Ask the server administrator to check the server log.");
+			connection.send(new ClientboundLoginDisconnectPacket(reason));
+			connection.disconnect(reason);
+		}
+	}
+
+	private static void processHandshake(ServerLoginPacketListenerImpl handler, boolean understood, FriendlyByteBuf buf, PacketSender sender) throws Exception {
 		Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
 
 		GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();

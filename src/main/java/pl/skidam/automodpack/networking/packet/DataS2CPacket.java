@@ -12,6 +12,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.modpack.GameHelpers;
 import pl.skidam.automodpack.networking.PacketSender;
@@ -32,7 +33,15 @@ public class DataS2CPacket {
 		try {
 			GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
 
-			if (buf.readableBytes() == 0) return;
+			if (buf.readableBytes() == 0) {
+				// The handshake admitted this player, so a missing verification answer is a broken or
+				// tampered client: fail closed on servers that require the modpack instead of admitting it.
+				String playerName = GameHelpers.getPlayerName(profile);
+				Common.players.put(playerName, false);
+				LOGGER.warn("{} never answered the modpack verification query.", playerName);
+				if (serverConfig.requireModpack) disconnect(handler, VersionedText.literal("[AutoModpack] Install/Update modpack to join"));
+				return;
+			}
 
 			LoginUpdateResponse clientResponse = LoginUpdateResponse.fromWire(buf.readUtf(Short.MAX_VALUE));
 

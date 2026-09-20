@@ -9,11 +9,14 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 import org.jetbrains.annotations.Nullable;
+import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.LoginNetworkingIDs;
 import pl.skidam.automodpack.networking.LoginQueryParser;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.PacketSender;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -61,7 +64,12 @@ public class ServerLoginNetworkAddon implements PacketSender {
 			try {
 				future.get();
 			} catch (Exception e) {
-				LOGGER.error("A login synchronizer failed; the login proceeds without its result", e);
+				// Fail closed: a failed synchronizer means the modpack check never produced its verdict,
+				// so this login must not finalize without it.
+				LOGGER.error("A login synchronizer failed; disconnecting instead of proceeding without its result", e);
+				Component reason = VersionedText.literal("[AutoModpack] The modpack login check failed on the server. Ask the administrator to check the server log.");
+				this.connection.send(new ClientboundLoginDisconnectPacket(reason));
+				this.connection.disconnect(reason);
 			}
 
 			return true;
