@@ -18,7 +18,6 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
-import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -199,7 +198,7 @@ public final class ClientProjectionView {
 	}
 
 	private ModpackJsons.ModpackContentFields committedTarget() throws IOException {
-		return new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).map(SelectedModpackTarget::flatTarget).orElse(null);
+		return new ClientGenerationStore(storage).readActiveTarget().map(SelectedModpackTarget::flatTarget).orElse(null);
 	}
 
 	private ModpackJsons.ModpackContentFields stagedTarget(UpdateTransaction pending) throws IOException {

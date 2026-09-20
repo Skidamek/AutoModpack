@@ -176,8 +176,9 @@ public final class UpdateTransaction {
 		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorRequestedGroups, expectedPriorRequestedCategories, expectedPriorExcludedGroups) : null;
 	}
 
+	/** The target selection carrying the platform this transaction resolved under, so the commit pins the exact resolution. */
 	public SelectionIntent targetIntent() {
-		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
+		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups, platform());
 	}
 
 	/** The selection the transaction plans for; generated-copy state is keyed by it. */

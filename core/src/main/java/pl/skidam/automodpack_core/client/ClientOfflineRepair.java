@@ -11,7 +11,6 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
-import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -61,7 +60,7 @@ public final class ClientOfflineRepair {
 	}
 
 	private OfflineRepair.Request request() throws IOException {
-		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current())
+		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget()
 				.orElseThrow(() -> new IOException("Repair is available only for the active installed modpack"));
 		return new OfflineRepair.Request(target, forceCopyPaths(target), protectedModPath);
 	}

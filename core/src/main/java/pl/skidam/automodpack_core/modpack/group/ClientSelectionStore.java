@@ -63,18 +63,27 @@ public final class ClientSelectionStore {
 	}
 
 	private static ClientPlatform platform(String platform) {
-		if (platform == null) return null;
-		try {
-			return ClientPlatform.parse(platform);
-		} catch (IllegalArgumentException e) {
-			return null;
-		}
+		// Strict on purpose: a stored platform this build cannot parse is corrupt durable state, so the
+		// read's set-aside path handles it loudly instead of silently re-resolving under another platform.
+		return platform == null ? null : ClientPlatform.parse(platform);
 	}
 
 	private SelectionJsons.ClientSelectionStoreFields read() {
-		SelectionJsons.ClientSelectionStoreFields fields = ConfigTools.read(path, SelectionJsons.ClientSelectionStoreFields.class)
-				.orElseGet(SelectionJsons.ClientSelectionStoreFields::new);
+		try {
+			SelectionJsons.ClientSelectionStoreFields fields = ConfigTools.readState(path, SelectionJsons.ClientSelectionStoreFields.class, "Client group selection", ClientSelectionStore::validated)
+					.orElseGet(SelectionJsons.ClientSelectionStoreFields::new);
+			if (fields.selections == null) fields.selections = new LinkedHashMap<>();
+			return fields;
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to read configuration " + path.toAbsolutePath().normalize(), e);
+		}
+	}
+
+	/** The document's completeness contract: unusable content is set aside as evidence and reads as no selection. */
+	private static SelectionJsons.ClientSelectionStoreFields validated(SelectionJsons.ClientSelectionStoreFields fields) {
+		if (fields.DO_NOT_CHANGE_IT != 1) throw new IllegalArgumentException("Client group selection file version " + fields.DO_NOT_CHANGE_IT + " is not supported");
 		if (fields.selections == null) fields.selections = new LinkedHashMap<>();
+		for (SelectionJsons.ClientSelectionStoreFields.ModpackSelection selection : fields.selections.values()) platform(selection.platform);
 		return fields;
 	}
 }

@@ -26,8 +26,9 @@ public record SelectionIntent(NavigableSet<String> requestedGroups, NavigableSet
 		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups, platform);
 	}
 
-	// The platform override rides along with the choice but never affects choice equality: transaction and
-	// recovery flows rebuild intents without it and must keep comparing equal to the stored selection.
+	// The platform rides along with the choice but never affects choice equality: recovery flows rebuild
+	// intents without it and must keep comparing equal to the stored selection, and a transaction commit
+	// may overwrite the stored platform with the platform its plan resolved under.
 	@Override
 	public boolean equals(Object other) {
 		if (this == other) return true;
