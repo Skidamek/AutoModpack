@@ -108,7 +108,9 @@ public final class ConfigTools {
 	 * Reads one persisted-but-rebuildable state document: a missing file reads as empty, unusable content (including a
 	 * non-regular path occupying the name) is set aside as evidence and also reads as empty, and only real IO trouble
 	 * of a regular file propagates. The mapper folds every content validation in; the state's owner stays the sole
-	 * authority on what its document must look like. A failed aside is IO trouble, never empty.
+	 * authority on what its document must look like. A failed aside is IO trouble, never empty. This leniency is for
+	 * machine-written state only — user-owned config files take the strict {@link #read} path, which never sets
+	 * anything aside.
 	 */
 	public static <F, S> Optional<S> readState(Path path, Class<F> type, String description, Function<F, S> fromFields) throws IOException {
 		return readPersisted(path, type, description, fromFields, PersistFate.REBUILDABLE);
