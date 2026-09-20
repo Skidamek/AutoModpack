@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 from automodpack_autotester import cli, client_steps, runner, server_steps, staging_steps
-from automodpack_autotester.config import load_macros
+from automodpack_autotester.config import generated_content, load_macros
 from automodpack_autotester.engine.steps_io import wait_file, wait_file_content, wait_generation
 from automodpack_autotester.engine.util import ClientExited
 
@@ -726,6 +726,42 @@ def test_wait_exit_expect_clean_and_crash(monkeypatch):
     client_steps._v_wait_client_exit(ctx, {"expect": "crash"})
     with pytest.raises(AssertionError):
         client_steps._v_wait_client_exit(ctx, {"expect": "clean"})
+
+
+# ── netem knob and hosted size fixtures ─────────────────────────────────────
+
+
+def test_netem_parser_yields_tc_tokens_and_rejects_everything_else():
+    assert client_steps.parse_netem("delay=300ms,rate=5mbit") == ["delay", "300ms", "rate", "5mbit"]
+    assert client_steps.parse_netem("rate=5kbit") == ["rate", "5kbit"]
+    assert client_steps.parse_netem("delay=1.5s") == ["delay", "1.5s"]
+    for bad in ("", "delay=300", "rate=5mb", "delay=1s,foo=2ms", "delay=1ms,delay=2ms", "=1ms", "delay="):
+        with pytest.raises(ValueError):
+            client_steps.parse_netem(bad)
+
+
+def test_run_case_refuses_netem_on_host_networking(tmp_path):
+    with pytest.raises(ValueError, match="--netem requires bridge networking"):
+        runner.run_case(
+            _target(),
+            {"network": "host", "flow": [{"do": "quit"}]},
+            out_dir=tmp_path,
+            artifact_dir=tmp_path,
+            client_image="img",
+            settings={},
+            resource_scope="scope",
+            netem=["delay", "1ms"],
+        )
+
+
+def test_generated_content_is_deterministic_and_byte_exact():
+    assert generated_content("config/a.bin", 10) == "config/a.b"
+    assert len(generated_content("config/a.bin", 4194305)) == 4194305
+    assert generated_content("config/a.bin", 4194305) == generated_content("config/a.bin", 4194305)
+    assert generated_content("config/a.bin", 12) != generated_content("config/b.bin", 12)
+    assert generated_content("config/a.bin", 0) == ""
+    with pytest.raises(ValueError):
+        generated_content("config/a.bin", -1)
 
 
 # ── verb discovery ──────────────────────────────────────────────────────────

@@ -480,16 +480,16 @@ def assert_timeline_file(ctx, step):
     if fixture is None and content is None:
         return
 
-        if content is not None and payload.read_bytes() != content:
-            raise AssertionError(f"tracked timeline bytes for {logical_path!r} do not match the expected content")
-        if isinstance(fixture, dict):
-            try:
-                assert_valid_mod_fixture(payload.read_bytes(), fixture, ctx.target.minecraft)
-            except AssertionError as error:
-                raise AssertionError(
-                    f"tracked timeline bytes for {logical_path!r} are not the requested fixture: {error}; "
-                    f"tracked versions: {[{'sha1': str(e.get('sha1'))[:8], 'size': e.get('size')} for e in tracked]}"
-                ) from error
+    if content is not None and payload.read_bytes() != content:
+        raise AssertionError(f"tracked timeline bytes for {logical_path!r} do not match the expected content")
+    if isinstance(fixture, dict):
+        try:
+            assert_valid_mod_fixture(payload.read_bytes(), fixture, ctx.target.minecraft)
+        except AssertionError as error:
+            raise AssertionError(
+                f"tracked timeline bytes for {logical_path!r} are not the requested fixture: {error}; "
+                f"tracked versions: {[{'sha1': str(e.get('sha1'))[:8], 'size': e.get('size')} for e in tracked]}"
+            ) from error
 
 
 @verb("assert_generation")

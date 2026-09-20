@@ -59,7 +59,7 @@ def _remove_volume(name):
         pass
 
 
-def _run_container(name, image, network, env, mounts, command=None, user=None, entrypoint=None, labels=None):
+def _run_container(name, image, network, env, mounts, command=None, user=None, entrypoint=None, labels=None, cap_add=None):
     volumes = {}
     for host, container_path, readonly in mounts:
         volumes[str(host)] = {"bind": container_path, "mode": "ro" if readonly else "rw"}
@@ -67,6 +67,8 @@ def _run_container(name, image, network, env, mounts, command=None, user=None, e
         image=image, detach=True, name=name,
         environment=dict(env), volumes=volumes, command=command, user=user, labels=labels or {},
     )
+    if cap_add:
+        kwargs["cap_add"] = list(cap_add)
     # "host" is a network *mode*, not a user-defined network: server and client
     # share the host's network namespace (so the client reaches the server on
     # localhost). This is the only topology a --network-host-only sandbox allows.

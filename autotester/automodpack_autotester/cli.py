@@ -16,6 +16,7 @@ import docker as docker_py
 from filelock import Timeout
 
 from .cache import deduplicate_asset_objects
+from .client_steps import parse_netem
 from .config import (
     REPO_ROOT,
     ROOT,
@@ -112,7 +113,7 @@ def _server_cache_guard(target, variants, settings):
             print(f"[wait] {target.id}: server cache is in use by another run; waiting", flush=True)
 
 
-def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, settings, resource_scope):
+def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, settings, resource_scope, netem=None):
     lock = _server_cache_guard(target, variants, settings)
     try:
         case_results = [
@@ -124,6 +125,7 @@ def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, 
                 client_image=client_image,
                 settings=settings,
                 resource_scope=resource_scope,
+                netem=netem,
             )
             for variant in variants
         ]
@@ -239,6 +241,9 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument("--connection-path", choices=sorted(CONNECTION_MODES), type=str.upper,
                        help="Run one connection path (e.g. HOLEPUNCH) instead of the scenario's full matrix")
     run_p.add_argument("--jobs", type=int)
+    run_p.add_argument("--netem", type=parse_netem, metavar="delay=300ms,rate=5mbit",
+                       help="Shape the client container's eth0 with a tc netem qdisc (bridge networking only), "
+                            "e.g. delay=300ms,rate=5mbit")
     run_p.add_argument("--docker-uid", type=int)
     run_p.add_argument("--docker-gid", type=int)
     run_p.add_argument("--artifact-dir", type=Path)
@@ -286,7 +291,7 @@ def main(argv: list[str] | None = None) -> int:
             buildargs["HEADLESSMC_REF"] = str(hmc["ref"])
         docker_py.from_env().images.build(
             path=str(ROOT / "docker" / "client"),
-            dockerfile=str(ROOT / "docker" / "client" / "Dockerfile"),
+            dockerfile="Dockerfile",
             tag=img,
             buildargs=buildargs,
             rm=True,
@@ -400,6 +405,7 @@ def main(argv: list[str] | None = None) -> int:
                     client_image=client_image,
                     settings=s,
                     resource_scope=resource_scope,
+                    netem=args.netem,
                 ): t
                 for t in selected
             }

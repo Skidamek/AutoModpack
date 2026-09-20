@@ -35,6 +35,9 @@ class Context:
     # the server container name; on host networking it's localhost.
     server_host: str | None = None
     resource_scope: str = ""
+    # --netem tc netem argv tokens (empty when the knob is off), applied to the
+    # client container's eth0 after launch.
+    netem: list[str] = field(default_factory=list)
     vars: dict = field(default_factory=dict)
     bridge: BridgeClient | None = None
     # Injected by the runner so the engine stays decoupled from Docker.

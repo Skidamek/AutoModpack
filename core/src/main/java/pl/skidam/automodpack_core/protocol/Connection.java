@@ -255,15 +255,15 @@ class Connection implements AutoCloseable {
 				// reject after the fact.
 				if (head.contentLength() == null) throw new IOException("HTTP 206 without Content-Length");
 				requireResumeStart(head, offset);
-				consumeBody(head, destination, true, chunks, null);
+				consumeBody(head, destination, offset, chunks, null);
 				future.complete(destination);
 				return;
 			}
 			if (head.status() == 200) {
 				// A server that ignores Range answers 200 with the full body and no Content-Range; the truncate is the correct result then.
-				boolean append = offset > 0 && head.contentRange() != null;
-				if (append) requireResumeStart(head, offset);
-				consumeBody(head, destination, append, chunks, null);
+				boolean resumed = offset > 0 && head.contentRange() != null;
+				if (resumed) requireResumeStart(head, offset);
+				consumeBody(head, destination, resumed ? offset : 0, chunks, null);
 				future.complete(destination);
 				return;
 			}
@@ -296,13 +296,13 @@ class Connection implements AutoCloseable {
 			}
 			if (head.status() == 200) {
 				if (expectedSha1Hex == null) {
-					consumeBody(head, destination, false, chunks, null);
+					consumeBody(head, destination, 0, chunks, null);
 					future.complete(new DocumentFetch(destination, false));
 					return;
 				}
 				// A conditional document's body hash is the ground truth, so a host that ignores the condition still reads as unchanged when the bytes match the expectation.
 				MessageDigest hash = HashUtils.newSha1Digest();
-				consumeBody(head, destination, false, chunks, hash);
+				consumeBody(head, destination, 0, chunks, hash);
 				future.complete(new DocumentFetch(destination, HexFormat.of().formatHex(hash.digest()).equals(expectedSha1Hex)));
 				return;
 			}
@@ -414,7 +414,7 @@ class Connection implements AutoCloseable {
 	}
 
 	/** Writes the body per the framing rules; a bodyless status consumes nothing. Called with a null destination to discard an error body. */
-	private void consumeBody(ResponseHead head, Path destination, boolean append, IntConsumer chunkCallback, MessageDigest hash) throws IOException {
+	private void consumeBody(ResponseHead head, Path destination, long writeOffset, IntConsumer chunkCallback, MessageDigest hash) throws IOException {
 		if (head.chunked()) throw new IOException("Chunked responses are not supported");
 		if (head.status() == 204 || head.status() == 304) return;
 		if (head.contentLength() == null && head.status() != 200) return;
@@ -423,7 +423,7 @@ class Connection implements AutoCloseable {
 		InputStream source = bounded == null ? in : bounded;
 		if (zstd) source = new ZstdInputStream(source);
 		if (bounded == null) unhealthy = true;
-		transfer(source, destination, append, chunkCallback, hash, head.contentLength());
+		transfer(source, destination, writeOffset, chunkCallback, hash, head.contentLength());
 		if (bounded != null && bounded.remaining() > 0) throw new IOException("Response body ended before the promised Content-Length");
 		if (head.connectionClose()) unhealthy = true;
 	}
@@ -431,11 +431,12 @@ class Connection implements AutoCloseable {
 	/**
 	 * The body reads to the end of its framed source - exactly Content-Length bytes through the bounded wrapper, or EOF
 	 * on a close-framed body - so a zstd body is decoded on the way in and the next pipelined response head still parses
-	 * behind its exact byte count.
+	 * behind its exact byte count. A positive write offset lands bytes at their absolute file position: ranged bodies
+	 * from several lanes can share one partial without coordinating, and promotion judges the assembled whole.
 	 */
-	private void transfer(InputStream source, Path destination, boolean append, IntConsumer chunkCallback, MessageDigest hash, Long compressedLength) throws IOException {
+	private void transfer(InputStream source, Path destination, long writeOffset, IntConsumer chunkCallback, MessageDigest hash, Long compressedLength) throws IOException {
 		byte[] buffer = new byte[(int) Math.min(DEFAULT_CHUNK_SIZE, compressedLength == null ? DEFAULT_CHUNK_SIZE : compressedLength)];
-		try (OutputStream fos = destination == null ? null : append ? LocalFileWriter.openAppending(destination) : LocalFileWriter.open(destination)) {
+		try (OutputStream fos = destination == null ? null : writeOffset > 0 ? LocalFileWriter.openAt(destination, writeOffset) : LocalFileWriter.open(destination)) {
 			int read;
 			while ((read = source.read(buffer, 0, buffer.length)) >= 0) {
 				if (fos != null) fos.write(buffer, 0, read);
@@ -446,7 +447,7 @@ class Connection implements AutoCloseable {
 	}
 
 	private void discardBody(ResponseHead head) throws IOException {
-		consumeBody(head, null, false, null, null);
+		consumeBody(head, null, 0, null, null);
 	}
 
 	/** Reads at most {@code total} bytes from the socket, so a decoded body can never consume the next pipelined response's bytes. */

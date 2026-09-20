@@ -1,6 +1,8 @@
 package pl.skidam.automodpack_core.protocol;
 
 import java.io.*;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
 import java.nio.file.*;
 
 public final class LocalFileWriter {
@@ -17,14 +19,16 @@ public final class LocalFileWriter {
 		}
 	}
 
-	/** Opens the destination for appending: the resume path writes the served suffix behind the already-stored prefix. */
-	public static OutputStream openAppending(Path destination) throws LocalStorageException {
+	/** Opens the destination for a ranged body: bytes land at their absolute offsets, concurrent writers included. */
+	public static OutputStream openAt(Path destination, long offset) throws LocalStorageException {
 		try {
 			Path parent = destination.getParent();
 			if (parent != null) Files.createDirectories(parent);
-			return new LocalOutputStream(new BufferedOutputStream(Files.newOutputStream(destination, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND)));
+			FileChannel channel = FileChannel.open(destination, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+			channel.position(offset);
+			return new LocalOutputStream(Channels.newOutputStream(channel));
 		} catch (IOException e) {
-			throw new LocalStorageException("Failed to open local destination for appending " + destination, e);
+			throw new LocalStorageException("Failed to open local destination at " + offset + ": " + destination, e);
 		}
 	}
 

@@ -363,6 +363,11 @@ public class DownloadClient implements PackTransport {
 		}
 	}
 
+	@Override
+	public int pipelineCapacity() {
+		return MAX_CONNECTIONS * Connection.PIPELINE_DEPTH;
+	}
+
 	static void closeQuietly(AutoCloseable closeable) {
 		CandidateTrustValidation.closeQuietly(closeable);
 	}

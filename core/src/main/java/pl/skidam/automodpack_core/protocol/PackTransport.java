@@ -13,15 +13,14 @@ public interface PackTransport extends AutoCloseable {
 
 	/**
 	 * Downloads one object into {@code destination}: when {@code offset} is positive the server may stream only the
-	 * suffix, which is appended behind the stored prefix. On completion the destination holds the FULL object bytes
-	 * whether the server resumed or restarted, and promotion judges the whole.
+	 * suffix, whose bytes land at their absolute offsets behind the already-stored prefix. On completion the
+	 * destination holds the FULL object bytes whether the server resumed or restarted, and promotion judges the whole.
 	 */
 	CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, IntConsumer progress);
 
 	/**
-	 * The same fetch with a preferred pipeline lane: worker i submits to lane i when it has a free slot, so concurrent
-	 * large transfers land on distinct lanes while small files fill each lane's depth. Transports without a lane pool
-	 * ignore the hint.
+	 * The same fetch with a preferred pipeline lane: concurrent transfers land on distinct lanes while small items fill
+	 * each lane's depth. Transports without a lane pool ignore the hint.
 	 */
 	default CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, IntConsumer progress, int lane) {
 		return downloadFile(key, destination, offset, progress);
@@ -32,6 +31,11 @@ public interface PackTransport extends AutoCloseable {
 
 	/** Drops every in-flight transfer so a cancelled run cannot poison the next one. */
 	void abortTransfers();
+
+	/** How many unsettled requests the pipelined wire can hold across all lanes; 0 means the transport paces itself. */
+	default int pipelineCapacity() {
+		return 0;
+	}
 
 	@Override
 	void close();

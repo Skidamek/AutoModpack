@@ -182,6 +182,20 @@ def scenario_matches_target(scenario: dict, target: "Target") -> bool:
     return _ok("targets", target.id) and _ok("minecraft", target.minecraft)
 
 
+def generated_content(path: str, size_bytes: int) -> str:
+    """Deterministic ASCII fill of exactly ``size_bytes`` bytes for a hosted fixture file."""
+    if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or size_bytes < 0:
+        raise ValueError(f"sizeBytes must be a non-negative integer, got {size_bytes!r}")
+    unit = f"{path.encode('ascii', 'backslashreplace').decode('ascii')}:{size_bytes}\n"
+    return (unit * (size_bytes // len(unit) + 1))[:size_bytes]
+
+
+def _hosted_content(item: dict) -> str:
+    if "sizeBytes" not in item:
+        return str(item.get("content", ""))
+    return generated_content(str(item["path"]), item["sizeBytes"])
+
+
 @dataclass(frozen=True)
 class ServerFiles:
     """The modpack a scenario hosts on the server, parsed from ``serverFiles``."""
@@ -197,6 +211,6 @@ def parse_server_files(scenario: dict) -> ServerFiles:
     return ServerFiles(
         modpack_name=str(sf.get("modpackName", "amp-autotest")),
         marker=Path(str(sf.get("marker", "config/amp-autotest-marker.json"))),
-        files=[(Path(str(f["path"])), str(f.get("content", ""))) for f in sf.get("files", [])],
+        files=[(Path(str(f["path"])), _hosted_content(f)) for f in sf.get("files", [])],
         expected_mods=[str(m) for m in sf.get("expectedMods", [])],
     )

@@ -77,6 +77,11 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
         else:
             for index, generation in enumerate(generations):
                 _check_generation_files(generation, problems, f"serverFiles.generations[{index}]")
+    for index, item in enumerate((scenario.get("serverFiles", {}) or {}).get("files", []) or []):
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not item["path"].strip():
+            problems.append(f"serverFiles.files[{index}]: expected a mapping with a non-empty path")
+        elif "sizeBytes" in item and (not isinstance(item["sizeBytes"], int) or isinstance(item["sizeBytes"], bool) or item["sizeBytes"] < 0):
+            problems.append(f"serverFiles.files[{index}].sizeBytes: expected a non-negative integer")
 
     mode = str(scenario.get("mode", "full")).lower()
     if mode not in _VALID_MODES:
@@ -194,7 +199,7 @@ def _walk(steps, macros, problems, stack, scoped_targets):
                 _check_publish_generation(step, problems, label)
             elif verb == "assert_generation":
                 _check_generation_assertion(step, problems, label)
-            elif verb in ("assert_file_content", "wait_file_content", "write_file", "mutate_client_file", "mutate_active_object", "assert_client_object", "mutate_timeline_object", "seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_timeline_file"):
+            elif verb in ("assert_file_content", "wait_file_content", "write_file", "mutate_client_file", "mutate_active_object", "assert_client_object", "assert_client_file", "mutate_timeline_object", "seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_timeline_file"):
                 if not isinstance(step.get("path"), str) or not step["path"].strip():
                     problems.append(f"{label}.path: expected a non-empty relative path")
                 if verb in ("wait_file_content", "write_file") and not isinstance(step.get("content"), str):

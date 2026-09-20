@@ -1,0 +1,125 @@
+id: files-edge
+description: |
+  Host a modpack whose file universe hits the transfer edges: empty and one-byte
+  files, both sides of the 4 MiB contract chunk boundary, a multi-chunk 40 MiB
+  file, one CAS object served under two paths, a unicode file name, deep
+  nesting, an editable file, and an unowned local mod. Joins over the HTTP
+  connection path and verifies every byte landed exactly as hosted.
+renderClient: true
+connectionPaths:
+  - mode: HTTP
+    bindPort: 25567
+    endpointPort: 25567
+
+flow:
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - use: restart_client
+  - use: rejoin
+  - do: wait_generation
+    name: wait for the edge-case generation to commit
+    timeout: 300s
+  - do: verify_files
+    name: wait for every edge-case file to reach the active projection
+    timeout: 300s
+  - do: seed_unowned_local_file
+    name: seed an unowned local mod the sync must never touch
+    path: mods/local-unowned.jar
+    fixture: { modId: amp_local_unowned, version: "9.9.9-local", marker: local-universe }
+  - do: assert_mod_fixture
+    name: verify the unowned local mod survived the sync untouched
+    path: mods/local-unowned.jar
+    fixture: { modId: amp_local_unowned, version: "9.9.9-local", marker: local-universe }
+
+  # Tiny files: exact bytes.
+  - do: assert_file_content
+    name: verify the zero-byte file landed empty
+    path: config/edge/empty.bin
+    content: ""
+  - do: assert_file_content
+    name: verify the one-byte file landed with its single byte
+    path: config/edge/one-byte.txt
+    content: "x"
+
+  # Chunk boundaries: live bytes must equal the sha1 and size the server published.
+  - do: assert_client_file
+    name: verify the file one byte under the 4 MiB chunk boundary
+    path: config/edge/chunk-under.bin
+  - do: assert_client_file
+    name: verify the file exactly at the 4 MiB chunk boundary
+    path: config/edge/chunk-exact.bin
+  - do: assert_client_file
+    name: verify the file one byte over the 4 MiB chunk boundary
+    path: config/edge/chunk-over.bin
+  - do: assert_client_file
+    name: verify the 40 MiB multi-chunk file
+    path: config/edge/multi-chunk.bin
+
+  # Identical content under two paths: one CAS object, two manifest entries.
+  - do: assert_file_content
+    name: verify the first duplicate-content path
+    path: config/edge/duplicate-a.txt
+    content: "same-bytes\n"
+  - do: assert_file_content
+    name: verify the second duplicate-content path carries the identical bytes
+    path: config/edge/duplicate-b.txt
+    content: "same-bytes\n"
+
+  - do: assert_file_content
+    name: verify the unicode-named file
+    path: config/edge/validates-ünïcode.jar
+    content: "unicode-name\n"
+  - do: assert_client_file
+    name: verify the unicode-named file matches its manifest entry
+    path: config/edge/validates-ünïcode.jar
+  - do: assert_file_content
+    name: verify the file nested three directories deep
+    path: config/edge/deep/one/two/three/nested.txt
+    content: "three-directories-deep\n"
+  - do: assert_client_file
+    name: verify the editable file matches its manifest entry
+    path: config/edge/editable.txt
+
+  - do: write_file
+    name: make a local edit to the editable file
+    path: config/edge/editable.txt
+    content: "edge-local-edit\n"
+  - do: assert_file_content
+    name: verify the editable local edit is live
+    path: config/edge/editable.txt
+    content: "edge-local-edit\n"
+  - do: assert_file_content
+    name: verify the projection still holds the server default for the editable file
+    path: "${active_dir}/config/edge/editable.txt"
+    content: "editable-default\n"
+  - do: quit
+    name: quit the client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+    automodpack:
+      config:
+        # Replaces the permissive /config/** default: only this one file tolerates local edits.
+        allowEditsInFiles: ["/config/edge/editable.txt"]
+        # The zero-byte fixture is the point: keep the empty_file auto-exclusion from dropping it.
+        autoExcludeUnnecessaryFiles: false
+
+serverFiles:
+  modpackName: files-edge
+  marker: config/amp-autotest-marker.json
+  files:
+    - { path: config/edge/empty.bin, content: "" }
+    - { path: config/edge/one-byte.txt, content: "x" }
+    - { path: config/edge/chunk-under.bin, sizeBytes: 4194303 }
+    - { path: config/edge/chunk-exact.bin, sizeBytes: 4194304 }
+    - { path: config/edge/chunk-over.bin, sizeBytes: 4194305 }
+    - { path: config/edge/multi-chunk.bin, sizeBytes: 41943040 }
+    - { path: config/edge/duplicate-a.txt, content: "same-bytes\n" }
+    - { path: config/edge/duplicate-b.txt, content: "same-bytes\n" }
+    - { path: config/edge/validates-ünïcode.jar, content: "unicode-name\n" }
+    - { path: config/edge/deep/one/two/three/nested.txt, content: "three-directories-deep\n" }
+    - { path: config/edge/editable.txt, content: "editable-default\n" }

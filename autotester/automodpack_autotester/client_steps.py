@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -16,10 +17,11 @@ from .bridge import BridgeClient
 from .config import CLIENT_GENERATION_STATE_PATHS, Target
 from .mods import resolve_mod
 from .supervisor import resource_labels
-from .docker_harness import _assert_running, _container_logs, _docker, _exit_code, _inspect_container, _jitter_sleep, _remove_container, _run_container, _uid, _gid, _wait_exited
+from .docker_harness import _assert_running, _container, _container_logs, _docker, _exec_output, _exit_code, _inspect_container, _jitter_sleep, _remove_container, _run_container, _uid, _gid, _wait_exited
 from .engine import Context
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
+from .engine.steps_io import _active_file
 
 
 logger = logging.getLogger(__name__)
@@ -168,7 +170,81 @@ def _start_client_container(ctx: Context, name: str, *, prepare_only: bool = Fal
         user=f"{_uid()}:{_gid()}",
         entrypoint=["/usr/bin/tini", "--"],
         labels=resource_labels(ctx.resource_scope),
+        # NET_ADMIN is only needed so the --netem qdisc can be applied from inside; never granted otherwise.
+        cap_add=["NET_ADMIN"] if ctx.netem else None,
     )
+
+
+_NETEM_VALUE = {
+    "delay": re.compile(r"\d+(?:\.\d+)?(?:ms|s)"),
+    "rate": re.compile(r"\d+(?:\.\d+)?(?:kbit|mbit)"),
+}
+
+
+def parse_netem(spec: str) -> list[str]:
+    """Parse ``delay=300ms,rate=5mbit`` into ``tc qdisc ... netem`` argv tokens.
+
+    Raises ``ValueError`` for anything else, so argparse surfaces it as a CLI error.
+    """
+    tokens = []
+    seen = set()
+    for item in spec.split(","):
+        key, separator, value = item.strip().partition("=")
+        pattern = _NETEM_VALUE.get(key)
+        if not separator or pattern is None or pattern.fullmatch(value) is None:
+            raise ValueError(
+                f"invalid netem setting {item!r} (expected delay=<n>ms|s or rate=<n>kbit|mbit, got keys: {sorted(_NETEM_VALUE)})"
+            )
+        if key in seen:
+            raise ValueError(f"duplicate netem setting {key!r}")
+        seen.add(key)
+        tokens.extend((key, value))
+    if not tokens:
+        raise ValueError("--netem needs at least one delay= or rate= setting")
+    return tokens
+
+
+def _apply_netem(ctx: Context) -> None:
+    """Shape the running client container's eth0 with the --netem qdisc.
+
+    No teardown counterpart exists on purpose: the container is ephemeral and is
+    removed with the case, and every (re)launch re-applies the qdisc on the fresh
+    container. Runs as root because the game user holds no effective capabilities.
+
+    Known limit: delay shapes exactly, but netem's rate can still run several-fold
+    high on a docker bridge even with veth offloads off on both ends - treat the
+    rate as an order-of-magnitude constraint, the delay as the precise knob.
+    """
+    if not ctx.netem:
+        return
+    # TSO/GSO let the stack emit super-packets the qdisc counts as one, inflating any rate
+    # limit several-fold. Offloads must go off on BOTH ends of the veth pair: the container
+    # side so the qdisc sees segmented packets, the host peer so segmenting survives the hop.
+    _container(ctx.cli_name).exec_run(["ethtool", "-K", "eth0", "tso", "off", "gso", "off", "gro", "off"], user="root")
+    _disable_peer_offloads(ctx)
+    result = _container(ctx.cli_name).exec_run(["tc", "qdisc", "add", "dev", "eth0", "root", "netem", *ctx.netem], user="root")
+    output = _exec_output(result)
+    if result.exit_code != 0:
+        raise RuntimeError(f"client container could not apply the netem qdisc ({result.exit_code}): {output}")
+    logger.info("Applied netem qdisc to %s eth0: %s", ctx.cli_name, " ".join(ctx.netem))
+
+
+def _disable_peer_offloads(ctx: Context) -> None:
+    """Turns offloads off on the host-side veth peer of the client's eth0; best effort by design."""
+    result = _container(ctx.cli_name).exec_run(["cat", "/sys/class/net/eth0/iflink"], user="root")
+    peer_index = _exec_output(result).strip()
+    if not peer_index.isdigit():
+        logger.warning("Cannot resolve the client eth0 host peer (iflink %r); the shaped rate may run high", peer_index)
+        return
+    for device in Path("/sys/class/net").glob("*"):
+        try:
+            if (device / "ifindex").read_text().strip() == peer_index:
+                subprocess.run(["ethtool", "-K", device.name, "tso", "off", "gso", "off", "gro", "off"],
+                               check=False, capture_output=True)
+                return
+        except OSError:
+            continue
+    logger.warning("No host interface carries ifindex %s; the shaped rate may run high", peer_index)
 
 
 def _launch_client(ctx: Context):
@@ -176,6 +252,7 @@ def _launch_client(ctx: Context):
     _start_client_container(ctx, ctx.cli_name)
     _jitter_sleep(1)
     _assert_running(ctx.cli_name)
+    _apply_netem(ctx)
 
 
 def _stage_client_runtime_mods(ctx: Context) -> None:
@@ -418,6 +495,23 @@ def _v_assert_preload_acquired(ctx: Context, _step):
     if acquired not in log and restored not in log:
         raise AssertionError(f"client log did not prove launch object acquisition: {acquired!r} or {restored!r}")
     ctx.vars["preloaded_object_count"] = len(expected)
+
+
+@verb("assert_client_file")
+def _v_assert_client_file(ctx: Context, step):
+    """Assert a live game-dir file matches its active generation manifest entry (sha1 and size)."""
+    logical_path, expected_hash, expected_size = _active_file(ctx, step["path"])
+    path = ctx.game_dir / logical_path
+    try:
+        payload = path.read_bytes()
+    except OSError as error:
+        raise AssertionError(f"managed client file {path} is not readable: {error}") from error
+    actual_hash, actual_size = hashlib.sha1(payload).hexdigest(), len(payload)
+    if (actual_hash, actual_size) != (expected_hash, expected_size):
+        raise AssertionError(
+            f"managed client file {path} does not match the active generation: "
+            f"expected sha1={expected_hash} size={expected_size}, got sha1={actual_hash} size={actual_size}"
+        )
 
 
 @verb("wait_bridge")

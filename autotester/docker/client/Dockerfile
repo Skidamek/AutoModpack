@@ -31,13 +31,16 @@ RUN git init -q . \
 FROM ubuntu:26.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+# A POSIX locale makes the JDK encode file paths as ASCII, so any non-ASCII
+# mod file name cannot exist in the game directory; UTF-8 is the mod's contract.
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 ENV HMC_HOME=/work/hmc-cache
 
 # Most runs use HeadlessMC's LWJGL transformer. UI screenshot scenarios opt into
 # Xvfb and Mesa so Minecraft renders the real interface in a virtual display;
 # mesa-vulkan-drivers (lavapipe) completes that software stack for Minecraft
 # 26.3+, whose renderpearl backend rejects Xvfb's GLX visuals and renders
-# through Vulkan instead.
+# through Vulkan instead. iproute2 provides `tc` for the --netem qdisc.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -59,6 +62,8 @@ RUN apt-get update \
         openjdk-17-jre-headless \
         openjdk-21-jre-headless \
         openjdk-25-jre-headless \
+        iproute2 \
+        ethtool \
         xauth \
         xvfb \
     && rm -rf /var/lib/apt/lists/*
