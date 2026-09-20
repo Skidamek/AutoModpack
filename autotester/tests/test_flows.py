@@ -388,7 +388,7 @@ def test_fake_restart_screen_matches_production_button_order(make_ctx):
     ]
 
 
-def test_fake_new_repair_and_preservation_ui_states(make_ctx):
+def test_fake_new_repair_and_timeline_ui_states(make_ctx):
     ctx = make_ctx()
     bridge = FakeBridge(ctx)
     ctx.bridge = bridge

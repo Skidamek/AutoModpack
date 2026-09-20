@@ -58,12 +58,6 @@ class FakeBridge:
         self.alternative_selected = False
         self.chosen_visuals = False  # Visuals was explicitly picked, not default-selected
         self.acknowledged = False  # unverified-risk ack checkbox state on the confirm screens
-        self.preservation_restored = False
-        self.preservation_copy_saved = False
-        self.vault_claim_selected = False
-        self.conflict_jar_unowned = False
-        self.switch_count = 0
-        self.vault_message: str | None = None
         self.storage_running = False
         self.storage_compact_armed = False
         self.baseline_snapshots: dict[Path, bytes] = {}
@@ -74,8 +68,6 @@ class FakeBridge:
         self.repair_keep_unowned = False
         self.repair_applied = False
         self.error_parent = "details"
-        self.selected_claim_path: str | None = None
-        self.selected_claim_pack: str | None = None
         self.repair_expected: dict[str, bytes] = {}
         self.selected_snapshot: int | None = None
 
@@ -365,7 +357,6 @@ class FakeBridge:
                     self._capture_editable_overlay(self.selected_pack)
                     self.selected_pack = self.pending_pack
                     self.pending_pack = None
-                    self.switch_count += 1
                 self._write_modpack()
                 self._restore_editable_overlay(self.selected_pack)
                 self.screen = "restart"
@@ -654,32 +645,6 @@ class FakeBridge:
         self.repair_keep_unowned = False
         self._timeline_snapshot("REPAIR")
 
-    def _repair_preservation_objects(self) -> None:
-        objects = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects"
-        restored = self.ctx.game_dir / "automodpack" / "recovered"
-        for pack_id in ("packaaa", "packbbb"):
-            _manifest, claims = self._claims(pack_id)
-            for claim in claims:
-                expected_hash = claim["objectHash"]
-                object_path = cas_object(objects, expected_hash)
-                if object_path.is_file() and hashlib.sha1(object_path.read_bytes()).hexdigest() == expected_hash:
-                    continue
-                saved_copy = restored / pack_id / claim["contentToken"] / claim["claimId"] / claim["originalPath"]
-                if saved_copy.is_file() and hashlib.sha1(saved_copy.read_bytes()).hexdigest() == expected_hash:
-                    object_path.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(saved_copy, object_path)
-
-    def _claims(self, pack_id: str) -> tuple[Path, list[dict]]:
-        manifest = self.ctx.game_dir / "automodpack" / "client" / "preservation" / pack_id / "claims.json"
-        if not manifest.is_file():
-            return manifest, []
-        return manifest, json.loads(manifest.read_text(encoding="utf-8")).get("claims", [])
-
-    def _active_pack_owns_selected_claim(self, pack_id: str) -> bool:
-        _manifest, claims = self._claims(pack_id)
-        selected = next((claim for claim in claims if claim.get("originalPath") == self.selected_claim_path), claims[0] if claims else None)
-        return selected is not None and self.selected_pack == {"packaaa": "A", "packbbb": "B"}.get(pack_id) and (self.ctx.game_dir / "automodpack" / "client" / "active" / selected["originalPath"]).is_file()
-
     def _has_damaged_timeline_object(self) -> bool:
         objects = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects"
         for entry in self._timeline_entries():
@@ -693,9 +658,6 @@ class FakeBridge:
                     return True
         return False
 
-    def _delete_selected_claim(self, pack_id: str) -> None:
-        self._release_selected_claim(pack_id)
-
     def _compact_local_storage(self) -> None:
         """Keep the fake bridge focused on the UI; scenario assertions prove preservation."""
 
@@ -705,9 +667,6 @@ class FakeBridge:
         self.pack_removed = True
         self.pending_pack = None
         self.pack_b_files = []
-        self.preservation_restored = False
-        self.preservation_copy_saved = False
-        self.vault_claim_selected = False
         self.first_install_archive_existing = False
         self.storage_verified = False
         self.storage_compact_armed = False
@@ -842,92 +801,6 @@ class FakeBridge:
         conflict_path = self._conflict_path()
         return conflict_path is not None and any(str(rel) == conflict_path for rel, _content in self.pack_b_files)
 
-    def _vault_claim(self, pack_id: str, original_path: str, payload: bytes, reason: str) -> Path:
-        digest = hashlib.sha1(payload).hexdigest()
-        objects = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects"
-        objects.mkdir(parents=True, exist_ok=True)
-        object_path = cas_object(objects, digest)
-        object_path.parent.mkdir(parents=True, exist_ok=True)
-        object_path.write_bytes(payload)
-        root = self.ctx.game_dir / "automodpack" / "client" / "preservation" / pack_id
-        root.mkdir(parents=True, exist_ok=True)
-        manifest = root / "claims.json"
-        claims = json.loads(manifest.read_text(encoding="utf-8")).get("claims", []) if manifest.is_file() else []
-        content_token = "a" * 40
-        identity = (f"automodpack-preservation-v1\nmodpack={pack_id}\ncontentToken={content_token}\nreason={reason}\n"
-                    f"root=GAME_DIR\npath={original_path}\nhash={digest}\nsize={len(payload)}\n")
-        claim_id = hashlib.sha1(identity.encode()).hexdigest()
-        claims = [claim for claim in claims if claim.get("claimId") != claim_id]
-        claims.append({"claimId": claim_id, "originalPath": original_path, "sourceRoot": "GAME_DIR", "objectHash": digest, "size": len(payload), "modpackId": pack_id, "contentToken": content_token, "reason": reason, "preservedAt": "2026-01-01T00:00:00Z"})
-        manifest.write_text(json.dumps({"schemaVersion": 1, "modpackId": pack_id, "claims": sorted(claims, key=lambda claim: claim["claimId"])}), encoding="utf-8")
-        return cas_object(objects, digest)
-
-    def _claim_exists(self, pack_id: str, original_path: str) -> bool:
-        _manifest, claims = self._claims(pack_id)
-        return any(claim.get("originalPath") == original_path for claim in claims)
-
-    def _select_vault_claim(self, pack_id: str, original_path: str) -> None:
-        self.selected_claim_pack = pack_id
-        self.selected_claim_path = original_path
-        self.vault_claim_selected = True
-        self.vault_message = None
-
-    def _selected_claim_restorable(self) -> bool:
-        if not self.vault_claim_selected or self.selected_claim_pack is None:
-            return False
-        # The conflict jar is still projected by its freshly applied pack; a later pack apply cycle drops it.
-        if self.selected_claim_pack == "packbbb" and self.switch_count < 1:
-            return False
-        return self.selected_pack == {"packaaa": "A", "packbbb": "B"}[self.selected_claim_pack]
-
-    def _release_selected_claim(self, pack_id: str) -> None:
-        manifest, claims = self._claims(pack_id)
-        remaining = [claim for claim in claims if claim.get("originalPath") != self.selected_claim_path]
-        if remaining:
-            manifest.write_text(json.dumps({"schemaVersion": 1, "modpackId": pack_id, "claims": remaining}), encoding="utf-8")
-        else:
-            manifest.unlink(missing_ok=True)
-
-    def _restore_selected_claim(self) -> None:
-        if self.selected_claim_pack is None or self.selected_claim_path is None:
-            raise AssertionError("fake preservation restore requested without a selected claim")
-        _manifest, claims = self._claims(self.selected_claim_pack)
-        claim = next((claim for claim in claims if claim.get("originalPath") == self.selected_claim_path), None)
-        if claim is None:
-            raise AssertionError("fake preservation restore requested without an available claim")
-        source = cas_object(self.ctx.game_dir / "automodpack" / "client" / "data" / "objects", claim["objectHash"])
-        destination = self.ctx.path(claim["originalPath"])
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
-        self._release_selected_claim(self.selected_claim_pack)
-        self.preservation_restored = True
-        self.vault_message = f"Restored to {claim['originalPath']}"
-        self.vault_claim_selected = False
-        self.selected_claim_path = None
-        self.selected_claim_pack = None
-
-    def _save_selected_claim_copy(self) -> None:
-        if self.selected_claim_pack is None or self.selected_claim_path is None:
-            raise AssertionError("fake preservation save-copy requested without a selected claim")
-        _manifest, claims = self._claims(self.selected_claim_pack)
-        claim = next((claim for claim in claims if claim.get("originalPath") == self.selected_claim_path), None)
-        if claim is None:
-            raise AssertionError("fake preservation save-copy requested without an available claim")
-        root = self.ctx.game_dir / "automodpack" / "recovered" / self.selected_claim_pack / claim["contentToken"] / claim["claimId"]
-        destination = root / claim["originalPath"]
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        source = cas_object(self.ctx.game_dir / "automodpack" / "client" / "data" / "objects", claim["objectHash"])
-        shutil.copy2(source, destination)
-        self._release_selected_claim(self.selected_claim_pack)
-        self.preservation_copy_saved = True
-        self.vault_message = f"Saved a copy to {destination.relative_to(self.ctx.game_dir).as_posix()}"
-        self.vault_claim_selected = False
-        self.selected_claim_path = None
-        self.selected_claim_pack = None
-
-    def _preserved_claim_count(self) -> int:
-        return sum(len(self._claims(pack_id)[1]) for pack_id in ("packaaa", "packbbb"))
-
     # --- instance timeline model -----------------------------------------
     _TIMELINE_TITLES = {
         "LIVE": "Your files before a change",
@@ -952,8 +825,6 @@ class FakeBridge:
 
     def _timeline_snapshot(self, kind: str) -> None:
         """Model the client snapshotting the instance: tracked files hash into CAS, one journal line records the tree."""
-        import hashlib as _hashlib
-
         client = self.ctx.game_dir / "automodpack" / "client"
         state = client / "state-history"
         state.mkdir(parents=True, exist_ok=True)
@@ -969,14 +840,14 @@ class FakeBridge:
                 if not path.is_file():
                     continue
                 data = path.read_bytes()
-                digest = _hashlib.sha1(data).hexdigest()
+                digest = hashlib.sha1(data).hexdigest()
                 object_path = cas_object(game / "automodpack/client/data/objects", digest)
                 object_path.parent.mkdir(parents=True, exist_ok=True)
                 object_path.write_bytes(data)
                 overlay_pack = pack if pack != "per-pack" else path.relative_to(base).parts[0]
-                relative = path.relative_to(game).as_posix() if root == "GAME_DIR" else path.relative_to(pack_dir_parent := base / overlay_pack).as_posix()
+                relative = path.relative_to(game).as_posix() if root == "GAME_DIR" else path.relative_to(base / overlay_pack).as_posix()
                 files.append({"root": root, "overlayPackId": overlay_pack, "path": relative, "sha1": digest, "size": len(data)})
-        tree_sha1 = _hashlib.sha1(json.dumps(files, sort_keys=True).encode("utf-8")).hexdigest()
+        tree_sha1 = hashlib.sha1(json.dumps(files, sort_keys=True).encode("utf-8")).hexdigest()
         trees = state / "trees"
         trees.mkdir(parents=True, exist_ok=True)
         (trees / tree_sha1).write_text(json.dumps({"files": files}), encoding="utf-8")
