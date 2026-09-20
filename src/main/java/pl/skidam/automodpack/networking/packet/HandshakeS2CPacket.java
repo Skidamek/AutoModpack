@@ -55,7 +55,7 @@ public class HandshakeS2CPacket {
 			Common.players.put(playerName, false);
 			LOGGER.warn("{} has not installed AutoModpack.", playerName);
 			if (serverConfig.requireModpack) {
-				Component reason = VersionedText.literal(GameHelpers.nagMessage(serverConfig));
+				Component reason = VersionedText.literal(serverConfig.nagMessage);
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);
 				return;

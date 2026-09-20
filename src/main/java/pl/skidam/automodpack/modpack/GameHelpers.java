@@ -67,14 +67,9 @@ public class GameHelpers {
 		*//*?}*/
 	}
 
-	/** The unmodded-client nag text with the {loader} placeholder substituted; the login kick and the chat nag render the same message. */
-	public static String nagMessage(ServerConfigJsons.ServerConfigFieldsV3 config) {
-		return config.nagMessage.replace(ServerConfigJsons.LOADER_PLACEHOLDER, LOADER);
-	}
-
 	/** Sends the post-join chat nag: the bold nag message plus the clickable download row. */
 	public static void sendNag(ServerPlayer player, ServerConfigJsons.ServerConfigFieldsV3 config) {
-		Component nagText = VersionedText.literal(nagMessage(config)).withStyle(style -> style.withBold(true));
+		Component nagText = VersionedText.literal(config.nagMessage).withStyle(style -> style.withBold(true));
 		Component nagClickableText = VersionedText.literal(config.nagClickableMessage).withStyle(style -> style.withUnderlined(true).withColor(TextColor.fromLegacyFormat(ChatFormatting.BLUE))
 				/*? if >=1.21.5 {*/
 				.withClickEvent(new ClickEvent.OpenUrl(URI.create(config.nagClickableLink))));

@@ -8,8 +8,6 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class ServerConfigJsons {
 
-	public static final String LOADER_PLACEHOLDER = "{loader}";
-
 	public static class ServerConfigFieldsV3 {
 		public int DO_NOT_CHANGE_IT = 3; // file version
 		public String modpackName = "";
@@ -20,7 +18,7 @@ public class ServerConfigJsons {
 		public boolean autoExcludeServerSideMods = true;
 		public boolean requireModpack = true;
 		public boolean nagUnModdedClients = true;
-		public String nagMessage = "Install the AutoModpack mod for {loader} to get this server's modpack!";
+		public String nagMessage = "Install the AutoModpack mod to get this server's modpack!";
 		public String nagClickableMessage = "Click here to get the AutoModpack!";
 		public String nagClickableLink = "https://modrinth.com/project/automodpack";
 		public String bindAddress = "";
