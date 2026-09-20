@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.IntConsumer;
+import java.util.zip.GZIPInputStream;
 
 import javax.net.ssl.SSLSocket;
 
@@ -44,7 +45,7 @@ class Connection implements AutoCloseable {
 	static final int PIPELINE_DEPTH = 8;
 
 	private static final byte[] CRLF = {'\r', '\n'};
-	private static final String ACCEPT_ENCODING = "Accept-Encoding: zstd\r\n";
+	private static final String ACCEPT_ENCODING = "Accept-Encoding: gzip, zstd\r\n";
 	// Our own server never redirects; the cap exists for foreign static hosts, so only a misconfigured redirect loop touches it.
 	private static final int MAX_REDIRECTS = 3;
 	// Response header lines are tiny; a line past this or a block of this many lines is a hostile or broken peer.
@@ -426,10 +427,11 @@ class Connection implements AutoCloseable {
 		if (head.chunked()) throw new IOException("Chunked responses are not supported");
 		if (head.status() == 204 || head.status() == 304) return;
 		if (head.contentLength() == null && head.status() != 200) return;
-		boolean zstd = head.contentEncoding() != null && head.contentEncoding().trim().equalsIgnoreCase("zstd");
 		BoundedBody bounded = head.contentLength() == null ? null : new BoundedBody(head.contentLength());
 		InputStream source = bounded == null ? in : bounded;
-		if (zstd) source = new ZstdInputStream(source);
+		String encoding = head.contentEncoding() == null ? "" : head.contentEncoding().trim().toLowerCase(Locale.ROOT);
+		if (encoding.equals("zstd")) source = new ZstdInputStream(source);
+		else if (encoding.equals("gzip")) source = new GZIPInputStream(source);
 		if (bounded == null) unhealthy = true;
 		transfer(source, destination, writeOffset, chunkCallback, hash, head.contentLength(), tap);
 		if (bounded != null && bounded.remaining() > 0) throw new IOException("Response body ended before the promised Content-Length");

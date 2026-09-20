@@ -7,6 +7,7 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.TRANSFER_WRITE_STALL_
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -19,6 +20,7 @@ import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.zip.GZIPOutputStream;
 
 import io.airlift.compress.zstd.ZstdOutputStream;
 import io.netty.buffer.ByteBuf;
@@ -257,9 +259,13 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		if (length == 0) return finishBodyless(ctx, span, status, 0, etag, contentRange, keepAlive);
 
-		// Token matching on the lowercased header (multiple encodings and q-values included) is deliberately a contains check: zstd is the only encoding either end negotiates.
-		if (byteRange == null && acceptEncoding != null && acceptEncoding.toLowerCase(Locale.ROOT).contains("zstd")) {
-			return serveCompressedDocument(ctx, file, total, etag, keepAlive, span, status);
+		// Token matching on the lowercased header (multiple encodings and q-values included) is deliberately a contains
+		// check, and zstd wins whenever the client lists it: our own client always does, and zstd's ratio beats gzip at
+		// a fraction of the CPU. gzip remains for foreign clients that know nothing of zstd.
+		if (byteRange == null && acceptEncoding != null) {
+			String offered = acceptEncoding.toLowerCase(Locale.ROOT);
+			if (offered.contains("zstd")) return serveCompressedDocument(ctx, file, total, etag, keepAlive, span, status, "zstd");
+			if (offered.contains("gzip")) return serveCompressedDocument(ctx, file, total, etag, keepAlive, span, status, "gzip");
 		}
 
 		return serveIdentity(ctx, file, offset, length, status, etag, contentRange, keepAlive, span);
@@ -310,19 +316,19 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	 * is compressed off the event loop first and the stall window covers the buffer drain like any streamed body. Over the
 	 * buffer tripwire or on any compression failure the identity body is served instead.
 	 */
-	private boolean serveCompressedDocument(ChannelHandlerContext ctx, Path file, long total, String etag, boolean keepAlive, ActivityTracker.Span span, String status) {
+	private boolean serveCompressedDocument(ChannelHandlerContext ctx, Path file, long total, String etag, boolean keepAlive, ActivityTracker.Span span, String status, String codec) {
 		streaming = true;
 		inFlightSpan = span;
 		try {
 			senders.execute(() -> {
-				byte[] compressed = compress(file);
+				byte[] compressed = compress(file, codec);
 				if (compressed == null) {
 					serveIdentity(ctx, file, 0, total, STATUS_200, etag, null, keepAlive, span);
 					return;
 				}
 				span.totalBytes = compressed.length;
 				Channel channel = ctx.channel();
-				ChannelFuture headWritten = channel.writeAndFlush(response(STATUS_200, compressed.length, etag, null, "zstd"));
+				ChannelFuture headWritten = channel.writeAndFlush(response(STATUS_200, compressed.length, etag, null, codec));
 				Throwable failure = awaitWritten(channel, headWritten);
 				if (failure == null && !headWritten.isSuccess()) failure = causeOf(headWritten);
 				if (failure == null) failure = writeBody(channel, compressed);
@@ -338,12 +344,13 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	}
 
 	/** Streams a document through zstd into a capped buffer; null means the cap tripped or compression failed, and identity wins. */
-	private static byte[] compress(Path file) {
+	private static byte[] compress(Path file, String codec) {
 		ByteArrayOutputStream buffer = new ByteArrayOutputStream(64 * 1024);
-		try (ZstdOutputStream zstd = new ZstdOutputStream(buffer); FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+		try (OutputStream compressor = "gzip".equals(codec) ? new GZIPOutputStream(buffer) : new ZstdOutputStream(buffer);
+				FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
 			ByteBuffer chunk = ByteBuffer.allocate(64 * 1024);
 			while (channel.read(chunk) != -1) {
-				zstd.write(chunk.array(), 0, chunk.position());
+				compressor.write(chunk.array(), 0, chunk.position());
 				chunk.clear();
 				if (buffer.size() > MAX_COMPRESSED_DOCUMENT_BYTES) return null;
 			}

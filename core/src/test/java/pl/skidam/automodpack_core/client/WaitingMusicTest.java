@@ -29,9 +29,14 @@ class WaitingMusicTest {
 	}
 
 	private void awaitCache(ClientStorage storage, boolean present) throws InterruptedException {
+		// The sidecar is written after the cache move: awaiting it means the track is fully published.
 		long deadline = System.currentTimeMillis() + 5000;
-		while (Files.exists(WaitingMusic.cacheFile(storage)) != present && System.currentTimeMillis() < deadline) Thread.sleep(20);
-		assertEquals(present, Files.exists(WaitingMusic.cacheFile(storage)));
+		boolean sidecar = Files.exists(storage.clientDirectory().resolve("waiting-music.sha1"));
+		while (sidecar != present && System.currentTimeMillis() < deadline) {
+			Thread.sleep(20);
+			sidecar = Files.exists(storage.clientDirectory().resolve("waiting-music.sha1"));
+		}
+		assertEquals(present, sidecar);
 	}
 
 	private void awaitProbe(FakeTransport transport, int count) throws InterruptedException {

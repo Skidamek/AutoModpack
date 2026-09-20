@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.zip.GZIPInputStream;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -164,6 +166,12 @@ class HttpContractHandlerTest {
 		assertTrue(channel.isOpen());
 	}
 
+	private static byte[] gunzip(byte[] gzipped) throws IOException {
+		try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(gzipped))) {
+			return gzip.readAllBytes();
+		}
+	}
+
 	@Test
 	void documentsCompressForZstdClientsAndDecodeToIdentity() throws Exception {
 		Fixture fixture = fixture();
@@ -182,6 +190,13 @@ class HttpContractHandlerTest {
 		// A header listing several encodings with q-values still token-matches zstd.
 		byte[] listed = exchangeBytes(channel, request("/head", "Accept-Encoding: gzip;q=1.0, identity;q=0.5, zstd"));
 		assertTrue(headOf(listed).contains("Content-Encoding: zstd\r\n"), headOf(listed));
+
+		// A gzip-only client gets gzip; a client offering both gets zstd, our preferred codec.
+		byte[] gzipped = exchangeBytes(channel, request("/head", "Accept-Encoding: gzip"));
+		assertTrue(headOf(gzipped).contains("Content-Encoding: gzip\r\n"), headOf(gzipped));
+		assertArrayEquals(headBytes, gunzip(bodyOf(gzipped)));
+		byte[] both = exchangeBytes(channel, request("/head", "Accept-Encoding: gzip, zstd"));
+		assertTrue(headOf(both).contains("Content-Encoding: zstd\r\n"), headOf(both));
 
 		// Objects compress for zstd clients too; ranges and non-negotiating clients stay identity so resume stays trivial.
 		byte[] object = exchangeBytes(channel, request("/objects/" + fixture.objectHash(), "Accept-Encoding: zstd"));
