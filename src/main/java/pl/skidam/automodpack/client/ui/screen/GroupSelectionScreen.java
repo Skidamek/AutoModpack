@@ -238,22 +238,11 @@ public class GroupSelectionScreen extends VersionedScreen {
 		if (item.kind() == GroupSelectionList.Kind.GROUP) inspect(item.id());
 	}
 
-	/** The Files button on a group row opens the file browser pre-filtered to that group — the row tooltip already carries the group's metadata. */
+	/** The Files button on a group row opens the pack's file browser pre-filtered to that group — the row tooltip already carries the group's metadata. */
 	private void inspect(String groupId) {
 		if (!groups.containsKey(groupId)) return;
 		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.literal(displayName(groupId)),
-				VersionedText.text("automodpack.browser.groupDescription"), groupChanges(groupId), Map.of(groupId, displayName(groupId)), null, List.of(), 0, groupId));
-	}
-
-	/** The group's shipped files as a preserved catalogue for the shared browser. */
-	private ChangeSet groupChanges(String groupId) {
-		List<ChangeSet.Change> changes = new ArrayList<>();
-		for (var entry : groups.get(groupId).files().entrySet()) {
-			GroupManifest.GroupFile file = entry.getValue();
-			ChangeSet.Occurrence occurrence = new ChangeSet.Occurrence("catalogue", entry.getKey(), file.size(), null, null, file.sha1(), file.type(), List.of(groupId), List.of());
-			changes.add(new ChangeSet.Change(entry.getKey(), ChangeSet.Kind.PRESERVED, List.of(occurrence)));
-		}
-		return ChangeSet.of(changes);
+				VersionedText.text("automodpack.browser.groupDescription"), ChangeSet.catalogue(manifest), InstalledModpackController.groupNames(manifest), null, List.of(), 0, groupId));
 	}
 
 	@Override
