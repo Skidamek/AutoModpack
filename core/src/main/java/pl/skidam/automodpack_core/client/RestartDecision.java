@@ -65,8 +65,9 @@ final class RestartDecision {
 	}
 
 	/**
-	 * Fingerprint of the applied correction state so two rapid automatic restarts for the same state can be suppressed. The active pointer's unusable content fails the flow instead of silently disabling loop
-	 * suppression.
+	 * Fingerprint of the applied correction state so two rapid automatic restarts for the same state can be suppressed.
+	 * The active pointer's read failure propagates; the caller at the post-commit boundary decides whether it can
+	 * afford to proceed without suppression.
 	 */
 	static String stateFingerprint(ClientStorage storage, ApplyResult applyResult) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();

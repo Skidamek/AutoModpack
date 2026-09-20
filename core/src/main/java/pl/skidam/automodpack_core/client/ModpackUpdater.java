@@ -405,7 +405,7 @@ public class ModpackUpdater implements AutoCloseable {
 		close();
 	}
 
-	private void finishLaunchApply(ApplyResult applyResult) throws IOException {
+	private void finishLaunchApply(ApplyResult applyResult) {
 		if (!preload) {
 			restartAfterApply(applyResult);
 			return;
@@ -414,8 +414,16 @@ public class ModpackUpdater implements AutoCloseable {
 			LOGGER.info("Launch apply needs no restart at preload; hot-loading the fresh pack in this boot");
 			return;
 		}
-		String fingerprint = RestartDecision.stateFingerprint(storage, applyResult);
-		if (updateLoopDetector.evaluateAndRecord(fingerprint).decision() == UpdateLoopDetector.Decision.SUPPRESS) {
+		UpdateLoopDetector.Decision decision;
+		try {
+			decision = updateLoopDetector.evaluateAndRecord(RestartDecision.stateFingerprint(storage, applyResult)).decision();
+		} catch (IOException e) {
+			// Past the commit boundary a failed read cannot unapply the correction; the loud log is the receipt and
+			// the restart proceeds, this once without loop suppression.
+			LOGGER.error("Cannot track rapid modpack restarts because the correction or loop state is unreadable; restarting without loop suppression", e);
+			decision = UpdateLoopDetector.Decision.RESTART;
+		}
+		if (decision == UpdateLoopDetector.Decision.SUPPRESS) {
 			LOGGER.error("Automatic restart loop detected. AutoModpack already requested two rapid restarts for the same correction state.");
 			LOGGER.error("Corrections were applied but still require a restart: {}", String.join(", ", applyResult.reasonDescriptions()));
 			LOGGER.error("Another automatic restart was suppressed. The modpack may not be fully active; inspect the surrounding logs and report recurring issues at https://github.com/Skidamek/AutoModpack/issues");
