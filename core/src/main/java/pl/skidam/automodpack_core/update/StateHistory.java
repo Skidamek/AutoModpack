@@ -106,10 +106,6 @@ public final class StateHistory {
 		return versions;
 	}
 
-	static List<FileDiff> diff(InstanceTree parent, InstanceTree current) {
-		return diff(parent, current, Map.of(), false);
-	}
-
 	static List<FileDiff> diff(InstanceTree parent, InstanceTree current, Map<String, Set<String>> packVersions, boolean labelBroughtBack) {
 		Map<Key, TrackedFile> before = new HashMap<>();
 		if (parent != null) for (TrackedFile file : parent.files()) before.put(file.key(), file);
