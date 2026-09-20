@@ -60,6 +60,9 @@ public final class ModLauncherEarlyServiceBridge {
 	// GAME/PLUGIN layers.
 	private static final Map<Path, List<ITransformationService>> TRANSFORMATION_SERVICES = new ConcurrentHashMap<>();
 
+	/** The failure of the most recent layer-build attempt, for the refusal when a jar resolves on no layer at all. */
+	private static volatile Throwable lastLayerBuildFailure;
+
 	// The GAME-layer bridge must run exactly once, from the injected launch plugin's
 	// initializeLaunch (see EarlyServiceBridgePlugin), before Mixin loads any outer class.
 	private static final AtomicBoolean GAME_BRIDGE_DONE = new AtomicBoolean(false);
@@ -112,7 +115,8 @@ public final class ModLauncherEarlyServiceBridge {
 	 * with {@link #register}. Returns the jars that registered. If the shared resolution fails (e.g.
 	 * two jars deriving the same automatic module name throw for the whole batch), each jar is
 	 * retried on its own layer so one bad jar doesn't take every other early-service mod down with
-	 * it; cross-jar {@code requires} edges are lost in that degraded mode.
+	 * it; cross-jar {@code requires} edges are lost in that degraded mode. A jar that fails on every
+	 * attempt throws: a silently absent mod is the one outcome this pipeline refuses to produce.
 	 *
 	 * <p>
 	 * {@code loaderName} is the child {@link ModuleClassLoader}'s display name; each family passes its
@@ -121,20 +125,28 @@ public final class ModLauncherEarlyServiceBridge {
 	public static List<Path> buildChildLayers(List<Path> jars, ModuleLayer serviceLayer, String loaderName) {
 		if (jars.isEmpty()) return List.of();
 		List<Path> registered = new ArrayList<>(jars);
-		if (!buildAndRegister(jars, serviceLayer, loaderName)) {
+		if (!buildAndRegister(jars, serviceLayer, loaderName, false)) {
 			registered.clear();
+			List<String> unresolvable = new ArrayList<>();
+			Throwable cause = null;
 			for (Path jar : jars) {
-				if (buildAndRegister(List.of(jar), serviceLayer, loaderName)) registered.add(jar);
+				if (buildAndRegister(List.of(jar), serviceLayer, loaderName, true)) {
+					registered.add(jar);
+				} else {
+					unresolvable.add(jar.getFileName().toString());
+					cause = lastLayerBuildFailure;
+				}
 			}
+			// A jar that cannot resolve on any layer would load silently absent from the game otherwise.
+			if (!unresolvable.isEmpty())
+				throw new IllegalStateException("[AutoModpack] Could not build a service layer for early-service jar(s) " + unresolvable
+						+ "; fix or remove them from the modpack", cause);
 		}
 		return List.copyOf(registered);
 	}
 
-	/**
-	 * Resolves the given jars into one child configuration/layer/classloader and registers each in
-	 * the shared registry. Returns false - with nothing registered - if resolution fails.
-	 */
-	private static boolean buildAndRegister(List<Path> jars, ModuleLayer serviceLayer, String loaderName) {
+	/** Resolves the given jars into one child configuration/layer/classloader and registers each in the shared registry. */
+	private static boolean buildAndRegister(List<Path> jars, ModuleLayer serviceLayer, String loaderName, boolean captureFailure) {
 		try {
 			SecureJar[] secureJars = new SecureJar[jars.size()];
 			List<String> moduleNames = new ArrayList<>(jars.size());
@@ -158,6 +170,7 @@ public final class ModLauncherEarlyServiceBridge {
 			return true;
 		} catch (Throwable t) {
 			LOGGER.error("[AutoModpack] Could not build a service layer for early-service jar(s) {}", jars.stream().map(Path::getFileName).toList(), t);
+			if (captureFailure) lastLayerBuildFailure = t;
 			return false;
 		}
 	}

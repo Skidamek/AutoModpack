@@ -204,7 +204,7 @@ public final class EarlyServiceLayer {
 				List<?> result = (List<?>) locator.getClass().getMethod("scanMods").invoke(locator);
 				out.addAll(result);
 			} catch (Throwable t) {
-				LOGGER.error("[AutoModpack] Failed to run candidate locator {} from {}", impl, jar.getFileName(), t);
+				throw new IllegalStateException("[AutoModpack] Candidate locator " + impl + " from " + jar.getFileName() + " failed; refusing to continue with the mod silently missing", t);
 			}
 		}
 	}
@@ -252,8 +252,7 @@ public final class EarlyServiceLayer {
 		} catch (NoSuchMethodException e) {
 			return false; // a candidate-only IModLocator: nothing to run in the dependency phase
 		} catch (Throwable t) {
-			LOGGER.error("[AutoModpack] Failed to run dependency locator {} from {}", impl, jar.getFileName(), t);
-			return false;
+			throw new IllegalStateException("[AutoModpack] Dependency locator " + impl + " from " + jar.getFileName() + " failed; refusing to continue with the mod silently missing", t);
 		}
 		try {
 			LOGGER.debug("[AutoModpack] Running in-place dependency locator {} from {}", impl, jar.getFileName());
@@ -262,8 +261,7 @@ public final class EarlyServiceLayer {
 			if (result != null) out.addAll(result);
 			return true;
 		} catch (Throwable t) {
-			LOGGER.error("[AutoModpack] Failed to run dependency locator {} from {}", impl, jar.getFileName(), t);
-			return false;
+			throw new IllegalStateException("[AutoModpack] Dependency locator " + impl + " from " + jar.getFileName() + " failed; refusing to continue with the mod silently missing", t);
 		}
 	}
 

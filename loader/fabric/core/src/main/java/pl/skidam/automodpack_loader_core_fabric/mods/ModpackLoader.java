@@ -74,7 +74,9 @@ public class ModpackLoader implements ModpackLoaderService {
 				List<ModCandidateImpl> nestedMods = getNestedMods(candidate);
 				nestedMods = getOnlyNewestMods(nestedMods);
 
-				boolean isStandard = !candidate.getPaths().get(0).toAbsolutePath().toString().contains(activeModsDirectory.toAbsolutePath().toString());
+				// Component-wise prefix test: a substring match would misclassify a sibling directory
+				// whose name merely contains the mods directory's path.
+				boolean isStandard = !candidate.getPaths().get(0).toAbsolutePath().normalize().startsWith(activeModsDirectory.toAbsolutePath().normalize());
 				if (isStandard) {
 					standardNestedMods.addAll(nestedMods);
 				} else {

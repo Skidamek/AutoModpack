@@ -20,6 +20,8 @@ public final class LoaderServicePaths {
 	public static final String FORGE_MOD_LOCATOR = "META-INF/services/net.minecraftforge.forgespi.locating.IModLocator";
 	public static final String FORGE_DEPENDENCY_LOCATOR = "META-INF/services/net.minecraftforge.forgespi.locating.IDependencyLocator";
 	public static final String FORGE_LANGUAGE_PROVIDER = "META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider";
+	/** Picked up from standard {@code mods/} only (Forge 1.19.3+ {@code ModDirTransformerDiscoverer}); a projection copy never runs. */
+	public static final String FORGE_IMMEDIATE_WINDOW_PROVIDER = "META-INF/services/net.minecraftforge.fml.loading.ImmediateWindowProvider";
 
 	// NeoForge (net.neoforged.neoforgespi)
 	public static final String NEOFORGE_MOD_LOCATOR = "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator"; // pre-FML10; removed after

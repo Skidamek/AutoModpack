@@ -21,8 +21,9 @@ import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
  * flat-classloader fml10/11. FML enumerated locators and readers from its classloader chain BEFORE
  * the candidate phase that hosted these jars, so its own passes never see them: their candidate
  * locators, dependency locators and mod file readers must be driven by hand, which is what the
- * methods below do - priority-ordered across all hosted jars, each invocation isolated so one
- * misbehaving replayed service cannot abort discovery. Where a jar's implementations and the
+ * methods below do - priority-ordered across all hosted jars. A replay that throws refuses the
+ * launch loudly: a swallowed failure would leave that mod silently absent from the game, which is
+ * the stealth degradation the project bans. Where a jar's implementations and the
  * classloader that can see them live is per-generation knowledge, passed in by the caller; only the
  * replay machinery itself lives here.
  *
@@ -46,7 +47,7 @@ public final class EarlyServiceReplay {
 				LOGGER.debug("[AutoModpack] Running in-place candidate locator {} (priority {})", locator.getClass().getName(), priority(locator));
 				locator.findCandidates(context, pipeline);
 			} catch (Throwable t) {
-				LOGGER.error("[AutoModpack] Failed to run candidate locator {}", locator.getClass().getName(), t);
+				throw new IllegalStateException("[AutoModpack] Candidate locator " + locator.getClass().getName() + " failed; refusing to continue with the mod silently missing", t);
 			}
 		}
 	}
@@ -63,7 +64,7 @@ public final class EarlyServiceReplay {
 				LOGGER.debug("[AutoModpack] Running in-place dependency locator {} (priority {})", locator.getClass().getName(), priority(locator));
 				locator.scanMods(loadedMods, pipeline);
 			} catch (Throwable t) {
-				LOGGER.error("[AutoModpack] Failed to run dependency locator {}", locator.getClass().getName(), t);
+				throw new IllegalStateException("[AutoModpack] Dependency locator " + locator.getClass().getName() + " failed; refusing to continue with the mod silently missing", t);
 			}
 		}
 	}
@@ -72,7 +73,7 @@ public final class EarlyServiceReplay {
 	 * Instantiates every declared impl of {@code type} across the hosted jars, highest priority
 	 * first (IOrderedProvider order) across ALL of them, so a replayed provider's declared priority
 	 * is honoured relative to the others; raw staging (filesystem) order would silently drop it.
-	 * Each instantiation is isolated, so one misbehaving impl cannot abort the replay.
+	 * A failed instantiation throws: the mod would be silently absent otherwise.
 	 */
 	private static <T> List<T> instantiate(List<Path> jars, String kind, Function<Path, List<String>> implsFor, Function<Path, ClassLoader> loaderFor, Class<T> type) {
 		List<T> providers = new ArrayList<>();
@@ -83,7 +84,7 @@ public final class EarlyServiceReplay {
 				try {
 					providers.add(type.cast(Class.forName(impl, true, cl).getDeclaredConstructor().newInstance()));
 				} catch (Throwable t) {
-					LOGGER.error("[AutoModpack] Failed to load {} {} from {}", kind, impl, jar.getFileName(), t);
+					throw new IllegalStateException("[AutoModpack] Failed to load " + kind + " " + impl + " from " + jar.getFileName() + "; refusing to continue with the mod silently missing", t);
 				}
 			}
 		}
@@ -123,7 +124,7 @@ public final class EarlyServiceReplay {
 			readersField.set(modDiscoverer, List.copyOf(merged));
 			LOGGER.debug("[AutoModpack] Forwarded {} in-place IModFileReader(s) from {} into mod discovery", readers.size(), source);
 		} catch (Throwable t) {
-			LOGGER.error("[AutoModpack] Could not forward IModFileReader(s) from {} into mod discovery; a mod relying on that reader may need copy-to-standard", source, t);
+			throw new IllegalStateException("[AutoModpack] Could not forward IModFileReader(s) from " + source + " into mod discovery; refusing to continue with the mod silently missing", t);
 		}
 	}
 
