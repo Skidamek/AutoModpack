@@ -8,9 +8,10 @@ public final class ByteFormat {
 
 	public static String formatSize(long bytes) {
 		if (bytes < 1024) return bytes + " B";
-		if (bytes < 1024L * 1024L) return (bytes / 1024) + " KiB";
-		if (bytes < 1024L * 1024L * 1024L) return (bytes / (1024L * 1024L)) + " MiB";
-		return (bytes / (1024L * 1024L * 1024L)) + " GiB";
+		double kib = bytes / 1024.0;
+		if (kib < 1024) return String.format(Locale.ROOT, "%.1f KiB", kib);
+		if (kib < 1024 * 1024) return String.format(Locale.ROOT, "%.1f MiB", kib / 1024.0);
+		return String.format(Locale.ROOT, "%.1f GiB", kib / (1024.0 * 1024.0));
 	}
 
 	public static String formatSpeed(long bytesPerSec) {

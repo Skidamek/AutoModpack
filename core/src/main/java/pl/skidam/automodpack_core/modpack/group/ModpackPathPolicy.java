@@ -46,10 +46,11 @@ public final class ModpackPathPolicy {
 		if (normalized.equalsIgnoreCase(MODPACK_CONTENT_FILE.toString())) return false;
 		if (normalized.equalsIgnoreCase(BOOTSTRAP_FILE.getFileName().toString())) return false;
 		if (isInvalidLiveRoot(normalized)) return false;
+		// The player's options file is only ever a minecraft-options entry, whatever a pack declares.
+		if (normalized.equalsIgnoreCase(MINECRAFT_OPTIONS_FILE) && !ModpackContentType.MINECRAFT_OPTIONS.equals(type)) return false;
 		// A mod-shaped file keeps its mod metadata regardless of where the operator stores it.
 		// Its logical path independently controls whether the client activates or only places it.
 		if (ModpackContentType.MOD.equals(type)) return true;
-		if (normalized.equalsIgnoreCase(MINECRAFT_OPTIONS_FILE) && !ModpackContentType.MINECRAFT_OPTIONS.equals(type)) return false;
 		return type.equals(typeForPath(normalized));
 	}
 

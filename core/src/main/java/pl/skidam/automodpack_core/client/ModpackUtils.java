@@ -106,13 +106,7 @@ public class ModpackUtils {
 			LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
 			return FileVerification.SKIP;
 		}
-		long size;
-		try {
-			size = serverItem.size;
-		} catch (NumberFormatException e) {
-			return FileVerification.MISMATCH;
-		}
-		if (observed.size() != size || serverItem.sha1 == null || !serverItem.sha1.equalsIgnoreCase(observed.sha1())) return FileVerification.MISMATCH;
+		if (observed.size() != serverItem.size || serverItem.sha1 == null || !serverItem.sha1.equalsIgnoreCase(observed.sha1())) return FileVerification.MISMATCH;
 		return FileVerification.MATCH;
 	}
 

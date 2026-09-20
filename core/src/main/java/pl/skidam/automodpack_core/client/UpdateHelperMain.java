@@ -89,14 +89,20 @@ public final class UpdateHelperMain {
 					UpdateTransactionExecutor executor = UpdateTransactionSupport.executor(null, null);
 					long backoff = UpdateRecovery.INITIAL_BACKOFF_MILLIS;
 					for (int attempt = 1;; attempt++) {
-						recoverSelfUpdate(gameDirectory, dataLocation);
+						boolean selfUpdateRecovered = recoverSelfUpdate(gameDirectory, dataLocation);
 						UpdateTransactionExecutor.Execution execution = executor.recoverLatest();
-						if (execution.success()) {
+						if (execution.success() && selfUpdateRecovered) {
 							log("Pending update transaction recovered on attempt " + attempt);
 							return 0;
 						}
-						log("Update recovery attempt " + attempt + " failed: status " + execution.status() + ", operation " + execution.operation() + ", blocked path " + execution.blockedPath()
-								+ ", message " + execution.message());
+						if (!execution.success()) {
+							log("Update recovery attempt " + attempt + " failed: status " + execution.status() + ", operation " + execution.operation() + ", blocked path "
+									+ execution.blockedPath() + ", message " + execution.message());
+						} else {
+							// A pending swap record left behind would name an object the next boot's recovery still needs;
+							// exiting success here would drop it on the floor.
+							log("Update transaction recovered on attempt " + attempt + ", but the self-update swap is still pending");
+						}
 						if (execution.replanRequired() || attempt >= UpdateRecovery.MAX_ATTEMPTS) {
 							log("Update helper gave up; the transaction stays pending and the next game launch will retry it");
 							return 1;

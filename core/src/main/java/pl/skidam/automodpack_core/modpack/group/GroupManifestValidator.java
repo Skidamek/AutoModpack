@@ -62,10 +62,11 @@ public final class GroupManifestValidator {
 		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
 		GroupManifest manifest = new GroupManifest(fields.modpackId, value(fields.modpackName), value(fields.automodpackVersion), value(fields.loader),
 				value(fields.loaderVersion), value(fields.mcVersion), groups);
-		validatePlatformPaths(manifest, errors);
+		PairMemo pairs = new PairMemo(manifest);
+		validatePlatformPaths(manifest, errors, pairs);
 		validateDefaultAndIndividualSelections(manifest, errors);
 		validateObjectSizes(manifest, errors);
-		validateOverlaps(manifest, errors);
+		validateOverlaps(manifest, errors, pairs);
 		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
 		return manifest;
 	}
@@ -117,7 +118,7 @@ public final class GroupManifestValidator {
 		return true;
 	}
 
-	private static void validatePlatformPaths(GroupManifest manifest, List<String> errors) {
+	private static void validatePlatformPaths(GroupManifest manifest, List<String> errors, PairMemo pairs) {
 		for (ClientPlatform platform : coveredPlatforms(manifest)) {
 			Map<String, List<PathOwner>> aliases = new LinkedHashMap<>();
 			Map<String, List<PathOwner>> modBasenameAliases = new LinkedHashMap<>();
@@ -133,9 +134,9 @@ public final class GroupManifestValidator {
 								.add(new PathOwner(groupId, path));
 				}
 			}
-			validateAliasOwners(platform, manifest, aliases, false, errors);
-			validateAncestorOwners(platform, manifest, aliases, errors);
-			validateAliasOwners(platform, manifest, modBasenameAliases, true, errors);
+			validateAliasOwners(platform, manifest, aliases, false, errors, pairs);
+			validateAncestorOwners(platform, manifest, aliases, errors, pairs);
+			validateAliasOwners(platform, manifest, modBasenameAliases, true, errors, pairs);
 		}
 	}
 
@@ -144,11 +145,11 @@ public final class GroupManifestValidator {
 	 * map, so the conflicts come out of strict '/'-boundary prefix lookups instead of a pairwise scan over every
 	 * file owner. Equal keys are aliases, never ancestor pairs.
 	 */
-	private static void validateAncestorOwners(ClientPlatform platform, GroupManifest manifest, Map<String, List<PathOwner>> aliases, List<String> errors) {
+	private static void validateAncestorOwners(ClientPlatform platform, GroupManifest manifest, Map<String, List<PathOwner>> aliases, List<String> errors, PairMemo pairs) {
 		for (var entry : aliases.entrySet()) for (PathOwner descendant : entry.getValue()) for (String ancestorKey : ancestorKeys(entry.getKey())) {
 			List<PathOwner> ancestors = aliases.get(ancestorKey);
 			if (ancestors == null) continue;
-			for (PathOwner ancestor : ancestors) reportAncestor(platform, manifest, ancestor, descendant, errors);
+			for (PathOwner ancestor : ancestors) reportAncestor(platform, pairs, ancestor, descendant, errors);
 		}
 	}
 
@@ -159,8 +160,8 @@ public final class GroupManifestValidator {
 		return ancestors;
 	}
 
-	private static void reportAncestor(ClientPlatform platform, GroupManifest manifest, PathOwner ancestor, PathOwner descendant, List<String> errors) {
-		if (!ancestor.groupId().equals(descendant.groupId()) && !coSelectable(manifest, ancestor.groupId(), descendant.groupId())) return;
+	private static void reportAncestor(ClientPlatform platform, PairMemo pairs, PathOwner ancestor, PathOwner descendant, List<String> errors) {
+		if (!ancestor.groupId().equals(descendant.groupId()) && !pairs.coSelectable(ancestor.groupId(), descendant.groupId())) return;
 		String ownerDescription = ancestor.groupId().equals(descendant.groupId())
 				? "group '" + ancestor.groupId() + "'"
 				: "co-selectable groups '" + ancestor.groupId() + "' and '" + descendant.groupId() + "'";
@@ -168,7 +169,7 @@ public final class GroupManifestValidator {
 	}
 
 	private static void validateAliasOwners(ClientPlatform platform, GroupManifest manifest, Map<String, List<PathOwner>> aliases, boolean modBasenames,
-			List<String> errors) {
+			List<String> errors, PairMemo pairs) {
 		String prefix = modBasenames ? "mod files" : "paths";
 		String suffix = modBasenames ? " share a basename in the live mods directory" : " alias on this platform";
 		for (List<PathOwner> owners : aliases.values()) {
@@ -176,7 +177,7 @@ public final class GroupManifestValidator {
 				PathOwner first = owners.get(i);
 				PathOwner second = owners.get(j);
 				if (first.path().equals(second.path())) continue;
-				if (first.groupId().equals(second.groupId()) || coSelectable(manifest, first.groupId(), second.groupId())) {
+				if (first.groupId().equals(second.groupId()) || pairs.coSelectable(first.groupId(), second.groupId())) {
 					errors.add(platform.id() + ": " + prefix + " '" + first.path() + "' (group '" + first.groupId() + "') and '" + second.path()
 							+ "' (group '" + second.groupId() + "')" + suffix);
 				}
@@ -267,7 +268,7 @@ public final class GroupManifestValidator {
 		}
 	}
 
-	private static void validateOverlaps(GroupManifest manifest, List<String> errors) {
+	private static void validateOverlaps(GroupManifest manifest, List<String> errors, PairMemo pairs) {
 		Map<String, List<Map.Entry<String, GroupManifest.GroupFile>>> byPath = new LinkedHashMap<>();
 		for (var groupEntry : manifest.groups().entrySet())
 			for (var fileEntry : groupEntry.getValue().files().entrySet())
@@ -279,25 +280,44 @@ public final class GroupManifestValidator {
 				var first = owners.get(i);
 				var second = owners.get(j);
 				if (first.getValue().sameEffectiveState(second.getValue())) continue;
-				if (coSelectable(manifest, first.getKey(), second.getKey()))
+				if (pairs.coSelectable(first.getKey(), second.getKey()))
 					errors.add("Path '" + pathEntry.getKey() + "' differs between co-selectable groups '"
 							+ first.getKey() + "' and '" + second.getKey() + "'");
 			}
 		}
 	}
 
-	private static boolean coSelectable(GroupManifest manifest, String first, String second) {
-		for (ClientPlatform platform : coveredPlatforms(manifest)) {
-			GroupManifest.Group firstGroup = manifest.groups().get(first);
-			GroupManifest.Group secondGroup = manifest.groups().get(second);
-			if (!firstGroup.supports(platform) || !secondGroup.supports(platform)) continue;
-			try {
-				ResolvedSelection selection = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of(first, second)), platform);
-				if (selection.selectedGroups().contains(first) && selection.selectedGroups().contains(second)) return true;
-			} catch (SelectionResolutionException ignored) {
-			}
+	/**
+	 * Per-validation memo for the pair check. The resolver run per pair per platform is the validator's only
+	 * super-linear cost, and the same pair is asked repeatedly across the alias, ancestor, and overlap passes;
+	 * one memo per {@code validate} keeps a hostile catalogue from multiplying resolver runs.
+	 */
+	private static final class PairMemo {
+		private final GroupManifest manifest;
+		private final Map<String, Boolean> cache = new HashMap<>();
+
+		PairMemo(GroupManifest manifest) {
+			this.manifest = manifest;
 		}
-		return false;
+
+		boolean coSelectable(String first, String second) {
+			String key = first.compareTo(second) < 0 ? first + "\n" + second : second + "\n" + first;
+			return cache.computeIfAbsent(key, ignored -> computeCoSelectable(first, second));
+		}
+
+		private boolean computeCoSelectable(String first, String second) {
+			for (ClientPlatform platform : coveredPlatforms(manifest)) {
+				GroupManifest.Group firstGroup = manifest.groups().get(first);
+				GroupManifest.Group secondGroup = manifest.groups().get(second);
+				if (!firstGroup.supports(platform) || !secondGroup.supports(platform)) continue;
+				try {
+					ResolvedSelection selection = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of(first, second)), platform);
+					if (selection.selectedGroups().contains(first) && selection.selectedGroups().contains(second)) return true;
+				} catch (SelectionResolutionException ignored) {
+				}
+			}
+			return false;
+		}
 	}
 
 	private static Set<ClientPlatform> validatePlatforms(String groupId, Set<String> input, List<String> errors) {
