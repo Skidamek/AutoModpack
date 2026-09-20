@@ -156,6 +156,7 @@ def _start_client_container(ctx: Context, name: str, *, prepare_only: bool = Fal
             "JAVA_TOOL_OPTIONS": "-Xmx2G",
         },
         mounts=[
+            (_launcher_meta_dir(ctx), "/work", False),
             (ctx.game_dir, "/work/game", False),
             (hmc_cache_root, "/work/hmc-cache", False),
             (shared_versions, "/work/hmc-shared-versions", False),
@@ -366,6 +367,28 @@ def _record_prepared_client_profile(ctx: Context) -> None:
 
 def _client_preparation_name(ctx: Context) -> str:
     return ctx.cli_name.replace("-c-", "-p-", 1)
+
+
+def _launcher_meta_dir(ctx: Context) -> Path:
+    """Host dir mounted over the client container's /work (the game directory's
+    parent, where the launcher metadata writers probe). Scenario plants
+    mmc-pack.json here and the mod's switch rewrites it in place, so the
+    switched state survives relaunches without any seeding step. The game,
+    cache, and shared-versions mounts nest on top of it."""
+    directory = ctx.game_dir.parent / "launcher-meta"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+@verb("plant_launcher_metadata")
+def _v_plant_launcher_metadata(ctx: Context, step):
+    """Plant launcher metadata files (e.g. mmc-pack.json) beside the client game directory."""
+    files = step.get("files")
+    if not isinstance(files, dict) or not files:
+        raise ValueError("plant_launcher_metadata requires a non-empty files mapping")
+    directory = _launcher_meta_dir(ctx)
+    for name, content in files.items():
+        (directory / name).write_text(str(ctx.resolve(content)), encoding="utf-8")
 
 
 @verb("prepare_client")

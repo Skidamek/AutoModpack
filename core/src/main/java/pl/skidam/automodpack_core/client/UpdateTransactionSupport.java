@@ -1,10 +1,9 @@
 package pl.skidam.automodpack_core.client;
 
 import java.io.IOException;
+import java.util.EnumSet;
+import java.util.Set;
 
-import pl.skidam.automodpack_core.Constants;
-import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.launchers.LauncherVersionSwapper;
 import pl.skidam.automodpack_core.storage.GameDirectory;
@@ -20,35 +19,26 @@ public final class UpdateTransactionSupport {
 		return ClientStorage.open(GameDirectory.current());
 	}
 
-	/** The executor for a booted client or server process, whose Constants carry the client session state. */
-	public static UpdateTransactionExecutor executor() {
-		return executor(Constants.clientConfig, Constants.LOADER);
-	}
-
 	/**
-	 * The executor with explicit client session state. The helper process has no boot and passes nulls: the launcher
-	 * metadata step then reads the config from storage and stands in the manifest's own loader for the client's.
+	 * The executor for a booted client or server process and for the detached helper alike: the planned switch axes
+	 * ride the transaction's restart reasons, so no client session state is needed to apply the launcher metadata.
 	 */
-	public static UpdateTransactionExecutor executor(ClientConfigJsons.ClientConfigFieldsV3 clientConfig, String clientLoader) {
+	public static UpdateTransactionExecutor executor() {
 		ClientStorage storage = storage();
-		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(storage, (transaction, manifest) -> applyLauncherMetadata(clientConfig, clientLoader, storage, transaction, manifest)));
+		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(storage, (transaction, manifest) -> applyLauncherMetadata(transaction, manifest)));
 	}
 
-	private static void applyLauncherMetadata(ClientConfigJsons.ClientConfigFieldsV3 clientConfig, String clientLoader, ClientStorage storage, UpdateTransaction transaction,
-			ModpackJsons.ModpackContentFields manifest) throws IOException {
-		if (!transaction.plan().restartReasons().contains(RestartReason.CHANGED_LOADER_VERSION)) return;
-		ClientConfigJsons.ClientConfigFieldsV3 config = clientConfig != null ? clientConfig : readClientConfig(storage);
-		// Without a seeded client loader the manifest's own loader is the only stand-in, so the type check degenerates and the version decides.
-		String loader = clientLoader != null ? clientLoader : manifest.loader;
-		if (!LauncherVersionSwapper.requiresLoaderVersionSwap(manifest.loader, manifest.loaderVersion, config.syncLoaderVersion, loader)) return;
-		if (!LauncherVersionSwapper.swapLoaderVersion(manifest.loader, manifest.loaderVersion, config.syncLoaderVersion, loader))
-			throw new IOException("Planned launcher loader-version change is no longer applicable");
-		if (LauncherVersionSwapper.requiresLoaderVersionSwap(manifest.loader, manifest.loaderVersion, config.syncLoaderVersion, loader))
-			throw new IOException("Planned launcher loader-version change did not converge");
+	private static void applyLauncherMetadata(UpdateTransaction transaction, ModpackJsons.ModpackContentFields manifest) throws IOException {
+		EnumSet<LauncherVersionSwapper.Axis> axes = switchAxes(transaction.plan().restartReasons());
+		if (axes.isEmpty()) return;
+		LauncherVersionSwapper.apply(axes, manifest.loader, manifest.loaderVersion, manifest.mcVersion);
 	}
 
-	private static ClientConfigJsons.ClientConfigFieldsV3 readClientConfig(ClientStorage storage) throws IOException {
-		return ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
-				.orElseThrow(() -> new IOException("Client config is missing while applying launcher metadata"));
+	private static EnumSet<LauncherVersionSwapper.Axis> switchAxes(Set<RestartReason> reasons) {
+		EnumSet<LauncherVersionSwapper.Axis> axes = EnumSet.noneOf(LauncherVersionSwapper.Axis.class);
+		if (reasons.contains(RestartReason.CHANGED_GAME_VERSION)) axes.add(LauncherVersionSwapper.Axis.GAME_VERSION);
+		if (reasons.contains(RestartReason.CHANGED_LOADER_TYPE)) axes.add(LauncherVersionSwapper.Axis.LOADER_TYPE);
+		if (reasons.contains(RestartReason.CHANGED_LOADER_VERSION)) axes.add(LauncherVersionSwapper.Axis.LOADER_VERSION);
+		return axes;
 	}
 }

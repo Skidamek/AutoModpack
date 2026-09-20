@@ -16,7 +16,7 @@ prepared_profile="${AM_AUTOTEST_HMC_PREPARED:-false}"
 prepare_only="${AM_AUTOTEST_PREPARE_ONLY:-false}"
 display_start_seconds="${AM_AUTOTEST_DISPLAY_START_SECONDS:-5}"
 
-mkdir -p "$game_dir" "$cache_dir"
+mkdir -p "$game_dir" "$cache_dir" /work/HeadlessMC
 
 # ── Share client-jar cache across targets ──────────────────────────────
 shared_versions="/work/hmc-shared-versions"

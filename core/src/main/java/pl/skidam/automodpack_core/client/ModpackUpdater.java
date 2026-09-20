@@ -392,6 +392,12 @@ public class ModpackUpdater implements AutoCloseable {
 		sourceCatalogue.startSourceFetch();
 		UpdateSession launch = beginUpdateAttempt();
 		launch.prepare(false, false);
+		if (launch.prepared().plan().restartReasons().contains(UpdatePlan.RestartReason.MANUAL_VERSION_SWITCH)) {
+			LOGGER.warn(
+					"Launch apply skipped: the selected pack needs Minecraft {} ({}) and this launcher cannot switch versions automatically - join the server in-game to sync it, then set the instance's version manually",
+					serverModpackContent.mcVersion, serverModpackContent.loader);
+			return;
+		}
 		if (review.planWritesUnverifiedJar(launch.prepared().plan())) {
 			LOGGER.warn("Launch apply aborted: unverified jars will not be written during preload; leaving the live pack unchanged");
 			return;

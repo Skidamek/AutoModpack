@@ -6,7 +6,7 @@ Most launchers work as-is. Custom clients that replace the game's loading pipeli
 | Pandora | Works | Recommended: sandboxing on all platforms and automatic version switching |
 | Prism / MultiMC | Works | With automatic version switching |
 | Modrinth App | Works | Manual version changes |
-| CurseForge | Works | With automatic version switching |
+| CurseForge | Works | Manual version changes |
 | GDLauncher | Works | |
 | ATLauncher | Works | Manual version changes |
 | Android launchers | Work | Reported working |
@@ -18,8 +18,8 @@ Most launchers work as-is. Custom clients that replace the game's loading pipeli
 
 The server can publish the versions a pack needs: the modloader type, the modloader version, and the Minecraft version. Publishing is controlled by `advertiseVersionsToSync` in the [server config](../configuration/server-config) (named `syncLoaderVersion` before v5).
 
-AutoModpack applies that metadata to the launcher instance itself on Prism, MultiMC forks, Pandora, and CurseForge app instances. A loader-version bump is applied the same way as in v4. A pack switch that needs a different Minecraft version or a different modloader rewrites the launcher's instance metadata, and the change is picked up on the next launch. On CurseForge the switch also restarts the CurseForge agent, which is expected.
+AutoModpack applies that metadata on Prism, MultiMC forks, and Pandora. A pack switch that needs a different Minecraft version or a different modloader rewrites the instance files, and the launcher picks the change up on the next game launch. Prism and MultiMC forks write `mmc-pack.json`. Pandora writes `info_v1.json`. Sandboxed Pandora instances keep their game files outside the instance folder and are not detected, so use a non-sandboxed instance for version switching. Quilt is not a switch target: AutoModpack switches between Fabric, Forge and NeoForge only.
 
-Before changing anything, AutoModpack asks the Prism meta server whether it knows the target versions. If it does not, the versions are left alone rather than risk installing something the launcher cannot resolve. Server owners can stop publishing version metadata entirely with `advertiseVersionsToSync: false`, and players can refuse the sync per instance with `syncLoaderVersion: false` in the [client config](../configuration/client-config).
+Before changing anything, AutoModpack asks the Prism meta server whether it knows the target versions. If it does not, the versions are left alone. Server owners can stop publishing version metadata with `advertiseVersionsToSync: false`, and players can refuse the sync per instance with `syncLoaderVersion: false` in the [client config](../configuration/client-config).
 
-AutoModpack cannot switch launchers it does not manage: the vanilla launcher, Modrinth App, ATLauncher, and custom instances. A pack that needs different versions is then not applied at launch. The client says which versions to change by hand before the next start. Joining the server in-game still syncs the pack files.
+On every other launcher, a pack that needs different versions is not applied at launch. After you join in-game, the pack files still sync, and the restart screen names the Minecraft version and loader to set in the launcher before the next start.

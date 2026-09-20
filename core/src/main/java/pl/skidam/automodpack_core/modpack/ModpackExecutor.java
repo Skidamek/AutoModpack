@@ -416,7 +416,7 @@ public class ModpackExecutor {
 		try (FileCache fileCache = FileCache.open(dataLayout.fileCacheDirectory());
 				ModFileCache modFileCache = ModFileCache.open(dataLayout.modCacheDirectory())) {
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
-					serverConfig.syncLoaderVersion ? LOADER_VERSION : null, MC_VERSION, serverRoot, groupRoot, serverConfig.modpack,
+					serverConfig.advertiseVersionsToSync ? LOADER_VERSION : null, MC_VERSION, serverRoot, groupRoot, serverConfig.modpack,
 					serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()), creationExecutor,
 					generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects);
 			ModpackCandidate candidate = candidateScan.scan(request);

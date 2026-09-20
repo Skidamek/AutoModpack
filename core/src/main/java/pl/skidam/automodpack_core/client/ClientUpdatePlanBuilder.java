@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.client;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.Constants.MC_VERSION;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -160,9 +161,24 @@ final class ClientUpdatePlanBuilder {
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, input.target(), files, forceCopyServices, targetMods, standardMods,
 				previousCopies, nestedCandidates, selection, plannedConfig, input.consentedLocalModFiles()));
-		if (!LauncherVersionSwapper.requiresLoaderVersionSwap(input.target().loader, input.target().loaderVersion, logicalConfig.syncLoaderVersion, loaderType))
-			return new PreparedPlan(plan, files, targetOverlay.digest(), expectedClientConfig);
-		return new PreparedPlan(plan.withRestartReason(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION), files, targetOverlay.digest(), expectedClientConfig);
+		return new PreparedPlan(withSwitchConsequences(plan, input.target(), logicalConfig.syncLoaderVersion), files, targetOverlay.digest(), expectedClientConfig);
+	}
+
+	/** Refuses a pack this client cannot run, plans the launcher-metadata switch (with its restart demand) when it can, and marks the manual switches. */
+	private UpdatePlan withSwitchConsequences(UpdatePlan plan, ModpackJsons.ModpackContentFields target, boolean syncVersions) throws IOException {
+		LauncherVersionSwapper.SwitchPlan switchPlan = LauncherVersionSwapper.planSwitch(target.loader, target.loaderVersion, target.mcVersion, syncVersions, loaderType, MC_VERSION);
+		if (switchPlan.refused()) throw new IOException(switchPlan.refusedReason());
+		if (!switchPlan.required()) return plan;
+		if (switchPlan.manual()) return plan.withRestartReason(UpdatePlan.RestartReason.MANUAL_VERSION_SWITCH);
+		return plan.withRestartReasons(switchReasons(switchPlan.axes()));
+	}
+
+	private static Set<UpdatePlan.RestartReason> switchReasons(EnumSet<LauncherVersionSwapper.Axis> axes) {
+		Set<UpdatePlan.RestartReason> reasons = new LinkedHashSet<>();
+		if (axes.contains(LauncherVersionSwapper.Axis.GAME_VERSION)) reasons.add(UpdatePlan.RestartReason.CHANGED_GAME_VERSION);
+		if (axes.contains(LauncherVersionSwapper.Axis.LOADER_TYPE)) reasons.add(UpdatePlan.RestartReason.CHANGED_LOADER_TYPE);
+		if (axes.contains(LauncherVersionSwapper.Axis.LOADER_VERSION)) reasons.add(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION);
+		return reasons;
 	}
 
 	RemovalPreparation prepareRemoval() throws Exception {

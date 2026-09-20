@@ -1,0 +1,48 @@
+id: launcher-version-switch
+description: |
+  A client whose launcher metadata (a planted MultiMC mmc-pack.json) describes a
+  different Minecraft version and modloader than the server's pack: the first
+  sync downloads the pack, rewrites the launcher metadata (the Minecraft component
+  is switched and the Forge component is replaced by the pack's loader), and the
+  update demands a restart. The restarted client's metadata is converged, so the
+  rejoin reaches in-game with no second switch. The planted file is seeded
+  no-clobber, which is what lets the switched state survive the relaunch.
+renderClient: true
+
+# The switch flow is connection-agnostic; run it through the fast default path.
+connectionPaths:
+  - mode: HOLEPUNCH
+    bindPort: -1
+    endpointPort: 25565
+
+flow:
+  - do: plant_launcher_metadata
+    name: plant MultiMC metadata describing forge 1.20.1 while the pack is this target's loader
+    files:
+      mmc-pack.json: '{"formatVersion":1,"components":[{"uid":"net.minecraft","version":"1.20.1"},{"uid":"net.minecraftforge","version":"47.4.0","cachedVersion":"47.4.0"}]}'
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - do: assert
+    name: verify the launcher metadata switch ran against the planted instance
+    that:
+      all:
+        - log:
+            container: client
+            matches: 'MultiMC/Prism: switched launcher metadata to'
+  - use: restart_client
+  - use: rejoin
+  - do: assert
+    name: verify the second boot needed no further switch (rejoin only lands in-game when the metadata converged)
+    that:
+      all:
+        - file: "../launcher-meta/mmc-pack.json"
+  - do: quit
+    name: quit the client
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  files:
+    - path: config/amp-autotest-switch.txt
+      content: "launcher-version-switch\n"
