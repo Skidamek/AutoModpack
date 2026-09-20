@@ -468,6 +468,48 @@ class UpdatePlannerTest {
 		assertTrue(plan.restartReasons().contains(RestartReason.SELECTED_MODPACK));
 	}
 
+	@Test
+	void editableModsMaterializeInTheWorkingDirectoryOnFirstInstall() {
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(
+				"mods/edit.jar", editableItem("mods/edit.jar", TARGET_HASH, 9, "mod"),
+				"mods/locked.jar", item("mods/locked.jar", OTHER_HASH, 9, "mod")),
+				ledger(entry("mods/edit.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT),
+						entry("mods/locked.jar", OTHER_HASH, 9, OwnershipLedger.Status.PRESENT)));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(), Set.of(),
+				List.of(mod("mods/edit.jar", TARGET_HASH, "edit"), mod("mods/locked.jar", OTHER_HASH, "locked")), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR
+				&& operation.relativePath().equals("mods/edit.jar") && operation.operation() == OperationType.INSTALL_OBJECT));
+		assertFalse(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR
+				&& operation.relativePath().equals("mods/locked.jar")));
+	}
+
+	@Test
+	void editedEditableModsAreNotDuplicateResolved() {
+		ModpackJsons.ModpackContentFields installed = packManifest("packaa1",
+				Map.of("mods/edit.jar", editableItem("mods/edit.jar", OLD_HASH, 9, "mod")), entry("mods/edit.jar", OLD_HASH, 9, OwnershipLedger.Status.PRESENT));
+		ModpackJsons.ModpackContentFields target = packManifest("packaa1",
+				Map.of("mods/edit.jar", editableItem("mods/edit.jar", OLD_HASH, 9, "mod")), entry("mods/edit.jar", OLD_HASH, 9, OwnershipLedger.Status.PRESENT));
+		Map<FileKey, FileState> files = Map.of(
+				new FileKey(Root.PROJECTION, "mods/edit.jar"), new FileState(OLD_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, "mods/edit.jar"), new FileState(OTHER_HASH, 9, true),
+				new FileKey(Root.OVERLAY, "mods/edit.jar"), new FileState(OTHER_HASH, 9, true));
+		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext("packaa1", installed, Map.of());
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Set.of(),
+				List.of(mod("mods/edit.jar", OLD_HASH, "edit")), List.of(mod("mods/edit.jar", OTHER_HASH, "edit")), List.of(), List.of(), selection,
+				config("packaa1")));
+
+		// The player's edited copy is overlay state, not a duplicate: no conflict, no deletion, live keeps the player's bytes.
+		assertTrue(plan.conflicts().isEmpty());
+		assertFalse(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR
+				&& operation.relativePath().equals("mods/edit.jar") && operation.operation() == OperationType.DELETE));
+		assertTrue(plan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR
+				&& file.relativePath().equals("mods/edit.jar") && OTHER_HASH.equals(file.expectedHash())));
+	}
+
 	private static UpdatePlanner.Input input(ModpackJsons.ModpackContentFields target, Map<FileKey, FileState> files) {
 		return new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3());
 	}

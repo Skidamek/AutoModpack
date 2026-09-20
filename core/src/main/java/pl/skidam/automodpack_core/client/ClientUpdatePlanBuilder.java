@@ -284,8 +284,15 @@ final class ClientUpdatePlanBuilder {
 			}
 			Path live = livePath(item);
 			Path overlay = storage.overlayFile(activeTarget.modpackId, item.file);
+			var targetItem = sameModpackTarget ? targetItems.get(LogicalPath.normalize(item.file)) : null;
 			if (!Files.isRegularFile(live, LinkOption.NOFOLLOW_LINKS)) {
 				if (projection.matchesPendingGameState(item.file, new UpdatePlan.FileState(null, -1, false))) continue;
+				if (targetItem != null && !targetItem.sha1.equalsIgnoreCase(item.sha1)) {
+					// The pack replaced the content while the file was removed: the removal intent is spent and the new version comes back.
+					Files.deleteIfExists(overlay);
+					deletedPaths.remove(LogicalPath.normalize(item.file));
+					continue;
+				}
 				Files.deleteIfExists(overlay);
 				deletedPaths.add(LogicalPath.normalize(item.file));
 				continue;
@@ -299,7 +306,6 @@ final class ClientUpdatePlanBuilder {
 				deletedPaths.remove(LogicalPath.normalize(item.file));
 				continue;
 			}
-			var targetItem = sameModpackTarget ? targetItems.get(LogicalPath.normalize(item.file)) : null;
 			if (targetItem != null && !targetItem.sha1.equalsIgnoreCase(item.sha1)) {
 				// The pack owner replaced the file: leave the player's bytes in place and let the plan install the new
 				// server version once; the update entry's captures pin the replaced bytes for the state history.

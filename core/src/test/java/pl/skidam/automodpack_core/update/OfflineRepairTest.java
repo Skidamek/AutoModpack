@@ -63,6 +63,24 @@ class OfflineRepairTest {
 	}
 
 	@Test
+	void editableModCopiesAreNotOfferedForArchive() throws Exception {
+		ClientStorage storage = storage();
+		byte[] packBytes = "pack-mod".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(packBytes);
+		SelectedModpackTarget target = install(storage, new FileSpec("mods/edit.jar", "mod", true, hash, packBytes.length));
+		write(storage.activePath("mods/edit.jar"), packBytes);
+		byte[] edited = "player-mod".getBytes(StandardCharsets.UTF_8);
+		write(storage.gamePath("mods/edit.jar"), edited);
+		OfflineRepair repair = new OfflineRepair(storage);
+
+		OfflineRepair.Prepared before = repair.inspect(new OfflineRepair.Request(target, Set.of(), null));
+
+		// The live copy of an editable mod belongs to the pack until the player removes it; its divergence is a reset candidate, not unowned clutter.
+		assertTrue(before.unownedModPaths().isEmpty());
+		assertEquals(Set.of("mods/edit.jar"), before.editableResetCandidates().stream().map(OfflineRepair.EditableResetCandidate::logicalPath).collect(Collectors.toSet()));
+	}
+
+	@Test
 	void reportsUnavailableBytesWithoutChangingDamagedFiles() throws Exception {
 		ClientStorage storage = storage();
 		byte[] expectedBytes = "unavailable".getBytes(StandardCharsets.UTF_8);

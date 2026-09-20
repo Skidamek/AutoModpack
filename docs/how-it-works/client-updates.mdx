@@ -20,7 +20,9 @@ Everything else downloads from the modpack host over its TLS connection. Those t
 
 ## Editable files
 
-`allowEditsInFiles` marks pack files players may change, such as `options.txt` and `config/**` by default. The client records the player's copy in an overlay that shadows the pack version, so ordinary edits survive every update.
+`allowEditsInFiles` marks pack files players may change, such as `options.txt` and `config/**` by default. Every editable file keeps its copy in the game directory, no matter the type: an editable mod jar materializes in the standard `mods` folder and loads from there. The client records the player's copy in an overlay that shadows the pack version, so ordinary edits survive every update.
+
+Removing an editable file is a statement, not an accident: the file stays away through updates and through edits to other files. When the server replaces that file's content, the removal is spent and the new version comes back.
 
 The comparison that matters is between the server's new generation and the generation currently installed. When the server changes an editable file:
 
@@ -30,7 +32,7 @@ The comparison that matters is between the server's new generation and the gener
 
 An operator who wants a file's edits to never be replaced simply never changes that file on the server. Every editable file follows the same rule; there is no second list.
 
-A file that is *not* editable but no longer matches the pack is treated the same way: the player's bytes are recorded on the instance timeline, then the pack version is written.
+A file that is *not* editable but no longer matches the pack is treated the same way: the player's bytes are recorded on the instance timeline, then the pack version is written. The instance timeline labels these files *Brought back in sync with the pack*, so silent sync-backs of files that rewrite themselves, like configs with a timestamp header, are visible in the file list with their older bytes one restore away.
 
 ## Deletions are measured
 

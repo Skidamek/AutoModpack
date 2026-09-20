@@ -121,7 +121,8 @@ public final class StateHistoryScreen extends VersionedScreen {
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows) - 6;
 		List<RowListWidget.Row> listRows = new ArrayList<>();
 		List<TrackedFile> shown = selectedFiles();
-		for (TrackedFile file : shown) listRows.add(fileRow(file));
+		Map<String, StateHistory.FileDiff> diffsByFile = diffsByFile();
+		for (TrackedFile file : shown) listRows.add(fileRow(file, diffsByFile.get(fileKey(file))));
 		this.files = this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, this.width - 20, 0, 64, listBottom, 24, listRows, this::pickFile));
 		selectFileRow();
 		TrackedFile selectedFile = selectedFile();
@@ -155,8 +156,27 @@ public final class StateHistoryScreen extends VersionedScreen {
 		return new RowListWidget.Row(List.of(title, VersionedText.literal(summary).withStyle(ChatFormatting.GRAY)));
 	}
 
-	private RowListWidget.Row fileRow(TrackedFile file) {
-		return new RowListWidget.Row(List.of(VersionedText.literal(rootLabel(file.root()) + " · " + file.path()).withStyle(ChatFormatting.WHITE)));
+	private RowListWidget.Row fileRow(TrackedFile file, StateHistory.FileDiff diff) {
+		MutableComponent title = VersionedText.literal(rootLabel(file.root()) + " · " + file.path()).withStyle(ChatFormatting.WHITE);
+		if (diff != null && diff.broughtBackToPack())
+			return new RowListWidget.Row(List.of(title, VersionedText.text("automodpack.stateHistory.broughtBack").withStyle(ChatFormatting.GRAY)));
+		return new RowListWidget.Row(List.of(title));
+	}
+
+	private Map<String, StateHistory.FileDiff> diffsByFile() {
+		Snapshot selected = selectedEntry();
+		StateHistory.SnapshotView view = selected == null ? null : view(selected.seq());
+		if (view == null) return Map.of();
+		Map<String, StateHistory.FileDiff> diffs = new HashMap<>();
+		for (StateHistory.FileDiff diff : view.diffs()) {
+			TrackedFile side = diff.after() == null ? diff.before() : diff.after();
+			if (side != null) diffs.put(fileKey(side), diff);
+		}
+		return diffs;
+	}
+
+	private static String fileKey(TrackedFile file) {
+		return file.root() + ":" + file.overlayPackId() + ":" + file.path();
 	}
 
 	private MutableComponent restoreTooltip(Snapshot selected, StateHistory.Restorability option) {

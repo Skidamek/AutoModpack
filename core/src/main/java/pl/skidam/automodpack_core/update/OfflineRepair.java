@@ -384,7 +384,7 @@ public final class OfflineRepair {
 		String contentToken = request.activeTarget().packTarget().contentToken();
 
 		// The state reader validates editable tombstone identity and canonical paths.
-		storage.readOverlayState(modpackId);
+		ClientStorageJsons.ClientOverlayFields overlayState = storage.readOverlayState(modpackId);
 		Map<String, Observation> overlays = inspectOverlay(modpackId, fileCache, observations, observationsByFileKey);
 		for (var item : request.activeTarget().flatTarget().list.stream().sorted(Comparator.comparing(value -> LogicalPath.normalize(value.file))).toList()) {
 			String logicalPath = LogicalPath.normalize(item.file);
@@ -417,6 +417,11 @@ public final class OfflineRepair {
 
 		Set<String> ownedLiveMods = new TreeSet<>();
 		for (Expected value : expected.values()) if ((value.place() == Place.LIVE || value.place() == Place.GENERATED_COPY) && ModpackPathPolicy.isModPath(value.logicalPath())) ownedLiveMods.add(value.logicalPath());
+		// Editable mod files keep a live copy in the game directory; until the player removes one, that copy belongs to the pack, not to the unowned-mod archive.
+		for (var item : request.activeTarget().flatTarget().list) {
+			String editablePath = LogicalPath.normalize(item.file);
+			if (item.editable && !overlayState.deletedPaths.contains(editablePath) && ModpackPathPolicy.isActiveMod(editablePath, item.type)) ownedLiveMods.add(editablePath);
+		}
 		List<String> unownedMods = inspectMods(request.protectedModPath(), ownedLiveMods, fileCache, observations, observationsByFileKey);
 		for (Expected value : expected.values()) observe(value.path(), value.root(), fileCache, observations, observationsByFileKey);
 

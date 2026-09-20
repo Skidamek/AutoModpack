@@ -15,6 +15,7 @@ import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.ContentTree;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -28,6 +29,7 @@ import pl.skidam.automodpack_core.update.InstanceTree.TrackedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
+import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -46,7 +48,7 @@ public final class StateHistory {
 		AVAILABLE, NOT_GAME_DIR, OWNED, PROTECTED
 	}
 
-	public record FileDiff(TrackedFile before, TrackedFile after) {
+	public record FileDiff(TrackedFile before, TrackedFile after, boolean broughtBackToPack) {
 		public JournalEntry.Change.Kind kind() {
 			if (before == null) return JournalEntry.Change.Kind.ADDED;
 			if (after == null) return JournalEntry.Change.Kind.REMOVED;
@@ -73,18 +75,42 @@ public final class StateHistory {
 					extra.addAll(tree.keys());
 				}
 				InstanceTree live = InstanceTree.observe(storage, extra, cache);
+				Map<String, Set<String>> packVersions = packVersions(storage);
 				List<SnapshotView> views = new ArrayList<>();
 				for (Snapshot snapshot : journal.entries()) {
 					InstanceTree tree = trees.get(snapshot.treeSha1());
 					InstanceTree parent = snapshot.parentSeq() == ClientStateJournal.NO_PARENT ? null : trees.get(journal.require(snapshot.parentSeq()).treeSha1());
-					views.add(new SnapshotView(snapshot, tree, diff(parent, tree), restorabilityOf(storage, tree, live, cache)));
+					views.add(new SnapshotView(snapshot, tree, diff(parent, tree, packVersions, snapshot.kind() != Kind.INSTALL),
+							restorabilityOf(storage, tree, live, cache)));
 				}
 				return List.copyOf(views);
 			}
 		});
 	}
 
+	/** Per logical path, every sha1 any installed pack generation ever declared: the receipt that bytes match the pack, not the player. */
+	private static Map<String, Set<String>> packVersions(ClientStorage storage) throws IOException {
+		Map<String, Set<String>> versions = new HashMap<>();
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		for (String modpackId : generations.installedPackIds()) {
+			for (JournalEntry entry : new JournalMirror(storage).entries(modpackId)) {
+				try {
+					for (var file : ContentTree.fromManifest(generations.policyDocument(entry.policySha1())).files().entrySet())
+						versions.computeIfAbsent(LogicalPath.normalize(file.getKey()), ignored -> new HashSet<>())
+								.add(HashUtils.normalizeSha1(file.getValue().sha1()));
+				} catch (IOException unavailable) {
+					// A generation whose policy is unavailable contributes no labels; the timeline itself does not depend on it.
+				}
+			}
+		}
+		return versions;
+	}
+
 	static List<FileDiff> diff(InstanceTree parent, InstanceTree current) {
+		return diff(parent, current, Map.of(), false);
+	}
+
+	static List<FileDiff> diff(InstanceTree parent, InstanceTree current, Map<String, Set<String>> packVersions, boolean labelBroughtBack) {
 		Map<Key, TrackedFile> before = new HashMap<>();
 		if (parent != null) for (TrackedFile file : parent.files()) before.put(file.key(), file);
 		Map<Key, TrackedFile> after = new HashMap<>();
@@ -97,7 +123,10 @@ public final class StateHistory {
 			TrackedFile left = before.get(key);
 			TrackedFile right = after.get(key);
 			if (left != null && right != null && left.sha1().equals(right.sha1()) && left.size() == right.size()) continue;
-			diffs.add(new FileDiff(left, right));
+			Set<String> packSha1s = packVersions.getOrDefault(key.path(), Set.of());
+			// The pack moving a path back to content it ships - over a local change or a removal - is the silent sync-back receipt.
+			boolean broughtBack = labelBroughtBack && right != null && packSha1s.contains(right.sha1()) && (left == null || !packSha1s.contains(left.sha1()));
+			diffs.add(new FileDiff(left, right, broughtBack));
 		}
 		return diffs;
 	}
@@ -113,7 +142,7 @@ public final class StateHistory {
 			String normalized = LogicalPath.normalize(path);
 			if (target.flatTarget().list != null)
 				for (var item : target.flatTarget().list)
-					if (LogicalPath.normalize(item.file).equals(normalized)) return FileGate.OWNED;
+					if (LogicalPath.normalize(item.file).equals(normalized)) return item.editable ? FileGate.AVAILABLE : FileGate.OWNED;
 			return FileGate.AVAILABLE;
 		}
 	}

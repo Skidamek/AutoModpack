@@ -40,7 +40,7 @@ Each group carries three rule lists, relative to the server root.
 |---|---|---|
 | `modpack.<category>.<id>.syncedFiles` | `mods/*.jar`, `kubejs/**`, `emotes/*` | Files pulled from the server root into the pack. The server root contributes only what a rule matches. |
 | `modpack.<category>.<id>.excludedFiles` | `kubejs/server_scripts/**` | Files kept out of the pack from every source. This is the only way to exclude something from the group directory, and it also carves exceptions out of `syncedFiles`. |
-| `modpack.<category>.<id>.allowEditsInFiles` | `options.txt`, `config/**` | Pack files that players may edit locally. Local edits survive updates until the server changes the file; see [client updates](../how-it-works/client-updates#editable-files). |
+| `modpack.<category>.<id>.allowEditsInFiles` | `options.txt`, `config/**` | Pack files that players may edit locally, mods included: editable mod jars live in the player's `mods` folder, replaceable and removable. Local edits survive updates until the server changes the file; see [client updates](../how-it-works/client-updates#editable-files). |
 
 ### Globbing wildcards
 

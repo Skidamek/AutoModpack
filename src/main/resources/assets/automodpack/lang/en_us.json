@@ -301,6 +301,7 @@
   "automodpack.stateHistory.restoreFile": "Restore file",
   "automodpack.stateHistory.restoreFileReady": "Puts the file back where it was. Refuses to overwrite a different file.",
   "automodpack.stateHistory.restoreFileOwned": "The active pack owns this path, so it cannot be restored while the pack uses it. Save a copy instead.",
+  "automodpack.stateHistory.broughtBack": "Brought back in sync with the pack — the file had been changed or removed locally.",
   "automodpack.stateHistory.restoreFileManaged": "Only game-directory files can be restored to their original path.",
   "automodpack.stateHistory.restoreFileProtected": "This is the running AutoModpack itself. Restoring over it could leave the game unable to update.",
   "automodpack.stateHistory.saveCopy": "Save copy",

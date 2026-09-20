@@ -176,13 +176,13 @@ public final class UpdatePlanner {
 		else
 			planServerKnownCleanup(ledger, targetItems.keySet(), session);
 		planSelectionChange(input, target, session);
-		Set<String> forceCopyPaths = new HashSet<>(input.forceCopyServicePaths());
+		Set<String> liveCopyPaths = liveCopyPaths(targetItems, input.forceCopyServicePaths());
 		Set<String> listedPins = listedPins(input);
 		Set<String> protectedIds = PinnedMods.protectedIds(listedPins, input.standardMods().stream().map(ModInfo::ids).toList());
-		planTargetInstalls(input, targetItems, forceCopyPaths, protectedIds, targetModsByPath, session);
+		planTargetInstalls(input, targetItems, liveCopyPaths, protectedIds, targetModsByPath, session);
 		List<NestedCopy> generatedCopies = ownedNestedCopies(input.nestedCopies());
 		planNestedCopies(input.previousNestedCopies(), generatedCopies, session);
-		planDuplicates(target.modpackId, input.targetMods(), input.standardMods(), forceCopyPaths, installedLedger, session, listedPins);
+		planDuplicates(target.modpackId, input.targetMods(), input.standardMods(), liveCopyPaths, installedLedger, session, listedPins);
 		planBaselineCaptures(input.files(), session);
 		return session.finalState(target.modpackId, packTarget, input.plannedClientConfig(), input.files(), target, ledger, false, null, generatedCopies);
 	}
@@ -228,8 +228,15 @@ public final class UpdatePlanner {
 		return Collections.unmodifiableMap(overlays);
 	}
 
+	/** Pack paths that keep a live copy in the working directory: editable files, which the player owns in place, and service mods the loader requires there. */
+	private static Set<String> liveCopyPaths(Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, Set<String> forceCopyServicePaths) {
+		Set<String> paths = new HashSet<>(forceCopyServicePaths);
+		for (var entry : targetItems.entrySet()) if (entry.getValue().editable) paths.add(entry.getKey());
+		return paths;
+	}
+
 	/** Installs every target manifest item into the projection, its overlay, and — when not protected from the player's mods directory — the live copy. */
-	private static void planTargetInstalls(Input input, Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, Set<String> forceCopyPaths,
+	private static void planTargetInstalls(Input input, Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, Set<String> liveCopyPaths,
 			Set<String> protectedIds, Map<String, ModInfo> targetModsByPath, PlanningSession session) {
 		Map<String, FileState> overlays = overlaysByRelative(input.files());
 		for (var item : targetItems.values()) {
@@ -245,7 +252,8 @@ public final class UpdatePlanner {
 				session.delete(new FileKey(Root.OVERLAY, relative), session.projected(new FileKey(Root.OVERLAY, relative)).sha1());
 			if (!matches(existing, item.sha1, item.size)) session.install(modpackKey, item.sha1, item.size);
 
-			boolean copyToLive = !PinnedMods.protects(protectedIds, idsForPath(targetModsByPath, relative)) && (!activeMod || forceCopyPaths.contains(relative) || overlay != null);
+			// Non-mod pack files always live in the working directory; mod files join them when they are editable or the loader requires their services there.
+			boolean copyToLive = !PinnedMods.protects(protectedIds, idsForPath(targetModsByPath, relative)) && (!activeMod || liveCopyPaths.contains(relative));
 			FileKey liveKey = liveKey(item);
 			if (copyToLive) {
 				FileState live = session.projected(liveKey);
@@ -482,7 +490,7 @@ public final class UpdatePlanner {
 		return List.copyOf(owned);
 	}
 
-	private static void planDuplicates(String modpackId, List<ModInfo> targetMods, List<ModInfo> standardMods, Set<String> forceCopyPaths,
+	private static void planDuplicates(String modpackId, List<ModInfo> targetMods, List<ModInfo> standardMods, Set<String> liveCopyPaths,
 			OwnershipLedger installedLedger, PlanningSession session, Set<String> listedPins) {
 		List<ModInfo> sortedTarget = targetMods.stream().filter(mod -> session.has(new FileKey(Root.PROJECTION, LogicalPath.normalize(mod.relativePath()))))
 				.sorted(Comparator.comparing(ModInfo::relativePath)).toList();
@@ -490,8 +498,13 @@ public final class UpdatePlanner {
 				.sorted(Comparator.comparing(ModInfo::relativePath)).toList();
 		Map<ModInfo, ModInfo> duplicates = new LinkedHashMap<>();
 		for (ModInfo target : sortedTarget) {
-			if (forceCopyPaths.contains(LogicalPath.normalize(target.relativePath()))) continue;
-			sortedStandard.stream().filter(standard -> intersects(target.ids(), standard.ids())).findFirst().ifPresent(standard -> duplicates.put(target, standard));
+			String targetPath = LogicalPath.normalize(target.relativePath());
+			// A live-copy path is resolved by editable-state reconciliation, not by duplicate resolution: neither its projection row
+			// nor the player's standard-directory jar may be deleted, vaulted or conflict-flagged as a duplicate of the other.
+			if (liveCopyPaths.contains(targetPath)) continue;
+			sortedStandard.stream()
+					.filter(standard -> intersects(target.ids(), standard.ids()) && !liveCopyPaths.contains(LogicalPath.normalize(standard.relativePath())))
+					.findFirst().ifPresent(standard -> duplicates.put(target, standard));
 		}
 		Set<ModInfo> keep = new HashSet<>();
 		for (ModInfo standard : sortedStandard) if (!duplicates.containsValue(standard)) addDependencies(standard, sortedStandard, keep);

@@ -87,6 +87,8 @@ What the example shows:
 - `options.txt` and everything under `config` in the pack is editable because `allowEditsInFiles` says so.
 - `config/ferritecore.mixin.properties` and `config/invisible-radio.json` exist on the server but not in the pack. `allowEditsInFiles` marks files that are already in the pack; it does not pull files in.
 
+Editable files keep their copy in the game directory, mods included: a mod matched by `allowEditsInFiles`, say `mods/customizable.jar`, materializes in the player's `mods` folder where they can edit or remove it. Mark a mod editable when players are expected to replace it themselves; leave it out and it stays in the projection, untouched.
+
 ## File rules
 
 `syncedFiles`, `excludedFiles`, and `allowEditsInFiles` live on each group and are documented with the [group settings](configuration/server-config#groups). All three lists speak the same glob language, described in [globbing](configuration/server-config#globbing-wildcards).
