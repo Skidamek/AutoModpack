@@ -37,12 +37,6 @@ public class ServerConfigJsons {
 		public String exportHttpDirectory = "";
 		/** Include every object in the HTTP contract export even when Modrinth or CurseForge serves it, keeping the host as the backstop for platform link rot. */
 		public boolean exportHttpIncludeAll = false;
-		/**
-		 * Server-relative or absolute path to an ogg file served as GET /music: the client's custom waiting track.
-		 * Streaming it is the operator's licensing responsibility; keep it small (clients cap it at 4 MiB and fall
-		 * back to the bundled track past that).
-		 */
-		public String waitingMusicFile = "";
 		public boolean selfUpdater = false;
 		/** Loaders a client may run the modpack with; seeded with this server's loader on first load only, never re-added after the admin edits the set. */
 		public Set<String> acceptedLoaders = new HashSet<>();

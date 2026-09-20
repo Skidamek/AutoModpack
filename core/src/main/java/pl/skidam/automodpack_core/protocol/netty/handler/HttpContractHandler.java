@@ -258,7 +258,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		if (length == 0) return finishBodyless(ctx, span, status, 0, etag, contentRange, keepAlive);
 
 		// Token matching on the lowercased header (multiple encodings and q-values included) is deliberately a contains check: zstd is the only encoding either end negotiates.
-		if (document && byteRange == null && acceptEncoding != null && acceptEncoding.toLowerCase(Locale.ROOT).contains("zstd")) {
+		if (byteRange == null && acceptEncoding != null && acceptEncoding.toLowerCase(Locale.ROOT).contains("zstd")) {
 			return serveCompressedDocument(ctx, file, total, etag, keepAlive, span, status);
 		}
 

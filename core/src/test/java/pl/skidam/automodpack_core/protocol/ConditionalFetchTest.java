@@ -35,6 +35,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.IntConsumer;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -68,7 +69,7 @@ class ConditionalFetchTest {
 		try (ContractServer server = new ContractServer()) {
 			server.store.put("head", "head-document".getBytes(StandardCharsets.UTF_8));
 			try (DownloadClient client = client(server, null)) {
-				client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), null, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 			}
 			assertNull(server.firstAuthorization.get(AWAIT_SECONDS, TimeUnit.SECONDS));
 		}
@@ -81,7 +82,7 @@ class ConditionalFetchTest {
 			server.bearerSecret = "a-bearer-secret";
 			server.store.put("head", "head-document".getBytes(StandardCharsets.UTF_8));
 			try (DownloadClient client = client(server, server.bearerSecret)) {
-				client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), null, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 			}
 			assertEquals("Bearer a-bearer-secret", server.firstAuthorization.get(AWAIT_SECONDS, TimeUnit.SECONDS));
 		}
@@ -94,7 +95,7 @@ class ConditionalFetchTest {
 			server.bearerSecret = "a-bearer-secret";
 			server.store.put("head", "head-document".getBytes(StandardCharsets.UTF_8));
 			try (DownloadClient client = client(server, null)) {
-				var future = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), null, null);
+				var future = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), null, (IntConsumer) null);
 				var thrown = assertThrows(ExecutionException.class, () -> future.get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertInstanceOf(UnauthorizedException.class, thrown.getCause());
 			}
@@ -110,11 +111,11 @@ class ConditionalFetchTest {
 			server.store.put("head", head);
 			server.store.put("journal", journal);
 			try (DownloadClient client = client(server, "test-secret")) {
-				var unchangedHead = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), HashUtils.sha1(head), null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var unchangedHead = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), HashUtils.sha1(head), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertNull(unchangedHead.path());
 				assertTrue(unchangedHead.unchanged());
 
-				var unchangedJournal = client.downloadDocument("journal".getBytes(StandardCharsets.UTF_8), directory.resolve("journal"), HashUtils.sha1(journal), null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var unchangedJournal = client.downloadDocument("journal".getBytes(StandardCharsets.UTF_8), directory.resolve("journal"), HashUtils.sha1(journal), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertNull(unchangedJournal.path());
 				assertTrue(unchangedJournal.unchanged());
 				assertFalse(Files.exists(directory.resolve("head")));
@@ -131,11 +132,11 @@ class ConditionalFetchTest {
 			server.store.put("head", oldHead);
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("head");
-				var first = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, HashUtils.sha1(oldHead), null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var first = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, HashUtils.sha1(oldHead), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertTrue(first.unchanged());
 
 				server.store.put("head", newHead);
-				var second = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, HashUtils.sha1(oldHead), null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var second = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, HashUtils.sha1(oldHead), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertFalse(second.unchanged());
 				assertEquals(destination, second.path());
 				assertArrayEquals(newHead, Files.readAllBytes(destination));
@@ -152,7 +153,7 @@ class ConditionalFetchTest {
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("head");
 				// The host ignored the conditional and sent the full body; the hash-compare is the ground truth.
-				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, HashUtils.sha1(head), null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, HashUtils.sha1(head), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertEquals(destination, fetch.path());
 				assertTrue(fetch.unchanged());
 				assertArrayEquals(head, Files.readAllBytes(destination));
@@ -168,7 +169,7 @@ class ConditionalFetchTest {
 			server.store.put("head", head);
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("head");
-				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, null, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertEquals(destination, fetch.path());
 				assertFalse(fetch.unchanged());
 				assertArrayEquals(head, Files.readAllBytes(destination));
@@ -187,7 +188,7 @@ class ConditionalFetchTest {
 			server.store.put("head", head);
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("head");
-				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, HashUtils.sha1(head), null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, HashUtils.sha1(head), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertEquals(destination, fetch.path());
 				assertTrue(fetch.unchanged(), "the decoded body hash still reads as unchanged");
 				assertArrayEquals(head, Files.readAllBytes(destination));
@@ -218,7 +219,7 @@ class ConditionalFetchTest {
 			server.store.put("head", head);
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("head");
-				client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, null, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertTrue(server.sawAcceptEncoding.get(), "the client offered zstd even to a host that ignores it");
 				assertFalse(server.lastResponseZstd.get());
 				assertArrayEquals(head, Files.readAllBytes(destination));
@@ -297,7 +298,7 @@ class ConditionalFetchTest {
 
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("journal");
-				var fetch = client.downloadDocument("journal".getBytes(StandardCharsets.UTF_8), destination, null, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var fetch = client.downloadDocument("journal".getBytes(StandardCharsets.UTF_8), destination, null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertEquals(destination, fetch.path());
 				assertFalse(fetch.unchanged());
 				assertArrayEquals(object, Files.readAllBytes(destination));
@@ -310,7 +311,7 @@ class ConditionalFetchTest {
 		try (ContractServer server = new ContractServer()) {
 			server.redirects.put("/head", "/head");
 			try (DownloadClient client = client(server, "test-secret")) {
-				var future = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), null, null);
+				var future = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), null, (IntConsumer) null);
 				assertThrows(ExecutionException.class, () -> future.get(AWAIT_SECONDS, TimeUnit.SECONDS));
 			}
 			// Three re-issues follow the initial request; the fourth redirect answer fails the fetch.

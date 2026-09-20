@@ -345,7 +345,13 @@ public class DownloadClient implements PackTransport {
 	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers 304 and {@code destination} is not written. */
 	@Override
 	public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer chunkCallback) {
-		return withSlot(0, connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex, chunkCallback));
+		return withSlot(0, connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex, chunkCallback, null));
+	}
+
+	/** The same fetch with a tap: served body bytes reach the tap (decode-while-downloading) and the destination alike. */
+	@Override
+	public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, OutputStream tap) {
+		return withSlot(0, connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex, null, tap));
 	}
 
 	/** Drops every pooled and in-flight transfer connection so a cancelled run cannot poison the next one. */

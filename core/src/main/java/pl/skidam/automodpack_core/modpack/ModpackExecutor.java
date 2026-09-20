@@ -29,6 +29,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.platforms.PlatformSourceLookup;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.Throwables;
@@ -388,16 +389,10 @@ public class ModpackExecutor {
 		return bound;
 	}
 
-	/** The configured waiting track joins the hosting map as the reserved music document; unconfigured or missing means the route 404s. */
+	/** The convention track joins the hosting map as the reserved music document; absent means the route 404s. */
 	private GenerationHosting withWaitingMusic(GenerationHosting hosting) {
-		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
-		String configured = serverConfig == null || serverConfig.waitingMusicFile == null ? "" : serverConfig.waitingMusicFile.trim();
-		if (configured.isEmpty()) return hosting;
-		Path music = serverRoot.resolve(configured).normalize();
-		if (!Files.isRegularFile(music)) {
-			LOGGER.warn("waitingMusicFile {} does not exist; the custom waiting track is not served", music);
-			return hosting;
-		}
+		Path music = serverRoot.resolve(StoragePaths.HOST_MODPACK_DIR).resolve("music.ogg").normalize();
+		if (!Files.isRegularFile(music)) return hosting;
 		Map<String, Path> paths = new TreeMap<>(hosting.asMap());
 		paths.put(GenerationHosting.MUSIC_DOCUMENT_KEY, music);
 		return new GenerationHosting(paths);

@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.audio;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.io.InputStream;
@@ -26,6 +27,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.sounds.SoundSource;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.client.WaitingMusic;
 import pl.skidam.automodpack_core.utils.Assets;
 
 /**
@@ -51,23 +53,7 @@ public class AudioManager {
 
 	private static final Object LOCK = new Object();
 	private static volatile Loop PLAYER;
-	/** The server's custom track once it lands in the client cache; the bundled jar track stays the default. */
-	private static volatile Path customTrack;
 
-	/** Swaps the waiting track for the server's custom one, restarting the loop when ambience is already playing. */
-	public static void offerCustomTrack(Path track) {
-		synchronized (LOCK) {
-			customTrack = track;
-			if (PLAYER != null) {
-				PLAYER.stop();
-				Loop loop = new Loop();
-				PLAYER = loop;
-				Thread thread = new Thread(loop, "AutoModpack waiting music");
-				thread.setDaemon(true);
-				thread.start();
-			}
-		}
-	}
 
 	/** Kept so every loader's init call site stays identical; the loop itself starts lazily in playMusic(). */
 	public AudioManager() {}
@@ -132,7 +118,19 @@ public class AudioManager {
 		}
 
 		private void playSession() {
-			byte[] pcm = decode();
+			WaitingMusic.Session session = WaitingMusic.current();
+			WaitingMusic.Kind kind = session == null ? WaitingMusic.Kind.BUNDLED : session.kind();
+			if (kind == WaitingMusic.Kind.STREAM) {
+				// A live stream plays sequentially and ends at EOF; a failure ends in silence rather than switching tracks mid-listen.
+				try (AudioStream stream = openStream(session.audio())) {
+					playLive(stream);
+				} catch (Exception e) {
+					Constants.LOGGER.error("The server's custom waiting music stream failed; stopping playback", e);
+				}
+				return;
+			}
+			Path custom = kind == WaitingMusic.Kind.LOOP ? session.loopFile() : null;
+			byte[] pcm = decode(custom);
 			if (pcm == null || stopped) return;
 			int format = openAlFormat(this.format);
 			if (format == AL10.AL_NONE) return;
@@ -141,6 +139,58 @@ public class AudioManager {
 			try (output) {
 				streamLoop(pcm, format, output);
 			}
+		}
+
+		/** Plays a live stream sequentially through the buffer ring: chunks queue as they arrive, and EOF drains then ends. */
+		private void playLive(AudioStream stream) throws Exception {
+			this.format = stream.getFormat();
+			int format = openAlFormat(this.format);
+			if (format == AL10.AL_NONE) return;
+			Output output = Output.open();
+			if (output == null) return;
+			try (output) {
+				ByteBuffer staging = ByteBuffer.allocateDirect(WRITE_CHUNK);
+				int buffers = output.buffers().length;
+				for (int i = 0; i < buffers && !stopped; i++) {
+					if (!fillLive(format, output.buffers()[i], staging, stream)) {
+						drain(output);
+						return;
+					}
+					output.queue(output.buffers()[i]);
+				}
+				output.play();
+				while (!stopped) {
+					int[] processed = output.takeProcessed();
+					for (int buffer : processed) {
+						if (!fillLive(format, buffer, staging, stream)) {
+							drain(output);
+							return;
+						}
+						output.queue(buffer);
+					}
+					if (processed.length > 0 && output.stoppedByStarvation()) output.play();
+					output.applyVolume();
+					sleepWhile();
+				}
+				output.stopSource();
+			}
+		}
+
+		private void drain(Output output) throws InterruptedException {
+			long deadline = System.currentTimeMillis() + 5000;
+			while (System.currentTimeMillis() < deadline && !stopped && output.takeProcessed().length < output.buffers().length) sleepWhile();
+			output.stopSource();
+		}
+
+		/** Reads one decoded chunk straight into an AL buffer; false means the stream ended. */
+		private boolean fillLive(int format, int buffer, ByteBuffer staging, AudioStream stream) throws IOException {
+			ByteBuffer chunk = stream.read(WRITE_CHUNK);
+			if (chunk == null || !chunk.hasRemaining()) return false;
+			byte[] bytes = new byte[chunk.remaining()];
+			chunk.get(bytes);
+			staging.clear().put(bytes).flip();
+			AL10.alBufferData(buffer, format, staging, (int) this.format.getSampleRate());
+			return true;
 		}
 
 		/** Feeds the source's buffer ring until stopped: refill processed buffers from the PCM, wrapping at its end; a source that starved to AL_STOPPED just gets replayed. */
@@ -194,9 +244,8 @@ public class AudioManager {
 			return format.getChannels() == 1 ? AL10.AL_FORMAT_MONO16 : AL10.AL_FORMAT_STEREO16;
 		}
 
-		/** Decodes the whole ogg through Minecraft's vorbis decoder; the PCM stays resident so looping never re-decodes. The server's custom track wins, and the bundled one is the fallback when it is missing or broken. */
-		private byte[] decode() {
-			Path custom = customTrack;
+		/** Decodes the whole ogg through Minecraft's vorbis decoder; the PCM stays resident so looping never re-decodes. A null path is the bundled asset. */
+		private byte[] decode(Path custom) {
 			if (custom != null) {
 				try (InputStream input = Files.newInputStream(custom)) {
 					byte[] pcm = decodeStream(input, "the server's custom waiting music " + custom);

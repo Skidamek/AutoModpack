@@ -12,6 +12,7 @@ import java.security.cert.X509Certificate;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.function.IntConsumer;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -115,7 +116,7 @@ public final class ManifestFetcher {
 			journalExpected = null;
 		}
 
-		return transport.downloadDocument(GenerationHosting.HEAD_DOCUMENT_KEY.getBytes(StandardCharsets.UTF_8), storage.modpackContentTempFile(), headExpected, null)
+		return transport.downloadDocument(GenerationHosting.HEAD_DOCUMENT_KEY.getBytes(StandardCharsets.UTF_8), storage.modpackContentTempFile(), headExpected, (IntConsumer) null)
 				.thenComposeAsync(fetch -> applyFetchedHead(storage, transport, selectedModpackId, headExpected, journalExpected, fetch), DownloadClient.NET_EXECUTOR).whenComplete((ignored, error) -> {
 					try {
 						Files.deleteIfExists(storage.modpackContentTempFile());
@@ -173,7 +174,7 @@ public final class ManifestFetcher {
 		}
 		if (!mirror.isStale(modpackId, content.contentToken)) return CompletableFuture.completedFuture(false);
 		LOGGER.info("Journal mirror is stale for modpack {}; fetching the full journal from the server", modpackId);
-		return transport.downloadDocument(GenerationHosting.JOURNAL_KEY.getBytes(StandardCharsets.UTF_8), storage.journalTempFile(), journalExpected, null)
+		return transport.downloadDocument(GenerationHosting.JOURNAL_KEY.getBytes(StandardCharsets.UTF_8), storage.journalTempFile(), journalExpected, (IntConsumer) null)
 				.thenComposeAsync(fetch -> {
 					try {
 						if (fetch.unchanged() && journalExpected == null) throw new IOException("Server answered UNCHANGED to an unconditional journal request");

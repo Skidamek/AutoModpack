@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.protocol;
 
+import java.io.OutputStream;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.IntConsumer;
@@ -28,6 +29,14 @@ public interface PackTransport extends AutoCloseable {
 
 	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the answer is {@code unchanged} and no body may follow. */
 	CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer progress);
+
+	/**
+	 * The same fetch with a tap: every served body byte is written to {@code tap} (decode-while-downloading) in
+	 * addition to the destination. Transports without byte-level access drop the tap.
+	 */
+	default CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, OutputStream tap) {
+		return downloadDocument(key, destination, expectedSha1Hex, (IntConsumer) null);
+	}
 
 	/** Drops every in-flight transfer so a cancelled run cannot poison the next one. */
 	void abortTransfers();

@@ -183,10 +183,18 @@ class HttpContractHandlerTest {
 		byte[] listed = exchangeBytes(channel, request("/head", "Accept-Encoding: gzip;q=1.0, identity;q=0.5, zstd"));
 		assertTrue(headOf(listed).contains("Content-Encoding: zstd\r\n"), headOf(listed));
 
-		// Objects stay identity so Range and resume stay trivial.
+		// Objects compress for zstd clients too; ranges and non-negotiating clients stay identity so resume stays trivial.
 		byte[] object = exchangeBytes(channel, request("/objects/" + fixture.objectHash(), "Accept-Encoding: zstd"));
-		assertFalse(headOf(object).contains("Content-Encoding"), headOf(object));
-		assertArrayEquals(fixture.objectContent().getBytes(StandardCharsets.UTF_8), bodyOf(object));
+		assertTrue(headOf(object).contains("Content-Encoding: zstd\r\n"), headOf(object));
+		assertArrayEquals(fixture.objectContent().getBytes(StandardCharsets.UTF_8), zstdDecode(bodyOf(object)));
+		byte[] ranged = exchangeBytes(channel, request("/objects/" + fixture.objectHash(), "Accept-Encoding: zstd", "Range: bytes=0-4"));
+		assertFalse(headOf(ranged).contains("Content-Encoding"), headOf(ranged));
+		byte[] expectedRange = new byte[5];
+		System.arraycopy(fixture.objectContent().getBytes(StandardCharsets.UTF_8), 0, expectedRange, 0, 5);
+		assertArrayEquals(expectedRange, bodyOf(ranged));
+		byte[] plain = exchangeBytes(channel, request("/objects/" + fixture.objectHash()));
+		assertFalse(headOf(plain).contains("Content-Encoding"), headOf(plain));
+		assertArrayEquals(fixture.objectContent().getBytes(StandardCharsets.UTF_8), bodyOf(plain));
 		assertTrue(channel.isOpen());
 	}
 

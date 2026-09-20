@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.screen;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.awt.GraphicsEnvironment;
-import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Future;
@@ -49,10 +48,6 @@ public final class ScreenManager {
 
 	public static void completeWithoutRestart() {
 		instance.completeWithoutRestart();
-	}
-
-	public static void musicReady(Path track) {
-		instance.musicReady(track);
 	}
 
 	public static void welcome(ReviewPayload payload) {
