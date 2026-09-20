@@ -118,6 +118,13 @@ public final class ActivityTracker {
 		}
 	}
 
+	/** The shaper's most recent outbound rate; the codec choice reads it to tell a fast link from a shaped one. */
+	public long writeThroughput() {
+		synchronized (lock) {
+			return writeThroughput;
+		}
+	}
+
 	/** The command's read model; names resolve object hashes against the names of the current generation. */
 	public Snapshot snapshot(Map<String, String> names) {
 		synchronized (lock) {

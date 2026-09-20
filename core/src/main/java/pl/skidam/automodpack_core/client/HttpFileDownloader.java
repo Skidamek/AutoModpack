@@ -12,15 +12,13 @@ import java.nio.file.Path;
 import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.function.IntConsumer;
-import java.util.zip.GZIPInputStream;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import io.airlift.compress.zstd.ZstdInputStream;
-
 import pl.skidam.automodpack_core.protocol.LocalFileWriter;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.protocol.WireCodec;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 
 public class HttpFileDownloader {
@@ -74,13 +72,11 @@ public class HttpFileDownloader {
 		}
 
 		String encoding = response.headers().firstValue("Content-Encoding").orElse("").trim().toLowerCase(Locale.ROOT);
+		WireCodec codec = WireCodec.negotiate(encoding);
+		if (codec == null && !encoding.isEmpty()) throw new IOException("Unsupported Content-Encoding: " + encoding);
 
 		try (InputStream rawIn = response.body();
-				InputStream in = switch (encoding) {
-					case "gzip" -> new GZIPInputStream(rawIn);
-					case "zstd" -> new ZstdInputStream(rawIn);
-					default -> rawIn;
-				};
+				InputStream in = codec == null ? rawIn : codec.unwrap(rawIn);
 				OutputStream out = LocalFileWriter.open(target)) {
 
 			byte[] buffer = new byte[NetUtils.DEFAULT_CHUNK_SIZE];
@@ -97,7 +93,7 @@ public class HttpFileDownloader {
 	private HttpResponse<InputStream> send(DownloadSource source, URI uri, boolean authenticate, HttpClient client, Path target)
 			throws IOException, InterruptedException {
 		HttpRequest.Builder request = HttpRequest.newBuilder().uri(uri).header("User-Agent", NetUtils.USER_AGENT)
-				.header("Accept-Encoding", "gzip, zstd").timeout(NetUtils.NETWORK_TIMEOUT).GET();
+				.header("Accept-Encoding", WireCodec.offeredEncodings()).timeout(NetUtils.NETWORK_TIMEOUT).GET();
 		if (authenticate) request.header("x-api-key", summonKey());
 
 		try {

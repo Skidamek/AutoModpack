@@ -172,6 +172,28 @@ class HttpContractHandlerTest {
 		}
 	}
 
+	/** Concatenates a chunked body - hex size lines, frames, zero terminator - out of the raw response bytes. */
+	private static byte[] deframe(byte[] response) {
+		int body = 0;
+		for (int index = 0; index + 4 <= response.length; index++) {
+			if (response[index] == '\r' && response[index + 1] == '\n' && response[index + 2] == '\r' && response[index + 3] == '\n') {
+				body = index + 4;
+				break;
+			}
+		}
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		int offset = body;
+		while (true) {
+			int lineEnd = offset;
+			while (response[lineEnd] != '\r') lineEnd++;
+			int size = Integer.parseInt(new String(response, offset, lineEnd - offset, StandardCharsets.US_ASCII), 16);
+			offset = lineEnd + 2;
+			if (size == 0) return out.toByteArray();
+			out.write(response, offset, size);
+			offset += size + 2;
+		}
+	}
+
 	@Test
 	void documentsCompressForZstdClientsAndDecodeToIdentity() throws Exception {
 		Fixture fixture = fixture();
@@ -180,11 +202,13 @@ class HttpContractHandlerTest {
 
 		byte[] response = exchangeBytes(channel, request("/head", "Accept-Encoding: zstd"));
 		String head = headOf(response);
-		byte[] body = bodyOf(response);
+		byte[] body = deframe(response);
 		assertTrue(head.startsWith("HTTP/1.1 200 OK\r\n"), head);
 		assertTrue(head.contains("Content-Encoding: zstd\r\n"), head);
 		assertTrue(head.contains("Vary: Accept-Encoding\r\n"), head);
-		assertTrue(head.contains("Content-Length: " + body.length + "\r\n"), head);
+		// The compressed length is unknowable before the body exists, so the stream is chunked and carries no length.
+		assertTrue(head.contains("Transfer-Encoding: chunked\r\n"), head);
+		assertFalse(head.contains("Content-Length"), head);
 		assertArrayEquals(headBytes, zstdDecode(body));
 
 		// A header listing several encodings with q-values still token-matches zstd.
@@ -194,14 +218,14 @@ class HttpContractHandlerTest {
 		// A gzip-only client gets gzip; a client offering both gets zstd, our preferred codec.
 		byte[] gzipped = exchangeBytes(channel, request("/head", "Accept-Encoding: gzip"));
 		assertTrue(headOf(gzipped).contains("Content-Encoding: gzip\r\n"), headOf(gzipped));
-		assertArrayEquals(headBytes, gunzip(bodyOf(gzipped)));
+		assertArrayEquals(headBytes, gunzip(deframe(gzipped)));
 		byte[] both = exchangeBytes(channel, request("/head", "Accept-Encoding: gzip, zstd"));
 		assertTrue(headOf(both).contains("Content-Encoding: zstd\r\n"), headOf(both));
 
 		// Objects compress for zstd clients too; ranges and non-negotiating clients stay identity so resume stays trivial.
 		byte[] object = exchangeBytes(channel, request("/objects/" + fixture.objectHash(), "Accept-Encoding: zstd"));
 		assertTrue(headOf(object).contains("Content-Encoding: zstd\r\n"), headOf(object));
-		assertArrayEquals(fixture.objectContent().getBytes(StandardCharsets.UTF_8), zstdDecode(bodyOf(object)));
+		assertArrayEquals(fixture.objectContent().getBytes(StandardCharsets.UTF_8), zstdDecode(deframe(object)));
 		byte[] ranged = exchangeBytes(channel, request("/objects/" + fixture.objectHash(), "Accept-Encoding: zstd", "Range: bytes=0-4"));
 		assertFalse(headOf(ranged).contains("Content-Encoding"), headOf(ranged));
 		byte[] expectedRange = new byte[5];
@@ -403,7 +427,8 @@ class HttpContractHandlerTest {
 
 	private Fixture fixture() throws Exception {
 		GenerationStore store = new GenerationStore(tempDir.resolve("host-generations"), tempDir.resolve("objects"));
-		byte[] bytes = "object-payload".getBytes(StandardCharsets.UTF_8);
+		// Long enough to sniff as compressible: a few bytes would serve identity, zstd's frame overhead eats the savings.
+		byte[] bytes = "object-payload-that-compresses-well\n".repeat(512).getBytes(StandardCharsets.UTF_8);
 		Path staging = tempDir.resolve("host-generations").resolve("staging");
 		Files.createDirectories(staging);
 		Path staged = Files.createTempFile(staging, "candidate-", ".staged");

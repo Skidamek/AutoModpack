@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.protocol.netty.handler;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.serverConfig;
 import static pl.skidam.automodpack_core.protocol.NetUtils.DEFAULT_CHUNK_SIZE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.FAST_LINK_WRITE_RATE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.TRANSFER_WRITE_STALL_TIMEOUT;
 
 import java.io.ByteArrayOutputStream;
@@ -20,9 +21,7 @@ import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.zip.GZIPOutputStream;
 
-import io.airlift.compress.zstd.ZstdOutputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -35,6 +34,7 @@ import io.netty.handler.timeout.IdleStateEvent;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
+import pl.skidam.automodpack_core.protocol.WireCodec;
 import pl.skidam.automodpack_core.protocol.netty.ActivityTracker;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -50,8 +50,16 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	/** Tripwire past any real request header block; an honest client holds ≤ 8 requests ≈ 2 KB of headers in flight, 4× under this cap; only a pipelining abuser touches it. */
 	private static final int MAX_HEADER_BLOCK_BYTES = 8 * 1024;
 
-	/** Compressed-document buffer tripwire: a 3000-file pack's head is ~1 MB, so this sits past any real head or journal; only a broken or adversarial document touches it. */
-	private static final int MAX_COMPRESSED_DOCUMENT_BYTES = 16 * 1024 * 1024;
+	// Stream-compression gauges: the sniff sample, one frame's worth of file input, and the frame size the wire sees.
+	// A 64 KiB sample decides identity vs codec for a whole file - stored content (jars, sounds, textures) sniffs at
+	// ≥ 0.95 under every registry codec while text sits under 0.5 - and 256 KiB in ≈ 192 KiB out bounds a frame's
+	// resident bytes to a fraction of one lane's worth of nothing next to the identity path's 4 MiB chunks.
+	private static final int SNIFF_BYTES = 64 * 1024;
+	private static final int COMPRESS_INPUT_CHUNK = 256 * 1024;
+	private static final int FRAME_BYTES = 192 * 1024;
+	private static final double INCOMPRESSIBLE_RATIO = 0.9;
+	private static final byte[] CRLF = {'\r', '\n'};
+	private static final byte[] FINAL_CHUNK = {'0', '\r', '\n', '\r', '\n'};
 
 	private static final String BEARER_PREFIX = "Bearer ";
 
@@ -259,13 +267,9 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		if (length == 0) return finishBodyless(ctx, span, status, 0, etag, contentRange, keepAlive);
 
-		// Token matching on the lowercased header (multiple encodings and q-values included) is deliberately a contains
-		// check, and zstd wins whenever the client lists it: our own client always does, and zstd's ratio beats gzip at
-		// a fraction of the CPU. gzip remains for foreign clients that know nothing of zstd.
-		if (byteRange == null && acceptEncoding != null) {
-			String offered = acceptEncoding.toLowerCase(Locale.ROOT);
-			if (offered.contains("zstd")) return serveCompressedDocument(ctx, file, total, etag, keepAlive, span, status, "zstd");
-			if (offered.contains("gzip")) return serveCompressedDocument(ctx, file, total, etag, keepAlive, span, status, "gzip");
+		// Full bodies are negotiable per request; ranges stay identity so resume offsets keep their meaning.
+		if (byteRange == null && acceptEncoding != null && WireCodec.negotiate(acceptEncoding) != null) {
+			return serveCompressedDocument(ctx, file, total, etag, keepAlive, span, acceptEncoding);
 		}
 
 		return serveIdentity(ctx, file, offset, length, status, etag, contentRange, keepAlive, span);
@@ -312,60 +316,146 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	}
 
 	/**
-	 * Document bodies may be negotiated per request: the head cannot precede the compressed length, so the whole document
-	 * is compressed off the event loop first and the stall window covers the buffer drain like any streamed body. Over the
-	 * buffer tripwire or on any compression failure the identity body is served instead.
+	 * A negotiated body streams: a sniff decides between identity and the codec, the head goes out framed as chunked
+	 * (the compressed length is unknowable before the body exists), and compression runs one frame ahead of the wire
+	 * under the same stall window as any streamed body. Nothing buffers a whole response, so there is no cap to hit.
 	 */
-	private boolean serveCompressedDocument(ChannelHandlerContext ctx, Path file, long total, String etag, boolean keepAlive, ActivityTracker.Span span, String status, String codec) {
+	private boolean serveCompressedDocument(ChannelHandlerContext ctx, Path file, long total, String etag, boolean keepAlive, ActivityTracker.Span span, String acceptEncoding) {
 		streaming = true;
 		inFlightSpan = span;
 		try {
 			senders.execute(() -> {
-				byte[] compressed = compress(file, codec);
-				if (compressed == null) {
+				WireCodec codec = chooseCodec(acceptEncoding);
+				double ratio = sniffRatio(file, codec);
+				if (ratio < 0 || ratio > INCOMPRESSIBLE_RATIO) {
 					serveIdentity(ctx, file, 0, total, STATUS_200, etag, null, keepAlive, span);
 					return;
 				}
-				span.totalBytes = compressed.length;
-				Channel channel = ctx.channel();
-				ChannelFuture headWritten = channel.writeAndFlush(response(STATUS_200, compressed.length, etag, null, codec));
-				Throwable failure = awaitWritten(channel, headWritten);
-				if (failure == null && !headWritten.isSuccess()) failure = causeOf(headWritten);
-				if (failure == null) failure = writeBody(channel, compressed);
-				Throwable finalFailure = failure;
-				executeOnLoop(channel, () -> finishStream(ctx, span, status, compressed.length, finalFailure, keepAlive));
+				streamCompressedBody(ctx, file, codec, etag, keepAlive, span);
 			});
 		} catch (RejectedExecutionException rejected) {
 			streaming = false;
-			tracker.complete(span, statusNumber(status), 0);
+			tracker.complete(span, 200, 0);
 			ctx.close();
 		}
 		return false;
 	}
 
-	/** Streams a document through zstd into a capped buffer; null means the cap tripped or compression failed, and identity wins. */
-	private static byte[] compress(Path file, String codec) {
-		ByteArrayOutputStream buffer = new ByteArrayOutputStream(64 * 1024);
-		try (OutputStream compressor = "gzip".equals(codec) ? new GZIPOutputStream(buffer) : new ZstdOutputStream(buffer);
-				FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
-			ByteBuffer chunk = ByteBuffer.allocate(64 * 1024);
-			while (channel.read(chunk) != -1) {
-				compressor.write(chunk.array(), 0, chunk.position());
-				chunk.clear();
-				if (buffer.size() > MAX_COMPRESSED_DOCUMENT_BYTES) return null;
-			}
-		} catch (IOException e) {
-			LOGGER.debug("Failed to compress document {}; serving identity", file, e);
-			return null;
-		}
-		return buffer.toByteArray();
+	/**
+	 * The codec for this response: the first registry coding the client listed, except that a fast link swaps zstd for
+	 * snappy when the client offered both - at LAN rates zstd's compression CPU costs more than the bytes it saves.
+	 */
+	private WireCodec chooseCodec(String acceptEncoding) {
+		WireCodec negotiated = WireCodec.negotiate(acceptEncoding);
+		if (negotiated == WireCodec.ZSTD && tracker.writeThroughput() >= FAST_LINK_WRITE_RATE && acceptEncoding.toLowerCase(Locale.ROOT).contains(WireCodec.SNAPPY.wireName())) return WireCodec.SNAPPY;
+		return negotiated;
 	}
 
-	private static Throwable writeBody(Channel channel, byte[] body) {
-		ChannelFuture written = channel.writeAndFlush(Unpooled.wrappedBuffer(body));
-		Throwable failure = awaitWritten(channel, written);
-		if (failure == null && !written.isSuccess()) failure = causeOf(written);
-		return failure;
+	/** The sniff receipt: compression ratio of the first {@link #SNIFF_BYTES} under the codec; -1 means the file is unreadable and identity must answer. */
+	private static double sniffRatio(Path file, WireCodec codec) {
+		ByteArrayOutputStream sink = new ByteArrayOutputStream(SNIFF_BYTES);
+		long sampled;
+		try (OutputStream compressor = codec.wrap(sink); FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+			ByteBuffer sample = ByteBuffer.allocate(SNIFF_BYTES);
+			while (channel.read(sample) != -1 && sample.hasRemaining()) {
+			}
+			sampled = sample.position();
+			compressor.write(sample.array(), 0, (int) sampled);
+		} catch (IOException e) {
+			LOGGER.debug("Failed to sniff {}; serving identity", file, e);
+			return -1;
+		}
+		return sampled == 0 ? 0 : (double) sink.size() / sampled;
+	}
+
+	/** Streams the negotiated body: file through the codec into chunked frames, each write blocked on the stall window so the compressor cannot outrun the peer. */
+	private void streamCompressedBody(ChannelHandlerContext ctx, Path file, WireCodec codec, String etag, boolean keepAlive, ActivityTracker.Span span) {
+		Channel channel = ctx.channel();
+		ChannelFuture headWritten = channel.writeAndFlush(chunkedResponse(etag, codec));
+		Throwable failure = awaitWritten(channel, headWritten);
+		if (failure == null && !headWritten.isSuccess()) failure = causeOf(headWritten);
+		FrameSink frames = new FrameSink(channel);
+		try (FileChannel source = FileChannel.open(file, StandardOpenOption.READ); OutputStream compressor = codec.wrap(frames)) {
+			ByteBuffer buffer = ByteBuffer.allocate(COMPRESS_INPUT_CHUNK);
+			while (failure == null) {
+				buffer.clear();
+				int read = source.read(buffer);
+				if (read < 0) break;
+				compressor.write(buffer.array(), 0, read);
+				tracker.progress(span, frames.flushed());
+				frames.frameIfDue();
+			}
+		} catch (Exception e) {
+			failure = e;
+		}
+		try {
+			if (failure == null) {
+				frames.frameRemaining();
+				ChannelFuture last = channel.writeAndFlush(Unpooled.wrappedBuffer(FINAL_CHUNK));
+				failure = awaitWritten(channel, last);
+				if (failure == null && !last.isSuccess()) failure = causeOf(last);
+			}
+		} catch (IOException e) {
+			failure = e;
+		}
+		Throwable finalFailure = failure;
+		long sentBytes = frames.flushed();
+		executeOnLoop(channel, () -> finishStream(ctx, span, STATUS_200, sentBytes, finalFailure, keepAlive));
+	}
+
+	/** Collects compressor output until it holds a frame's worth, then writes it as one sized chunk. Not thread-safe; owned by one sender task. */
+	private final class FrameSink extends OutputStream {
+		private final Channel channel;
+		private final ByteArrayOutputStream buffer = new ByteArrayOutputStream(FRAME_BYTES);
+		private long flushed;
+
+		FrameSink(Channel channel) {
+			this.channel = channel;
+		}
+
+		long flushed() {
+			return flushed;
+		}
+
+		@Override
+		public void write(int b) {
+			buffer.write(b);
+		}
+
+		@Override
+		public void write(byte[] source, int offset, int length) {
+			buffer.write(source, offset, length);
+		}
+
+		void frameIfDue() throws IOException {
+			if (buffer.size() >= FRAME_BYTES) frame();
+		}
+
+		void frameRemaining() throws IOException {
+			if (buffer.size() > 0) frame();
+		}
+
+		private void frame() throws IOException {
+			byte[] bytes = buffer.toByteArray();
+			buffer.reset();
+			flushed += bytes.length;
+			byte[] sizeLine = (Integer.toHexString(bytes.length) + "\r\n").getBytes(StandardCharsets.UTF_8);
+			ChannelFuture written = channel.writeAndFlush(Unpooled.wrappedBuffer(sizeLine, bytes, CRLF));
+			Throwable failure = awaitWritten(channel, written);
+			if (failure == null && !written.isSuccess()) failure = causeOf(written);
+			if (failure != null) throw failure instanceof IOException io ? io : new IOException(failure);
+		}
+	}
+
+	/** The negotiated head: no length exists yet, so the body is framed chunked and the coding is named. */
+	private static ByteBuf chunkedResponse(String etag, WireCodec codec) {
+		StringBuilder head = new StringBuilder(160);
+		head.append("HTTP/1.1 ").append(STATUS_200).append("\r\n");
+		head.append("Content-Type: ").append(CONTENT_TYPE).append("\r\n");
+		if (etag != null) head.append("ETag: \"").append(etag).append("\"\r\n");
+		head.append("Content-Encoding: ").append(codec.wireName()).append("\r\n").append("Vary: Accept-Encoding\r\n");
+		head.append("Transfer-Encoding: chunked\r\n\r\n");
+		return Unpooled.wrappedBuffer(head.toString().getBytes(StandardCharsets.UTF_8));
 	}
 
 	/**

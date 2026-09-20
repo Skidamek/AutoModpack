@@ -21,11 +21,8 @@ import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.IntConsumer;
-import java.util.zip.GZIPInputStream;
 
 import javax.net.ssl.SSLSocket;
-
-import io.airlift.compress.zstd.ZstdInputStream;
 
 import pl.skidam.automodpack_core.utils.HashUtils;
 
@@ -34,9 +31,9 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * {@code GET /objects/<sha1>}. Up to {@link #PIPELINE_DEPTH} requests sit in flight, written as the pool hands out
  * slots, and one reader per connection consumes the responses strictly in order; a failure anywhere fails every
  * pending request, because alignment is lost and every request is an idempotent GET whose retry belongs to the
- * download manager. The parser survives foreign static hosts on a tiny fixed response subset - status line,
- * Content-Length, Content-Range, Content-Encoding, Connection, Location - and fails loudly on anything else (chunked
- * included): our server never sends it and hand-rolled chunk decoding is not worth the risk.
+ * download manager. Bodies arrive Content-Length framed, chunked (our server streams negotiated bodies that way), or
+ * close framed; content codings decode through the {@link WireCodec} registry. The parser survives foreign static
+ * hosts on this fixed response subset and fails loudly on anything else.
  */
 class Connection implements AutoCloseable {
 
@@ -45,7 +42,7 @@ class Connection implements AutoCloseable {
 	static final int PIPELINE_DEPTH = 8;
 
 	private static final byte[] CRLF = {'\r', '\n'};
-	private static final String ACCEPT_ENCODING = "Accept-Encoding: gzip, zstd\r\n";
+	private static final String ACCEPT_ENCODING = "Accept-Encoding: " + WireCodec.offeredEncodings() + "\r\n";
 	// Our own server never redirects; the cap exists for foreign static hosts, so only a misconfigured redirect loop touches it.
 	private static final int MAX_REDIRECTS = 3;
 	// Response header lines are tiny; a line past this or a block of this many lines is a hostile or broken peer.
@@ -422,19 +419,31 @@ class Connection implements AutoCloseable {
 		}
 	}
 
-	/** Writes the body per the framing rules; a bodyless status consumes nothing. Called with a null destination to discard an error body. */
+	/**
+	 * Writes the body per the framing rules; a bodyless status consumes nothing. Called with a null destination to
+	 * discard an error body. The framed source - Content-Length, chunked, or close - ends exactly where the next
+	 * pipelined response head begins, so a coded body decodes on the way in without losing alignment.
+	 */
 	private void consumeBody(ResponseHead head, Path destination, long writeOffset, IntConsumer chunkCallback, MessageDigest hash, OutputStream tap) throws IOException {
-		if (head.chunked()) throw new IOException("Chunked responses are not supported");
 		if (head.status() == 204 || head.status() == 304) return;
-		if (head.contentLength() == null && head.status() != 200) return;
-		BoundedBody bounded = head.contentLength() == null ? null : new BoundedBody(head.contentLength());
-		InputStream source = bounded == null ? in : bounded;
+		InputStream source;
+		boolean closeFramed = false;
+		if (head.chunked()) {
+			source = new ChunkedBody();
+		} else if (head.contentLength() != null) {
+			source = new BoundedBody(head.contentLength());
+		} else {
+			if (head.status() != 200) return;
+			source = in;
+			closeFramed = true;
+		}
 		String encoding = head.contentEncoding() == null ? "" : head.contentEncoding().trim().toLowerCase(Locale.ROOT);
-		if (encoding.equals("zstd")) source = new ZstdInputStream(source);
-		else if (encoding.equals("gzip")) source = new GZIPInputStream(source);
-		if (bounded == null) unhealthy = true;
+		WireCodec codec = WireCodec.negotiate(encoding);
+		if (codec == null && !encoding.isEmpty()) throw new IOException("Unsupported Content-Encoding: " + head.contentEncoding());
+		if (codec != null) source = codec.unwrap(source);
+		if (closeFramed) unhealthy = true;
 		transfer(source, destination, writeOffset, chunkCallback, hash, head.contentLength(), tap);
-		if (bounded != null && bounded.remaining() > 0) throw new IOException("Response body ended before the promised Content-Length");
+		if (source instanceof BoundedBody bounded && bounded.remaining() > 0) throw new IOException("Response body ended before the promised Content-Length");
 		if (head.connectionClose()) unhealthy = true;
 	}
 
@@ -486,6 +495,70 @@ class Connection implements AutoCloseable {
 			int read = in.read(buffer, offset, (int) Math.min(length, remaining));
 			if (read > 0) remaining -= read;
 			return read;
+		}
+	}
+
+	/**
+	 * De-frames a chunked body straight off the socket: each chunk is a hex size line, its bytes, and a CRLF; a zero
+	 * size ends the body behind its trailer block. The framing is exact, so the next pipelined response head still
+	 * parses behind it; a stretched line or a truncated chunk is a hostile or broken peer and fails the connection.
+	 */
+	private final class ChunkedBody extends InputStream {
+		private long chunkRemaining;
+		private boolean done;
+
+		@Override
+		public int read() throws IOException {
+			byte[] one = new byte[1];
+			int read = read(one, 0, 1);
+			return read < 0 ? -1 : one[0] & 0xFF;
+		}
+
+		@Override
+		public int read(byte[] buffer, int offset, int length) throws IOException {
+			if (done) return -1;
+			if (chunkRemaining == 0) {
+				long size = parseChunkSize(readLine());
+				if (size == 0) {
+					consumeTrailers();
+					done = true;
+					return -1;
+				}
+				chunkRemaining = size;
+			}
+			int read = in.read(buffer, offset, (int) Math.min(length, chunkRemaining));
+			if (read < 0) throw new IOException("Connection ended inside a chunked body");
+			chunkRemaining -= read;
+			if (chunkRemaining == 0) expectCrlf();
+			return read;
+		}
+
+		private long parseChunkSize(String line) throws IOException {
+			String hex = line.indexOf(';') >= 0 ? line.substring(0, line.indexOf(';')).trim() : line.trim();
+			try {
+				long size = Long.parseLong(hex, 16);
+				if (size < 0) throw new NumberFormatException();
+				return size;
+			} catch (NumberFormatException | StringIndexOutOfBoundsException e) {
+				throw new IOException("Unparseable chunk size: " + line);
+			}
+		}
+
+		private void expectCrlf() throws IOException {
+			if (in.read() != '\r' || in.read() != '\n') throw new IOException("Chunked body is missing a chunk terminator");
+		}
+
+		/** The size line's CRLF is already consumed, so the first trailer line (empty when there are none) reads next. */
+		private void consumeTrailers() throws IOException {
+			int lines = 0;
+			while (!readLine().isEmpty()) {
+				if (++lines > MAX_HEADER_LINES) throw new IOException("Chunked trailer block exceeded " + MAX_HEADER_LINES + " lines");
+			}
+		}
+
+		@Override
+		public int available() throws IOException {
+			return in.available();
 		}
 	}
 

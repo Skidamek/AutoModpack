@@ -180,6 +180,28 @@ class ConditionalFetchTest {
 	}
 
 	@Test
+	void chunkedZstdBodiesDecodeAndKeepTheConnectionAligned(@TempDir Path directory) throws Exception {
+		try (ContractServer server = new ContractServer()) {
+			server.compressDocuments.set(true);
+			server.chunkedDocuments.set(true);
+			byte[] head = "a-repetitive-head-document-streamed-in-chunks\n".repeat(8).getBytes(StandardCharsets.UTF_8);
+			byte[] journal = "a-repetitive-journal-document-streamed-in-chunks\n".repeat(8).getBytes(StandardCharsets.UTF_8);
+			server.store.put("head", head);
+			server.store.put("journal", journal);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path headDestination = directory.resolve("head");
+				client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), headDestination, null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertArrayEquals(head, Files.readAllBytes(headDestination));
+				// The second body rides the same connection: exact chunk framing left the pipeline aligned behind it.
+				Path journalDestination = directory.resolve("journal");
+				client.downloadDocument("journal".getBytes(StandardCharsets.UTF_8), journalDestination, null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertArrayEquals(journal, Files.readAllBytes(journalDestination));
+				assertEquals(1, server.connections.get(), "both chunked responses rode one connection");
+			}
+		}
+	}
+
+	@Test
 	void zstdBodyHashIsTheGroundTruthWhenTheHostIgnoresTheCondition(@TempDir Path directory) throws Exception {
 		try (ContractServer server = new ContractServer()) {
 			server.compressDocuments.set(true);
@@ -362,6 +384,7 @@ class ConditionalFetchTest {
 		final AtomicBoolean requireAuth = new AtomicBoolean(false);
 		final AtomicBoolean lieAboutResumeStart = new AtomicBoolean(false);
 		final AtomicBoolean compressDocuments = new AtomicBoolean(false);
+		final AtomicBoolean chunkedDocuments = new AtomicBoolean(false);
 		final AtomicBoolean lastResponseZstd = new AtomicBoolean(false);
 		final AtomicBoolean sawAcceptEncoding = new AtomicBoolean(false);
 		final AtomicInteger connections = new AtomicInteger();
@@ -504,7 +527,9 @@ class ConditionalFetchTest {
 				if (compressDocuments.get() && !request.path.startsWith("/objects/") && request.acceptEncoding != null
 						&& request.acceptEncoding.toLowerCase(Locale.ROOT).contains("zstd")) {
 					lastResponseZstd.set(true);
-					respond(out, "200 OK", zstdCompress(content), "Content-Encoding: zstd");
+					byte[] compressed = zstdCompress(content);
+					if (chunkedDocuments.get()) respondChunked(out, "200 OK", compressed, "Content-Encoding: zstd");
+					else respond(out, "200 OK", compressed, "Content-Encoding: zstd");
 					return;
 				}
 				respond(out, "200 OK", content);
@@ -518,6 +543,25 @@ class ConditionalFetchTest {
 				zstd.write(content);
 			}
 			return buffer.toByteArray();
+		}
+
+		/** The same body in chunked framing, cut into odd-sized frames so the de-framer sees several. */
+		private static void respondChunked(BufferedOutputStream out, String status, byte[] body, String... headers) throws IOException {
+			StringBuilder head = new StringBuilder(128);
+			head.append("HTTP/1.1 ").append(status).append("\r\n");
+			head.append("Transfer-Encoding: chunked\r\n");
+			for (String header : headers)
+				head.append(header).append("\r\n");
+			head.append("\r\n");
+			out.write(head.toString().getBytes(StandardCharsets.UTF_8));
+			for (int offset = 0; offset < body.length; offset += 37) {
+				byte[] frame = Arrays.copyOfRange(body, offset, Math.min(offset + 37, body.length));
+				out.write((Integer.toHexString(frame.length) + "\r\n").getBytes(StandardCharsets.UTF_8));
+				out.write(frame);
+				out.write("\r\n".getBytes(StandardCharsets.UTF_8));
+			}
+			out.write("0\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+			out.flush();
 		}
 
 		private static String routeKey(String path) {

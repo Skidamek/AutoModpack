@@ -61,6 +61,11 @@ public class NetUtils {
 	// The body chunk both ends stream in; the client reads one buffer of it per syscall loop and the server streams file bodies through it.
 	public static final int DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB
 
+	// Server egress above this rate is a fast link: at ~0.5 ratio, zstd's pure-Java ~100-150 MB/s compression costs more
+	// CPU than the bytes it saves above roughly ratio × speed ≈ 50-75 MB/s, so snappy (several times cheaper) takes over
+	// and only genuinely fast links ever qualify; shaped links (5 mbit class) sit two orders of magnitude below it.
+	public static final int FAST_LINK_WRITE_RATE = 32 * 1024 * 1024; // 32 MiB/s
+
 	private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
 	private static final AlgorithmIdentifier SIGNATURE_ALGORITHM_IDENTIFIER = new AlgorithmIdentifier(PKCSObjectIdentifiers.sha256WithRSAEncryption, DERNull.INSTANCE);
 
