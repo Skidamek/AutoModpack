@@ -52,6 +52,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	private final Consumer<JournalEntry> restore;
 	private RowListWidget historyList;
 	private boolean closed;
+	private boolean restoreInFlight;
 
 	public ContentHistoryScreen(Screen parent, HistoryViewRequest request) {
 		super(VersionedText.text("automodpack.history.title"));
@@ -132,7 +133,11 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		for (String line : wrapToWidth(this.font, entry.notes(), panelWidth(PANEL_WIDTH) - TEXT_MARGIN * 2, DETAIL_NOTES_LINES))
 			notes.add(VersionedText.literal(line).withStyle(ChatFormatting.WHITE));
 		ChangeBrowserScreen.BrowserAction restoreAction = restorableSeqs.contains(entry.seq()) && restore != null
-				? new ChangeBrowserScreen.BrowserAction(VersionedText.text("automodpack.history.restore"), screen -> restore.accept(entry), true)
+				? new ChangeBrowserScreen.BrowserAction(VersionedText.text("automodpack.history.restore"), screen -> {
+					if (restoreInFlight) return;
+					restoreInFlight = true;
+					restore.accept(entry);
+				}, true)
 				: null;
 		openBrowserScreen(heading, VersionedText.text("automodpack.history.detailsDescription"), notes, changeSet(entry), restoreAction);
 	}

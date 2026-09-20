@@ -61,6 +61,8 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private boolean loading = true;
 	private boolean busy;
 	private boolean closed;
+	private boolean restoreArmed;
+	private boolean forgetArmed;
 	private WorkResult result = WorkResult.NONE;
 	private Map<String, String> packNames = Map.of();
 	private Future<?> load;
@@ -81,9 +83,9 @@ public final class StateHistoryScreen extends VersionedScreen {
 	}
 
 	private void initTimeline() {
-		ActionDefinition restore = primaryAction(VersionedText.text("automodpack.stateHistory.restore"), press -> restoreState());
+		ActionDefinition restore = primaryAction(VersionedText.text(restoreArmed ? "automodpack.stateHistory.restoreArmed" : "automodpack.stateHistory.restore"), press -> restoreState());
 		ActionDefinition filesAction = optionalAction(VersionedText.text("automodpack.stateHistory.files"), press -> openFiles());
-		ActionDefinition forget = optionalAction(VersionedText.text("automodpack.stateHistory.forgetOlder"), press -> forgetOlder());
+		ActionDefinition forget = optionalAction(VersionedText.text(forgetArmed ? "automodpack.stateHistory.forgetArmed" : "automodpack.stateHistory.forgetOlder"), press -> forgetOlder());
 		ActionRow[] rows = {actionRow(ActionAreaLayout.RowKind.AUXILIARY, restore, filesAction, forget),
 				actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), press -> back()))};
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows) - 6;
@@ -259,9 +261,16 @@ public final class StateHistoryScreen extends VersionedScreen {
 		return entry.seq() + ":" + file.root() + ":" + file.overlayPackId() + ":" + file.path();
 	}
 
+	/** The destructive commands fire on the second press only; changing the selection or starting other work disarms them. */
 	private void restoreState() {
 		Snapshot entry = selectedEntry();
 		if (entry == null || restorability(entry.seq()) != StateHistory.Restorability.READY || busy) return;
+		if (!restoreArmed) {
+			restoreArmed = true;
+			forgetArmed = false;
+			super.rebuild();
+			return;
+		}
 		beginWork();
 		controller.restoreState(entry, this::refreshAfterMutation);
 	}
@@ -269,6 +278,12 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private void forgetOlder() {
 		Snapshot entry = selectedEntry();
 		if (entry == null || busy || views == null || views.isEmpty() || entry.seq() == views.get(0).snapshot().seq()) return;
+		if (!forgetArmed) {
+			forgetArmed = true;
+			restoreArmed = false;
+			super.rebuild();
+			return;
+		}
 		beginWork();
 		controller.forgetOlderThan(entry.seq(), this::refreshAfterMutation);
 	}
@@ -290,6 +305,8 @@ public final class StateHistoryScreen extends VersionedScreen {
 	/** Starts a mutation: the working line replaces any stale result line, so the two never draw over each other. */
 	private void beginWork() {
 		busy = true;
+		restoreArmed = false;
+		forgetArmed = false;
 		result = WorkResult.NONE;
 		super.rebuild();
 	}
@@ -344,6 +361,12 @@ public final class StateHistoryScreen extends VersionedScreen {
 		List<Snapshot> newestFirst = reversed();
 		if (index < 0 || index >= newestFirst.size()) return;
 		selectedSeq = newestFirst.get(index).seq();
+		if (restoreArmed || forgetArmed) {
+			restoreArmed = false;
+			forgetArmed = false;
+			super.rebuild();
+			return;
+		}
 		updateTimelineButtons();
 	}
 

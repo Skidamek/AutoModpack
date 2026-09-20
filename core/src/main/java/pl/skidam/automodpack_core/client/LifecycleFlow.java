@@ -55,7 +55,8 @@ final class LifecycleFlow {
 			removal.approve();
 			RestartDecision.ApplyResult result = updater.commitFlow(removal);
 			RestartDemand demand = RestartPolicy.inGame(result.restartReasons(), changelogs.changedOrRemovedPaths());
-			finishedWithoutRestart = removed != null && (!deactivation || demand == RestartDemand.NONE);
+			// Navigation happens only when nothing supersedes it: a restart demand takes the screen.
+			finishedWithoutRestart = removed != null && demand == RestartDemand.NONE;
 			afterApply(result, demand);
 		} catch (Exception e) {
 			ModpackUpdater.showUpdateFailure(e);

@@ -46,7 +46,7 @@ public class RestartScreen extends VersionedScreen {
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.management.preservedFilesCount", preservedFiles), button -> openStateHistory())));
 		if (!new InstalledModpackController().stalePacks().isEmpty())
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.restart.removeStale"),
-					button -> new InstalledModpackController().offerStalePackRemoval(this::rebuild))));
+					button -> new InstalledModpackController().offerStalePackRemoval(() -> ScreenImpl.setScreen(this)))));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.text("automodpack.restart.cancel"), button -> ScreenImpl.multiplayer()),
 				primaryAction(VersionedText.text("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> minecraft.stop())));

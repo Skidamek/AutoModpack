@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.client;
 
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
@@ -72,9 +73,14 @@ public final class SwitchFlow {
 		UpdatePreview preview = updater.previewInstalledSwitch();
 		if (forcedMode != null) preview = preview.withMode(forcedMode);
 		boolean writesUnverifiedJar = (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && updater.planWritesUnverifiedJar(preview.plan());
+		// One apply per review: a double confirm click must not start a second commit on the same updater.
+		AtomicBoolean applyArmed = new AtomicBoolean(true);
 		boolean shown = ScreenManager.preview(PreviewPayload.review(preview, modpackName, updater.joinOrigin(), writesUnverifiedJar, updater.getSelectedTarget(), updater.unverifiedSelectedJarPaths(),
 				updater.selectedJarSourceCounts(), updater.reviewActions(),
-				(Runnable) () -> ModpackUpdater.executor().execute(() -> apply(updater, release, rollback)),
+				(Runnable) () -> {
+					if (!applyArmed.compareAndSet(true, false)) return;
+					ModpackUpdater.executor().execute(() -> apply(updater, release, rollback));
+				},
 				(Runnable) () -> {
 					updater.close();
 					ScreenManager.clientThread(release);
