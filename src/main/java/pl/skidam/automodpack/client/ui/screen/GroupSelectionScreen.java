@@ -1,6 +1,5 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -73,7 +72,6 @@ public class GroupSelectionScreen extends VersionedScreen {
 	private final Consumer<SelectionIntent> selectionAction;
 	private final Runnable cancelAction;
 	private final ReviewActions actions;
-	private final boolean managerEntry;
 	private final boolean activeModpack;
 	private final PackDocument localRecord;
 	private final ClientPlatform detectedPlatform;
@@ -91,26 +89,27 @@ public class GroupSelectionScreen extends VersionedScreen {
 
 	private boolean closed;
 	private boolean switchInFlight;
+	private boolean saveInFlight;
 	private AbstractWidget saveButton;
 	private DropdownWidget platformDropdown;
 	private int listBottom;
 
 	public GroupSelectionScreen(Screen parent, SelectedModpackTarget target, ReviewActions actions, Consumer<SelectionIntent> selectionAction) {
 		this(parent, target.manifest(),
-				new Entry(target.expectedPriorIntent(), target.selection().intent(), selectionAction, () -> {}, actions, false, null));
+				new Entry(target.expectedPriorIntent(), target.selection().intent(), selectionAction, () -> {}, actions, null));
 	}
 
 	public static GroupSelectionScreen repair(Screen parent, GroupManifest manifest, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
-		return new GroupSelectionScreen(parent, manifest, new Entry(savedSelection, savedSelection, selectionAction, cancelAction, null, false, null));
+		return new GroupSelectionScreen(parent, manifest, new Entry(savedSelection, savedSelection, selectionAction, cancelAction, null, null));
 	}
 
-	static GroupSelectionScreen forInstalledRecord(Screen parent, PackDocument record, boolean managerEntry) {
-		return new GroupSelectionScreen(parent, record.manifest(), new Entry(null, null, null, () -> {}, null, managerEntry, record));
+	static GroupSelectionScreen forInstalledRecord(Screen parent, PackDocument record) {
+		return new GroupSelectionScreen(parent, record.manifest(), new Entry(null, null, null, () -> {}, null, record));
 	}
 
 	/** What an entry point varies; the screen settles everything else itself. */
 	private record Entry(SelectionIntent expectedSelection, SelectionIntent initialSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction,
-			ReviewActions actions, boolean managerEntry, PackDocument localRecord) {}
+			ReviewActions actions, PackDocument localRecord) {}
 
 	private GroupSelectionScreen(Screen parent, GroupManifest manifest, Entry entry) {
 		super(VersionedText.text("automodpack.selection.title"));
@@ -127,7 +126,6 @@ public class GroupSelectionScreen extends VersionedScreen {
 		this.selectionAction = entry.selectionAction();
 		this.cancelAction = entry.cancelAction();
 		this.actions = entry.actions();
-		this.managerEntry = entry.managerEntry();
 		this.activeModpack = controller.activeRecord(modpackId) != null;
 		this.localRecord = entry.localRecord();
 		SelectionIntent initial = entry.initialSelection() != null
@@ -154,7 +152,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 		super.init();
 
 		int actionY = this.height - 28;
-		String saveLabel = selectionAction != null ? "automodpack.selection.preview" : managerEntry && !activeModpack ? "automodpack.packManager.reviewSwitch" : "automodpack.selection.save";
+		String saveLabel = selectionAction != null ? "automodpack.selection.preview" : "automodpack.selection.save";
 		SelectionIntent defaults = GroupSelectionResolver.defaultIntent(manifest);
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.text("automodpack.back"), press -> back()),
@@ -370,23 +368,17 @@ public class GroupSelectionScreen extends VersionedScreen {
 		SelectionIntent target = currentIntent();
 		if (!resolutionError.isEmpty()) return;
 		if (selectionAction != null) {
+			if (saveInFlight) return;
+			saveInFlight = true;
 			try {
 				selectionAction.accept(target);
 			} catch (RuntimeException e) {
+				saveInFlight = false;
 				ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			}
 			return;
 		}
-		if (localRecord != null) {
-			startCachedSwitch(target);
-			return;
-		}
-		try {
-			controller.saveSelection(modpackId, expectedSelection, target);
-			ScreenImpl.setScreen(new SelectionSavedScreen(this, modpackName));
-		} catch (IOException e) {
-			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
-		}
+		startCachedSwitch(target);
 	}
 
 	private void startCachedSwitch(SelectionIntent targetIntent) {
@@ -603,7 +595,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 
 	private boolean canSave() {
 		return resolutionError.isEmpty()
-				&& (selectionAction != null || managerEntry && !activeModpack || !initialSelection.equals(currentIntent()) || !Objects.equals(initialSelection.platform(), currentIntent().platform()));
+				&& (selectionAction != null || !initialSelection.equals(currentIntent()) || !Objects.equals(initialSelection.platform(), currentIntent().platform()));
 	}
 
 	/** The estimated download size of the current selection: unique SHA-1s across the selected groups, shared files counted once. */
@@ -626,9 +618,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 				: VersionedText.literal(modpackName);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header.getString(), this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 11,
 				TextColors.WHITE);
-		MutableComponent description = managerEntry && !isActiveModpack()
-				? VersionedText.text("automodpack.packManager.switchDescription")
-				: VersionedText.text("automodpack.selection.description");
+		MutableComponent description = VersionedText.text("automodpack.selection.description");
 		// The header stack shares the rail with the platform dropdown (y 24..44), so the description
 		// wraps inside the space left of it and the summary waits until that zone ends. The origin
 		// takes the first rail line when it is known, so the pack name always sits next to its server.

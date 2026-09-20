@@ -84,10 +84,6 @@ final class InstalledModpackController {
 		}
 	}
 
-	void saveSelection(String modpackId, SelectionIntent expected, SelectionIntent target) throws IOException {
-		new ClientSelectionStore(storage.selectionFile()).compareAndSet(modpackId, expected, target);
-	}
-
 	/** One applied selection change, the conflict the player must settle first, or the player-facing reason the change cannot apply. */
 	record SelectionChange(SelectionIntent intent, ResolvedSelection resolution, GroupSelectionResolver.ConflictReplacement conflict, String failure) {}
 
