@@ -18,8 +18,6 @@ public class ServerConfigJsons {
 		// Category name -> group id -> declaration. The group id is referenced by requires/breaksWith and by the client's saved selection; the category name is the player-facing section label.
 		public Map<String, Map<String, GroupDeclaration>> modpack = Map.of("General", Map.of("main", mainGroupDeclaration()));
 		public boolean autoExcludeServerSideMods = true;
-		/** Convenience tier only: skips empty, hidden, .tmp, .disabled and .bak files at scan time. The correctness tier (the 'automodpack/' namespace and Windows-reserved device names) is always enforced. */
-		public boolean autoExcludeUnnecessaryFiles = true;
 		public boolean requireModpack = true;
 		public boolean nagUnModdedClients = true;
 		public String nagMessage = "Install the AutoModpack mod for {loader} to get this server's modpack!";
@@ -64,7 +62,7 @@ public class ServerConfigJsons {
 		declaration.required = true;
 		declaration.defaultSelected = true;
 		declaration.syncedFiles = Set.of("mods/*.jar", "kubejs/**", "emotes/*");
-		declaration.excludedFiles = Set.of("kubejs/server_scripts/**");
+		declaration.excludedFiles = Set.of(".*", ".*/**", "**/.*", "**/.*/**", "*.tmp", "**/*.tmp", "*.disabled", "**/*.disabled", "*.bak", "**/*.bak", "kubejs/server_scripts/**");
 		declaration.allowEditsInFiles = Set.of("options.txt", "config/**");
 		return declaration;
 	}

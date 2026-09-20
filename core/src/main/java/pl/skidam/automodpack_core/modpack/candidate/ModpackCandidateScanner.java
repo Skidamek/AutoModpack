@@ -177,7 +177,7 @@ public final class ModpackCandidateScanner {
 		GroupManifest.GroupFile file = null;
 		StagedObject object = null;
 		if (candidate != null) {
-			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(candidate, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(),
+			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(candidate, request.autoExcludeServerSideMods(),
 					request.stagingDirectory(), request.fileCache(), request.modFileCache(), request.objectStoreDirectory(), request.materializeMissingObjects());
 			if (snapshot.exclusion() != null) {
 				exclusions.add(excluded(candidate, snapshot.exclusion()));
@@ -344,7 +344,6 @@ public final class ModpackCandidateScanner {
 			Path serverRoot,
 			Path groupRoot,
 			Map<String, Map<String, ServerConfigJsons.GroupDeclaration>> modpack,
-			boolean autoExcludeUnnecessaryFiles,
 			boolean autoExcludeServerSideMods,
 			Path stagingDirectory,
 			Executor executor,

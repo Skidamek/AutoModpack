@@ -300,7 +300,6 @@ class ModpackExecutorTest {
 		main.required = true;
 		main.syncedFiles = Set.of();
 		config.modpack = Map.of("General", Map.of("main", main));
-		config.autoExcludeUnnecessaryFiles = false;
 		config.autoExcludeServerSideMods = false;
 		return config;
 	}

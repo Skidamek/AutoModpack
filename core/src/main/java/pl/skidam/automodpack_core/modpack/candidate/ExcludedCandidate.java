@@ -9,11 +9,6 @@ public record ExcludedCandidate(CandidateSource source, Reason reason, String me
 
 	public enum Reason {
 		EXCLUDED_BY_RULE,
-		EMPTY_FILE,
-		HIDDEN_FILE,
-		TEMPORARY_FILE,
-		DISABLED_FILE,
-		BACKUP_FILE,
 		RESERVED_WINDOWS_NAME,
 		SERVER_SIDE_MOD,
 		INTERNAL_FILE

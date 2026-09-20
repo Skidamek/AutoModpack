@@ -12,7 +12,6 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
-import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
@@ -33,7 +32,7 @@ public final class StableSourceSnapshotter {
 		this.copyOperation = Objects.requireNonNull(copyOperation);
 	}
 
-	public Snapshot snapshot(CandidateSource source, boolean autoExcludeUnnecessary, boolean autoExcludeServerMods, Path stagingDirectory,
+	public Snapshot snapshot(CandidateSource source, boolean autoExcludeServerMods, Path stagingDirectory,
 			FileCache fileCache, ModFileCache modFileCache, Path objectStoreDirectory, boolean materializeMissing) throws CandidateBuildException {
 		Path staged = null;
 		try {
@@ -41,7 +40,7 @@ public final class StableSourceSnapshotter {
 			if (before.symbolicLink()) throw new IOException("Symbolic links are not allowed");
 			if (!before.regularFile()) throw new IOException("Source is not a regular file");
 			FileCache.FileFingerprint beforeFingerprint = before.fingerprint();
-			Exclusion exclusion = expectedPathExclusion(source, before, autoExcludeUnnecessary);
+			Exclusion exclusion = expectedPathExclusion(source);
 			if (exclusion != null) return new Snapshot(null, exclusion, null);
 
 			String sha1 = fileCache != null ? fileCache.getOrComputeHash(source.sourcePath()) : HashUtils.getHash(source.sourcePath());
@@ -97,21 +96,14 @@ public final class StableSourceSnapshotter {
 		return true;
 	}
 
-	private static Exclusion expectedPathExclusion(CandidateSource source, FileCache.StatSnapshot attributes, boolean autoExcludeUnnecessary) {
+	private static Exclusion expectedPathExclusion(CandidateSource source) {
 		String logicalPath = source.logicalPath();
-		// Correctness tier, always enforced: Windows clients cannot create these names, and the AutoModpack namespace belongs to the mod's own update flow.
+		// Correctness tier, always enforced and not expressible as admin rules: Windows clients cannot create these names,
+		// and the AutoModpack namespace belongs to the mod's own update flow.
 		if (logicalPath.equals("automodpack") || logicalPath.startsWith("automodpack/"))
 			return new Exclusion(ExcludedCandidate.Reason.INTERNAL_FILE, "AutoModpack internal content is never published");
 		for (Path component : Path.of(logicalPath))
 			if (OsPaths.isReservedWindowsDeviceName(component.toString())) return new Exclusion(ExcludedCandidate.Reason.RESERVED_WINDOWS_NAME, "'" + component + "' cannot be created on Windows clients");
-		// Convenience tier, owned by the autoExcludeUnnecessaryFiles preference.
-		if (!autoExcludeUnnecessary) return null;
-		if (attributes.size() == 0) return new Exclusion(ExcludedCandidate.Reason.EMPTY_FILE, "empty file");
-		for (Path component : Path.of(logicalPath))
-			if (component.toString().startsWith(".")) return new Exclusion(ExcludedCandidate.Reason.HIDDEN_FILE, "hidden file or directory");
-		if (logicalPath.endsWith(DurableFiles.TEMPORARY_SUFFIX)) return new Exclusion(ExcludedCandidate.Reason.TEMPORARY_FILE, "temporary file");
-		if (logicalPath.endsWith(".disabled")) return new Exclusion(ExcludedCandidate.Reason.DISABLED_FILE, "disabled file");
-		if (logicalPath.endsWith(".bak")) return new Exclusion(ExcludedCandidate.Reason.BACKUP_FILE, "backup file");
 		return null;
 	}
 
