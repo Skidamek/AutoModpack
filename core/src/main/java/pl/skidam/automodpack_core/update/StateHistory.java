@@ -18,7 +18,6 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.ContentTree;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
-import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -133,7 +132,7 @@ public final class StateHistory {
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
 		if (active == null) return FileGate.AVAILABLE;
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-			var target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
+			var target = new ClientGenerationStore(storage).readActiveTarget().orElse(null);
 			if (target == null) return FileGate.AVAILABLE;
 			String normalized = LogicalPath.normalize(path);
 			if (target.flatTarget().list != null)
@@ -178,8 +177,12 @@ public final class StateHistory {
 				InstanceTree target = InstanceTree.read(storage, snapshot.treeSha1());
 				if (!blobsPresent(storage, target, cache)) throw new IOException("Instance snapshot " + seq + " is missing file data on this computer");
 				if (!identityFeasible(storage, target.identity())) throw new IOException("Pack history has no generation " + target.identity().contentToken() + " for " + target.identity().activeModpackId());
+				if (Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS))
+					throw new IOException("An offline repair is pending; finish or discard it before restoring a timeline snapshot");
 				InstanceTree live = InstanceTree.observe(storage, target.keys(), cache);
 				if (live.sameAs(target)) return storage.gameDirectory();
+				// Unsnapshotted local edits die in the overwrite otherwise, like the single-file restore's LIVE row.
+				snapshotIfDirty(storage, target.keys(), Kind.LIVE, snapshot.modpackId(), "checkout-" + seq);
 				applyTree(storage, live, target, cache);
 				applyIdentity(storage, target.identity());
 				detachInstalled(storage);

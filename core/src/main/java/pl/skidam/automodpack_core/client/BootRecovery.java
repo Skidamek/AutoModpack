@@ -54,8 +54,15 @@ public final class BootRecovery {
 
 	private void recoverPendingRepair() throws IOException {
 		if (!Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) return;
-		new ClientOfflineRepair(storage, MODPACK_LOADER).recover()
-				.ifPresent(receipt -> LOGGER.info("Recovered offline repair for {} (complete: {})", receipt.before().modpackId(), receipt.complete()));
+		try {
+			new ClientOfflineRepair(storage, MODPACK_LOADER).recover()
+					.ifPresent(receipt -> LOGGER.info("Recovered offline repair for {} (complete: {})", receipt.before().modpackId(), receipt.complete()));
+		} catch (IOException | RuntimeException e) {
+			// The journal can name state that no longer exists (its generation was checked out, an editable
+			// file changed). An unresumable repair must not boot-loop the game; the aside is the receipt and
+			// the repair can be re-run from the installed-pack screens.
+			DurableFiles.setAside(storage.repairJournalFile(), "Offline repair journal", e);
+		}
 	}
 
 	private void recoverPendingTransaction() throws IOException {
