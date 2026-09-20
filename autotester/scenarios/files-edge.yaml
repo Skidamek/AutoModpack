@@ -80,6 +80,98 @@ flow:
   - do: assert_client_file
     name: verify the editable file matches its manifest entry
     path: config/edge/editable.txt
+  - do: assert_client_file
+    name: verify swarm file 01
+    path: config/edge/swarm/file-01.bin
+  - do: assert_client_file
+    name: verify swarm file 02
+    path: config/edge/swarm/file-02.bin
+  - do: assert_client_file
+    name: verify swarm file 03
+    path: config/edge/swarm/file-03.bin
+  - do: assert_client_file
+    name: verify swarm file 04
+    path: config/edge/swarm/file-04.bin
+  - do: assert_client_file
+    name: verify swarm file 05
+    path: config/edge/swarm/file-05.bin
+  - do: assert_client_file
+    name: verify swarm file 06
+    path: config/edge/swarm/file-06.bin
+  - do: assert_client_file
+    name: verify swarm file 07
+    path: config/edge/swarm/file-07.bin
+  - do: assert_client_file
+    name: verify swarm file 08
+    path: config/edge/swarm/file-08.bin
+  - do: assert_client_file
+    name: verify swarm file 09
+    path: config/edge/swarm/file-09.bin
+  - do: assert_client_file
+    name: verify swarm file 10
+    path: config/edge/swarm/file-10.bin
+  - do: assert_client_file
+    name: verify swarm file 11
+    path: config/edge/swarm/file-11.bin
+  - do: assert_client_file
+    name: verify swarm file 12
+    path: config/edge/swarm/file-12.bin
+  - do: assert_client_file
+    name: verify swarm file 13
+    path: config/edge/swarm/file-13.bin
+  - do: assert_client_file
+    name: verify swarm file 14
+    path: config/edge/swarm/file-14.bin
+  - do: assert_client_file
+    name: verify swarm file 15
+    path: config/edge/swarm/file-15.bin
+  - do: assert_client_file
+    name: verify swarm file 16
+    path: config/edge/swarm/file-16.bin
+  - do: assert_client_file
+    name: verify swarm file 17
+    path: config/edge/swarm/file-17.bin
+  - do: assert_client_file
+    name: verify swarm file 18
+    path: config/edge/swarm/file-18.bin
+  - do: assert_client_file
+    name: verify swarm file 19
+    path: config/edge/swarm/file-19.bin
+  - do: assert_client_file
+    name: verify swarm file 20
+    path: config/edge/swarm/file-20.bin
+  - do: assert_client_file
+    name: verify swarm file 21
+    path: config/edge/swarm/file-21.bin
+  - do: assert_client_file
+    name: verify swarm file 22
+    path: config/edge/swarm/file-22.bin
+  - do: assert_client_file
+    name: verify swarm file 23
+    path: config/edge/swarm/file-23.bin
+  - do: assert_client_file
+    name: verify swarm file 24
+    path: config/edge/swarm/file-24.bin
+  - do: assert_client_file
+    name: verify mid-1mib.bin
+    path: config/edge/mid-1mib.bin
+  - do: assert_client_file
+    name: verify mid-2point5mib.bin
+    path: config/edge/mid-2point5mib.bin
+  - do: assert_client_file
+    name: verify mid-8mib.bin
+    path: config/edge/mid-8mib.bin
+  - do: assert_client_file
+    name: verify mid-10mib.bin
+    path: config/edge/mid-10mib.bin
+  - do: assert_file_content
+    name: verify name with spaces.txt
+    path: "config/edge/name with spaces.txt"
+    content: "spaces-in-name"
+  - do: assert_file_content
+    name: verify plus+plus.txt
+    path: "config/edge/plus+plus.txt"
+    content: "plus-in-name"
 
   - do: write_file
     name: make a local edit to the editable file
@@ -123,3 +215,33 @@ serverFiles:
     - { path: config/edge/validates-ünïcode.jar, content: "unicode-name\n" }
     - { path: config/edge/deep/one/two/three/nested.txt, content: "three-directories-deep\n" }
     - { path: config/edge/editable.txt, content: "editable-default\n" }
+    - { path: config/edge/swarm/file-01.bin, sizeBytes: 2711 }
+    - { path: config/edge/swarm/file-02.bin, sizeBytes: 5422 }
+    - { path: config/edge/swarm/file-03.bin, sizeBytes: 8133 }
+    - { path: config/edge/swarm/file-04.bin, sizeBytes: 10844 }
+    - { path: config/edge/swarm/file-05.bin, sizeBytes: 13555 }
+    - { path: config/edge/swarm/file-06.bin, sizeBytes: 16266 }
+    - { path: config/edge/swarm/file-07.bin, sizeBytes: 18977 }
+    - { path: config/edge/swarm/file-08.bin, sizeBytes: 21688 }
+    - { path: config/edge/swarm/file-09.bin, sizeBytes: 24399 }
+    - { path: config/edge/swarm/file-10.bin, sizeBytes: 27110 }
+    - { path: config/edge/swarm/file-11.bin, sizeBytes: 29821 }
+    - { path: config/edge/swarm/file-12.bin, sizeBytes: 32532 }
+    - { path: config/edge/swarm/file-13.bin, sizeBytes: 35243 }
+    - { path: config/edge/swarm/file-14.bin, sizeBytes: 37954 }
+    - { path: config/edge/swarm/file-15.bin, sizeBytes: 40665 }
+    - { path: config/edge/swarm/file-16.bin, sizeBytes: 43376 }
+    - { path: config/edge/swarm/file-17.bin, sizeBytes: 46087 }
+    - { path: config/edge/swarm/file-18.bin, sizeBytes: 48798 }
+    - { path: config/edge/swarm/file-19.bin, sizeBytes: 51509 }
+    - { path: config/edge/swarm/file-20.bin, sizeBytes: 54220 }
+    - { path: config/edge/swarm/file-21.bin, sizeBytes: 56931 }
+    - { path: config/edge/swarm/file-22.bin, sizeBytes: 59642 }
+    - { path: config/edge/swarm/file-23.bin, sizeBytes: 62353 }
+    - { path: config/edge/swarm/file-24.bin, sizeBytes: 65064 }
+    - { path: config/edge/mid-1mib.bin, sizeBytes: 1048576 }
+    - { path: config/edge/mid-2point5mib.bin, sizeBytes: 2621440 }
+    - { path: config/edge/mid-8mib.bin, sizeBytes: 8388608 }
+    - { path: config/edge/mid-10mib.bin, sizeBytes: 10485760 }
+    - { path: "config/edge/name with spaces.txt", content: "spaces-in-name" }
+    - { path: "config/edge/plus+plus.txt", content: "plus-in-name" }
