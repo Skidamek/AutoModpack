@@ -363,7 +363,6 @@ class ModpackExecutorTest {
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		ServerConfigJsons.ServerConfigFieldsV3 fixture = config();
-		fixture.autoExcludeUnnecessaryFiles = true;
 		Constants.serverConfig = fixture;
 		Constants.AM_VERSION = "test";
 		Constants.LOADER = "test";

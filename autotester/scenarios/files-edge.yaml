@@ -329,8 +329,6 @@ topology:
       config:
         # Replaces the permissive /config/** default: only this one file tolerates local edits.
         allowEditsInFiles: ["/config/edge/editable.txt"]
-        # The zero-byte fixture is the point: keep the empty_file auto-exclusion from dropping it.
-        autoExcludeUnnecessaryFiles: false
         # The bundled waiting track, re-hosted as the server's custom one so the client exercises GET /music.
         waitingMusicFile: automodpack/waiting-music.ogg
 
