@@ -49,7 +49,7 @@ public class ModpackExecutor {
 	}
 
 	public ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot) {
-		this(serverRoot, groupRoot, generationRoot, new GenerationStore(generationRoot, DataRootResolver.resolve(serverRoot).layout().objectsDirectory()), new ModpackCandidateScanner()::scan,
+		this(serverRoot, groupRoot, generationRoot, DataRootResolver.resolve(serverRoot), new ModpackCandidateScanner()::scan,
 				(ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2),
 						new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build()));
 	}
@@ -59,6 +59,11 @@ public class ModpackExecutor {
 		this(serverRoot, groupRoot, generationRoot, generationStore, candidateScan, creationExecutor, hosting -> {
 			if (hostServer != null) hostServer.replacePaths(hosting);
 		});
+	}
+
+	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, DataRootResolver.Location dataLocation, CandidateScan candidateScan,
+			ThreadPoolExecutor creationExecutor) {
+		this(serverRoot, groupRoot, generationRoot, new GenerationStore(generationRoot, dataLocation.layout().objectsDirectory(), dataLocation), candidateScan, creationExecutor);
 	}
 
 	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, GenerationStore generationStore, CandidateScan candidateScan,
@@ -148,6 +153,7 @@ public class ModpackExecutor {
 			return new Reverted(document, targetSeq, List.of(), publication.hostingPaths());
 		} catch (Exception e) {
 			if (publication == null) throw e;
+			LOGGER.error("Modpack revert committed, but post-publication cleanup was incomplete", e);
 			return new Reverted(currentDocument(publication), targetSeq, List.of("Revert published, but post-publication cleanup was incomplete"), publication.hostingPaths());
 		}
 	}
@@ -186,25 +192,27 @@ public class ModpackExecutor {
 			GenerationStore.Current current = generationStore.loadCurrent().orElse(null);
 			if (expectedContentToken != null && current == null)
 				return new PublishResult.Rejected("A state guard is unavailable before the root generation is published", null);
-			try (ModpackCandidate candidate = buildCandidate(current, true)) {
+			try (ModpackCandidate candidate = buildCandidate(current, true);
+					FileCache fileCache = FileCache.open(dataLayout.fileCacheDirectory())) {
 				GenerationDiff diff = GenerationDiff.between(current == null ? null : current.manifest(), candidate.manifest());
 				String token = ContentTree.tokenOf(candidate.manifest());
 				CandidateState candidateState = candidateState(current, candidate, token, diff, Optional.empty());
 				if (expectedContentToken != null && !expectedContentToken.equals(token))
 					return new PublishResult.Rejected("Fresh candidate content does not match the requested guard", null);
 
-				if (current != null && current.contentToken().equals(token))
-					return new NoChanges(candidateState.withoutPatchNotesSource(), currentDocument(current), List.of(), generationStore.hosting());
-
 				GenerationPatchNotes.Resolution notes = GenerationPatchNotes.resolve(inlineNotes, patchNotesFile);
+				publication = generationStore.publish(candidate, notes.text(), fileCache);
+				if (current != null && publication.entry().seq() == current.seq())
+					return new NoChanges(candidateState.withoutPatchNotesSource(), currentDocument(publication), List.of(), publication.hostingPaths());
+
 				candidateState = candidateState.withPatchNotesSource(notes.source());
-				publication = generationStore.publish(candidate, notes.text());
 				committedState = candidateState;
 				consumePatchNotes(notes);
 				return new Published(candidateState, currentDocument(publication), List.of(), publication.hostingPaths());
 			}
 		} catch (Exception e) {
 			if (publication == null || committedState == null) throw e;
+			LOGGER.error("Modpack publication committed, but candidate staging cleanup was incomplete", e);
 			return new Published(committedState, currentDocument(publication), List.of("Publication committed, but candidate staging cleanup was incomplete"), publication.hostingPaths());
 		}
 	}

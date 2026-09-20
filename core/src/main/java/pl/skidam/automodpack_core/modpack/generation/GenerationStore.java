@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -24,8 +25,11 @@ import pl.skidam.automodpack_core.modpack.candidate.ServerObjectStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance;
+import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * The server-side modpack state: a content-addressed object store plus an append-only journal of
@@ -38,16 +42,23 @@ public final class GenerationStore {
 	private final Path projectionFile;
 	private final ServerObjectStore objectStore;
 	private final Path objectsDirectory;
+	private final DataRootResolver.Location dataLocation;
 
 	private Journal journal;
 	private Current current;
 
 	public GenerationStore(Path root, Path objectsDirectory) {
+		this(root, objectsDirectory, new DataRootResolver.Location(objectsDirectory.getParent(), HashUtils.sha1("generation-store:" + objectsDirectory.toAbsolutePath().normalize()),
+				objectsDirectory.getParent()));
+	}
+
+	public GenerationStore(Path root, Path objectsDirectory, DataRootResolver.Location dataLocation) {
 		this.root = root.toAbsolutePath().normalize();
 		this.journalFile = this.root.resolve(SERVER_JOURNAL_FILE.getFileName().toString());
 		this.projectionFile = this.root.resolve(SERVER_PROJECTION_FILE.getFileName().toString());
 		this.objectsDirectory = objectsDirectory.toAbsolutePath().normalize();
 		this.objectStore = new ServerObjectStore(this.objectsDirectory, this.root.resolve("staging"));
+		this.dataLocation = Objects.requireNonNull(dataLocation, "data location");
 	}
 
 	public Path objectRoot() {
@@ -134,8 +145,12 @@ public final class GenerationStore {
 		return new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), manifest, OwnershipLedger.fromFields(fields.ownershipLedger), tree);
 	}
 
-	/** Publishes one candidate: promotes its objects, stores its policy document, and appends a journal entry. */
-	public Publication publish(ModpackCandidate candidate, String notes) throws IOException {
+	/**
+	 * Publishes one candidate: promotes its objects, stores its policy document, and appends a journal entry. A
+	 * metadata-only policy change lands as an empty-changes entry - the journal is the only truth, so the new policy
+	 * must be reachable from it or the next boot rebuilds the old one. True no-change leaves the head untouched.
+	 */
+	public Publication publish(ModpackCandidate candidate, String notes, FileCache fileCache) throws IOException {
 		Current current = loadCurrent().orElse(null);
 		GroupManifest manifest = candidate.manifest();
 		ContentTree tree = ContentTree.fromManifest(manifest);
@@ -148,12 +163,11 @@ public final class GenerationStore {
 		OwnershipLedger ledger = OwnershipLedger.materialize(current == null ? OwnershipLedger.empty(manifest.modpackId()) : current.ledger(), manifest);
 		List<JournalEntry.Change> changes = diffTrees(current == null ? ContentTree.empty() : current.tree(), tree);
 
-		objectStore.promoteAll(candidate.objects(), null);
-		if (current != null && current.contentToken().equals(token)) {
-			// Content is unchanged (a policy-only republish): refresh the head document without a journal entry.
-			Current updated = new Current(current.seq(), token, policySha1, current.createdAt(), manifest, ledger, current.tree());
-			this.current = updated;
-			writeProjection(updated);
+		// Promotion runs before the no-change check: a corrupted object the fresh snapshot repaired
+		// must be replaced even when the candidate ends up matching the current generation.
+		objectStore.promoteAll(candidate.objects(), fileCache);
+
+		if (current != null && current.contentToken().equals(token) && current.policySha1().equals(policySha1)) {
 			return new Publication(journal.head(), manifest, ledger, hosting());
 		}
 
@@ -213,34 +227,22 @@ public final class GenerationStore {
 	/**
 	 * Deletes content objects the current head generation no longer serves; collected objects make their generations
 	 * unrestorable. Policy documents are never collected: they are the journal's metadata shadow, and the ledger
-	 * replay plus any generation's manifest folding stay possible for the whole history.
+	 * replay plus any generation's manifest folding stay possible for the whole history. The pass publishes this
+	 * store's ownership receipt and deletes only against every owner's pins on the shared data root, so instances
+	 * reusing the same object store never collect each other's pinned bytes.
 	 */
 	public CollectionSummary collectUnreachable() throws IOException {
 		Current current = loadCurrent().orElse(null);
 		TreeSet<String> reachable = new TreeSet<>();
 		for (JournalEntry entry : journal.entries()) reachable.add(entry.policySha1());
 		if (current != null) for (ContentTree.ContentFile file : current.tree().files().values()) reachable.add(file.sha1());
-		long beforeBytes = 0;
-		long beforeCount = 0;
-		long deletedBytes = 0;
-		long deletedCount = 0;
-		List<Path> objects;
-		try (var stream = Files.walk(objectsDirectory)) {
-			objects = stream.filter(Files::isRegularFile).toList();
-		}
-		for (Path file : objects) {
-			String sha1 = DataRootResolver.objectHash(objectsDirectory, file);
-			if (sha1 == null) continue;
-			beforeCount++;
-			long size = Files.size(file);
-			beforeBytes += size;
-			if (!reachable.contains(sha1)) {
-				Files.delete(file);
-				deletedCount++;
-				deletedBytes += size;
-			}
-		}
-		return new CollectionSummary(beforeCount, beforeBytes, deletedCount, deletedBytes);
+		return SharedObjectOwnership.withGlobalReferences(dataLocation, "server", reachable, globallyReferenced -> {
+			List<Path> objects = ObjectStoreMaintenance.objectFiles(objectsDirectory);
+			long beforeBytes = 0;
+			for (Path file : objects) beforeBytes = ObjectStoreMaintenance.addExact(beforeBytes, Files.size(file), "object store bytes");
+			ObjectStoreMaintenance.DeletionReceipt deletion = ObjectStoreMaintenance.deleteUnreachable(objectsDirectory, globallyReferenced);
+			return new CollectionSummary(objects.size(), beforeBytes, deletion.deletedCount(), deletion.deletedBytes());
+		});
 	}
 
 	public record CollectionSummary(long objectsBefore, long bytesBefore, long deletedObjects, long deletedBytes) {}

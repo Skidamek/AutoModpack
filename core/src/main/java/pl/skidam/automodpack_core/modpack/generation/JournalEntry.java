@@ -28,8 +28,7 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 		createdAt = Objects.requireNonNull(createdAt, "createdAt");
 		notes = validateNotes(notes);
 		if (restoreOf < JournalEntry.NO_RESTORE) throw new IllegalArgumentException("Invalid restore reference");
-		changes = List.copyOf(changes);
-		if (changes.isEmpty()) throw new IllegalArgumentException("A journal entry must carry its changes");
+		changes = List.copyOf(changes); // Empty is a policy-only republish: metadata moved, content did not.
 	}
 
 	/** The per-entry change list kept server-side; summaries ride the wire instead. */

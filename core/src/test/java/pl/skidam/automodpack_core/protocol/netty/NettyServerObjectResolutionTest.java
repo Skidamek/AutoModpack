@@ -116,7 +116,7 @@ class NettyServerObjectResolutionTest {
 
 	private GenerationStore.Publication publish(GenerationStore store, String description) throws Exception {
 		try (ModpackCandidate candidate = candidate(store, description)) {
-			return store.publish(candidate, "");
+			return store.publish(candidate, "", null);
 		}
 	}
 
