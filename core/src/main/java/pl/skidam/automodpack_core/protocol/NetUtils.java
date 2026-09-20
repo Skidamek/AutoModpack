@@ -61,10 +61,11 @@ public class NetUtils {
 	// The body chunk both ends stream in; the client reads one buffer of it per syscall loop and the server streams file bodies through it.
 	public static final int DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB
 
-	// Server egress above this rate is a fast link: at ~0.5 ratio, zstd's pure-Java ~100-150 MB/s compression costs more
-	// CPU than the bytes it saves above roughly ratio × speed ≈ 50-75 MB/s, so snappy (several times cheaper) takes over
-	// and only genuinely fast links ever qualify; shaped links (5 mbit class) sit two orders of magnitude below it.
-	public static final int FAST_LINK_WRITE_RATE = 32 * 1024 * 1024; // 32 MiB/s
+	// The server queues whole response chunks ahead of the peer's drain instead of stop-and-wait: writing resumes below
+	// the low watermark, pauses at the high one, so compression overlaps the wire and memory stays bounded - one identity
+	// chunk of queued response per connection, ≈5 lanes × 4 MiB = 20 MiB worst case across a full pool.
+	public static final int WRITE_BUFFER_LOW_WATER = 512 * 1024;
+	public static final int WRITE_BUFFER_HIGH_WATER = 4 * 1024 * 1024; // 4 MiB
 
 	private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
 	private static final AlgorithmIdentifier SIGNATURE_ALGORITHM_IDENTIFIER = new AlgorithmIdentifier(PKCSObjectIdentifiers.sha256WithRSAEncryption, DERNull.INSTANCE);

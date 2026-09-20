@@ -13,18 +13,28 @@ import java.util.function.IntConsumer;
 public interface PackTransport extends AutoCloseable {
 
 	/**
-	 * Downloads one object into {@code destination}: when {@code offset} is positive the server may stream only the
-	 * suffix, whose bytes land at their absolute offsets behind the already-stored prefix. On completion the
-	 * destination holds the FULL object bytes whether the server resumed or restarted, and promotion judges the whole.
+	 * Downloads the object bytes [{@code offset}, {@code endInclusive}] into {@code destination} at those absolute
+	 * offsets; {@code endInclusive < 0} means through end of file. Bytes land behind any already-stored prefix and
+	 * promotion judges the assembled whole.
 	 */
-	CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, IntConsumer progress);
+	CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, long endInclusive, IntConsumer progress, int lane);
+
+	/**
+	 * Downloads one object into {@code destination} from {@code offset} through end of file: when {@code offset} is
+	 * positive the server may stream only the suffix, whose bytes land at their absolute offsets behind the
+	 * already-stored prefix. On completion the destination holds the FULL object bytes whether the server resumed or
+	 * restarted, and promotion judges the whole.
+	 */
+	default CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, IntConsumer progress) {
+		return downloadFile(key, destination, offset, -1L, progress, 0);
+	}
 
 	/**
 	 * The same fetch with a preferred pipeline lane: concurrent transfers land on distinct lanes while small items fill
 	 * each lane's depth. Transports without a lane pool ignore the hint.
 	 */
 	default CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, IntConsumer progress, int lane) {
-		return downloadFile(key, destination, offset, progress);
+		return downloadFile(key, destination, offset, -1L, progress, lane);
 	}
 
 	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the answer is {@code unchanged} and no body may follow. */

@@ -124,7 +124,8 @@ class DownloadManagerPlatformTest {
 		FakeTransport transport = new FakeTransport(expected);
 		Path stored = downloadViaPlatform("fallback.bin", "multi-chunk.bin", "/missing/fallback.bin", transport);
 		assertArrayEquals(expected, Files.readAllBytes(stored));
-		assertEquals(1, transport.fetches.size());
+		// 12 MiB over 4 MiB chunks: the first segment plus two idle-window takes.
+		assertEquals(3, transport.fetches.size());
 	}
 
 	private Path downloadViaPlatform(String name, String contentKey, String serverPath, FakeTransport transport) throws Exception {
@@ -161,11 +162,12 @@ class DownloadManagerPlatformTest {
 		}
 
 		@Override
-		public CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, IntConsumer progress) {
+		public CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, long endInclusive, IntConsumer progress, int lane) {
 			fetches.add(new String(key, StandardCharsets.UTF_8));
 			if (servedBytes == null) return CompletableFuture.failedFuture(new IOException("no host wire in this test"));
 			try {
-				byte[] suffix = new byte[servedBytes.length - (int) offset];
+				int end = endInclusive < 0 ? servedBytes.length - 1 : (int) endInclusive;
+				byte[] suffix = new byte[end + 1 - (int) offset];
 				System.arraycopy(servedBytes, (int) offset, suffix, 0, suffix.length);
 				if (offset > 0) {
 					try (OutputStream out = LocalFileWriter.openAt(destination, offset)) {

@@ -207,6 +207,8 @@ public class NettyServer {
 						// far past any client's keep-alive reuse window, and a streaming response keeps writing, so the
 						// reap can never interrupt a live transfer.
 						ch.pipeline().addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, NetUtils.HTTP_IDLE_REAP_SECONDS));
+						// Streaming responses queue whole chunks ahead of the peer's drain; the watermark bounds that queue and keeps compression overlapped with the wire.
+						ch.config().setWriteBufferWaterMark(new WriteBufferWaterMark(NetUtils.WRITE_BUFFER_LOW_WATER, NetUtils.WRITE_BUFFER_HIGH_WATER));
 						ch.pipeline().addLast("traffic-shaper", NettyServer.this.trafficHandler());
 						if (connectionMode == ModpackConnectionMode.MAGIC) {
 							ch.pipeline().addLast(MOD_ID + "-magic-gate", new AmmhGateHandler(NettyServer.this, senderExecutor, false));

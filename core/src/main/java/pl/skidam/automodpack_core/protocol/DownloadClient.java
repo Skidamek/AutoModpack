@@ -338,8 +338,13 @@ public class DownloadClient implements PackTransport {
 
 	@Override
 	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, IntConsumer chunkCallback, int lane) {
+		return downloadFile(fileHash, destination, offset, -1L, chunkCallback, lane);
+	}
+
+	@Override
+	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, long endInclusive, IntConsumer chunkCallback, int lane) {
 		// A stale range already surfaces as StaleRangeException from the response parse; no mapping happens here.
-		return withSlot(lane, connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback, offset));
+		return withSlot(lane, connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback, offset, endInclusive));
 	}
 
 	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers 304 and {@code destination} is not written. */

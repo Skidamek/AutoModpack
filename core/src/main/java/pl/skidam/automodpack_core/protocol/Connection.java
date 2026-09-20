@@ -93,9 +93,9 @@ class Connection implements AutoCloseable {
 		}
 	}
 
-	/** Object request by sha1; a positive offset resumes from there and is answered append-only behind a validated start. */
-	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback, long offset) {
-		return submit(new ObjectRequest("/objects/" + new String(fileHash, StandardCharsets.UTF_8), destination, offset, chunkCallback));
+	/** Object request by sha1; the range is [{@code offset}, {@code endInclusive}] ({@code endInclusive < 0} means EOF) and is answered append-only behind a validated start. */
+	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback, long offset, long endInclusive) {
+		return submit(new ObjectRequest("/objects/" + new String(fileHash, StandardCharsets.UTF_8), destination, offset, endInclusive, chunkCallback));
 	}
 
 	/** Document request (reserved keys); a non-null expected hash may be answered 304, and the 200 body hash is the ground truth. */
@@ -240,15 +240,18 @@ class Connection implements AutoCloseable {
 
 	private final class ObjectRequest extends Pending<Path> {
 		private final long offset;
+		private final long endInclusive;
 
-		ObjectRequest(String path, Path destination, long offset, IntConsumer chunks) {
+		ObjectRequest(String path, Path destination, long offset, long endInclusive, IntConsumer chunks) {
 			super(path, destination, chunks);
 			this.offset = offset;
+			this.endInclusive = endInclusive;
 		}
 
 		@Override
 		String headers() {
-			String range = offset > 0 ? "Range: bytes=" + offset + "-\r\n" : "";
+			String end = endInclusive >= 0 ? "-" + endInclusive : "-";
+			String range = endInclusive >= 0 || offset > 0 ? "Range: bytes=" + offset + end + "\r\n" : "";
 			return range + ACCEPT_ENCODING;
 		}
 
@@ -264,7 +267,8 @@ class Connection implements AutoCloseable {
 				return;
 			}
 			if (head.status() == 200) {
-				// A server that ignores Range answers 200 with the full body and no Content-Range; the truncate is the correct result then.
+				// A server that ignores Range answers 200 with the full body and no Content-Range; the truncate is the correct result for an open-ended request then, and a bounded one cannot be satisfied at all.
+				if (endInclusive >= 0) throw new IOException("Server ignored the Range end for " + originPath);
 				boolean resumed = offset > 0 && head.contentRange() != null;
 				if (resumed) requireResumeStart(head, offset);
 				consumeBody(head, destination, resumed ? offset : 0, chunks, null, null);
@@ -273,7 +277,7 @@ class Connection implements AutoCloseable {
 			}
 			discardBody(head);
 			// A failed response is thrown, not completed quietly: the reader treats any failure on the connection as lost alignment and fails every pending request with it.
-			throw statusFailure(head, offset > 0);
+			throw statusFailure(head, offset > 0 || endInclusive >= 0);
 		}
 	}
 

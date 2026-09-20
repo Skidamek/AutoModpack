@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.Test;
 
-/** The window's dynamics are the pacer's whole contract: doubling while throughput climbs, plateau freeze, failure halving, hard cap. */
+/** The window's dynamics are the pacer's whole contract: lane-depth start, doubling while throughput climbs, plateau freeze, failure halving, hard cap. */
 class WirePacerTest {
 	/** One virtual millisecond per settle: a deterministic time base for the throughput ratios. */
 	private static final AtomicLong TICK = new AtomicLong();
@@ -23,9 +23,10 @@ class WirePacerTest {
 	}
 
 	@Test
-	void windowDoublesWhileThroughputClimbsAndStopsAtTheCap() {
+	void windowStartsAtOneLanePipelineAndDoublesToTheCap() {
 		WirePacer pacer = pacer(8, 2);
-		assertEquals(1, pacer.window());
+		// 2 lanes × depth 4: the floor is one lane's pipeline, the smallest window that can still fill a lane.
+		assertEquals(4, pacer.window());
 		for (int i = 0; i < 10; i++) climbCycle(pacer, 1_000_000L * (i + 1));
 		assertEquals(8, pacer.window());
 	}
@@ -34,13 +35,22 @@ class WirePacerTest {
 	void fallingThroughputFreezesTheWindowAtThePlateau() {
 		WirePacer pacer = pacer(40, 5);
 		climbCycle(pacer, 1_000_000);
-		climbCycle(pacer, 4_000_000);
-		assertEquals(4, pacer.window());
-		// Identical bytes per cycle: the throughput ratio is exactly one, so growth freezes at the plateau.
+		assertEquals(16, pacer.window());
+		// A cycle moving about the previous cycle's bytes is a plateau: growth freezes, nothing halves.
+		flatCycle(pacer, 2_000_000);
+		assertEquals(16, pacer.window());
+		flatCycle(pacer, 2_000_000);
+		assertEquals(16, pacer.window());
+	}
+
+	@Test
+	void collapsedThroughputHalvesTheWindow() {
+		WirePacer pacer = pacer(40, 5);
+		climbCycle(pacer, 1_000_000);
+		assertEquals(16, pacer.window());
+		// A congested wire: the cycle moved a fraction of the previous one's bytes, so the window halves.
 		flatCycle(pacer, 1);
-		assertEquals(4, pacer.window());
-		flatCycle(pacer, 1);
-		assertEquals(4, pacer.window());
+		assertEquals(8, pacer.window());
 	}
 
 	/** One full cycle of good settles at a constant per-item size, so no cycle can look like a climb. */
@@ -52,19 +62,19 @@ class WirePacerTest {
 	void failureHalvesTheWindowAndNeverBelowOne() {
 		WirePacer pacer = pacer(40, 5);
 		climbCycle(pacer, 1_000_000);
-		climbCycle(pacer, 8_000_000);
+		assertEquals(16, pacer.window());
+		pacer.settle(true, 0, 1_000_000, 0);
+		assertEquals(8, pacer.window());
+		pacer.settle(true, 0, 1_000_000, 0);
 		assertEquals(4, pacer.window());
-		pacer.settle(true, 0, 1_000_000, 0);
-		assertEquals(2, pacer.window());
-		pacer.settle(true, 0, 1_000_000, 0);
-		assertEquals(1, pacer.window());
-		pacer.settle(true, 0, 1_000_000, 0);
+		for (int i = 0; i < 5; i++) pacer.settle(true, 0, 1_000_000, 0);
 		assertEquals(1, pacer.window());
 	}
 
 	@Test
 	void windowAccountingBalancesAcrossAcquireReleaseAndSettle() {
-		WirePacer pacer = pacer(2, 1);
+		WirePacer pacer = pacer(4, 4);
+		assertEquals(1, pacer.window());
 		assertTrue(pacer.tryAcquire());
 		assertFalse(pacer.tryAcquire());
 		pacer.release();

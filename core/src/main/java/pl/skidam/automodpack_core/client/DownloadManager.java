@@ -112,15 +112,26 @@ public class DownloadManager implements DownloadView {
 		downloadNext();
 	}
 
-	private synchronized void downloadNext() {
-		if (queuedDownloads.isEmpty()) {
-			stealIdleWork();
-			return;
-		}
-		// Host tasks are paced by the wire window, not by worker count: a small-file sync only fills the
-		// lanes' depth when many tasks may hold a request each. Platform tasks block a worker each, so
-		// they alone answer to the worker budget, gated after the pick below.
+	// Guards the pump against re-entrancy: a request that settles inline inside a dispatch (a fail-fast submit) must not recurse the loop - the running iteration covers the freed slot.
+	private boolean pumping;
 
+	private synchronized void downloadNext() {
+		// Drain, don't dribble: every settle and every finalize pumps the dispatch until the wire window or the worker
+		// budget is full, so concurrency tracks the window as it grows instead of riding one file per settle.
+		if (pumping) return;
+		pumping = true;
+		try {
+			while (!queuedDownloads.isEmpty()) {
+				if (!dispatchOne()) return;
+			}
+			stealIdleWork();
+		} finally {
+			pumping = false;
+		}
+	}
+
+	/** Picks and submits one task; false means the queue is empty of dispatchable work or the budget is full and the next settle re-runs the dispatch. */
+	private boolean dispatchOne() {
 		// SCHEDULING: the largest queued file first (ties in enqueue order), then among its candidate domains the one
 		// whose measured speed makes backlog-plus-this-file finish soonest. Domains this task already burned its
 		// attempts on are withheld (candidateDomains); dead links are handled at attempt time.
@@ -132,10 +143,10 @@ public class DownloadManager implements DownloadView {
 		for (DownloadData data : downloadsInProgress.values()) inFlightBacklog.merge(data.activeDomain, Math.max(0, data.remainingBytes.get()), Long::sum);
 
 		DownloadScheduler.Pick<FileInspection.HashPathPair> pick = scheduler.pick(queue, inFlightBacklog);
-		if (pick == null) return;
+		if (pick == null) return false;
 
 		QueuedDownload task = queuedDownloads.remove(pick.identity());
-		if (task == null) return; // The queue was cleared (cancel) between the snapshot and the removal.
+		if (task == null) return false; // The queue was cleared (cancel) between the snapshot and the removal.
 		final FileInspection.HashPathPair key = pick.identity();
 		final String activeDomain = pick.sourceDomain();
 
@@ -144,11 +155,11 @@ public class DownloadManager implements DownloadView {
 			if (!pacer.tryAcquire()) {
 				// The wire window is full: put the task back; the next settle re-runs the dispatch.
 				queuedDownloads.put(key, task);
-				return;
+				return false;
 			}
 		} else if (platformTasksInFlight() >= MAX_DOWNLOADS_IN_PROGRESS) {
 			queuedDownloads.put(key, task);
-			return;
+			return false;
 		}
 
 		LOGGER.info("Queueing download for: {} {} {}", task.file, task.fileSize, activeDomain);
@@ -163,7 +174,7 @@ public class DownloadManager implements DownloadView {
 			downloadsInProgress.remove(key);
 			failedFiles.incrementAndGet();
 			semaphore.release();
-			return;
+			return false;
 		}
 		try {
 			downloadExecutor.execute(() -> {
@@ -180,12 +191,14 @@ public class DownloadManager implements DownloadView {
 			failedFiles.incrementAndGet();
 			semaphore.release();
 			future.completeExceptionally(error);
+			return false;
 		} catch (RuntimeException error) {
 			downloadsInProgress.remove(key);
 			future.completeExceptionally(error);
 			throw error;
 		}
 		stealIdleWork();
+		return true;
 	}
 
 	/** Platform tasks occupy a worker for their whole blocking attempt; host tasks do not. */
@@ -364,7 +377,7 @@ public class DownloadManager implements DownloadView {
 		cleanupAndFinalize(hashPathPair, task, storeFile, downloaded, false);
 	}
 
-	/** The host path: the streamer owns [offset, size) and idle lanes later steal tail chunks; the barrier finalizes. */
+	/** The host path: the first segment rides the dispatch credit, every further chunk waits for a free window slot; the barrier finalizes once all of them are in. */
 	private void submitHostItems(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path partial) {
 		task.hostError = null;
 		task.stealCursor = task.fileSize;
@@ -377,7 +390,8 @@ public class DownloadManager implements DownloadView {
 			return;
 		}
 		task.pendingItems = 1;
-		submitHostItem(hashPathPair, task, data, partial, offset, lane.get());
+		submitHostItem(hashPathPair, task, data, partial, offset, Math.min(offset + (long) NetUtils.DEFAULT_CHUNK_SIZE, task.fileSize) - 1, lane.get());
+		stealIdleWork();
 	}
 
 	/** The byte offset a host attempt resumes from: the partial's size while the prefix is valid, else a fresh start. */
@@ -398,8 +412,8 @@ public class DownloadManager implements DownloadView {
 		}
 	}
 
-	/** One request of the task's file on one lane; its settle feeds the pacer and ticks the task's barrier down. */
-	private void submitHostItem(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path partial, long offset, int lane) {
+	/** One request of the task's file on one lane, covering [offset, endInclusive]; its settle feeds the pacer and ticks the task's barrier down. */
+	private void submitHostItem(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path partial, long offset, long endInclusive, int lane) {
 		AtomicLong itemBytes = new AtomicLong(0);
 		long itemStart = System.nanoTime();
 		IntConsumer progressAction = bytes -> {
@@ -407,7 +421,17 @@ public class DownloadManager implements DownloadView {
 			itemBytes.addAndGet(bytes);
 			data.remainingBytes.addAndGet(-bytes);
 		};
-		transport.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), partial, offset, progressAction, lane).whenComplete((path, error) -> {
+		CompletableFuture<Path> future;
+		try {
+			future = transport.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), partial, offset, endInclusive, progressAction, lane);
+		} catch (Throwable error) {
+			// The submit never produced an item: return its window credit and tick the barrier down, or the task waits for a settle that never comes.
+			if (task.hostError == null) task.hostError = Throwables.unwrap(error);
+			pacer.settle(true, 0, 0, lane);
+			onHostItemSettled(hashPathPair, task, data, partial);
+			return;
+		}
+		future.whenComplete((path, error) -> {
 			if (error != null && task.hostError == null) task.hostError = Throwables.unwrap(error);
 			long settled = System.nanoTime() - itemStart;
 			pacer.settle(error != null, itemBytes.get(), settled, lane);
@@ -416,13 +440,16 @@ public class DownloadManager implements DownloadView {
 		});
 	}
 
-	/** Runs on the lane's reader thread: barrier bookkeeping only, then the window refill. */
+	/**
+	 * Runs on the lane's reader thread: barrier bookkeeping only, then the window refill. The task is done only once every chunk beyond the first is taken - a partial barrier would promote a hole-riddled file - or once
+	 * it has failed.
+	 */
 	private void onHostItemSettled(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path partial) {
-		boolean last;
+		boolean done;
 		synchronized (task) {
-			last = --task.pendingItems == 0;
+			done = --task.pendingItems == 0 && (task.hostError != null || task.stealCursor <= data.hostOffset + (long) NetUtils.DEFAULT_CHUNK_SIZE);
 		}
-		if (last) {
+		if (done) {
 			Throwable error = task.hostError;
 			downloadExecutor.execute(() -> finishHostFile(hashPathPair, task, data, partial, error));
 		} else {
@@ -482,31 +509,37 @@ public class DownloadManager implements DownloadView {
 		return true;
 	}
 
-	/** The queue is drained but lanes may idle: steal a tail chunk of an in-flight host file for a free window slot. */
+	/** The queue is drained or the budget full but the window has room: hand idle slots to the tails of in-flight host files, one exact chunk per take. */
 	private synchronized void stealIdleWork() {
-		if (!pacer.tryAcquire()) return; // the wire is the constraint, not idle lanes
 		long chunk = NetUtils.DEFAULT_CHUNK_SIZE;
-		for (DownloadData data : downloadsInProgress.values()) {
-			QueuedDownload task = data.task;
-			if (data.hostOffset < 0 || task.hostError != null) continue;
-			// The barrier lock decides steal vs finish: once the last item settles, no steal may join the task.
-			synchronized (task) {
-				if (task.pendingItems == 0) continue;
-				long floor = data.hostOffset + chunk; // the streamer always keeps at least one chunk of its own
-				long stealFrom = task.stealCursor - chunk;
-				if (stealFrom < floor) continue;
-				Path partial = task.partialFile;
-				if (partial == null) continue;
-				task.stealCursor = stealFrom;
-				task.resumeValid = false; // a positioned steal write makes the partial's size meaningless for resume
-				task.pendingItems++;
-				int lane = Math.floorMod(laneCounter.getAndIncrement(), MAX_DOWNLOADS_IN_PROGRESS);
-				LOGGER.debug("[download] lane {} steals bytes {}..{} of {}", lane, stealFrom, stealFrom + chunk, task.file.getFileName());
-				submitHostItem(data.key, task, data, partial, stealFrom, lane);
+		while (pacer.tryAcquire()) {
+			boolean stole = false;
+			for (DownloadData data : downloadsInProgress.values()) {
+				QueuedDownload task = data.task;
+				if (data.hostOffset < 0 || task.hostError != null) continue;
+				// The task lock decides take vs finish, exactly as the barrier's done check reads it: once the cursor
+				// sits at the first chunk there is nothing left to take, so a finished task is never joined.
+				synchronized (task) {
+					long floor = data.hostOffset + chunk; // never take the first chunk; the streamer owns it
+					long stealFrom = task.stealCursor - chunk;
+					if (stealFrom < floor) continue;
+					Path partial = task.partialFile;
+					if (partial == null) continue;
+					task.stealCursor = stealFrom;
+					task.resumeValid = false; // a positioned take makes the partial's size meaningless for resume
+					task.pendingItems++;
+					int lane = Math.floorMod(laneCounter.getAndIncrement(), MAX_DOWNLOADS_IN_PROGRESS);
+					LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", lane, stealFrom, stealFrom + chunk - 1, task.file.getFileName());
+					submitHostItem(data.key, task, data, partial, stealFrom, stealFrom + chunk - 1, lane);
+				}
+				stole = true;
+				break;
 			}
-			return;
+			if (!stole) {
+				pacer.release(); // nothing left to take
+				return;
+			}
 		}
-		pacer.release(); // nothing to steal
 	}
 
 	/** Deletes the task's partial temp and forgets it; the next attempt, if any, starts from zero. */

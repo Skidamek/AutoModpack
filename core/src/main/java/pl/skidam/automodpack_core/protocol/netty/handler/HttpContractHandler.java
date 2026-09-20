@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.protocol.netty.handler;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.serverConfig;
 import static pl.skidam.automodpack_core.protocol.NetUtils.DEFAULT_CHUNK_SIZE;
-import static pl.skidam.automodpack_core.protocol.NetUtils.FAST_LINK_WRITE_RATE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.TRANSFER_WRITE_STALL_TIMEOUT;
 
 import java.io.ByteArrayOutputStream;
@@ -325,7 +324,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		inFlightSpan = span;
 		try {
 			senders.execute(() -> {
-				WireCodec codec = chooseCodec(acceptEncoding);
+				WireCodec codec = WireCodec.negotiate(acceptEncoding);
 				double ratio = sniffRatio(file, codec);
 				if (ratio < 0 || ratio > INCOMPRESSIBLE_RATIO) {
 					serveIdentity(ctx, file, 0, total, STATUS_200, etag, null, keepAlive, span);
@@ -339,16 +338,6 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			ctx.close();
 		}
 		return false;
-	}
-
-	/**
-	 * The codec for this response: the first registry coding the client listed, except that a fast link swaps zstd for
-	 * snappy when the client offered both - at LAN rates zstd's compression CPU costs more than the bytes it saves.
-	 */
-	private WireCodec chooseCodec(String acceptEncoding) {
-		WireCodec negotiated = WireCodec.negotiate(acceptEncoding);
-		if (negotiated == WireCodec.ZSTD && tracker.writeThroughput() >= FAST_LINK_WRITE_RATE && acceptEncoding.toLowerCase(Locale.ROOT).contains(WireCodec.SNAPPY.wireName())) return WireCodec.SNAPPY;
-		return negotiated;
 	}
 
 	/** The sniff receipt: compression ratio of the first {@link #SNIFF_BYTES} under the codec; -1 means the file is unreadable and identity must answer. */
@@ -368,7 +357,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		return sampled == 0 ? 0 : (double) sink.size() / sampled;
 	}
 
-	/** Streams the negotiated body: file through the codec into chunked frames, each write blocked on the stall window so the compressor cannot outrun the peer. */
+	/** Streams the negotiated body: file through the codec into chunked frames, queued ahead of the peer's drain until the watermark pauses them. */
 	private void streamCompressedBody(ChannelHandlerContext ctx, Path file, WireCodec codec, String etag, boolean keepAlive, ActivityTracker.Span span) {
 		Channel channel = ctx.channel();
 		ChannelFuture headWritten = channel.writeAndFlush(chunkedResponse(etag, codec));
@@ -435,16 +424,30 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			if (buffer.size() > 0) frame();
 		}
 
+		/** Emits the buffered bytes as one sized chunk; only a congested channel blocks the next compress. */
 		private void frame() throws IOException {
 			byte[] bytes = buffer.toByteArray();
 			buffer.reset();
 			flushed += bytes.length;
 			byte[] sizeLine = (Integer.toHexString(bytes.length) + "\r\n").getBytes(StandardCharsets.UTF_8);
 			ChannelFuture written = channel.writeAndFlush(Unpooled.wrappedBuffer(sizeLine, bytes, CRLF));
-			Throwable failure = awaitWritten(channel, written);
-			if (failure == null && !written.isSuccess()) failure = causeOf(written);
+			Throwable failure = awaitWhenCongested(channel, written);
 			if (failure != null) throw failure instanceof IOException io ? io : new IOException(failure);
 		}
+	}
+
+	/**
+	 * The streaming backpressure point: a write whose channel still has queue room is left to drain while the next chunk
+	 * is read or compressed; only a channel past its high watermark waits, under the same stall window as before. A
+	 * channel with room cannot hide a failure for long - every later write checks the queue - and a response's final
+	 * write is always awaited, which completes every write queued before it.
+	 */
+	private static Throwable awaitWhenCongested(Channel channel, ChannelFuture written) {
+		if (written.isDone()) return written.isSuccess() ? null : causeOf(written);
+		if (channel.isWritable()) return null;
+		Throwable failure = awaitWritten(channel, written);
+		if (failure == null && !written.isSuccess()) failure = causeOf(written);
+		return failure;
 	}
 
 	/** The negotiated head: no length exists yet, so the body is framed chunked and the coding is named. */
@@ -505,6 +508,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		Throwable failure = awaitWritten(channel, headWritten);
 		if (failure == null && !headWritten.isSuccess()) failure = causeOf(headWritten);
 		long sent = 0;
+		ChannelFuture lastWritten = headWritten;
 		try {
 			while (failure == null && sent < length) {
 				int chunkLength = (int) Math.min(DEFAULT_CHUNK_SIZE, length - sent);
@@ -524,12 +528,16 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 					chunk.release();
 					throw e;
 				}
-				ChannelFuture written = channel.writeAndFlush(chunk);
+				lastWritten = channel.writeAndFlush(chunk);
 				tracker.progress(span, sent);
-				failure = awaitWritten(channel, written);
-				if (failure == null && !written.isSuccess()) failure = causeOf(written);
+				failure = awaitWhenCongested(channel, lastWritten);
 			}
 			if (failure == null && sent < length) failure = new IOException("File ended before the response was fully streamed");
+			// The queued chunks ahead of the last one complete with it; only here does the whole body count as delivered.
+			if (failure == null) {
+				failure = awaitWritten(channel, lastWritten);
+				if (failure == null && !lastWritten.isSuccess()) failure = causeOf(lastWritten);
+			}
 		} catch (Exception e) {
 			failure = e;
 		} finally {

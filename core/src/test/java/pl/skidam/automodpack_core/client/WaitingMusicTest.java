@@ -141,7 +141,7 @@ class WaitingMusicTest {
 		}
 
 		@Override
-		public CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, IntConsumer progress) {
+		public CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, long endInclusive, IntConsumer progress, int lane) {
 			return CompletableFuture.failedFuture(new IOException("unused"));
 		}
 
