@@ -114,11 +114,33 @@ public final class HconfConfigs {
 			}
 			document = result.document();
 		}
-		document.reconcile(modelTree(model));
+		Value.Obj tree = modelTree(model);
+		document.reconcile(tree);
+		setArrays(document, tree, document.tree(), hconf.Path.root());
 		ensureDeclared(document, type, defaults.get());
 		OsPaths.requirePublishableConfig(path);
 		DurableFiles.writeAtomic(path, document.text());
 		if (legacyBytes != null) Files.deleteIfExists(legacy);
+	}
+
+	/**
+	 * Sets every array member from the model, walking both trees in parallel. Reconcile is insert-only (§9.5): it
+	 * never deletes, which is right for a model built from scratch, but this model was read from the very file being
+	 * saved - so every element the model lacks is a deliberate removal (a normalized-away rule, an unpinned mod),
+	 * and letting it stand would resurrect it on the next read. The model carries the user's own elements untouched;
+	 * only the program's deletions are applied.
+	 */
+	private static void setArrays(Document document, Value model, Value current, hconf.Path path) {
+		if (model instanceof Value.Arr arr) {
+			if (current instanceof Value.Arr) document.set(path, arr);
+			return;
+		}
+		if (!(model instanceof Value.Obj modelObj) || !(current instanceof Value.Obj currentObj)) return;
+		for (var entry : modelObj.members.entrySet()) {
+			Value currentMember = currentObj.members.get(entry.getKey());
+			if (currentMember == null) continue; // absent from the file: ensureDeclared materializes the declared ones
+			setArrays(document, entry.getValue(), currentMember, path.appended(entry.getKey()));
+		}
 	}
 
 	/** The pre-hconf {@code .json} name of a config file; the read fallback and the save migration source. */

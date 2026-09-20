@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -134,6 +135,32 @@ class HconfConfigsTest {
 		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertTrue(text.contains("someFutureOption: true"), "stale key not left alone:\n" + text);
+	}
+
+	@Test
+	void saveRemovesArrayElementsTheModelDropped() throws IOException {
+		// the model was read from this very file, so an element missing from it is a deliberate
+		// removal - a normalized-away rule, a pin removed in the UI - and reconcile (insert-only,
+		// §9.5) must not let it resurrect on the next read
+		String userFile = """
+				modpackName: "X"
+				modpack: {
+				  General: {
+				    main: {
+				      syncedFiles: ["mods/*.jar", "kubejs/**"]
+				    }
+				  }
+				}
+				""";
+		Files.writeString(serverConfig(), userFile, StandardCharsets.UTF_8);
+		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		config.modpack.get("General").get("main").syncedFiles = Set.of("mods/*.jar");
+		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
+		assertTrue(text.contains("mods/*.jar"), "kept rule lost:\n" + text);
+		assertFalse(text.contains("kubejs"), "removed rule resurrected:\n" + text);
+		assertEquals(Set.of("mods/*.jar"),
+				HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow().modpack.get("General").get("main").syncedFiles);
 	}
 
 	@Test
