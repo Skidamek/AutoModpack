@@ -260,6 +260,18 @@ public class DownloadManager implements DownloadView {
 				return;
 			}
 			// DOWNLOAD REQUIRED. A corrupt object is never a cache hit.
+			// An empty file is its own source: there are no bytes to fetch from anyone, so materialize it locally and let the normal promotion judge it.
+			if (task.fileSize == 0) {
+				Path empty = preparePartial(hashPathPair, task);
+				if (empty == null) {
+					releaseWindow(data);
+					cleanupAndFinalize(hashPathPair, task, storeFile, false, false);
+					return;
+				}
+				releaseWindow(data);
+				finishHostFile(hashPathPair, task, data, empty);
+				return;
+			}
 			Path partial = preparePartial(hashPathPair, task);
 			if (partial == null) {
 				releaseWindow(data);

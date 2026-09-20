@@ -144,6 +144,22 @@ class DownloadManagerPlatformTest {
 		return layout.objectFile(sha1);
 	}
 
+	/** A zero-byte file needs nobody: no platform, no host wire - the client just creates it and promotion judges the hash. */
+	@Test
+	void emptyFileMaterializesWithoutAnySourceOrWire() throws Exception {
+		layout = new DataRootResolver.Layout(tempDir.resolve("data"));
+		Path destination = tempDir.resolve("active").resolve("zero.bin");
+		PlatformCache cache = PlatformCache.open(tempDir.resolve("platform-cache"));
+		DownloadManager manager = new DownloadManager(0, layout, cache);
+		manager.attachTransport(new FakeTransport(null)); // any host fetch would fail this test
+		String sha1 = HashUtils.getHash(writeExpected("zero.bin", new byte[0]));
+		manager.download(destination, sha1, null, "config", List.of(), 0, () -> {}, category -> {});
+		manager.joinAll();
+		manager.finish();
+		cache.close();
+		assertArrayEquals(new byte[0], Files.readAllBytes(layout.objectFile(sha1)));
+	}
+
 	/** The expected bytes on disk, so the store's sha1 promotion judges real content. */
 	private Path writeExpected(String name, byte[] content) throws IOException {
 		Path expected = tempDir.resolve("expected-" + name);
