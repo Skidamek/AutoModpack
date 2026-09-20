@@ -142,7 +142,12 @@ final class ModpackObjectAcquisition {
 		}
 
 		downloadManager = new DownloadManager(totalBytes, storage.dataLocation().layout(), platformCache);
-		if (playerFacing) ScreenManager.download(downloadManager, modpackName.get(), onPlayerCancel);
+		if (playerFacing) {
+			ScreenManager.download(downloadManager, modpackName.get(), onPlayerCancel);
+			WaitingMusic.refreshAsync(transport, storage).thenAccept(track -> {
+				if (track != null) ScreenManager.musicReady(track);
+			});
+		}
 		downloadManager.attachTransport(transport);
 		for (var serverItem : files) {
 			Path downloadFile = storage.activePath(serverItem.file);

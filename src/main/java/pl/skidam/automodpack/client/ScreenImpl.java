@@ -1,6 +1,9 @@
 package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack_core.config.GenerationJsons;
+import java.nio.file.Path;
+
+import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.*;
 import pl.skidam.automodpack.client.ui.screen.*;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -35,6 +38,11 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 
 public class ScreenImpl implements ScreenService {
+
+	@Override
+	public void musicReady(Path track) {
+		AudioManager.offerCustomTrack(track);
+	}
 
 	private static void executeOnClient(Runnable task) {
 		Minecraft.getInstance().execute(task);

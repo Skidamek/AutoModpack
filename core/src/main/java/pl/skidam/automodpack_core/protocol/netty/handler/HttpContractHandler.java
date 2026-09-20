@@ -234,7 +234,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		// Objects already are their hash. A document is only hashed when a validator actually asks, keeping the SHA-1
 		// of a possibly large journal off the event loop for the plain GETs; the response then simply carries no ETag.
-		boolean document = key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY);
+		boolean document = key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY) || key.equals(GenerationHosting.MUSIC_DOCUMENT_KEY);
 		String etag = document ? null : key;
 		if (ifNoneMatch != null) {
 			etag = document ? HashUtils.getHash(file) : key;
@@ -502,6 +502,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	private static String routeKey(String target) {
 		if (target.equals("/" + GenerationHosting.HEAD_DOCUMENT_KEY)) return GenerationHosting.HEAD_DOCUMENT_KEY;
 		if (target.equals("/" + GenerationHosting.JOURNAL_KEY)) return GenerationHosting.JOURNAL_KEY;
+		if (target.equals("/" + GenerationHosting.MUSIC_DOCUMENT_KEY)) return GenerationHosting.MUSIC_DOCUMENT_KEY;
 		if (target.startsWith("/objects/")) {
 			String sha1 = target.substring("/objects/".length());
 			return HashUtils.isSha1(sha1) ? HashUtils.normalizeSha1(sha1) : null;

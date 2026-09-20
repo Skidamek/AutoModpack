@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.screen;
 
+import java.nio.file.Path;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -21,6 +22,9 @@ public interface ScreenService {
 	default void restart(UpdateType updateType, Changelogs changelogs) {}
 
 	default void completeWithoutRestart() {}
+
+	/** The server's custom waiting track landed in the client cache; the audio layer swaps to it if ambience is on. */
+	default void musicReady(Path track) {}
 
 	default void welcome(ReviewPayload payload) {}
 

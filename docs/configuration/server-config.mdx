@@ -88,6 +88,7 @@ When a client cannot detect a platform at all, groups without `compatiblePlatfor
 | `secretLifetime` | `336` | How long a download secret stays valid, in hours. 336 hours is 14 days. |
 | `exportHttpDirectory` | `""` | Non-empty: after every publish, the URL-contract tree (`head`, `journal`, `objects/`) is exported to this directory, ready to serve with any static HTTPS host. See [HTTP contract export](../how-it-works/hosting#http-contract-export). |
 | `exportHttpIncludeAll` | `false` | Keeps every object in the HTTP contract export, including files Modrinth or CurseForge still serve to clients directly. Off, the platforms carry those downloads and your mirror holds no fallback for a file a platform later deletes; on, the exported tree stays complete. See [HTTP contract export](../how-it-works/hosting#http-contract-export). |
+- `waitingMusicFile` - Path to an `.ogg` file served as `GET /music`: the client's custom waiting track (streamed on first contact, cached afterwards; 4 MiB cap, bundled track beyond it). Licensing is the operator's responsibility.
 
 Setting `modpackHost` to `false` turns off every built-in listener while clients keep receiving connection information. AutoModpack cannot validate external routing from the Minecraft server process, so a reverse proxy setup is your responsibility; the [proxies page](../compatibility/proxies) covers known-good setups.
 

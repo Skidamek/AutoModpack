@@ -96,6 +96,7 @@ class HttpContractHandlerTest {
 		assertEquals("HTTP/1.1 404 Not Found", statusOf(exchange(channel, request("/unknown"))));
 		assertEquals("HTTP/1.1 404 Not Found", statusOf(exchange(channel, request("/head/"))));
 		assertEquals("HTTP/1.1 404 Not Found", statusOf(exchange(channel, request("/head?v=2"))));
+		assertEquals("HTTP/1.1 404 Not Found", statusOf(exchange(channel, request("/music")))); // no track configured
 		assertTrue(channel.isOpen());
 	}
 

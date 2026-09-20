@@ -331,9 +331,13 @@ topology:
         allowEditsInFiles: ["/config/edge/editable.txt"]
         # The zero-byte fixture is the point: keep the empty_file auto-exclusion from dropping it.
         autoExcludeUnnecessaryFiles: false
+        # The bundled waiting track, re-hosted as the server's custom one so the client exercises GET /music.
+        waitingMusicFile: automodpack/waiting-music.ogg
 
 serverFiles:
   modpackName: files-edge
+  # The mod's own bundled track, re-hosted as the server's custom one, so the client exercises GET /music end to end.
+  waitingMusic: client-jar
   marker: config/amp-autotest-marker.json
   files:
     - { path: config/edge/empty.bin, content: "" }

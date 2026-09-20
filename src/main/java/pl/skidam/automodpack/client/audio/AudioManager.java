@@ -1,6 +1,8 @@
 package pl.skidam.automodpack.client.audio;
 
 import java.io.ByteArrayOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
@@ -49,6 +51,23 @@ public class AudioManager {
 
 	private static final Object LOCK = new Object();
 	private static volatile Loop PLAYER;
+	/** The server's custom track once it lands in the client cache; the bundled jar track stays the default. */
+	private static volatile Path customTrack;
+
+	/** Swaps the waiting track for the server's custom one, restarting the loop when ambience is already playing. */
+	public static void offerCustomTrack(Path track) {
+		synchronized (LOCK) {
+			customTrack = track;
+			if (PLAYER != null) {
+				PLAYER.stop();
+				Loop loop = new Loop();
+				PLAYER = loop;
+				Thread thread = new Thread(loop, "AutoModpack waiting music");
+				thread.setDaemon(true);
+				thread.start();
+			}
+		}
+	}
 
 	/** Kept so every loader's init call site stays identical; the loop itself starts lazily in playMusic(). */
 	public AudioManager() {}
@@ -175,9 +194,28 @@ public class AudioManager {
 			return format.getChannels() == 1 ? AL10.AL_FORMAT_MONO16 : AL10.AL_FORMAT_STEREO16;
 		}
 
-		/** Decodes the whole ogg through Minecraft's vorbis decoder; the PCM stays resident so looping never re-decodes. */
+		/** Decodes the whole ogg through Minecraft's vorbis decoder; the PCM stays resident so looping never re-decodes. The server's custom track wins, and the bundled one is the fallback when it is missing or broken. */
 		private byte[] decode() {
-			try (InputStream input = Assets.stream(MUSIC_PATH); AudioStream stream = openStream(input)) {
+			Path custom = customTrack;
+			if (custom != null) {
+				try (InputStream input = Files.newInputStream(custom)) {
+					byte[] pcm = decodeStream(input, "the server's custom waiting music " + custom);
+					if (pcm != null) return pcm;
+				} catch (Exception e) {
+					Constants.LOGGER.error("Failed to decode the custom waiting music {}; falling back to the bundled track", custom, e);
+				}
+			}
+			try (InputStream input = Assets.stream(MUSIC_PATH)) {
+				return decodeStream(input, MUSIC_PATH);
+			} catch (Exception e) {
+				Constants.LOGGER.error("Failed to decode the bundled waiting music from {}", MUSIC_PATH, e);
+				return null;
+			}
+		}
+
+		/** Decodes one ogg source to resident PCM; null with the failure logged means this source has no usable audio. */
+		private byte[] decodeStream(InputStream input, String description) throws Exception {
+			try (AudioStream stream = openStream(input)) {
 				this.format = stream.getFormat();
 				ByteArrayOutputStream pcm = new ByteArrayOutputStream();
 				ByteBuffer chunk;
@@ -187,13 +225,10 @@ public class AudioManager {
 					pcm.write(bytes);
 				}
 				if (pcm.size() == 0) {
-					Constants.LOGGER.error("The bundled waiting music decoded to no audio from {}", MUSIC_PATH);
+					Constants.LOGGER.error("The waiting music decoded to no audio from {}", description);
 					return null;
 				}
 				return pcm.toByteArray();
-			} catch (Exception e) {
-				Constants.LOGGER.error("Failed to decode the bundled waiting music from {}", MUSIC_PATH, e);
-				return null;
 			}
 		}
 

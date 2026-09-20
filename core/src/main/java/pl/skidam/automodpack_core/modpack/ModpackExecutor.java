@@ -198,10 +198,10 @@ public class ModpackExecutor {
 			return new ExportHttpResult.Rejected("The pack validates download secrets, which a public mirror cannot enforce", null);
 		Path target = (targetDirectory.isAbsolute() ? targetDirectory : serverRoot.resolve(targetDirectory)).normalize();
 		boolean exportEverything = includeAll || serverConfig != null && serverConfig.exportHttpIncludeAll;
-		GenerationHosting hosting = generationStore.hosting();
+		GenerationHosting hosting = withWaitingMusic(generationStore.hosting());
 		Map<String, Path> objects = new TreeMap<>();
 		for (String key : hosting.asMap().keySet()) {
-			if (key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY)) continue;
+			if (isReservedDocument(key)) continue;
 			if (!HashUtils.isSha1(key)) throw new IOException("Unexpected hosting key in the generation store: " + key);
 			objects.put(HashUtils.normalizeSha1(key), hosting.get(key));
 		}
@@ -221,7 +221,7 @@ public class ModpackExecutor {
 		for (Map.Entry<String, Path> entry : hosting.asMap().entrySet()) {
 			String key = entry.getKey();
 			Path destination;
-			if (key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY)) destination = target.resolve(key);
+			if (isReservedDocument(key)) destination = target.resolve(key);
 			else {
 				String sha1 = HashUtils.normalizeSha1(key);
 				Long served = platformServed.get(sha1);
@@ -237,6 +237,11 @@ public class ModpackExecutor {
 			written++;
 		}
 		return new ExportHttpResult.Exported(written, omitted, unresolvable);
+	}
+
+	/** head/journal/music: served beside the content-addressed objects, exported to the target root, never pruned. */
+	private static boolean isReservedDocument(String key) {
+		return key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY) || key.equals(GenerationHosting.MUSIC_DOCUMENT_KEY);
 	}
 
 	public GenerationStore.StorageReport storageReport() throws IOException {
@@ -372,7 +377,7 @@ public class ModpackExecutor {
 		if (!(result instanceof CommittedOutcome committed)) return result;
 		R bound = result;
 		try {
-			hostingBinder.bind(committed.hosting());
+			hostingBinder.bind(withWaitingMusic(committed.hosting()));
 		} catch (Exception e) {
 			LOGGER.error("The generation committed, but the hosting swap failed", e);
 			@SuppressWarnings("unchecked")
@@ -381,6 +386,21 @@ public class ModpackExecutor {
 		}
 		autoExportHttp();
 		return bound;
+	}
+
+	/** The configured waiting track joins the hosting map as the reserved music document; unconfigured or missing means the route 404s. */
+	private GenerationHosting withWaitingMusic(GenerationHosting hosting) {
+		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
+		String configured = serverConfig == null || serverConfig.waitingMusicFile == null ? "" : serverConfig.waitingMusicFile.trim();
+		if (configured.isEmpty()) return hosting;
+		Path music = serverRoot.resolve(configured).normalize();
+		if (!Files.isRegularFile(music)) {
+			LOGGER.warn("waitingMusicFile {} does not exist; the custom waiting track is not served", music);
+			return hosting;
+		}
+		Map<String, Path> paths = new TreeMap<>(hosting.asMap());
+		paths.put(GenerationHosting.MUSIC_DOCUMENT_KEY, music);
+		return new GenerationHosting(paths);
 	}
 
 	/** Publish-time mirror of the URL contract for static hosting; a failed or refused export is logged loudly but never fails the committed publication. */
