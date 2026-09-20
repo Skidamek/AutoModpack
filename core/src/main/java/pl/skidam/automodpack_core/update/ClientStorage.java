@@ -480,8 +480,10 @@ public final class ClientStorage {
 
 	/**
 	 * The scan-time gate's active-state read failure, when it could not decide whether the projection would load. The
-	 * authoritative load refuses to run on a boot where this is set: the projection would load without the loaders that
-	 * discover mods by directory ever receiving it.
+	 * authoritative load refuses the projection on a boot where this is set: the projection would load without the
+	 * loaders that discover mods by directory ever receiving it. A process-lifetime latch, not storage state: the
+	 * scan-time hook runs in the loader's own context and can only hand back a directory, so the failure crosses to
+	 * the authoritative load through this static and dies with the boot.
 	 */
 	public static IOException scanTimeStateFailure() {
 		return scanTimeStateFailure;

@@ -66,9 +66,14 @@ final class ProjectionLoader {
 			return;
 		}
 		// The scan-time gate could not decide, so the loaders that discover mods by directory never received the
-		// projection; loading only through the loader API would hide that half-loaded state, so fail the boot instead.
+		// projection; loading only through the loader API would hide that half-loaded state, so this boot refuses the
+		// projection and runs without it. The state itself is fine - a locked file decided the gate - and the next
+		// boot re-decides with a readable one.
 		IOException scanFailure = ClientStorage.scanTimeStateFailure();
-		if (scanFailure != null) throw new IOException("The scan-time projection gate could not read the client active state, so directory-scanning loaders did not receive the projection", scanFailure);
+		if (scanFailure != null) {
+			LOGGER.error("The scan-time projection gate could not read the client active state, so directory-scanning loaders did not receive the projection; not loading it through the loader API either", scanFailure);
+			return;
+		}
 		loadModpack();
 	}
 
