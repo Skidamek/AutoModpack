@@ -25,7 +25,7 @@ public final class UriOpener {
 			Process process = Runtime.getRuntime().exec(switch (PlatformUtils.operatingSystem()) {
 				case WINDOWS -> new String[]{"rundll32", "url.dll,FileProtocolHandler", uri.toString()};
 				case MACOS -> new String[]{"open", uri.toString()};
-				default -> new String[]{"xdg-open", normalizeFileUri(uri.toString())};
+				default -> new String[]{"xdg-open", uri.toString()};
 			});
 			process.getInputStream().close();
 			process.getErrorStream().close();
@@ -36,15 +36,11 @@ public final class UriOpener {
 	}
 
 	public static void openFile(File file) {
-		openUri(file.toURI());
+		// Path.toUri always emits the canonical file:/// form, File.toURI's bare file:/ trips xdg-open
+		openUri(file.toPath().toUri());
 	}
 
 	public static void openPath(Path path) {
 		openUri(path.toUri());
-	}
-
-	// xdg-open resolves bare file: urls against the xdg prefix, so they need the host-qualified form
-	private static String normalizeFileUri(String uri) {
-		return uri.startsWith("file:") ? uri.replace("file:", "file://") : uri;
 	}
 }
