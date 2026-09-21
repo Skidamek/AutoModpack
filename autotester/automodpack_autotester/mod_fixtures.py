@@ -43,8 +43,21 @@ def pack_metadata_for(minecraft_version: str) -> dict:
     return {"pack": {"description": "AutoModpack autotest fixture", **format_fields}}
 
 
+def _nested_jar_name(child: dict) -> str:
+    """The META-INF/jars entry name for one nested child fixture (and the file name a copied-out jar lands at)."""
+    mod_id = str(child.get("modId", "amp_autotest_fixture"))
+    version = str(child.get("version", "1.0.0"))
+    return f"{mod_id.replace('_', '-')}-{version}.jar"
+
+
 def valid_mod_jar_bytes(fixture: dict, minecraft_version: str = DEFAULT_MINECRAFT_VERSION) -> bytes:
-    """Build a harmless archive recognized by Fabric, Forge, and NeoForge."""
+    """Build a harmless archive recognized by Fabric, Forge, and NeoForge.
+
+    ``fixture["depends"]`` lists extra hard Fabric dependency mod ids (declared in
+    fabric.mod.json only, like the built-in minecraft dependency). ``fixture["nested"]``
+    lists child fixture mappings whose valid mod jars are written under META-INF/jars/,
+    so fabric-loader's jar-in-jar discovery accepts them.
+    """
     if not isinstance(fixture, dict):
         raise ValueError("mod fixture must be a mapping")
     mod_id = str(fixture.get("modId", "amp_autotest_fixture"))
@@ -52,13 +65,21 @@ def valid_mod_jar_bytes(fixture: dict, minecraft_version: str = DEFAULT_MINECRAF
     marker = str(fixture.get("marker", "fixture"))
     if re.fullmatch(r"[a-z0-9][a-z0-9_-]*", mod_id) is None or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.+_-]*", version) is None:
         raise ValueError("mod fixture requires loader-safe modId and version")
+    depends = {"minecraft": "*"}
+    for dependency in fixture.get("depends") or []:
+        if not isinstance(dependency, str) or re.fullmatch(r"[a-z0-9][a-z0-9_-]*", dependency) is None:
+            raise ValueError("mod fixture depends entries must be loader-safe mod ids")
+        depends[dependency] = "*"
+    nested = fixture.get("nested") or []
+    if not isinstance(nested, list):
+        raise ValueError("mod fixture nested children must be a list of fixture mappings")
     fabric = {
         "schemaVersion": 1,
         "id": mod_id,
         "version": version,
         "name": "AutoModpack autotest fixture",
         "environment": "*",
-        "depends": {"minecraft": "*"},
+        "depends": depends,
     }
     pack = pack_metadata_for(minecraft_version)
     def loader_metadata(loader: str) -> bytes:
@@ -79,6 +100,10 @@ description = "Harmless metadata-only release-gate fixture"
         "fabric.mod.json": (json.dumps(fabric, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8"),
         "pack.mcmeta": (json.dumps(pack, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8"),
     }
+    for child in nested:
+        if not isinstance(child, dict):
+            raise ValueError("nested mod fixture children must be mappings")
+        entries[f"META-INF/jars/{_nested_jar_name(child)}"] = valid_mod_jar_bytes(child, minecraft_version)
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED) as archive:
         for name, content in sorted(entries.items()):
@@ -96,7 +121,7 @@ def write_valid_mod_fixture(path: Path, fixture: dict, minecraft_version: str = 
 
 
 def assert_valid_mod_fixture(payload: bytes, fixture: dict, minecraft_version: str = DEFAULT_MINECRAFT_VERSION) -> None:
-    """Validate the metadata and marker that make a fixture a real mod archive."""
+    """Validate the metadata and marker that make a fixture a real mod archive, including depends and nested children."""
     expected_id = str(fixture.get("modId", "amp_autotest_fixture"))
     expected_version = str(fixture.get("version", "1.0.0"))
     expected_marker = str(fixture.get("marker", "fixture"))
@@ -111,6 +136,16 @@ def assert_valid_mod_fixture(payload: bytes, fixture: dict, minecraft_version: s
         raise AssertionError(f"fixture is not a valid cross-loader mod archive: {error}") from error
     if fabric.get("id") != expected_id or fabric.get("version") != expected_version:
         raise AssertionError("fixture Fabric metadata does not match the expected mod identity")
+    expected_depends = {"minecraft": "*"}
+    for dependency in fixture.get("depends") or []:
+        expected_depends[str(dependency)] = "*"
+    if fabric.get("depends") != expected_depends:
+        raise AssertionError(f"fixture Fabric depends differ: expected {sorted(expected_depends)}, got {sorted(fabric.get('depends') or {})}")
+    expected_children = [(_nested_jar_name(child), child) for child in fixture.get("nested") or []]
+    actual_children = sorted(name[len("META-INF/jars/"):] for name in archive.namelist()
+                             if name.startswith("META-INF/jars/") and name.endswith(".jar"))
+    if actual_children != sorted(name for name, _ in expected_children):
+        raise AssertionError(f"fixture nested jars differ: expected {sorted(name for name, _ in expected_children)}, got {actual_children}")
     if pack != pack_metadata_for(minecraft_version):
         raise AssertionError(f"fixture pack metadata does not match Minecraft {minecraft_version}")
     for metadata in (forge, neoforge):
@@ -121,3 +156,7 @@ def assert_valid_mod_fixture(payload: bytes, fixture: dict, minecraft_version: s
             raise AssertionError("fixture Forge metadata does not match the expected mod identity")
     if marker != expected_marker:
         raise AssertionError(f"fixture marker differs: expected {expected_marker!r}, got {marker!r}")
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        child_payloads = [(archive.read(f"META-INF/jars/{name}"), child) for name, child in sorted(expected_children)]
+    for payload, child in child_payloads:
+        assert_valid_mod_fixture(payload, child, minecraft_version)

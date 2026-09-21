@@ -1,0 +1,77 @@
+id: dependency-driven-copy
+description: |
+  Issue #276: a user-owned mod in the standard mods directory hard-depends on a library
+  that exists ONLY nested (jar-in-jar) inside a pack mod. The pack ships nesteddep_pack,
+  which nests nesteddep_lib; the user's nesteddep_user jar sits in standard mods/ and
+  declares a hard dependency on nesteddep_lib. On Fabric the pack loads through
+  AutoModpack's second discovery pass, so the native pass that resolves the user mod
+  cannot see the pack's nesting and mod resolution boot-crashes. The sync's plan phase
+  must detect the unmet dependency and copy the nested library out into the standard
+  mods directory (as a generated copy), so the next launch resolves everything natively
+  and the player reaches the game with the user mod loaded.
+
+renderClient: true
+
+targets:
+  - 1.21.11-fabric
+  - 1.20.1-fabric
+
+flow:
+  - use: boot
+  - use: accept_certificate
+  - do: seed_mod_fixture
+    name: seed the user mod into standard mods/ before the sync builds its plan
+    path: mods/nesteddep-user-1.0.0.jar
+    fixture: { modId: nesteddep_user, version: "1.0.0", marker: nesteddep-user, depends: ["nesteddep_lib"] }
+  - use: download_modpack
+  - do: wait_for
+    name: wait for the sync to land the copied nested library in standard mods/
+    timeout: 120s
+    until:
+      only_files:
+        dir: mods
+        patterns: ["automodpack.jar", "nesteddep-user*.jar", "nesteddep-lib*.jar"]
+  - do: assert_mod_fixture
+    name: the copied library is the intact nested fixture jar at its deterministic landing name
+    path: mods/nesteddep-lib-1.0.0.jar
+    fixture: { modId: nesteddep_lib, version: "1.0.0", marker: nesteddep-lib }
+  - use: restart_client
+  - use: rejoin
+  - do: assert
+    name: the user mod and the copied library both load natively and no dependency error appears
+    that:
+      all:
+        - log:
+            container: client
+            matches_all:
+              # fabric-loader logs every resolved mod's id in its "Loading N mods" dump;
+              # an unresolvable mandatory dependency crashes resolution before that dump.
+              - 'nesteddep_user'
+              - 'nesteddep_lib'
+        - log:
+            container: client
+            not_matches:
+              - 'Missing or unsupported mandatory dependencies'
+  - do: quit
+    name: quit the client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  generations:
+    - files:
+        - path: mods/nesteddep_pack-1.0.0.jar
+          fixture:
+            modId: nesteddep_pack
+            version: "1.0.0"
+            marker: nesteddep-pack
+            nested:
+              - modId: nesteddep_lib
+                version: "1.0.0"
+                marker: nesteddep-lib
