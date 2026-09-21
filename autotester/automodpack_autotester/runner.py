@@ -101,6 +101,7 @@ def run_case(
     settings: dict,
     resource_scope: str,
     netem: list[str] | None = None,
+    loss: str = "",
 ) -> dict:
     started = time.monotonic()
     scenario_id = scenario.get("id", "?")
@@ -110,6 +111,8 @@ def run_case(
     # qdisc on its eth0 would shape the host's own traffic instead of the test's.
     if netem and net_mode == "host":
         raise ValueError("--netem requires bridge networking: on host networking the client shares the host's eth0")
+    if loss and net_mode == "host":
+        raise ValueError("--loss requires bridge networking: on host networking the server shares the host's eth0")
     mode = scenario_mode(scenario)
     case_dir = out_dir / f"{target.id}-{int(time.time())}-{secrets.token_hex(3)}"
     server_dir = case_dir / "server"
@@ -176,6 +179,7 @@ def run_case(
             server_host=server_host,
             resource_scope=resource_scope,
             netem=list(netem or []),
+            loss=loss,
             vars={
                 **dict(scenario.get("vars", {}) or {}),
                 "server_endpoint_port": int((scenario.get("connectionPath") or {}).get("endpointPort", 25565)),

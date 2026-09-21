@@ -13,7 +13,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
-import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.LocalStorageException;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.protocol.PartialResume;
@@ -45,14 +44,17 @@ public class DownloadManager implements DownloadView {
 	public record AcquisitionProgress(long acquired, long failed) {}
 
 	private static final int MAX_DOWNLOAD_ATTEMPTS = 2;
+	// Platform attempts are blocking whole-file HTTP pulls, unrelated to the host wire's lane count this used to be
+	// welded to: five concurrent CDN downloads saturate any home link while bounding the parallelism any one CDN sees.
+	private static final int PLATFORM_WORKERS = 5;
 	private static final int HTTP_UNAUTHORIZED = 401;
 	private static final int HTTP_NOT_FOUND = 404;
 	private static final int HTTP_GONE = 410;
 	// Domain label for transfers served by the attached AutoModpack host client instead of a remote platform source.
 	private static final String INTERNAL_CLIENT_SOURCE = "internal_client";
 
-	// One worker per pipeline lane: workers run the short, blocking jobs - platform attempts, cache checks, promotion -
-	// while host transfers finalize on their transport future's callback, so a worker never blocks on the network.
+	// Workers run the short, blocking jobs - platform attempts, cache checks, promotion - while host transfers
+	// finalize on their transport future's callback, so a worker never blocks on the network.
 	private final ExecutorService downloadExecutor;
 
 	private final HttpFileDownloader httpDownloader = new HttpFileDownloader();
@@ -93,7 +95,7 @@ public class DownloadManager implements DownloadView {
 		this.totalBytesToDownload.set(bytesToDownload);
 		this.speedometer.setExpectedBytes(bytesToDownload);
 		this.dataLayout = Objects.requireNonNull(dataLayout, "dataLayout");
-		this.downloadExecutor = Executors.newFixedThreadPool(DownloadClient.MAX_CONNECTIONS,
+		this.downloadExecutor = Executors.newFixedThreadPool(PLATFORM_WORKERS,
 				new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
 		this.metadataFetcher = new FetchManager(List.of(), Objects.requireNonNull(platformCache, "platformCache"));
 	}
@@ -173,7 +175,7 @@ public class DownloadManager implements DownloadView {
 				requeue(key, task);
 				return false;
 			}
-		} else if (platformTasksInFlight() >= DownloadClient.MAX_CONNECTIONS) {
+		} else if (platformTasksInFlight() >= PLATFORM_WORKERS) {
 			requeue(key, task);
 			return false;
 		}

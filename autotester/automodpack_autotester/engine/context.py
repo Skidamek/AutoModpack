@@ -38,6 +38,10 @@ class Context:
     # --netem tc netem argv tokens (empty when the knob is off), applied to the
     # client container's eth0 after launch.
     netem: list[str] = field(default_factory=list)
+    # --loss percentage (empty when the knob is off), applied as a netem loss qdisc to
+    # the SERVER container's eth0: the server's egress is the download's data direction,
+    # where segment loss actually stalls transfers.
+    loss: str = ''
     vars: dict = field(default_factory=dict)
     bridge: BridgeClient | None = None
     # Injected by the runner so the engine stays decoupled from Docker.

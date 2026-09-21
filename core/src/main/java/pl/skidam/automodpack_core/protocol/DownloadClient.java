@@ -50,8 +50,11 @@ public class DownloadClient implements PackTransport {
 		return t;
 	});
 
-	/** Every download worker owns one pipeline lane; big files never queue behind another on the same lane. The download manager sizes its worker pool from this single source. */
-	public static final int MAX_CONNECTIONS = 5;
+	// The pooled pipeline lanes. They buy exactly two physical things: loss-regime multiplication (a lost segment stalls
+	// one lane's pipeline, not the transfer) and streaming through a lane re-handshake; on a clean link a single
+	// connection is already bandwidth-equivalent. The count is the B1 netem matrix's decision, kept alongside the
+	// platform-worker count it used to be welded to.
+	public static final int LANES = 5;
 
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
 	private final String secret;
@@ -67,7 +70,7 @@ public class DownloadClient implements PackTransport {
 	volatile boolean rangeIgnoredHost;
 	// The transport's wire window: the number of unsettled takes it may keep on the lanes. The cap is the receipted
 	// lanes × pipeline depth; the pacer starts at one lane's depth, doubles every clean cycle and halves on congestion.
-	private final WirePacer pacer = new WirePacer(MAX_CONNECTIONS * Connection.PIPELINE_DEPTH, MAX_CONNECTIONS);
+	private final WirePacer pacer = new WirePacer(LANES * Connection.PIPELINE_DEPTH, LANES);
 	// The live transfers, so a settle anywhere revives one whose takes all settled while the window was full - a dormant
 	// transfer has nothing in flight, so nothing else would ever hand the freed credit to it. Own lock: never taken
 	// while holding a transfer's lock or the pool lock.
@@ -310,7 +313,7 @@ public class DownloadClient implements PackTransport {
 			if (connection == null) break;
 			slotWaiters.remove().dispatch(connection);
 		}
-		while (!closed && !slotWaiters.isEmpty() && lanes.size() + openingConnections < MAX_CONNECTIONS) {
+		while (!closed && !slotWaiters.isEmpty() && lanes.size() + openingConnections < LANES) {
 			SlotWaiter<?> waiter = slotWaiters.remove();
 			openingConnections++;
 			openConnectionAsync().whenComplete((connection, error) -> {
@@ -486,7 +489,7 @@ public class DownloadClient implements PackTransport {
 				pendingItems = 1;
 			}
 			long headEnd = openEnded ? -1 : Math.min(offset + (long) WIRE_CHUNK_BYTES, fileSize) - 1;
-			int lane = Math.floorMod(laneCounter.getAndIncrement(), MAX_CONNECTIONS);
+			int lane = Math.floorMod(laneCounter.getAndIncrement(), LANES);
 			LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", lane, offset, headEnd, objectName());
 			submitTake(new Take(offset, headEnd, lane, 1), new AtomicLong());
 			if (!openEnded) pump();
@@ -530,7 +533,7 @@ public class DownloadClient implements PackTransport {
 			long stealFrom = Math.max(floor(), cursor - (long) WIRE_CHUNK_BYTES);
 			cursor = stealFrom;
 			pendingItems++;
-			return new Take(stealFrom, takeEnd, Math.floorMod(laneCounter.getAndIncrement(), MAX_CONNECTIONS), 1);
+			return new Take(stealFrom, takeEnd, Math.floorMod(laneCounter.getAndIncrement(), LANES), 1);
 		}
 
 		private void submitTake(Take take, AtomicLong takeBytes) {
@@ -558,7 +561,7 @@ public class DownloadClient implements PackTransport {
 			if (takeError != null && take.attempt() < MAX_TAKE_ATTEMPTS && retryWorth(takeError)) {
 				WireTrace.log("TAKE_RETRY", "object", objectName(), "item", take.start() + "-" + take.end(), "attempt", take.attempt(), "error", takeError);
 				// The credit stays held and the barrier stays charged: the retried range is the same one unsettled unit of work.
-				submitTake(new Take(take.start(), take.end(), Math.floorMod(laneCounter.getAndIncrement(), MAX_CONNECTIONS), take.attempt() + 1), takeBytes);
+				submitTake(new Take(take.start(), take.end(), Math.floorMod(laneCounter.getAndIncrement(), LANES), take.attempt() + 1), takeBytes);
 				return;
 			}
 			pacer.settle(verdictOf(takeError), takeBytes.get(), nanos, take.lane());

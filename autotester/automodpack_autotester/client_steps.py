@@ -204,6 +204,28 @@ def parse_netem(spec: str) -> list[str]:
     return tokens
 
 
+def parse_loss(spec: str) -> str:
+    """Validates ``--loss 1%``; the value rides into the netem qdisc verbatim."""
+    if re.fullmatch(r"\d+(?:\.\d+)?%", spec) is None:
+        raise ValueError(f"invalid loss setting {spec!r} (expected e.g. 1%)")
+    return spec
+
+
+def _apply_loss(ctx: Context) -> None:
+    """Drops {@code --loss} percent of the SERVER's outgoing segments: the server's egress is the
+    download's data direction, where segment loss actually stalls transfers, and the client keeps its
+    own --netem knob for delay/rate. Same teardown story as --netem: the container is ephemeral."""
+    if not ctx.loss:
+        return
+    _disable_iface_offloads(ctx.srv_name)
+    _disable_peer_offloads_of(ctx.srv_name)
+    result = _container(ctx.srv_name).exec_run(["tc", "qdisc", "add", "dev", "eth0", "root", "netem", "loss", ctx.loss], user="root")
+    output = _exec_output(result)
+    if result.exit_code != 0:
+        raise RuntimeError(f"server container could not apply the loss qdisc ({result.exit_code}): {output}")
+    logger.info("Applied loss qdisc to %s eth0: %s", ctx.srv_name, ctx.loss)
+
+
 def _apply_netem(ctx: Context) -> None:
     """Shape the running client container's eth0 with the --netem qdisc.
 
@@ -220,7 +242,7 @@ def _apply_netem(ctx: Context) -> None:
     # TSO/GSO let the stack emit super-packets the qdisc counts as one, inflating any rate
     # limit several-fold. Offloads must go off on BOTH ends of the veth pair: the container
     # side so the qdisc sees segmented packets, the host peer so segmenting survives the hop.
-    _container(ctx.cli_name).exec_run(["ethtool", "-K", "eth0", "tso", "off", "gso", "off", "gro", "off"], user="root")
+    _disable_iface_offloads(ctx.cli_name)
     _disable_peer_offloads(ctx)
     result = _container(ctx.cli_name).exec_run(["tc", "qdisc", "add", "dev", "eth0", "root", "netem", *ctx.netem], user="root")
     output = _exec_output(result)
@@ -229,12 +251,21 @@ def _apply_netem(ctx: Context) -> None:
     logger.info("Applied netem qdisc to %s eth0: %s", ctx.cli_name, " ".join(ctx.netem))
 
 
+def _disable_iface_offloads(container_name: str) -> None:
+    """Turns offloads off on a container's eth0 so the qdisc sees segmented packets; best effort by design."""
+    _container(container_name).exec_run(["ethtool", "-K", "eth0", "tso", "off", "gso", "off", "gro", "off"], user="root")
+
+
 def _disable_peer_offloads(ctx: Context) -> None:
     """Turns offloads off on the host-side veth peer of the client's eth0; best effort by design."""
-    result = _container(ctx.cli_name).exec_run(["cat", "/sys/class/net/eth0/iflink"], user="root")
+    _disable_peer_offloads_of(ctx.cli_name)
+
+
+def _disable_peer_offloads_of(container_name: str) -> None:
+    result = _container(container_name).exec_run(["cat", "/sys/class/net/eth0/iflink"], user="root")
     peer_index = _exec_output(result).strip()
     if not peer_index.isdigit():
-        logger.warning("Cannot resolve the client eth0 host peer (iflink %r); the shaped rate may run high", peer_index)
+        logger.warning("Cannot resolve the %s eth0 host peer (iflink %r); the shaped rate may run high", container_name, peer_index)
         return
     for device in Path("/sys/class/net").glob("*"):
         try:
@@ -253,6 +284,7 @@ def _launch_client(ctx: Context):
     _jitter_sleep(1)
     _assert_running(ctx.cli_name)
     _apply_netem(ctx)
+    _apply_loss(ctx)
 
 
 def _stage_client_runtime_mods(ctx: Context) -> None:
