@@ -47,3 +47,4 @@ autotester/out/
 autotester/out-*/
 autotester/.hmc-cache/
 
+bench/raw/

@@ -76,6 +76,8 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	private volatile boolean streaming;
 	// The one response body currently streaming; the connection drops must end its span even when finishStream never runs.
 	private ActivityTracker.Span inFlightSpan;
+	private int responsesServed;
+	private long bytesServed;
 
 	public HttpContractHandler(NettyServer server, Executor senders) {
 		this.server = server;
@@ -111,6 +113,8 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 	@Override
 	public void channelInactive(ChannelHandlerContext ctx) {
+		LOGGER.info("HTTP contract connection closed: responses={} bytes={} streaming={} pendingHeaders={}B", responsesServed, bytesServed, streaming,
+				cumulation == null ? 0 : cumulation.readableBytes());
 		if (inFlightSpan != null) tracker.completeDropped(inFlightSpan);
 		releaseCumulation();
 	}
@@ -122,7 +126,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 	@Override
 	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-		LOGGER.debug("HTTP contract connection error", cause);
+		LOGGER.error("The HTTP contract connection failed; closing it", cause);
 		ctx.close();
 	}
 
@@ -130,8 +134,8 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
 		// The pipeline's all-idle reap: a silent connection holds a public FD for nothing. A streaming response writes
 		// continuously, so the event can only fire for a connection with no request in flight and no body draining.
-		if (evt instanceof IdleStateEvent) {
-			LOGGER.debug("HTTP contract connection went idle; closing it");
+		if (evt instanceof IdleStateEvent idle) {
+			LOGGER.info("HTTP contract connection went idle ({}); closing it. streaming={} responses={}", idle.state(), streaming, responsesServed);
 			ctx.close();
 			return;
 		}
@@ -172,12 +176,13 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	}
 
 	private void rejectUnparseable(ChannelHandlerContext ctx) {
-		LOGGER.debug("HTTP request header block exceeded {} bytes; closing the connection", MAX_HEADER_BLOCK_BYTES);
+		LOGGER.warn("HTTP request header block exceeded {} bytes (streaming={}, pending={}B); closing the connection", MAX_HEADER_BLOCK_BYTES, streaming,
+				cumulation == null ? 0 : cumulation.readableBytes());
 		ctx.close();
 	}
 
 	private boolean rejectGarbage(ChannelHandlerContext ctx, ActivityTracker.Span span) {
-		LOGGER.debug("Unparseable HTTP request; closing the connection");
+		LOGGER.warn("Unparseable HTTP request; closing the connection");
 		tracker.complete(span, 400, 0);
 		ctx.close();
 		return false;
@@ -274,6 +279,8 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	/** Ends a bodyless response: the tracker entry closes with the status before the head goes out. */
 	private boolean finishBodyless(ChannelHandlerContext ctx, ActivityTracker.Span span, String status, long contentLength, String etag, String contentRange, boolean keepAlive) {
 		tracker.complete(span, statusNumber(status), contentLength);
+		responsesServed++;
+		bytesServed += contentLength;
 		return respondOrClose(ctx, status, contentLength, etag, contentRange, keepAlive);
 	}
 
@@ -381,6 +388,9 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		}
 		Throwable finalFailure = failure;
 		long sentBytes = frames.flushed();
+		if (finalFailure != null) LOGGER.error("The streamed response to {} died mid-body ({} bytes sent)", span.routeKey, sentBytes, finalFailure);
+		responsesServed++;
+		bytesServed += sentBytes;
 		executeOnLoop(channel, () -> finishStream(ctx, span, status, sentBytes, finalFailure, keepAlive));
 	}
 
@@ -539,6 +549,8 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		Throwable finalFailure = failure;
 		long sentBytes = sent;
+		responsesServed++;
+		bytesServed += sentBytes;
 		executeOnLoop(channel, () -> finishStream(ctx, span, status, sentBytes, finalFailure, keepAlive));
 	}
 

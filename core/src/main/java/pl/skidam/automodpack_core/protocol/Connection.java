@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.protocol;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.DEFAULT_CHUNK_SIZE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.USER_AGENT;
 
@@ -183,6 +184,11 @@ class Connection implements AutoCloseable {
 			try {
 				settled = respond(request);
 			} catch (Throwable failure) {
+				int waiting;
+				synchronized (gate) {
+					waiting = pending.size();
+				}
+				LOGGER.warn("The modpack wire lane died: conn={} pending={} request={} failure={}", traceId, waiting, request.originPath, failure.toString());
 				WireTrace.log("READER_EXIT", "conn", traceId, "reason", "fail:" + failure);
 				request.future.completeExceptionally(failure);
 				failPending(failure);
