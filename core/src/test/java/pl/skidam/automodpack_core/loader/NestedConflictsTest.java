@@ -80,17 +80,17 @@ class NestedConflictsTest {
 	}
 
 	@Test
-	void unparseableVersionsCompeteByExactStringEqualityOnly() {
-		StandardRoot unparseable = standard("mods/local.jar", nested(Set.of("a"), "nightly"));
+	void aMissingVersionIsNeverBeatenAndNeverBeats() {
+		StandardRoot missing = standard("mods/local.jar", nested(Set.of("a"), null));
 		StandardRoot parseable = standard("mods/local.jar", nested(Set.of("a"), "1.0.0"));
 		FileInspection.Mod parseablePackRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
 				tree("/META-INF/jars/a.jar", "2.0.0", Set.of("a"), Set.of()));
-		FileInspection.Mod unparseablePackRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
-				tree("/META-INF/jars/a.jar", "nightly", Set.of("a"), Set.of()));
+		FileInspection.Mod missingPackRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
+				tree("/META-INF/jars/a.jar", null, Set.of("a"), Set.of()));
 
-		// The pack side can never be proven newer than an unparseable version, and an unparseable pack version can never be proven newer.
-		assertTrue(NestedConflicts.detect(List.of(packRoot(parseablePackRoot)), List.of(unparseable), Set.of()).isEmpty());
-		assertTrue(NestedConflicts.detect(List.of(packRoot(unparseablePackRoot)), List.of(parseable), Set.of()).isEmpty());
+		// Only a missing version string escapes comparison: it is never beaten and never proves itself newer.
+		assertTrue(NestedConflicts.detect(List.of(packRoot(parseablePackRoot)), List.of(missing), Set.of()).isEmpty());
+		assertTrue(NestedConflicts.detect(List.of(packRoot(missingPackRoot)), List.of(parseable), Set.of()).isEmpty());
 		assertEquals(1, NestedConflicts.detect(List.of(packRoot(parseablePackRoot)), List.of(parseable), Set.of()).size());
 	}
 
@@ -140,6 +140,85 @@ class NestedConflictsTest {
 		assertEquals(1, candidates.stream().map(Candidate::colliders).collect(Collectors.toSet()).size());
 	}
 
+	@Test
+	void unmetStandardDependencyEmitsThePackNestedProviderWithDependentsAsColliders() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
+				tree("/META-INF/jars/p.jar", "2.0.0", Set.of("d"), Set.of()));
+		StandardRoot dependentOne = standard("mods/one.jar", Set.of("one"), Set.of("d"));
+		StandardRoot dependentTwo = standard("mods/two.jar", Set.of("two"), Set.of("d"));
+
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependentOne, dependentTwo), Set.of());
+
+		assertEquals(1, candidates.size());
+		assertEquals(Path.of("nested/pack.jar/META-INF/jars/p.jar"), candidates.get(0).mod().path());
+		assertEquals(List.of(new Collider("mods/one.jar", ROOT_HASH), new Collider("mods/two.jar", ROOT_HASH)), candidates.get(0).colliders());
+	}
+
+	@Test
+	void aStandardTopLevelOrNestedProviderSuppressesTheDependencyCopy() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
+				tree("/META-INF/jars/p.jar", "2.0.0", Set.of("d"), Set.of()));
+		StandardRoot dependent = standard("mods/one.jar", Set.of("one"), Set.of("d"));
+
+		StandardRoot topLevelProvider = standard("mods/provider.jar", Set.of("d"), Set.of());
+		assertTrue(NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent, topLevelProvider), Set.of()).isEmpty());
+
+		// A standard root nesting a NEWER d satisfies the dependency; an older one would be the classic beaten-collider case instead.
+		StandardRoot nestedProvider = standard("mods/provider.jar", Set.of("other"), Set.of(), nested(Set.of("d"), "9.0.0"));
+		assertTrue(NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent, nestedProvider), Set.of()).isEmpty());
+	}
+
+	@Test
+	void aClaimedDependencyDoesNotEmitAnotherCopy() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
+				tree("/META-INF/jars/w.jar", "2.0.0", Set.of("a"), Set.of("d")),
+				tree("/META-INF/jars/d.jar", "1.0.0", Set.of("d"), Set.of()));
+		StandardRoot beaten = standard("mods/old.jar", nested(Set.of("a"), "1.0.0"));
+		StandardRoot dependent = standard("mods/one.jar", Set.of("one"), Set.of("d"));
+
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(beaten, dependent), Set.of());
+
+		// The winner's drag already provides d as a root; the dependent's unmet pass must not emit a second copy.
+		assertEquals(List.of("nested/pack.jar/META-INF/jars/d.jar", "nested/pack.jar/META-INF/jars/w.jar"), paths(candidates));
+	}
+
+	@Test
+	void aDependentOnAnAlreadyEmittedJarJoinsItsColliders() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
+				tree("/META-INF/jars/w.jar", "2.0.0", Set.of("a"), Set.of("d")),
+				tree("/META-INF/jars/d.jar", "1.0.0", Set.of("d"), Set.of()));
+		StandardRoot beaten = standard("mods/old.jar", nested(Set.of("a"), "1.0.0"));
+		StandardRoot dependent = standard("mods/one.jar", Set.of("one"), Set.of("d"));
+
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(beaten, dependent), Set.of());
+
+		// The drag's copy survives while either reason survives: the beaten root that forced the winner, or the dependent.
+		Candidate drag = candidates.stream().filter(candidate -> candidate.mod().path().toString().endsWith("d.jar")).findFirst().orElseThrow();
+		assertEquals(List.of(new Collider("mods/old.jar", ROOT_HASH), new Collider("mods/one.jar", ROOT_HASH)), drag.colliders());
+	}
+
+	@Test
+	void aPackRootCoveredDependencyIsNotServed() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
+				tree("/META-INF/jars/p.jar", "2.0.0", Set.of("d"), Set.of()));
+		StandardRoot dependent = standard("mods/one.jar", Set.of("one"), Set.of("d"));
+
+		assertTrue(NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent), Set.of("d")).isEmpty());
+	}
+
+	@Test
+	void aDependencyDrivenProviderDragsItsOwnDependencies() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
+				tree("/META-INF/jars/p.jar", "2.0.0", Set.of("d"), Set.of("d2")),
+				tree("/META-INF/jars/d2.jar", "1.0.0", Set.of("d2"), Set.of()));
+		StandardRoot dependent = standard("mods/one.jar", Set.of("one"), Set.of("d"));
+
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent), Set.of());
+
+		assertEquals(List.of("nested/pack.jar/META-INF/jars/d2.jar", "nested/pack.jar/META-INF/jars/p.jar"), paths(candidates));
+		assertEquals(1, candidates.stream().map(Candidate::colliders).collect(Collectors.toSet()).size());
+	}
+
 	private static List<String> paths(List<Candidate> candidates) {
 		return candidates.stream().map(candidate -> candidate.mod().path().toString()).toList();
 	}
@@ -157,6 +236,10 @@ class NestedConflictsTest {
 	}
 
 	private static StandardRoot standard(String logicalPath, FileInspection.Mod... nested) {
-		return new StandardRoot(logicalPath, new FileInspection.Mod(Set.of("root"), ROOT_HASH, "1.0.0", Path.of(logicalPath), Set.of(), Set.of(nested)));
+		return standard(logicalPath, Set.of("root"), Set.of(), nested);
+	}
+
+	private static StandardRoot standard(String logicalPath, Set<String> ids, Set<String> deps, FileInspection.Mod... nested) {
+		return new StandardRoot(logicalPath, new FileInspection.Mod(ids, ROOT_HASH, "1.0.0", Path.of(logicalPath), deps, Set.of(nested)));
 	}
 }

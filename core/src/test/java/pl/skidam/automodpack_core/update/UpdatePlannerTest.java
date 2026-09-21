@@ -636,6 +636,40 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void dependencyDrivenCopyLivesAndDiesWithTheDependentRoot() {
+		ModpackJsons.ModpackContentFields targetWithDuplicate = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
+				ledger(entry("mods/server.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		ModpackJsons.ModpackContentFields targetWithoutDuplicate = manifest(Map.of("mods/other.jar", item("mods/other.jar", OTHER_HASH, 9, "mod")),
+				ledger(entry("mods/other.jar", OTHER_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		Map<FileKey, FileState> files = Map.of(
+				new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
+				new FileKey(Root.PROJECTION, "mods/other.jar"), new FileState(OTHER_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true));
+		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/provider.jar", TARGET_HASH, 9, Set.of("d")), "2.0.0",
+				Set.of(new NestedConflicts.Collider("mods/local.jar", OLD_HASH)));
+
+		UpdatePlan dropped = UpdatePlanner.plan(new UpdatePlanner.Input(null, targetWithDuplicate, files, Set.of(),
+				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, "1.0.0", Set.of("r"), Set.of())),
+				List.of(new ModInfo("mods/local.jar", OLD_HASH, 8, "1.0.0", Set.of("r"), Set.of())), List.of(), List.of(candidate), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		// Duplicate resolution removes the dependent root, so the copy has no reason to exist.
+		assertTrue(dropped.conflicts().stream().anyMatch(conflict -> conflict.sourcePath().equals("mods/local.jar")));
+		assertTrue(dropped.operations().stream().noneMatch(operation -> operation.relativePath().equals("mods/provider.jar")));
+		assertTrue(dropped.generatedCopies().isEmpty());
+
+		UpdatePlan kept = UpdatePlanner.plan(new UpdatePlanner.Input(null, targetWithoutDuplicate, files, Set.of(),
+				List.of(new ModInfo("mods/other.jar", OTHER_HASH, 9, "1.0.0", Set.of("unrelated"), Set.of())),
+				List.of(new ModInfo("mods/local.jar", OLD_HASH, 8, "1.0.0", Set.of("r"), Set.of())), List.of(), List.of(candidate), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		Operation install = kept.operations().stream().filter(value -> value.relativePath().equals("mods/provider.jar")).findFirst().orElseThrow();
+		assertEquals(OperationType.INSTALL_OBJECT, install.operation());
+		assertEquals(TARGET_HASH, install.expectedObjectHash());
+		assertEquals(1, kept.generatedCopies().size());
+	}
+
+	@Test
 	void generatedCopiesKeepTheHighestVersionPerIdRegardlessOfPathOrder() {
 		UpdatePlanner.NestedCandidate lower = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/a.jar", OLD_HASH, 8, Set.of("Shared")), "1.0.0", Set.of());
 		UpdatePlanner.NestedCandidate higher = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/b.jar", TARGET_HASH, 9, Set.of("shared")), "2.0.0", Set.of());

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.utils.FileInspection;
@@ -22,9 +23,12 @@ import pl.skidam.automodpack_core.utils.SemanticVersion;
  * a strictly older version. An emitted winner also drags the transitive closure of its declared-dependency
  * siblings - jars nested beside it in the same parent: the copy is a root in the native pass, which only sees
  * {@code mods/}, so a sibling left nested inside its projection jar would boot the game with a missing dependency.
- * Every emitted jar is reported at the path where the extractor materialized it, derived from the parent chain of
- * entry paths, so the caller can hash and store the bytes. Pure: everything here works on inspected trees, never
- * on the filesystem.
+ * The same mechanics serve the reverse direction: a surviving standard root whose hard dependency id is provided
+ * only by a pack-nested jar gets that jar copied out too. Deliberate scope limit: an id provided by a pack ROOT
+ * mod (a top-level projection jar) never triggers a copy - the projection-root dependency case is a policy
+ * question this detection does not answer, only the pack-nested case is served. Every emitted jar is reported at
+ * the path where the extractor materialized it, derived from the parent chain of entry paths, so the caller can
+ * hash and store the bytes. Pure: everything here works on inspected trees, never on the filesystem.
  */
 public final class NestedConflicts {
 
@@ -73,7 +77,10 @@ public final class NestedConflicts {
 	 * materialized path); each winner with a colliding standard root is emitted, and every winner drags its
 	 * dependency siblings unless their own ids are already covered by an emitted jar or a pack root - a dragged
 	 * jar sharing an id with either would make the loader's per-id solver drop the owner. Jars sharing any id
-	 * with a pack root mod are never candidates at all, for the same reason.
+	 * with a pack root mod are never candidates at all, for the same reason. Afterwards, a standard root whose
+	 * hard dependency id nothing provides gets the best eligible pack-nested provider copied out, colliding with
+	 * the dependent roots so the copy lives and dies with their survival under the plan. An id provided by a
+	 * pack root mod never triggers this: the projection-root dependency case stays unanswered by design.
 	 */
 	public static List<Candidate> detect(List<PackRoot> packRoots, List<StandardRoot> standardRoots, Set<String> packRootIds) {
 		List<Node> roots = new ArrayList<>();
@@ -103,6 +110,7 @@ public final class NestedConflicts {
 			for (String id : winnerMod.IDs()) claimed.add(id.toLowerCase(Locale.ROOT));
 			collectDependencySiblings(winner, claimed, candidates, colliders);
 		}
+		emitDependencyDrivenCopies(standardRoots, nested, coveredIds, claimed, candidates);
 		candidates.sort(Comparator.comparing(candidate -> candidate.mod().path().toString()));
 		return List.copyOf(candidates);
 	}
@@ -164,9 +172,81 @@ public final class NestedConflicts {
 	}
 
 	/**
+	 * Emits copies for standard-root hard dependencies nothing in sight provides: per unmet dependency id the best
+	 * eligible pack-nested provider (same pool as the winners: nothing covered by a pack root id, nothing already
+	 * claimed), with every dependent root as its collider. The copy then lives and dies with the dependent roots'
+	 * survival under the plan, exactly like a collision-driven candidate. A dependency whose id an emitted jar
+	 * already claims gains the dependent as an extra collider on that jar instead - either surviving reason keeps
+	 * the copy. {@code claimed} carries the emitted ids, {@code coveredIds} the pack root ids.
+	 */
+	private static void emitDependencyDrivenCopies(List<StandardRoot> standardRoots, List<Node> nested, Set<String> coveredIds, Set<String> claimed, List<Candidate> candidates) {
+		Set<String> providedByStandards = new HashSet<>();
+		for (StandardRoot root : standardRoots) {
+			FileInspection.Mod mod = root.mod();
+			for (String id : mod.IDs()) providedByStandards.add(id.toLowerCase(Locale.ROOT));
+			collectIds(mod, providedByStandards);
+		}
+		Map<String, List<StandardRoot>> dependents = new TreeMap<>();
+		for (StandardRoot root : standardRoots)
+			for (String dependency : root.mod().deps()) {
+				String id = dependency.toLowerCase(Locale.ROOT);
+				if (providedByStandards.contains(id) || coveredIds.contains(id)) continue;
+				if (claimed.contains(id)) {
+					claimDependent(id, root, candidates);
+					continue;
+				}
+				dependents.computeIfAbsent(id, key -> new ArrayList<>()).add(root);
+			}
+		for (var entry : dependents.entrySet()) {
+			Node provider = null;
+			for (Node node : nested) {
+				FileInspection.Mod mod = node.mod;
+				if (mod.IDs().stream().anyMatch(id -> claimed.contains(id.toLowerCase(Locale.ROOT)))) continue;
+				if (!provides(mod, entry.getKey())) continue;
+				if (provider == null || winsJar(node, provider)) provider = node;
+			}
+			if (provider == null) continue;
+			List<Collider> colliders = dependentColliders(entry.getValue());
+			if (colliders.isEmpty()) continue;
+			candidates.add(new Candidate(provider.mod.at(provider.extractedPath), colliders));
+			FileInspection.Mod providerMod = provider.mod;
+			for (String id : providerMod.IDs()) claimed.add(id.toLowerCase(Locale.ROOT));
+			collectDependencySiblings(provider, claimed, candidates, colliders);
+		}
+	}
+
+	/** Adds {@code root} as a collider on the already-emitted candidate claiming {@code id}, deduplicated by path. */
+	private static void claimDependent(String id, StandardRoot root, List<Candidate> candidates) {
+		if (root.mod().hash() == null) return;
+		for (int index = 0; index < candidates.size(); index++) {
+			Candidate candidate = candidates.get(index);
+			if (candidate.mod().IDs().stream().noneMatch(candidateId -> candidateId.equalsIgnoreCase(id))) continue;
+			List<Collider> colliders = new ArrayList<>(candidate.colliders());
+			Collider collider = new Collider(root.logicalPath(), root.mod().hash());
+			if (colliders.stream().noneMatch(existing -> existing.logicalPath().equals(collider.logicalPath()))) colliders.add(collider);
+			candidates.set(index, new Candidate(candidate.mod(), colliders));
+			return;
+		}
+	}
+
+	private static List<Collider> dependentColliders(List<StandardRoot> dependents) {
+		List<Collider> colliders = new ArrayList<>();
+		for (StandardRoot dependent : dependents)
+			if (dependent.mod().hash() != null) colliders.add(new Collider(dependent.logicalPath(), dependent.mod().hash()));
+		return colliders;
+	}
+
+	private static void collectIds(FileInspection.Mod mod, Set<String> into) {
+		for (FileInspection.Mod nested : mod.nestedMods()) {
+			for (String id : nested.IDs()) into.add(id.toLowerCase(Locale.ROOT));
+			collectIds(nested, into);
+		}
+	}
+
+	/**
 	 * Whether {@code root} nests any id of {@code winner} at a version the winner strictly beats; per id its newest
-	 * nested jar speaks for the root, and an unparseable nested version is never beaten - the winner can only be
-	 * proven newer against a parseable one.
+	 * nested jar speaks for the root. Every non-blank version parses, so a missing version string is the only way a
+	 * nested jar escapes comparison.
 	 */
 	private static boolean nestsBeatenVersion(FileInspection.Mod root, FileInspection.Mod winner) {
 		SemanticVersion parsedWinner = SemanticVersion.parseOrNull(winner.version());
