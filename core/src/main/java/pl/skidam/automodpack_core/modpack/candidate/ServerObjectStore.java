@@ -25,6 +25,20 @@ public final class ServerObjectStore {
 			throw new IllegalArgumentException("Managed object and staging directories must be separate");
 	}
 
+	/** Copies one source file through the full publish discipline; never links the target to a source inode callers may still edit. */
+	public Path promoteCopy(Path source, String sha1) throws IOException {
+		Path staged = Files.createTempFile(stagingDirectory, ".staged-", null);
+		StagedObject object = new StagedObject(sha1, Files.size(source), staged);
+		try {
+			Files.copy(source, staged, StandardCopyOption.REPLACE_EXISTING);
+			TreeMap<String, StagedObject> single = new TreeMap<>();
+			single.put(object.sha1(), object);
+			return promoteAll(single, null).get(object.sha1());
+		} finally {
+			object.delete();
+		}
+	}
+
 	public NavigableMap<String, Path> promoteAll(NavigableMap<String, StagedObject> objects, FileCache cache) throws IOException {
 		FileTrees.createManagedDirectory(objectsDirectory, "immutable object directory");
 		FileTrees.createManagedDirectory(stagingDirectory, "staging directory");

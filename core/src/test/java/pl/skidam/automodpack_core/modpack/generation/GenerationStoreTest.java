@@ -25,6 +25,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 
 class GenerationStoreTest {
 	@TempDir
@@ -36,14 +37,14 @@ class GenerationStoreTest {
 		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects);
 		assertTrue(store.loadCurrent().isEmpty());
 
-		GenerationStore.Publication root = store.publish(candidate("one", "content-one"), "First", null);
+		GenerationStore.Publication root = store.publish(candidate("one", "content-one"), "First");
 		GenerationStore.Current current = store.loadCurrent().orElseThrow();
 		assertEquals(root.entry().seq(), current.seq());
 		assertEquals("First", root.entry().notes());
 		assertEquals("one", current.manifest().toFields().categories.get("General").get("main").description);
 		assertEquals(1, current.seq());
 
-		GenerationStore.Publication second = store.publish(candidate("two", "content-two"), "Second", null);
+		GenerationStore.Publication second = store.publish(candidate("two", "content-two"), "Second");
 		assertEquals(2, second.entry().seq());
 		assertEquals(1, second.entry().summary().added() + second.entry().summary().changed());
 		assertTrue(second.entry().changes().stream().anyMatch(change -> change.path().equals("config/example.txt") && change.toSha1().equals(sha1("content-two"))));
@@ -80,10 +81,10 @@ class GenerationStoreTest {
 	void collectThenRestoreFailsLoudlyAboutTheCollectedObjects() throws Exception {
 		Path objects = tempDir.resolve("objects");
 		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects);
-		store.publish(candidate("one", "content-one"), "First", null);
-		store.publish(candidate("two", "content-two"), "Second", null);
+		store.publish(candidate("one", "content-one"), "First");
+		store.publish(candidate("two", "content-two"), "Second");
 		store.publishRestore(1, "Back to first");
-		store.publish(candidate("two", "content-two"), "Second again", null);
+		store.publish(candidate("two", "content-two"), "Second again");
 		store.collectUnreachable();
 
 		IOException failure = assertThrows(IOException.class, () -> store.publishRestore(1, "No bytes left"));
@@ -95,8 +96,8 @@ class GenerationStoreTest {
 		Path objects = tempDir.resolve("objects");
 		Path state = tempDir.resolve("state");
 		GenerationStore store = new GenerationStore(state, objects);
-		store.publish(candidate(Map.of("config/a.txt", "A", "config/b.txt", "B")), "First", null);
-		store.publish(candidate(Map.of("config/a.txt", "A2")), "Second", null);
+		store.publish(candidate(Map.of("config/a.txt", "A", "config/b.txt", "B")), "First");
+		store.publish(candidate(Map.of("config/a.txt", "A2")), "Second");
 		Files.delete(state.resolve("current-projection.json"));
 
 		// The projection is gone: the slow path replays the journal from the root and the folded
@@ -111,7 +112,7 @@ class GenerationStoreTest {
 	@Test
 	void contentTokenIgnoresPolicyOnlyChanges() throws Exception {
 		GenerationStore store = new GenerationStore(tempDir.resolve("state"), tempDir.resolve("objects"));
-		store.publish(candidate("one", "content-one"), "First", null);
+		store.publish(candidate("one", "content-one"), "First");
 		String before = store.loadCurrent().orElseThrow().contentToken();
 
 		// Same bytes, different group policy: the content token must not move.
@@ -120,29 +121,29 @@ class GenerationStoreTest {
 	}
 
 	@Test
-	void policyOnlyRepublishLandsInTheJournalAndSurvivesAStoreReload() throws Exception {
-		Path state = tempDir.resolve("state");
+	void waitingTrackPublishesThroughTheObjectStoreAndAChangedFileLandsAtTheNextPublish() throws Exception {
 		Path objects = tempDir.resolve("objects");
-		GenerationStore store = new GenerationStore(state, objects);
-		store.publish(candidate("one", "content-one"), "First", null);
-		String beforeToken = store.loadCurrent().orElseThrow().contentToken();
+		Path track = tempDir.resolve("waiting-music.ogg");
+		Files.write(track, "track-bytes".getBytes(StandardCharsets.UTF_8));
+		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects, track);
+		store.publish(candidate("one", "content-one"), "First");
 
-		// Same bytes, renamed group: the republish appends an empty-changes entry instead of reporting no changes,
-		// because the journal is the only truth a policy change can survive a reload through.
-		GenerationStore.Publication republished = store.publish(candidate("renamed", "content-one"), "Rename", null);
-		assertEquals(2, republished.entry().seq());
-		assertEquals(beforeToken, republished.entry().contentToken());
-		assertEquals(0, republished.entry().summary().added() + republished.entry().summary().changed() + republished.entry().summary().removed());
+		Path object = DataRootResolver.objectFile(objects, sha1("track-bytes"));
+		assertEquals("track-bytes", Files.readString(object, StandardCharsets.UTF_8));
+		assertTrue(store.hosting().asMap().containsKey(sha1("track-bytes")));
 
-		// The projection and the journal head agree: the reload folds the renamed policy, not a stale one.
-		GenerationStore reopened = new GenerationStore(state, objects);
-		GenerationStore.Current current = reopened.loadCurrent().orElseThrow();
-		assertEquals(2, current.seq());
-		assertEquals("renamed", current.manifest().toFields().categories.get("General").get("main").description);
+		// A corrupted store object is never a fact to cache: republishing the same track judges the
+		// object against its hash and replaces it instead of advertising bytes the server can never serve.
+		ImmutableFiles.unprotect(object);
+		Files.write(object, "truncated".getBytes(StandardCharsets.UTF_8));
+		store.publish(candidate("two", "content-two"), "Second");
+		assertEquals("track-bytes", Files.readString(object, StandardCharsets.UTF_8));
 
-		// Republishing the very same policy again changes nothing at all: the head stays where it is.
-		GenerationStore.Publication unchanged = reopened.publish(candidate("renamed", "content-one"), "Nothing", null);
-		assertEquals(2, unchanged.entry().seq());
+		// A changed track file lands under its own hash at the next publish.
+		Files.write(track, "new-track-bytes".getBytes(StandardCharsets.UTF_8));
+		store.publish(candidate("three", "content-three"), "Third");
+		assertEquals("new-track-bytes", Files.readString(DataRootResolver.objectFile(objects, sha1("new-track-bytes")), StandardCharsets.UTF_8));
+		assertTrue(store.hosting().asMap().containsKey(sha1("new-track-bytes")));
 	}
 
 	@Test
@@ -173,7 +174,7 @@ class GenerationStoreTest {
 			assertTrue(leftovers.anyMatch(path -> path.getFileName().toString().startsWith("journal.jsonl.corrupt-")));
 		}
 
-		GenerationStore.Publication fresh = reopened.publish(candidate("two", "content-two"), "After heal", null);
+		GenerationStore.Publication fresh = reopened.publish(candidate("two", "content-two"), "After heal");
 		assertEquals(1, fresh.entry().seq());
 	}
 
@@ -182,7 +183,7 @@ class GenerationStoreTest {
 		Path state = tempDir.resolve("state");
 		Path objects = tempDir.resolve("objects");
 		GenerationStore store = new GenerationStore(state, objects);
-		GenerationStore.Publication root = store.publish(candidate("one", "content-one"), "First", null);
+		GenerationStore.Publication root = store.publish(candidate("one", "content-one"), "First");
 
 		// No projection view and no policy object to rebuild it from: the state an interrupted publish can leave behind.
 		Files.delete(state.resolve("current-projection.json"));
@@ -191,7 +192,7 @@ class GenerationStoreTest {
 		GenerationStore reopened = new GenerationStore(state, objects);
 		assertTrue(reopened.loadCurrent().isEmpty());
 
-		GenerationStore.Publication fresh = reopened.publish(candidate("one", "content-one"), "After heal", null);
+		GenerationStore.Publication fresh = reopened.publish(candidate("one", "content-one"), "After heal");
 		assertEquals(1, fresh.entry().seq());
 		assertEquals(root.entry().contentToken(), fresh.entry().contentToken());
 	}
@@ -199,8 +200,8 @@ class GenerationStoreTest {
 	@Test
 	void headDocumentCarriesIdentityPolicyAndLedger() throws Exception {
 		GenerationStore store = new GenerationStore(tempDir.resolve("state"), tempDir.resolve("objects"));
-		store.publish(candidate("one", "content-one"), "First", null);
-		store.publish(candidate("two", "content-two"), "Second", null);
+		store.publish(candidate("one", "content-one"), "First");
+		store.publish(candidate("two", "content-two"), "Second");
 
 		Path projection = tempDir.resolve("state").resolve("current-projection.json");
 		GenerationJsons.HeadDocumentFields fields = ConfigToolsRead.read(projection);
