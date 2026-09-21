@@ -17,6 +17,7 @@ import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.ContentTree;
@@ -86,7 +87,7 @@ public final class ClientGenerationStore {
 	/** The active pack's document: active-state identity and ledger, its mirror entry, and its policy document from the CAS. */
 	public Optional<PackDocument> activeDocument() throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-		return state == null ? Optional.empty() : Optional.of(document(mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger)));
+		return state == null ? Optional.empty() : Optional.of(document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger)));
 	}
 
 	/** Reconstructs the active target from the active document and the persisted selection intent, without server access. */
@@ -94,31 +95,18 @@ public final class ClientGenerationStore {
 		Objects.requireNonNull(platform, "platform");
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null) return Optional.empty();
-		return Optional.of(resolveActive(state, platform));
-	}
-
-	/** Same, resolving under the stored selection's own platform: the exact platform the selection last committed under. */
-	public Optional<SelectedModpackTarget> readActiveTarget() throws IOException {
-		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-		if (state == null) return Optional.empty();
-		ClientPlatform platform = ClientPlatform.effective(new ClientSelectionStore(storage.selectionFile()).get(state.modpackId).orElse(null));
-		return Optional.of(resolveActive(state, platform));
-	}
-
-	private SelectedModpackTarget resolveActive(ClientStorageJsons.ClientGenerationStateFields state, ClientPlatform platform) throws IOException {
-		Objects.requireNonNull(platform, "platform");
-		PackDocument document = document(mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger));
+		PackDocument document = document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger));
 		Optional<SelectionIntent> stored = new ClientSelectionStore(storage.selectionFile()).get(state.modpackId);
-		return stored.isPresent()
+		return Optional.of(stored.isPresent()
 				? SelectedModpackTarget.prepare(document, null, stored.get(), platform)
-				: SelectedModpackTarget.prepareDefault(document, platform);
+				: SelectedModpackTarget.prepareDefault(document, platform));
 	}
 
 	/** One pending transaction's target document: the transaction carries the exact ledger, the mirror entry the creation time. */
 	public PackDocument document(UpdateTransaction transaction) throws IOException {
 		Objects.requireNonNull(transaction, "transaction");
 		if (transaction.ownershipLedger == null) throw new IOException("Pending modpack transaction carries no ownership ledger: " + transaction.transactionId);
-		return document(mirrorEntry(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken()), OwnershipLedger.fromFields(transaction.ownershipLedger));
+		return document(transaction.plan().modpackId(), mirrorEntry(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken()), OwnershipLedger.fromFields(transaction.ownershipLedger));
 	}
 
 	/** The newest mirror generation of one pack; its ledger comes from the active pointer when that is the newest generation. */
@@ -134,8 +122,8 @@ public final class ClientGenerationStore {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state != null && state.modpackId.equals(normalizedModpackId) && state.contentToken.equals(entry.contentToken()))
-			return document(entry, OwnershipLedger.fromFields(state.ownershipLedger));
-		return document(entry, replayedLedger(normalizedModpackId, entry));
+			return document(normalizedModpackId, entry, OwnershipLedger.fromFields(state.ownershipLedger));
+		return document(normalizedModpackId, entry, replayedLedger(normalizedModpackId, entry));
 	}
 
 	/**
@@ -363,14 +351,20 @@ public final class ClientGenerationStore {
 		return state != null && state.modpackId.equals(ModpackId.requireValid(modpackId)) ? state.contentToken : null;
 	}
 
-	private PackDocument document(JournalEntry entry, OwnershipLedger ledger) throws IOException {
+	private PackDocument document(String modpackId, JournalEntry entry, OwnershipLedger ledger) throws IOException {
 		try {
-			return new PackDocument(policyDocument(entry.policySha1()), entry.contentToken(), entry.policySha1(), entry.createdAt(), ledger, "");
+			return new PackDocument(policyDocument(entry.policySha1()), entry.contentToken(), entry.policySha1(), entry.createdAt(), ledger, advertisedTrack(modpackId, entry));
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
 			throw new IOException("Client generation could not be reconstructed from the journal mirror: " + entry.contentToken(), e);
 		}
+	}
+
+	/** The advertised track's hash when the head mirror names this exact generation; the mirror is the only offline record of the track. */
+	private String advertisedTrack(String modpackId, JournalEntry entry) throws IOException {
+		GenerationJsons.HeadDocumentFields head = new HeadMirror(storage).read(modpackId);
+		return head != null && entry.contentToken().equals(head.contentToken) ? head.waitingMusicSha1 : "";
 	}
 
 	private JournalEntry mirrorEntry(String modpackId, String contentToken) throws IOException {
