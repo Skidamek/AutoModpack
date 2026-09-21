@@ -110,14 +110,18 @@ public final class ManifestFetcher {
 			}
 			headExpected = head;
 			journalExpected = journal;
-			if (head != null) LOGGER.info("Installed head mirror vouches for {}; fetching conditionally", selectedModpackId);
+			if (head != null) LOGGER.info("Installed head mirror vouches for {}; fetching head and journal conditionally in one round trip", selectedModpackId);
 		} else {
 			headExpected = null;
 			journalExpected = null;
 		}
 
+		// When the mirror vouches, the journal request is decided before either request is sent, so it pipelines with
+		// the head: a matching pair answers in one round trip, and a moved head still hands back the journal that head
+		// wants - the same request the sequential chain would have issued after parsing.
+		CompletableFuture<DocumentFetch> journalFetched = headExpected == null ? null : fetchJournal(transport, storage, journalExpected);
 		return transport.downloadDocument(GenerationHosting.HEAD_DOCUMENT_KEY.getBytes(StandardCharsets.UTF_8), storage.modpackContentTempFile(), headExpected, (IntConsumer) null)
-				.thenComposeAsync(fetch -> applyFetchedHead(storage, transport, selectedModpackId, headExpected, journalExpected, fetch), DownloadClient.NET_EXECUTOR).whenComplete((ignored, error) -> {
+				.thenComposeAsync(fetch -> applyFetchedHead(storage, transport, selectedModpackId, headExpected, journalExpected, journalFetched, fetch), DownloadClient.NET_EXECUTOR).whenComplete((ignored, error) -> {
 					try {
 						Files.deleteIfExists(storage.modpackContentTempFile());
 					} catch (IOException e) {
@@ -126,9 +130,22 @@ public final class ManifestFetcher {
 				});
 	}
 
+	/** One full journal fetch into the temp file; callers delete the temp only after their last consumer of the fetch has run. */
+	private static CompletableFuture<DocumentFetch> fetchJournal(PackTransport transport, ClientStorage storage, String journalExpected) {
+		return transport.downloadDocument(GenerationHosting.JOURNAL_KEY.getBytes(StandardCharsets.UTF_8), storage.journalTempFile(), journalExpected, (IntConsumer) null);
+	}
+
+	private static void deleteJournalTemp(ClientStorage storage) {
+		try {
+			Files.deleteIfExists(storage.journalTempFile());
+		} catch (IOException e) {
+			LOGGER.warn("Failed to remove the temporary journal download", e);
+		}
+	}
+
 	/** Applies one head fetch answer: parses the served or mirrored document, writes a fresh fetch through to the mirror, then syncs the journal vouch. */
 	private static CompletableFuture<GenerationJsons.HeadDocumentFields> applyFetchedHead(ClientStorage storage, PackTransport transport, String selectedModpackId, String headExpected, String journalExpected,
-			DocumentFetch fetch) {
+			CompletableFuture<DocumentFetch> journalFetched, DocumentFetch fetch) {
 		GenerationJsons.HeadDocumentFields content;
 		if (fetch.unchanged()) {
 			// The validator is the only thing that can make UNCHANGED a truthful answer; anything else is a broken or
@@ -150,8 +167,12 @@ public final class ManifestFetcher {
 				}
 			}
 		}
-		if (content == null) return CompletableFuture.completedFuture(null);
-		return syncJournalMirror(storage, transport, content, journalExpected).thenApply(journalRefetched -> content);
+		if (content == null) {
+			// The pipelined journal fetch, if any, lands with nobody to consume it: sweep its temp once it settles.
+			if (journalFetched != null) journalFetched.whenComplete((ignored, error) -> deleteJournalTemp(storage));
+			return CompletableFuture.completedFuture(null);
+		}
+		return syncJournalMirror(storage, transport, content, journalExpected, journalFetched).thenApply(journalRefetched -> content);
 	}
 
 	/**
@@ -159,9 +180,12 @@ public final class ManifestFetcher {
 	 * is stored in the client CAS under its own hash (the mirror's entries name it), and the journal mirror must
 	 * vouch for the head content token; when it is stale, missing, or unreadable, the whole journal file is fetched
 	 * under the reserved key - conditionally when the mirror's own hash can serve as the validator - and swapped in
-	 * whole. Returns whether the journal was actually refetched.
+	 * whole. A journal fetch already pipelined beside the head request skips the staleness gate: it is the same
+	 * request the gate would have issued, and a body the server did send is always fresher than deciding from the
+	 * gate alone. Returns whether the journal was actually refetched.
 	 */
-	private static CompletableFuture<Boolean> syncJournalMirror(ClientStorage storage, PackTransport transport, GenerationJsons.HeadDocumentFields content, String journalExpected) {
+	private static CompletableFuture<Boolean> syncJournalMirror(ClientStorage storage, PackTransport transport, GenerationJsons.HeadDocumentFields content, String journalExpected,
+			CompletableFuture<DocumentFetch> journalFetched) {
 		if (content == null) return CompletableFuture.completedFuture(false);
 		String modpackId;
 		JournalMirror mirror = new JournalMirror(storage);
@@ -170,27 +194,24 @@ public final class ManifestFetcher {
 			byte[] policyBytes = ConfigTools.GSON.toJson(content.policy).getBytes(StandardCharsets.UTF_8);
 			ClientObjectStore.storeObject(storage, content.policySha1, policyBytes);
 		} catch (RuntimeException | IOException e) {
+			if (journalFetched != null) journalFetched.whenComplete((ignored, error) -> deleteJournalTemp(storage));
 			return CompletableFuture.failedFuture(e);
 		}
-		if (!mirror.isStale(modpackId, content.contentToken)) return CompletableFuture.completedFuture(false);
-		LOGGER.info("Journal mirror is stale for modpack {}; fetching the full journal from the server", modpackId);
-		return transport.downloadDocument(GenerationHosting.JOURNAL_KEY.getBytes(StandardCharsets.UTF_8), storage.journalTempFile(), journalExpected, (IntConsumer) null)
-				.thenComposeAsync(fetch -> {
-					try {
-						if (fetch.unchanged() && journalExpected == null) throw new IOException("Server answered UNCHANGED to an unconditional journal request");
-						// A conditional match means the served journal equals the mirror's own bytes: nothing to replace.
-						if (!fetch.unchanged()) mirror.replaceFrom(modpackId, fetch.path());
-						return CompletableFuture.completedFuture(!fetch.unchanged());
-					} catch (IOException e) {
-						return CompletableFuture.failedFuture(e);
-					}
-				}, DownloadClient.NET_EXECUTOR).whenComplete((ignored, error) -> {
-					try {
-						Files.deleteIfExists(storage.journalTempFile());
-					} catch (IOException e) {
-						LOGGER.warn("Failed to remove the temporary journal download", e);
-					}
-				});
+		if (journalFetched == null) {
+			if (!mirror.isStale(modpackId, content.contentToken)) return CompletableFuture.completedFuture(false);
+			LOGGER.info("Journal mirror is stale for modpack {}; fetching the full journal from the server", modpackId);
+			journalFetched = fetchJournal(transport, storage, journalExpected);
+		}
+		return journalFetched.thenComposeAsync(fetch -> {
+			try {
+				if (fetch.unchanged() && journalExpected == null) throw new IOException("Server answered UNCHANGED to an unconditional journal request");
+				// A conditional match means the served journal equals the mirror's own bytes: nothing to replace.
+				if (!fetch.unchanged()) mirror.replaceFrom(modpackId, fetch.path());
+				return CompletableFuture.completedFuture(!fetch.unchanged());
+			} catch (IOException e) {
+				return CompletableFuture.failedFuture(e);
+			}
+		}, DownloadClient.NET_EXECUTOR).whenComplete((ignored, error) -> deleteJournalTemp(storage));
 	}
 
 	private static CompletableFuture<PackTransport> createTransport(ConnectionJsons.ConnectionInfo connectionInfo, String secret,
