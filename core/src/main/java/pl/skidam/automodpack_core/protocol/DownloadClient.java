@@ -290,9 +290,11 @@ public class DownloadClient implements PackTransport {
 						if (connection != null) closeQuietly(connection);
 						waiter.future().completeExceptionally(new IOException("Download client is closed"));
 					} else if (error != null) {
+						WireTrace.log("LANE_FAIL", "lane", waiter.lane(), "error", Throwables.unwrap(error));
 						waiter.future().completeExceptionally(Throwables.unwrap(error));
 					} else {
 						lanes.add(connection);
+						WireTrace.log("LANE_OPEN", "lanes", lanes.size(), "conn", connection.traceId());
 						waiter.dispatch(connection);
 					}
 					pumpPool();
@@ -316,6 +318,7 @@ public class DownloadClient implements PackTransport {
 			Connection connection = iterator.next();
 			if (!connection.isActive()) {
 				iterator.remove();
+				WireTrace.log("LANE_REAP", "conn", connection.traceId(), "lanes", lanes.size());
 				closeQuietly(connection);
 			}
 		}

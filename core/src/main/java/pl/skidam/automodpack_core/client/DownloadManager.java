@@ -18,6 +18,7 @@ import pl.skidam.automodpack_core.protocol.LocalStorageException;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.protocol.StaleRangeException;
+import pl.skidam.automodpack_core.protocol.WireTrace;
 import pl.skidam.automodpack_core.screen.DownloadView;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
@@ -154,6 +155,7 @@ public class DownloadManager implements DownloadView {
 		if (hostServed) {
 			if (!pacer.tryAcquire()) {
 				// The wire window is full: put the task back; the next settle re-runs the dispatch.
+				WireTrace.log("WINDOW_FULL", "task", task.file.getFileName(), "inflight", pacer.inFlight(), "window", pacer.window());
 				queuedDownloads.put(key, task);
 				return false;
 			}
@@ -288,6 +290,7 @@ public class DownloadManager implements DownloadView {
 						return;
 					}
 					if (!pacer.tryAcquire()) { // window full: requeue, the next settle rediscovers this task
+						WireTrace.log("WINDOW_FULL", "task", task.file.getFileName(), "inflight", pacer.inFlight(), "window", pacer.window());
 						downloadsInProgress.remove(hashPathPair);
 						queuedDownloads.put(hashPathPair, task);
 						activeTemporaryFiles.remove(hashPathPair);
@@ -401,6 +404,17 @@ public class DownloadManager implements DownloadView {
 			finishHostFile(hashPathPair, task, data, partial);
 			return;
 		}
+		// The resume check above deletes a partial it judges invalid; the streamer and the steals must agree on one live
+		// file, so recreate what was dropped - writing into the stale reference would feed an unlinked inode and strand
+		// the barrier with steals that can never be taken.
+		if (task.partialFile == null) {
+			partial = preparePartial(hashPathPair, task);
+			if (partial == null) {
+				releaseWindow(data);
+				cleanupAndFinalize(hashPathPair, task, dataLayout.objectFile(hashPathPair.hash()), false, false);
+				return;
+			}
+		}
 		task.pendingItems = 1;
 		submitHostItem(hashPathPair, task, data, partial, offset, Math.min(offset + (long) NetUtils.DEFAULT_CHUNK_SIZE, task.fileSize) - 1, lane.get());
 		stealIdleWork();
@@ -438,6 +452,7 @@ public class DownloadManager implements DownloadView {
 			future = transport.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), partial, offset, endInclusive, progressAction, lane);
 		} catch (Throwable error) {
 			// The submit never produced an item: return its window credit and tick the barrier down, or the task waits for a settle that never comes.
+			WireTrace.log("TAKE_FAIL", "task", task.file.getFileName(), "item", offset + "-" + endInclusive, "error", error);
 			if (task.hostError == null) task.hostError = Throwables.unwrap(error);
 			pacer.settle(true, 0, 0, lane);
 			onHostItemSettled(hashPathPair, task, data, partial);
@@ -485,6 +500,7 @@ public class DownloadManager implements DownloadView {
 	}
 
 	private void finishHostFile(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path partial, Throwable error) {
+		WireTrace.log("DONE", "task", task.file.getFileName(), "status", error == null ? "promote" : "fail:" + Throwables.detail(error), "inflight", pacer.inFlight(), "window", pacer.window());
 		if (error != null) {
 			if (cancelled || error instanceof InterruptedException) {
 				task.lastFailureCategory = FailureCategory.CANCELLED;
@@ -636,6 +652,7 @@ public class DownloadManager implements DownloadView {
 			return true;
 		}
 		if (task.lastFailureCategory != FailureCategory.LOCAL_STORAGE && task.attempts < (task.sources.size() + 1) * MAX_DOWNLOAD_ATTEMPTS) {
+			WireTrace.log("REQUEUE", "task", task.file.getFileName(), "attempts", task.attempts, "category", task.lastFailureCategory);
 			LOGGER.warn("Retrying download: {}", task.file.getFileName());
 			task.attempts++;
 			queuedDownloads.put(key, task);

@@ -97,6 +97,28 @@ class PipeliningTest {
 		}
 	}
 
+	/**
+	 * The streamer and the steals share one partial, so the offset-0 segment can land after a positioned one; its write
+	 * must append at its own offset, never truncate the file - a truncate here silently wipes bytes another request
+	 * already settled and the assembled object hash-mismatches.
+	 */
+	@Test
+	void aLateZeroOffsetWriteKeepsEarlierPositionedBytes(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			byte[] object = new byte[256 * 1024];
+			new SecureRandom().nextBytes(object);
+			String sha1 = HashUtils.sha1(object);
+			server.store().put(sha1, object);
+
+			Path partial = directory.resolve("partial");
+			try (DownloadClient client = client(server, "test-secret")) {
+				client.downloadFile(sha1.getBytes(StandardCharsets.UTF_8), partial, 100_000, object.length - 1, null, 0).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				client.downloadFile(sha1.getBytes(StandardCharsets.UTF_8), partial, 0, 99_999, null, 0).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+			}
+			assertArrayEquals(object, Files.readAllBytes(partial));
+		}
+	}
+
 	private static List<String> storeObjects(ConditionalFetchTest.ContractServer server, int count) {
 		List<String> hashes = new ArrayList<>();
 		byte[] seed = new byte[16];

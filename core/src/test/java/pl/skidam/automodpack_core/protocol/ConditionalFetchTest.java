@@ -539,15 +539,15 @@ class ConditionalFetchTest {
 					respond(out, "304 Not Modified", new byte[0]);
 					return;
 				}
-				Long offset = parseRangeStart(request.range);
-				if (offset != null && offset >= content.length) {
+				long[] range = parseRange(request.range, content.length);
+				if (range != null && range[0] >= content.length) {
 					respond(out, "416 Range Not Satisfiable", new byte[0], "Content-Range: bytes */" + content.length);
 					return;
 				}
-				if (offset != null) {
-					long start = lieAboutResumeStart.get() ? offset + 5 : offset;
-					respond(out, "206 Partial Content", Arrays.copyOfRange(content, offset.intValue(), content.length),
-							"Content-Range: bytes " + start + "-" + (content.length - 1) + "/" + content.length);
+				if (range != null) {
+					long start = lieAboutResumeStart.get() ? range[0] + 5 : range[0];
+					respond(out, "206 Partial Content", Arrays.copyOfRange(content, (int) range[0], (int) range[1] + 1),
+							"Content-Range: bytes " + start + "-" + range[1] + "/" + content.length);
 					return;
 				}
 				lastResponseZstd.set(false);
@@ -619,16 +619,26 @@ class ConditionalFetchTest {
 			return null;
 		}
 
-		private static Long parseRangeStart(String range) {
+		/** The real server's single-range subset: {@code bytes=N-} and {@code bytes=N-M} (end clamped to EOF); null otherwise. A start past EOF is kept so the caller answers 416. */
+		private static long[] parseRange(String range, int total) {
 			if (range == null || !range.startsWith("bytes=")) return null;
 			String spec = range.substring("bytes=".length()).trim();
 			int dash = spec.indexOf('-');
 			if (dash <= 0) return null;
+			long start;
+			long end;
 			try {
-				return Long.parseLong(spec.substring(0, dash).trim());
+				start = Long.parseLong(spec.substring(0, dash).trim());
+				end = total - 1L;
+				String last = spec.substring(dash + 1).trim();
+				if (!last.isEmpty()) end = Math.min(end, Long.parseLong(last));
 			} catch (NumberFormatException e) {
 				return null;
 			}
+			if (start < 0) return null;
+			if (start >= total) return new long[]{start, start};
+			if (end < start) return null;
+			return new long[]{start, end};
 		}
 
 		private static void respond(BufferedOutputStream out, String status, byte[] body, String... headers) throws IOException {
