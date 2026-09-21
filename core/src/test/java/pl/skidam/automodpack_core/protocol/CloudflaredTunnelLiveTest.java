@@ -1,7 +1,7 @@
 package pl.skidam.automodpack_core.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -39,7 +39,7 @@ class CloudflaredTunnelLiveTest {
 
 	@Test
 	void contractSurvivesCloudflaredTunnel(@TempDir Path directory) throws Exception {
-		if (!hasCloudflared()) return;
+		Assumptions.assumeTrue(hasCloudflared(), "cloudflared is not installed; skipping");
 
 		Path hostDir = directory.resolve("hosting");
 		Files.createDirectories(hostDir);
@@ -56,7 +56,7 @@ class CloudflaredTunnelLiveTest {
 		ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
 		config.connectionMode = ModpackConnectionMode.HTTP;
 		config.bindAddress = "127.0.0.1";
-		config.bindPort = 8000;
+		config.bindPort = 0;
 		config.disableInternalTLS = true; // cloudflared terminates TLS; the origin hop is plain HTTP
 		config.validateSecrets = false;
 		ServerConfigJsons.ServerConfigFieldsV3 previous = Constants.serverConfig;
@@ -64,15 +64,16 @@ class CloudflaredTunnelLiveTest {
 		NettyServer server = new NettyServer();
 		try {
 			server.replacePaths(paths);
-			assertNotNull(server.start().orElse(null), "contract listener must bind");
+			var bound = server.start();
+			assertTrue(bound.isPresent(), "contract listener must bind");
+			int originPort = ((InetSocketAddress) bound.get().channel().localAddress()).getPort();
 
 			Path cloudflaredLog = directory.resolve("cloudflared.log");
-			Process tunnel = new ProcessBuilder("cloudflared", "tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:8000")
+			Process tunnel = new ProcessBuilder("cloudflared", "tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:" + originPort)
 					.redirectErrorStream(true).redirectOutput(cloudflaredLog.toFile()).start();
 			try {
 				String publicUrl = awaitTunnelUrl(cloudflaredLog);
 				Assumptions.assumeTrue(publicUrl != null, "cloudflared did not cut a quick tunnel (offline or rate-limited); skipping");
-				Assumptions.assumeTrue(publicUrl != null, "no tunnel URL");
 				String host = publicUrl.substring("https://".length());
 				awaitDns(host);
 				InetSocketAddress endpoint = AddressHelpers.format(host, 443);
@@ -81,7 +82,6 @@ class CloudflaredTunnelLiveTest {
 				DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(true))
 						.get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				try {
-					Thread.dumpStack();
 					Path headDestination = directory.resolve("head-download");
 					client.downloadDocument(GenerationHosting.HEAD_DOCUMENT_KEY.getBytes(StandardCharsets.UTF_8), headDestination, null, (IntConsumer) null)
 							.get(AWAIT_SECONDS, TimeUnit.SECONDS);

@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntConsumer;
 
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.protocol.DocumentFetch;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.MissingObjectException;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.storage.StoragePaths;
@@ -159,8 +161,10 @@ class WaitingMusicTest {
 			assertTrue(done, "the fetch never finished");
 		}
 
-		void awaitIdle() throws InterruptedException {
-			Thread.sleep(100);
+		/** A fetch submitted by begin() is enqueued on the wire executor ahead of the handshake task, so its attempt is counted when this returns. */
+		void awaitIdle() throws Exception {
+			CompletableFuture<Void> handshake = new CompletableFuture<>();
+			CompletableFuture.runAsync(() -> handshake.complete(null), DownloadClient.NET_EXECUTOR).get(5, TimeUnit.SECONDS);
 		}
 
 		@Override
