@@ -18,6 +18,28 @@ public record SemanticVersion(int major, int minor, int patch, String label, int
 	// Regex to split "beta.1", "beta1", "alpha-5", "rc2"
 	private static final Pattern PRE_SPLIT_PATTERN = Pattern.compile("^([a-zA-Z]+)(?:[.\\-]?)(\\d+)?$");
 
+	/** {@link #parse} for strings that may not be versions at all: null when {@code versionString} cannot be parsed. */
+	public static SemanticVersion parseOrNull(String versionString) {
+		try {
+			return parse(versionString);
+		} catch (IllegalArgumentException e) {
+			return null;
+		}
+	}
+
+	/**
+	 * Deterministic total winner order over raw version strings: parsed versions compare semantically and beat
+	 * unparseable ones, unparseable ones compare as raw strings. Callers break remaining ties by path.
+	 */
+	public static int compareVersionStrings(String left, String right) {
+		SemanticVersion parsedLeft = parseOrNull(left);
+		SemanticVersion parsedRight = parseOrNull(right);
+		if (parsedLeft != null && parsedRight != null) return parsedLeft.compareTo(parsedRight);
+		if (parsedLeft != null) return 1;
+		if (parsedRight != null) return -1;
+		return String.valueOf(left).compareTo(String.valueOf(right));
+	}
+
 	public static SemanticVersion parse(String versionString) {
 		if (versionString == null || versionString.isBlank()) throw new IllegalArgumentException("Version cannot be empty");
 
