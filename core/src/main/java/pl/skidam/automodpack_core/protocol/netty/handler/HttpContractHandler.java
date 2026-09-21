@@ -242,12 +242,12 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			return finishBodyless(ctx, span, STATUS_404, 0, null, null, keepAlive);
 		}
 
-		// Objects already are their hash. A document is only hashed when a validator actually asks, keeping the SHA-1
-		// of a possibly large journal off the event loop for the plain GETs; the response then simply carries no ETag.
+		// Objects already are their hash. A document's validator etag comes from the server's memo, keeping the SHA-1
+		// of a possibly large journal off the event loop for every conditional fetch; a plain GET carries no ETag.
 		boolean document = key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY);
 		String etag = document ? null : key;
 		if (ifNoneMatch != null) {
-			etag = document ? HashUtils.getHash(file) : key;
+			etag = document ? server.documentEtag(file) : key;
 			if (etag == null) return finishBodyless(ctx, span, STATUS_404, 0, null, null, keepAlive);
 		}
 
@@ -308,7 +308,6 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			channel.position(offset);
 		} catch (IOException e) {
 			closeQuietly(channel);
-			streaming = false;
 			tracker.complete(span, 404, 0);
 			return respondOrClose(ctx, STATUS_404, 0, null, null, keepAlive);
 		}

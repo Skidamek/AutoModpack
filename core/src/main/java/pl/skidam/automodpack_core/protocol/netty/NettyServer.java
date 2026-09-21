@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.protocol.netty;
 import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.file.Files;
@@ -11,6 +12,7 @@ import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.cert.X509Certificate;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -87,7 +89,30 @@ public class NettyServer {
 
 	public void replacePaths(GenerationHosting hosting) {
 		this.paths = hosting.asMap();
+		documentEtags.clear();
 	}
+
+	// The head/journal etags: hashed once per file version and shared by every conditional fetch, instead of hashing a
+	// possibly large document on the event loop once per client sync. Cleared when the hosting swap replaces the files.
+	private final Map<Path, EtagMemo> documentEtags = new ConcurrentHashMap<>();
+
+	/** The served document's sha1 for conditional fetches; null when it cannot be read, mirroring {@code HashUtils.getHash}. */
+	public String documentEtag(Path file) {
+		try {
+			long size = Files.size(file);
+			long mtimeMillis = Files.getLastModifiedTime(file).toMillis();
+			EtagMemo memo = documentEtags.get(file);
+			if (memo != null && memo.size() == size && memo.mtimeMillis() == mtimeMillis) return memo.sha1();
+			String sha1 = HashUtils.getHash(file);
+			if (sha1 == null) return null;
+			if (Files.size(file) == size && Files.getLastModifiedTime(file).toMillis() == mtimeMillis) documentEtags.put(file, new EtagMemo(size, mtimeMillis, sha1));
+			return sha1;
+		} catch (IOException e) {
+			return null;
+		}
+	}
+
+	private record EtagMemo(long size, long mtimeMillis, String sha1) {}
 
 	public Optional<Path> getPath(String requestKey) {
 		if (requestKey == null) return Optional.empty();
