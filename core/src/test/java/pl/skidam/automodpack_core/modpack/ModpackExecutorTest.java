@@ -134,7 +134,7 @@ class ModpackExecutorTest {
 		};
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		ModpackExecutor executor = new ModpackExecutor(tempDir.resolve("server"), groups, tempDir.resolve("host-generations"),
-				new GenerationStore(tempDir.resolve("host-generations"), tempDir.resolve("objects")), scan, creation);
+				new ModpackExecutor.Deps(new GenerationStore(tempDir.resolve("host-generations"), tempDir.resolve("objects")), scan, creation));
 		var operationExecutor = Executors.newSingleThreadExecutor();
 		try {
 			Future<ModpackExecutor.PublishResult> first = operationExecutor.submit(() -> executor.publish());
@@ -167,8 +167,8 @@ class ModpackExecutorTest {
 		Constants.LOADER_VERSION = "test";
 		Constants.MC_VERSION = "test";
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
-		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot, new GenerationStore(generationRoot, dataRoot.resolve("objects")), new ModpackCandidateScanner()::scan,
-				creation);
+		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot,
+				new ModpackExecutor.Deps(new GenerationStore(generationRoot, dataRoot.resolve("objects")), new ModpackCandidateScanner()::scan, creation));
 		try {
 			assertInstanceOf(ModpackExecutor.PreviewReady.class, executor.preview());
 			assertInstanceOf(ModpackExecutor.PreviewReady.class, executor.preview());
@@ -235,10 +235,10 @@ class ModpackExecutorTest {
 		Constants.LOADER_VERSION = "test";
 		Constants.MC_VERSION = "test";
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
-		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot, new GenerationStore(generationRoot, tempDir.resolve("objects")),
-				new ModpackCandidateScanner()::scan, creation, hosting -> {
+		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot,
+				new ModpackExecutor.Deps(new GenerationStore(generationRoot, tempDir.resolve("objects")), new ModpackCandidateScanner()::scan, creation, hosting -> {
 					throw new IllegalStateException("swap boom");
-				});
+				}, () -> Constants.serverConfig, PlatformSourceLookup.none()));
 		try {
 			ModpackExecutor.Published published = assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
 			assertEquals("swap boom", published.hostingFailure().orElseThrow().getMessage());
@@ -275,13 +275,14 @@ class ModpackExecutorTest {
 		Constants.MC_VERSION = "test";
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		List<GenerationHosting> bound = new ArrayList<>();
-		ModpackExecutor clean = new ModpackExecutor(server, groups, generationRoot, new GenerationStore(generationRoot, tempDir.resolve("objects-clean")),
-				new ModpackCandidateScanner()::scan, creation, bound::add);
+		ModpackExecutor clean = new ModpackExecutor(server, groups, generationRoot,
+				new ModpackExecutor.Deps(new GenerationStore(generationRoot, tempDir.resolve("objects-clean")), new ModpackCandidateScanner()::scan, creation, bound::add,
+						() -> Constants.serverConfig, PlatformSourceLookup.none()));
 		ModpackExecutor guarded = new ModpackExecutor(tempDir.resolve("server-guarded"), tempDir.resolve("guarded-groups"), tempDir.resolve("guarded-generations"),
-				new GenerationStore(tempDir.resolve("guarded-generations"), tempDir.resolve("guarded-objects")),
-				request -> {
-					throw new CandidateBuildException("Candidate scan failed");
-				}, creation);
+				new ModpackExecutor.Deps(new GenerationStore(tempDir.resolve("guarded-generations"), tempDir.resolve("guarded-objects")),
+						request -> {
+							throw new CandidateBuildException("Candidate scan failed");
+						}, creation));
 		try {
 			ModpackExecutor.Published published = assertInstanceOf(ModpackExecutor.Published.class, clean.publish());
 			assertTrue(published.hostingFailure().isEmpty());
@@ -370,12 +371,13 @@ class ModpackExecutorTest {
 		Constants.MC_VERSION = "test";
 		Map<String, Long> platformServed = new HashMap<>();
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
-		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot, new GenerationStore(generationRoot, tempDir.resolve("objects")),
-				new ModpackCandidateScanner()::scan, creation, hosting -> {}, () -> fixture, queries -> {
-					Map<String, Long> hits = new HashMap<>();
-					for (PlatformSourceLookup.Query query : queries) if (platformServed.containsKey(query.sha1())) hits.put(query.sha1(), platformServed.get(query.sha1()));
-					return hits;
-				});
+		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot,
+				new ModpackExecutor.Deps(new GenerationStore(generationRoot, tempDir.resolve("objects")), new ModpackCandidateScanner()::scan, creation, hosting -> {}, () -> fixture,
+						queries -> {
+							Map<String, Long> hits = new HashMap<>();
+							for (PlatformSourceLookup.Query query : queries) if (platformServed.containsKey(query.sha1())) hits.put(query.sha1(), platformServed.get(query.sha1()));
+							return hits;
+						}));
 		try {
 			assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
 
@@ -457,8 +459,9 @@ class ModpackExecutorTest {
 		Constants.LOADER_VERSION = "test";
 		Constants.MC_VERSION = "test";
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
-		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot, new GenerationStore(generationRoot, tempDir.resolve("objects")),
-				new ModpackCandidateScanner()::scan, creation, hosting -> {}, () -> fixture, PlatformSourceLookup.none());
+		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot,
+				new ModpackExecutor.Deps(new GenerationStore(generationRoot, tempDir.resolve("objects")), new ModpackCandidateScanner()::scan, creation, hosting -> {},
+						() -> fixture, PlatformSourceLookup.none()));
 		try {
 			assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
 

@@ -61,45 +61,41 @@ public class ModpackExecutor {
 	}
 
 	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, PlatformSourceLookup platformSourceLookup) {
-		this(serverRoot, groupRoot, generationRoot, new GenerationStore(generationRoot, DataRootResolver.resolve(serverRoot).layout().objectsDirectory(),
+		this(serverRoot, groupRoot, generationRoot, new Deps(new GenerationStore(generationRoot, DataRootResolver.resolve(serverRoot).layout().objectsDirectory(),
 				serverRoot.resolve(HOST_MODPACK_DIR).resolve(WAITING_MUSIC_FILE)), new ModpackCandidateScanner()::scan,
 				(ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2),
 						new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build()),
-				hosting -> {
-					if (hostServer != null) hostServer.replacePaths(hosting);
-				}, platformSourceLookup);
+				platformSourceLookup));
 	}
 
-	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, GenerationStore generationStore, CandidateScan candidateScan,
-			ThreadPoolExecutor creationExecutor) {
-		this(serverRoot, groupRoot, generationRoot, generationStore, candidateScan, creationExecutor, hosting -> {
-			if (hostServer != null) hostServer.replacePaths(hosting);
-		});
-	}
-
-	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, GenerationStore generationStore, CandidateScan candidateScan,
-			ThreadPoolExecutor creationExecutor, HostingBinder hostingBinder) {
-		this(serverRoot, groupRoot, generationRoot, generationStore, candidateScan, creationExecutor, hostingBinder, () -> serverConfig, PlatformSourceLookup.none());
-	}
-
-	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, GenerationStore generationStore, CandidateScan candidateScan,
-			ThreadPoolExecutor creationExecutor, HostingBinder hostingBinder, PlatformSourceLookup platformSourceLookup) {
-		this(serverRoot, groupRoot, generationRoot, generationStore, candidateScan, creationExecutor, hostingBinder, () -> serverConfig, platformSourceLookup);
-	}
-
-	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, GenerationStore generationStore, CandidateScan candidateScan,
-			ThreadPoolExecutor creationExecutor, HostingBinder hostingBinder, Supplier<ServerConfigJsons.ServerConfigFieldsV3> config, PlatformSourceLookup platformSourceLookup) {
+	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, Deps deps) {
 		this.serverRoot = serverRoot.toAbsolutePath().normalize();
 		this.groupRoot = groupRoot.toAbsolutePath().normalize();
 		this.generationRoot = generationRoot.toAbsolutePath().normalize();
 		this.patchNotesFile = this.groupRoot.resolve(PATCH_NOTES_FILE).normalize();
-		this.generationStore = Objects.requireNonNull(generationStore);
+		this.generationStore = Objects.requireNonNull(deps.generationStore());
 		this.dataLayout = new DataRootResolver.Layout(this.generationStore.objectRoot().getParent());
-		this.candidateScan = Objects.requireNonNull(candidateScan);
-		this.creationExecutor = Objects.requireNonNull(creationExecutor);
-		this.hostingBinder = Objects.requireNonNull(hostingBinder);
-		this.config = Objects.requireNonNull(config);
-		this.platformSourceLookup = Objects.requireNonNull(platformSourceLookup);
+		this.candidateScan = Objects.requireNonNull(deps.candidateScan());
+		this.creationExecutor = Objects.requireNonNull(deps.creationExecutor());
+		this.hostingBinder = Objects.requireNonNull(deps.hostingBinder());
+		this.config = Objects.requireNonNull(deps.config());
+		this.platformSourceLookup = Objects.requireNonNull(deps.platformSourceLookup());
+	}
+
+	/** One executor's collaborators; production fills them from the roots, tests swap any of them. */
+	record Deps(GenerationStore generationStore, CandidateScan candidateScan, ThreadPoolExecutor creationExecutor, HostingBinder hostingBinder,
+			Supplier<ServerConfigJsons.ServerConfigFieldsV3> config, PlatformSourceLookup platformSourceLookup) {
+		Deps(GenerationStore generationStore, CandidateScan candidateScan, ThreadPoolExecutor creationExecutor, PlatformSourceLookup platformSourceLookup) {
+			this(generationStore, candidateScan, creationExecutor, hosting -> {
+				if (hostServer != null) hostServer.replacePaths(hosting);
+			}, () -> serverConfig, platformSourceLookup);
+		}
+
+		Deps(GenerationStore generationStore, CandidateScan candidateScan, ThreadPoolExecutor creationExecutor) {
+			this(generationStore, candidateScan, creationExecutor, hosting -> {
+				if (hostServer != null) hostServer.replacePaths(hosting);
+			}, () -> serverConfig, PlatformSourceLookup.none());
+		}
 	}
 
 	@FunctionalInterface
