@@ -8,7 +8,9 @@ With `updateSelectedModpackOnLaunch` on (the default), every launch fetches the 
 
 When the plan touches files in the standard `mods` folder or the loader version, AutoModpack stops and asks for a relaunch, so the loader reads the real file tree. Fabric enumerates `mods/` early in boot and Forge and NeoForge later, but the restart rule is the same for every loader.
 
-Joining a server while in-game goes through a review screen instead: it shows what the update would change, asks for consent when your own extra mods would be touched, and applies group selections. A first install always waits for this review. A pack installed through a [trusted bootstrap](files-on-disk#bootstrap) is the exception and applies on that launch.
+Joining a server while in-game goes through a review screen instead: it shows what the update would change, asks for consent when your own extra mods would be touched, and applies group selections. Mod jars that could not be matched on Modrinth or CurseForge are listed as unverified and need an explicit risk acknowledgement before the download starts. A first install always waits for this review. A pack installed through a [trusted bootstrap](files-on-disk#bootstrap) is the exception and applies on that launch.
+
+When an installed pack starts being served from a new address, the client shows an origin change prompt before trusting the address, and remembers the approved origins per pack. Declining an update joins on the locally kept pack and stays detached until you sync again from the pack manager.
 
 With `updateSelectedModpackOnLaunch` off, launch loads the current state without contacting the server, and updates happen only when you join.
 
@@ -16,7 +18,7 @@ With `updateSelectedModpackOnLaunch` off, launch loads the current state without
 
 The client first asks the platform APIs. Files found on Modrinth or CurseForge download straight from their CDNs through direct links, so mod authors get the download credit and your server ships less traffic. The client matches files by SHA-1 on Modrinth and by content fingerprint on CurseForge.
 
-Everything else downloads from the modpack host over its TLS connection. Those transfers are compressed, with pure-Java Zstandard as the default codec; the peers negotiate one codec for the connection from the supported set. When a platform link fails, the client falls back to your server automatically.
+Everything else downloads from the modpack host over its TLS connection. The host compresses documents with zstd, falling back to gzip; files that are already compressed, such as jars, travel as-is. When a platform link fails, the client falls back to your server automatically.
 
 ## Editable files
 

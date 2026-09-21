@@ -12,12 +12,13 @@ The one-shot client drop-in is `~/automodpack/automodpack-bootstrap.json`. Put a
 
 | Path | Role |
 | --- | --- |
-| `server-config.json` | [Server settings](../configuration/server-config) |
-| `client-config.json` | [Client settings](../configuration/client-config) |
+| `server-config.hconf` | [Server settings](../configuration/server-config) |
+| `client-config.hconf` | [Client settings](../configuration/client-config) |
 | `automodpack-bootstrap.json` | Client drop-in, imported on launch, then deleted |
 | `automodpack-bootstrap.exported.json` | Written by `/automodpack host bootstrap`, for copying to clients |
 | `host-modpack/<group>/` | Pack files the server itself does not need; the folder name is the group id, and `main` is the default group |
 | `host-modpack/patch-notes.md` | Notes for the next published generation; cleared when it publishes |
+| `host-modpack/music.ogg` | Optional custom waiting track, streamed to clients during downloads |
 | `credentials/certificate.crt` | TLS certificate chain |
 | `credentials/private-key.pem` | TLS private key, PKCS#8 PEM |
 | `credentials/provisioning-secret` | Bootstrap provisioning secret; keep this folder out of support dumps |

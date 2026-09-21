@@ -1,12 +1,13 @@
 # Client configuration
 
-`automodpack/client-config.json` in the game directory of the instance. The file is created on the first start with defaults.
+`automodpack/client-config.hconf` in the game directory of the instance. The file is created on the first start with defaults.
 
 ## Editing the file
 
+- The file is hconf: `#` starts a comment, options are `key: value` lines, lists are inline `[a, b, c]`. Plain JSON also parses.
 - Restart the game after editing, unless a note below says otherwise.
-- Invalid JSON stops the launch with the reason in the log. Unknown keys are ignored and logged.
-- Leave `DO_NOT_CHANGE_IT` alone. It marks the file version for future migrations.
+- A mistake stops the launch with the file, line, and column in the message. Unknown keys are logged and ignored.
+- AutoModpack writes the file by splicing in only the changed value, so your comments and layout survive every save. Leave `DO_NOT_CHANGE_IT` alone.
 
 | Setting | Default | Description |
 |---|---|---|
@@ -14,7 +15,7 @@
 | `updateSelectedModpackOnLaunch` | `true` | Fetches and applies the selected pack during launch, before the game loads it. When false, launch loads the current state and contacts the server only when you join. See [client updates](../how-it-works/client-updates). |
 | `selfUpdater` | `false` | Checks Modrinth on its own for AutoModpack updates. Turning this off does not affect modpack installs. |
 | `syncAutoModpackVersion` | `true` | Matches the AutoModpack version the server runs, updating or downgrading from Modrinth as needed. |
-| `syncLoaderVersion` | `true` | Matches the modloader version the server publishes. Applies on Prism, MultiMC forks, and Pandora; see [launcher compatibility](../compatibility/launchers#loader-version-sync). |
+| `syncLoaderVersion` | `true` | Lets AutoModpack switch the launcher instance to the versions the server publishes (loader version, and on a pack switch also the game version and loader type). Applies on Prism, MultiMC forks, Pandora, and CurseForge; see [launcher compatibility](../compatibility/launchers#version-sync-and-switching). |
 | `playMusic` | `true` | Plays music while a download runs in-game. |
 | `showModpackSettingsButton` | `true` | Shows the "Modpacks" button on the multiplayer screen. It opens the installed-pack list, where players manage the pack and pick optional [groups](server-config#groups). |
 | `pinnedModIds` | `[]` | Mod ids this instance always loads from its own `mods` folder. See below. |

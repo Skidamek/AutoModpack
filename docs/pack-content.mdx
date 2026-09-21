@@ -13,7 +13,7 @@ A server with this layout:
 
 ```
 ├── automodpack
-│   ├── server-config.json
+│   ├── server-config.hconf
 │   └── host-modpack
 │       └── main
 │           ├── config
@@ -43,7 +43,7 @@ A server with this layout:
     └── sodium-fabric.jar
 ```
 
-and this group declared in `server-config.json`:
+and this group declared in `server-config.hconf` (the config is hconf, and plain JSON like this parses as-is):
 
 ```json
 "modpack": {
@@ -103,7 +103,7 @@ Remove the file from the server, or keep it on the server and add it to `exclude
 
 - AutoModpack's own jar. `/automodpack generate` never packs it and never publishes its updates: clients follow the AutoModpack version the server runs and pick the matching release up from Modrinth. To update players, update the jar on the server, restart, and clients sync to it on their next connection. The details, including `syncAutoModpackVersion` and `selfUpdater`, are in [AutoModpack's own updates](how-it-works/client-updates#automodpacks-own-updates).
 - Mods whose metadata declares them server-side, when `autoExcludeServerSideMods` is on (default).
-- Empty, hidden, `.tmp`, `.disabled`, and `.bak` files, when `autoExcludeUnnecessaryFiles` is on (default). The `automodpack/` namespace and Windows-reserved device names are always left out.
+- Empty, hidden, `.tmp`, `.disabled`, and `.bak` files. The default `excludedFiles` rules carry these patterns and can be edited; the `automodpack/` namespace and Windows-reserved device names are always left out and cannot be turned back on.
 - The paths `saves/`, `screenshots/`, `logs/`, and `automodpack/` can never be claimed by the pack.
 
 <Callout>
