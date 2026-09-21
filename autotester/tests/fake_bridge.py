@@ -60,6 +60,7 @@ class FakeBridge:
         self.acknowledged = False  # unverified-risk ack checkbox state on the confirm screens
         self.storage_running = False
         self.storage_compact_armed = False
+        self.timeline_forget_armed = False
         self.baseline_snapshots: dict[Path, bytes] = {}
         self.first_install_archive_existing = False
         self.storage_verified = False
@@ -181,7 +182,7 @@ class FakeBridge:
                 # them always enabled with the row's narration text (the snapshot kind).
                 "buttons": [
                     {"id": 88, "text": "Files...", "enabled": self.selected_snapshot is not None, "visible": True},
-                    {"id": 86, "text": "Forget older", "enabled": self.selected_snapshot is not None, "visible": True},
+                    {"id": 86, "text": "Click again to forget older snapshots" if self.timeline_forget_armed else "Forget older", "enabled": self.selected_snapshot is not None, "visible": True},
                     {"id": 87, "text": "Back", "enabled": True, "visible": True},
                 ],
                 "other": [
@@ -453,11 +454,17 @@ class FakeBridge:
             if entry is None:
                 raise AssertionError(f"timeline row for snapshot {seq} is not rendered")
             self.selected_snapshot = seq
+            self.timeline_forget_armed = False
         elif element_id == 86 and self.screen == "state_history":
             if self.selected_snapshot is None:
                 raise AssertionError("fake timeline forget requested without a selected snapshot")
-            self._forget_older(self.selected_snapshot)
+            if self.timeline_forget_armed:
+                self.timeline_forget_armed = False
+                self._forget_older(self.selected_snapshot)
+            else:
+                self.timeline_forget_armed = True
         elif element_id == 87 and self.screen == "state_history":
+            self.timeline_forget_armed = False
             self.screen = "manager"
         elif element_id == 46:
             if self.screen == "manager":

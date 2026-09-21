@@ -987,8 +987,22 @@ flow:
     name: select the newest repair checkpoint
     select: { text: Repaired }
   - do: click
-    name: forget the older snapshots holding the corrupted bytes
+    name: arm forgetting the older snapshots holding the corrupted bytes
     select: { text: Forget older }
+  - do: wait_for
+    name: show the armed forget confirmation
+    timeout: 30s
+    until: { element: { text: Click again to forget older snapshots, enabled: true } }
+  - do: click
+    name: confirm forgetting the older snapshots holding the corrupted bytes
+    select: { text: Click again to forget older snapshots }
+  - do: wait_for
+    name: finish forgetting before leaving the timeline
+    timeout: 60s
+    until:
+      all:
+        - element: { text: Forget older, enabled: true }
+        - no_element: { text: Click again to forget older snapshots }
   - do: screenshot
     name: capture the timeline after forgetting older snapshots
     file: all-timeline-forgot-older
