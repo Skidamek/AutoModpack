@@ -1236,6 +1236,15 @@ flow:
   - do: click
     name: accept Pack A removal
     select: { text: Remove }
+  # Removing the active pack ends on the restart screen: the removed content cannot hot-unload from the running game.
+  - do: wait_for
+    name: show the restart prompt removing the active pack requires
+    timeout: 120s
+    until: { screen: RestartScreen }
+  - do: click
+    name: dismiss the restart prompt without closing the game
+    select: { key: automodpack.restart.cancel }
+  - use: open_pack_manager
   - do: wait_for
     name: return to installed pack list after Pack A removal
     until:

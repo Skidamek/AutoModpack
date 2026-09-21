@@ -361,6 +361,8 @@ class FakeBridge:
                 self._write_modpack()
                 self._restore_editable_overlay(self.selected_pack)
                 self.screen = "restart"
+        elif element_id == 6:
+            self.screen = "multiplayer"
         elif element_id == 4:
             self.exited = True
         elif element_id == 40:
@@ -444,7 +446,7 @@ class FakeBridge:
             self._timeline_snapshot("LIVE")
             self._remove_active_pack()
             self._timeline_snapshot("REMOVAL")
-            self.screen = "manager"
+            self.screen = "restart"
         elif element_id == 105 and self.screen == "manager":
             self.selected_snapshot = None
             self.screen = "state_history"
