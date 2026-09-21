@@ -55,7 +55,7 @@ public final class HconfConfigs {
 		String value();
 	}
 
-	private static final String BANNER = "AutoModpack configuration - your edits and comments survive updates";
+	private static final String BANNER = "AutoModpack configuration - your edits and comments survive updates. Docs: https://moddedmc.wiki/en/project/automodpack/docs Discord: https://discord.gg/hS6aMyeA9P";
 
 	/** Reads one human config; empty when neither it nor its pre-hconf {@code .json} predecessor exists, {@link ConfigTools.ConfigParseException} with position when it is corrupt. */
 	public static <T> Optional<T> read(Path path, Class<T> type) {

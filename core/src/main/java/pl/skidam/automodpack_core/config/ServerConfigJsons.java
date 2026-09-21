@@ -20,7 +20,7 @@ public class ServerConfigJsons {
 		@HconfConfigs.Comment("scan and regenerate the modpack on every server start")
 		public boolean generateModpackOnStart = true;
 		// Category name -> group id -> declaration. The group id is referenced by requires/breaksWith and by the client's saved selection; the category name is the player-facing section label.
-		@HconfConfigs.Comment("modpack groups and their file rules; the braced form nests, rules are group-relative globs")
+		@HconfConfigs.Comment("what clients receive. host-modpack/<group>/ ships in full, syncedFiles pulls from the server root, excludedFiles keeps files off clients (put server-only mods there)")
 		public Map<String, Map<String, GroupDeclaration>> modpack = Map.of("General", Map.of("main", mainGroupDeclaration()));
 		@HconfConfigs.Comment("leave mods marked as server-side out of the synced modpack")
 		public boolean autoExcludeServerSideMods = true;
@@ -46,7 +46,7 @@ public class ServerConfigJsons {
 		public boolean disableInternalTLS = false;
 		@HconfConfigs.Comment("honor HAProxy PROXY protocol headers; enable only behind a trusted proxy")
 		public boolean acceptProxyProtocol = false;
-		@HconfConfigs.Comment("HOLEPUNCH, MAGIC or DIRECT")
+		@HconfConfigs.Comment("HOLEPUNCH, MAGIC or HTTP; HOLEPUNCH carries the pack through the Minecraft server port")
 		public ModpackConnectionMode connectionMode = ModpackConnectionMode.HOLEPUNCH;
 		@HconfConfigs.Comment("per-client transfer cap in MiB/s; 0 = unlimited")
 		public int bandwidthLimit = 0;
@@ -62,7 +62,7 @@ public class ServerConfigJsons {
 		public boolean selfUpdater = false;
 		@HconfConfigs.Comment("loaders a client may run the modpack with; seeded once, then yours to edit")
 		public Set<String> acceptedLoaders = new HashSet<>();
-		@HconfConfigs.Comment("advertise the pack's loader and Minecraft versions so clients switch their instance to match; off = files-only pack")
+		@HconfConfigs.Comment("publish the pack's loader and Minecraft versions so clients match them; off = files-only pack")
 		public boolean advertiseVersionsToSync = true;
 	}
 

@@ -11,21 +11,21 @@ public class ClientConfigJsons {
 	public static class ClientConfigFieldsV3 {
 		@HconfConfigs.Comment("file version - do not change")
 		public int DO_NOT_CHANGE_IT = 3;
-		@HconfConfigs.Comment("currently selected modpack; empty = none")
+		@HconfConfigs.Comment("id of the installed modpack this instance follows; automodpack manages this")
 		public String selectedModpackId = "";
-		@HconfConfigs.Comment("switch to the server's current modpack on launch")
+		@HconfConfigs.Comment("fetch and apply the pack during launch, before the game loads")
 		public boolean updateSelectedModpackOnLaunch = true;
 		@HconfConfigs.Comment("let the mod update itself")
 		public boolean selfUpdater = false;
-		@HconfConfigs.Comment("keep the automodpack version in sync with the server's")
+		@HconfConfigs.Comment("match the automodpack version the server runs, via modrinth")
 		public boolean syncAutoModpackVersion = true;
-		@HconfConfigs.Comment("keep the loader version in sync with the server's")
+		@HconfConfigs.Comment("let the server switch this instance's loader version")
 		public boolean syncLoaderVersion = true;
-		@HconfConfigs.Comment("play the modpack's music")
+		@HconfConfigs.Comment("play music while a download runs")
 		public boolean playMusic = true;
 		@HconfConfigs.Comment("show the modpack settings button")
 		public boolean showModpackSettingsButton = true;
-		@HconfConfigs.Comment("mods pinned to stay installed regardless of modpack changes")
+		@HconfConfigs.Comment("mod ids that keep loading from this instance's own mods folder")
 		public List<String> pinnedModIds = new ArrayList<>();
 
 		public ClientConfigFieldsV3() {}
