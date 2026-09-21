@@ -2,8 +2,8 @@ package pl.skidam.automodpack_core.protocol.netty.handler;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.serverConfig;
-import static pl.skidam.automodpack_core.protocol.NetUtils.DEFAULT_CHUNK_SIZE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.TRANSFER_WRITE_STALL_TIMEOUT;
+import static pl.skidam.automodpack_core.protocol.NetUtils.WIRE_CHUNK_BYTES;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -40,13 +40,14 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 
 /**
  * Serves the URL contract (GET /head, GET /journal, GET /objects/<sha1>) over an already-TLS-terminated pipeline with
- * hand-rolled HTTP/1.1: one in-flight response per connection, keep-alive by default, requests arriving while a body
- * streams are held and served after it. No pipelining support; a pipelining client just gets serialized responses, so
- * unlike the custom protocol there is no per-connection in-flight transfer cap - one slot per connection by construction.
+ * hand-rolled HTTP/1.1: one in-flight response per connection, keep-alive by default. Requests pipelined while a body
+ * streams are held - bounded by the header-block cap - and served strictly in order, so a connection never serves two
+ * bodies at once and, unlike the custom protocol, needs no per-connection in-flight transfer cap: one slot per
+ * connection by construction. Our own client pipelines every lane this deep.
  */
 public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
-	/** Tripwire past any real request header block; an honest client holds ≤ 8 requests ≈ 2 KB of headers in flight, 4× under this cap; only a pipelining abuser touches it. */
+	/** Tripwire past any real request header block; an honest client holds ≤ 8 requests ≈ 2 KB of headers in flight, 4× under this cap. Only a broken client touches it. */
 	private static final int MAX_HEADER_BLOCK_BYTES = 8 * 1024;
 
 	// Stream-compression gauges: one frame's worth of file input and the frame size the wire sees. 256 KiB in bounds
@@ -506,6 +507,9 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	}
 
 	private void streamBody(ChannelHandlerContext ctx, FileChannel file, long length, ChannelFuture headWritten, boolean keepAlive, ActivityTracker.Span span, String status) {
+		// User-space copy instead of sendfile on purpose: one memcpy per 4 MiB chunk is ~0.2 ms against a home uplink
+		// draining the same chunk for seconds, and ranged responses re-open the file per chunk anyway. Only a
+		// LAN-targeted server would measure the difference; revisit there, not here.
 		Channel channel = ctx.channel();
 		Throwable failure = awaitWritten(channel, headWritten);
 		if (failure == null && !headWritten.isSuccess()) failure = causeOf(headWritten);
@@ -513,7 +517,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		ChannelFuture lastWritten = headWritten;
 		try {
 			while (failure == null && sent < length) {
-				int chunkLength = (int) Math.min(DEFAULT_CHUNK_SIZE, length - sent);
+				int chunkLength = (int) Math.min(WIRE_CHUNK_BYTES, length - sent);
 				ByteBuf chunk = channel.alloc().heapBuffer(chunkLength, chunkLength);
 				// Owned by the write once handed to writeAndFlush; until then every exit must release it.
 				try {

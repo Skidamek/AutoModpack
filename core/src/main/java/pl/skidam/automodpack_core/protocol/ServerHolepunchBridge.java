@@ -178,6 +178,6 @@ public final class ServerHolepunchBridge {
 	 * stopped draining piles up past this watermark.
 	 */
 	private static long maxPendingWriteBytes() {
-		return DEFAULT_CHUNK_SIZE + (long) TlsRecordCamouflage.MAX_RECORD_LENGTH + TlsRecordCamouflage.FRAME_HEADER_LENGTH;
+		return WIRE_CHUNK_BYTES + (long) TlsRecordCamouflage.MAX_RECORD_LENGTH + TlsRecordCamouflage.FRAME_HEADER_LENGTH;
 	}
 }

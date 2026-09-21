@@ -58,14 +58,22 @@ public class NetUtils {
 	public static final int MAGIC_AMMH = 0x414D4D48;
 	public static final int MAGIC_AMOK = 0x414D4F4B;
 
-	// The body chunk both ends stream in; the client reads one buffer of it per syscall loop and the server streams file bodies through it.
-	public static final int DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB
+	// The ranged-GET unit the client tiles objects with and the server streams file bodies through; changing it changes
+	// transfer granularity on both ends at once. Per-request overhead at this size is noise - a few hundred bytes of
+	// headers and one seek per 4 MiB - so the unit is sized by the wire, not by either end's buffers.
+	public static final int WIRE_CHUNK_BYTES = 4 * 1024 * 1024; // 4 MiB
 
-	// The server queues whole response chunks ahead of the peer's drain instead of stop-and-wait: writing resumes below
-	// the low watermark, pauses at the high one, so compression overlaps the wire and memory stays bounded - one identity
-	// chunk of queued response per connection, ≈5 lanes × 4 MiB = 20 MiB worst case across a full pool.
-	public static final int WRITE_BUFFER_LOW_WATER = 512 * 1024;
-	public static final int WRITE_BUFFER_HIGH_WATER = 4 * 1024 * 1024; // 4 MiB
+	// The client's per-response read buffer, deliberately not the transfer unit: a 512 KiB read costs a syscall per
+	// ~5 ms of drain at 100 MB/s, and five lanes pin 2.5 MiB of heap instead of 20.
+	public static final int READ_BUFFER_BYTES = 512 * 1024;
+
+	// The server queues streamed response bytes ahead of the peer's drain: writes pause at the high watermark, resume
+	// below the low one, so compression overlaps the wire. The receipt is per connection and the server hosts every
+	// client: against the reference envelope (5 Mbps uplink, 300 ms RTT, BDP ≈ 187 KB) a 512 KiB queue holds ~2.7 BDP,
+	// which is everything the pipe can absorb, and a full pool of 20 clients × 5 lanes queues ≤ 50 MiB on top of the
+	// one 4 MiB chunk each stream holds transiently - where a 4 MiB watermark queued ~400 MiB across the same pool.
+	public static final int WRITE_BUFFER_LOW_WATER = 256 * 1024;
+	public static final int WRITE_BUFFER_HIGH_WATER = 512 * 1024;
 
 	private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
 	private static final AlgorithmIdentifier SIGNATURE_ALGORITHM_IDENTIFIER = new AlgorithmIdentifier(PKCSObjectIdentifiers.sha256WithRSAEncryption, DERNull.INSTANCE);

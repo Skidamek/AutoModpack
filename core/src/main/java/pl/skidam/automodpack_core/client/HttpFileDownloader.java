@@ -79,7 +79,7 @@ public class HttpFileDownloader {
 				InputStream in = codec == null ? rawIn : codec.unwrap(rawIn);
 				OutputStream out = LocalFileWriter.open(target)) {
 
-			byte[] buffer = new byte[NetUtils.DEFAULT_CHUNK_SIZE];
+			byte[] buffer = new byte[NetUtils.READ_BUFFER_BYTES];
 			int bytesRead;
 			while ((bytesRead = in.read(buffer)) != -1) {
 				if (Thread.currentThread().isInterrupted()) throw new InterruptedException();

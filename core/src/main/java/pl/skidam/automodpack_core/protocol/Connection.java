@@ -1,7 +1,7 @@
 package pl.skidam.automodpack_core.protocol;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.protocol.NetUtils.DEFAULT_CHUNK_SIZE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.READ_BUFFER_BYTES;
 import static pl.skidam.automodpack_core.protocol.NetUtils.USER_AGENT;
 
 import java.io.BufferedInputStream;
@@ -38,8 +38,9 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  */
 class Connection implements AutoCloseable {
 
-	// 8 in flight per connection: 10 KB files @ 300 ms RTT @ 5 Mbps up → BDP ≈ 187 KB ≈ 19 outstanding files; 5 connections × 8 = 40 ≈ 2× BDP, so the pipe stays full while a connection re-handshakes. Bigger/faster than
-	// the envelope is bandwidth-bound and K stops mattering.
+	// The window counts unsettled takes, not bytes: against the reference envelope (5 Mbps uplink, 300 ms RTT,
+	// BDP ≈ 187 KB ≈ 19 × 10 KB responses) each lane's share of the pipe is ~4 responses, so a depth of 8 re-fills
+	// a lane inside one RTT while its head-of-line queue stays 8 responses deep. The window cap is lanes × depth.
 	static final int PIPELINE_DEPTH = 8;
 
 	private static final byte[] CRLF = {'\r', '\n'};
@@ -480,7 +481,7 @@ class Connection implements AutoCloseable {
 	 * share one partial without coordinating, and promotion judges the assembled whole.
 	 */
 	private void transfer(InputStream source, Path destination, long writeOffset, IntConsumer chunkCallback, MessageDigest hash, Long compressedLength, OutputStream tap, boolean truncate) throws IOException {
-		byte[] buffer = new byte[(int) Math.min(DEFAULT_CHUNK_SIZE, compressedLength == null ? DEFAULT_CHUNK_SIZE : compressedLength)];
+		byte[] buffer = new byte[(int) Math.min(READ_BUFFER_BYTES, compressedLength == null ? READ_BUFFER_BYTES : compressedLength)];
 		try (OutputStream fos = destination == null ? null : truncate && writeOffset == 0 ? LocalFileWriter.open(destination) : LocalFileWriter.openAt(destination, writeOffset)) {
 			int read;
 			while ((read = source.read(buffer, 0, buffer.length)) >= 0) {

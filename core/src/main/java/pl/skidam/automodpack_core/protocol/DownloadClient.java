@@ -457,7 +457,7 @@ public class DownloadClient implements PackTransport {
 			synchronized (lock) {
 				pendingItems = 1;
 			}
-			long headEnd = Math.min(offset + (long) DEFAULT_CHUNK_SIZE, fileSize) - 1;
+			long headEnd = Math.min(offset + (long) WIRE_CHUNK_BYTES, fileSize) - 1;
 			int lane = Math.floorMod(laneCounter.getAndIncrement(), MAX_CONNECTIONS);
 			LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", lane, offset, headEnd, objectName());
 			submitTake(offset, headEnd, lane);
@@ -490,12 +490,12 @@ public class DownloadClient implements PackTransport {
 		}
 
 		private long floor() {
-			return offset + (long) DEFAULT_CHUNK_SIZE;
+			return offset + (long) WIRE_CHUNK_BYTES;
 		}
 
 		private Take claimLocked() {
 			long takeEnd = cursor - 1;
-			long stealFrom = Math.max(floor(), cursor - (long) DEFAULT_CHUNK_SIZE);
+			long stealFrom = Math.max(floor(), cursor - (long) WIRE_CHUNK_BYTES);
 			cursor = stealFrom;
 			pendingItems++;
 			return new Take(stealFrom, takeEnd, Math.floorMod(laneCounter.getAndIncrement(), MAX_CONNECTIONS));

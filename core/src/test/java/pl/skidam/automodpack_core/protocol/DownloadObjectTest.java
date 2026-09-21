@@ -39,7 +39,7 @@ class DownloadObjectTest {
 	@Test
 	void transfersTileNonChunkMultipleSizesExactly(@TempDir Path directory) throws Exception {
 		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
-			byte[] object = new byte[NetUtils.DEFAULT_CHUNK_SIZE * 2 + 1234];
+			byte[] object = new byte[NetUtils.WIRE_CHUNK_BYTES * 2 + 1234];
 			new SecureRandom().nextBytes(object);
 			String sha1 = HashUtils.sha1(object);
 			server.store().put(sha1, object);
