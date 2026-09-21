@@ -470,8 +470,8 @@ class UpdateTransactionExecutorTest {
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/local-sodium.jar"),
 				new UpdatePlan.FileState(localHash, localBytes.length, true));
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Set.of(),
-				List.of(new UpdatePlan.ModInfo("mods/server-sodium.jar", serverHash, serverBytes.length, Set.of("sodium"), Set.of())),
-				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, Set.of("sodium"), Set.of())), List.of(), List.of(), null,
+				List.of(new UpdatePlan.ModInfo("mods/server-sodium.jar", serverHash, serverBytes.length, "1.0.0", Set.of("sodium"), Set.of())),
+				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, "1.0.0", Set.of("sodium"), Set.of())), List.of(), List.of(), null,
 				clientConfig(target.manifest().modpackId())));
 		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
 

@@ -3,13 +3,11 @@ package pl.skidam.automodpack_loader_core_fabric.mods;
 import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_loader_core_fabric.mods.FabricLoaderImplAccessor.*;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
 import net.fabricmc.loader.api.LanguageAdapter;
 import net.fabricmc.loader.api.ModContainer;
-import net.fabricmc.loader.api.metadata.ModDependency;
 import net.fabricmc.loader.impl.FabricLoaderImpl;
 import net.fabricmc.loader.impl.ModContainerImpl;
 import net.fabricmc.loader.impl.discovery.*;
@@ -22,9 +20,6 @@ import net.fabricmc.loader.impl.util.SystemProperties;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.loader.RequestedCandidates;
-import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
-import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 @SuppressWarnings({"unchecked", "unused"})
 public class ModpackLoader implements ModpackLoaderService {
@@ -55,157 +50,6 @@ public class ModpackLoader implements ModpackLoaderService {
 	@Override
 	public boolean discoversNestedConflicts() {
 		return true;
-	}
-
-	@Override
-	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileCache cache) {
-		Path activeModsDirectory = activeProjectionDirectory.resolve(ModpackPathPolicy.MODS_ROOT);
-
-		List<ModCandidateImpl> modpackNestedMods = new ArrayList<>();
-		List<ModCandidateImpl> standardNestedMods = new ArrayList<>();
-
-		try {
-			List<ModCandidateImpl> candidates = (List<ModCandidateImpl>) discoverMods(activeModsDirectory);
-			candidates.forEach(it -> applyPaths(it, false));
-
-			for (ModCandidateImpl candidate : candidates) {
-				if (!candidate.isRoot()) continue;
-
-				List<ModCandidateImpl> nestedMods = getNestedMods(candidate);
-				nestedMods = getOnlyNewestMods(nestedMods);
-
-				// Component-wise prefix test: a substring match would misclassify a sibling directory
-				// whose name merely contains the mods directory's path.
-				boolean isStandard = !candidate.getPaths().get(0).toAbsolutePath().normalize().startsWith(activeModsDirectory.toAbsolutePath().normalize());
-				if (isStandard) {
-					standardNestedMods.addAll(nestedMods);
-				} else {
-					modpackNestedMods.addAll(nestedMods);
-				}
-			}
-		} catch (Exception e) {
-			LOGGER.error("Failed to discover nested modpack conflicts", e);
-		}
-
-		modpackNestedMods = getOnlyNewestMods(modpackNestedMods);
-		standardNestedMods = getOnlyNewestMods(standardNestedMods);
-
-		List<ModCandidateImpl> conflictingNestedModsImpl = new ArrayList<>();
-
-		for (ModCandidateImpl standardNestedMod : standardNestedMods) {
-			for (ModCandidateImpl modpackNestedMod : modpackNestedMods) {
-				if (!standardNestedMod.getId().equals(modpackNestedMod.getId())) continue;
-
-				if (modpackNestedMod.getVersion().compareTo(standardNestedMod.getVersion()) > 0) conflictingNestedModsImpl.add(modpackNestedMod);
-			}
-		}
-
-		conflictingNestedModsImpl = getOnlyNewestMods(conflictingNestedModsImpl);
-
-		List<ModCandidateImpl> modsNestedDeps = new ArrayList<>();
-
-		for (ModCandidateImpl modCandidate : conflictingNestedModsImpl) {
-			List<ModCandidateImpl> nestedDeps = getNestedDeps(modCandidate);
-			for (ModCandidateImpl nestedDep : nestedDeps) {
-				if (conflictingNestedModsImpl.stream().anyMatch(it -> it.getId().equals(nestedDep.getId()))) continue;
-
-				if (modsNestedDeps.stream().anyMatch(it -> it.getId().equals(nestedDep.getId()))) continue;
-
-				modsNestedDeps.add(nestedDep);
-			}
-		}
-
-		conflictingNestedModsImpl.addAll(modsNestedDeps);
-
-		List<String> originModIds = new ArrayList<>();
-
-		for (ModCandidateImpl mod : conflictingNestedModsImpl) {
-			mod.getParentMods().stream().filter(ModCandidateImpl::isRoot).findFirst().map(ModCandidateImpl::getId).ifPresent(originModIds::add);
-		}
-
-		// These are nested mods which we need to force load from standard mods dir
-		List<FileInspection.Mod> conflictingNestedMods = new ArrayList<>();
-
-		for (ModCandidateImpl mod : conflictingNestedModsImpl) {
-			// Check mods provides, if theres some mod which is named with the same id as some other mod 'provides' remove the mod which provides that id as
-			// well, otherwise loader will crash
-			if (originModIds.stream().anyMatch(mod.getProvides()::contains)) continue;
-
-			Path path = mod.getPaths().get(0);
-			if (path == null || path.toString().isEmpty()) continue;
-
-			if (!Files.exists(path)) continue;
-
-			String hash = cache.getHashOrNull(path);
-			if (hash == null) continue;
-
-			Set<String> modIds = new HashSet<>();
-			modIds.add(mod.getId());
-			modIds.addAll(mod.getProvides());
-
-			Set<String> deps = new HashSet<>();
-			for (ModDependency dep : mod.getDependencies()) {
-				deps.add(dep.getModId());
-			}
-
-			FileInspection.Mod conflictingMod = new FileInspection.Mod(modIds, hash, mod.getVersion().getFriendlyString(), path, deps, Set.of());
-
-			conflictingNestedMods.add(conflictingMod);
-		}
-
-		return conflictingNestedMods;
-	}
-
-	private List<ModCandidateImpl> getNestedMods(ModCandidateImpl originMod) {
-		List<ModCandidateImpl> mods = new ArrayList<>();
-		for (ModCandidateImpl nested : originMod.getNestedMods()) {
-			mods.add(nested);
-			mods.addAll(getNestedMods(nested));
-		}
-
-		return mods;
-	}
-
-	// Needed for e.g. fabric api
-	private List<ModCandidateImpl> getNestedDeps(ModCandidateImpl nestedMod) {
-		List<ModCandidateImpl> deps = new ArrayList<>();
-
-		ModCandidateImpl originMod;
-		if (!nestedMod.isRoot()) {
-			originMod = nestedMod.getParentMods().stream().toList().get(0);
-		} else {
-			originMod = nestedMod;
-		}
-
-		for (ModDependency dep : nestedMod.getDependencies()) {
-			ModCandidateImpl candidate = originMod.getNestedMods().stream().filter(it -> it.getId().equals(dep.getModId())).findFirst().orElse(null);
-			if (candidate == null) continue;
-
-			deps.add(candidate);
-		}
-
-		return deps;
-	}
-
-	private List<ModCandidateImpl> getOnlyNewestMods(List<ModCandidateImpl> allMods) {
-		List<ModCandidateImpl> latestMods = new ArrayList<>();
-
-		for (ModCandidateImpl standardNestedMod : allMods) {
-			boolean alreadyExists = latestMods.stream().anyMatch(existingMod -> {
-				boolean hasSameId = existingMod.getId().equals(standardNestedMod.getId());
-				boolean hasGreaterOrEqualVersion = existingMod.getVersion().compareTo(standardNestedMod.getVersion()) >= 0;
-
-				return hasSameId && hasGreaterOrEqualVersion;
-			});
-
-			if (alreadyExists) continue;
-
-			latestMods.removeIf(existingMod -> existingMod.getId().equals(standardNestedMod.getId()));
-
-			latestMods.add(standardNestedMod);
-		}
-
-		return latestMods;
 	}
 
 	private static final RequestedCandidates.Accessor<ModCandidateImpl> ACCESSOR = new RequestedCandidates.Accessor<>() {

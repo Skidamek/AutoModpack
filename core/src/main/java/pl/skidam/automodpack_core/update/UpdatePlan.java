@@ -531,7 +531,7 @@ public final class UpdatePlan {
 
 	public record FileState(String sha1, long size, boolean regularFile) {}
 
-	public record ModInfo(String relativePath, String sha1, long size, Set<String> ids, Set<String> dependencies) {
+	public record ModInfo(String relativePath, String sha1, long size, String version, Set<String> ids, Set<String> dependencies) {
 		public ModInfo {
 			ids = normalizedSet(ids);
 			dependencies = normalizedSet(dependencies);
@@ -552,7 +552,7 @@ public final class UpdatePlan {
 			this.sha1 = HashUtils.normalizeSha1(sha1);
 			if (size < 0) throw new IllegalArgumentException("Nested-copy size is invalid");
 			this.size = size;
-			this.ids = stableSet(ids);
+			this.ids = normalizedSet(ids);
 		}
 
 		public NestedCopy validated() {

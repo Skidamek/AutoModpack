@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.loader.NestedConflicts;
 import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
@@ -31,6 +32,7 @@ import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.SemanticVersion;
 
 public final class UpdatePlanner {
 
@@ -44,7 +46,7 @@ public final class UpdatePlanner {
 			List<ModInfo> targetMods,
 			List<ModInfo> standardMods,
 			List<NestedCopy> previousNestedCopies,
-			List<NestedCopy> nestedCopies,
+			List<NestedCandidate> nestedCandidates,
 			SelectionContext selection,
 			ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig,
 			Map<String, FileState> consentedLocalModFiles) {
@@ -56,7 +58,7 @@ public final class UpdatePlanner {
 			targetMods = List.copyOf(targetMods);
 			standardMods = List.copyOf(standardMods);
 			previousNestedCopies = List.copyOf(previousNestedCopies);
-			nestedCopies = List.copyOf(nestedCopies);
+			nestedCandidates = List.copyOf(nestedCandidates);
 			Map<String, FileState> normalizedConsent = new TreeMap<>();
 			for (var entry : (consentedLocalModFiles == null ? Map.<String, FileState>of() : consentedLocalModFiles).entrySet())
 				normalizedConsent.put(LogicalPath.normalize(entry.getKey()), entry.getValue());
@@ -65,12 +67,27 @@ public final class UpdatePlanner {
 
 		public Input(ModpackJsons.ModpackContentFields installedManifest, ModpackJsons.ModpackContentFields targetManifest, Map<FileKey, FileState> files,
 				Set<String> forceCopyServicePaths, List<ModInfo> targetMods, List<ModInfo> standardMods,
-				List<NestedCopy> previousNestedCopies, List<NestedCopy> nestedCopies, SelectionContext selection,
+				List<NestedCopy> previousNestedCopies, List<NestedCandidate> nestedCandidates, SelectionContext selection,
 				ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig) {
-			this(installedManifest, targetManifest, files, forceCopyServicePaths, targetMods, standardMods, previousNestedCopies, nestedCopies, selection,
+			this(installedManifest, targetManifest, files, forceCopyServicePaths, targetMods, standardMods, previousNestedCopies, nestedCandidates, selection,
 					plannedClientConfig, Map.of());
 		}
 
+	}
+
+	/**
+	 * In-memory planning input for one generated copy: the persisted {@link NestedCopy} shape plus the version string
+	 * of the nested jar and the standard roots whose survival requires the copy. Without collision knowledge
+	 * (previous-state input) a candidate is never filtered.
+	 */
+	public record NestedCandidate(NestedCopy copy, String version, Set<NestedConflicts.Collider> colliders) {
+		public NestedCandidate {
+			colliders = colliders == null ? Set.of() : Set.copyOf(colliders);
+		}
+
+		public static NestedCandidate previous(NestedCopy copy) {
+			return new NestedCandidate(copy, null, Set.of());
+		}
 	}
 
 	public record SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest, Map<String, FileState> previousEditableOverlays,
@@ -182,9 +199,11 @@ public final class UpdatePlanner {
 		Set<String> liveCopyPaths = liveCopyPaths(targetItems, input.forceCopyServicePaths());
 		Set<String> protectedIds = PinnedMods.protectedIds(listedPins, input.standardMods().stream().map(ModInfo::ids).toList());
 		planTargetInstalls(input, targetItems, liveCopyPaths, protectedIds, targetModsByPath, session);
-		List<NestedCopy> generatedCopies = ownedNestedCopies(input.nestedCopies());
-		planNestedCopies(input.previousNestedCopies(), generatedCopies, session);
+		// Duplicate disposition must precede nested-copy planning so a candidate's colliders are judged against
+		// the plan that already decided the fate of the standard roots they collide with.
 		planDuplicates(target.modpackId, input.targetMods(), input.standardMods(), liveCopyPaths, installedLedger, session, listedPins);
+		List<NestedCopy> generatedCopies = ownedNestedCopies(survivingNestedCandidates(input.nestedCandidates(), session));
+		planNestedCopies(input.previousNestedCopies(), generatedCopies, session);
 		planBaselineCaptures(input.files(), session);
 		return session.finalState(target.modpackId, packTarget, input.plannedClientConfig(), input.files(), target, ledger, false, null, generatedCopies);
 	}
@@ -484,15 +503,41 @@ public final class UpdatePlanner {
 		}
 	}
 
-	private static List<NestedCopy> ownedNestedCopies(List<NestedCopy> copies) {
-		Set<String> generatedIds = new HashSet<>();
+	/** A candidate is owned only while a colliding standard root survives the plan; without collision knowledge nothing filters it. */
+	private static List<NestedCandidate> survivingNestedCandidates(List<NestedCandidate> candidates, PlanningSession session) {
+		List<NestedCandidate> surviving = new ArrayList<>();
+		for (NestedCandidate candidate : candidates)
+			if (candidate.colliders().isEmpty() || candidate.colliders().stream().anyMatch(collider -> survives(collider, session))) surviving.add(candidate);
+		return surviving;
+	}
+
+	private static boolean survives(NestedConflicts.Collider collider, PlanningSession session) {
+		FileState state = session.projected(new FileKey(Root.GAME_DIR, LogicalPath.normalize(collider.logicalPath())));
+		return state != null && state.regularFile() && hashesEqual(state.sha1(), collider.sha1());
+	}
+
+	private static List<NestedCopy> ownedNestedCopies(List<NestedCandidate> candidates) {
+		Map<String, NestedCandidate> winnerById = new HashMap<>();
+		for (NestedCandidate candidate : candidates)
+			for (String id : candidate.copy().ids())
+				winnerById.merge(id, candidate, (current, challenger) -> winsVersion(challenger.version(), challenger.copy().relativePath(), current.version(), current.copy().relativePath()) ? challenger : current);
+		Set<NestedCandidate> winners = new HashSet<>(winnerById.values());
+		Set<String> claimedIds = new HashSet<>();
 		List<NestedCopy> owned = new ArrayList<>();
-		for (NestedCopy copy : copies.stream().sorted(Comparator.comparing(NestedCopy::relativePath)).toList()) {
-			if (copy.ids().stream().anyMatch(generatedIds::contains)) continue;
-			owned.add(copy);
-			generatedIds.addAll(copy.ids());
+		for (NestedCandidate candidate : candidates.stream().sorted(Comparator.comparing(candidate -> candidate.copy().relativePath())).toList()) {
+			if (!winners.contains(candidate)) continue;
+			if (candidate.copy().ids().stream().anyMatch(claimedIds::contains)) continue;
+			owned.add(candidate.copy());
+			claimedIds.addAll(candidate.copy().ids());
 		}
 		return List.copyOf(owned);
+	}
+
+	/** Whether the challenger beats the incumbent on version, with a lexicographically smaller path breaking ties. */
+	private static boolean winsVersion(String challengerVersion, String challengerPath, String incumbentVersion, String incumbentPath) {
+		int comparison = SemanticVersion.compareVersionStrings(challengerVersion, incumbentVersion);
+		if (comparison != 0) return comparison > 0;
+		return challengerPath.compareTo(incumbentPath) < 0;
 	}
 
 	private static void planDuplicates(String modpackId, List<ModInfo> targetMods, List<ModInfo> standardMods, Set<String> liveCopyPaths,
@@ -501,23 +546,28 @@ public final class UpdatePlanner {
 				.sorted(Comparator.comparing(ModInfo::relativePath)).toList();
 		List<ModInfo> sortedStandard = standardMods.stream().filter(mod -> session.has(new FileKey(Root.GAME_DIR, LogicalPath.normalize(mod.relativePath()))))
 				.sorted(Comparator.comparing(ModInfo::relativePath)).toList();
+		// One disposition per standard source file: the pack mod sharing an id that wins on version (smaller path on
+		// ties) speaks for the source, so a file never gets two conflict rows.
 		Map<ModInfo, ModInfo> duplicates = new LinkedHashMap<>();
-		for (ModInfo target : sortedTarget) {
-			String targetPath = LogicalPath.normalize(target.relativePath());
+		for (ModInfo standard : sortedStandard) {
 			// A live-copy path is resolved by editable-state reconciliation, not by duplicate resolution: neither its projection row
 			// nor the player's standard-directory jar may be deleted, vaulted or conflict-flagged as a duplicate of the other.
-			if (liveCopyPaths.contains(targetPath)) continue;
-			sortedStandard.stream()
-					.filter(standard -> intersects(target.ids(), standard.ids()) && !liveCopyPaths.contains(LogicalPath.normalize(standard.relativePath())))
-					.findFirst().ifPresent(standard -> duplicates.put(target, standard));
+			if (liveCopyPaths.contains(LogicalPath.normalize(standard.relativePath()))) continue;
+			ModInfo winner = null;
+			for (ModInfo target : sortedTarget) {
+				if (liveCopyPaths.contains(LogicalPath.normalize(target.relativePath()))) continue;
+				if (!intersects(target.ids(), standard.ids())) continue;
+				if (winner == null || winsVersion(target.version(), target.relativePath(), winner.version(), winner.relativePath())) winner = target;
+			}
+			if (winner != null) duplicates.put(standard, winner);
 		}
 		Set<ModInfo> keep = new HashSet<>();
-		for (ModInfo standard : sortedStandard) if (!duplicates.containsValue(standard)) addDependencies(standard, sortedStandard, keep);
+		for (ModInfo standard : sortedStandard) if (!duplicates.containsKey(standard)) addDependencies(standard, sortedStandard, keep);
 		Set<String> idsToKeep = keep.stream().flatMap(mod -> mod.ids().stream()).collect(Collectors.toSet());
 
 		for (var duplicate : duplicates.entrySet()) {
-			ModInfo target = duplicate.getKey();
-			ModInfo standard = duplicate.getValue();
+			ModInfo standard = duplicate.getKey();
+			ModInfo target = duplicate.getValue();
 			String targetPath = LogicalPath.normalize(target.relativePath());
 			String standardPath = LogicalPath.normalize(standard.relativePath());
 			if (PinnedMods.matches(listedPins, standard.ids())) continue;

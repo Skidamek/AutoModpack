@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.loader.NestedConflicts;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 
@@ -106,8 +107,8 @@ class UpdatePlannerTest {
 				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(),
-				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())),
-				List.of(new ModInfo("mods/local.jar", OLD_HASH, 8, Set.of("sodium"), Set.of())), List.of(), List.of(), null, config));
+				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, "1.0.0", Set.of("sodium"), Set.of())),
+				List.of(new ModInfo("mods/local.jar", OLD_HASH, 8, "1.0.0", Set.of("sodium"), Set.of())), List.of(), List.of(), null, config));
 
 		assertTrue(plan.conflicts().isEmpty());
 		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/local.jar")));
@@ -125,7 +126,7 @@ class UpdatePlannerTest {
 				new FileKey(Root.GAME_DIR, "mods/server.jar"), new FileState(OLD_HASH, 8, true));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Set.of(), List.of(),
-				List.of(new ModInfo("mods/server.jar", OLD_HASH, 8, Set.of("sodium"), Set.of())), List.of(), List.of(), null, config));
+				List.of(new ModInfo("mods/server.jar", OLD_HASH, 8, "1.0.0", Set.of("sodium"), Set.of())), List.of(), List.of(), null, config));
 
 		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/server.jar")));
 		assertTrue(plan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.PROJECTION && file.relativePath().equals("mods/server.jar") && !file.present()));
@@ -146,7 +147,7 @@ class UpdatePlannerTest {
 				Map.of("mods/server.jar", new FileState(OTHER_HASH, 8, true)));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Set.of(), List.of(),
-				List.of(new ModInfo("mods/server.jar", OTHER_HASH, 8, Set.of("sodium"), Set.of())), List.of(), List.of(), selection, config));
+				List.of(new ModInfo("mods/server.jar", OTHER_HASH, 8, "1.0.0", Set.of("sodium"), Set.of())), List.of(), List.of(), selection, config));
 
 		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/server.jar")));
 		assertTrue(plan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals("mods/server.jar")
@@ -165,7 +166,7 @@ class UpdatePlannerTest {
 				Map.of("mods/server.jar", new FileState(OTHER_HASH, 8, true)));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Set.of(), List.of(),
-				List.of(new ModInfo("mods/server.jar", OTHER_HASH, 8, Set.of("sodium"), Set.of())), List.of(), List.of(), selection,
+				List.of(new ModInfo("mods/server.jar", OTHER_HASH, 8, "1.0.0", Set.of("sodium"), Set.of())), List.of(), List.of(), selection,
 				new ClientConfigJsons.ClientConfigFieldsV3()));
 
 		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/server.jar")
@@ -180,7 +181,7 @@ class UpdatePlannerTest {
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/removed.jar"), new FileState(OLD_HASH, 8, true));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(),
-				List.of(new ModInfo("mods/removed.jar", OLD_HASH, 8, Set.of("sodium"), Set.of())), List.of(), List.of(), null, config));
+				List.of(new ModInfo("mods/removed.jar", OLD_HASH, 8, "1.0.0", Set.of("sodium"), Set.of())), List.of(), List.of(), null, config));
 
 		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/removed.jar")));
 		assertTrue(plan.preservations().isEmpty());
@@ -194,7 +195,7 @@ class UpdatePlannerTest {
 		FileState local = new FileState(OLD_HASH, 8, true);
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, path), local);
 		UpdatePlanner.Input input = new UpdatePlanner.Input(null, manifest(Map.of(), ledger()), files, Set.of(), List.of(),
-				List.of(new ModInfo(path, OLD_HASH, 8, Set.of("controlify"), Set.of())), List.of(), List.of(), null, config, Map.of(path, local));
+				List.of(new ModInfo(path, OLD_HASH, 8, "1.0.0", Set.of("controlify"), Set.of())), List.of(), List.of(), null, config, Map.of(path, local));
 
 		UpdatePlan plan = UpdatePlanner.plan(input);
 
@@ -210,8 +211,8 @@ class UpdatePlannerTest {
 				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(),
-				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())),
-				List.of(new ModInfo("mods/local.jar", OLD_HASH, 8, Set.of("sodium"), Set.of())), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
+				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, "1.0.0", Set.of("sodium"), Set.of())),
+				List.of(new ModInfo("mods/local.jar", OLD_HASH, 8, "1.0.0", Set.of("sodium"), Set.of())), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
 
 		assertEquals(1, plan.conflicts().size());
 		assertEquals(ConflictAction.PRESERVE_LOCAL, plan.conflicts().get(0).action());
@@ -227,8 +228,8 @@ class UpdatePlannerTest {
 				new FileKey(Root.GAME_DIR, "mods/server.jar"), new FileState(TARGET_HASH, 9, true));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(),
-				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())),
-				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
+				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, "1.0.0", Set.of("sodium"), Set.of())),
+				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, "1.0.0", Set.of("sodium"), Set.of())), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
 
 		// The live copy holds the pack's own bytes, so it is a plain delete: the generation pins the bytes already.
 		assertTrue(plan.conflicts().isEmpty());
@@ -588,13 +589,104 @@ class UpdatePlannerTest {
 				&& file.relativePath().equals("mods/edit.jar") && OTHER_HASH.equals(file.expectedHash())));
 	}
 
+	@Test
+	void candidateWithoutSurvivingColliderIsDropped() {
+		ModpackJsons.ModpackContentFields target = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
+				ledger(entry("mods/server.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		Map<FileKey, FileState> files = Map.of(
+				new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true));
+		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("sodium")), "2.0.0",
+				Set.of(new NestedConflicts.Collider("mods/local.jar", OLD_HASH)));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(),
+				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, "2.0.0", Set.of("sodium"), Set.of())),
+				List.of(new ModInfo("mods/local.jar", OLD_HASH, 8, "1.0.0", Set.of("sodium"), Set.of())), List.of(), List.of(candidate), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		// Duplicate resolution removes the only colliding standard root, so the copy has no reason to exist.
+		assertTrue(plan.conflicts().stream().anyMatch(conflict -> conflict.sourcePath().equals("mods/local.jar")));
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.relativePath().equals("mods/nested.jar")));
+		assertTrue(plan.generatedCopies().isEmpty());
+	}
+
+	@Test
+	void candidateWithOneSurvivingColliderIsKept() {
+		ModpackJsons.ModpackContentFields target = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
+				ledger(entry("mods/server.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		Map<FileKey, FileState> files = Map.of(
+				new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true),
+				new FileKey(Root.GAME_DIR, "mods/other.jar"), new FileState(OTHER_HASH, 7, true));
+		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("sodium")), "2.0.0",
+				Set.of(new NestedConflicts.Collider("mods/local.jar", OLD_HASH), new NestedConflicts.Collider("mods/other.jar", OTHER_HASH)));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(),
+				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, "2.0.0", Set.of("sodium"), Set.of())),
+				List.of(new ModInfo("mods/local.jar", OLD_HASH, 8, "1.0.0", Set.of("sodium"), Set.of()),
+						new ModInfo("mods/other.jar", OTHER_HASH, 7, "1.0.0", Set.of("unrelated"), Set.of())),
+				List.of(), List.of(candidate), null, new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		Operation install = plan.operations().stream().filter(value -> value.relativePath().equals("mods/nested.jar")).findFirst().orElseThrow();
+		assertEquals(OperationType.INSTALL_OBJECT, install.operation());
+		assertEquals(TARGET_HASH, install.expectedObjectHash());
+		assertEquals(1, plan.generatedCopies().size());
+		assertEquals("mods/nested.jar", plan.generatedCopies().get(0).relativePath());
+		assertTrue(plan.restartReasons().contains(RestartReason.FIXED_NESTED_MODS));
+	}
+
+	@Test
+	void generatedCopiesKeepTheHighestVersionPerIdRegardlessOfPathOrder() {
+		UpdatePlanner.NestedCandidate lower = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/a.jar", OLD_HASH, 8, Set.of("Shared")), "1.0.0", Set.of());
+		UpdatePlanner.NestedCandidate higher = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/b.jar", TARGET_HASH, 9, Set.of("shared")), "2.0.0", Set.of());
+
+		UpdatePlan byVersion = UpdatePlanner.plan(new UpdatePlanner.Input(null, manifest(Map.of(), ledger()), Map.of(), Set.of(), List.of(), List.of(),
+				List.of(), List.of(lower, higher), null, new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertEquals(1, byVersion.generatedCopies().size());
+		assertEquals("mods/b.jar", byVersion.generatedCopies().get(0).relativePath());
+
+		UpdatePlanner.NestedCandidate first = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/a.jar", OLD_HASH, 8, Set.of("shared")), "1.0.0", Set.of());
+		UpdatePlanner.NestedCandidate second = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/b.jar", TARGET_HASH, 9, Set.of("shared")), "1.0.0", Set.of());
+
+		UpdatePlan byPath = UpdatePlanner.plan(new UpdatePlanner.Input(null, manifest(Map.of(), ledger()), Map.of(), Set.of(), List.of(), List.of(),
+				List.of(), List.of(second, first), null, new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertEquals(1, byPath.generatedCopies().size());
+		assertEquals("mods/a.jar", byPath.generatedCopies().get(0).relativePath());
+	}
+
+	@Test
+	void duplicateResolutionPicksTheHigherVersionPackModPerSourceFile() {
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(
+				"mods/old-pack.jar", item("mods/old-pack.jar", OLD_HASH, 8, "mod"),
+				"mods/new-pack.jar", item("mods/new-pack.jar", TARGET_HASH, 9, "mod")),
+				ledger(entry("mods/old-pack.jar", OLD_HASH, 8, OwnershipLedger.Status.PRESENT),
+						entry("mods/new-pack.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		Map<FileKey, FileState> files = Map.of(
+				new FileKey(Root.PROJECTION, "mods/old-pack.jar"), new FileState(OLD_HASH, 8, true),
+				new FileKey(Root.PROJECTION, "mods/new-pack.jar"), new FileState(TARGET_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OTHER_HASH, 7, true));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(),
+				List.of(new ModInfo("mods/old-pack.jar", OLD_HASH, 8, "1.0.0", Set.of("sodium"), Set.of()),
+						new ModInfo("mods/new-pack.jar", TARGET_HASH, 9, "2.0.0", Set.of("sodium"), Set.of())),
+				List.of(new ModInfo("mods/local.jar", OTHER_HASH, 7, "1.0.0", Set.of("sodium"), Set.of())), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		// One conflict row per standard source file, and the pack's higher version is the one it speaks for.
+		assertEquals(1, plan.conflicts().size());
+		assertEquals("mods/local.jar", plan.conflicts().get(0).sourcePath());
+		assertEquals("mods/new-pack.jar", plan.conflicts().get(0).targetPath());
+	}
+
 	private static UpdatePlanner.Input input(ModpackJsons.ModpackContentFields target, Map<FileKey, FileState> files) {
 		return new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3());
 	}
 
 	private static UpdatePlan planWithGeneratedCopies(ModpackJsons.ModpackContentFields target, Map<FileKey, FileState> files, List<NestedCopy> previous, List<NestedCopy> generated) {
-		return UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), previous, generated, null,
-				new ClientConfigJsons.ClientConfigFieldsV3()));
+		return UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), previous,
+				generated.stream().map(UpdatePlanner.NestedCandidate::previous).toList(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
 	}
 
 	private static ModpackJsons.ModpackContentFields manifest(Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> items,
@@ -630,7 +722,7 @@ class UpdatePlannerTest {
 	}
 
 	private static ModInfo mod(String path, String hash, String id) {
-		return new ModInfo(path, hash, 1, Set.of(id), Set.of());
+		return new ModInfo(path, hash, 1, "1.0.0", Set.of(id), Set.of());
 	}
 
 	private static ClientConfigJsons.ClientConfigFieldsV3 config(String modpackId) {
