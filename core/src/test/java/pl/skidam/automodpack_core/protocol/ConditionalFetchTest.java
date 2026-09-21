@@ -298,6 +298,32 @@ class ConditionalFetchTest {
 	}
 
 	@Test
+	void anUndeclaredBodyPastTheLimitFailsOnlyItsOwnRequest(@TempDir Path directory) throws Exception {
+		try (ContractServer server = new ContractServer()) {
+			// No Content-Length and no declared range: the guardrail must judge the body byte count itself.
+			server.chunkedObjects.set(true);
+			byte[] object = "an-object-body-longer-than-the-guardrail-allows\n".repeat(8).getBytes(StandardCharsets.UTF_8);
+			byte[] head = "a-tiny-head-document\n".getBytes(StandardCharsets.UTF_8);
+			String sha1 = HashUtils.sha1(object);
+			server.store.put(sha1, object);
+			server.store.put("head", head);
+
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("oversize");
+				var future = client.downloadFile(sha1.getBytes(StandardCharsets.UTF_8), destination, 0L, -1L, null, null, false, 64L, 0);
+				assertThrows(ExecutionException.class, () -> future.get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertTrue(rootCause(future).getMessage().contains("byte limit"));
+
+				// The frame drain kept the lane aligned behind the abandoned body: the next request rides the same connection.
+				Path headDestination = directory.resolve("head");
+				client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), headDestination, null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertArrayEquals(head, Files.readAllBytes(headDestination));
+				assertEquals(1, server.connections.get());
+			}
+		}
+	}
+
+	@Test
 	void rangedRequestPastObjectSizeReadsAsStaleRange(@TempDir Path directory) throws Exception {
 		try (ContractServer server = new ContractServer()) {
 			byte[] object = "complete-object-bytes".getBytes(StandardCharsets.UTF_8);
@@ -411,6 +437,7 @@ class ConditionalFetchTest {
 		final AtomicBoolean compressDocuments = new AtomicBoolean(false);
 		final AtomicBoolean gzipDocuments = new AtomicBoolean(false);
 		final AtomicBoolean chunkedDocuments = new AtomicBoolean(false);
+		final AtomicBoolean chunkedObjects = new AtomicBoolean(false);
 		final AtomicBoolean delayFinalChunk = new AtomicBoolean(false);
 		final AtomicBoolean lastResponseZstd = new AtomicBoolean(false);
 		final AtomicBoolean sawAcceptEncoding = new AtomicBoolean(false);
@@ -562,6 +589,10 @@ class ConditionalFetchTest {
 				if (gzipDocuments.get() && !request.path.startsWith("/objects/") && request.acceptEncoding != null) {
 					byte[] compressed = gzipCompress(content);
 					respondChunked(out, "200 OK", compressed, delayFinalChunk.get() ? 1500 : 0, "Content-Encoding: gzip");
+					return;
+				}
+				if (chunkedObjects.get() && request.path.startsWith("/objects/")) {
+					respondChunked(out, "200 OK", content, 0);
 					return;
 				}
 				respond(out, "200 OK", content);

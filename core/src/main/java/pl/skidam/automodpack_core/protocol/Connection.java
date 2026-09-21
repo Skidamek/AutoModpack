@@ -312,7 +312,10 @@ class Connection implements AutoCloseable {
 				// reject after the fact. An encoded body is framed chunked and has no length by design.
 				if (head.contentLength() == null && !head.chunked()) throw new IOException("HTTP 206 without Content-Length");
 				requireResumeStart(head, offset);
-				consumeBody(head, destination, offset, chunks, null, tap, false);
+				if (consumeBody(head, destination, offset, chunks, null, tap, false, limitBytes)) {
+					future.completeExceptionally(new IOException("Object exceeds the " + limitBytes + " byte limit for " + originPath));
+					return;
+				}
 				future.complete(destination);
 				return;
 			}
@@ -322,7 +325,10 @@ class Connection implements AutoCloseable {
 				if (endInclusive >= 0) throw new IOException("Server ignored the Range end for " + originPath);
 				boolean resumed = offset > 0 && head.contentRange() != null;
 				if (resumed) requireResumeStart(head, offset);
-				consumeBody(head, destination, resumed ? offset : 0, chunks, null, tap, false);
+				if (consumeBody(head, destination, resumed ? offset : 0, chunks, null, tap, false, limitBytes)) {
+					future.completeExceptionally(new IOException("Object exceeds the " + limitBytes + " byte limit for " + originPath));
+					return;
+				}
 				future.complete(destination);
 				return;
 			}
@@ -357,13 +363,13 @@ class Connection implements AutoCloseable {
 			}
 			if (head.status() == 200) {
 				if (expectedSha1Hex == null) {
-					consumeBody(head, destination, 0, chunks, null, null, true);
+					consumeBody(head, destination, 0, chunks, null, null, true, -1L);
 					future.complete(new DocumentFetch(destination, false));
 					return;
 				}
 				// A conditional document's body hash is the ground truth, so a host that ignores the condition still reads as unchanged when the bytes match the expectation.
 				MessageDigest hash = HashUtils.newSha1Digest();
-				consumeBody(head, destination, 0, chunks, hash, null, true);
+				consumeBody(head, destination, 0, chunks, hash, null, true, -1L);
 				future.complete(new DocumentFetch(destination, HexFormat.of().formatHex(hash.digest()).equals(expectedSha1Hex)));
 				return;
 			}
@@ -481,10 +487,11 @@ class Connection implements AutoCloseable {
 	 * stop at its own stream end (gzip peeks the wire via available(), which loses to a terminator still in flight),
 	 * and the frame drain below consumes whatever framing bytes the decoder left behind. Truncate is only honest for a
 	 * single-writer destination (documents): an object partial shares positioned writers across pipelined requests, so
-	 * a truncate there would wipe bytes another writer already settled.
+	 * a truncate there would wipe bytes another writer already settled. A non-negative limit stops the copy once the
+	 * decoded body passes it and still drains the frame, so the return value says whether the limit was the verdict.
 	 */
-	private void consumeBody(ResponseHead head, Path destination, long writeOffset, IntConsumer chunkCallback, MessageDigest hash, OutputStream tap, boolean truncate) throws IOException {
-		if (head.status() == 204 || head.status() == 304) return;
+	private boolean consumeBody(ResponseHead head, Path destination, long writeOffset, IntConsumer chunkCallback, MessageDigest hash, OutputStream tap, boolean truncate, long limitBytes) throws IOException {
+		if (head.status() == 204 || head.status() == 304) return false;
 		InputStream framed;
 		boolean closeFramed = false;
 		if (head.chunked()) {
@@ -492,7 +499,7 @@ class Connection implements AutoCloseable {
 		} else if (head.contentLength() != null) {
 			framed = new BoundedBody(head.contentLength());
 		} else {
-			if (head.status() != 200) return;
+			if (head.status() != 200) return false;
 			framed = in;
 			closeFramed = true;
 		}
@@ -500,11 +507,14 @@ class Connection implements AutoCloseable {
 		WireCodec codec = WireCodec.negotiate(encoding);
 		if (codec == null && !encoding.isEmpty()) throw new IOException("Unsupported Content-Encoding: " + head.contentEncoding());
 		InputStream source = codec == null ? framed : codec.unwrap(framed);
+		LimitedBody limited = limitBytes >= 0 ? new LimitedBody(source, limitBytes) : null;
+		if (limited != null) source = limited;
 		if (closeFramed) unhealthy = true;
 		transfer(source, destination, writeOffset, chunkCallback, hash, head.contentLength(), tap, truncate);
 		if (framed instanceof ChunkedBody chunked) chunked.drainToFrameEnd();
 		if (framed instanceof BoundedBody bounded && bounded.remaining() > 0) throw new IOException("Response body ended before the promised Content-Length");
 		if (head.connectionClose()) unhealthy = true;
+		return limited != null && limited.exceeded();
 	}
 
 	/**
@@ -527,7 +537,45 @@ class Connection implements AutoCloseable {
 	}
 
 	private void discardBody(ResponseHead head) throws IOException {
-		consumeBody(head, null, 0, null, null, null, false);
+		consumeBody(head, null, 0, null, null, null, false, -1L);
+	}
+
+	/**
+	 * Serves at most {@code limit} decoded bytes, then reports EOF once and remembers whether the body actually
+	 * carried more: an honest body of exactly the limit reads as complete, a longer one reads as over the cap while
+	 * the frame drain walks the remaining body bytes off the wire.
+	 */
+	private static final class LimitedBody extends InputStream {
+		private final InputStream source;
+		private long remaining;
+		private boolean exceeded;
+
+		LimitedBody(InputStream source, long limit) {
+			this.source = source;
+			this.remaining = limit;
+		}
+
+		boolean exceeded() {
+			return exceeded;
+		}
+
+		@Override
+		public int read() throws IOException {
+			byte[] one = new byte[1];
+			int read = read(one, 0, 1);
+			return read < 0 ? -1 : one[0] & 0xFF;
+		}
+
+		@Override
+		public int read(byte[] buffer, int offset, int length) throws IOException {
+			if (remaining <= 0) {
+				exceeded = source.read() >= 0;
+				return -1;
+			}
+			int read = source.read(buffer, offset, (int) Math.min(length, remaining));
+			if (read > 0) remaining -= read;
+			return read;
+		}
 	}
 
 	/** Reads at most {@code total} bytes from the socket, so a decoded body can never consume the next pipelined response's bytes. */
