@@ -367,7 +367,7 @@ class UpdatePlannerTest {
 	}
 
 	@Test
-	void removalCleansOnlyUnmodifiedGeneratedCopies() {
+	void removalCleansEveryGeneratedCopyStateEntryIncludingDriftedOnes() {
 		ModpackJsons.ModpackContentFields installed = manifest(Map.of("mods/root.jar", item("mods/root.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/root.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
 		Map<String, InstanceTree.TrackedFile> baseline = Map.of();
@@ -378,15 +378,21 @@ class UpdatePlannerTest {
 				new FileKey(Root.GAME_DIR, "mods/nested-edited.jar"), new FileState(OTHER_HASH, 8, true),
 				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(TARGET_HASH, 9, true));
 		GeneratedCopyState generated = new GeneratedCopyState(installed.modpackId, installed.contentToken, "3".repeat(40), List.of(
-				new GeneratedCopyState.Entry("mods/nested.jar", OLD_HASH, 8), new GeneratedCopyState.Entry("mods/nested-edited.jar", OLD_HASH, 8)));
+				new GeneratedCopyState.Entry("mods/nested.jar", OLD_HASH, 8), new GeneratedCopyState.Entry("mods/nested-edited.jar", OLD_HASH, 8),
+				new GeneratedCopyState.Entry("mods/nested-gone.jar", OLD_HASH, 8)));
 
 		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(), generated, new ClientConfigJsons.ClientConfigFieldsV3()));
 
-		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/nested.jar")
-				&& operation.operation() == OperationType.DELETE && OLD_HASH.equals(operation.expectedExistingHash())));
-		assertTrue(plan.operations().stream().noneMatch(operation -> operation.relativePath().equals("mods/nested-edited.jar") || operation.relativePath().equals("mods/local.jar")));
-		assertTrue(plan.projectedFinalState().stream().noneMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals("mods/nested.jar") && file.present()));
-		assertTrue(plan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals("mods/nested-edited.jar") && file.present()));
+		Operation matching = plan.operations().stream().filter(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/nested.jar")).findFirst().orElseThrow();
+		assertEquals(OperationType.DELETE, matching.operation());
+		assertEquals(OLD_HASH, matching.expectedExistingHash());
+		Operation drifted = plan.operations().stream().filter(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/nested-edited.jar")).findFirst().orElseThrow();
+		assertEquals(OperationType.DELETE, drifted.operation());
+		assertEquals(OTHER_HASH, drifted.expectedExistingHash());
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.relativePath().equals("mods/nested-gone.jar") || operation.relativePath().equals("mods/local.jar")));
+		assertTrue(plan.projectedFinalState().stream()
+				.noneMatch(file -> file.root() == Root.GAME_DIR && (file.relativePath().equals("mods/nested.jar") || file.relativePath().equals("mods/nested-edited.jar")) && file.present()));
+		assertTrue(plan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals("mods/local.jar") && file.present()));
 		assertTrue(plan.restartReasons().contains(RestartReason.SELECTED_MODPACK));
 	}
 

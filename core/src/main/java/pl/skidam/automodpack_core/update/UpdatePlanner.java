@@ -131,10 +131,12 @@ public final class UpdatePlanner {
 		if (input.generatedCopies() != null) for (GeneratedCopyState.Entry generated : input.generatedCopies().entries()) {
 			FileKey key = new FileKey(Root.GAME_DIR, generated.logicalPath());
 			FileState state = session.projected(key);
-			if (matches(state, generated.sha1(), generated.size())) {
-				session.delete(key, generated.sha1());
-				session.restart(RestartReason.FIXED_NESTED_MODS);
-			}
+			if (state == null || !state.regularFile() || state.sha1() == null) continue;
+			// A drifted copy is still owned garbage once the pack goes: deleting the bytes observed at plan time is what
+			// lets finalize's unconditional generation-dir delete never orphan it.
+			boolean drifted = !matches(state, generated.sha1(), generated.size());
+			session.delete(key, drifted ? state.sha1() : generated.sha1());
+			session.restart(RestartReason.FIXED_NESTED_MODS);
 		}
 
 		for (OwnershipLedger.Entry ledgerEntry : ledger.entries().values()) {
