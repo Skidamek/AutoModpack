@@ -415,8 +415,8 @@ public class ModpackExecutor {
 		String modpackId = previous == null ? ModpackId.generate() : ModpackId.requireValid(previous.manifest().modpackId());
 		try (FileCache fileCache = FileCache.open(dataLayout.fileCacheDirectory());
 				ModFileCache modFileCache = ModFileCache.open(dataLayout.modCacheDirectory())) {
-			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
-					serverConfig.advertiseVersionsToSync ? LOADER_VERSION : null, MC_VERSION, serverRoot, groupRoot, serverConfig.modpack,
+			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpack.name, AM_VERSION, LOADER,
+					serverConfig.advertiseVersionsToSync ? LOADER_VERSION : null, MC_VERSION, serverRoot, groupRoot, serverConfig.modpack.categories,
 					serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()), creationExecutor,
 					generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects);
 			ModpackCandidate candidate = candidateScan.scan(request);
@@ -499,9 +499,9 @@ public class ModpackExecutor {
 	}
 
 	private static void validateConfiguration() throws CandidateBuildException {
-		if (serverConfig == null || serverConfig.modpack == null || serverConfig.modpack.isEmpty())
+		if (serverConfig == null || serverConfig.modpack.categories.isEmpty())
 			throw new CandidateBuildException("Server group configuration is missing");
-		for (var categoryEntry : serverConfig.modpack.entrySet()) {
+		for (var categoryEntry : serverConfig.modpack.categories.entrySet()) {
 			var category = categoryEntry.getValue();
 			if (category == null) throw new CandidateBuildException("Category '" + categoryEntry.getKey() + "' has no declaration");
 			for (var entry : category.entrySet()) {
@@ -517,7 +517,7 @@ public class ModpackExecutor {
 
 	private void prepareDirectories() throws IOException, CandidateBuildException {
 		Map<String, Path> groupDirectories = new TreeMap<>();
-		for (var categoryEntry : serverConfig.modpack.entrySet()) {
+		for (var categoryEntry : serverConfig.modpack.categories.entrySet()) {
 			if (categoryEntry.getValue() == null) continue;
 			for (String groupId : categoryEntry.getValue().keySet()) {
 				Path groupDirectory = groupRoot.resolve(groupId).normalize();

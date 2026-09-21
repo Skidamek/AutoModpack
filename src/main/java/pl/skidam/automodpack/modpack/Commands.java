@@ -696,7 +696,7 @@ public class Commands {
 		Util.backgroundExecutor().execute(() -> {
 			try {
 				Optional<PackDocument> published = modpackExecutor.currentDocument();
-				for (String line : GroupInspector.overview(serverConfig.modpack, published.map(PackDocument::manifest).orElse(null)))
+				for (String line : GroupInspector.overview(serverConfig.modpack.categories, published.map(PackDocument::manifest).orElse(null)))
 					send(context, line, ChatFormatting.WHITE, false);
 			} catch (IOException e) {
 				send(context, "Failed to read the published modpack: " + e.getMessage(), ChatFormatting.RED, true);
@@ -710,7 +710,7 @@ public class Commands {
 		Util.backgroundExecutor().execute(() -> {
 			try {
 				Optional<PackDocument> published = modpackExecutor.currentDocument();
-				Optional<List<String>> lines = GroupInspector.detail(serverConfig.modpack, groupId, published.map(PackDocument::manifest).orElse(null));
+				Optional<List<String>> lines = GroupInspector.detail(serverConfig.modpack.categories, groupId, published.map(PackDocument::manifest).orElse(null));
 				if (lines.isEmpty()) {
 					send(context, "Unknown group id: " + groupId + ". Run /automodpack groups for the list.", ChatFormatting.RED, false);
 					return;

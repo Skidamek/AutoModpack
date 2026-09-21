@@ -17,7 +17,7 @@ class ConfigUtilsTest {
 		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
 		group.syncedFiles = new LinkedHashSet<>(List.of("third", "first", "second"));
 		group.allowEditsInFiles = new LinkedHashSet<>(List.of("third", "first", "second"));
-		config.modpack = Map.of("General", new LinkedHashMap<>(Map.of("main", group)));
+		config.modpack.categories = Map.of("General", new LinkedHashMap<>(Map.of("main", group)));
 
 		ConfigUtils.normalizeServerConfig(config);
 
@@ -32,7 +32,7 @@ class ConfigUtilsTest {
 		group.syncedFiles = new LinkedHashSet<>(List.of("/mods/*.jar", "/automodpack/host-modpack/main/extra", "!kubejs/server_scripts/**", "!/kubejs/assets/**"));
 		group.excludedFiles = new LinkedHashSet<>(List.of("/automodpack/host-modpack/main/secret.bin", "!/automodpack/host-modpack/main/keep.bin"));
 		group.allowEditsInFiles = new LinkedHashSet<>(List.of("//config/**"));
-		config.modpack = Map.of("General", new LinkedHashMap<>(Map.of("main", group)));
+		config.modpack.categories = Map.of("General", new LinkedHashMap<>(Map.of("main", group)));
 
 		ConfigUtils.normalizeServerConfig(config);
 
@@ -48,7 +48,7 @@ class ConfigUtilsTest {
 		group.syncedFiles = new LinkedHashSet<>(List.of("automodpack/host-modpack/main/extra", "!automodpack/host-modpack/main/skip/**"));
 		group.excludedFiles = new LinkedHashSet<>(
 				List.of("automodpack/host-modpack/main/**", "automodpack/host-modpack/other/**", "/automodpack/host-modpack/main", "automodpack/host-modpack/main/**/**", "automodpack/host-modpack/main/**/*"));
-		config.modpack = Map.of("General", new LinkedHashMap<>(Map.of("main", group)));
+		config.modpack.categories = Map.of("General", new LinkedHashMap<>(Map.of("main", group)));
 
 		ConfigUtils.normalizeServerConfig(config);
 
@@ -62,14 +62,14 @@ class ConfigUtilsTest {
 	@Test
 	void nullGroupAndCategoryDeclarationsAreInvalid() {
 		ServerConfigJsons.ServerConfigFieldsV3 nullCategory = new ServerConfigJsons.ServerConfigFieldsV3();
-		nullCategory.modpack = new LinkedHashMap<>(Map.of("General", new LinkedHashMap<>(Map.of("main", new ServerConfigJsons.GroupDeclaration()))));
-		nullCategory.modpack.put("Broken", null);
+		nullCategory.modpack.categories = new LinkedHashMap<>(Map.of("General", new LinkedHashMap<>(Map.of("main", new ServerConfigJsons.GroupDeclaration()))));
+		nullCategory.modpack.categories.put("Broken", null);
 		assertThrows(ConfigTools.ConfigParseException.class, () -> ConfigUtils.normalizeServerConfig(nullCategory));
 
 		ServerConfigJsons.ServerConfigFieldsV3 nullGroup = new ServerConfigJsons.ServerConfigFieldsV3();
 		Map<String, ServerConfigJsons.GroupDeclaration> groups = new LinkedHashMap<>();
 		groups.put("main", null);
-		nullGroup.modpack = new LinkedHashMap<>(Map.of("General", groups));
+		nullGroup.modpack.categories = new LinkedHashMap<>(Map.of("General", groups));
 		assertThrows(ConfigTools.ConfigParseException.class, () -> ConfigUtils.normalizeServerConfig(nullGroup));
 	}
 }

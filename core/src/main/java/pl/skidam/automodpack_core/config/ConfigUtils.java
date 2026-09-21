@@ -59,8 +59,7 @@ public class ConfigUtils {
 		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
 
 		// Rules are group-directory-relative: no leading slash, no '/automodpack/host-modpack/<this group>' prefix (slash optional).
-		if (config.modpack == null) return;
-		for (var categoryEntry : config.modpack.entrySet()) {
+		for (var categoryEntry : config.modpack.categories.entrySet()) {
 			var category = categoryEntry.getValue();
 			if (category == null) throw new ConfigTools.ConfigParseException("Category '" + categoryEntry.getKey() + "' is null; declare its groups or remove the category");
 			for (var groupEntry : category.entrySet()) {

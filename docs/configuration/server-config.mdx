@@ -14,7 +14,6 @@ The file is hconf - comments (`#`), bare values and one entry per line. A pre-ex
 
 | Setting | Default | Description |
 |---|---|---|
-| `modpackName` | `""` | Display name of the modpack, shown in AutoModpack screens. Pack identity uses the generated modpack id instead. |
 | `modpackHost` | `true` | Runs AutoModpack's built-in connection handling. When false, clients still receive connection information, which can point at a proxy or an externally handled endpoint. See [hosting](../how-it-works/hosting). |
 | `generateModpackOnStart` | `true` | Publishes a new generation on every start when the content changed. |
 | `autoExcludeServerSideMods` | `true` | Leaves out mods whose metadata declares them server-side only. |
@@ -26,9 +25,9 @@ The file is hconf - comments (`#`), bare values and one entry per line. A pre-ex
 
 ## Groups
 
-The `modpack` section declares the pack's groups, nested under the category each one belongs to: category name, then group id, then the declaration. The factory config contains one category, `General`, holding a single group `main`, which is required and selected by default. Extra groups become optional parts that players pick in the in-game "Group Selection" screen, listed under their categories. Group content comes from two sources: the directory `automodpack/host-modpack/<id>/` is included in full, and `syncedFiles` pulls in files from the server root. The full picture is in [building the modpack](../pack-content).
+The `modpack` section holds the pack: `modpack.name` is the display name players see, and the categories follow it, each mapping category name, then group id, then the declaration. The factory config contains one category, `General`, holding a single group `main`, which is required and selected by default. Extra groups become optional parts that players pick in the in-game "Group Selection" screen, listed under their categories. Group content comes from two sources: the directory `automodpack/host-modpack/<id>/` is included in full, and `syncedFiles` pulls in files from the server root. The full picture is in [building the modpack](../pack-content).
 
-Both keys are identities, so treat them as permanent. The group id is the slug used by `requires` and `breaksWith`, by players' saved selections, and as the folder name under `automodpack/host-modpack/<id>/`; renaming it strands saved selections, breaks references from other groups, and requires renaming the folder. Renaming a category strands players' saved category choices. `displayName` is the always-safe rename, so keep anything volatile — versions, dates — out of ids and category names.
+Both keys are identities, so treat them as permanent. The group id is the slug used by `requires` and `breaksWith`, by players' saved selections, and as the folder name under `automodpack/host-modpack/<id>/`; renaming it strands saved selections, breaks references from other groups, and requires renaming the folder. Renaming a category strands players' saved category choices. `displayName` is the always-safe rename, so keep anything volatile — versions, dates — out of ids and category names. A group with a blank `displayName` shows its id instead.
 
 ### Categories
 
@@ -60,7 +59,7 @@ Read more about glob syntax on the [Globbing Wikipedia article](https://wikipedi
 
 | Setting | Default | Description |
 |---|---|---|
-| `modpack.<category>.<id>.displayName` | `""` | Name shown to players in the Group Selection screen. The map key is the id used by rules and by `requires` and `breaksWith`. |
+| `modpack.<category>.<id>.displayName` | `""` | Name shown to players in the Group Selection screen; blank shows the group id. The map key is the id used by rules and by `requires` and `breaksWith`. |
 | `modpack.<category>.<id>.description` | `""` | Short player-facing description of the group. |
 | `modpack.<category>.<id>.required` | `false` | Players cannot deselect the group. The factory `main` group sets this. |
 | `modpack.<category>.<id>.defaultSelected` | `false` | Preselected for players who have not chosen yet. Ignored when `required` is true. |

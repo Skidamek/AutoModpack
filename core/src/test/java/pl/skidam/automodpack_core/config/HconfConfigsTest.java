@@ -37,8 +37,8 @@ class HconfConfigsTest {
 		assertTrue(text.startsWith("# "), text);
 		assertTrue(text.contains("# serve the modpack to clients from this server\nmodpackHost: true"), text);
 		assertTrue(text.contains("syncedFiles: [mods/*.jar, kubejs/**, emotes/*]"), text);
-		assertTrue(text.contains("modpackName: \"\""), text);
-		assertEquals("", config.modpackName);
+		assertTrue(text.contains("name: \"\""), text);
+		assertEquals("", config.modpack.name);
 	}
 
 	@Test
@@ -60,7 +60,7 @@ class HconfConfigsTest {
 		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
 		assertEquals(2, config.DO_NOT_CHANGE_IT);
 		assertEquals(25590, config.bindPort);
-		assertFalse(config.modpackName == null);
+		assertEquals("", config.modpack.name);
 	}
 
 	@Test
@@ -76,17 +76,17 @@ class HconfConfigsTest {
 
 	@Test
 	void saveSplicesOnlyTheChangedValueAndKeepsCommentsAndCrlf() throws IOException {
-		String userFile = "# my server config\r\nmodpackName: \"Cool Pack\" # keep this name\r\nbindPort: 25565\r\n";
+		String userFile = "# my server config\r\nmodpackHost: true # keep this note\r\nbindPort: 25565\r\n";
 		Files.write(serverConfig(), userFile.getBytes(StandardCharsets.UTF_8));
 		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
-		assertEquals("Cool Pack", config.modpackName);
-		assertTrue(Files.readString(serverConfig(), StandardCharsets.UTF_8).contains("modpackName: \"Cool Pack\" # keep this name"));
+		assertTrue(config.modpackHost);
+		assertTrue(Files.readString(serverConfig(), StandardCharsets.UTF_8).contains("modpackHost: true # keep this note"));
 		assertEquals(25565, config.bindPort);
 		config.bindPort = 25566;
 		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertTrue(text.contains("# my server config\r\n"), "banner comment lost:\n" + text);
-		assertTrue(text.contains("modpackName: \"Cool Pack\" # keep this name\r\n"), "trailing comment lost:\n" + text);
+		assertTrue(text.contains("modpackHost: true # keep this note\r\n"), "trailing comment lost:\n" + text);
 		assertTrue(text.contains("bindPort: 25566\r\n"), "value not spliced:\n" + text);
 		assertFalse(text.contains("25565"), "old value still present:\n" + text);
 	}
@@ -94,14 +94,14 @@ class HconfConfigsTest {
 	@Test
 	void saveEnsuresMissingAnnotatedFieldsWithTheirComment() throws IOException {
 		// an old file from before accept-proxy-protocol existed
-		String oldFile = "modpackName: \"Old Pack\"\r\nbindPort: 25565\r\n";
+		String oldFile = "modpackHost: false\r\nbindPort: 25565\r\n";
 		Files.write(serverConfig(), oldFile.getBytes(StandardCharsets.UTF_8));
 		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
 		assertFalse(config.acceptProxyProtocol);
 		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertTrue(text.contains("# honor HAProxy PROXY protocol headers; enable only behind a trusted proxy\r\nacceptProxyProtocol: false"), text);
-		assertTrue(text.contains("modpackName: \"Old Pack\""), "existing value disturbed:\n" + text);
+		assertTrue(text.contains("modpackHost: false"), "existing value disturbed:\n" + text);
 	}
 
 	@Test
@@ -154,26 +154,26 @@ class HconfConfigsTest {
 				""";
 		Files.writeString(serverConfig(), userFile, StandardCharsets.UTF_8);
 		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
-		config.modpack.get("General").get("main").syncedFiles = Set.of("mods/*.jar");
+		config.modpack.categories.get("General").get("main").syncedFiles = Set.of("mods/*.jar");
 		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertTrue(text.contains("mods/*.jar"), "kept rule lost:\n" + text);
 		assertFalse(text.contains("kubejs"), "removed rule resurrected:\n" + text);
 		assertEquals(Set.of("mods/*.jar"),
-				HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow().modpack.get("General").get("main").syncedFiles);
+				HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow().modpack.categories.get("General").get("main").syncedFiles);
 	}
 
 	@Test
 	void legacyJsonMigratesToHconfOnFirstSave() throws IOException {
-		String legacy = "modpackName: \"Carried Pack\"\nbindPort: 25590\n";
+		String legacy = "modpackHost: false\nbindPort: 25590\n";
 		Files.write(legacyServerConfig(), legacy.getBytes(StandardCharsets.UTF_8));
 		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
-		assertEquals("Carried Pack", config.modpackName);
+		assertFalse(config.modpackHost);
 		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		assertFalse(Files.exists(legacyServerConfig()), "legacy .json not removed after migration");
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertTrue(text.startsWith("# "), "migrated file lacks the banner:\n" + text);
-		assertTrue(text.contains("modpackName: \"Carried Pack\""), "value not carried:\n" + text);
+		assertTrue(text.contains("modpackHost: false"), "value not carried:\n" + text);
 		assertTrue(text.contains("bindPort: 25590"), "value not carried:\n" + text);
 		assertTrue(text.contains("# honor HAProxy PROXY protocol headers"), "fresh comments missing:\n" + text);
 	}

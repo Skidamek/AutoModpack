@@ -444,7 +444,7 @@ class ModpackCandidateScannerTest {
 		Files.writeString(groups.resolve("main/config/.gitkeep"), "keep", StandardCharsets.UTF_8);
 		Files.writeString(groups.resolve("main/config/kept.txt"), "kept", StandardCharsets.UTF_8);
 
-		ModpackCandidate candidate = scan(server, groups, new ServerConfigJsons.ServerConfigFieldsV3().modpack.get("General"));
+		ModpackCandidate candidate = scan(server, groups, new ServerConfigJsons.ServerConfigFieldsV3().modpack.categories.get("General"));
 		var files = candidate.manifest().groups().get("main").files();
 
 		assertTrue(files.containsKey("config/kept.txt"));

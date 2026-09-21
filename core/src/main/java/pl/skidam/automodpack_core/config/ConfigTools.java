@@ -47,7 +47,8 @@ import pl.skidam.automodpack_core.utils.OsPaths;
 public final class ConfigTools {
 	/** The custom JSON shapes registered on {@link #GSON}; the same set defines which types key-reflection may not inspect. */
 	private static final Map<Class<?>, Object> CUSTOM_JSON_ADAPTERS = Map.of(InetSocketAddress.class, new InetSocketAddressTypeAdapter(), ConnectionJsons.ConnectionInfo.class,
-			new ConnectionInfoTypeAdapter(), ConnectionJsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter());
+			new ConnectionInfoTypeAdapter(), ConnectionJsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter(), ServerConfigJsons.ModpackFields.class,
+			new ServerConfigJsons.ModpackFields.Adapter());
 
 	/**
 	 * Stream-reader strictness for the integral types, registered because Gson 2.8.9 deserializing from a parsed tree
@@ -200,7 +201,11 @@ public final class ConfigTools {
 		return unknown;
 	}
 
-	private static void collectUnknownKeys(JsonElement element, Type type, String prefix, List<String> unknown) {
+	/**
+	 * Walks one JSON document against a type and collects the paths that match no field. Public so an
+	 * {@link UnknownKeyScanner} can hand the generic reflection back in for the parts of its shape that are plain.
+	 */
+	public static void collectUnknownKeys(JsonElement element, Type type, String prefix, List<String> unknown) {
 		if (type instanceof ParameterizedType parameterized) {
 			Class<?> raw = (Class<?>) parameterized.getRawType();
 			Type[] arguments = parameterized.getActualTypeArguments();
@@ -212,7 +217,13 @@ public final class ConfigTools {
 			}
 			return;
 		}
-		if (!(type instanceof Class<?> raw) || !isInspectable(raw) || !element.isJsonObject()) return;
+		if (!(type instanceof Class<?> raw) || !element.isJsonObject()) return;
+		if (OPAQUE_JSON_TYPES.contains(raw)) {
+			// reflection cannot read a custom-JSON shape, so the type itself keeps the unknown-key warning honest
+			if (CUSTOM_JSON_ADAPTERS.get(raw) instanceof UnknownKeyScanner scanner) scanner.collectUnknownKeys(element, prefix, unknown);
+			return;
+		}
+		if (!isInspectable(raw)) return;
 		Map<String, Field> fields = jsonFieldNames(raw);
 		for (var entry : element.getAsJsonObject().entrySet()) {
 			String path = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
@@ -224,6 +235,14 @@ public final class ConfigTools {
 
 	/** Types key-reflection may not inspect, derived from the {@link #CUSTOM_JSON_ADAPTERS} registry; JSON primitives are excluded separately. */
 	private static final Set<Class<?>> OPAQUE_JSON_TYPES = CUSTOM_JSON_ADAPTERS.keySet();
+
+	/**
+	 * A custom-JSON type whose shape reflection cannot read keeps its unknown-key warning by walking its own members
+	 * and calling {@link #collectUnknownKeys} back for the parts of its shape that are plain.
+	 */
+	public interface UnknownKeyScanner {
+		void collectUnknownKeys(JsonElement element, String prefix, List<String> unknown);
+	}
 
 	private static boolean isInspectable(Class<?> raw) {
 		return !raw.isPrimitive() && !raw.isArray() && !raw.isEnum() && !raw.isInterface() && !OPAQUE_JSON_TYPES.contains(raw) && raw != String.class && raw != Boolean.class

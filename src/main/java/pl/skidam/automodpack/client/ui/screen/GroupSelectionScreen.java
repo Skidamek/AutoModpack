@@ -549,14 +549,17 @@ public class GroupSelectionScreen extends VersionedScreen {
 		for (String value : values) {
 			if (result.length() > 0) result.append(", ");
 			GroupManifest.Group related = groups.get(value);
-			result.append(related == null || related.displayName().isBlank() ? VersionedText.str("automodpack.browser.unknownGroup") : related.displayName());
+			if (related == null) result.append(VersionedText.str("automodpack.browser.unknownGroup"));
+			else result.append(related.displayName().isBlank() ? value : related.displayName());
 		}
 		return result.length() == 0 ? VersionedText.str("automodpack.ui.none") : result.toString();
 	}
 
+	/** A group without a display name shows its id, so an unnamed group is never mistaken for a broken reference. */
 	private String displayName(String groupId) {
 		GroupManifest.Group group = groups.get(groupId);
-		return group == null || group.displayName().isBlank() ? VersionedText.str("automodpack.browser.unknownGroup") : group.displayName();
+		if (group == null) return VersionedText.str("automodpack.browser.unknownGroup");
+		return group.displayName().isBlank() ? groupId : group.displayName();
 	}
 
 	private boolean hasOptionalCategoryGroups(String category) {

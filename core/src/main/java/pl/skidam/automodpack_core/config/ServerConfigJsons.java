@@ -1,10 +1,21 @@
 package pl.skidam.automodpack_core.config;
 
+import java.lang.reflect.Type;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonSerializationContext;
+import com.google.gson.JsonSerializer;
+import com.google.gson.reflect.TypeToken;
 
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
@@ -13,15 +24,13 @@ public class ServerConfigJsons {
 	public static class ServerConfigFieldsV3 {
 		@HconfConfigs.Comment("file version - do not change")
 		public int DO_NOT_CHANGE_IT = 3;
-		@HconfConfigs.Comment("name shown to players joining the modpack")
-		public String modpackName = "";
 		@HconfConfigs.Comment("serve the modpack to clients from this server")
 		public boolean modpackHost = true;
 		@HconfConfigs.Comment("scan and regenerate the modpack on every server start")
 		public boolean generateModpackOnStart = true;
 		// Category name -> group id -> declaration. The group id is referenced by requires/breaksWith and by the client's saved selection; the category name is the player-facing section label.
-		@HconfConfigs.Comment("what clients receive. host-modpack/<group>/ ships in full, syncedFiles pulls from the server root, excludedFiles keeps files off clients (put server-only mods there)")
-		public Map<String, Map<String, GroupDeclaration>> modpack = Map.of("General", Map.of("main", mainGroupDeclaration()));
+		@HconfConfigs.Comment("what clients receive. name is the pack's display name; host-modpack/<group>/ ships in full, syncedFiles pulls from the server root, excludedFiles keeps files off clients (put server-only mods there)")
+		public ModpackFields modpack = ModpackFields.withMainGroup();
 		@HconfConfigs.Comment("leave mods marked as server-side out of the synced modpack")
 		public boolean autoExcludeServerSideMods = true;
 		@HconfConfigs.Comment("require clients to install the modpack")
@@ -73,16 +82,13 @@ public class ServerConfigJsons {
 	public static ServerConfigFieldsV3 standalone() {
 		ServerConfigFieldsV3 config = new ServerConfigFieldsV3();
 		config.validateSecrets = false;
-		GroupDeclaration main = mainGroupDeclaration();
-		main.syncedFiles = Set.of();
-		config.modpack = Map.of("General", Map.of("main", main));
+		config.modpack = ModpackFields.withStandaloneMain();
 		return config;
 	}
 
 	// Default group for a fresh config. The sets are linked so a generated file is byte-identical across runs (§7.4 determinism).
 	private static GroupDeclaration mainGroupDeclaration() {
 		GroupDeclaration declaration = new GroupDeclaration();
-		declaration.displayName = "Main";
 		declaration.description = "Core modpack files";
 		declaration.required = true;
 		declaration.defaultSelected = true;
@@ -90,6 +96,67 @@ public class ServerConfigJsons {
 		declaration.excludedFiles = new LinkedHashSet<>(List.of(".*", ".*/**", "**/.*", "**/.*/**", "*.tmp", "**/*.tmp", "*.disabled", "**/*.disabled", "*.bak", "**/*.bak", "kubejs/server_scripts/**"));
 		declaration.allowEditsInFiles = new LinkedHashSet<>(List.of("options.txt", "config/**"));
 		return declaration;
+	}
+
+	/**
+	 * The pack section: the reserved {@code name} key is the pack's display name, every other member is a category of
+	 * groups. The reserved key is what makes this a typed object instead of a bare map - a {@code name} member that is
+	 * not a string fails the parse with a clear message instead of being silently swallowed as an unread category.
+	 */
+	public static class ModpackFields {
+		public String name = "";
+		public Map<String, Map<String, GroupDeclaration>> categories = new LinkedHashMap<>();
+
+		private static final Type GROUPS_TYPE = new TypeToken<Map<String, GroupDeclaration>>() {
+		}.getType();
+
+		public static ModpackFields withMainGroup() {
+			ModpackFields fields = new ModpackFields();
+			fields.categories = new LinkedHashMap<>(Map.of("General", new LinkedHashMap<>(Map.of("main", mainGroupDeclaration()))));
+			return fields;
+		}
+
+		public static ModpackFields withStandaloneMain() {
+			ModpackFields fields = withMainGroup();
+			fields.categories.get("General").get("main").syncedFiles = Set.of();
+			return fields;
+		}
+
+		/** Serializes {@code name} plus every category into one flat object and reads the same shape back. */
+		public static final class Adapter implements JsonSerializer<ModpackFields>, JsonDeserializer<ModpackFields>, ConfigTools.UnknownKeyScanner {
+			@Override
+			public JsonElement serialize(ModpackFields src, Type type, JsonSerializationContext context) {
+				JsonObject object = new JsonObject();
+				object.addProperty("name", src.name);
+				for (var entry : src.categories.entrySet()) object.add(entry.getKey(), context.serialize(entry.getValue()));
+				return object;
+			}
+
+			@Override
+			public ModpackFields deserialize(JsonElement json, Type type, JsonDeserializationContext context) throws JsonParseException {
+				if (json == null || !json.isJsonObject()) throw new JsonParseException("modpack must hold the pack name and its categories: modpack { name: \"\", <category> { <group> { ... } } }");
+				ModpackFields fields = new ModpackFields();
+				for (var entry : json.getAsJsonObject().entrySet()) {
+					if (entry.getKey().equals("name")) {
+						if (entry.getValue() == null || !entry.getValue().isJsonPrimitive() || !entry.getValue().getAsJsonPrimitive().isString())
+							throw new JsonParseException("modpack.name must be a string; the name key is reserved and cannot be a category");
+						fields.name = entry.getValue().getAsString();
+					} else {
+						fields.categories.put(entry.getKey(), context.deserialize(entry.getValue(), GROUPS_TYPE));
+					}
+				}
+				return fields;
+			}
+
+			@Override
+			public void collectUnknownKeys(JsonElement element, String prefix, List<String> unknown) {
+				for (var entry : element.getAsJsonObject().entrySet()) {
+					if (entry.getKey().equals("name")) continue;
+					String categoryPath = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
+					ConfigTools.collectUnknownKeys(entry.getValue(), GROUPS_TYPE, categoryPath, unknown);
+				}
+			}
+		}
 	}
 
 	public static class GroupDeclaration {
