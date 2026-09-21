@@ -11,6 +11,8 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
@@ -73,14 +75,20 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 	private final X509ExtendedTrustManager defaultTrustManager;
 	private final SessionTrust sessionTrust;
 	private final Consumer<X509Certificate[]> onValidating;
-	private volatile X509Certificate deferredCertificate;
-	private volatile CertificateException deferredFailure;
+	// The deferred trust state is keyed per peer, not per handshake, so one manager serves every lane of a client:
+	// concurrent handshakes defer into their own slots and the trust ladder reads exactly the certificate each
+	// candidate socket presented. Keyed by Socket (the SSLSocket variant the JDK calls for our handshakes), by
+	// SSLEngine for engine handshakes, and by null for the bare checkServerTrusted(chain, authType) variant; an entry
+	// is spent by CandidateTrustValidation when the ladder has judged its socket, pass or fail.
+	private final Map<Object, Deferred> deferred = new HashMap<>();
 
 	public CustomizableTrustManager(SessionTrust sessionTrust, Consumer<X509Certificate[]> onValidating) throws KeyStoreException {
 		this.defaultTrustManager = createTrustManager();
 		this.sessionTrust = sessionTrust;
 		this.onValidating = onValidating;
 	}
+
+	private record Deferred(X509Certificate certificate, CertificateException failure) {}
 
 	private static X509ExtendedTrustManager createTrustManager() throws KeyStoreException {
 		try {
@@ -95,12 +103,19 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 		}
 	}
 
-	public X509Certificate getDeferredCertificate() {
-		return deferredCertificate;
+	public synchronized X509Certificate getDeferredCertificate(Socket socket) {
+		Deferred entry = deferred.get(socket);
+		return entry == null ? null : entry.certificate();
 	}
 
-	public CertificateException getDeferredFailure() {
-		return deferredFailure;
+	public synchronized CertificateException getDeferredFailure(Socket socket) {
+		Deferred entry = deferred.get(socket);
+		return entry == null ? null : entry.failure();
+	}
+
+	/** The ladder is done with this socket's deferral, pass or fail: its entry is spent and freed. */
+	public synchronized void forget(Socket socket) {
+		deferred.remove(socket);
 	}
 
 	@Override
@@ -110,20 +125,20 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 
 	@Override
 	public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-		validateServer(chain, () -> defaultTrustManager.checkServerTrusted(chain, authType));
+		validateServer(null, chain, () -> defaultTrustManager.checkServerTrusted(chain, authType));
 	}
 
 	@Override
 	public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket) throws CertificateException {
-		validateServer(chain, () -> defaultTrustManager.checkServerTrusted(chain, authType, socket));
+		validateServer(socket, chain, () -> defaultTrustManager.checkServerTrusted(chain, authType, socket));
 	}
 
 	@Override
 	public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine engine) throws CertificateException {
-		validateServer(chain, () -> defaultTrustManager.checkServerTrusted(chain, authType, engine));
+		validateServer(engine, chain, () -> defaultTrustManager.checkServerTrusted(chain, authType, engine));
 	}
 
-	private void validateServer(X509Certificate[] chain, TrustCheck defaultCheck) throws CertificateException {
+	private void validateServer(Object peer, X509Certificate[] chain, TrustCheck defaultCheck) throws CertificateException {
 		if (onValidating != null) onValidating.accept(chain);
 		if (chain == null || chain.length == 0) throw new CertificateException("Server did not present a certificate");
 		if (sessionTrust.pinMatches(chain)) return;
@@ -133,11 +148,16 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 		} catch (CertificateException e) {
 			// A chain the CAs reject is only deferrable when it is genuinely self-signed; anything else is broken.
 			if (!isSelfSigned(chain[0])) throw e;
-			deferredFailure = e;
+			synchronized (this) {
+				deferred.put(peer, new Deferred(chain[0], e));
+			}
+			return;
 		}
 		// No pin matched this leaf: a first contact (whatever the CA said) or a changed certificate. The ladder
 		// decides - a published DNSSEC fingerprint speaks for the endpoint, and a first contact is the player's.
-		deferredCertificate = chain[0];
+		synchronized (this) {
+			deferred.put(peer, new Deferred(chain[0], null));
+		}
 	}
 
 	/** A certificate genuinely signed by its own key, not merely one whose subject equals its issuer. */

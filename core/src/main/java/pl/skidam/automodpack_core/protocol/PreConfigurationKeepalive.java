@@ -16,11 +16,12 @@ import java.util.function.BooleanSupplier;
 import javax.net.ssl.SSLSocket;
 
 /**
- * One parked candidate's heartbeat while the human decides on certificate trust: every interval it writes a one-byte
- * ranged {@code GET /head} the server answers with a 206, so idle NAT mappings and relay bindings never decay under
- * the parked connection. It self-retires on the trust decision, a dead socket, or a closed client; the write gate
- * makes retirement wait for an in-flight heartbeat, including its consumed response, so the connection is always
- * byte-aligned when the trust decision hands it over.
+ * One parked candidate's heartbeat while the human decides on certificate trust: every interval it writes a plain
+ * {@code GET /head} - the head document is small JSON, and the response is consumed by its Content-Length whatever
+ * the status, so a ranged byte saves nothing worth the special case - and idle NAT mappings and relay bindings never
+ * decay under the parked connection. It self-retires on the trust decision, a dead socket, or a closed client; the
+ * write gate makes retirement wait for an in-flight heartbeat, including its consumed response, so the connection is
+ * always byte-aligned when the trust decision hands it over.
  */
 final class PreConfigurationKeepalive {
 
@@ -37,7 +38,7 @@ final class PreConfigurationKeepalive {
 		this.alive = alive;
 		// The Authorization header rides the heartbeat too: a host with validateSecrets on answers an unauthenticated heartbeat with a 401 and a close, killing the connection the heartbeat exists to keep alive.
 		String authorization = secret == null ? "" : "Authorization: Bearer " + secret + "\r\n";
-		this.heartbeat = ("GET /head HTTP/1.1\r\nHost: " + hostHeader + "\r\nUser-Agent: " + USER_AGENT + "\r\n" + authorization + "Range: bytes=0-0\r\n\r\n")
+		this.heartbeat = ("GET /head HTTP/1.1\r\nHost: " + hostHeader + "\r\nUser-Agent: " + USER_AGENT + "\r\n" + authorization + "\r\n")
 				.getBytes(StandardCharsets.UTF_8);
 		this.in = new BufferedInputStream(socket.getInputStream());
 		this.task = executor.scheduleWithFixedDelay(this::tick, interval.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS);
@@ -60,7 +61,7 @@ final class PreConfigurationKeepalive {
 			out.write(heartbeat);
 			out.flush();
 			// The server answers every heartbeat, so the response must be consumed before the next request or the first
-			// application read would misframe against a stale 206. The bounded read can never wedge the scheduler.
+			// application read would misframe against a stale response record. The bounded read can never wedge the scheduler.
 			previousTimeout = socket.getSoTimeout();
 			socket.setSoTimeout(NETWORK_TIMEOUT_MILLIS);
 			discardResponse();

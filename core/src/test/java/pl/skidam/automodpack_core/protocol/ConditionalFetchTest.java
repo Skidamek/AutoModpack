@@ -434,6 +434,7 @@ class ConditionalFetchTest {
 		final Map<String, byte[]> store = new ConcurrentHashMap<>();
 		final Map<String, String> redirects = new ConcurrentHashMap<>();
 		final AtomicBoolean cooperate = new AtomicBoolean(true);
+		final AtomicBoolean ignoreRanges = new AtomicBoolean(false);
 		final AtomicBoolean requireAuth = new AtomicBoolean(false);
 		final AtomicBoolean lieAboutResumeStart = new AtomicBoolean(false);
 		final AtomicBoolean compressDocuments = new AtomicBoolean(false);
@@ -578,6 +579,11 @@ class ConditionalFetchTest {
 				if (!request.path.startsWith("/objects/") && request.ifNoneMatch != null && cooperate.get()
 						&& HashUtils.sha1(content).equals(request.ifNoneMatch.replace("\"", ""))) {
 					respond(out, "304 Not Modified", new byte[0]);
+					return;
+				}
+				// The barebones static host class: every object request is answered 200 with the full body, no Content-Range, Range ignored.
+				if (request.path.startsWith("/objects/") && ignoreRanges.get()) {
+					respond(out, "200 OK", content);
 					return;
 				}
 				long[] range = parseRange(request.range, content.length);

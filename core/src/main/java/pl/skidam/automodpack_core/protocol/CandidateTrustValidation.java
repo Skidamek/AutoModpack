@@ -44,7 +44,7 @@ public final class CandidateTrustValidation {
 	private static final ScheduledExecutorService PRE_CONFIGURATION_KEEPALIVE_EXECUTOR = Executors.newSingleThreadScheduledExecutor(
 			new CustomThreadFactoryBuilder().setNameFormat("AutoModpack PreConfigurationKeepalive #%d").setDaemon(true).build());
 
-	/** One transport candidate: its probe socket, the trust manager that handed it over, and who may accept the certificate. */
+	/** One transport candidate: its probe socket, the client's shared trust manager holding that socket's deferral, and who may accept the certificate. */
 	public record Candidate(SSLSocket socket, CustomizableTrustManager trustManager, CustomizableTrustManager.SessionTrust sessionTrust, String originHost, String endpointHost,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, BooleanSupplier clientAlive, String hostHeader, String secret) {}
 
@@ -83,16 +83,26 @@ public final class CandidateTrustValidation {
 
 	/** Runs the ladder over the candidate; completion means the certificate is pinned into the session trust, and any failure closes the probe socket. */
 	public static CompletableFuture<Void> validate(Candidate candidate, Duration preConfigurationKeepaliveInterval) {
-		X509Certificate certificate = candidate.trustManager().getDeferredCertificate();
+		X509Certificate certificate = candidate.trustManager().getDeferredCertificate(candidate.socket());
 		if (certificate == null) return CompletableFuture.completedFuture(null);
 
+		CompletableFuture<Void> validation;
 		try {
 			certificate.checkValidity();
+			validation = judge(candidate, certificate, preConfigurationKeepaliveInterval);
 		} catch (CertificateException e) {
-			return reject(candidate, new IOException("Untrusted certificate is not valid", e));
+			validation = CompletableFuture.failedFuture(new IOException("Untrusted certificate is not valid", e));
 		}
+		return validation.whenComplete((ignored, error) -> {
+			// The deferral is spent once the ladder has judged this socket, pass or fail; the entry dies with the decision.
+			candidate.trustManager().forget(candidate.socket());
+			if (error != null) closeQuietly(candidate.socket());
+		});
+	}
 
-		CompletableFuture<Void> validation = DnsPinResolver.resolvePinAsync(candidate.originHost()).thenCompose(result -> {
+	/** The DNSSEC ladder and the manual-trust fallback over one deferred certificate. */
+	private static CompletableFuture<Void> judge(Candidate candidate, X509Certificate certificate, Duration preConfigurationKeepaliveInterval) {
+		return DnsPinResolver.resolvePinAsync(candidate.originHost()).thenCompose(result -> {
 			if (result instanceof DnsPinResolver.Authoritative authoritative) {
 				try {
 					String fingerprint = getFingerprint(certificate);
@@ -118,14 +128,11 @@ public final class CandidateTrustValidation {
 			}
 			return requestManualTrust(candidate, certificate, preConfigurationKeepaliveInterval);
 		});
-		return validation.whenComplete((ignored, error) -> {
-			if (error != null) closeQuietly(candidate.socket());
-		});
 	}
 
 	private static CompletableFuture<Void> requestManualTrust(Candidate candidate, X509Certificate certificate, Duration preConfigurationKeepaliveInterval) {
 		if (candidate.trustCallback() == null) {
-			CertificateException failure = candidate.trustManager().getDeferredFailure();
+			CertificateException failure = candidate.trustManager().getDeferredFailure(candidate.socket());
 			return reject(candidate, failure == null ? new IOException("Certificate is not trusted") : failure);
 		}
 

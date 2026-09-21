@@ -9,6 +9,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.KeyStoreException;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.ArrayDeque;
@@ -57,7 +58,13 @@ public class DownloadClient implements PackTransport {
 	private final Function<X509Certificate, CompletableFuture<Boolean>> trustCallback;
 	private final Duration preConfigurationKeepaliveInterval;
 	private final CustomizableTrustManager.SessionTrust sessionTrust;
+	private final CustomizableTrustManager trustManager;
+	private final SSLContext sslContext;
 	private final TransportRoute route;
+	// Set once a take's response head proves the peer ignores Range (a 200 past the requested slice): every whole-object
+	// task on this client then takes the object open-ended instead of tiling. One client is one endpoint - all lanes
+	// terminate on the same peer and redirects drop authority - so the capability verdict is per client, not per file.
+	volatile boolean rangeIgnoredHost;
 	// The transport's wire window: the number of unsettled takes it may keep on the lanes. The cap is the receipted
 	// lanes × pipeline depth; the pacer starts at one lane's depth, doubles every clean cycle and halves on congestion.
 	private final WirePacer pacer = new WirePacer(MAX_CONNECTIONS * Connection.PIPELINE_DEPTH, MAX_CONNECTIONS);
@@ -78,7 +85,7 @@ public class DownloadClient implements PackTransport {
 
 	private record TransportRoute(InetSocketAddress directAddress, HolepunchRoute holepunchRoute) {}
 
-	private record TlsCandidate(SSLSocket socket, Socket transport, CustomizableTrustManager trustManager) {}
+	private record TlsCandidate(SSLSocket socket, Socket transport) {}
 
 	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, String secret, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback,
 			Duration preConfigurationKeepaliveInterval, TransportRoute route) {
@@ -88,6 +95,18 @@ public class DownloadClient implements PackTransport {
 		this.preConfigurationKeepaliveInterval = preConfigurationKeepaliveInterval;
 		this.route = route;
 		this.sessionTrust = new CustomizableTrustManager.SessionTrust(AddressHelpers.formatAddress(connectionInfo.origin), connectionInfo.expectedFingerprint);
+		CustomizableTrustManager manager;
+		try {
+			manager = new CustomizableTrustManager(sessionTrust, null);
+		} catch (KeyStoreException e) {
+			throw new IllegalStateException("Failed to initialize certificate trust", e);
+		}
+		// One trust manager and one SSLContext per client, shared by every lane: the JDK's TLS 1.3 session cache lives in
+		// the context, so lanes past the first resume (PSK) and never re-enter the trust ladder, and the deferred
+		// certificate state keyed per socket in the manager is what makes the sharing safe - concurrent handshakes
+		// defer into their own slots instead of a shared per-handshake field.
+		this.trustManager = manager;
+		this.sslContext = CandidateTrustValidation.newSslContext(manager);
 	}
 
 	public static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, String secret,
@@ -158,29 +177,22 @@ public class DownloadClient implements PackTransport {
 	}
 
 	private TlsCandidate openTlsCandidate() throws IOException {
-		CustomizableTrustManager trustManager;
-		try {
-			trustManager = new CustomizableTrustManager(sessionTrust, null);
-		} catch (Exception e) {
-			throw new IOException("Failed to initialize certificate trust", e);
-		}
-		// One SSLContext per lane, so lanes past the first pay a full TLS handshake each: a shared context would let
-		// the JDK session cache resume them, but the deferred per-handshake certificate state lives in the trust
-		// manager, so sharing one needs a delegating trust manager. A couple of RTTs per sync is not that price.
-		SSLContext context = CandidateTrustValidation.newSslContext(trustManager);
 		Socket plainSocket = connectTransport();
-
+		SSLSocket tlsSocket = null;
 		try {
 			plainSocket.setSoTimeout(NETWORK_TIMEOUT_MILLIS);
 			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC) performMagicHandshake(plainSocket);
 			// TLS identity follows the endpoint - the host this socket actually reaches - so proxied frontends like
 			// tunnels present their own certificate (SNI and name check); the origin stays the trust root: its pin
 			// is enforced against the presented leaf, and any unpinned first contact defers to the trust ladder.
-			SSLSocket tlsSocket = CandidateTrustValidation.wrapWithTls(plainSocket, context, connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort());
+			tlsSocket = CandidateTrustValidation.wrapWithTls(plainSocket, sslContext, connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort());
 			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket);
 			tlsSocket.setSoTimeout(0);
-			return new TlsCandidate(tlsSocket, plainSocket, trustManager);
+			return new TlsCandidate(tlsSocket, plainSocket);
 		} catch (IOException e) {
+			// The candidate never reached validation, so its deferred entry (a handshake that deferred and then died)
+			// is spent here; a failure inside startHandshake itself leaves one small entry keyed by the dead socket.
+			if (tlsSocket != null) trustManager.forget(tlsSocket);
 			closeQuietly(plainSocket);
 			throw e;
 		}
@@ -258,7 +270,7 @@ public class DownloadClient implements PackTransport {
 
 	/** The shared candidate trust ladder; completion means the certificate is pinned into this session's trust. */
 	private CompletableFuture<TlsCandidate> validateCandidate(TlsCandidate candidate) {
-		return CandidateTrustValidation.validate(new CandidateTrustValidation.Candidate(candidate.socket(), candidate.trustManager(), sessionTrust, connectionInfo.origin.getHostString(),
+		return CandidateTrustValidation.validate(new CandidateTrustValidation.Candidate(candidate.socket(), trustManager, sessionTrust, connectionInfo.origin.getHostString(),
 				connectionInfo.endpoint.getHostString(), trustCallback, () -> !closed, hostHeader(), secret), preConfigurationKeepaliveInterval).thenApply(ignored -> candidate);
 	}
 
@@ -452,6 +464,9 @@ public class DownloadClient implements PackTransport {
 		private boolean positionedWrites;
 		// Set when the client aborts: this transfer's failed takes must not retry onto freshly reopened lanes.
 		private volatile boolean aborted;
+		// A range-ignoring host serves every bounded take as a full 200, so tiling would only re-detect the same verdict
+		// per slice: one open-ended take covers the object, and the cursor stays at the resume offset so no tail is claimed.
+		private final boolean openEnded;
 
 		ObjectTransfer(byte[] sha1Hex, Path destination, long fileSize, long offset, IntConsumer progress) {
 			this.sha1Hex = sha1Hex;
@@ -459,7 +474,8 @@ public class DownloadClient implements PackTransport {
 			this.fileSize = fileSize;
 			this.offset = offset;
 			this.progress = progress;
-			this.cursor = fileSize;
+			this.openEnded = rangeIgnoredHost;
+			this.cursor = openEnded ? offset : fileSize;
 		}
 
 		CompletableFuture<Path> start() {
@@ -469,11 +485,11 @@ public class DownloadClient implements PackTransport {
 			synchronized (lock) {
 				pendingItems = 1;
 			}
-			long headEnd = Math.min(offset + (long) WIRE_CHUNK_BYTES, fileSize) - 1;
+			long headEnd = openEnded ? -1 : Math.min(offset + (long) WIRE_CHUNK_BYTES, fileSize) - 1;
 			int lane = Math.floorMod(laneCounter.getAndIncrement(), MAX_CONNECTIONS);
 			LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", lane, offset, headEnd, objectName());
 			submitTake(new Take(offset, headEnd, lane, 1), new AtomicLong());
-			pump();
+			if (!openEnded) pump();
 			return future;
 		}
 
@@ -527,7 +543,7 @@ public class DownloadClient implements PackTransport {
 			CompletableFuture<Path> future;
 			try {
 				// A stale range already surfaces as StaleRangeException from the response parse; no mapping happens here.
-				future = withSlot(take.lane(), connection -> connection.sendDownloadFile(sha1Hex, destination, chunkCallback, take.start(), take.end(), null, true, -1L));
+				future = withSlot(take.lane(), connection -> connection.sendDownloadFile(sha1Hex, destination, chunkCallback, take.start(), take.end(), null, true, -1L, fileSize));
 			} catch (Throwable submitFailure) {
 				// The submit never produced a request: the settle path retries or books it like any other failure.
 				WireTrace.log("TAKE_FAIL", "object", objectName(), "item", take.start() + "-" + take.end(), "error", submitFailure);
@@ -538,6 +554,7 @@ public class DownloadClient implements PackTransport {
 		}
 
 		private void onTakeSettled(Take take, AtomicLong takeBytes, long nanos, Throwable takeError) {
+			if (takeError instanceof RangeIgnoredException) markRangeIgnoredHost();
 			if (takeError != null && take.attempt() < MAX_TAKE_ATTEMPTS && retryWorth(takeError)) {
 				WireTrace.log("TAKE_RETRY", "object", objectName(), "item", take.start() + "-" + take.end(), "attempt", take.attempt(), "error", takeError);
 				// The credit stays held and the barrier stays charged: the retried range is the same one unsettled unit of work.
@@ -558,9 +575,20 @@ public class DownloadClient implements PackTransport {
 			reviveDormant();
 		}
 
+		/** Marks the whole client degraded once, with the one loud line naming the host every lane of this client terminates on. */
+		private void markRangeIgnoredHost() {
+			synchronized (poolLock) {
+				if (rangeIgnoredHost) return;
+				rangeIgnoredHost = true;
+			}
+			LOGGER.warn("Host {} ignores HTTP Range requests; every object on this client now downloads in one open-ended take", connectionInfo.endpoint.getHostString());
+		}
+
 		private static WirePacer.Verdict verdictOf(Throwable error) {
 			if (error == null) return WirePacer.Verdict.OK;
-			if (error instanceof MissingObjectException || error instanceof UnauthorizedException || error instanceof StaleRangeException || error instanceof LocalStorageException) return WirePacer.Verdict.PERMANENT;
+			if (error instanceof MissingObjectException || error instanceof UnauthorizedException || error instanceof StaleRangeException || error instanceof LocalStorageException
+					|| error instanceof RangeIgnoredException)
+				return WirePacer.Verdict.PERMANENT;
 			return WirePacer.Verdict.CONGESTED;
 		}
 
@@ -595,7 +623,7 @@ public class DownloadClient implements PackTransport {
 	/** The waiting-track fetch: one identity GET with no negotiation and no resume, aborted past maxBytes. */
 	@Override
 	public CompletableFuture<Path> downloadSmallObject(byte[] sha1Hex, Path destination, long maxBytes, OutputStream tap) {
-		return withSlot(0, connection -> connection.sendDownloadFile(sha1Hex, destination, null, 0L, -1L, tap, false, maxBytes));
+		return withSlot(0, connection -> connection.sendDownloadFile(sha1Hex, destination, null, 0L, -1L, tap, false, maxBytes, -1L));
 	}
 
 	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers 304 and {@code destination} is not written. */

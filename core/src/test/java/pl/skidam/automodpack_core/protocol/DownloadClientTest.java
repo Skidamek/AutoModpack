@@ -98,12 +98,13 @@ class DownloadClientTest {
 
 		// The exact pin passes the leaf straight through; a changed leaf defers quietly - the handshake never
 		// hard-fails, the ladder recovers it through a published fingerprint or ends in a pin mismatch.
+		// The bare checkServerTrusted(chain, authType) variant keys its deferral on null.
 		var configuredTrust = new CustomizableTrustManager.SessionTrust("origin.example:25565", fingerprint);
 		var configuredManager = new CustomizableTrustManager(configuredTrust, null);
 		assertDoesNotThrow(() -> configuredManager.checkServerTrusted(new X509Certificate[]{accepted}, "RSA"));
-		assertNull(configuredManager.getDeferredCertificate());
+		assertNull(configuredManager.getDeferredCertificate(null));
 		assertDoesNotThrow(() -> configuredManager.checkServerTrusted(new X509Certificate[]{changed}, "RSA"));
-		assertSame(changed, configuredManager.getDeferredCertificate());
+		assertSame(changed, configuredManager.getDeferredCertificate(null));
 		CertificatePinMismatchException mismatch = configuredTrust.mismatch(changed);
 		assertEquals(fingerprint, mismatch.getExpectedFingerprint());
 		assertEquals(NetUtils.getFingerprint(changed), mismatch.getPresentedFingerprint());
@@ -114,14 +115,14 @@ class DownloadClientTest {
 		var sessionManager = new CustomizableTrustManager(sessionTrust, null);
 		assertDoesNotThrow(() -> sessionManager.checkServerTrusted(new X509Certificate[]{accepted}, "RSA"));
 		assertDoesNotThrow(() -> sessionManager.checkServerTrusted(new X509Certificate[]{changed}, "RSA"));
-		assertSame(changed, sessionManager.getDeferredCertificate());
+		assertSame(changed, sessionManager.getDeferredCertificate(null));
 		assertThrows(CertificatePinMismatchException.class, () -> sessionTrust.accept(changed));
 
 		// A published fingerprint recovers a rotated leaf: the session's pin follows it.
 		configuredTrust.recover(changed);
 		var recoveredManager = new CustomizableTrustManager(configuredTrust, null);
 		assertDoesNotThrow(() -> recoveredManager.checkServerTrusted(new X509Certificate[]{changed}, "RSA"));
-		assertNull(recoveredManager.getDeferredCertificate());
+		assertNull(recoveredManager.getDeferredCertificate(null));
 	}
 
 	@Test
@@ -503,9 +504,9 @@ class DownloadClientTest {
 						return;
 					}
 					if (request == null) return;
-					if (request.path().equals("/head") && request.range() != null) {
+					if (request.path().equals("/head")) {
 						heartbeats.incrementAndGet();
-						respond(out, "206 Partial Content", new byte[1], "Content-Range: bytes 0-0/42");
+						respond(out, "200 OK", new byte[0]);
 						continue;
 					}
 					requests.add(request.path());

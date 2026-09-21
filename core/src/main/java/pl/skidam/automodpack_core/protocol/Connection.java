@@ -108,10 +108,14 @@ class Connection implements AutoCloseable {
 	 * Object request by sha1; the range is [{@code offset}, {@code endInclusive}] ({@code endInclusive < 0} means EOF) and is answered append-only behind a validated start.
 	 * {@code offerEncoding} is plain negotiation: true sends Accept-Encoding and may receive an encoded chunked body,
 	 * false asks for identity and an ordinary Content-Length. {@code limitBytes} rejects an object whose declared
-	 * length exceeds it before a body byte is read (negative means no limit).
+	 * length exceeds it before a body byte is read (negative means no limit). {@code expectedSize} is the object's
+	 * total size when the caller knows it (negative for unknown): it lets a 200 that ignores the Range be judged by
+	 * length - a declared length equal to the slice is acceptable, a longer one is the range-ignoring verdict, and a
+	 * differing length on a full-object take is the length-mismatch verdict.
 	 */
-	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback, long offset, long endInclusive, OutputStream tap, boolean offerEncoding, long limitBytes) {
-		return submit(new ObjectRequest("/objects/" + new String(fileHash, StandardCharsets.UTF_8), destination, offset, endInclusive, chunkCallback, tap, offerEncoding, limitBytes));
+	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback, long offset, long endInclusive, OutputStream tap, boolean offerEncoding, long limitBytes,
+			long expectedSize) {
+		return submit(new ObjectRequest("/objects/" + new String(fileHash, StandardCharsets.UTF_8), destination, offset, endInclusive, chunkCallback, tap, offerEncoding, limitBytes, expectedSize));
 	}
 
 	/** Document request (reserved keys); a non-null expected hash may be answered 304, and the 200 body hash is the ground truth. */
@@ -277,14 +281,16 @@ class Connection implements AutoCloseable {
 		private final OutputStream tap;
 		private final boolean offerEncoding;
 		private final long limitBytes;
+		private final long expectedSize;
 
-		ObjectRequest(String path, Path destination, long offset, long endInclusive, IntConsumer chunks, OutputStream tap, boolean offerEncoding, long limitBytes) {
+		ObjectRequest(String path, Path destination, long offset, long endInclusive, IntConsumer chunks, OutputStream tap, boolean offerEncoding, long limitBytes, long expectedSize) {
 			super(path, destination, chunks);
 			this.offset = offset;
 			this.endInclusive = endInclusive;
 			this.tap = tap;
 			this.offerEncoding = offerEncoding;
 			this.limitBytes = limitBytes;
+			this.expectedSize = expectedSize;
 		}
 
 		@Override
@@ -320,9 +326,30 @@ class Connection implements AutoCloseable {
 				return;
 			}
 			if (head.status() == 200) {
-				// A server that ignores Range answers 200 with the full body and no Content-Range; the fresh attempt's empty partial makes the restart from zero correct for an open-ended request then, and a bounded one
-				// cannot be satisfied at all.
+				// A server that ignores Range answers 200 with the full body and no Content-Range. The head alone judges
+				// it before a body byte is read: a declared length equal to the slice means the body carries exactly this
+				// take's bytes - the whole file when the take is the whole file - so the 200 is acceptable as-is, a
+				// shorter one is a broken server, and a longer one is the range-ignoring verdict whose body is drained so
+				// the lane stays aligned. A bounded take without a declared length cannot be judged and fails as before.
+				if (endInclusive >= 0 && head.contentLength() != null) {
+					long sliceBytes = endInclusive - offset + 1;
+					if (head.contentLength() < sliceBytes) throw new IOException("Declared Content-Length " + head.contentLength() + " is shorter than the " + sliceBytes + " byte slice for " + originPath);
+					if (head.contentLength() > sliceBytes) {
+						discardBody(head);
+						future.completeExceptionally(new RangeIgnoredException(originPath));
+						return;
+					}
+					if (consumeBody(head, destination, offset, chunks, null, tap, false, limitBytes)) {
+						future.completeExceptionally(new IOException("Object exceeds the " + limitBytes + " byte limit for " + originPath));
+						return;
+					}
+					future.complete(destination);
+					return;
+				}
 				if (endInclusive >= 0) throw new IOException("Server ignored the Range end for " + originPath);
+				// On a full-object take a 200 without a Content-Range whose declared length differs from the expected size is the wrong object: the length comparison is the verdict, no hash needed after a full download.
+				if (head.contentRange() == null && expectedSize >= 0 && head.contentLength() != null && head.contentLength() != expectedSize)
+					throw new IOException("Served object length " + head.contentLength() + " does not match the expected object size " + expectedSize + " for " + originPath);
 				boolean resumed = offset > 0 && head.contentRange() != null;
 				if (resumed) requireResumeStart(head, offset);
 				if (consumeBody(head, destination, resumed ? offset : 0, chunks, null, tap, false, limitBytes)) {

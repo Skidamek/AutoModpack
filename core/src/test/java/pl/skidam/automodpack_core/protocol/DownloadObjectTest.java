@@ -141,6 +141,71 @@ class DownloadObjectTest {
 		}
 	}
 
+	/** A range-ignoring host fails the first bounded take fast with a capability verdict, and the requeued task rides one open-ended take to a complete download. */
+	@Test
+	void aRangeIgnoringHostFailsFastThenDownloadsInOneOpenEndedTake(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			byte[] object = new byte[NetUtils.WIRE_CHUNK_BYTES * 2 + 1234];
+			new SecureRandom().nextBytes(object);
+			String sha1 = HashUtils.sha1(object);
+			server.store().put(sha1, object);
+			server.ignoreRanges.set(true);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("object");
+				var thrown = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertInstanceOf(RangeIgnoredException.class, rootCause(thrown));
+				assertTrue(client.rangeIgnoredHost, "the capability flag is set for the whole client");
+				assertFalse(Files.exists(destination), "nothing was written before the verdict");
+
+				// The manager requeues the task; under the flag it skips tiling and rides one open-ended take.
+				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertFalse(client.windowSummary().contains("→"), () -> "a permanent capability verdict must not move the window: " + client.windowSummary());
+			}
+			assertTrue(server.ranges.isEmpty(), "every take was answered by the barebones head rules, never a 206");
+		}
+	}
+
+	/** Against a range-ignoring host a whole-file take is its own slice: the bounded 200 whose declared length equals the slice is the whole file, so the object promotes without ever tiling. */
+	@Test
+	void aWholeFileTakeAcceptsARangeIgnoringHostsBounded200(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			byte[] object = "a-small-object-under-one-chunk".getBytes(StandardCharsets.UTF_8);
+			String sha1 = HashUtils.sha1(object);
+			server.store().put(sha1, object);
+			server.ignoreRanges.set(true);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("object");
+				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertFalse(client.rangeIgnoredHost, "an honest-length 200 is not a range-ignoring verdict");
+			}
+			assertEquals(1, server.requests.size(), "the whole file rode one take, no tiling");
+			assertTrue(server.ranges.isEmpty(), "the server never answered a range");
+		}
+	}
+
+	/** A full-object take whose declared length differs from the expected object size is the length-mismatch verdict: it fails before a body byte is consumed into the destination. */
+	@Test
+	void aWrongDeclaredLengthOnAFullObjectTakeFailsBeforeConsuming(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			// The server stores 200 bytes under the hash while the caller advertised a 100-byte object: no take can match.
+			byte[] object = new byte[200];
+			new SecureRandom().nextBytes(object);
+			String sha1 = HashUtils.sha1(object);
+			server.store().put(sha1, object);
+			server.ignoreRanges.set(true);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("object");
+				var first = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, 100, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertInstanceOf(RangeIgnoredException.class, rootCause(first));
+				var second = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, 100, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertTrue(rootCause(second).getMessage().contains("does not match the expected object size"), String.valueOf(rootCause(second)));
+			}
+			assertFalse(Files.exists(directory.resolve("object")), "the body was never consumed into the destination");
+		}
+	}
+
 	private static Throwable rootCause(Throwable thrown) {
 		Throwable cause = thrown;
 		while (cause.getCause() != null)
