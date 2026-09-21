@@ -444,6 +444,7 @@ class ConditionalFetchTest {
 		final AtomicBoolean lastResponseZstd = new AtomicBoolean(false);
 		final AtomicBoolean sawAcceptEncoding = new AtomicBoolean(false);
 		final AtomicInteger connections = new AtomicInteger();
+		private final AtomicInteger dropNextObjectRequests = new AtomicInteger();
 		final CompletableFuture<String> firstAuthorization = new CompletableFuture<>();
 		final List<String> requests = new CopyOnWriteArrayList<>();
 		/** Every served object range as [start, end], so object-transfer tests can prove exact byte coverage. */
@@ -494,6 +495,11 @@ class ConditionalFetchTest {
 
 		void setResponseDelayMillis(long delay) {
 			responseDelayMillis = delay;
+		}
+
+		/** Arms a one-shot drop: the next object request has its whole connection closed, so the client's retries of its ranges are deterministic. */
+		void dropNextObjectRequest() {
+			dropNextObjectRequests.incrementAndGet();
 		}
 
 		private void acceptConnections() {
@@ -549,6 +555,10 @@ class ConditionalFetchTest {
 					pipelineArrived = pipeline.getCount() == 0;
 				}
 				if (responseDelayMillis > 0) Thread.sleep(responseDelayMillis);
+				if (request.path.startsWith("/objects/") && dropNextObjectRequests.getAndUpdate(count -> Math.max(0, count - 1)) > 0) {
+					socket.close();
+					return;
+				}
 				if (requireAuth.get() && !("Bearer " + bearerSecret).equals(request.authorization)) {
 					respond(out, "401 Unauthorized", new byte[0], "Connection: close");
 					socket.close();

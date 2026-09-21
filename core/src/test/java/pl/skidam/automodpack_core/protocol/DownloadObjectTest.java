@@ -104,6 +104,43 @@ class DownloadObjectTest {
 		}
 	}
 
+	/** A 404 is a pack-hygiene verdict, not congestion: the failing range is never retried and the window never moves. */
+	@Test
+	void aMissingObjectFailsTheTransferWithoutRetryingARangeOrMovingTheWindow(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			// The hash is well-formed but the server stores nothing under it: every take is answered 404.
+			byte[] sha1 = HashUtils.sha1("a-missing-object".getBytes(StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
+			long fileSize = NetUtils.WIRE_CHUNK_BYTES * 2L + 1234; // tiles into the head plus two tails: three takes
+			server.expectPipeline(3); // all three takes must reach the socket before any answer, so the request count is exact
+			try (DownloadClient client = client(server, "test-secret")) {
+				var thrown = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1, directory.resolve("object"), fileSize, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertInstanceOf(MissingObjectException.class, rootCause(thrown));
+				assertTrue(server.pipelineArrived(), "all three takes reached the socket before the first answer");
+				assertFalse(client.windowSummary().contains("→"), () -> "a permanent verdict must not move the window: " + client.windowSummary());
+			}
+			assertEquals(3, server.requests.size(), "each take asked exactly once - a 404 range is never retried");
+		}
+	}
+
+	/** A dropped lane is transient: the failed ranges retry in place and the transfer still promotes, without moving the window. */
+	@Test
+	void aDroppedRangeRetriesInPlaceAndStillPromotes(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			byte[] object = new byte[NetUtils.WIRE_CHUNK_BYTES * 2 + 1234];
+			new SecureRandom().nextBytes(object);
+			String sha1 = HashUtils.sha1(object);
+			server.store().put(sha1, object);
+			server.dropNextObjectRequest();
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("object");
+				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertTrue(server.requests.size() > 3, "the dropped take must have been retried, requests: " + server.requests.size());
+				assertFalse(client.windowSummary().contains("→"), () -> "a recovered transient failure must not move the window: " + client.windowSummary());
+			}
+		}
+	}
+
 	private static Throwable rootCause(Throwable thrown) {
 		Throwable cause = thrown;
 		while (cause.getCause() != null)
