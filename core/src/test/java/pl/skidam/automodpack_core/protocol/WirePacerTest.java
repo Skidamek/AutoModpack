@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.client;
+package pl.skidam.automodpack_core.protocol;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -75,9 +75,12 @@ class WirePacerTest {
 	void windowAccountingBalancesAcrossAcquireReleaseAndSettle() {
 		WirePacer pacer = pacer(4, 4);
 		assertEquals(1, pacer.window());
+		assertTrue(pacer.hasRoom());
 		assertTrue(pacer.tryAcquire());
+		assertFalse(pacer.hasRoom());
 		assertFalse(pacer.tryAcquire());
 		pacer.release();
+		assertTrue(pacer.hasRoom());
 		assertTrue(pacer.tryAcquire());
 		assertEquals(1, pacer.inFlight());
 		pacer.settle(false, 10, 1_000_000, 0);

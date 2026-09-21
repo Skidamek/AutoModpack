@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.client;
+package pl.skidam.automodpack_core.protocol;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
@@ -70,7 +70,14 @@ final class WirePacer {
 		}
 	}
 
-	/** Returns a credit without telemetry: a cache hit or a task that skipped its network leg. */
+	/** Whether one more request would fit the window, without taking anything: a scheduling peek. */
+	boolean hasRoom() {
+		synchronized (lock) {
+			return inFlight < window;
+		}
+	}
+
+	/** Returns a credit without telemetry: the transfer's pump found nothing left to take. */
 	void release() {
 		synchronized (lock) {
 			inFlight--;

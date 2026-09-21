@@ -252,7 +252,7 @@ class ConditionalFetchTest {
 			server.store.put(sha1, object);
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("object");
-				client.downloadFile(sha1.getBytes(StandardCharsets.UTF_8), destination, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertArrayEquals(object, Files.readAllBytes(destination));
 				assertFalse(server.lastResponseZstd.get(), "objects stay identity so Range and resume stay trivial");
 			}
@@ -286,7 +286,7 @@ class ConditionalFetchTest {
 			Files.write(partial, Arrays.copyOf(object, 100_000));
 
 			try (DownloadClient client = client(server, "test-secret")) {
-				client.downloadFile(sha1.getBytes(StandardCharsets.UTF_8), partial, 100_000, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), partial, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 			}
 			assertArrayEquals(object, Files.readAllBytes(partial));
 			assertTrue(FileIntegrity.matches(partial, object.length, sha1));
@@ -310,9 +310,10 @@ class ConditionalFetchTest {
 
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("oversize");
-				var future = client.downloadFile(sha1.getBytes(StandardCharsets.UTF_8), destination, 0L, -1L, null, null, false, 64L, 0);
+				var future = client.downloadSmallObject(sha1.getBytes(StandardCharsets.UTF_8), destination, 64L, null);
 				assertThrows(ExecutionException.class, () -> future.get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertTrue(rootCause(future).getMessage().contains("byte limit"));
+				assertFalse(server.sawAcceptEncoding.get(), "the small-object fetch asks for identity, no negotiation");
 
 				// The frame drain kept the lane aligned behind the abandoned body: the next request rides the same connection.
 				Path headDestination = directory.resolve("head");
@@ -326,19 +327,20 @@ class ConditionalFetchTest {
 	@Test
 	void rangedRequestPastObjectSizeReadsAsStaleRange(@TempDir Path directory) throws Exception {
 		try (ContractServer server = new ContractServer()) {
-			byte[] object = "complete-object-bytes".getBytes(StandardCharsets.UTF_8);
+			// The destination's prefix is longer than the served object: the resume request starts past the object's end.
+			byte[] object = "tiny".getBytes(StandardCharsets.UTF_8);
 			String sha1 = HashUtils.sha1(object);
 			server.store.put(sha1, object);
 
 			Path destination = directory.resolve("partial");
-			Files.write(destination, object);
+			Files.write(destination, new byte[32]);
 
 			try (DownloadClient client = client(server, "test-secret")) {
-				var future = client.downloadFile(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null);
+				var future = client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, 64, null);
 				assertThrows(ExecutionException.class, () -> future.get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertInstanceOf(StaleRangeException.class, rootCause(future));
 			}
-			assertArrayEquals(object, Files.readAllBytes(destination));
+			assertEquals(32, Files.size(destination), "a failure with only an append-at-end write keeps the valid resume prefix");
 		}
 	}
 
@@ -354,7 +356,7 @@ class ConditionalFetchTest {
 			server.lieAboutResumeStart.set(true);
 
 			try (DownloadClient client = client(server, "test-secret")) {
-				var future = client.downloadFile(sha1.getBytes(StandardCharsets.UTF_8), partial, 100_000, null);
+				var future = client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), partial, object.length, null);
 				assertThrows(ExecutionException.class, () -> future.get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertInstanceOf(StaleRangeException.class, rootCause(future));
 			}
@@ -444,6 +446,8 @@ class ConditionalFetchTest {
 		final AtomicInteger connections = new AtomicInteger();
 		final CompletableFuture<String> firstAuthorization = new CompletableFuture<>();
 		final List<String> requests = new CopyOnWriteArrayList<>();
+		/** Every served object range as [start, end], so object-transfer tests can prove exact byte coverage. */
+		final List<long[]> ranges = new CopyOnWriteArrayList<>();
 		private final AtomicBoolean secretRecorded = new AtomicBoolean();
 		private final X509Certificate certificate;
 		volatile String bearerSecret;
@@ -572,9 +576,9 @@ class ConditionalFetchTest {
 					return;
 				}
 				if (range != null) {
-					long start = lieAboutResumeStart.get() ? range[0] + 5 : range[0];
+					ranges.add(range);
 					respond(out, "206 Partial Content", Arrays.copyOfRange(content, (int) range[0], (int) range[1] + 1),
-							"Content-Range: bytes " + start + "-" + range[1] + "/" + content.length);
+							"Content-Range: bytes " + (lieAboutResumeStart.get() ? range[0] + 5 : range[0]) + "-" + range[1] + "/" + content.length);
 					return;
 				}
 				lastResponseZstd.set(false);

@@ -9,16 +9,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
+import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.LocalStorageException;
-import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.protocol.StaleRangeException;
 import pl.skidam.automodpack_core.protocol.WireTrace;
+import pl.skidam.automodpack_core.protocol.WireWindowFullException;
 import pl.skidam.automodpack_core.screen.DownloadView;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
@@ -43,12 +43,12 @@ public class DownloadManager implements DownloadView {
 	/** Finished acquisitions so far: files acquired successfully, then files failed for good. Survives {@link #cancelAllAndShutdown()}. */
 	public record AcquisitionProgress(long acquired, long failed) {}
 
-	// Matches DownloadClient.MAX_CONNECTIONS so every download worker owns one pipeline lane; big files never queue behind another on the same lane.
-	private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
 	private static final int MAX_DOWNLOAD_ATTEMPTS = 2;
 	// Domain label for transfers served by the attached AutoModpack host client instead of a remote platform source.
 	private static final String INTERNAL_CLIENT_SOURCE = "internal_client";
 
+	// One worker per pipeline lane: workers run the short, blocking jobs - platform attempts, cache checks, promotion -
+	// while host transfers finalize on their transport future's callback, so a worker never blocks on the network.
 	private final ExecutorService downloadExecutor;
 
 	private final HttpFileDownloader httpDownloader = new HttpFileDownloader();
@@ -78,24 +78,18 @@ public class DownloadManager implements DownloadView {
 	private final Semaphore semaphore = new Semaphore(0);
 	private final Speedometer speedometer = new Speedometer();
 	private final DataRootResolver.Layout dataLayout;
-	// Workers run the short, blocking jobs: platform attempts, cache checks, and promotion. The wire itself is paced
-	// separately (WirePacer), so a lane never idles behind a worker and a worker never blocks on the network.
-	private final AtomicInteger laneCounter = new AtomicInteger();
-	private final ThreadLocal<Integer> lane = ThreadLocal.withInitial(() -> Math.floorMod(laneCounter.getAndIncrement(), MAX_DOWNLOADS_IN_PROGRESS));
-	private volatile WirePacer pacer = new WirePacer(MAX_DOWNLOADS_IN_PROGRESS, 1);
 
 	public DownloadManager(long bytesToDownload, DataRootResolver.Layout dataLayout, PlatformCache platformCache) {
 		this.totalBytesToDownload.set(bytesToDownload);
 		this.speedometer.setExpectedBytes(bytesToDownload);
 		this.dataLayout = Objects.requireNonNull(dataLayout, "dataLayout");
-		this.downloadExecutor = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS,
+		this.downloadExecutor = Executors.newFixedThreadPool(DownloadClient.MAX_CONNECTIONS,
 				new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
 		this.metadataFetcher = new FetchManager(List.of(), Objects.requireNonNull(platformCache, "platformCache"));
 	}
 
 	public void attachTransport(PackTransport transport) {
 		this.transport = transport;
-		this.pacer = new WirePacer(Math.max(1, transport.pipelineCapacity()), MAX_DOWNLOADS_IN_PROGRESS);
 	}
 
 	public synchronized void download(Path file, String sha1, String murmur, String fileType, List<DownloadSource> sources, long fileSize, Runnable successCallback, Runnable failureCallback) {
@@ -125,7 +119,6 @@ public class DownloadManager implements DownloadView {
 			while (!queuedDownloads.isEmpty()) {
 				if (!dispatchOne()) return;
 			}
-			stealIdleWork();
 		} finally {
 			pumping = false;
 		}
@@ -153,13 +146,13 @@ public class DownloadManager implements DownloadView {
 
 		boolean hostServed = activeDomain.equals(INTERNAL_CLIENT_SOURCE) && transport != null;
 		if (hostServed) {
-			if (!pacer.tryAcquire()) {
-				// The wire window is full: put the task back; the next settle re-runs the dispatch.
-				WireTrace.log("WINDOW_FULL", "task", task.file.getFileName(), "inflight", pacer.inFlight(), "window", pacer.window());
+			if (!transport.hasWireRoom()) {
+				// The transport's wire window is full: put the task back; the next settle re-runs the dispatch.
+				WireTrace.log("WINDOW_FULL", "task", task.file.getFileName());
 				queuedDownloads.put(key, task);
 				return false;
 			}
-		} else if (platformTasksInFlight() >= MAX_DOWNLOADS_IN_PROGRESS) {
+		} else if (platformTasksInFlight() >= DownloadClient.MAX_CONNECTIONS) {
 			queuedDownloads.put(key, task);
 			return false;
 		}
@@ -199,7 +192,6 @@ public class DownloadManager implements DownloadView {
 			future.completeExceptionally(error);
 			throw error;
 		}
-		stealIdleWork();
 		return true;
 	}
 
@@ -257,7 +249,6 @@ public class DownloadManager implements DownloadView {
 				// IMPORTANT: Do NOT add cached bytes to Speedometer.
 				// It would fake a massive speed spike.
 
-				releaseWindow(data);
 				cleanupAndFinalize(hashPathPair, task, storeFile, true, false);
 				return;
 			}
@@ -266,17 +257,14 @@ public class DownloadManager implements DownloadView {
 			if (task.fileSize == 0) {
 				Path empty = preparePartial(hashPathPair, task);
 				if (empty == null) {
-					releaseWindow(data);
 					cleanupAndFinalize(hashPathPair, task, storeFile, false, false);
 					return;
 				}
-				releaseWindow(data);
-				finishHostFile(hashPathPair, task, data, empty);
+				finishHostFile(hashPathPair, task, data, empty, null);
 				return;
 			}
 			Path partial = preparePartial(hashPathPair, task);
 			if (partial == null) {
-				releaseWindow(data);
 				cleanupAndFinalize(hashPathPair, task, storeFile, false, false);
 				return;
 			}
@@ -289,8 +277,8 @@ public class DownloadManager implements DownloadView {
 						cleanupAndFinalize(hashPathPair, task, storeFile, false, false);
 						return;
 					}
-					if (!pacer.tryAcquire()) { // window full: requeue, the next settle rediscovers this task
-						WireTrace.log("WINDOW_FULL", "task", task.file.getFileName(), "inflight", pacer.inFlight(), "window", pacer.window());
+					if (!transport.hasWireRoom()) { // window full: requeue, the next settle rediscovers this task
+						WireTrace.log("WINDOW_FULL", "task", task.file.getFileName());
 						downloadsInProgress.remove(hashPathPair);
 						queuedDownloads.put(hashPathPair, task);
 						activeTemporaryFiles.remove(hashPathPair);
@@ -298,32 +286,24 @@ public class DownloadManager implements DownloadView {
 					}
 					data.hostServed = true;
 				}
-				submitHostItems(hashPathPair, task, data, partial);
+				downloadFromHost(hashPathPair, task, data, partial);
 			} else {
 				boolean success = attemptPlatformDownload(hashPathPair, task, data, source, partial);
 				promotePlatformDownload(hashPathPair, task, storeFile, cache, partial, success);
 			}
 		} catch (InterruptedException e) {
 			task.lastFailureCategory = FailureCategory.CANCELLED;
-			releaseWindow(data);
 			cleanupAndFinalize(hashPathPair, task, storeFile, false, true);
 		} catch (Exception e) {
 			if (cancelled || Thread.currentThread().isInterrupted()) {
 				task.lastFailureCategory = FailureCategory.CANCELLED;
-				releaseWindow(data);
 				cleanupAndFinalize(hashPathPair, task, storeFile, false, true);
 			} else {
 				if (task.lastFailureCategory == null) task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
 				LOGGER.warn("Unexpected error processing {}", task.file, e);
-				releaseWindow(data);
 				cleanupAndFinalize(hashPathPair, task, storeFile, false, false);
 			}
 		}
-	}
-
-	/** Returns a wire-window credit taken for a host task that ended before submitting any request. */
-	private void releaseWindow(DownloadData data) {
-		if (data.hostServed) pacer.release();
 	}
 
 	/** Creates the task's one partial temp; null with the failure recorded means the attempt cannot start. */
@@ -343,7 +323,7 @@ public class DownloadManager implements DownloadView {
 		}
 	}
 
-	/** The blocking platform path: one HTTP download from the picked source. The wire pacer is not involved. */
+	/** The blocking platform path: one HTTP download from the picked source. The transport's wire window is not involved. */
 	private boolean attemptPlatformDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, DownloadSource source, Path partial) throws InterruptedException {
 		refreshDeadLinkSources(hashPathPair.hash(), task);
 		long attemptStart = System.nanoTime();
@@ -392,116 +372,38 @@ public class DownloadManager implements DownloadView {
 		cleanupAndFinalize(hashPathPair, task, storeFile, downloaded, false);
 	}
 
-	/** The host path: the first segment rides the dispatch credit, every further chunk waits for a free window slot; the barrier finalizes once all of them are in. */
-	private void submitHostItems(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path partial) {
-		task.hostError = null;
-		task.stealCursor = task.fileSize;
-		long offset = hostResumeOffset(task);
-		data.hostOffset = offset;
-		if (offset >= task.fileSize) {
-			// A complete-sized partial skips the network; promotion judges it for free.
-			releaseWindow(data);
-			finishHostFile(hashPathPair, task, data, partial);
-			return;
-		}
-		// The resume check above deletes a partial it judges invalid; the streamer and the steals must agree on one live
-		// file, so recreate what was dropped - writing into the stale reference would feed an unlinked inode and strand
-		// the barrier with steals that can never be taken.
-		if (task.partialFile == null) {
-			partial = preparePartial(hashPathPair, task);
-			if (partial == null) {
-				releaseWindow(data);
-				cleanupAndFinalize(hashPathPair, task, dataLayout.objectFile(hashPathPair.hash()), false, false);
-				return;
-			}
-		}
-		task.pendingItems = 1;
-		submitHostItem(hashPathPair, task, data, partial, offset, Math.min(offset + (long) NetUtils.DEFAULT_CHUNK_SIZE, task.fileSize) - 1, lane.get());
-		stealIdleWork();
-	}
-
-	/** The byte offset a host attempt resumes from: the partial's size while the prefix is valid, else a fresh start. */
-	private long hostResumeOffset(QueuedDownload task) {
-		try {
-			if (task.partialFile == null) return 0;
-			long size = Files.size(task.partialFile);
-			if (!task.resumeValid || size > task.fileSize) {
-				LOGGER.warn("Stored partial for CAS object {} is not a valid prefix; restarting from zero", task.file.getFileName());
-				deletePartial(task);
-				return 0;
-			}
-			return size;
-		} catch (IOException e) {
-			LOGGER.warn("Failed to inspect the partial of CAS object {}; restarting from zero", task.file.getFileName(), e);
-			deletePartial(task);
-			return 0;
-		}
-	}
-
-	/** One request of the task's file on one lane, covering [offset, endInclusive]; its settle feeds the pacer and ticks the task's barrier down. */
-	private void submitHostItem(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path partial, long offset, long endInclusive, int lane) {
-		AtomicLong itemBytes = new AtomicLong(0);
-		long itemStart = System.nanoTime();
+	/** The host path: the transport owns the whole transfer - resume, tiling, pacing - and its future finalizes the task, so the worker is free at once. */
+	private void downloadFromHost(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path partial) {
+		long attemptStart = System.nanoTime();
+		AtomicLong attemptBytes = new AtomicLong(0);
+		// One hook for everything the written bytes mean: global progress, display speed and the in-flight backlog left for the scheduler.
 		IntConsumer progressAction = bytes -> {
 			updateNetworkProgress(bytes);
-			itemBytes.addAndGet(bytes);
+			attemptBytes.addAndGet(bytes);
 			data.remainingBytes.addAndGet(-bytes);
 		};
-		CompletableFuture<Path> future;
-		try {
-			future = transport.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), partial, offset, endInclusive, progressAction, lane);
-		} catch (Throwable error) {
-			// The submit never produced an item: return its window credit and tick the barrier down, or the task waits for a settle that never comes.
-			WireTrace.log("TAKE_FAIL", "task", task.file.getFileName(), "item", offset + "-" + endInclusive, "error", error);
-			if (task.hostError == null) task.hostError = Throwables.unwrap(error);
-			pacer.settle(true, 0, 0, lane);
-			onHostItemSettled(hashPathPair, task, data, partial);
-			return;
-		}
-		future.whenComplete((path, error) -> {
-			if (error != null && task.hostError == null) task.hostError = Throwables.unwrap(error);
-			long settled = System.nanoTime() - itemStart;
-			try {
-				pacer.settle(error != null, itemBytes.get(), settled, lane);
-				if (itemBytes.get() > 0) scheduler.report(INTERNAL_CLIENT_SOURCE, itemBytes.get(), settled);
-			} catch (Throwable chainFailure) {
-				// Stats must never take the barrier tick hostage: the credit is returned either way, and the task has
-				// to see this take as failed instead of waiting on a settle that already happened.
-				if (task.hostError == null) task.hostError = Throwables.unwrap(chainFailure);
-			}
-			onHostItemSettled(hashPathPair, task, data, partial);
-		});
-	}
-
-	/**
-	 * Runs on the lane's reader thread: barrier bookkeeping only, then the window refill. The task is done only once every chunk beyond the first is taken - a partial barrier would promote a hole-riddled file - or once
-	 * it has failed.
-	 */
-	private void onHostItemSettled(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path partial) {
-		boolean done;
-		synchronized (task) {
-			done = --task.pendingItems == 0 && (task.hostError != null || task.stealCursor <= data.hostOffset + (long) NetUtils.DEFAULT_CHUNK_SIZE);
-		}
-		if (done) {
-			Throwable error = task.hostError;
+		transport.downloadObject(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), partial, task.fileSize, progressAction).whenComplete((path, error) -> {
+			// Every byte that arrived is real bandwidth data for the path it actually travelled, whatever happened to the transfer.
+			if (attemptBytes.get() > 0) scheduler.report(data.activeDomain, attemptBytes.get(), System.nanoTime() - attemptStart);
 			try {
 				downloadExecutor.execute(() -> finishHostFile(hashPathPair, task, data, partial, error));
 			} catch (RejectedExecutionException rejected) {
 				finishHostFile(hashPathPair, task, data, partial, error); // shutdown: end the task inline rather than zombie it
 			}
-		} else {
-			downloadNext();
-		}
+		});
 	}
 
-	/** The task barrier: every item settled, so promotion judges the assembled partial whatever holes a crash left. */
-	private void finishHostFile(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path partial) {
-		finishHostFile(hashPathPair, task, data, partial, null);
-	}
-
+	/** The transfer's outcome: promotion judges the assembled partial, the failure category routes the retry. */
 	private void finishHostFile(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path partial, Throwable error) {
-		WireTrace.log("DONE", "task", task.file.getFileName(), "status", error == null ? "promote" : "fail:" + Throwables.detail(error), "inflight", pacer.inFlight(), "window", pacer.window());
 		if (error != null) {
+			error = Throwables.unwrap(error);
+			if (error instanceof WireWindowFullException) {
+				// The window filled between the dispatch peek and the transfer's first take: requeue, the next settle rediscovers this task.
+				downloadsInProgress.remove(hashPathPair);
+				queuedDownloads.put(hashPathPair, task);
+				activeTemporaryFiles.remove(hashPathPair);
+				return;
+			}
 			if (cancelled || error instanceof InterruptedException) {
 				task.lastFailureCategory = FailureCategory.CANCELLED;
 				deletePartial(task); // the writers died with the aborted lanes; the partial is a hole-riddled relic
@@ -514,6 +416,7 @@ public class DownloadManager implements DownloadView {
 			} else {
 				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 				LOGGER.warn("Remote source failed for CAS object {}", hashPathPair.hash(), error);
+				if (task.partialFile != null && !Files.exists(task.partialFile)) task.partialFile = null; // the transport deleted a hole-riddled partial; the next attempt starts from a fresh temp
 			}
 			cleanupAndFinalize(hashPathPair, task, dataLayout.objectFile(hashPathPair.hash()), false, false);
 			return;
@@ -547,44 +450,6 @@ public class DownloadManager implements DownloadView {
 		return true;
 	}
 
-	/** The queue is drained or the budget full but the window has room: hand idle slots to the tails of in-flight host files, one exact chunk per take. */
-	private synchronized void stealIdleWork() {
-		long chunk = NetUtils.DEFAULT_CHUNK_SIZE;
-		while (pacer.tryAcquire()) {
-			boolean stole = false;
-			for (DownloadData data : downloadsInProgress.values()) {
-				QueuedDownload task = data.task;
-				if (data.hostOffset < 0 || task.hostError != null) continue;
-				// The task lock decides take vs finish, exactly as the barrier's done check reads it: once the cursor
-				// sits at the first chunk there is nothing left to take, so a finished task is never joined.
-				synchronized (task) {
-					// The cursor is the task's one uncovered-tail pointer: the streamer owns [offset, floor) and every
-					// take claims exactly [stealFrom, old cursor - 1], so the final take may be short - a whole-chunk walk
-					// past a non-chunk-multiple size would orphan bytes no request ever covers and the barrier would
-					// never fire.
-					long floor = data.hostOffset + chunk;
-					if (task.stealCursor <= floor) continue;
-					long takeEnd = task.stealCursor - 1;
-					long stealFrom = Math.max(floor, task.stealCursor - chunk);
-					Path partial = task.partialFile;
-					if (partial == null) continue;
-					task.stealCursor = stealFrom;
-					task.resumeValid = false; // a positioned take makes the partial's size meaningless for resume
-					task.pendingItems++;
-					int lane = Math.floorMod(laneCounter.getAndIncrement(), MAX_DOWNLOADS_IN_PROGRESS);
-					LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", lane, stealFrom, takeEnd, task.file.getFileName());
-					submitHostItem(data.key, task, data, partial, stealFrom, takeEnd, lane);
-				}
-				stole = true;
-				break;
-			}
-			if (!stole) {
-				pacer.release(); // nothing left to take
-				return;
-			}
-		}
-	}
-
 	/** Deletes the task's partial temp and forgets it; the next attempt, if any, starts from zero. */
 	private static void deletePartial(QueuedDownload task) {
 		if (task.partialFile == null) return;
@@ -593,7 +458,6 @@ public class DownloadManager implements DownloadView {
 		} catch (IOException ignored) {
 		}
 		task.partialFile = null;
-		task.resumeValid = true;
 	}
 
 	private static boolean isDeadPlatformLink(DownloadSource source, HttpFileDownloader.HttpStatusException e) {
@@ -639,7 +503,7 @@ public class DownloadManager implements DownloadView {
 				if (handleRetry(key, task, interrupted)) activeTemporaryFiles.remove(key);
 			}
 		} finally {
-			if (downloadsInProgress.isEmpty() && queuedDownloads.isEmpty()) LOGGER.info("[download] {} pacer summary: {}", task.file.getFileName(), pacer.summary());
+			if (downloadsInProgress.isEmpty() && queuedDownloads.isEmpty() && transport != null) LOGGER.info("[download] {} window summary: {}", task.file.getFileName(), transport.windowSummary());
 			if (!interrupted && !cancelled && !downloadExecutor.isShutdown()) downloadNext();
 		}
 	}
@@ -776,14 +640,6 @@ public class DownloadManager implements DownloadView {
 		public boolean needsMetadataRefetch;
 		/** The one partial temp of the whole task: kept across failed attempts as the resume prefix, deleted at its ends. */
 		public Path partialFile;
-		/** Unsettled host items of the current attempt; the last one to settle finalizes the task. */
-		public int pendingItems;
-		/** The tail boundary the next idle-lane steal may take; the streamer always keeps at least one chunk. */
-		public long stealCursor;
-		/** False once a positioned steal write made the partial's size meaningless for resume. */
-		public boolean resumeValid = true;
-		/** The first failure of the current attempt; the barrier reports it. */
-		public volatile Throwable hostError;
 
 		public QueuedDownload(Path f, List<DownloadSource> sources, String murmur, String fileType, long size, int seq, int a, Runnable s, Consumer<FailureCategory> fa) {
 			file = f;
@@ -806,10 +662,8 @@ public class DownloadManager implements DownloadView {
 		public final AtomicLong remainingBytes;
 		public FileInspection.HashPathPair key;
 		public QueuedDownload task;
-		/** True when the wire pacer owns this task's transfer; a window credit is outstanding until its first settle. */
+		/** True when this task's transfer belongs to the attached host transport; platform tasks occupy a worker, host tasks do not. */
 		public boolean hostServed;
-		/** The streamer's range start, or -1 before the host path submitted anything. */
-		public long hostOffset = -1;
 
 		DownloadData(CompletableFuture<Void> f, Path p, String d, long s) {
 			future = f;

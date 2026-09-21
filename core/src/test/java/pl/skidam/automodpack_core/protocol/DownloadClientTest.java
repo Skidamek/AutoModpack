@@ -141,7 +141,7 @@ class DownloadClientTest {
 
 			try (DownloadClient client = clientFuture.get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
 				// The HTTP connection carries no handshake of its own: the first application bytes are the first request.
-				client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("first"), null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("first"), -1L, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertEquals(List.of("/objects/hash"), server.requests());
 				assertEquals(1, server.acceptedConnections());
 			}
@@ -185,7 +185,7 @@ class DownloadClientTest {
 
 			decision.complete(true);
 			try (DownloadClient client = clientFuture.get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
-				client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("first"), null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("first"), -1L, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				int heartbeatsAtConfiguration = server.heartbeats();
 				// The heartbeat retires with the trust decision: three parked-phase intervals later the connection has heard no straggler heartbeat.
 				deadline = System.currentTimeMillis() + 500;
@@ -207,12 +207,12 @@ class DownloadClientTest {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
-				CompletableFuture<Path> first = client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("first"), null);
+				CompletableFuture<Path> first = client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("first"), -1L, null);
 				assertTrue(server.receivedRequest().await(AWAIT_SECONDS, TimeUnit.SECONDS));
 				client.abortTransfers();
 				assertThrows(Exception.class, () -> first.get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				server.allowResponses(2);
-				assertEquals(directory.resolve("second"), client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("second"), null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertEquals(directory.resolve("second"), client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("second"), -1L, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
 			}
 		}
 	}
@@ -228,7 +228,7 @@ class DownloadClientTest {
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
 				List<CompletableFuture<Path>> downloads = new ArrayList<>();
-				for (int i = 0; i < 6; i++) downloads.add(client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), null));
+				for (int i = 0; i < 6; i++) downloads.add(client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), -1L, null));
 
 				server.awaitRequests(6);
 				assertEquals(1, server.acceptedConnections(), "a lane holds eight in flight, so six requests share one connection");
@@ -251,7 +251,7 @@ class DownloadClientTest {
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
 				List<CompletableFuture<Path>> downloads = new ArrayList<>();
-				for (int i = 0; i < 9; i++) downloads.add(client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), null));
+				for (int i = 0; i < 9; i++) downloads.add(client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), -1L, null));
 
 				server.awaitRequests(9);
 				assertEquals(2, server.acceptedConnections(), "the ninth request passes the depth of eight and opens the next lane");
@@ -273,7 +273,7 @@ class DownloadClientTest {
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
 				List<CompletableFuture<Path>> downloads = new ArrayList<>();
-				for (int i = 0; i < 41; i++) downloads.add(client.downloadFile("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), null));
+				for (int i = 0; i < 41; i++) downloads.add(client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), -1L, null));
 
 				server.awaitRequests(40);
 				assertEquals(5, server.acceptedConnections(), "5 lanes × 8 slots cap the in-flight requests; request 41 waits");

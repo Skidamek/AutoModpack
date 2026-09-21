@@ -7,6 +7,7 @@ import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
@@ -22,6 +23,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 
@@ -46,7 +49,8 @@ public class DownloadClient implements PackTransport {
 		return t;
 	});
 
-	private static final int MAX_CONNECTIONS = 5;
+	/** Every download worker owns one pipeline lane; big files never queue behind another on the same lane. The download manager sizes its worker pool from this single source. */
+	public static final int MAX_CONNECTIONS = 5;
 
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
 	private final String secret;
@@ -54,6 +58,14 @@ public class DownloadClient implements PackTransport {
 	private final Duration preConfigurationKeepaliveInterval;
 	private final CustomizableTrustManager.SessionTrust sessionTrust;
 	private final TransportRoute route;
+	// The transport's wire window: the number of unsettled takes it may keep on the lanes. The cap is the receipted
+	// lanes × pipeline depth; the pacer starts at one lane's depth, grows while throughput climbs and halves on failure.
+	private final WirePacer pacer = new WirePacer(MAX_CONNECTIONS * Connection.PIPELINE_DEPTH, MAX_CONNECTIONS);
+	// The live transfers, so a settle anywhere revives one whose takes all settled while the window was full - a dormant
+	// transfer has nothing in flight, so nothing else would ever hand the freed credit to it. Own lock: never taken
+	// while holding a transfer's lock or the pool lock.
+	private final Object transferRegistryLock = new Object();
+	private final List<ObjectTransfer> activeTransfers = new ArrayList<>();
 	private final Object poolLock = new Object();
 	// The lanes, in creation order: worker i submits to lane i when it has a free slot, so the scheduler's largest-first
 	// dispatch puts concurrent big files on distinct lanes while small files fill each lane's depth. ≤ 8 × 10 KB = 80 KB
@@ -346,29 +358,213 @@ public class DownloadClient implements PackTransport {
 		}
 	}
 
-	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
-		return downloadFile(fileHash, destination, 0, chunkCallback, 0);
+	/**
+	 * One complete object transfer: on success the destination holds the FULL object bytes. Resume validation and the
+	 * zero-size shortcut run on the calling thread exactly as the old manager's dispatch did; the wire credit for the
+	 * first take is taken here too, so a full window fails the future before anything is sent and the caller requeues.
+	 */
+	@Override
+	public CompletableFuture<Path> downloadObject(byte[] sha1Hex, Path destination, long fileSize, IntConsumer progress) {
+		try {
+			if (fileSize == 0) {
+				// Zero-size objects never reach the wire: materialize the empty object and let the caller's promotion judge it.
+				if (Files.exists(destination) && Files.size(destination) > 0) Files.delete(destination);
+				if (!Files.exists(destination)) Files.createFile(destination);
+				return CompletableFuture.completedFuture(destination);
+			}
+			long offset = resumeOffset(destination, fileSize);
+			if (offset >= fileSize) {
+				// A complete-sized destination skips the network; the caller's promotion judges it for free.
+				return CompletableFuture.completedFuture(destination);
+			}
+			if (!pacer.tryAcquire()) {
+				// The caller requeues on this type without burning retry budget; no credit is held, so none is released.
+				return CompletableFuture.failedFuture(new WireWindowFullException());
+			}
+			return new ObjectTransfer(sha1Hex, destination, fileSize, offset, progress).start();
+		} catch (IOException e) {
+			return CompletableFuture.failedFuture(e);
+		}
 	}
 
-	@Override
-	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, IntConsumer chunkCallback) {
-		return downloadFile(fileHash, destination, offset, chunkCallback, 0);
+	/** The byte offset the transfer resumes from: the destination's size while it is a valid prefix, else a fresh start. */
+	private static long resumeOffset(Path destination, long fileSize) {
+		if (!Files.exists(destination)) return 0;
+		long size;
+		try {
+			size = Files.size(destination);
+		} catch (IOException e) {
+			LOGGER.warn("Failed to inspect the partial {}; restarting from zero", destination.getFileName(), e);
+			deleteQuietly(destination);
+			return 0;
+		}
+		if (size > fileSize) {
+			LOGGER.warn("Stored partial for {} is past the served object's end; restarting from zero", destination.getFileName());
+			deleteQuietly(destination);
+			return 0;
+		}
+		return size;
 	}
 
-	@Override
-	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, IntConsumer chunkCallback, int lane) {
-		return downloadFile(fileHash, destination, offset, -1L, chunkCallback, lane);
+	private static void deleteQuietly(Path path) {
+		try {
+			Files.deleteIfExists(path);
+		} catch (IOException ignored) {
+		}
 	}
 
-	@Override
-	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, long endInclusive, IntConsumer chunkCallback, int lane) {
-		return downloadFile(fileHash, destination, offset, endInclusive, chunkCallback, null, true, -1L, lane);
+	/**
+	 * One transfer's tiling, window accounting and completion barrier. The first take rides the credit acquired at
+	 * dispatch and covers the streamer's head chunk; every further take acquires its own credit and claims the
+	 * uncovered tail. All bookkeeping runs inside the transfer lock, one thread at a time; the pacer lock is always
+	 * taken either alone or inside the transfer lock, never the other way round.
+	 */
+	private final class ObjectTransfer {
+		private final byte[] sha1Hex;
+		private final Path destination;
+		private final long fileSize;
+		// The resume point: the streamer owns [offset, floor) and the tail takes claim everything behind it.
+		private final long offset;
+		private final IntConsumer progress;
+		private final CompletableFuture<Path> future = new CompletableFuture<>();
+		private final Object lock = new Object();
+		// Per-transfer round-robin lane hint: takes spread over the lanes the way the pool spreads workers, and pick()
+		// still falls back to any lane with a free slot. The simplest correct hint.
+		private final AtomicInteger laneCounter = new AtomicInteger();
+		// The cursor is the transfer's one uncovered-tail pointer: the streamer owns [offset, floor) and every take
+		// claims exactly [stealFrom, old cursor - 1], so the final take may be short - a whole-chunk walk past a
+		// non-chunk-multiple size would orphan bytes no request ever covers and the barrier would never fire.
+		private long cursor;
+		private int pendingItems;
+		// First error wins: recorded once, no further takes are issued, in-flight ones settle, the transfer fails.
+		private Throwable error;
+		// A positioned tail take wrote bytes: the partial is hole-riddled and its size no longer reads as a resume prefix.
+		private boolean positionedWrites;
+
+		ObjectTransfer(byte[] sha1Hex, Path destination, long fileSize, long offset, IntConsumer progress) {
+			this.sha1Hex = sha1Hex;
+			this.destination = destination;
+			this.fileSize = fileSize;
+			this.offset = offset;
+			this.progress = progress;
+			this.cursor = fileSize;
+		}
+
+		CompletableFuture<Path> start() {
+			synchronized (transferRegistryLock) {
+				activeTransfers.add(this);
+			}
+			synchronized (lock) {
+				pendingItems = 1;
+			}
+			long headEnd = Math.min(offset + (long) DEFAULT_CHUNK_SIZE, fileSize) - 1;
+			int lane = Math.floorMod(laneCounter.getAndIncrement(), MAX_CONNECTIONS);
+			LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", lane, offset, headEnd, objectName());
+			submitTake(offset, headEnd, lane);
+			pump();
+			return future;
+		}
+
+		/** A settle anywhere may have freed the credit this dormant transfer waits for: with nothing in flight, no settle of its own will ever re-pump it. */
+		void revive() {
+			synchronized (lock) {
+				if (pendingItems != 0 || error != null || cursor <= floor()) return;
+			}
+			pump();
+		}
+
+		/** Issues tail takes while the window has room; every settle releases its credit and re-pumps. */
+		private void pump() {
+			while (pacer.tryAcquire()) {
+				Take take;
+				synchronized (lock) {
+					if (error != null || cursor <= floor()) {
+						pacer.release(); // nothing left to take
+						return;
+					}
+					take = claimLocked();
+				}
+				LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", take.lane(), take.start(), take.end(), objectName());
+				submitTake(take.start(), take.end(), take.lane());
+			}
+		}
+
+		private long floor() {
+			return offset + (long) DEFAULT_CHUNK_SIZE;
+		}
+
+		private Take claimLocked() {
+			long takeEnd = cursor - 1;
+			long stealFrom = Math.max(floor(), cursor - (long) DEFAULT_CHUNK_SIZE);
+			cursor = stealFrom;
+			pendingItems++;
+			return new Take(stealFrom, takeEnd, Math.floorMod(laneCounter.getAndIncrement(), MAX_CONNECTIONS));
+		}
+
+		private void submitTake(long takeOffset, long takeEnd, int lane) {
+			AtomicLong takeBytes = new AtomicLong(0);
+			long takeStart = System.nanoTime();
+			// Same call pattern as the app's progress hook: decoded byte counts per read chunk.
+			IntConsumer chunkCallback = bytes -> {
+				takeBytes.addAndGet(bytes);
+				if (progress != null) progress.accept(bytes);
+			};
+			CompletableFuture<Path> future;
+			try {
+				// A stale range already surfaces as StaleRangeException from the response parse; no mapping happens here.
+				future = withSlot(lane, connection -> connection.sendDownloadFile(sha1Hex, destination, chunkCallback, takeOffset, takeEnd, null, true, -1L));
+			} catch (Throwable submitFailure) {
+				// The submit never produced a request: settle its credit and tick the barrier down, or the transfer waits for a settle that never comes.
+				WireTrace.log("TAKE_FAIL", "object", objectName(), "item", takeOffset + "-" + takeEnd, "error", submitFailure);
+				onTakeSettled(takeOffset, 0, System.nanoTime() - takeStart, lane, submitFailure);
+				return;
+			}
+			future.whenComplete((path, takeError) -> onTakeSettled(takeOffset, takeBytes.get(), System.nanoTime() - takeStart, lane, takeError));
+		}
+
+		private void onTakeSettled(long takeOffset, long bytes, long nanos, int lane, Throwable takeError) {
+			pacer.settle(takeError != null, bytes, nanos, lane);
+			boolean done;
+			Throwable failure;
+			synchronized (lock) {
+				if (takeError != null && error == null) error = Throwables.unwrap(takeError);
+				if (takeOffset != offset && bytes > 0) positionedWrites = true;
+				done = --pendingItems == 0 && (error != null || cursor <= floor());
+				failure = error;
+			}
+			if (done) finish(failure);
+			else pump();
+			reviveDormant();
+		}
+
+		private void finish(Throwable failure) {
+			synchronized (transferRegistryLock) {
+				activeTransfers.remove(this);
+			}
+			if (failure != null) {
+				if (positionedWrites) {
+					// The positioned writes left holes behind the streamed prefix: the partial is worthless for resume.
+					deleteQuietly(destination);
+				}
+				WireTrace.log("DONE", "object", objectName(), "status", "fail:" + Throwables.detail(failure));
+				future.completeExceptionally(failure);
+				return;
+			}
+			WireTrace.log("DONE", "object", objectName(), "status", "promote");
+			future.complete(destination);
+		}
+
+		private String objectName() {
+			return destination.getFileName().toString();
+		}
+
+		private record Take(long start, long end, int lane) {}
 	}
 
+	/** The waiting-track fetch: one identity GET with no negotiation and no resume, aborted past maxBytes. */
 	@Override
-	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, long endInclusive, IntConsumer chunkCallback, OutputStream tap, boolean offerEncoding, long limitBytes, int lane) {
-		// A stale range already surfaces as StaleRangeException from the response parse; no mapping happens here.
-		return withSlot(lane, connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback, offset, endInclusive, tap, offerEncoding, limitBytes));
+	public CompletableFuture<Path> downloadSmallObject(byte[] sha1Hex, Path destination, long maxBytes, OutputStream tap) {
+		return withSlot(0, connection -> connection.sendDownloadFile(sha1Hex, destination, null, 0L, -1L, tap, false, maxBytes));
 	}
 
 	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers 304 and {@code destination} is not written. */
@@ -399,8 +595,24 @@ public class DownloadClient implements PackTransport {
 	}
 
 	@Override
-	public int pipelineCapacity() {
-		return MAX_CONNECTIONS * Connection.PIPELINE_DEPTH;
+	public boolean hasWireRoom() {
+		return pacer.hasRoom();
+	}
+
+	/** Offers freed credits to transfers with nothing in flight; their own settles can never wake them. */
+	private void reviveDormant() {
+		List<ObjectTransfer> snapshot;
+		synchronized (transferRegistryLock) {
+			if (activeTransfers.isEmpty()) return;
+			snapshot = new ArrayList<>(activeTransfers);
+		}
+		for (ObjectTransfer transfer : snapshot) transfer.revive();
+	}
+
+	/** The one-line window receipt (window path, request duration estimate, per-lane settle rates) a run summary carries. */
+	@Override
+	public String windowSummary() {
+		return pacer.summary();
 	}
 
 	static void closeQuietly(AutoCloseable closeable) {

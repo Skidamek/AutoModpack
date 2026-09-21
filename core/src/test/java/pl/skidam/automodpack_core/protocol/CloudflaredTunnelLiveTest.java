@@ -88,15 +88,15 @@ class CloudflaredTunnelLiveTest {
 					assertArrayEquals(head, Files.readAllBytes(headDestination));
 
 					Path objectDestination = directory.resolve("object-download");
-					client.downloadFile(objectHash.getBytes(StandardCharsets.UTF_8), objectDestination, null)
+					client.downloadObject(objectHash.getBytes(StandardCharsets.UTF_8), objectDestination, object.length, null)
 							.get(AWAIT_SECONDS, TimeUnit.SECONDS);
 					assertArrayEquals(object, Files.readAllBytes(objectDestination));
 
-					// A resumed take appends exactly behind the stored prefix, through the same tunnel.
+					// A resumed transfer appends exactly behind the stored prefix, through the same tunnel.
 					Path rangedDestination = directory.resolve("object-ranged");
 					long offset = 4096;
 					Files.write(rangedDestination, Arrays.copyOf(object, (int) offset));
-					client.downloadFile(objectHash.getBytes(StandardCharsets.UTF_8), rangedDestination, offset, null)
+					client.downloadObject(objectHash.getBytes(StandardCharsets.UTF_8), rangedDestination, object.length, null)
 							.get(AWAIT_SECONDS, TimeUnit.SECONDS);
 					assertArrayEquals(object, Files.readAllBytes(rangedDestination));
 				} finally {

@@ -168,14 +168,8 @@ class WaitingMusicTest {
 		}
 
 		@Override
-		public CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, long endInclusive, IntConsumer progress, int lane) {
-			return downloadFile(key, destination, offset, endInclusive, progress, null, true, -1L, lane);
-		}
-
-		@Override
-		public CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, long endInclusive, IntConsumer progress, OutputStream tap, boolean offerEncoding, long limitBytes, int lane) {
-			assertFalse(offerEncoding, "the track fetch asks for identity");
-			lastLimit = limitBytes;
+		public CompletableFuture<Path> downloadSmallObject(byte[] key, Path destination, long maxBytes, OutputStream tap) {
+			lastLimit = maxBytes;
 
 			fetches.incrementAndGet();
 			if (!serverHasTrack) {
@@ -195,8 +189,28 @@ class WaitingMusicTest {
 		}
 
 		@Override
+		public CompletableFuture<Path> downloadObject(byte[] key, Path destination, long fileSize, IntConsumer progress) {
+			return CompletableFuture.failedFuture(new IOException("whole objects are not part of this test"));
+		}
+
+		@Override
 		public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer progress) {
 			return CompletableFuture.failedFuture(new IOException("unused"));
+		}
+
+		@Override
+		public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, OutputStream tap) {
+			return CompletableFuture.failedFuture(new IOException("unused"));
+		}
+
+		@Override
+		public boolean hasWireRoom() {
+			return true;
+		}
+
+		@Override
+		public String windowSummary() {
+			return "no window";
 		}
 
 		@Override

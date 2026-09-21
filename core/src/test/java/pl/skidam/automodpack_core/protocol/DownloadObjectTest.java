@@ -1,0 +1,119 @@
+package pl.skidam.automodpack_core.protocol;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.utils.HashUtils;
+
+/**
+ * The whole-object transfer contract: exact tiling across chunk edges (every byte requested exactly once), resume
+ * behind the stored prefix, the complete-size shortcut that never touches the wire, and the typed window-full failure
+ * the caller requeues on.
+ */
+class DownloadObjectTest {
+	/** Generous bound for loopback handshakes that complete in milliseconds when warm; cold CI runners have blown past five seconds here. */
+	private static final int AWAIT_SECONDS = 20;
+
+	/**
+	 * The transfer's chunked takes must tile any size exactly: a whole-chunk tail walk past a non-chunk-multiple size
+	 * once orphaned the bytes between the first chunk and the aligned tail, so no request ever covered them and the
+	 * transfer never finished.
+	 */
+	@Test
+	void transfersTileNonChunkMultipleSizesExactly(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			byte[] object = new byte[NetUtils.DEFAULT_CHUNK_SIZE * 2 + 1234];
+			new SecureRandom().nextBytes(object);
+			String sha1 = HashUtils.sha1(object);
+			server.store().put(sha1, object);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("object");
+				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertArrayEquals(object, Files.readAllBytes(destination));
+			}
+			long next = 0;
+			for (long[] range : server.ranges.stream().sorted(Comparator.comparingLong(range -> range[0])).toList()) {
+				assertEquals(next, range[0], "a take must start exactly where the coverage ends");
+				next = range[1] + 1;
+			}
+			assertEquals(object.length, next, "the takes must cover every byte of the object exactly once");
+		}
+	}
+
+	@Test
+	void resumeStartsBehindTheStoredPrefixAndCompleteSizesSkipTheWire(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			byte[] object = new byte[256 * 1024];
+			new SecureRandom().nextBytes(object);
+			String sha1 = HashUtils.sha1(object);
+			server.store().put(sha1, object);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("object");
+				Files.write(destination, Arrays.copyOf(object, 100_000));
+				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertEquals(1, server.ranges.size());
+				assertEquals(100_000, server.ranges.get(0)[0], "the resumed transfer requests exactly behind the stored prefix");
+
+				// A destination already at the advertised size skips the network entirely.
+				server.requests.clear();
+				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertEquals(0, server.requests.size(), "a complete-sized destination must not touch the wire");
+			}
+		}
+	}
+
+	/** The window starts at one lane's pipeline depth, so the transfer past it fails typed before anything is sent, and the gate the caller peeks reads full. */
+	@Test
+	void theTransferPastTheWindowFailsTypedWithoutSending(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			List<String> hashes = new ArrayList<>();
+			for (int i = 0; i < Connection.PIPELINE_DEPTH + 1; i++) {
+				byte[] object = ("window-full-object-" + i).getBytes(StandardCharsets.UTF_8);
+				String sha1 = HashUtils.sha1(object);
+				server.store().put(sha1, object);
+				hashes.add(sha1);
+			}
+			server.setResponseDelayMillis(30_000); // no settles while the test runs: the window stays at its lane-depth start
+			try (DownloadClient client = client(server, "test-secret")) {
+				List<CompletableFuture<Path>> futures = new ArrayList<>();
+				for (int i = 0; i < hashes.size(); i++) {
+					futures.add(client.downloadObject(hashes.get(i).getBytes(StandardCharsets.UTF_8), directory.resolve("object-" + i), 20, null));
+				}
+				assertFalse(client.hasWireRoom(), "one lane's depth of takes fills the window");
+				var thrown = assertThrows(ExecutionException.class, () -> futures.get(futures.size() - 1).get(5, TimeUnit.SECONDS));
+				assertInstanceOf(WireWindowFullException.class, rootCause(thrown));
+			}
+		}
+	}
+
+	private static Throwable rootCause(Throwable thrown) {
+		Throwable cause = thrown;
+		while (cause.getCause() != null)
+			cause = cause.getCause();
+		return cause;
+	}
+
+	private static DownloadClient client(ConditionalFetchTest.ContractServer server, String secret) throws Exception {
+		ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+				new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, server.fingerprint(), null);
+		return DownloadClient.createAsync(connectionInfo, secret, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+	}
+}

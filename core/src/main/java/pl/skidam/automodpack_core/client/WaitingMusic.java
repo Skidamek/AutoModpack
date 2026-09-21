@@ -171,8 +171,8 @@ public final class WaitingMusic {
 						write(new byte[]{(byte) b}, 0, 1);
 					}
 				};
-				transport.downloadFile(advertisedSha1.getBytes(StandardCharsets.UTF_8), temp, 0L, -1L, null, tap, false, StoragePaths.WAITING_MUSIC_MAX_BYTES, 0).join();
-				// The object request judges ranges, not the whole; the advertised hash is judged here before caching.
+				transport.downloadSmallObject(advertisedSha1.getBytes(StandardCharsets.UTF_8), temp, StoragePaths.WAITING_MUSIC_MAX_BYTES, tap).join();
+				// The fetch judges nothing about the content; the advertised hash is checked here before caching.
 				if (!advertisedSha1.equals(sha1(temp))) throw new IOException("The served waiting music does not match the advertised hash");
 				publish(cache, temp);
 			} catch (Exception e) {
