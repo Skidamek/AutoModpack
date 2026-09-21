@@ -4,7 +4,7 @@
 
 ## Editing the file
 
-- The file is hconf: `#` starts a comment, options are `key: value` lines, lists are inline `[a, b, c]`. Plain JSON also parses, so an old JSON document stays readable.
+- The file is hconf: `#` starts a comment, options are `key: value` lines, lists are inline `[a, b, c]`. Plain JSON also parses.
 - Generated files carry a comment above every option. When a new release adds an option, the file gains it with its default and comment.
 - Apply changes with `/automodpack config reload` or a restart. When the reload changes connection settings, run `/automodpack host restart` to apply them.
 - A mistake fails the start or the reload with the file, line, and column in the message, and the file stays as it is. Unknown keys are logged and ignored.
@@ -20,7 +20,7 @@
 | `autoExcludeServerSideMods` | `true` | Leaves out mods whose metadata declares them server-side only. |
 | `requireModpack` | `true` | When true, players without AutoModpack are kicked and modded clients sync the pack before joining. When false, the pack is optional: players without the mod join vanilla, and modded clients are asked whether to sync before they join. |
 | `acceptedLoaders` | current loader | Modloaders allowed to connect, for example Fabric, Forge, NeoForge. The set is seeded with this server's loader on first load only; after that it is yours to edit, and removing the current loader keeps it removed. Most mods are loader-specific, so change it with care. |
-| `advertiseVersionsToSync` | `true` | Publishes the server's version metadata to clients: the modloader type, the modloader version, and the Minecraft version the pack needs. When false, clients keep the versions their launcher installed and a pack that needs different versions asks to be switched by hand. See [launcher compatibility](../compatibility/launchers#version-sync-and-switching). The key was named `syncLoaderVersion` before v5; an old file's value is ignored and the default applies. |
+| `advertiseVersionsToSync` | `true` | Publishes the versions the pack needs to clients: the modloader type, the modloader version, and the Minecraft version. When false, clients keep the versions their launcher installed. See [launcher compatibility](../compatibility/launchers#version-sync-and-switching). The key was named `syncLoaderVersion` before v5; the old name is ignored. |
 | `selfUpdater` | `false` | Updates AutoModpack itself from Modrinth when a new version is published. |
 
 ## Groups
@@ -40,7 +40,7 @@ Each group carries three rule lists, relative to the server root.
 | Setting | Factory value for `main` | Description |
 |---|---|---|
 | `modpack.<category>.<id>.syncedFiles` | `mods/*.jar`, `kubejs/**`, `emotes/*` | Files pulled from the server root into the pack. The server root contributes only what a rule matches. |
-| `modpack.<category>.<id>.excludedFiles` | `.*`, `.*/**`, `**/.*`, `**/.*/**`, `*.tmp`, `**/*.tmp`, `.disabled` and `*.bak` with `**/` forms, `kubejs/server_scripts/**` | Files kept out of the pack from every source. The factory rules skip hidden, `.tmp`, `.disabled`, and `.bak` files; edit or remove them like any other rule. This is the only way to exclude something from the group directory, and it also carves exceptions out of `syncedFiles`. |
+| `modpack.<category>.<id>.excludedFiles` | Hidden-file rules, `*.tmp`, `*.disabled`, `*.bak` (each also as `**/` forms), `kubejs/server_scripts/**` | Files kept out of the pack from every source. The factory rules skip hidden, `.tmp`, `.disabled`, and `.bak` files; edit or remove them like any other rule. This is the only way to exclude something from the group directory, and it also carves exceptions out of `syncedFiles`. |
 | `modpack.<category>.<id>.allowEditsInFiles` | `options.txt`, `config/**` | Pack files that players may edit locally, mods included: editable mod jars live in the player's `mods` folder, replaceable and removable. Local edits survive updates until the server changes the file; see [client updates](../how-it-works/client-updates#editable-files). |
 
 ### Globbing wildcards

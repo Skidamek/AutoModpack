@@ -89,6 +89,16 @@ What the example shows:
 
 Editable files keep their copy in the game directory, mods included: a mod matched by `allowEditsInFiles`, say `mods/customizable.jar`, materializes in the player's `mods` folder where they can edit or remove it. Mark a mod editable when players are expected to replace it themselves; leave it out and it stays in the projection, untouched.
 
+## Which files reach clients?
+
+A file reaches clients when one of the two sources provides it: the group directory includes everything it holds, and `syncedFiles` pulls matching files from the server root. AutoModpack does not care what a file is; the same rules move mods, configs, and everything else.
+
+- Keep a server file off clients: add its path to `excludedFiles`. A server-side mod, for example, is kept off with `mods/the-server-mod.jar`. Mods whose metadata already declares them server-side are left out by `autoExcludeServerSideMods` without any rule.
+- Give clients a file the server does not need: put it in the group directory, for example `automodpack/host-modpack/main/mods/`.
+- Split fully: remove the mod rules from `syncedFiles` and put every client mod into the group directory. The pack's mods then come only from `host-modpack`, and the server's `mods` folder stays server-only.
+
+A `!` rule inside `syncedFiles` also skips a path, but only for the server root; the group directory can still provide the file. `excludedFiles` is the stronger tool and the one to reach for.
+
 ## File rules
 
 `syncedFiles`, `excludedFiles`, and `allowEditsInFiles` live on each group and are documented with the [group settings](configuration/server-config#groups). All three lists speak the same glob language, described in [globbing](configuration/server-config#globbing-wildcards).
@@ -97,7 +107,7 @@ One rule worth knowing early: the group directory is included in full, so `exclu
 
 ## Deleting content
 
-Remove the file from the server, or keep it on the server and add it to `excludedFiles`. On the next update, clients delete their copy when the path, hash, and size prove the file belongs to the pack, so player-created or player-modified files survive. The full rules are in [client updates](how-it-works/client-updates#deletions-are-measured).
+Remove the file from the server, or keep it on the server and add it to `excludedFiles`. On the next update, clients delete their copy when the path, hash, and size prove the file belongs to the pack, so player-created or player-modified files survive. Updates replace files by the same rule: a file that changed on the server is replaced by the pack's new bytes, and the old copy is not kept in the game folder. The full rules are in [client updates](how-it-works/client-updates#deletions-are-measured).
 
 ## What never ships
 

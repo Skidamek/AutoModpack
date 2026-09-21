@@ -4,6 +4,9 @@ Both. It needs to be installed on the server and on every client.
 ### How do I add client-only mods to the pack?
 Put them in `automodpack/host-modpack/main/mods/` on the server. They ship to clients without the server loading them. The full guide is [building the modpack](pack-content).
 
+### How do I keep a server mod from reaching clients?
+Add it to `excludedFiles` in the [server config](configuration/server-config#rule-lists), for example `mods/the-server-mod.jar`. Client-only mods go the other way, into `automodpack/host-modpack/main/mods/`. The recipes, including a complete server/client split, are in [which files reach clients](pack-content#which-files-reach-clients).
+
 ### How do I restrict access to my modpack?
 Keep `validateSecrets` on in the [server config](configuration/server-config), set `online-mode=true` in `server.properties`, and use the whitelist or bans as usual. Downloads then require a secret issued through the Minecraft login. See [security](security#download-authorization).
 
@@ -37,7 +40,7 @@ Each group has a directory under `automodpack/host-modpack/<group>/`, and `main`
 Optional parts of a modpack, like a shader bundle or a platform-specific mod set. The server admin declares them under a category in the `modpack` section of the server config; players pick the ones they want in the in-game "Group Selection" screen, and the choice sticks across updates. They are covered in [building the modpack](pack-content#groups).
 
 ### I'm upgrading from v4. What changes?
-The release is one jar for every game version instead of one jar per version. Config files are renamed (`automodpack-server.json` became `server-config.hconf`, `automodpack-client.json` became `client-config.hconf`) and several keys moved; v4 files are not read, so carry your settings over once. Installed packs, pins, and caches move to a new layout, so clients re-sync on the first join and see the certificate prompt once per server. The server's certificate moves to `automodpack/credentials/`; copy the old `certificate.crt` and `private-key.pem` there before upgrading, or the server generates a new pair and pinned clients see the mismatch screen. The v5 release notes list everything.
+v5 ships one jar for every game version instead of one jar per version. Config files are renamed (`automodpack-server.json` became `server-config.hconf`, `automodpack-client.json` became `client-config.hconf`), and v4 files are not read, so carry your settings over once. Clients re-sync on the first join and see the certificate prompt once per server. On the server, copy the certificate and key to `automodpack/credentials/` before upgrading, or the server generates a new pair and pinned clients see the mismatch screen. The v5 release notes list everything.
 
 ### Which Minecraft versions are supported?
 The [game versions](compatibility/game-versions) page lists them; the [latest release](https://github.com/Skidamek/AutoModpack/releases/latest) always names the current set. One jar covers all of them.
@@ -46,7 +49,7 @@ The [game versions](compatibility/game-versions) page lists them; the [latest re
 Check the [launcher list](compatibility/launchers). Prism, MultiMC forks, Pandora, and the CurseForge app additionally follow the versions the server publishes.
 
 ### Does AutoModpack update my mods to their latest versions?
-AutoModpack keeps clients identical to the server, and updating the server's mods stays your job. To update a mod, replace the jar on the server and run `/automodpack generate`; the new version reaches every client. Many downloads come straight from Modrinth and CurseForge, so mod authors see the downloads too.
+AutoModpack keeps clients identical to the server, and updating the server's mods stays your job. To update a mod, replace the jar on the server and run `/automodpack generate`. The new version reaches every client, and many downloads come straight from Modrinth and CurseForge, so mod authors see the downloads too. The pack owns every file it ships: an updated jar replaces the old one, and a file that leaves the pack is removed on the next update. Restorable copies of past states stay on the instance timeline.
 
 ### I found a bug. What should I do?
 Report it on the [issue tracker](https://github.com/Skidamek/AutoModpack/issues). Include the Minecraft version, loader, and the log from the side that misbehaved.

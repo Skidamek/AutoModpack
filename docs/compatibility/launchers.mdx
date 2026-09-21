@@ -22,4 +22,4 @@ AutoModpack applies that metadata to the launcher instance itself on Prism, Mult
 
 Before changing anything, AutoModpack asks the Prism meta server whether it knows the target versions. If it does not, the versions are left alone rather than risk installing something the launcher cannot resolve. Server owners can stop publishing version metadata entirely with `advertiseVersionsToSync: false`, and players can refuse the sync per instance with `syncLoaderVersion: false` in the [client config](../configuration/client-config).
 
-On launchers AutoModpack cannot switch (vanilla launcher, Modrinth App, ATLauncher, custom instances), a pack that needs different versions is not applied at launch; the client explains that the versions must be changed by hand before the next start. Joining the server in-game still syncs the pack files.
+AutoModpack cannot switch launchers it does not manage: the vanilla launcher, Modrinth App, ATLauncher, and custom instances. A pack that needs different versions is then not applied at launch. The client says which versions to change by hand before the next start. Joining the server in-game still syncs the pack files.
