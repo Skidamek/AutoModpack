@@ -4,7 +4,9 @@ import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
@@ -196,7 +198,7 @@ public class ModpackExecutor {
 	public ExportHttpResult exportHttp(Path targetDirectory, boolean includeAll) throws IOException {
 		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
 		if (serverConfig != null && serverConfig.validateSecrets)
-			return new ExportHttpResult.Rejected("The pack validates download secrets, which a public mirror cannot enforce", null);
+			return new ExportHttpResult.Rejected("The pack validates download secrets, which a public mirror cannot enforce");
 		Path target = (targetDirectory.isAbsolute() ? targetDirectory : serverRoot.resolve(targetDirectory)).normalize();
 		boolean exportEverything = includeAll || serverConfig != null && serverConfig.exportHttpIncludeAll;
 		GenerationHosting hosting = generationStore.hosting();
@@ -234,10 +236,31 @@ public class ModpackExecutor {
 				destination = target.resolve("objects").resolve(sha1);
 			}
 			Files.createDirectories(destination.getParent());
-			Files.copy(entry.getValue(), destination, StandardCopyOption.REPLACE_EXISTING);
+			// Objects are immutable and named by their hash, documents change only at a publish, so an
+			// already-present file of the same size is the same bytes and the wholesale re-copy is skipped.
+			if (Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) && Files.size(destination) == Files.size(entry.getValue())) {
+				written++;
+				continue;
+			}
+			copyAtomically(entry.getValue(), destination);
 			written++;
 		}
 		return new ExportHttpResult.Exported(written, omitted, unresolvable);
+	}
+
+	/** Publishes one exported file through a same-directory temporary and an atomic move, so a static host never serves a half-written copy. */
+	private static void copyAtomically(Path source, Path destination) throws IOException {
+		Path temporary = Files.createTempFile(destination.getParent(), ".export-", null);
+		try {
+			Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
+			try {
+				Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+			} catch (AtomicMoveNotSupportedException e) {
+				Files.move(temporary, destination, StandardCopyOption.REPLACE_EXISTING);
+			}
+		} finally {
+			Files.deleteIfExists(temporary);
+		}
 	}
 
 	/** head/journal: served beside the content-addressed objects, exported to the target root, never pruned. The waiting track is an object like any other. */
@@ -627,7 +650,7 @@ public class ModpackExecutor {
 		}
 
 		/** The export produced no tree; the detail explains the refusal. */
-		record Rejected(String detail, Throwable cause) implements ExportHttpResult {
+		record Rejected(String detail) implements ExportHttpResult {
 			public Rejected {
 				detail = Objects.requireNonNull(detail);
 			}

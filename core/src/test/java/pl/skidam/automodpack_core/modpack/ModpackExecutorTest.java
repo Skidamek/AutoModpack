@@ -467,7 +467,6 @@ class ModpackExecutorTest {
 
 			ModpackExecutor.ExportHttpResult.Rejected refused = assertInstanceOf(ModpackExecutor.ExportHttpResult.Rejected.class, executor.exportHttp(tempDir.resolve("mirror")));
 			assertEquals("The pack validates download secrets, which a public mirror cannot enforce", refused.detail());
-			assertNull(refused.cause());
 			assertTrue(Files.notExists(tempDir.resolve("mirror")));
 		} finally {
 			executor.stop();
