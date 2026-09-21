@@ -270,6 +270,12 @@ public class FileInspection {
 						String depId = MiniToml.getString(depTable, "modId");
 						if (depId == null) continue;
 
+						// Legacy entries gate on mandatory (absent means true), NeoForge 20.5+ entries on type; type wins when both exist.
+						boolean required;
+						if (depTable.get("type") instanceof String typeName) required = "required".equalsIgnoreCase(typeName);
+						else required = !(depTable.get("mandatory") instanceof Boolean flag && !flag);
+						if (!required) continue;
+
 						deps.add(depId);
 
 						// Determine Environment based on Minecraft/Forge side requirement
