@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.protocol.DocumentFetch;
+import pl.skidam.automodpack_core.protocol.MissingObjectException;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -175,7 +176,7 @@ class WaitingMusicTest {
 			fetches.incrementAndGet();
 			if (!serverHasTrack) {
 				done = true;
-				return CompletableFuture.failedFuture(new IOException("HTTP 404"));
+				return CompletableFuture.failedFuture(new MissingObjectException());
 			}
 			byte[] served = corrupt ? "not-the-advertised-bytes".getBytes(StandardCharsets.UTF_8) : track;
 			return CompletableFuture.runAsync(() -> {

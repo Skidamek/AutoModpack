@@ -390,7 +390,7 @@ class Connection implements AutoCloseable {
 	private IOException statusFailure(ResponseHead head, boolean ranged) {
 		return switch (head.status()) {
 			case 401 -> new UnauthorizedException();
-			case 404, 410 -> new IOException("HTTP " + head.status());
+			case 404, 410 -> new MissingObjectException();
 			case 416 -> ranged ? new StaleRangeException() : new IOException("HTTP 416 without a sent Range");
 			default -> new IOException("HTTP " + head.status());
 		};

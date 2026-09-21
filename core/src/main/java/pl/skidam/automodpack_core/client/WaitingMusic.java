@@ -19,6 +19,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.MissingObjectException;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -177,7 +178,7 @@ public final class WaitingMusic {
 			} catch (Exception e) {
 				fetchAlive = false;
 				Throwable cause = Throwables.unwrap(e);
-				if (cause instanceof IOException io && io.getMessage() != null && io.getMessage().contains("HTTP 404")) {
+				if (cause instanceof MissingObjectException) {
 					// The host withdrew the track: whatever streamed finishes, the bundled track follows it.
 					completeKind(Kind.BUNDLED);
 					forget(cache);
