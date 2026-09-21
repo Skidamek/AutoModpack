@@ -10,7 +10,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.util.Locale;
-import java.util.concurrent.Executors;
 import java.util.function.IntConsumer;
 
 import org.apache.logging.log4j.LogManager;
@@ -18,29 +17,34 @@ import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.protocol.LocalFileWriter;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.protocol.StaleRangeException;
 import pl.skidam.automodpack_core.protocol.WireCodec;
 import pl.skidam.automodpack_core.utils.DownloadSource;
+import pl.skidam.automodpack_core.utils.HttpClientPool;
 
 public class HttpFileDownloader {
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-	// Shared Clients for HTTP/2 Multiplexing and Connection Pooling
-	private static final HttpClient DIRECT_CLIENT = createClient(HttpClient.Redirect.NEVER);
-	private static final HttpClient REDIRECT_CLIENT = createClient(HttpClient.Redirect.NORMAL);
+	// A download worker reuses one 512 KiB read buffer for every attempt instead of allocating half a MiB per call.
+	private static final ThreadLocal<byte[]> READ_BUFFERS = ThreadLocal.withInitial(() -> new byte[NetUtils.READ_BUFFER_BYTES]);
 
 	/**
 	 * Downloads a file from a URL to a target path using HTTP/2 if available.
 	 * Blocks the calling thread (designed for use in Worker Threads).
 	 *
+	 * @param offset
+	 *            The resume point: bytes before it already sit in the target and are not fetched again.
 	 * @param progressAction
 	 *            A callback to report bytes read (for bandwidth tracking).
 	 * @throws IOException
 	 *             If network or IO fails.
+	 * @throws StaleRangeException
+	 *             If the stored partial cannot serve as the resume prefix (the server cannot answer from the offset).
 	 * @throws InterruptedException
 	 *             If the download is cancelled.
 	 */
-	public void download(DownloadSource source, Path target, IntConsumer progressAction) throws IOException, InterruptedException {
+	public void download(DownloadSource source, Path target, long offset, IntConsumer progressAction) throws IOException, InterruptedException {
 		URI uri;
 		try {
 			uri = URI.create(source.url());
@@ -49,7 +53,9 @@ public class HttpFileDownloader {
 		}
 
 		boolean authenticate = isAuthenticatedCurseForgeTarget(source, uri);
-		HttpResponse<InputStream> response = send(source, uri, authenticate, authenticate ? DIRECT_CLIENT : REDIRECT_CLIENT, target);
+		// The key-carrying request must never follow a redirect (DIRECT), so the explicit dance below re-sends it
+		// without the key; every other source follows redirects in the pool like it always has.
+		HttpResponse<InputStream> response = send(source, uri, authenticate, offset, authenticate ? HttpClientPool.direct() : HttpClientPool.redirects(), target);
 
 		if (authenticate && response.statusCode() >= 300 && response.statusCode() < 400) {
 			try (InputStream ignored = response.body()) {
@@ -61,14 +67,26 @@ public class HttpFileDownloader {
 				}
 				if (!"https".equalsIgnoreCase(uri.getScheme())) throw new IOException("Refusing CurseForge HTTPS downgrade redirect");
 			}
-			response = send(source, uri, false, REDIRECT_CLIENT, target);
+			response = send(source, uri, false, offset, HttpClientPool.redirects(), target);
 		}
 
 		int statusCode = response.statusCode();
-		if (statusCode != 200) {
+		if (statusCode == 416) {
+			try (InputStream ignored = response.body()) {
+				throw new StaleRangeException();
+			}
+		}
+		long writeOffset = offset;
+		if (statusCode == 206) {
+			writeOffset = requireResumeStart(response, offset);
+		} else if (statusCode != 200) {
 			try (InputStream ignored = response.body()) {
 				throw new HttpStatusException(statusCode);
 			}
+		} else if (offset > 0) {
+			// A 200 to a Range request means "full representation": truncate and pull the whole body from zero, in place - the barebones-CDN case, not an error.
+			LOGGER.info("Server ignored the Range header for {}; pulling the whole object from zero", target.getFileName());
+			writeOffset = 0;
 		}
 
 		String encoding = response.headers().firstValue("Content-Encoding").orElse("").trim().toLowerCase(Locale.ROOT);
@@ -77,9 +95,9 @@ public class HttpFileDownloader {
 
 		try (InputStream rawIn = response.body();
 				InputStream in = codec == null ? rawIn : codec.unwrap(rawIn);
-				OutputStream out = LocalFileWriter.open(target)) {
+				OutputStream out = writeOffset > 0 ? LocalFileWriter.openAt(target, writeOffset) : LocalFileWriter.open(target)) {
 
-			byte[] buffer = new byte[NetUtils.READ_BUFFER_BYTES];
+			byte[] buffer = READ_BUFFERS.get();
 			int bytesRead;
 			while ((bytesRead = in.read(buffer)) != -1) {
 				if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
@@ -90,11 +108,30 @@ public class HttpFileDownloader {
 		}
 	}
 
-	private HttpResponse<InputStream> send(DownloadSource source, URI uri, boolean authenticate, HttpClient client, Path target)
+	/** A 206 must answer the exact take we asked for: its Content-Range start is the offset, anything else means the partial is stale. */
+	private static long requireResumeStart(HttpResponse<InputStream> response, long offset) throws IOException {
+		String contentRange = response.headers().firstValue("Content-Range").orElse(null);
+		if (contentRange == null) throw new StaleRangeException();
+		String spec = contentRange.trim();
+		if (!spec.startsWith("bytes ")) throw new IOException("Unparseable Content-Range: " + contentRange);
+		int dash = spec.indexOf('-');
+		if (dash < 0) throw new IOException("Unparseable Content-Range: " + contentRange);
+		long start;
+		try {
+			start = Long.parseLong(spec.substring("bytes ".length(), dash).trim());
+		} catch (NumberFormatException e) {
+			throw new IOException("Unparseable Content-Range: " + contentRange);
+		}
+		if (start != offset) throw new StaleRangeException();
+		return start;
+	}
+
+	private HttpResponse<InputStream> send(DownloadSource source, URI uri, boolean authenticate, long offset, HttpClient client, Path target)
 			throws IOException, InterruptedException {
 		HttpRequest.Builder request = HttpRequest.newBuilder().uri(uri).header("User-Agent", NetUtils.USER_AGENT)
 				.header("Accept-Encoding", WireCodec.offeredEncodings()).timeout(NetUtils.NETWORK_TIMEOUT).GET();
 		if (authenticate) request.header("x-api-key", summonKey());
+		if (offset > 0) request.header("Range", "bytes=" + offset + "-");
 
 		try {
 			HttpResponse<InputStream> response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
@@ -106,11 +143,6 @@ public class HttpFileDownloader {
 		} catch (Exception e) {
 			throw new IOException("HTTP Client Protocol Error", e);
 		}
-	}
-
-	private static HttpClient createClient(HttpClient.Redirect redirects) {
-		return HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).followRedirects(redirects).connectTimeout(NetUtils.NETWORK_TIMEOUT)
-				.executor(Executors.newCachedThreadPool()).build();
 	}
 
 	private static boolean isAuthenticatedCurseForgeTarget(DownloadSource source, URI uri) {

@@ -27,10 +27,12 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import pl.skidam.automodpack_core.protocol.DocumentFetch;
 import pl.skidam.automodpack_core.protocol.LocalFileWriter;
+import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.DownloadSource;
@@ -46,6 +48,10 @@ class DownloadManagerPlatformTest {
 
 	private static HttpServer server;
 	private static final Map<String, byte[]> CONTENTS = new HashMap<>();
+	/** Every request the resume-lab endpoints answered, so the tests can fail fast on the wire behavior after the run. */
+	private static final List<ServedRequest> RESUME_REQUESTS = new ArrayList<>();
+
+	private record ServedRequest(String scenario, String range, String userAgent) {}
 
 	@TempDir
 	Path tempDir;
@@ -61,6 +67,7 @@ class DownloadManagerPlatformTest {
 		CONTENTS.put("chunk-over.bin", deterministic("chunk-over", 4_194_305));
 		CONTENTS.put("multi-chunk.bin", deterministic("multi-chunk", 12_582_912));
 		CONTENTS.put("validates-ünïcode.jar", deterministic("unicode", 4096));
+		CONTENTS.put("resume.bin", deterministic("resume", 1_048_576));
 		server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 		server.createContext("/good", exchange -> {
 			byte[] body = CONTENTS.get(exchange.getRequestURI().getPath().substring("/good/".length()));
@@ -84,7 +91,51 @@ class DownloadManagerPlatformTest {
 			}
 			exchange.close();
 		});
+		server.createContext("/resume-lab", exchange -> serveResumeLab(exchange));
+		server.createContext("/redirect", exchange -> {
+			exchange.getResponseHeaders().set("Location", "/good/" + exchange.getRequestURI().getPath().substring("/redirect/".length()));
+			exchange.sendResponseHeaders(302, -1);
+			exchange.close();
+		});
 		server.start();
+	}
+
+	/**
+	 * The interrupted-download scenarios: the first (Range-less) attempt serves a prefix of the body and kills the
+	 * connection mid-body; the retry's behavior depends on the scenario - a 206 from the requested offset, a 200 that
+	 * ignores the Range, or a 416 that declares the partial stale.
+	 */
+	private static void serveResumeLab(HttpExchange exchange) throws IOException {
+		byte[] body = CONTENTS.get("resume.bin");
+		String range = exchange.getRequestHeaders().getFirst("Range");
+		String scenario = exchange.getRequestURI().getPath().substring("/resume-lab/".length());
+		synchronized (RESUME_REQUESTS) {
+			RESUME_REQUESTS.add(new ServedRequest(scenario, range, exchange.getRequestHeaders().getFirst("User-Agent")));
+		}
+		if (range == null) {
+			int prefix = "resumable".equals(scenario) ? body.length * 8 / 10 : body.length * 4 / 10;
+			exchange.sendResponseHeaders(200, body.length);
+			OutputStream out = exchange.getResponseBody();
+			out.write(body, 0, prefix);
+			out.flush();
+			exchange.close(); // short of the declared length: the client loses the connection mid-body
+			return;
+		}
+		long start = Long.parseLong(range.replace("bytes=", "").replace("-", ""));
+		switch (scenario) {
+			case "resumable" -> {
+				exchange.getResponseHeaders().set("Content-Range", "bytes " + start + "-" + (body.length - 1) + "/" + body.length);
+				exchange.sendResponseHeaders(206, body.length - start);
+				exchange.getResponseBody().write(body, (int) start, body.length - (int) start);
+			}
+			case "range-ignored" -> {
+				exchange.sendResponseHeaders(200, body.length);
+				exchange.getResponseBody().write(body);
+			}
+			case "stale" -> exchange.sendResponseHeaders(416, -1);
+			default -> throw new IOException("Unknown resume-lab scenario: " + scenario);
+		}
+		exchange.close();
 	}
 
 	@AfterAll
@@ -195,6 +246,51 @@ class DownloadManagerPlatformTest {
 		assertArrayEquals(new byte[0], Files.readAllBytes(layout.objectFile(sha1)));
 	}
 
+	/** First attempt dies at 80%; the retry must carry the partial's offset on the wire and finish the object from the 206. */
+	@Test
+	void anInterruptedPlatformDownloadResumesBehindItsPartial() throws Exception {
+		byte[] expected = CONTENTS.get("resume.bin");
+		RESUME_REQUESTS.clear();
+		Path stored = downloadViaPlatform("resumed.bin", "resume.bin", "/resume-lab/resumable", new FakeTransport(null));
+		assertArrayEquals(expected, Files.readAllBytes(stored));
+		assertEquals(2, RESUME_REQUESTS.size());
+		assertNull(RESUME_REQUESTS.get(0).range(), "the first attempt has no partial, so no Range header");
+		assertEquals("bytes=" + expected.length * 8 / 10 + "-", RESUME_REQUESTS.get(1).range(), "the retry must resume exactly behind the stored prefix");
+		for (ServedRequest served : RESUME_REQUESTS) assertEquals(NetUtils.USER_AGENT, served.userAgent(), "downloads carry the User-Agent too");
+	}
+
+	/** A redirecting non-CurseForge source is followed by the pool, and the file behind the hop lands exact. */
+	@Test
+	void aRedirectingSourceIsFollowedAndTheFileLandsExact() throws Exception {
+		byte[] expected = CONTENTS.get("resume.bin");
+		Path stored = downloadViaPlatform("redirected.bin", "resume.bin", "/redirect/resume.bin", new FakeTransport(null));
+		assertArrayEquals(expected, Files.readAllBytes(stored));
+	}
+
+	/** First attempt dies at 40%; the retry sends the Range, the server ignores it with a full 200, and the object still lands exact. */
+	@Test
+	void aRangeIgnoringServerStillYieldsExactBytesFromZero() throws Exception {
+		byte[] expected = CONTENTS.get("resume.bin");
+		RESUME_REQUESTS.clear();
+		Path stored = downloadViaPlatform("range-ignored.bin", "resume.bin", "/resume-lab/range-ignored", new FakeTransport(null));
+		assertArrayEquals(expected, Files.readAllBytes(stored));
+		assertEquals(2, RESUME_REQUESTS.size());
+		assertEquals("bytes=" + expected.length * 4 / 10 + "-", RESUME_REQUESTS.get(1).range(), "the retry does send the Range header");
+	}
+
+	/** A 416 verdict deletes the partial: the host fallback receives a clean, empty temp instead of the stale prefix. */
+	@Test
+	void aStalePartialIsDeletedAndTheNextAttemptStartsClean() throws Exception {
+		byte[] expected = CONTENTS.get("resume.bin");
+		RESUME_REQUESTS.clear();
+		FakeTransport transport = new FakeTransport(expected);
+		Path stored = downloadViaPlatform("stale.bin", "resume.bin", "/resume-lab/stale", transport);
+		assertArrayEquals(expected, Files.readAllBytes(stored));
+		assertEquals(2, RESUME_REQUESTS.size());
+		assertEquals("bytes=" + expected.length * 4 / 10 + "-", RESUME_REQUESTS.get(1).range());
+		assertEquals(List.of(0L), transport.resumeOffsets, "the 416 must have deleted the stale partial: the host wire resumes from zero");
+	}
+
 	/** The expected bytes on disk, so the store's sha1 promotion judges real content. */
 	private Path writeExpected(String name, byte[] content) throws IOException {
 		Path expected = tempDir.resolve("expected-" + name);
@@ -207,6 +303,7 @@ class DownloadManagerPlatformTest {
 	private static final class FakeTransport implements PackTransport {
 		private final byte[] servedBytes;
 		private final List<String> fetches = new ArrayList<>();
+		private final List<Long> resumeOffsets = new ArrayList<>();
 		private final AtomicInteger failures = new AtomicInteger();
 		// Optional test hooks: onFetch fires after each recorded fetch; wirePermits, when non-null, caps how many
 		// hasWireRoom calls may answer true (each true consumes one).
@@ -228,6 +325,7 @@ class DownloadManagerPlatformTest {
 			}
 			try {
 				long offset = Files.exists(destination) ? Files.size(destination) : 0; // the contract: resume behind the stored prefix
+				resumeOffsets.add(offset);
 				if (offset >= servedBytes.length) return CompletableFuture.completedFuture(destination);
 				byte[] suffix = new byte[servedBytes.length - (int) offset];
 				System.arraycopy(servedBytes, (int) offset, suffix, 0, suffix.length);

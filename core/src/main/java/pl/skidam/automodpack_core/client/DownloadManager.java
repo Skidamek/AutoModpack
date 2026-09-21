@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.client;
 import static pl.skidam.automodpack_core.Constants.*;
 
 import java.io.*;
-import java.net.HttpURLConnection;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,6 +16,7 @@ import java.util.function.IntConsumer;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.LocalStorageException;
 import pl.skidam.automodpack_core.protocol.PackTransport;
+import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.protocol.StaleRangeException;
 import pl.skidam.automodpack_core.protocol.WireTrace;
 import pl.skidam.automodpack_core.protocol.WireWindowFullException;
@@ -45,6 +45,9 @@ public class DownloadManager implements DownloadView {
 	public record AcquisitionProgress(long acquired, long failed) {}
 
 	private static final int MAX_DOWNLOAD_ATTEMPTS = 2;
+	private static final int HTTP_UNAUTHORIZED = 401;
+	private static final int HTTP_NOT_FOUND = 404;
+	private static final int HTTP_GONE = 410;
 	// Domain label for transfers served by the attached AutoModpack host client instead of a remote platform source.
 	private static final String INTERNAL_CLIENT_SOURCE = "internal_client";
 
@@ -351,9 +354,10 @@ public class DownloadManager implements DownloadView {
 		}
 	}
 
-	/** The blocking platform path: one HTTP download from the picked source. The transport's wire window is not involved. */
+	/** The blocking platform path: one HTTP download from the picked source, resuming behind the stored partial. The transport's wire window is not involved. */
 	private boolean attemptPlatformDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, DownloadSource source, Path partial) throws InterruptedException {
 		refreshDeadLinkSources(hashPathPair.hash(), task);
+		long offset = PartialResume.offset(partial, task.fileSize);
 		long attemptStart = System.nanoTime();
 		AtomicLong attemptBytes = new AtomicLong(0);
 		// One hook for everything the written bytes mean: global progress, display speed, this attempt's sample and the in-flight backlog left for the scheduler.
@@ -363,7 +367,7 @@ public class DownloadManager implements DownloadView {
 			data.remainingBytes.addAndGet(-bytes);
 		};
 		try {
-			httpDownloader.download(source, partial, progressAction);
+			httpDownloader.download(source, partial, offset, progressAction);
 		} catch (LocalStorageException e) {
 			task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
 			LOGGER.warn("Failed to write temporary CAS object {}", hashPathPair.hash(), e);
@@ -372,15 +376,15 @@ public class DownloadManager implements DownloadView {
 		} catch (HttpFileDownloader.HttpStatusException e) {
 			task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 			if (isDeadPlatformLink(source, e)) markDeadPlatformLink(hashPathPair.hash(), task);
-			else if (source.provider() == DownloadSource.Provider.CURSEFORGE && e.statusCode() == HttpURLConnection.HTTP_UNAUTHORIZED) {
+			else if (source.provider() == DownloadSource.Provider.CURSEFORGE && e.statusCode() == HTTP_UNAUTHORIZED) {
 				LOGGER.warn("CurseForge rejected the download API key with HTTP 401; trying the next source");
 				task.domainFailures.merge(data.activeDomain, MAX_DOWNLOAD_ATTEMPTS, Integer::sum);
 			}
 			return false;
 		} catch (StaleRangeException e) {
-			// The partial is beyond the served object's end: worthless, so the next attempt starts clean.
+			// The partial cannot serve as the resume prefix: worthless, so the next attempt starts clean.
 			task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
-			LOGGER.warn("Stored partial for CAS object {} is past the served object's end; restarting from zero", hashPathPair.hash());
+			LOGGER.warn("Stored partial for CAS object {} is stale for resume; restarting from zero", hashPathPair.hash());
 			deletePartial(task);
 			return false;
 		} catch (IOException e) {
@@ -489,7 +493,7 @@ public class DownloadManager implements DownloadView {
 	}
 
 	private static boolean isDeadPlatformLink(DownloadSource source, HttpFileDownloader.HttpStatusException e) {
-		return source != null && (e.statusCode() == HttpURLConnection.HTTP_NOT_FOUND || e.statusCode() == HttpURLConnection.HTTP_GONE);
+		return source != null && (e.statusCode() == HTTP_NOT_FOUND || e.statusCode() == HTTP_GONE);
 	}
 
 	private void markDeadPlatformLink(String sha1, QueuedDownload task) {
