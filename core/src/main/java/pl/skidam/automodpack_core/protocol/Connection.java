@@ -47,7 +47,6 @@ class Connection implements AutoCloseable {
 	// Our own server never redirects; the cap exists for foreign static hosts, so only a misconfigured redirect loop touches it.
 	private static final int MAX_REDIRECTS = 3;
 	// Response header lines are tiny; a line past this or a block of this many lines is a hostile or broken peer.
-	private static final int MAX_HEADER_LINE_BYTES = 8 * 1024;
 	private static final int MAX_HEADER_LINES = 128;
 	/** The document verdict for one conditional response; the body hash decides, never the status alone. */
 	private record ResponseHead(int status, Long contentLength, String contentRange, String contentEncoding, String location, boolean connectionClose, boolean chunked) {}
@@ -419,64 +418,21 @@ class Connection implements AutoCloseable {
 	}
 
 	private ResponseHead parseResponseHead() throws IOException {
-		String statusLine = readLine();
-		if (!statusLine.startsWith("HTTP/1.1 ")) throw new IOException("Not an HTTP/1.1 response: " + statusLine);
-		String[] parts = statusLine.split(" ", 3);
-		int status;
-		try {
-			status = Integer.parseInt(parts[1]);
-		} catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
-			throw new IOException("Unparseable HTTP status line: " + statusLine);
-		}
-		Long contentLength = null;
-		String contentRange = null;
-		String contentEncoding = null;
-		String location = null;
-		boolean connectionClose = false;
-		boolean chunked = false;
-		int lines = 0;
-		while (lines++ < MAX_HEADER_LINES) {
-			String header = readLine();
-			if (header.isEmpty()) return new ResponseHead(status, contentLength, contentRange, contentEncoding, location, connectionClose, chunked);
-			int colon = header.indexOf(':');
-			if (colon <= 0) continue;
-			String name = header.substring(0, colon).trim().toLowerCase(Locale.ROOT);
-			String value = header.substring(colon + 1).trim();
-			switch (name) {
-				case "content-length" -> contentLength = parseContentLength(value, header);
-				case "content-range" -> contentRange = value;
-				case "content-encoding" -> contentEncoding = value;
-				case "location" -> location = value;
-				case "connection" -> connectionClose = value.toLowerCase(Locale.ROOT).contains("close");
-				case "transfer-encoding" -> chunked = true;
-				default -> {
-				}
-			}
-		}
-		throw new IOException("Response header block exceeded " + MAX_HEADER_LINES + " lines");
+		HttpHead head = HttpHead.read(in);
+		String contentLengthValue = head.headerValue("content-length");
+		Long contentLength = contentLengthValue == null ? null : parseContentLength(contentLengthValue);
+		String connection = head.headerValue("connection");
+		return new ResponseHead(head.status(), contentLength, head.headerValue("content-range"), head.headerValue("content-encoding"), head.headerValue("location"),
+				connection != null && connection.toLowerCase(Locale.ROOT).contains("close"), head.headerValue("transfer-encoding") != null);
 	}
 
-	private static long parseContentLength(String value, String header) throws IOException {
+	private static long parseContentLength(String value) throws IOException {
 		try {
 			long length = Long.parseLong(value);
 			if (length < 0) throw new NumberFormatException();
 			return length;
 		} catch (NumberFormatException e) {
-			throw new IOException("Unparseable Content-Length: " + header);
-		}
-	}
-
-	/** Reads one CRLF-terminated header line; TLS already framed the records, so only a hostile peer can stretch a line. */
-	private String readLine() throws IOException {
-		StringBuilder line = new StringBuilder(64);
-		int previous = -1;
-		while (true) {
-			int read = in.read();
-			if (read < 0) throw new IOException("Connection ended inside a response header");
-			if (previous == '\r' && read == '\n') return line.substring(0, line.length() - 1);
-			line.append((char) read);
-			if (line.length() > MAX_HEADER_LINE_BYTES) throw new IOException("Response header line exceeded " + MAX_HEADER_LINE_BYTES + " bytes");
-			previous = read;
+			throw new IOException("Unparseable Content-Length: " + value);
 		}
 	}
 
@@ -626,7 +582,7 @@ class Connection implements AutoCloseable {
 		public int read(byte[] buffer, int offset, int length) throws IOException {
 			if (done) return -1;
 			if (chunkRemaining == 0) {
-				long size = parseChunkSize(readLine());
+				long size = parseChunkSize(HttpHead.readLine(in));
 				if (size == 0) {
 					consumeTrailers();
 					done = true;
@@ -649,7 +605,7 @@ class Connection implements AutoCloseable {
 		void drainToFrameEnd() throws IOException {
 			while (!done) {
 				if (chunkRemaining == 0) {
-					long size = parseChunkSize(readLine());
+					long size = parseChunkSize(HttpHead.readLine(in));
 					if (size == 0) {
 						consumeTrailers();
 						done = true;
@@ -685,7 +641,7 @@ class Connection implements AutoCloseable {
 		/** The size line's CRLF is already consumed, so the first trailer line (empty when there are none) reads next. */
 		private void consumeTrailers() throws IOException {
 			int lines = 0;
-			while (!readLine().isEmpty()) {
+			while (!HttpHead.readLine(in).isEmpty()) {
 				if (++lines > MAX_HEADER_LINES) throw new IOException("Chunked trailer block exceeded " + MAX_HEADER_LINES + " lines");
 			}
 		}

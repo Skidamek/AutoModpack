@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Locale;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -79,21 +78,14 @@ final class PreConfigurationKeepalive {
 	}
 
 	private void discardResponse() throws IOException {
-		Long contentLength = null;
-		for (int lines = 0; lines++ < 128;) {
-			String header = readLine();
-			if (header.isEmpty()) break;
-			int colon = header.indexOf(':');
-			if (colon <= 0) continue;
-			if (header.substring(0, colon).trim().toLowerCase(Locale.ROOT).equals("content-length")) {
-				try {
-					contentLength = Long.parseLong(header.substring(colon + 1).trim());
-				} catch (NumberFormatException e) {
-					throw new IOException("Unparseable keepalive response: " + header);
-				}
-			}
+		String lengthValue = HttpHead.read(in).headerValue("content-length");
+		if (lengthValue == null) throw new IOException("Keepalive response without a Content-Length");
+		long contentLength;
+		try {
+			contentLength = Long.parseLong(lengthValue);
+		} catch (NumberFormatException e) {
+			throw new IOException("Unparseable keepalive response: " + lengthValue);
 		}
-		if (contentLength == null) throw new IOException("Keepalive response without a Content-Length");
 		for (long remaining = contentLength; remaining > 0;) {
 			long skipped = in.skip(remaining);
 			if (skipped <= 0) {
@@ -101,19 +93,6 @@ final class PreConfigurationKeepalive {
 				skipped = 1;
 			}
 			remaining -= skipped;
-		}
-	}
-
-	private String readLine() throws IOException {
-		StringBuilder line = new StringBuilder(64);
-		int previous = -1;
-		while (true) {
-			int read = in.read();
-			if (read < 0) throw new IOException("Connection ended inside a keepalive response");
-			if (previous == '\r' && read == '\n') return line.substring(0, line.length() - 1);
-			line.append((char) read);
-			if (line.length() > 8 * 1024) throw new IOException("Keepalive response header line exceeded 8 KiB");
-			previous = read;
 		}
 	}
 
