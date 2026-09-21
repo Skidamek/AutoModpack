@@ -34,7 +34,7 @@ public class SelfUpdater {
 
 	// Hardcoded floor: 5.0.0 Stable.
 	// Logic: 5.0.0-beta1 < 5.0.0 Stable. This prevents downgrading to unsafe betas.
-	private static final SemanticVersion MINIMUM_SAFE_VERSION = new SemanticVersion(5, 0, 0, "release", Integer.MAX_VALUE);
+	private static final SemanticVersion MINIMUM_SAFE_VERSION = new SemanticVersion(5, 0, 0, List.of());
 
 	public static boolean update() {
 		return update(null);
