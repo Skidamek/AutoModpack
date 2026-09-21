@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,26 @@ class PipeliningTest {
 				assertEquals(1, server.connections.get(), "the whole pipeline rides one lane");
 				assertTrue(server.pipelineArrived(), "all eight requests reached the socket before the first response left");
 				assertEquals(expectedOrder(IN_FLIGHT), completionOrder, "responses complete strictly in request order");
+			}
+		}
+	}
+
+	@Test
+	void aDeclaredLengthPastTheLimitFailsOnlyItsOwnRequest(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			List<String> hashes = storeObjects(server, 2);
+			String sha1 = hashes.get(0);
+			try (DownloadClient client = client(server, "test-secret")) {
+				CompletableFuture<Path> limited = client.downloadFile(sha1.getBytes(StandardCharsets.UTF_8), directory.resolve("limited"), 0L, -1L, null, null, false, 4L, 0);
+				ExecutionException failed = assertThrows(ExecutionException.class, () -> limited.get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertTrue(rootCause(failed).getMessage().contains("byte limit"), String.valueOf(rootCause(failed)));
+				assertFalse(Files.exists(directory.resolve("limited")));
+
+				// The body was discarded, not abandoned: the same lane answers the next request with its full bytes.
+				Path whole = client.downloadFile(sha1.getBytes(StandardCharsets.UTF_8), directory.resolve("whole"), null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertArrayEquals(server.store().get(sha1), Files.readAllBytes(whole));
+				Path untouched = client.downloadFile(hashes.get(1).getBytes(StandardCharsets.UTF_8), directory.resolve("untouched"), null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertArrayEquals(server.store().get(hashes.get(1)), Files.readAllBytes(untouched));
 			}
 		}
 	}

@@ -43,13 +43,15 @@ final class ModpackObjectAcquisition {
 	private final AtomicBoolean playerCancelled;
 	private final Supplier<String> modpackName;
 	private final Runnable onPlayerCancel;
+	private final String waitingMusicSha1;
 	private final Set<String> reservedObjectHashes = new TreeSet<>();
 	private final Map<ModpackJsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new ConcurrentHashMap<>();
 	private final Map<ModpackJsons.ModpackContentFields.ModpackContentItem, DownloadManager.FailureCategory> failedDownloadCategories = new ConcurrentHashMap<>();
 	private DownloadManager downloadManager;
 
 	ModpackObjectAcquisition(ClientStorage storage, PlatformCache platformCache, SourceCatalogue sourceCatalogue, ClientUpdatePlanBuilder planBuilder,
-			ConnectionJsons.ConnectionInfo connectionInfo, PackTransport transport, AtomicBoolean playerCancelled, Supplier<String> modpackName, Runnable onPlayerCancel) {
+			ConnectionJsons.ConnectionInfo connectionInfo, PackTransport transport, AtomicBoolean playerCancelled, Supplier<String> modpackName, Runnable onPlayerCancel,
+			String waitingMusicSha1) {
 		this.storage = storage;
 		this.platformCache = platformCache;
 		this.sourceCatalogue = sourceCatalogue;
@@ -59,6 +61,7 @@ final class ModpackObjectAcquisition {
 		this.playerCancelled = playerCancelled;
 		this.modpackName = modpackName;
 		this.onPlayerCancel = onPlayerCancel;
+		this.waitingMusicSha1 = waitingMusicSha1;
 	}
 
 	void interrupt() {
@@ -144,7 +147,7 @@ final class ModpackObjectAcquisition {
 		downloadManager = new DownloadManager(totalBytes, storage.dataLocation().layout(), platformCache);
 		if (playerFacing) {
 			ScreenManager.download(downloadManager, modpackName.get(), onPlayerCancel);
-			WaitingMusic.start(transport, storage);
+			WaitingMusic.start(transport, storage, waitingMusicSha1);
 		}
 		downloadManager.attachTransport(transport);
 		for (var serverItem : files) {

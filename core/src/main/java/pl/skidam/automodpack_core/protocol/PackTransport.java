@@ -37,6 +37,16 @@ public interface PackTransport extends AutoCloseable {
 		return downloadFile(key, destination, offset, -1L, progress, lane);
 	}
 
+	/**
+	 * The same fetch with a tap and a negotiation choice: every served body byte is written to {@code tap}
+	 * (decode-while-downloading) in addition to the destination, {@code offerEncoding} sends Accept-Encoding
+	 * (true) or asks for identity (false), and {@code limitBytes} rejects an object whose declared length exceeds
+	 * it before a body byte is read (negative means no limit). Transports without byte-level access drop the tap.
+	 */
+	default CompletableFuture<Path> downloadFile(byte[] key, Path destination, long offset, long endInclusive, IntConsumer progress, OutputStream tap, boolean offerEncoding, long limitBytes, int lane) {
+		return downloadFile(key, destination, offset, endInclusive, progress, lane);
+	}
+
 	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the answer is {@code unchanged} and no body may follow. */
 	CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer progress);
 

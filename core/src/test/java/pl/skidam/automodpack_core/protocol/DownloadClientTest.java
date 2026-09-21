@@ -91,22 +91,37 @@ class DownloadClientTest {
 	}
 
 	@Test
-	void exactAndSessionPinsConstrainEveryConnection() throws Exception {
+	void pinsPassOrDeferAndOnlyTheLadderRecovers() throws Exception {
 		X509Certificate accepted = NetUtils.selfSign(NetUtils.generateKeyPair());
 		X509Certificate changed = NetUtils.selfSign(NetUtils.generateKeyPair());
 		String fingerprint = NetUtils.getFingerprint(accepted);
 
+		// The exact pin passes the leaf straight through; a changed leaf defers quietly - the handshake never
+		// hard-fails, the ladder recovers it through a published fingerprint or ends in a pin mismatch.
 		var configuredTrust = new CustomizableTrustManager.SessionTrust("origin.example:25565", fingerprint);
 		var configuredManager = new CustomizableTrustManager(configuredTrust, null);
 		assertDoesNotThrow(() -> configuredManager.checkServerTrusted(new X509Certificate[]{accepted}, "RSA"));
-		assertThrows(CertificatePinMismatchException.class,
-				() -> configuredManager.checkServerTrusted(new X509Certificate[]{changed}, "RSA"));
+		assertNull(configuredManager.getDeferredCertificate());
+		assertDoesNotThrow(() -> configuredManager.checkServerTrusted(new X509Certificate[]{changed}, "RSA"));
+		assertSame(changed, configuredManager.getDeferredCertificate());
+		CertificatePinMismatchException mismatch = configuredTrust.mismatch(changed);
+		assertEquals(fingerprint, mismatch.getExpectedFingerprint());
+		assertEquals(NetUtils.getFingerprint(changed), mismatch.getPresentedFingerprint());
 
+		// A session-accepted pin constrains later handshakes the same way, and a conflicting accept is refused.
 		var sessionTrust = new CustomizableTrustManager.SessionTrust("origin.example:25565", null);
 		sessionTrust.accept(accepted);
 		var sessionManager = new CustomizableTrustManager(sessionTrust, null);
 		assertDoesNotThrow(() -> sessionManager.checkServerTrusted(new X509Certificate[]{accepted}, "RSA"));
-		assertThrows(CertificatePinMismatchException.class, () -> sessionManager.checkServerTrusted(new X509Certificate[]{changed}, "RSA"));
+		assertDoesNotThrow(() -> sessionManager.checkServerTrusted(new X509Certificate[]{changed}, "RSA"));
+		assertSame(changed, sessionManager.getDeferredCertificate());
+		assertThrows(CertificatePinMismatchException.class, () -> sessionTrust.accept(changed));
+
+		// A published fingerprint recovers a rotated leaf: the session's pin follows it.
+		configuredTrust.recover(changed);
+		var recoveredManager = new CustomizableTrustManager(configuredTrust, null);
+		assertDoesNotThrow(() -> recoveredManager.checkServerTrusted(new X509Certificate[]{changed}, "RSA"));
+		assertNull(recoveredManager.getDeferredCertificate());
 	}
 
 	@Test

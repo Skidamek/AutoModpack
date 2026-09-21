@@ -77,7 +77,8 @@ class CloudflaredTunnelLiveTest {
 				awaitDns(host);
 				InetSocketAddress endpoint = AddressHelpers.format(host, 443);
 				ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(endpoint, endpoint, ModpackConnectionMode.HTTP, null, null);
-				DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false))
+				// The edge certificate is publicly trusted, but a first contact always pins with the player's blessing.
+				DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(true))
 						.get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				try {
 					Thread.dumpStack();

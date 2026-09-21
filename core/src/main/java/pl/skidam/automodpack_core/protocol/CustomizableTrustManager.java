@@ -8,6 +8,7 @@ import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.concurrent.atomic.AtomicReference;
@@ -22,7 +23,7 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 
 	public static final class SessionTrust {
 		private final String origin;
-		private final String configuredFingerprint;
+		private volatile String configuredFingerprint;
 		private final AtomicReference<String> acceptedFingerprint = new AtomicReference<>();
 
 		public SessionTrust(String origin, String configuredFingerprint) {
@@ -30,14 +31,21 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 			this.configuredFingerprint = configuredFingerprint == null ? null : normalizeFingerprint(configuredFingerprint);
 		}
 
-		boolean checkPin(X509Certificate[] chain) throws CertificateException {
-			String expected = configuredFingerprint != null ? configuredFingerprint : acceptedFingerprint.get();
-			if (expected == null) return false;
-			if (chain == null || chain.length == 0) throw new CertificateException("Server did not present a certificate");
+		/** True when this leaf is exactly the pin this session trusts: the configured pin or one accepted earlier in the session. */
+		boolean pinMatches(X509Certificate[] chain) throws CertificateEncodingException {
+			String expected = expectedFingerprint();
+			if (expected == null || chain == null || chain.length == 0) return false;
+			return expected.equals(getFingerprint(chain[0]));
+		}
 
-			String presented = getFingerprint(chain[0]);
-			if (!expected.equals(presented)) throw new CertificatePinMismatchException(origin, expected, presented);
-			return true;
+		/** Whether a pin was configured for this origin; a pinned session whose leaf changed has no bypass, only recovery channels. */
+		boolean hasConfiguredPin() {
+			return configuredFingerprint != null;
+		}
+
+		/** The mismatch a deferred certificate fails with; the ladder surfaces it, the handshake itself stays quiet. */
+		CertificatePinMismatchException mismatch(X509Certificate leaf) throws CertificateEncodingException {
+			return new CertificatePinMismatchException(origin, expectedFingerprint(), leaf == null ? null : getFingerprint(leaf));
 		}
 
 		void accept(X509Certificate certificate) throws CertificateException {
@@ -48,6 +56,17 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 			String previous = acceptedFingerprint.get();
 			if (previous != null && !previous.equals(fingerprint)) throw new CertificatePinMismatchException(origin, previous, fingerprint);
 			acceptedFingerprint.compareAndSet(null, fingerprint);
+		}
+
+		/** A published DNSSEC fingerprint approved this leaf (typically rotation): the session's pin follows it. */
+		void recover(X509Certificate certificate) throws CertificateException {
+			String fingerprint = getFingerprint(certificate);
+			configuredFingerprint = fingerprint;
+			acceptedFingerprint.set(fingerprint);
+		}
+
+		private String expectedFingerprint() {
+			return configuredFingerprint != null ? configuredFingerprint : acceptedFingerprint.get();
 		}
 	}
 
@@ -106,15 +125,19 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 
 	private void validateServer(X509Certificate[] chain, TrustCheck defaultCheck) throws CertificateException {
 		if (onValidating != null) onValidating.accept(chain);
-		if (sessionTrust.checkPin(chain)) return;
+		if (chain == null || chain.length == 0) throw new CertificateException("Server did not present a certificate");
+		if (sessionTrust.pinMatches(chain)) return;
 
 		try {
 			defaultCheck.check();
 		} catch (CertificateException e) {
-			if (chain == null || chain.length == 0 || !isSelfSigned(chain[0])) throw e;
-			deferredCertificate = chain[0];
+			// A chain the CAs reject is only deferrable when it is genuinely self-signed; anything else is broken.
+			if (!isSelfSigned(chain[0])) throw e;
 			deferredFailure = e;
 		}
+		// No pin matched this leaf: a first contact (whatever the CA said) or a changed certificate. The ladder
+		// decides - a published DNSSEC fingerprint speaks for the endpoint, and a first contact is the player's.
+		deferredCertificate = chain[0];
 	}
 
 	/** A certificate genuinely signed by its own key, not merely one whose subject equals its issuer. */

@@ -103,9 +103,14 @@ class Connection implements AutoCloseable {
 		}
 	}
 
-	/** Object request by sha1; the range is [{@code offset}, {@code endInclusive}] ({@code endInclusive < 0} means EOF) and is answered append-only behind a validated start. */
-	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback, long offset, long endInclusive) {
-		return submit(new ObjectRequest("/objects/" + new String(fileHash, StandardCharsets.UTF_8), destination, offset, endInclusive, chunkCallback));
+	/**
+	 * Object request by sha1; the range is [{@code offset}, {@code endInclusive}] ({@code endInclusive < 0} means EOF) and is answered append-only behind a validated start.
+	 * {@code offerEncoding} is plain negotiation: true sends Accept-Encoding and may receive an encoded chunked body,
+	 * false asks for identity and an ordinary Content-Length. {@code limitBytes} rejects an object whose declared
+	 * length exceeds it before a body byte is read (negative means no limit).
+	 */
+	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback, long offset, long endInclusive, OutputStream tap, boolean offerEncoding, long limitBytes) {
+		return submit(new ObjectRequest("/objects/" + new String(fileHash, StandardCharsets.UTF_8), destination, offset, endInclusive, chunkCallback, tap, offerEncoding, limitBytes));
 	}
 
 	/** Document request (reserved keys); a non-null expected hash may be answered 304, and the 200 body hash is the ground truth. */
@@ -263,28 +268,45 @@ class Connection implements AutoCloseable {
 	private final class ObjectRequest extends Pending<Path> {
 		private final long offset;
 		private final long endInclusive;
+		private final OutputStream tap;
+		private final boolean offerEncoding;
+		private final long limitBytes;
 
-		ObjectRequest(String path, Path destination, long offset, long endInclusive, IntConsumer chunks) {
+		ObjectRequest(String path, Path destination, long offset, long endInclusive, IntConsumer chunks, OutputStream tap, boolean offerEncoding, long limitBytes) {
 			super(path, destination, chunks);
 			this.offset = offset;
 			this.endInclusive = endInclusive;
+			this.tap = tap;
+			this.offerEncoding = offerEncoding;
+			this.limitBytes = limitBytes;
 		}
 
 		@Override
 		String headers() {
 			String end = endInclusive >= 0 ? "-" + endInclusive : "-";
 			String range = endInclusive >= 0 || offset > 0 ? "Range: bytes=" + offset + end + "\r\n" : "";
-			return range + ACCEPT_ENCODING;
+			return range + (offerEncoding ? ACCEPT_ENCODING : "");
+		}
+
+		/** True when the guardrail applies and the response declares more bytes than it allows; no limit or no declared length never trips. */
+		private boolean overLimit(ResponseHead head) {
+			return limitBytes >= 0 && head.contentLength() != null && head.contentLength() > limitBytes;
 		}
 
 		@Override
 		void deliver(ResponseHead head) throws IOException {
+			if (overLimit(head)) {
+				// The declared length busts the guardrail: the body is discarded so the lane stays aligned, and only this request fails.
+				discardBody(head);
+				future.completeExceptionally(new IOException("Object exceeds the " + limitBytes + " byte limit for " + originPath));
+				return;
+			}
 			if (head.status() == 206) {
 				// A 206 may only be appended behind the stored prefix when the server actually resumed at the requested offset; anything else fails fast instead of splicing together bytes that promotion would only
-				// reject after the fact.
-				if (head.contentLength() == null) throw new IOException("HTTP 206 without Content-Length");
+				// reject after the fact. An encoded body is framed chunked and has no length by design.
+				if (head.contentLength() == null && !head.chunked()) throw new IOException("HTTP 206 without Content-Length");
 				requireResumeStart(head, offset);
-				consumeBody(head, destination, offset, chunks, null, null, false);
+				consumeBody(head, destination, offset, chunks, null, tap, false);
 				future.complete(destination);
 				return;
 			}
@@ -294,7 +316,7 @@ class Connection implements AutoCloseable {
 				if (endInclusive >= 0) throw new IOException("Server ignored the Range end for " + originPath);
 				boolean resumed = offset > 0 && head.contentRange() != null;
 				if (resumed) requireResumeStart(head, offset);
-				consumeBody(head, destination, resumed ? offset : 0, chunks, null, null, false);
+				consumeBody(head, destination, resumed ? offset : 0, chunks, null, tap, false);
 				future.complete(destination);
 				return;
 			}

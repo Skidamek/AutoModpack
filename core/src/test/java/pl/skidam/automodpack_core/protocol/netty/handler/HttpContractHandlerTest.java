@@ -98,7 +98,7 @@ class HttpContractHandlerTest {
 		assertEquals("HTTP/1.1 404 Not Found", statusOf(exchange(channel, request("/unknown"))));
 		assertEquals("HTTP/1.1 404 Not Found", statusOf(exchange(channel, request("/head/"))));
 		assertEquals("HTTP/1.1 404 Not Found", statusOf(exchange(channel, request("/head?v=2"))));
-		assertEquals("HTTP/1.1 404 Not Found", statusOf(exchange(channel, request("/music")))); // no track configured
+		assertEquals("HTTP/1.1 404 Not Found", statusOf(exchange(channel, request("/waiting-music.ogg")))); // the track is an object, never a route
 		assertTrue(channel.isOpen());
 	}
 
@@ -126,6 +126,14 @@ class HttpContractHandlerTest {
 
 		String bare = exchange(channel, request("/head", "If-None-Match: " + etag));
 		assertTrue(bare.startsWith("HTTP/1.1 304 Not Modified\r\n"), bare);
+
+		// RFC 7232 weak comparison: the W/ prefix and validator lists never change the opaque value, and * matches any.
+		String weak = exchange(channel, request("/head", "If-None-Match: W/\"" + etag + "\""));
+		assertTrue(weak.startsWith("HTTP/1.1 304 Not Modified\r\n"), weak);
+		String listed = exchange(channel, request("/head", "If-None-Match: \"" + "0".repeat(40) + "\", \"" + etag + "\""));
+		assertTrue(listed.startsWith("HTTP/1.1 304 Not Modified\r\n"), listed);
+		String star = exchange(channel, request("/head", "If-None-Match: *"));
+		assertTrue(star.startsWith("HTTP/1.1 304 Not Modified\r\n"), star);
 
 		String mismatch = exchange(channel, request("/head", "If-None-Match: \"" + "0".repeat(40) + "\""));
 		assertTrue(mismatch.startsWith("HTTP/1.1 200 OK\r\n"), mismatch);
@@ -222,15 +230,20 @@ class HttpContractHandlerTest {
 		byte[] both = exchangeBytes(channel, request("/head", "Accept-Encoding: gzip, zstd"));
 		assertTrue(headOf(both).contains("Content-Encoding: zstd\r\n"), headOf(both));
 
-		// Objects compress for zstd clients too; ranges and non-negotiating clients stay identity so resume stays trivial.
+		// Plain negotiation on every body: objects compress for offering clients, ranges included - the slice is
+		// selected in file bytes, encoded on the wire, and Content-Range keeps describing file offsets.
 		byte[] object = exchangeBytes(channel, request("/objects/" + fixture.objectHash(), "Accept-Encoding: zstd"));
 		assertTrue(headOf(object).contains("Content-Encoding: zstd\r\n"), headOf(object));
 		assertArrayEquals(fixture.objectContent().getBytes(StandardCharsets.UTF_8), zstdDecode(deframe(object)));
 		byte[] ranged = exchangeBytes(channel, request("/objects/" + fixture.objectHash(), "Accept-Encoding: zstd", "Range: bytes=0-4"));
-		assertFalse(headOf(ranged).contains("Content-Encoding"), headOf(ranged));
+		assertTrue(headOf(ranged).startsWith("HTTP/1.1 206 Partial Content\r\n"), headOf(ranged));
+		assertTrue(headOf(ranged).contains("Content-Encoding: zstd\r\n"), headOf(ranged));
+		assertTrue(headOf(ranged).contains("Transfer-Encoding: chunked\r\n"), headOf(ranged));
+		assertTrue(headOf(ranged).contains("Content-Range: bytes 0-4/" + fixture.objectContent().length() + "\r\n"), headOf(ranged));
 		byte[] expectedRange = new byte[5];
 		System.arraycopy(fixture.objectContent().getBytes(StandardCharsets.UTF_8), 0, expectedRange, 0, 5);
-		assertArrayEquals(expectedRange, bodyOf(ranged));
+		assertArrayEquals(expectedRange, zstdDecode(deframe(ranged)));
+		// A client that offers nothing gets identity with an ordinary length.
 		byte[] plain = exchangeBytes(channel, request("/objects/" + fixture.objectHash()));
 		assertFalse(headOf(plain).contains("Content-Encoding"), headOf(plain));
 		assertArrayEquals(fixture.objectContent().getBytes(StandardCharsets.UTF_8), bodyOf(plain));
@@ -427,7 +440,7 @@ class HttpContractHandlerTest {
 
 	private Fixture fixture() throws Exception {
 		GenerationStore store = new GenerationStore(tempDir.resolve("host-generations"), tempDir.resolve("objects"));
-		// Long enough to sniff as compressible: a few bytes would serve identity, zstd's frame overhead eats the savings.
+		// Long enough that compression visibly pays; the contract itself no longer cares about ratios.
 		byte[] bytes = "object-payload-that-compresses-well\n".repeat(512).getBytes(StandardCharsets.UTF_8);
 		Path staging = tempDir.resolve("host-generations").resolve("staging");
 		Files.createDirectories(staging);

@@ -8,6 +8,7 @@ import java.net.Socket;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
@@ -31,9 +32,11 @@ import pl.skidam.automodpack_core.utils.Throwables;
 
 /**
  * The one certificate-trust plumbing and ladder every client transport runs over a freshly handshaked candidate
- * socket: a deferred self-signed certificate is accepted on a DNSSEC fingerprint match or the player's explicit
- * decision, heartbeated while the human decides. On acceptance the session trust pins the certificate, so every later
- * handshake on the same SSLContext passes without asking again.
+ * socket: a deferred certificate - any first contact, and any leaf that differs from the session's pin - is accepted
+ * on a published DNSSEC fingerprint match or the player's explicit decision, heartbeated while the human decides. A
+ * pinned session whose leaf changed recovers only through that published fingerprint; without one the mismatch is
+ * final. On acceptance the session trust pins the certificate, so every later handshake on the same SSLContext passes
+ * without asking again.
  */
 public final class CandidateTrustValidation {
 
@@ -93,18 +96,25 @@ public final class CandidateTrustValidation {
 			if (result instanceof DnsPinResolver.Authoritative authoritative) {
 				try {
 					String fingerprint = getFingerprint(certificate);
-					if (!authoritative.fingerprint().equals(fingerprint)) {
-						return reject(candidate, new IOException("Certificate does not match the DNSSEC fingerprint for " + candidate.originHost()));
-					}
-					candidate.sessionTrust().accept(certificate);
-					LOGGER.info("Trusting the self-signed certificate from {} because it matches the DNSSEC fingerprint for {}", candidate.endpointHost(), candidate.originHost());
+					if (!authoritative.fingerprint().equals(fingerprint)) return reject(candidate, candidate.sessionTrust().mismatch(certificate));
+					candidate.sessionTrust().recover(certificate);
+					LOGGER.info("Trusting the certificate from {} because it matches the published DNSSEC fingerprint for {}", candidate.endpointHost(), candidate.originHost());
 					return CompletableFuture.completedFuture(null);
 				} catch (CertificateException e) {
-					return reject(candidate, new IOException("Failed to validate DNSSEC-pinned certificate", e));
+					return reject(candidate, new IOException("Failed to validate the DNSSEC-pinned certificate", e));
 				}
 			}
 			if (result instanceof DnsPinResolver.Misconfigured misconfigured) {
 				return reject(candidate, new IOException("Invalid DNSSEC AutoModpack fingerprint for " + candidate.originHost() + ": " + misconfigured.reason()));
+			}
+			// No published fingerprint: a pinned session whose leaf changed has no recovery channel, and a first
+			// contact is the player's decision - both end here.
+			if (candidate.sessionTrust().hasConfiguredPin()) {
+				try {
+					return reject(candidate, candidate.sessionTrust().mismatch(certificate));
+				} catch (CertificateEncodingException e) {
+					return reject(candidate, new IOException("Cannot fingerprint the deferred certificate", e));
+				}
 			}
 			return requestManualTrust(candidate, certificate, preConfigurationKeepaliveInterval);
 		});

@@ -31,6 +31,8 @@ public class GenerationJsons {
 		public String policySha1 = "";
 		public String createdAt = "";
 		public long journalHead;
+		/** The sha1 of this generation's custom waiting track when it publishes one; empty means the bundled track plays. */
+		public String waitingMusicSha1 = "";
 		public OwnershipLedgerFields ownershipLedger = new OwnershipLedgerFields();
 		public ModpackJsons.CompleteModpackContentFields policy = new ModpackJsons.CompleteModpackContentFields();
 	}

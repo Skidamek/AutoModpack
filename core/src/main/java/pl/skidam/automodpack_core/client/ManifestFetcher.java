@@ -215,8 +215,8 @@ public final class ManifestFetcher {
 			}
 			if (CertificateTrustStore.matches(connectionInfo.origin, fingerprint)) return CompletableFuture.completedFuture(true);
 
-			LOGGER.warn("Received untrusted certificate for Minecraft server {} from AutoModpack endpoint {}:{}!", originHost, connectionInfo.endpoint.getHostString(),
-					connectionInfo.endpoint.getPort());
+			LOGGER.warn("First contact with AutoModpack endpoint {}:{} for Minecraft server {}: its certificate {} must be trusted by the player or a published fingerprint",
+					connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort(), originHost, fingerprint);
 			if (allowAskingUser) return askUserAboutCertificateAsync(connectionInfo, fingerprint);
 
 			return CompletableFuture.completedFuture(false);

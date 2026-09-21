@@ -120,16 +120,18 @@ public class AudioManager {
 		private void playSession() {
 			WaitingMusic.Session session = WaitingMusic.current();
 			WaitingMusic.Kind kind = session == null ? WaitingMusic.Kind.BUNDLED : session.kind();
+			Path custom = kind == WaitingMusic.Kind.LOOP ? session.loopFile() : null;
 			if (kind == WaitingMusic.Kind.STREAM) {
-				// A live stream plays sequentially and ends at EOF; a failure ends in silence rather than switching tracks mid-listen.
+				// A live stream plays sequentially; a failure falls back to the bundled track rather than leaving silence.
 				try (AudioStream stream = openStream(session.audio())) {
 					playLive(stream);
 				} catch (Exception e) {
-					Constants.LOGGER.error("The server's custom waiting music stream failed; stopping playback", e);
+					Constants.LOGGER.error("The server's custom waiting music stream failed; falling back to the bundled track", e);
 				}
-				return;
+				if (stopped) return;
+				// At the stream's end the verified cache loops; without one the bundled track takes over.
+				custom = session.loopFile();
 			}
-			Path custom = kind == WaitingMusic.Kind.LOOP ? session.loopFile() : null;
 			byte[] pcm = decode(custom);
 			if (pcm == null || stopped) return;
 			int format = openAlFormat(this.format);

@@ -49,14 +49,10 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	/** Tripwire past any real request header block; an honest client holds ≤ 8 requests ≈ 2 KB of headers in flight, 4× under this cap; only a pipelining abuser touches it. */
 	private static final int MAX_HEADER_BLOCK_BYTES = 8 * 1024;
 
-	// Stream-compression gauges: the sniff sample, one frame's worth of file input, and the frame size the wire sees.
-	// A 64 KiB sample decides identity vs codec for a whole file - stored content (jars, sounds, textures) sniffs at
-	// ≥ 0.95 under every registry codec while text sits under 0.5 - and 256 KiB in ≈ 192 KiB out bounds a frame's
-	// resident bytes to a fraction of one lane's worth of nothing next to the identity path's 4 MiB chunks.
-	private static final int SNIFF_BYTES = 64 * 1024;
+	// Stream-compression gauges: one frame's worth of file input and the frame size the wire sees. 256 KiB in bounds
+	// each frame's resident bytes; the frame count rides the write watermark, not a response-size cap.
 	private static final int COMPRESS_INPUT_CHUNK = 256 * 1024;
 	private static final int FRAME_BYTES = 192 * 1024;
-	private static final double INCOMPRESSIBLE_RATIO = 0.9;
 	private static final byte[] CRLF = {'\r', '\n'};
 	private static final byte[] FINAL_CHUNK = {'0', '\r', '\n', '\r', '\n'};
 
@@ -243,14 +239,14 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		// Objects already are their hash. A document is only hashed when a validator actually asks, keeping the SHA-1
 		// of a possibly large journal off the event loop for the plain GETs; the response then simply carries no ETag.
-		boolean document = key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY) || key.equals(GenerationHosting.MUSIC_DOCUMENT_KEY);
+		boolean document = key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY);
 		String etag = document ? null : key;
 		if (ifNoneMatch != null) {
 			etag = document ? HashUtils.getHash(file) : key;
 			if (etag == null) return finishBodyless(ctx, span, STATUS_404, 0, null, null, keepAlive);
 		}
 
-		if (ifNoneMatch != null && (ifNoneMatch.equals(etag) || ifNoneMatch.equals("\"" + etag + "\""))) {
+		if (ifNoneMatch != null && ifNoneMatchMatches(ifNoneMatch, etag)) {
 			return finishBodyless(ctx, span, STATUS_304, 0, etag, null, keepAlive);
 		}
 
@@ -266,9 +262,10 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		if (length == 0) return finishBodyless(ctx, span, status, 0, etag, contentRange, keepAlive);
 
-		// Full bodies are negotiable per request; ranges stay identity so resume offsets keep their meaning.
-		if (byteRange == null && acceptEncoding != null && WireCodec.negotiate(acceptEncoding) != null) {
-			return serveCompressedDocument(ctx, file, total, etag, keepAlive, span, acceptEncoding);
+		// Plain negotiation: a codec was offered and known, so the body - whole or ranged - goes out encoded; no
+		// header means identity. The resume contract lives in Content-Range and is untouched by the coding.
+		if (acceptEncoding != null && WireCodec.negotiate(acceptEncoding) != null) {
+			return serveNegotiated(ctx, file, offset, length, status, etag, contentRange, keepAlive, span, acceptEncoding);
 		}
 
 		return serveIdentity(ctx, file, offset, length, status, etag, contentRange, keepAlive, span);
@@ -282,6 +279,18 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 	private static int statusNumber(String status) {
 		return Integer.parseInt(status.substring(0, 3));
+	}
+
+	/** RFC 7232 weak comparison: any listed validator (or {@code *}) matches; the quotes and an optional {@code W/} are never part of the opaque value. */
+	private static boolean ifNoneMatchMatches(String header, String opaque) {
+		for (String part : header.split(",")) {
+			String candidate = part.trim();
+			if (candidate.equals("*")) return true;
+			if (candidate.startsWith("W/")) candidate = candidate.substring(2).trim();
+			if (candidate.length() >= 2 && candidate.startsWith("\"") && candidate.endsWith("\"")) candidate = candidate.substring(1, candidate.length() - 1);
+			if (candidate.equals(opaque)) return true;
+		}
+		return false;
 	}
 
 	/** The plain body path: objects, ranged responses, and documents for clients that did not offer zstd. */
@@ -315,61 +324,44 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	}
 
 	/**
-	 * A negotiated body streams: a sniff decides between identity and the codec, the head goes out framed as chunked
-	 * (the compressed length is unknowable before the body exists), and compression runs one frame ahead of the wire
-	 * under the same stall window as any streamed body. Nothing buffers a whole response, so there is no cap to hit.
+	 * A negotiated body streams: the head goes out framed as chunked (the encoded length is unknowable before the body
+	 * exists), and compression runs one frame ahead of the wire under the same stall window as any streamed body.
+	 * Nothing buffers a whole response, so there is no cap to hit.
 	 */
-	private boolean serveCompressedDocument(ChannelHandlerContext ctx, Path file, long total, String etag, boolean keepAlive, ActivityTracker.Span span, String acceptEncoding) {
+	private boolean serveNegotiated(ChannelHandlerContext ctx, Path file, long offset, long length, String status, String etag, String contentRange, boolean keepAlive,
+			ActivityTracker.Span span, String acceptEncoding) {
 		streaming = true;
 		inFlightSpan = span;
 		try {
 			senders.execute(() -> {
 				WireCodec codec = WireCodec.negotiate(acceptEncoding);
-				double ratio = sniffRatio(file, codec);
-				if (ratio < 0 || ratio > INCOMPRESSIBLE_RATIO) {
-					serveIdentity(ctx, file, 0, total, STATUS_200, etag, null, keepAlive, span);
-					return;
-				}
-				streamCompressedBody(ctx, file, codec, etag, keepAlive, span);
+				streamCompressedBody(ctx, file, offset, length, status, contentRange, codec, etag, keepAlive, span);
 			});
 		} catch (RejectedExecutionException rejected) {
 			streaming = false;
-			tracker.complete(span, 200, 0);
+			tracker.complete(span, statusNumber(status), 0);
 			ctx.close();
 		}
 		return false;
 	}
 
-	/** The sniff receipt: compression ratio of the first {@link #SNIFF_BYTES} under the codec; -1 means the file is unreadable and identity must answer. */
-	private static double sniffRatio(Path file, WireCodec codec) {
-		ByteArrayOutputStream sink = new ByteArrayOutputStream(SNIFF_BYTES);
-		long sampled;
-		try (OutputStream compressor = codec.wrap(sink); FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
-			ByteBuffer sample = ByteBuffer.allocate(SNIFF_BYTES);
-			while (channel.read(sample) != -1 && sample.hasRemaining()) {
-			}
-			sampled = sample.position();
-			compressor.write(sample.array(), 0, (int) sampled);
-		} catch (IOException e) {
-			LOGGER.debug("Failed to sniff {}; serving identity", file, e);
-			return -1;
-		}
-		return sampled == 0 ? 0 : (double) sink.size() / sampled;
-	}
-
-	/** Streams the negotiated body: file through the codec into chunked frames, queued ahead of the peer's drain until the watermark pauses them. */
-	private void streamCompressedBody(ChannelHandlerContext ctx, Path file, WireCodec codec, String etag, boolean keepAlive, ActivityTracker.Span span) {
+	/** Streams the selected slice through the codec into chunked frames, queued ahead of the peer's drain until the watermark pauses them. */
+	private void streamCompressedBody(ChannelHandlerContext ctx, Path file, long offset, long length, String status, String contentRange, WireCodec codec, String etag,
+			boolean keepAlive, ActivityTracker.Span span) {
 		Channel channel = ctx.channel();
-		ChannelFuture headWritten = channel.writeAndFlush(chunkedResponse(etag, codec));
+		ChannelFuture headWritten = channel.writeAndFlush(chunkedResponse(status, contentRange, etag, codec));
 		Throwable failure = awaitWritten(channel, headWritten);
 		if (failure == null && !headWritten.isSuccess()) failure = causeOf(headWritten);
 		FrameSink frames = new FrameSink(channel);
 		try (FileChannel source = FileChannel.open(file, StandardOpenOption.READ); OutputStream compressor = codec.wrap(frames)) {
+			source.position(offset);
 			ByteBuffer buffer = ByteBuffer.allocate(COMPRESS_INPUT_CHUNK);
-			while (failure == null) {
-				buffer.clear();
+			long remaining = length;
+			while (failure == null && remaining > 0) {
+				buffer.clear().limit((int) Math.min(buffer.capacity(), remaining));
 				int read = source.read(buffer);
 				if (read < 0) break;
+				remaining -= read;
 				compressor.write(buffer.array(), 0, read);
 				tracker.progress(span, frames.flushed());
 				frames.frameIfDue();
@@ -389,7 +381,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		}
 		Throwable finalFailure = failure;
 		long sentBytes = frames.flushed();
-		executeOnLoop(channel, () -> finishStream(ctx, span, STATUS_200, sentBytes, finalFailure, keepAlive));
+		executeOnLoop(channel, () -> finishStream(ctx, span, status, sentBytes, finalFailure, keepAlive));
 	}
 
 	/** Collects compressor output until it holds a frame's worth, then writes it as one sized chunk. Not thread-safe; owned by one sender task. */
@@ -450,12 +442,13 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		return failure;
 	}
 
-	/** The negotiated head: no length exists yet, so the body is framed chunked and the coding is named. */
-	private static ByteBuf chunkedResponse(String etag, WireCodec codec) {
+	/** The negotiated head: no length exists yet, so the body is framed chunked, the coding is named, and a range keeps its Content-Range. */
+	private static ByteBuf chunkedResponse(String status, String contentRange, String etag, WireCodec codec) {
 		StringBuilder head = new StringBuilder(160);
-		head.append("HTTP/1.1 ").append(STATUS_200).append("\r\n");
+		head.append("HTTP/1.1 ").append(status).append("\r\n");
 		head.append("Content-Type: ").append(CONTENT_TYPE).append("\r\n");
 		if (etag != null) head.append("ETag: \"").append(etag).append("\"\r\n");
+		if (contentRange != null) head.append("Content-Range: ").append(contentRange).append("\r\n");
 		head.append("Content-Encoding: ").append(codec.wireName()).append("\r\n").append("Vary: Accept-Encoding\r\n");
 		head.append("Transfer-Encoding: chunked\r\n\r\n");
 		return Unpooled.wrappedBuffer(head.toString().getBytes(StandardCharsets.UTF_8));
@@ -607,7 +600,6 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	private static String routeKey(String target) {
 		if (target.equals("/" + GenerationHosting.HEAD_DOCUMENT_KEY)) return GenerationHosting.HEAD_DOCUMENT_KEY;
 		if (target.equals("/" + GenerationHosting.JOURNAL_KEY)) return GenerationHosting.JOURNAL_KEY;
-		if (target.equals("/" + GenerationHosting.MUSIC_DOCUMENT_KEY)) return GenerationHosting.MUSIC_DOCUMENT_KEY;
 		if (target.startsWith("/objects/")) {
 			String sha1 = target.substring("/objects/".length());
 			return HashUtils.isSha1(sha1) ? HashUtils.normalizeSha1(sha1) : null;

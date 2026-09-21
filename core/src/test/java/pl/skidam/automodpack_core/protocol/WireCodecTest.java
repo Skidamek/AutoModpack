@@ -33,11 +33,11 @@ class WireCodecTest {
 
 	@Test
 	void negotiationTakesTheFirstRegistryCodecTheClientListed() {
-		assertEquals(WireCodec.ZSTD, WireCodec.negotiate("zstd, snappy, gzip"));
-		assertEquals(WireCodec.SNAPPY, WireCodec.negotiate("snappy, gzip"));
+		assertEquals(WireCodec.ZSTD, WireCodec.negotiate("zstd, gzip"));
 		assertEquals(WireCodec.GZIP, WireCodec.negotiate("br, gzip, identity"));
+		assertNull(WireCodec.negotiate("snappy, identity"));
 		assertNull(WireCodec.negotiate("identity"));
 		assertNull(WireCodec.negotiate(null));
-		assertEquals("zstd, snappy, gzip", WireCodec.offeredEncodings());
+		assertEquals("zstd, gzip", WireCodec.offeredEncodings());
 	}
 }

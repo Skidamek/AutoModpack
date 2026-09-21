@@ -13,8 +13,6 @@ public final class GenerationHosting {
 	/** Reserved hosting keys served beside the content-addressed object hashes. */
 	public static final String HEAD_DOCUMENT_KEY = "head";
 	public static final String JOURNAL_KEY = "journal";
-	/** The server's optional custom waiting track; clients fetch it conditionally and cache it. */
-	public static final String MUSIC_DOCUMENT_KEY = "music";
 
 	private final NavigableMap<String, Path> paths;
 

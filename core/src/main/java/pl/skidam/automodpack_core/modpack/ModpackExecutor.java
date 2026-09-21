@@ -29,7 +29,6 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.platforms.PlatformSourceLookup;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
-import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.Throwables;
@@ -60,7 +59,8 @@ public class ModpackExecutor {
 	}
 
 	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, PlatformSourceLookup platformSourceLookup) {
-		this(serverRoot, groupRoot, generationRoot, new GenerationStore(generationRoot, DataRootResolver.resolve(serverRoot).layout().objectsDirectory()), new ModpackCandidateScanner()::scan,
+		this(serverRoot, groupRoot, generationRoot, new GenerationStore(generationRoot, DataRootResolver.resolve(serverRoot).layout().objectsDirectory(),
+				serverRoot.resolve(HOST_MODPACK_DIR).resolve(WAITING_MUSIC_FILE)), new ModpackCandidateScanner()::scan,
 				(ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2),
 						new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build()),
 				hosting -> {
@@ -170,7 +170,7 @@ public class ModpackExecutor {
 			publication = generationStore.publishRestore(targetSeq, notes.text());
 			consumePatchNotes(notes);
 			PackDocument document = new PackDocument(publication.manifest(), publication.entry().contentToken(), publication.entry().policySha1(),
-					publication.entry().createdAt(), publication.ledger());
+					publication.entry().createdAt(), publication.ledger(), "");
 			return new Reverted(document, targetSeq, List.of(), publication.hostingPaths());
 		} catch (Exception e) {
 			if (publication == null) throw e;
@@ -199,7 +199,7 @@ public class ModpackExecutor {
 			return new ExportHttpResult.Rejected("The pack validates download secrets, which a public mirror cannot enforce", null);
 		Path target = (targetDirectory.isAbsolute() ? targetDirectory : serverRoot.resolve(targetDirectory)).normalize();
 		boolean exportEverything = includeAll || serverConfig != null && serverConfig.exportHttpIncludeAll;
-		GenerationHosting hosting = withWaitingMusic(generationStore.hosting());
+		GenerationHosting hosting = generationStore.hosting();
 		Map<String, Path> objects = new TreeMap<>();
 		for (String key : hosting.asMap().keySet()) {
 			if (isReservedDocument(key)) continue;
@@ -240,9 +240,9 @@ public class ModpackExecutor {
 		return new ExportHttpResult.Exported(written, omitted, unresolvable);
 	}
 
-	/** head/journal/music: served beside the content-addressed objects, exported to the target root, never pruned. */
+	/** head/journal: served beside the content-addressed objects, exported to the target root, never pruned. The waiting track is an object like any other. */
 	private static boolean isReservedDocument(String key) {
-		return key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY) || key.equals(GenerationHosting.MUSIC_DOCUMENT_KEY);
+		return key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY);
 	}
 
 	public GenerationStore.StorageReport storageReport() throws IOException {
@@ -315,11 +315,11 @@ public class ModpackExecutor {
 	}
 
 	private PackDocument currentDocument(GenerationStore.Current current) {
-		return new PackDocument(current.manifest(), current.contentToken(), current.policySha1(), current.createdAt(), current.ledger());
+		return new PackDocument(current.manifest(), current.contentToken(), current.policySha1(), current.createdAt(), current.ledger(), "");
 	}
 
 	private PackDocument currentDocument(GenerationStore.Publication publication) {
-		return new PackDocument(publication.manifest(), publication.entry().contentToken(), publication.entry().policySha1(), publication.entry().createdAt(), publication.ledger());
+		return new PackDocument(publication.manifest(), publication.entry().contentToken(), publication.entry().policySha1(), publication.entry().createdAt(), publication.ledger(), "");
 	}
 
 	private CandidateState candidateState(GenerationStore.Current current, ModpackCandidate candidate, String token, GenerationDiff diff, Optional<GenerationPatchNotes.Source> source) {
@@ -378,7 +378,7 @@ public class ModpackExecutor {
 		if (!(result instanceof CommittedOutcome committed)) return result;
 		R bound = result;
 		try {
-			hostingBinder.bind(withWaitingMusic(committed.hosting()));
+			hostingBinder.bind(committed.hosting());
 		} catch (Exception e) {
 			LOGGER.error("The generation committed, but the hosting swap failed", e);
 			@SuppressWarnings("unchecked")
@@ -387,15 +387,6 @@ public class ModpackExecutor {
 		}
 		autoExportHttp();
 		return bound;
-	}
-
-	/** The convention track joins the hosting map as the reserved music document; absent means the route 404s. */
-	private GenerationHosting withWaitingMusic(GenerationHosting hosting) {
-		Path music = serverRoot.resolve(StoragePaths.HOST_MODPACK_DIR).resolve("music.ogg").normalize();
-		if (!Files.isRegularFile(music)) return hosting;
-		Map<String, Path> paths = new TreeMap<>(hosting.asMap());
-		paths.put(GenerationHosting.MUSIC_DOCUMENT_KEY, music);
-		return new GenerationHosting(paths);
 	}
 
 	/** Publish-time mirror of the URL contract for static hosting; a failed or refused export is logged loudly but never fails the committed publication. */

@@ -13,32 +13,29 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.HexFormat;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
-import pl.skidam.automodpack_core.protocol.DocumentFetch;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.PackTransport;
+import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.Throwables;
 
 /**
- * The server's custom waiting track, served as the reserved {@code /music} document from the convention file
- * {@code automodpack/host-modpack/music.ogg}. The session starts eagerly at download begin and resolves to one of
- * three plays: the cached track at once (a background conditional fetch only swaps the cache for the next sync), a
- * live stream when the server serves fresh bytes (decoded as they arrive, cached for every later sync), or the bundled
- * track once the server answers 404. The bundled track never plays while a fetch is still in flight, and a stream that
- * fails mid-play ends in silence rather than in an interrupting switch.
+ * The server's custom waiting track, published in the head document as the sha1 of the convention file
+ * {@code automodpack/host-modpack/waiting-music.ogg} and served like any object at {@code objects/<sha1>}. The
+ * session starts eagerly at download begin and resolves to one of three plays: the cached track at once when its
+ * hash is the advertised one (no request at all), a live stream of the object fetch when the cache is stale
+ * (decoded as they arrive, cached for every later sync), or the bundled track when the head advertises none, the
+ * object is missing, or the fetch fails. The bundled track never plays while a fetch is still in flight, and a
+ * stream that fails mid-play ends in silence rather than in an interrupting switch.
  */
 public final class WaitingMusic {
-	public static final String DOCUMENT_KEY = GenerationHosting.MUSIC_DOCUMENT_KEY;
-	// The cap admits a track to the cache, not to the wire: whatever streams plays, and only oversized tracks are
-	// denied the cache (they would compete with pack bytes on every later sync too).
-	public static final long MAX_CACHED_TRACK_BYTES = 4 * 1024 * 1024;
 
 	private static volatile Session current;
 
@@ -53,8 +50,8 @@ public final class WaitingMusic {
 	}
 
 	/** Starts the run's session: the cached track plays at once, a fresh track streams in, absence resolves to bundled. */
-	public static Session start(PackTransport transport, ClientStorage storage) {
-		Session session = new Session(storage);
+	public static Session start(PackTransport transport, ClientStorage storage, String advertisedSha1) {
+		Session session = new Session(storage, advertisedSha1 == null ? "" : advertisedSha1.trim().toLowerCase(Locale.ROOT));
 		current = session;
 		session.begin(transport);
 		return session;
@@ -66,6 +63,7 @@ public final class WaitingMusic {
 
 	public static final class Session {
 		private final ClientStorage storage;
+		private final String advertisedSha1;
 		private final LinkedBlockingQueue<byte[]> chunks = new LinkedBlockingQueue<>();
 		private final CompletableFuture<Kind> kind = new CompletableFuture<>();
 		private volatile boolean fetchAlive = true;
@@ -73,8 +71,9 @@ public final class WaitingMusic {
 		private volatile byte[] residual;
 		private volatile Path loopFile;
 
-		private Session(ClientStorage storage) {
+		private Session(ClientStorage storage, String advertisedSha1) {
 			this.storage = storage;
+			this.advertisedSha1 = advertisedSha1;
 		}
 
 		/** Blocks until the play decision exists: LOOP plays {@code loopFile()} (null = bundled asset), STREAM plays {@code audio()}. */
@@ -137,17 +136,23 @@ public final class WaitingMusic {
 
 		private void begin(PackTransport transport) {
 			Path cache = cacheFile(storage);
-			String expected = cachedSha1(storage);
-			if (expected != null && Files.isRegularFile(cache)) {
-				// The cached track is this sync's music immediately; the conditional fetch only checks for a change.
+			if (!HashUtils.isSha1(advertisedSha1)) {
+				// The head advertises no track: bundled plays and any withdrawn cache goes with it.
+				completeKind(Kind.BUNDLED);
+				forget(cache);
+				return;
+			}
+			if (advertisedSha1.equals(cachedSha1(storage))) {
+				// The cached track is this sync's music, and its hash is the cache key: nothing to request at all.
 				loopFile = cache;
 				kind.complete(Kind.LOOP);
+				return;
 			}
-			CompletableFuture.runAsync(() -> fetch(transport, cache, expected), DownloadClient.NET_EXECUTOR);
+			CompletableFuture.runAsync(() -> fetch(transport, cache), DownloadClient.NET_EXECUTOR);
 		}
 
-		/** The conditional fetch: 304 keeps whatever plays, 200 streams the new bytes and caches them, 404 withdraws. */
-		private void fetch(PackTransport transport, Path cache, String expected) {
+		/** The object fetch streams the advertised track; a verified body is cached for every later sync. */
+		private void fetch(PackTransport transport, Path cache) {
 			Path temp = null;
 			try {
 				temp = Files.createTempFile(cache.getParent(), ".waiting-music.", ".ogg");
@@ -165,15 +170,15 @@ public final class WaitingMusic {
 						write(new byte[]{(byte) b}, 0, 1);
 					}
 				};
-				DocumentFetch fetch = transport.downloadDocument(DOCUMENT_KEY.getBytes(StandardCharsets.UTF_8), temp, expected, tap).join();
-				fetchAlive = false;
-				if (fetch.unchanged()) return; // the cached play was current all along
+				transport.downloadFile(advertisedSha1.getBytes(StandardCharsets.UTF_8), temp, 0L, -1L, null, tap, false, StoragePaths.WAITING_MUSIC_MAX_BYTES, 0).join();
+				// The object request judges ranges, not the whole; the advertised hash is judged here before caching.
+				if (!advertisedSha1.equals(sha1(temp))) throw new IOException("The served waiting music does not match the advertised hash");
 				publish(cache, temp);
 			} catch (Exception e) {
 				fetchAlive = false;
 				Throwable cause = Throwables.unwrap(e);
 				if (cause instanceof IOException io && io.getMessage() != null && io.getMessage().contains("HTTP 404")) {
-					// The server withdrew the track: whatever streamed finishes, the bundled track follows it.
+					// The host withdrew the track: whatever streamed finishes, the bundled track follows it.
 					completeKind(Kind.BUNDLED);
 					forget(cache);
 					deleteQuietly(temp);
@@ -188,15 +193,16 @@ public final class WaitingMusic {
 			}
 		}
 
-		/** Admits a served track to the cache when it fits; oversized streams still played, they just never get cached. */
+		/** Admits the verified track to the cache; the head guardrail already rejected oversized tracks before a body byte arrived. */
 		private void publish(Path cache, Path temp) throws IOException {
-			if (Files.size(temp) > MAX_CACHED_TRACK_BYTES) {
-				LOGGER.warn("The server's custom waiting music exceeds {} bytes; it played but will not be cached", MAX_CACHED_TRACK_BYTES);
+			if (Files.size(temp) > StoragePaths.WAITING_MUSIC_MAX_BYTES) {
+				LOGGER.warn("The server's custom waiting music exceeds {} bytes despite the response head; it played but will not be cached", StoragePaths.WAITING_MUSIC_MAX_BYTES);
 				Files.deleteIfExists(temp);
 				return;
 			}
 			Files.move(temp, cache, StandardCopyOption.REPLACE_EXISTING);
-			Files.writeString(hashFile(storage), sha1(cache), StandardCharsets.UTF_8);
+			Files.writeString(hashFile(storage), advertisedSha1, StandardCharsets.UTF_8);
+			loopFile = cache; // a finished stream loops the cached track instead of ending in silence
 			LOGGER.info("Cached the server's custom waiting music ({})", ByteFormat.formatSize(Files.size(cache)));
 		}
 
@@ -217,14 +223,14 @@ public final class WaitingMusic {
 	}
 
 	public static Path cacheFile(ClientStorage storage) {
-		return storage.clientDirectory().resolve("waiting-music.ogg");
+		return storage.clientDirectory().resolve(StoragePaths.WAITING_MUSIC_FILE);
 	}
 
 	private static Path hashFile(ClientStorage storage) {
-		return storage.clientDirectory().resolve("waiting-music.sha1");
+		return storage.clientDirectory().resolve(StoragePaths.WAITING_MUSIC_FILE + ".sha1");
 	}
 
-	/** The cached track's sha1, or null when nothing (valid) is cached; the conditional fetch's If-None-Match. */
+	/** The cached track's sha1, or null when nothing (valid) is cached; equal to the advertised hash means the cache plays. */
 	public static String cachedSha1(ClientStorage storage) {
 		Path cache = cacheFile(storage);
 		Path hash = hashFile(storage);

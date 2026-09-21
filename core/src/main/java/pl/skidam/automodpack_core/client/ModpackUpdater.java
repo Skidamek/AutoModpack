@@ -226,7 +226,7 @@ public class ModpackUpdater implements AutoCloseable {
 		this.transport = transport;
 		AtomicBoolean playerCancelled = new AtomicBoolean();
 		this.objectAcquisition = new ModpackObjectAcquisition(this.storage, this.platformCache, this.sourceCatalogue, this.planBuilder, this.connectionInfo, this.transport,
-				playerCancelled, this::getModpackName, this::cancelFromPlayer);
+				playerCancelled, this::getModpackName, this::cancelFromPlayer, selectedTarget == null ? "" : selectedTarget.document().waitingMusicSha1());
 		this.review = new ReviewSession(this, this.storage, this.sourceCatalogue, playerCancelled);
 		this.lifecycle = new LifecycleFlow(this, this.storage, this.planBuilder, this.changelogs);
 	}

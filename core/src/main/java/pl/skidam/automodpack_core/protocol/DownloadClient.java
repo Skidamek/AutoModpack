@@ -159,8 +159,8 @@ public class DownloadClient implements PackTransport {
 			plainSocket.setSoTimeout(NETWORK_TIMEOUT_MILLIS);
 			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC) performMagicHandshake(plainSocket);
 			// TLS identity follows the endpoint - the host this socket actually reaches - so proxied frontends like
-			// tunnels present their own valid certificate (SNI and name check); the origin stays the trust root via
-			// its fingerprint pin, and the self-signed deferral ladder is unaffected.
+			// tunnels present their own certificate (SNI and name check); the origin stays the trust root: its pin
+			// is enforced against the presented leaf, and any unpinned first contact defers to the trust ladder.
 			SSLSocket tlsSocket = CandidateTrustValidation.wrapWithTls(plainSocket, context, connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort());
 			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket);
 			tlsSocket.setSoTimeout(0);
@@ -362,8 +362,13 @@ public class DownloadClient implements PackTransport {
 
 	@Override
 	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, long endInclusive, IntConsumer chunkCallback, int lane) {
+		return downloadFile(fileHash, destination, offset, endInclusive, chunkCallback, null, true, -1L, lane);
+	}
+
+	@Override
+	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long offset, long endInclusive, IntConsumer chunkCallback, OutputStream tap, boolean offerEncoding, long limitBytes, int lane) {
 		// A stale range already surfaces as StaleRangeException from the response parse; no mapping happens here.
-		return withSlot(lane, connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback, offset, endInclusive));
+		return withSlot(lane, connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback, offset, endInclusive, tap, offerEncoding, limitBytes));
 	}
 
 	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers 304 and {@code destination} is not written. */

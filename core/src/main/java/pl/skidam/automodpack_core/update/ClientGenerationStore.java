@@ -365,7 +365,7 @@ public final class ClientGenerationStore {
 
 	private PackDocument document(JournalEntry entry, OwnershipLedger ledger) throws IOException {
 		try {
-			return new PackDocument(policyDocument(entry.policySha1()), entry.contentToken(), entry.policySha1(), entry.createdAt(), ledger);
+			return new PackDocument(policyDocument(entry.policySha1()), entry.contentToken(), entry.policySha1(), entry.createdAt(), ledger, "");
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
