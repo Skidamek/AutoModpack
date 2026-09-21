@@ -164,6 +164,9 @@ public class DownloadClient implements PackTransport {
 		} catch (Exception e) {
 			throw new IOException("Failed to initialize certificate trust", e);
 		}
+		// One SSLContext per lane, so lanes past the first pay a full TLS handshake each: a shared context would let
+		// the JDK session cache resume them, but the deferred per-handshake certificate state lives in the trust
+		// manager, so sharing one needs a delegating trust manager. A couple of RTTs per sync is not that price.
 		SSLContext context = CandidateTrustValidation.newSslContext(trustManager);
 		Socket plainSocket = connectTransport();
 
@@ -211,6 +214,9 @@ public class DownloadClient implements PackTransport {
 		if (connectionInfo.connectionMode != ModpackConnectionMode.HOLEPUNCH) {
 			Socket socket = new Socket();
 			socket.connect(route.directAddress(), NETWORK_TIMEOUT_MILLIS);
+			// Request heads are small writes; without this Nagle holds every head behind its lane's previous segment
+			// while the server, which does set TCP_NODELAY, already waits for it.
+			socket.setTcpNoDelay(true);
 			// Helps plain TCP NAT mappings survive the parked trust decision; zero protocol impact.
 			socket.setKeepAlive(true);
 			return socket;
