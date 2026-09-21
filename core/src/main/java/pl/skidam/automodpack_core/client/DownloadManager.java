@@ -60,6 +60,12 @@ public class DownloadManager implements DownloadView {
 	private volatile boolean cancelled = false;
 
 	private final Map<FileInspection.HashPathPair, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
+	// Dispatch order: largest file first, enqueue order breaks ties - a persistent queue, so ordering costs O(log N) per
+	// insert/poll instead of a full copy and sort per dispatch. Mutated only under the manager monitor, like the map.
+	private final PriorityQueue<QueuedDownload> dispatchOrder = new PriorityQueue<>((first, second) -> {
+		int bySize = Long.compare(second.fileSize, first.fileSize);
+		return bySize != 0 ? bySize : Integer.compare(first.seq, second.seq);
+	});
 	private final Map<FileInspection.HashPathPair, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
 	private final Map<FileInspection.HashPathPair, Path> activeTemporaryFiles = new ConcurrentHashMap<>();
 
@@ -103,7 +109,9 @@ public class DownloadManager implements DownloadView {
 		if (queuedDownloads.containsKey(hashPathPair)) return;
 
 		QueuedDownload task = new QueuedDownload(file, new ArrayList<>(sources), murmur, fileType, fileSize, enqueueSequence++, 0, successCallback, failureCallback);
+		task.key = hashPathPair;
 		queuedDownloads.put(hashPathPair, task);
+		dispatchOrder.add(task);
 		totalFilesAdded++;
 		downloadNext();
 	}
@@ -127,36 +135,48 @@ public class DownloadManager implements DownloadView {
 
 	/** Picks and submits one task; false means the queue is empty of dispatchable work or the budget is full and the next settle re-runs the dispatch. */
 	private boolean dispatchOne() {
-		// SCHEDULING: the largest queued file first (ties in enqueue order), then among its candidate domains the one
-		// whose measured speed makes backlog-plus-this-file finish soonest. Domains this task already burned its
-		// attempts on are withheld (candidateDomains); dead links are handled at attempt time.
-		List<Map.Entry<FileInspection.HashPathPair, QueuedDownload>> entries = new ArrayList<>(queuedDownloads.entrySet());
-		entries.sort(Comparator.comparingInt(entry -> entry.getValue().seq));
-		List<DownloadScheduler.QueuedFile<FileInspection.HashPathPair>> queue = new ArrayList<>(entries.size());
-		for (Map.Entry<FileInspection.HashPathPair, QueuedDownload> entry : entries) queue.add(new DownloadScheduler.QueuedFile<>(entry.getKey(), entry.getValue().fileSize, candidateDomains(entry.getValue())));
+		// SCHEDULING: the queue is already in dispatch order (largest first, ties in enqueue order); among the first
+		// dispatchable task's candidate domains chooseDomain picks the one whose measured speed makes
+		// backlog-plus-this-file finish soonest. Domains a task already burned its attempts on are withheld
+		// (candidateDomains); dead links are handled at attempt time.
 		Map<String, Long> inFlightBacklog = new HashMap<>();
 		for (DownloadData data : downloadsInProgress.values()) inFlightBacklog.merge(data.activeDomain, Math.max(0, data.remainingBytes.get()), Long::sum);
 
-		DownloadScheduler.Pick<FileInspection.HashPathPair> pick = scheduler.pick(queue, inFlightBacklog);
-		if (pick == null) return false;
+		List<QueuedDownload> aside = new ArrayList<>();
+		QueuedDownload chosen = null;
+		String chosenDomain = null;
+		for (QueuedDownload candidate; (candidate = dispatchOrder.poll()) != null;) {
+			String domain = scheduler.chooseDomain(new DownloadScheduler.QueuedFile<>(candidate.key, candidate.fileSize, candidateDomains(candidate)), inFlightBacklog);
+			if (domain == null) {
+				aside.add(candidate);
+				continue;
+			}
+			chosen = candidate;
+			chosenDomain = domain;
+			break;
+		}
+		dispatchOrder.addAll(aside);
+		if (chosen == null) return false;
 
-		QueuedDownload task = queuedDownloads.remove(pick.identity());
-		if (task == null) return false; // The queue was cleared (cancel) between the snapshot and the removal.
-		final FileInspection.HashPathPair key = pick.identity();
-		final String activeDomain = pick.sourceDomain();
+		QueuedDownload task = chosen;
+		FileInspection.HashPathPair key = chosen.key;
+		String activeDomain = chosenDomain;
 
 		boolean hostServed = activeDomain.equals(INTERNAL_CLIENT_SOURCE) && transport != null;
 		if (hostServed) {
 			if (!transport.hasWireRoom()) {
 				// The transport's wire window is full: put the task back; the next settle re-runs the dispatch.
 				WireTrace.log("WINDOW_FULL", "task", task.file.getFileName());
-				queuedDownloads.put(key, task);
+				requeue(key, task);
 				return false;
 			}
 		} else if (platformTasksInFlight() >= DownloadClient.MAX_CONNECTIONS) {
-			queuedDownloads.put(key, task);
+			requeue(key, task);
 			return false;
 		}
+
+		// The dispatch is committed: the task leaves both queue structures, so a later requeue re-enters exactly once.
+		queuedDownloads.remove(key);
 
 		LOGGER.info("Queueing download for: {} {} {}", task.file, task.fileSize, activeDomain);
 
@@ -194,6 +214,13 @@ public class DownloadManager implements DownloadView {
 			throw error;
 		}
 		return true;
+	}
+
+	/** Puts a dispatched task back into both queue structures and re-pumps; the pump is a no-op while the drain loop runs. */
+	private synchronized void requeue(FileInspection.HashPathPair key, QueuedDownload task) {
+		queuedDownloads.put(key, task);
+		dispatchOrder.add(task);
+		downloadNext();
 	}
 
 	/** Platform tasks occupy a worker for their whole blocking attempt; host tasks do not. */
@@ -281,8 +308,8 @@ public class DownloadManager implements DownloadView {
 					if (!transport.hasWireRoom()) { // window full: requeue, the next settle rediscovers this task
 						WireTrace.log("WINDOW_FULL", "task", task.file.getFileName());
 						downloadsInProgress.remove(hashPathPair);
-						queuedDownloads.put(hashPathPair, task);
 						activeTemporaryFiles.remove(hashPathPair);
+						requeue(hashPathPair, task);
 						return;
 					}
 					data.hostServed = true;
@@ -401,8 +428,8 @@ public class DownloadManager implements DownloadView {
 			if (error instanceof WireWindowFullException) {
 				// The window filled between the dispatch peek and the transfer's first take: requeue, the next settle rediscovers this task.
 				downloadsInProgress.remove(hashPathPair);
-				queuedDownloads.put(hashPathPair, task);
 				activeTemporaryFiles.remove(hashPathPair);
+				requeue(hashPathPair, task);
 				return;
 			}
 			if (cancelled || error instanceof InterruptedException) {
@@ -520,7 +547,7 @@ public class DownloadManager implements DownloadView {
 			WireTrace.log("REQUEUE", "task", task.file.getFileName(), "attempts", task.attempts, "category", task.lastFailureCategory);
 			LOGGER.warn("Retrying download: {}", task.file.getFileName());
 			task.attempts++;
-			queuedDownloads.put(key, task);
+			requeue(key, task);
 			return false;
 		}
 		FailureCategory category = task.lastFailureCategory == null ? FailureCategory.REMOTE_SOURCE : task.lastFailureCategory;
@@ -580,7 +607,10 @@ public class DownloadManager implements DownloadView {
 		cancelled = true;
 		if (transport != null) transport.abortTransfers();
 		LOGGER.info("Cancelling the download run: {} queued, {} in-flight", queuedDownloads.size(), downloadsInProgress.size());
-		queuedDownloads.clear();
+		synchronized (this) {
+			queuedDownloads.clear();
+			dispatchOrder.clear();
+		}
 		downloadsInProgress.forEach((k, v) -> v.future.cancel(false));
 		// Only partials without a live writer are swept here: host transfers die with their aborted lanes and the
 		// transport deletes a partial its positioned writers hole-riddled, and a platform attempt winds down at its
@@ -635,6 +665,8 @@ public class DownloadManager implements DownloadView {
 		public final String fileType;
 		public final long fileSize;
 		public final int seq;
+		/** The queue key this task lives under, set once at enqueue; the dispatch queue cannot find the task without it. */
+		public FileInspection.HashPathPair key;
 		public final Map<String, Integer> domainFailures = new HashMap<>();
 		public int attempts;
 		public final Runnable successCallback;
