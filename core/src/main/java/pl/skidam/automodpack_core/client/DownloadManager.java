@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
@@ -73,7 +74,7 @@ public class DownloadManager implements DownloadView {
 	private final AtomicLong totalBytesDownloaded = new AtomicLong(0);
 	private int totalFilesAdded = 0;
 	private int enqueueSequence = 0;
-	private int downloadedCount = 0;
+	private final AtomicInteger downloadedCount = new AtomicInteger();
 
 	private final Semaphore semaphore = new Semaphore(0);
 	private final Speedometer speedometer = new Speedometer();
@@ -490,7 +491,7 @@ public class DownloadManager implements DownloadView {
 		try {
 			if (success) {
 				activeTemporaryFiles.remove(key);
-				downloadedCount++;
+				downloadedCount.incrementAndGet();
 				acquiredFiles.incrementAndGet();
 				LOGGER.info("Acquired CAS object {} for {}", storeFile.getFileName(), task.file.getFileName());
 				try {
@@ -563,7 +564,7 @@ public class DownloadManager implements DownloadView {
 	}
 
 	public String getStage() {
-		return downloadedCount + "/" + totalFilesAdded;
+		return downloadedCount.get() + "/" + totalFilesAdded;
 	}
 
 	public boolean isRunning() {
@@ -580,9 +581,11 @@ public class DownloadManager implements DownloadView {
 		if (transport != null) transport.abortTransfers();
 		LOGGER.info("Cancelling the download run: {} queued, {} in-flight", queuedDownloads.size(), downloadsInProgress.size());
 		queuedDownloads.clear();
-		downloadsInProgress.forEach((k, v) -> v.future.cancel(true));
-		// Only partials without a live writer are swept here; an in-flight attempt is interrupted first and deletes its
-		// own partial when its task ends, so the sweep never unlinks a file a writer still holds.
+		downloadsInProgress.forEach((k, v) -> v.future.cancel(false));
+		// Only partials without a live writer are swept here: host transfers die with their aborted lanes and the
+		// transport deletes a partial its positioned writers hole-riddled, and a platform attempt winds down at its
+		// own request timeout - both stay in downloadsInProgress until their task ends, so the sweep never unlinks
+		// a file a writer still holds.
 		activeTemporaryFiles.forEach((key, path) -> {
 			if (downloadsInProgress.containsKey(key)) return;
 			try {
@@ -593,7 +596,7 @@ public class DownloadManager implements DownloadView {
 		activeTemporaryFiles.clear();
 		semaphore.release(totalFilesAdded);
 		downloadsInProgress.clear();
-		downloadedCount = 0;
+		downloadedCount.set(0);
 		downloadExecutor.shutdown();
 	}
 
