@@ -446,8 +446,14 @@ public class DownloadManager implements DownloadView {
 		future.whenComplete((path, error) -> {
 			if (error != null && task.hostError == null) task.hostError = Throwables.unwrap(error);
 			long settled = System.nanoTime() - itemStart;
-			pacer.settle(error != null, itemBytes.get(), settled, lane);
-			if (itemBytes.get() > 0) scheduler.report(INTERNAL_CLIENT_SOURCE, itemBytes.get(), settled);
+			try {
+				pacer.settle(error != null, itemBytes.get(), settled, lane);
+				if (itemBytes.get() > 0) scheduler.report(INTERNAL_CLIENT_SOURCE, itemBytes.get(), settled);
+			} catch (Throwable chainFailure) {
+				// Stats must never take the barrier tick hostage: the credit is returned either way, and the task has
+				// to see this take as failed instead of waiting on a settle that already happened.
+				if (task.hostError == null) task.hostError = Throwables.unwrap(chainFailure);
+			}
 			onHostItemSettled(hashPathPair, task, data, partial);
 		});
 	}
@@ -463,7 +469,11 @@ public class DownloadManager implements DownloadView {
 		}
 		if (done) {
 			Throwable error = task.hostError;
-			downloadExecutor.execute(() -> finishHostFile(hashPathPair, task, data, partial, error));
+			try {
+				downloadExecutor.execute(() -> finishHostFile(hashPathPair, task, data, partial, error));
+			} catch (RejectedExecutionException rejected) {
+				finishHostFile(hashPathPair, task, data, partial, error); // shutdown: end the task inline rather than zombie it
+			}
 		} else {
 			downloadNext();
 		}

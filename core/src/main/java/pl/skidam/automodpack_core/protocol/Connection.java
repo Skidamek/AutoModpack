@@ -323,9 +323,9 @@ class Connection implements AutoCloseable {
 				future.complete(new DocumentFetch(destination, HexFormat.of().formatHex(hash.digest()).equals(expectedSha1Hex)));
 				return;
 			}
+			// Same rule as the object path: a framed error status fails this request only.
 			discardBody(head);
-			// Same rule as the object path: a failed response throws, and the pending set behind it fails with it.
-			throw statusFailure(head, false);
+			future.completeExceptionally(statusFailure(head, false));
 		}
 	}
 
