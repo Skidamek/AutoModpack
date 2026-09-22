@@ -310,13 +310,6 @@ public class DownloadManager implements DownloadView {
 						cleanupAndFinalize(hashPathPair, task, storeFile, false, false);
 						return;
 					}
-					if (!transport.hasWireRoom()) { // window full: requeue, the next settle rediscovers this task
-						WireTrace.log("WINDOW_FULL", "task", task.file.getFileName());
-						downloadsInProgress.remove(hashPathPair);
-						activeTemporaryFiles.remove(hashPathPair);
-						requeue(hashPathPair, task);
-						return;
-					}
 					data.hostServed = true;
 				}
 				downloadFromHost(hashPathPair, task, data, partial);

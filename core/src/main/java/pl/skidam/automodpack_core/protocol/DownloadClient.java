@@ -412,21 +412,7 @@ public class DownloadClient implements PackTransport {
 
 	/** The byte offset the transfer resumes from: the destination's size while it is a valid prefix, else a fresh start. */
 	private static long resumeOffset(Path destination, long fileSize) {
-		if (!Files.exists(destination)) return 0;
-		long size;
-		try {
-			size = Files.size(destination);
-		} catch (IOException e) {
-			LOGGER.warn("Failed to inspect the partial {}; restarting from zero", destination.getFileName(), e);
-			deleteQuietly(destination);
-			return 0;
-		}
-		if (size > fileSize) {
-			LOGGER.warn("Stored partial for {} is past the served object's end; restarting from zero", destination.getFileName());
-			deleteQuietly(destination);
-			return 0;
-		}
-		return size;
+		return PartialResume.offset(destination, fileSize);
 	}
 
 	private static void deleteQuietly(Path path) {

@@ -9,8 +9,7 @@ import org.apache.logging.log4j.Logger;
 
 /**
  * The resume discipline both transports share: a stored partial is a resume prefix, and a partial past the expected end is
- * deleted with one loud line so the retry starts clean. The host wire's DownloadClient still carries its own copy of this
- * logic; both forms must stay in lockstep until it adopts this one.
+ * deleted with one loud line so the retry starts clean.
  */
 public final class PartialResume {
 
