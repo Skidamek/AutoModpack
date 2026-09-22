@@ -64,7 +64,12 @@ public enum WireCodec {
 		return offer.toString();
 	}
 
-	/** The first registry codec the header lists; null means identity, and an unknown name stays null for the caller to reject. */
+	/**
+	 * The first registry codec the header lists; null means identity, and an unknown name stays null for the caller to
+	 * reject. Token matching only, and q-values are ignored - {@code gzip;q=0} would still negotiate gzip, which is
+	 * wrong by RFC 9110 but harmless while the only negotiating peer is this project's own client. A proxy that
+	 * rewrites negotiation into this header's path is the signal to write a q-aware parser, not before.
+	 */
 	public static WireCodec negotiate(String acceptEncoding) {
 		if (acceptEncoding == null) return null;
 		String offered = acceptEncoding.toLowerCase(Locale.ROOT);
