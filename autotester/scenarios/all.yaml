@@ -998,11 +998,14 @@ flow:
     select: { text: Click again to forget older snapshots }
   - do: wait_for
     name: finish forgetting before leaving the timeline
-    timeout: 60s
+    timeout: 120s
     until:
       all:
-        - element: { text: Forget older, enabled: true }
+        - screen: StateHistoryScreen
+        - element: { text: Repaired }
         - no_element: { text: Click again to forget older snapshots }
+        # The install row only existed below the forget boundary, so its absence proves the reloaded timeline.
+        - no_element: { text: Installed modpack }
   - do: screenshot
     name: capture the timeline after forgetting older snapshots
     file: all-timeline-forgot-older

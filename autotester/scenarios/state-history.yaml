@@ -116,8 +116,18 @@ flow:
     name: capture the timeline with restore ready
     file: state-history-restore-ready
   - do: click
-    name: restore the install snapshot onto the running instance
+    name: arm the whole-state restore of the install checkpoint
     select: { key: automodpack.stateHistory.restore }
+  - do: wait_for
+    name: show the armed restore confirmation
+    timeout: 20s
+    until: { element: { key: automodpack.stateHistory.restoreArmed, enabled: true } }
+  - do: screenshot
+    name: capture the armed restore confirmation
+    file: state-history-restore-armed
+  - do: click
+    name: restore the install snapshot onto the running instance
+    select: { key: automodpack.stateHistory.restoreArmed }
   - do: wait_file_content
     name: wait until the install generation file is back
     path: "${active_dir}/config/amp-autotest-alpha.txt"
