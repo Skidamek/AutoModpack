@@ -243,9 +243,10 @@ public class ModpackExecutor {
 				destination = target.resolve("objects").resolve(sha1);
 			}
 			Files.createDirectories(destination.getParent());
-			// Objects are immutable and named by their hash, documents change only at a publish, so an
-			// already-present file of the same size is the same bytes and the wholesale re-copy is skipped.
-			if (Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) && Files.size(destination) == Files.size(entry.getValue())) {
+			// Objects are immutable and named by their hash, so an already-present file of any size is the same bytes
+			// and the copy is skipped. Documents are the opposite: fixed-shape bodies whose bytes change while their
+			// size stays, and they are the one file whose freshness the mirror exists to serve - always re-exported.
+			if (!isReservedDocument(key) && Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) && Files.size(destination) == Files.size(entry.getValue())) {
 				written++;
 				continue;
 			}

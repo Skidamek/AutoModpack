@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -345,6 +346,47 @@ class ModpackExecutorTest {
 			assertEquals(exported, executor.exportHttp(exportRoot));
 			assertEquals(exported, executor.exportHttp(Path.of("relative-export")));
 			assertTrue(Files.exists(server.resolve("relative-export").resolve(GenerationHosting.HEAD_DOCUMENT_KEY)));
+		} finally {
+			executor.stop();
+			snapshot.restore();
+			if (previous == null) System.clearProperty(StoragePaths.DATA_ROOT_PROPERTY);
+			else System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, previous);
+		}
+	}
+
+	/** Documents never ride the export's size-skip: a stale same-size head at the destination is re-exported from the store. */
+	@Test
+	void aSameSizeStaleDocumentIsStillReExported() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("host-modpack");
+		Path generationRoot = tempDir.resolve("host-generations");
+		Path source = groups.resolve("main/config/example.txt");
+		Files.createDirectories(source.getParent());
+		Files.writeString(source, "exported-object", StandardCharsets.UTF_8);
+
+		ConstantsSnapshot snapshot = new ConstantsSnapshot();
+		Constants.serverConfig = config();
+		Constants.AM_VERSION = "test";
+		Constants.LOADER = "test";
+		Constants.LOADER_VERSION = "test";
+		Constants.MC_VERSION = "test";
+		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
+		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
+		try {
+			assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
+			Path exportRoot = tempDir.resolve("export");
+			assertInstanceOf(ModpackExecutor.ExportHttpResult.Exported.class, executor.exportHttp(exportRoot));
+			Path exportedHead = exportRoot.resolve(GenerationHosting.HEAD_DOCUMENT_KEY);
+			byte[] head = Files.readAllBytes(exportedHead);
+
+			// The mirror drifts (a stale mirror, disk rot, an operator's edit): same size, different bytes.
+			Files.writeString(exportedHead, "x".repeat(head.length), StandardCharsets.UTF_8);
+			assertFalse(Arrays.equals(head, Files.readAllBytes(exportedHead)));
+
+			// Documents are the one file whose freshness the mirror exists to serve: the next export restores them
+			// from the store even though the stale copy's size matches.
+			assertInstanceOf(ModpackExecutor.ExportHttpResult.Exported.class, executor.exportHttp(exportRoot));
+			assertArrayEquals(head, Files.readAllBytes(exportedHead));
 		} finally {
 			executor.stop();
 			snapshot.restore();
