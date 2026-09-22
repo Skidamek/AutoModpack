@@ -95,8 +95,13 @@ public final class NestedConflicts {
 
 	public static List<Candidate> detect(List<PackRoot> packRoots, List<StandardRoot> standardRoots, Set<String> packRootIds, Set<String> previouslyCopiedPaths, Set<String> forceCopyPaths) {
 		List<Node> roots = new ArrayList<>();
-		for (PackRoot packRoot : packRoots)
-			if (packRoot.tree().path() != null) roots.add(buildNode(packRoot.tree(), packRoot.extractionBase(), null, packRoot.logicalPath(), packRoot.extractionBase()));
+		for (PackRoot packRoot : packRoots) {
+			if (packRoot.tree().path() == null) continue;
+			for (String id : packRoot.tree().IDs())
+				if (GeneratedBundle.MOD_ID.equalsIgnoreCase(id))
+					throw new IllegalArgumentException("Pack root " + packRoot.tree().path().getFileName() + " claims the reserved generated-bundle id " + GeneratedBundle.MOD_ID);
+			roots.add(buildNode(packRoot.tree(), packRoot.extractionBase(), null, packRoot.logicalPath(), packRoot.extractionBase()));
+		}
 		List<Node> nested = new ArrayList<>();
 		for (Node root : roots) collectNested(root, nested);
 		Set<String> coveredIds = new HashSet<>();

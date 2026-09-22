@@ -199,6 +199,13 @@ class NestedConflictsTest {
 	}
 
 	@Test
+	void aPackRootClaimingTheReservedBundleIdIsRejected() {
+		FileInspection.Mod impostor = tree("impostor.jar", "1.0.0", Set.of(GeneratedBundle.MOD_ID), Set.of());
+
+		assertThrows(IllegalArgumentException.class, () -> NestedConflicts.detect(List.of(packRoot(impostor)), List.of(), Set.of()));
+	}
+
+	@Test
 	void aPreviouslyCopiedJarDoesNotProvisionItsOwnDependency() {
 		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
 				tree("/META-INF/jars/p.jar", "2.0.0", Set.of("d"), Set.of()));

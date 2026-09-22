@@ -32,6 +32,8 @@ public final class GeneratedBundle {
 	/** One jar inside the bundle's {@code META-INF/jars/}: the entry name it lands under plus its bytes. */
 	public record Item(String entryName, Bytes bytes) {}
 
+	public static final String MOD_ID = "automodpack_generated";
+
 	private static final String MANIFEST_ENTRY = "fabric.mod.json";
 	private static final String NESTED_PREFIX = "META-INF/jars/";
 	private static final long FIXED_TIMESTAMP = 0;
@@ -43,7 +45,7 @@ public final class GeneratedBundle {
 			if (jars.length() > 0) jars.append(',');
 			jars.append("{\"file\":\"").append(NESTED_PREFIX).append(entryName).append("\"}");
 		}
-		return "{\"schemaVersion\":1,\"id\":\"automodpack_generated\",\"version\":\"1.0.0\",\"name\":\"AutoModpack generated dependencies\",\"environment\":\"*\",\"jars\":[" + jars + "]}";
+		return "{\"schemaVersion\":1,\"id\":\"" + MOD_ID + "\",\"version\":\"1.0.0\",\"name\":\"AutoModpack generated dependencies\",\"environment\":\"*\",\"jars\":[" + jars + "]}";
 	}
 
 	/** Produces deterministic bundle bytes; two items naming the same entry throw instead of silently dropping one. */
