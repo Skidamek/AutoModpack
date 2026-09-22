@@ -153,7 +153,8 @@ final class ClientUpdatePlanBuilder {
 		for (NestedConflicts.StandardRoot root : standardRoots)
 			standardMods.add(new UpdatePlan.ModInfo(root.logicalPath(), root.mod().hash(), Files.size(root.mod().path()), root.mod().version(), root.mod().IDs(), root.mod().deps()));
 		List<UpdatePlanner.NestedCandidate> nestedCandidates = input.prepareObjects()
-				? inspectNestedCopies(input.target(), cache, modCache, projection, targetMods, standardRoots)
+				? inspectNestedCopies(input.target(), cache, modCache, projection, targetMods, standardRoots,
+						previousGeneratedState == null ? Set.of() : previousGeneratedState.nestedCopies().stream().map(UpdatePlan.NestedCopy::relativePath).collect(Collectors.toSet()))
 				: readGeneratedCopyState(input.target(), input.selectedTarget().selection().intent()).nestedCopies().stream().map(UpdatePlanner.NestedCandidate::previous).toList();
 		ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = input.connectionInfo() == null || !input.connectionInfo().isComplete()
 				? ModpackUtils.planCachedModpackSelection(input.target().modpackId, logicalConfig)
@@ -487,7 +488,7 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	private List<UpdatePlanner.NestedCandidate> inspectNestedCopies(ModpackJsons.ModpackContentFields target, FileCache cache, ModFileCache modCache,
-			ClientProjectionView.Snapshot projection, List<UpdatePlan.ModInfo> targetMods, List<NestedConflicts.StandardRoot> standardRoots) throws IOException {
+			ClientProjectionView.Snapshot projection, List<UpdatePlan.ModInfo> targetMods, List<NestedConflicts.StandardRoot> standardRoots, Set<String> previouslyCopiedPaths) throws IOException {
 		if (!modpackLoader.discoversNestedConflicts()) return List.of();
 		Path inspectionDirectory = Files.createTempDirectory(storage.stagingDirectory(), "inspection-");
 		try {
@@ -515,7 +516,7 @@ final class ClientUpdatePlanBuilder {
 				}
 			}
 			List<UpdatePlanner.NestedCandidate> candidates = new ArrayList<>();
-			for (NestedConflicts.Candidate candidate : NestedConflicts.detect(packRoots, standardRoots, packRootIds)) {
+			for (NestedConflicts.Candidate candidate : NestedConflicts.detect(packRoots, standardRoots, packRootIds, previouslyCopiedPaths)) {
 				Path nestedJar = candidate.mod().path();
 				if (nestedJar == null || !Files.isRegularFile(nestedJar)) continue;
 				long size = Files.size(nestedJar);

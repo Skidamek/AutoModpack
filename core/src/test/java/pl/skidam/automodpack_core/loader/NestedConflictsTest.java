@@ -198,6 +198,20 @@ class NestedConflictsTest {
 	}
 
 	@Test
+	void aPreviouslyCopiedJarDoesNotProvisionItsOwnDependency() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
+				tree("/META-INF/jars/p.jar", "2.0.0", Set.of("d"), Set.of()));
+		StandardRoot dependent = standard("mods/one.jar", Set.of("one"), Set.of("d"));
+		StandardRoot copy = standard("mods/d-1.0.0.jar", Set.of("d"), Set.of());
+
+		// Without knowing the copy, the scan counts it as provision and satisfies its own dependency - the retirement trap.
+		assertEquals(0, NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent, copy), Set.of()).size());
+		// Knowing it, the detector keeps emitting the copy while the dependent lives, so the plan never retires it.
+		List<Candidate> stable = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent, copy), Set.of(), Set.of("mods/d-1.0.0.jar"));
+		assertEquals(1, stable.size());
+	}
+
+	@Test
 	void aPackRootCoveredDependencyIsNotServed() {
 		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
 				tree("/META-INF/jars/p.jar", "2.0.0", Set.of("d"), Set.of()));

@@ -80,9 +80,16 @@ public final class NestedConflicts {
 	 * with a pack root mod are never candidates at all, for the same reason. Afterwards, a standard root whose
 	 * hard dependency id nothing provides gets the best eligible pack-nested provider copied out, colliding with
 	 * the dependent roots so the copy lives and dies with their survival under the plan. An id provided by a
-	 * pack root mod never triggers this: the projection-root dependency case stays unanswered by design.
+	 * pack root mod never triggers this: the projection-root dependency case stays unanswered by design. A
+	 * previously generated copy must not count as provision for its own dependency - it would satisfy the scan,
+	 * get retired, and resurrect the crash one launch later - so {@code previouslyCopiedPaths} are skipped when
+	 * the provision set is collected.
 	 */
 	public static List<Candidate> detect(List<PackRoot> packRoots, List<StandardRoot> standardRoots, Set<String> packRootIds) {
+		return detect(packRoots, standardRoots, packRootIds, Set.of());
+	}
+
+	public static List<Candidate> detect(List<PackRoot> packRoots, List<StandardRoot> standardRoots, Set<String> packRootIds, Set<String> previouslyCopiedPaths) {
 		List<Node> roots = new ArrayList<>();
 		for (PackRoot packRoot : packRoots) if (packRoot.tree().path() != null) roots.add(buildNode(packRoot.tree(), packRoot.extractionBase(), null, packRoot.extractionBase()));
 		List<Node> nested = new ArrayList<>();
@@ -110,7 +117,8 @@ public final class NestedConflicts {
 			for (String id : winnerMod.IDs()) claimed.add(id.toLowerCase(Locale.ROOT));
 			collectDependencySiblings(winner, claimed, candidates, colliders);
 		}
-		emitDependencyDrivenCopies(standardRoots, nested, coveredIds, claimed, candidates);
+		Set<String> previouslyCopied = previouslyCopiedPaths == null ? Set.of() : previouslyCopiedPaths;
+		emitDependencyDrivenCopies(standardRoots, nested, coveredIds, previouslyCopied, claimed, candidates);
 		candidates.sort(Comparator.comparing(candidate -> candidate.mod().path().toString()));
 		return List.copyOf(candidates);
 	}
@@ -177,11 +185,14 @@ public final class NestedConflicts {
 	 * claimed), with every dependent root as its collider. The copy then lives and dies with the dependent roots'
 	 * survival under the plan, exactly like a collision-driven candidate. A dependency whose id an emitted jar
 	 * already claims gains the dependent as an extra collider on that jar instead - either surviving reason keeps
-	 * the copy. {@code claimed} carries the emitted ids, {@code coveredIds} the pack root ids.
+	 * the copy. {@code claimed} carries the emitted ids, {@code coveredIds} the pack root ids. Previously
+	 * generated copies sitting in {@code mods/} are not provision: counting them would satisfy the very
+	 * dependency they were copied for, retire them, and loop the crash back in.
 	 */
-	private static void emitDependencyDrivenCopies(List<StandardRoot> standardRoots, List<Node> nested, Set<String> coveredIds, Set<String> claimed, List<Candidate> candidates) {
+	private static void emitDependencyDrivenCopies(List<StandardRoot> standardRoots, List<Node> nested, Set<String> coveredIds, Set<String> previouslyCopied, Set<String> claimed, List<Candidate> candidates) {
 		Set<String> providedByStandards = new HashSet<>();
 		for (StandardRoot root : standardRoots) {
+			if (previouslyCopied.contains(root.logicalPath())) continue;
 			FileInspection.Mod mod = root.mod();
 			for (String id : mod.IDs()) providedByStandards.add(id.toLowerCase(Locale.ROOT));
 			collectIds(mod, providedByStandards);
