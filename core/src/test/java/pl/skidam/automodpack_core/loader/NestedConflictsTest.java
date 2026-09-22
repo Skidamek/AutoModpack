@@ -353,7 +353,7 @@ class NestedConflictsTest {
 	}
 
 	private static List<String> paths(List<Candidate> candidates) {
-		return candidates.stream().map(candidate -> candidate.mod().path().toString()).toList();
+		return candidates.stream().map(candidate -> candidate.mod().path().toString().replace('\\', '/')).toList();
 	}
 
 	private static NestedConflicts.PackRoot packRoot(FileInspection.Mod tree) {
