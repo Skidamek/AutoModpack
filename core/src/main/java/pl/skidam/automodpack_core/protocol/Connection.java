@@ -507,11 +507,17 @@ class Connection implements AutoCloseable {
 	 * behind its exact byte count. Every write lands at its absolute file position: ranged bodies from several lanes can
 	 * share one partial without coordinating, and promotion judges the assembled whole.
 	 */
+	// One reused read buffer per reader thread; a small Content-Length uses only the buffer's head. Five lanes pin
+	// 2.5 MiB instead of allocating half a MiB of garbage per response.
+	private static final ThreadLocal<byte[]> READ_BUFFERS = ThreadLocal.withInitial(() -> new byte[READ_BUFFER_BYTES]);
+
 	private void transfer(InputStream source, Path destination, long writeOffset, IntConsumer chunkCallback, MessageDigest hash, Long compressedLength, OutputStream tap, boolean truncate) throws IOException {
-		byte[] buffer = new byte[(int) Math.min(READ_BUFFER_BYTES, compressedLength == null ? READ_BUFFER_BYTES : compressedLength)];
+		byte[] buffer = READ_BUFFERS.get();
+		int bufferLength = READ_BUFFER_BYTES;
+		if (compressedLength != null && compressedLength < bufferLength) bufferLength = compressedLength.intValue();
 		try (OutputStream fos = destination == null ? null : truncate && writeOffset == 0 ? LocalFileWriter.open(destination) : LocalFileWriter.openAt(destination, writeOffset)) {
 			int read;
-			while ((read = source.read(buffer, 0, buffer.length)) >= 0) {
+			while ((read = source.read(buffer, 0, bufferLength)) >= 0) {
 				if (fos != null) fos.write(buffer, 0, read);
 				if (tap != null) tap.write(buffer, 0, read);
 				if (hash != null) hash.update(buffer, 0, read);
