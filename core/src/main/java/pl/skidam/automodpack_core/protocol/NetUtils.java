@@ -39,13 +39,16 @@ public class NetUtils {
 	public static final Duration TRANSFER_IDLE_TIMEOUT = Duration.ofSeconds(60);
 	// The transfer write-stall tripwire: how long a frame may sit on the socket with zero drain
 	// progress before the peer is declared gone. Only a peer that stopped reading entirely can trip
-	// it - a live link resets the window with every drained byte - and a genuinely dead peer
-	// surfaces faster through its own 60 s read deadline closing the socket. 90 s is 1.5x that
-	// window, so the stall fuse is never the first thing to fire on a healthy connection.
+	// it - a live link resets the window with every completed write, and at the receipted drain
+	// floor (the 20-client share of a 5 Mbps uplink, ~31 KB/s per client) a STREAM_WRITE_BYTES write
+	// completes at least every ~17 s, 5x inside this window. A genuinely dead peer also surfaces
+	// through its own 60 s read deadline closing the socket, so this fuse is never the first thing
+	// to fire on a healthy connection.
 	public static final Duration TRANSFER_WRITE_STALL_TIMEOUT = Duration.ofSeconds(90);
 	// The idle reap for public contract connections, in seconds of no reads and no writes. It sits far past any
-	// client's keep-alive reuse window while staying inside a minute-scale patience for silent sockets; a streaming
-	// response writes continuously, so the reap can never interrupt a live transfer.
+	// client's keep-alive reuse window while staying inside a minute-scale patience for silent sockets, and a streamed
+	// response completes a STREAM_WRITE_BYTES write at least every ~17 s at the drain floor (~31 KB/s per client),
+	// 3.5x inside this window - so the reap never interrupts a live transfer.
 	public static final int HTTP_IDLE_REAP_SECONDS = 60;
 	// Pre-configuration keepalive cadence: NAT mappings and holepunch relay bindings typically decay after 30-60s of
 	// silence, so a 20s heartbeat sits well inside that band while costing the parked client one tiny ranged GET.
@@ -58,10 +61,18 @@ public class NetUtils {
 	public static final int MAGIC_AMMH = 0x414D4D48;
 	public static final int MAGIC_AMOK = 0x414D4F4B;
 
-	// The ranged-GET unit the client tiles objects with and the server streams file bodies through; changing it changes
-	// transfer granularity on both ends at once. Per-request overhead at this size is noise - a few hundred bytes of
-	// headers and one seek per 4 MiB - so the unit is sized by the wire, not by either end's buffers.
+	// The ranged-GET unit the client tiles objects with; changing it changes request granularity on the client's
+	// lanes. Per-request overhead at this size is noise - a few hundred bytes of headers and one seek per 4 MiB - so
+	// the unit is sized by the wire, not by either end's buffers. The server's streamed-write granularity is
+	// STREAM_WRITE_BYTES below.
 	public static final int WIRE_CHUNK_BYTES = 4 * 1024 * 1024; // 4 MiB
+
+	// The server's streamed-write granularity. The idle reap and the stall fuse see write COMPLETIONS, so the chunk
+	// must be small enough that a draining client keeps completing writes: at the receipted drain floor - the
+	// 20-client share of a 5 Mbps uplink, ~31 KB/s per client - a 512 KiB write completes at least every ~17 s,
+	// 3.5x inside the 60 s reap and 5x inside the 90 s stall fuse. A 4 MiB chunk would need ~135 s and reap live
+	// transfers.
+	public static final int STREAM_WRITE_BYTES = 512 * 1024;
 
 	// The client's per-response read buffer, deliberately not the transfer unit: a 512 KiB read costs a syscall per
 	// ~5 ms of drain at 100 MB/s, and five lanes pin 2.5 MiB of heap instead of 20.

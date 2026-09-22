@@ -3,7 +3,9 @@ package pl.skidam.automodpack_core.protocol;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -65,16 +67,32 @@ public enum WireCodec {
 	}
 
 	/**
-	 * The first registry codec the header lists; null means identity, and an unknown name stays null for the caller to
-	 * reject. Token matching only, and q-values are ignored - {@code gzip;q=0} would still negotiate gzip, which is
-	 * wrong by RFC 9110 but harmless while the only negotiating peer is this project's own client. A proxy that
-	 * rewrites negotiation into this header's path is the signal to write a q-aware parser, not before.
+	 * The first registry codec the header accepts, in registry preference order; null means identity, and an unknown
+	 * name stays null for the caller to reject. Tokens match exactly, and a {@code q} parameter at or below zero
+	 * excludes the coding (an unparseable one counts as excluded - never send what cannot be ruled in).
 	 */
 	public static WireCodec negotiate(String acceptEncoding) {
 		if (acceptEncoding == null) return null;
-		String offered = acceptEncoding.toLowerCase(Locale.ROOT);
+		Map<String, Double> qualities = new HashMap<>();
+		for (String token : acceptEncoding.split(",")) {
+			String[] parameters = token.split(";");
+			String name = parameters[0].trim().toLowerCase(Locale.ROOT);
+			if (name.isEmpty()) continue;
+			double q = 1.0;
+			for (int i = 1; i < parameters.length; i++) {
+				String parameter = parameters[i].trim();
+				if (!parameter.regionMatches(true, 0, "q=", 0, 2)) continue;
+				try {
+					q = Double.parseDouble(parameter.substring(2));
+				} catch (NumberFormatException unparseable) {
+					q = 0;
+				}
+				break;
+			}
+			if (q > 0) qualities.put(name, q);
+		}
 		for (WireCodec codec : values()) {
-			if (offered.contains(codec.wireName)) return codec;
+			if (qualities.containsKey(codec.wireName)) return codec;
 		}
 		return null;
 	}

@@ -90,11 +90,18 @@ public class NettyServer {
 	public void replacePaths(GenerationHosting hosting) {
 		this.paths = hosting.asMap();
 		documentEtags.clear();
+		warmDocumentEtags();
 	}
 
 	// The head/journal etags: hashed once per file version and shared by every conditional fetch, instead of hashing a
-	// possibly large document on the event loop once per client sync. Cleared when the hosting swap replaces the files.
+	// possibly large document on the event loop once per client sync. Cleared and rewarmed when the hosting swap replaces the files.
 	private final Map<Path, EtagMemo> documentEtags = new ConcurrentHashMap<>();
+
+	/** Hashes the reserved documents on the calling thread so no conditional fetch ever hashes on the event loop: a publish just hashed the whole generation, so one more journal SHA-1 here is milliseconds. */
+	private void warmDocumentEtags() {
+		getPath(GenerationHosting.HEAD_DOCUMENT_KEY).ifPresent(this::documentEtag);
+		getPath(GenerationHosting.JOURNAL_KEY).ifPresent(this::documentEtag);
+	}
 
 	/** The served document's sha1 for conditional fetches; null when it cannot be read, mirroring {@code HashUtils.getHash}. */
 	public String documentEtag(Path file) {
@@ -159,6 +166,8 @@ public class NettyServer {
 			LOGGER.warn("No current generation record is prepared. Can't start modpack hosting.");
 			return Optional.empty();
 		}
+		// The first client after a restart must not pay the document hashes on the event loop either.
+		warmDocumentEtags();
 
 		ModpackConnectionMode connectionMode = serverConfig.connectionMode;
 		if (serverConfig.disableInternalTLS)
@@ -229,8 +238,8 @@ public class NettyServer {
 						// operator opted in (a trusted proxy is in front) may consume one.
 						if (serverConfig.acceptProxyProtocol) ch.pipeline().addLast("proxy-protocol", new ProxyProtocolHandler());
 						// The contract listener is public, so fully silent connections are reaped: the all-idle bound sits
-						// far past any client's keep-alive reuse window, and a streaming response keeps writing, so the
-						// reap can never interrupt a live transfer.
+						// far past any client's keep-alive reuse window, and a streamed body completes a write well
+						// inside it at the receipted drain floor, so the reap never interrupts a live transfer.
 						ch.pipeline().addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, NetUtils.HTTP_IDLE_REAP_SECONDS));
 						ch.pipeline().addLast("traffic-shaper", NettyServer.this.trafficHandler());
 						if (connectionMode == ModpackConnectionMode.MAGIC) {

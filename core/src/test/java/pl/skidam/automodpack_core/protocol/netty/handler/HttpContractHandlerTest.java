@@ -113,7 +113,7 @@ class HttpContractHandlerTest {
 		fixture();
 		EmbeddedChannel channel = channel();
 
-		assertTrue(exchange(channel, "POST /head HTTP/1.1\r\n\r\n").startsWith("HTTP/1.1 405 Method Not Allowed\r\n"));
+		assertTrue(exchange(channel, "POST /head HTTP/1.1\r\nHost: contract.test\r\n\r\n").startsWith("HTTP/1.1 405 Method Not Allowed\r\n"));
 		assertTrue(channel.isOpen());
 		assertTrue(exchange(channel, request("/head%2Fx")).startsWith("HTTP/1.1 400 Bad Request\r\n"));
 		assertFalse(channel.isOpen());
@@ -215,7 +215,6 @@ class HttpContractHandlerTest {
 		EmbeddedChannel channel = channel();
 
 		byte[] response = exchangeBytes(channel, request("/head", "Accept-Encoding: zstd"));
-		System.out.println("PROBE-LEN=" + response.length + " PROBE-TEXT=" + new String(response, 0, Math.min(response.length, 300), StandardCharsets.US_ASCII).replace('\r', '|').replace('\n', '~'));
 		String head = headOf(response);
 		byte[] body = deframe(response);
 		assertTrue(head.startsWith("HTTP/1.1 200 OK\r\n"), head);
@@ -289,6 +288,10 @@ class HttpContractHandlerTest {
 	private static byte[] exchangeBytes(EmbeddedChannel channel, String request) {
 		channel.writeInbound(Unpooled.wrappedBuffer(request.getBytes(StandardCharsets.UTF_8)));
 		settle(channel);
+		return drained(channel);
+	}
+
+	private static byte[] drained(EmbeddedChannel channel) {
 		ByteArrayOutputStream response = new ByteArrayOutputStream();
 		Object message;
 		while ((message = channel.readOutbound()) != null) {
@@ -334,8 +337,79 @@ class HttpContractHandlerTest {
 		assertEquals(fixture.objectContent(), bodyOf(second));
 		assertTrue(channel.isOpen());
 
-		assertTrue(exchange(channel, request("/head", "Connection: close")).startsWith("HTTP/1.1 200 OK\r\n"));
+		String closing = exchange(channel, request("/head", "Connection: close"));
+		assertTrue(closing.startsWith("HTTP/1.1 200 OK\r\n"), closing);
+		// The close is announced in the head, so a pipelining client knows its queued request is lost.
+		assertTrue(closing.contains("Connection: close\r\n"), closing);
 		assertFalse(channel.isOpen());
+	}
+
+	@Test
+	void malformedHeaderLinesAndMissingHostAreBadRequests() throws Exception {
+		fixture();
+
+		EmbeddedChannel folded = channel();
+		assertTrue(exchange(folded, "GET /head HTTP/1.1\r\nHost: contract.test\r\n X-Folded: continued\r\n\r\n").startsWith("HTTP/1.1 400 Bad Request\r\n"));
+		assertFalse(folded.isOpen());
+
+		EmbeddedChannel spacedName = channel();
+		assertTrue(exchange(spacedName, "GET /head HTTP/1.1\r\nHost : contract.test\r\n\r\n").startsWith("HTTP/1.1 400 Bad Request\r\n"));
+		assertFalse(spacedName.isOpen());
+
+		EmbeddedChannel noHost = channel();
+		assertTrue(exchange(noHost, "GET /head HTTP/1.1\r\nAccept: nothing\r\n\r\n").startsWith("HTTP/1.1 400 Bad Request\r\n"));
+		assertFalse(noHost.isOpen());
+
+		// HTTP/1.0 predates the Host requirement.
+		EmbeddedChannel http10NoHost = channel();
+		assertTrue(exchange(http10NoHost, "GET /head HTTP/1.0\r\n\r\n").startsWith("HTTP/1.1 200 OK\r\n"));
+		assertFalse(http10NoHost.isOpen());
+	}
+
+	@Test
+	void http10GetsIdentityContentLengthWithoutTransferEncoding() throws Exception {
+		Fixture fixture = fixture();
+		EmbeddedChannel channel = channel();
+
+		String response = exchange(channel, "GET /head HTTP/1.0\r\nHost: contract.test\r\nAccept-Encoding: zstd\r\n\r\n");
+		assertTrue(response.startsWith("HTTP/1.1 200 OK\r\n"), response);
+		// HTTP/1.0 has no Transfer-Encoding, so offering an encoding changes nothing: the body goes out identity Content-Length.
+		assertTrue(response.contains("Content-Length: " + Files.size(fixture.headPath()) + "\r\n"), response);
+		assertFalse(response.contains("Transfer-Encoding"), response);
+		assertFalse(response.contains("Content-Encoding"), response);
+		assertEquals(Files.readString(fixture.headPath(), StandardCharsets.UTF_8), bodyOf(response));
+		assertFalse(channel.isOpen());
+	}
+
+	@Test
+	void aZeroQualityEncodingIsNotNegotiated() throws Exception {
+		Fixture fixture = fixture();
+		EmbeddedChannel channel = channel();
+
+		String response = exchange(channel, request("/objects/" + fixture.objectHash(), "Accept-Encoding: gzip;q=0"));
+		assertTrue(response.startsWith("HTTP/1.1 200 OK\r\n"), response);
+		assertFalse(response.contains("Content-Encoding"), response);
+		assertTrue(response.contains("Content-Length: " + fixture.objectContent().length() + "\r\n"), response);
+		assertEquals(fixture.objectContent(), bodyOf(response));
+		assertTrue(channel.isOpen());
+	}
+
+	@Test
+	void errorAndNotModifiedHeadsCarryTheRequiredFields() throws Exception {
+		Fixture fixture = fixture();
+		String etag = HashUtils.getHash(fixture.headPath());
+		EmbeddedChannel channel = channel();
+
+		String notAllowed = exchange(channel, "POST /head HTTP/1.1\r\nHost: contract.test\r\n\r\n");
+		assertTrue(notAllowed.startsWith("HTTP/1.1 405 Method Not Allowed\r\n"), notAllowed);
+		assertTrue(notAllowed.contains("Allow: GET\r\n"), notAllowed);
+		assertTrue(notAllowed.contains("Date: "), notAllowed);
+
+		String notModified = exchange(channel, request("/head", "If-None-Match: \"" + etag + "\""));
+		assertTrue(notModified.startsWith("HTTP/1.1 304 Not Modified\r\n"), notModified);
+		// The 304 head states the length a 200 would have sent, while the books stay at zero served bytes.
+		assertTrue(notModified.contains("Content-Length: " + Files.size(fixture.headPath()) + "\r\n"), notModified);
+		assertEquals("", bodyOf(notModified));
 	}
 
 	@Test
@@ -412,9 +486,66 @@ class HttpContractHandlerTest {
 	}
 
 	private static String request(String target, String... headers) {
-		StringBuilder request = new StringBuilder("GET ").append(target).append(" HTTP/1.1\r\n");
+		StringBuilder request = new StringBuilder("GET ").append(target).append(" HTTP/1.1\r\nHost: contract.test\r\n");
 		for (String header : headers) request.append(header).append("\r\n");
 		return request.append("\r\n").toString();
+	}
+
+	/**
+	 * The one-stream-per-connection pin: a request pipelined while an identity body streams is held (accumulated) and
+	 * served strictly after the first response completes - never parsed mid-body into the first body's byte stream.
+	 */
+	@Test
+	void aPipelinedRequestWaitsForTheStreamingIdentityBodyToFinish() throws Exception {
+		byte[] body = new byte[NetUtils.STREAM_WRITE_BYTES * 3];
+		Path object = tempDir.resolve("pipeline.bin");
+		Files.write(object, body);
+		String hash = HashUtils.sha1(body);
+		NettyServer pipelineServer = new NettyServer() {
+			@Override
+			public Optional<Path> getPath(String requestKey) {
+				return requestKey.equals(hash) ? Optional.of(object) : Optional.empty();
+			}
+		};
+		class HoldableChannel extends EmbeddedChannel {
+			volatile boolean writable = true;
+			HoldableChannel(ChannelHandler handler) {
+				super(handler);
+			}
+
+			@Override
+			public boolean isWritable() {
+				return writable;
+			}
+		}
+		HoldableChannel channel = new HoldableChannel(new HttpContractHandler(pipelineServer, Runnable::run));
+		channels.add(channel);
+
+		// Start an identity body wide enough to span several writes, then stall the drain before any body byte leaves.
+		channel.writable = false;
+		channel.writeInbound(Unpooled.wrappedBuffer(request("/objects/" + hash).getBytes(StandardCharsets.UTF_8)));
+		channel.runPendingTasks();
+		assertEquals(1, channel.outboundMessages().size(), "only the response head may be out while the drain is stalled");
+		assertTrue(((ByteBuf) channel.outboundMessages().peek()).toString(StandardCharsets.UTF_8).startsWith("HTTP/1.1 200 OK\r\n"));
+
+		// A request pipelined mid-body is held, not answered into the first response's byte stream.
+		channel.writeInbound(Unpooled.wrappedBuffer(request("/journal").getBytes(StandardCharsets.UTF_8)));
+		channel.runPendingTasks();
+		assertEquals(1, channel.outboundMessages().size(), "a pipelined request must be held while a body streams");
+
+		// Resume the drain; the held request is served strictly after the first response completes.
+		channel.writable = true;
+		channel.pipeline().fireChannelWritabilityChanged();
+		settle(channel);
+
+		byte[] wire = drained(channel);
+		String firstHead = headOf(wire);
+		assertTrue(firstHead.startsWith("HTTP/1.1 200 OK\r\n"), firstHead);
+		assertArrayEquals(body, Arrays.copyOfRange(wire, firstHead.length(), firstHead.length() + body.length));
+		int secondHeadStart = firstHead.length() + body.length;
+		String secondHead = new String(wire, secondHeadStart, Math.min(40, wire.length - secondHeadStart), StandardCharsets.US_ASCII);
+		assertTrue(secondHead.startsWith("HTTP/1.1 404 Not Found\r\n"), secondHead);
+		assertEquals(wire.length, secondHeadStart + headOf(Arrays.copyOfRange(wire, secondHeadStart, wire.length)).length());
 	}
 
 	/** The stall fuse: a client that stops draining mid-response finds its connection closed inside the stall window. */

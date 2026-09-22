@@ -2,8 +2,8 @@ package pl.skidam.automodpack_core.protocol.netty.handler;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.serverConfig;
+import static pl.skidam.automodpack_core.protocol.NetUtils.STREAM_WRITE_BYTES;
 import static pl.skidam.automodpack_core.protocol.NetUtils.TRANSFER_WRITE_STALL_TIMEOUT;
-import static pl.skidam.automodpack_core.protocol.NetUtils.WIRE_CHUNK_BYTES;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -15,6 +15,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.Executor;
@@ -60,6 +63,12 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	private static final byte[] CRLF = {'\r', '\n'};
 	private static final byte[] FINAL_CHUNK = {'0', '\r', '\n', '\r', '\n'};
 
+	// IMF-fixdate for the Date header, reformatted only when the wall-clock second moves; the pair is racy across event
+	// loops but a response at worst carries a date one second old.
+	private static final DateTimeFormatter HTTP_DATE_FORMAT = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.ROOT).withZone(ZoneOffset.UTC);
+	private static volatile long httpDateSecond = -1;
+	private static volatile String httpDateValue = "";
+
 	private static final String BEARER_PREFIX = "Bearer ";
 
 	private static final String STATUS_200 = "200 OK";
@@ -79,7 +88,6 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	private final long stallSeconds;
 	private final ActivityTracker tracker;
 	private ByteBuf cumulation;
-	private volatile boolean streaming;
 	// The one response body currently streaming; the connection drops must end its span even when complete never runs.
 	private ActivityTracker.Span inFlightSpan;
 	// Same body as a state object: the loop writes from it when the channel turns writable, and the fuse watches it.
@@ -107,7 +115,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		}
 
 		try {
-			if (streaming) {
+			if (activeStream != null) {
 				// A pipelining client's next request waits until the current body drains; the header cap keeps the hold bounded.
 				accumulate(input);
 				if (cumulation.readableBytes() > MAX_HEADER_BLOCK_BYTES) rejectUnparseable(ctx);
@@ -135,7 +143,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 	@Override
 	public void channelInactive(ChannelHandlerContext ctx) {
-		LOGGER.info("HTTP contract connection closed: responses={} bytes={} streaming={} pendingHeaders={}B", responsesServed, bytesServed, streaming,
+		LOGGER.info("HTTP contract connection closed: responses={} bytes={} streaming={} pendingHeaders={}B", responsesServed, bytesServed, activeStream != null,
 				cumulation == null ? 0 : cumulation.readableBytes());
 		if (activeStream != null) activeStream.discard();
 		if (inFlightSpan != null) tracker.completeDropped(inFlightSpan);
@@ -157,9 +165,10 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	@Override
 	public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
 		// The pipeline's all-idle reap: a silent connection holds a public FD for nothing. A streaming response writes
-		// continuously, so the event can only fire for a connection with no request in flight and no body draining.
+		// a chunk well inside this window at the receipted drain floor, so the event can only fire for a connection
+		// with no request in flight and no body draining.
 		if (evt instanceof IdleStateEvent idle) {
-			LOGGER.info("HTTP contract connection went idle ({}); closing it. streaming={} responses={}", idle.state(), streaming, responsesServed);
+			LOGGER.info("HTTP contract connection went idle ({}); closing it. streaming={} responses={}", idle.state(), activeStream != null, responsesServed);
 			ctx.close();
 			return;
 		}
@@ -187,7 +196,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 	/** Parsed every buffered request it can; leaves when a body starts streaming, the connection closes, or bytes run out. */
 	private void serveLoop(ChannelHandlerContext ctx) {
-		while (ctx.channel().isActive() && !streaming && cumulation != null) {
+		while (ctx.channel().isActive() && activeStream == null && cumulation != null) {
 			int headerEnd = headerEnd(cumulation);
 			// The cap binds the block whether or not a terminator has arrived: junk-then-terminator streams must find no
 			// richer welcome than an unterminated trickle.
@@ -200,7 +209,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	}
 
 	private void rejectUnparseable(ChannelHandlerContext ctx) {
-		LOGGER.warn("HTTP request header block exceeded {} bytes (streaming={}, pending={}B); closing the connection", MAX_HEADER_BLOCK_BYTES, streaming,
+		LOGGER.warn("HTTP request header block exceeded {} bytes (streaming={}, pending={}B); closing the connection", MAX_HEADER_BLOCK_BYTES, activeStream != null,
 				cumulation == null ? 0 : cumulation.readableBytes());
 		ctx.close();
 	}
@@ -225,26 +234,40 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		String method = requestLine[0];
 		String target = requestLine[1];
-		boolean keepAlive = requestLine[2].equals("HTTP/1.1");
+		boolean http11 = requestLine[2].equals("HTTP/1.1");
+		boolean keepAlive = http11;
+		boolean hostSeen = false;
 		String ifNoneMatch = null;
 		String range = null;
 		String authorization = null;
 		String acceptEncoding = null;
 		for (int i = 1; i < lines.length; i++) {
-			int colon = lines[i].indexOf(':');
+			String line = lines[i];
+			char first = line.isEmpty() ? 0 : line.charAt(0);
+			if (first == ' ' || first == '\t') return finishBodyless(ctx, span, STATUS_400, 0, null, null, false); // obs-fold continuation
+			int colon = line.indexOf(':');
 			if (colon <= 0) continue;
-			String name = lines[i].substring(0, colon).trim().toLowerCase(Locale.ROOT);
-			String value = lines[i].substring(colon + 1).trim();
+			String name = line.substring(0, colon);
+			char nameEnd = name.charAt(name.length() - 1);
+			if (nameEnd == ' ' || nameEnd == '\t') return finishBodyless(ctx, span, STATUS_400, 0, null, null, false); // whitespace between field name and colon
+			name = name.toLowerCase(Locale.ROOT);
+			String value = line.substring(colon + 1).trim();
 			if (name.equals("if-none-match")) ifNoneMatch = value;
 			else if (name.equals("range")) range = value;
 			else if (name.equals("authorization")) authorization = value;
 			else if (name.equals("accept-encoding")) acceptEncoding = value;
+			else if (name.equals("host")) hostSeen = true;
 			else if (name.equals("connection")) {
-				String connection = value.toLowerCase(Locale.ROOT);
-				if (connection.contains("close")) keepAlive = false;
-				else if (connection.contains("keep-alive")) keepAlive = true;
+				for (String token : value.toLowerCase(Locale.ROOT).split(",")) {
+					String option = token.trim();
+					if (option.equals("close")) keepAlive = false;
+					else if (option.equals("keep-alive")) keepAlive = true;
+				}
 			}
 		}
+
+		// RFC 9112: an HTTP/1.1 request without a Host header is invalid; HTTP/1.0 predates the requirement.
+		if (http11 && !hostSeen) return finishBodyless(ctx, span, STATUS_400, 0, null, null, false);
 
 		if (serverConfig.validateSecrets && !authorized(ctx, authorization, span)) return false;
 
@@ -276,7 +299,10 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		}
 
 		if (ifNoneMatch != null && ifNoneMatchMatches(ifNoneMatch, etag)) {
-			return finishBodyless(ctx, span, STATUS_304, 0, etag, null, keepAlive);
+			// The 304 head states the length a 200 would have sent (RFC 9110); nothing is served, so the books stay at zero.
+			tracker.complete(span, 304, 0);
+			responsesServed++;
+			return respondOrClose(ctx, STATUS_304, total, etag, null, keepAlive);
 		}
 
 		ByteRange byteRange = range == null ? null : parseRange(range, total);
@@ -291,16 +317,16 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		if (length == 0) return finishBodyless(ctx, span, status, 0, etag, contentRange, keepAlive);
 
-		// Plain negotiation: a codec was offered and known, so the body - whole or ranged - goes out encoded; no
-		// header means identity. The resume contract lives in Content-Range and is untouched by the coding. Encoding
-		// stays on for objects by measurement, not by faith: zstd -3 over 183 real mod/loader jars (188 MiB) gives
-		// 1.16x (gzip 1.13x), worth ~14% of the served bytes on the home uplinks and relays this server targets,
-		// while compression CPU (~500 MB/s) sits three orders of magnitude past any drain rate it can ever wait on.
-		if (acceptEncoding != null && WireCodec.negotiate(acceptEncoding) != null) {
-			return serveNegotiated(ctx, file, offset, length, status, etag, contentRange, keepAlive, span, acceptEncoding);
+		// Plain negotiation: a codec was offered and known, so the body - whole or ranged - goes out encoded; no header,
+		// an unknown or q-zeroed offer, or HTTP/1.0 (which has no Transfer-Encoding) means identity. The resume contract
+		// lives in Content-Range and is untouched by the coding. Encoding stays on for objects by measurement, not by
+		// faith: zstd -3 over 183 real mod/loader jars (188 MiB) gives 1.16x (gzip 1.13x), worth ~14% of the served
+		// bytes on the home uplinks and relays this server targets, while compression CPU (~500 MB/s) sits three orders
+		// of magnitude past any drain rate it can ever wait on.
+		if (http11 && acceptEncoding != null && WireCodec.negotiate(acceptEncoding) != null) {
+			return serveNegotiated(ctx, file, offset, length, total, status, etag, contentRange, keepAlive, span, acceptEncoding);
 		}
-
-		return serveIdentity(ctx, file, offset, length, status, etag, contentRange, keepAlive, span);
+		return serveIdentity(ctx, file, offset, length, total, status, etag, contentRange, keepAlive, span);
 	}
 
 	/** Ends a bodyless response: the tracker entry closes with the status before the head goes out. */
@@ -328,8 +354,8 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	}
 
 	/** The plain body path: objects, ranged responses, and documents for clients that did not offer zstd. */
-	private boolean serveIdentity(ChannelHandlerContext ctx, Path file, long offset, long length, String status, String etag, String contentRange, boolean keepAlive, ActivityTracker.Span span) {
-		activeStream = new StreamedBody(ctx, file, null, null, offset, length, keepAlive, span, status, etag, contentRange);
+	private boolean serveIdentity(ChannelHandlerContext ctx, Path file, long offset, long length, long total, String status, String etag, String contentRange, boolean keepAlive, ActivityTracker.Span span) {
+		activeStream = new StreamedBody(ctx, file, null, null, offset, length, total, keepAlive, span, status, etag, contentRange);
 		activeStream.openThenStream();
 		return false;
 	}
@@ -339,13 +365,12 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	 * exists), and compression runs one frame ahead of the wire under the same stall window as any streamed body.
 	 * Nothing buffers a whole response, so there is no cap to hit.
 	 */
-	private boolean serveNegotiated(ChannelHandlerContext ctx, Path file, long offset, long length, String status, String etag, String contentRange, boolean keepAlive,
+	private boolean serveNegotiated(ChannelHandlerContext ctx, Path file, long offset, long length, long total, String status, String etag, String contentRange, boolean keepAlive,
 			ActivityTracker.Span span, String acceptEncoding) {
 		WireCodec codec = WireCodec.negotiate(acceptEncoding);
 		ChannelFuture headWritten = ctx.channel().writeAndFlush(chunkedResponse(status, contentRange, etag, codec));
-		streaming = true;
 		inFlightSpan = span;
-		activeStream = new StreamedBody(ctx, file, null, codec, offset, length, keepAlive, span, status, etag, contentRange);
+		activeStream = new StreamedBody(ctx, file, null, codec, offset, length, total, keepAlive, span, status, etag, contentRange);
 		activeStream.start(headWritten);
 		return false;
 	}
@@ -368,6 +393,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		private final String contentRange;
 		private final long offset;
 		private final long length;
+		private final long expectedTotal; // the stat the head promised; the open must agree or the stream fails
 		private final boolean keepAlive;
 		private final ActivityTracker.Span span;
 		private final String status;
@@ -390,7 +416,8 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		private boolean closed; // the file channel has been closed
 		private ScheduledFuture<?> fuse;
 
-		StreamedBody(ChannelHandlerContext ctx, Path path, FileChannel file, WireCodec codec, long offset, long length, boolean keepAlive, ActivityTracker.Span span, String status, String etag, String contentRange) {
+		StreamedBody(ChannelHandlerContext ctx, Path path, FileChannel file, WireCodec codec, long offset, long length, long expectedTotal, boolean keepAlive, ActivityTracker.Span span, String status, String etag,
+				String contentRange) {
 			this.ctx = ctx;
 			this.path = path;
 			this.file = file;
@@ -399,6 +426,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			this.contentRange = contentRange;
 			this.offset = offset;
 			this.length = length;
+			this.expectedTotal = expectedTotal;
 			this.fileRemaining = length;
 			this.keepAlive = keepAlive;
 			this.span = span;
@@ -419,6 +447,11 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			diskReads.execute(() -> {
 				try {
 					file = FileChannel.open(path, StandardOpenOption.READ);
+					if (file.size() != expectedTotal) {
+						// A publish swapped the file between the stat and the open; serving would mix generations, so die loudly and let the client retry into the new one.
+						ctx.executor().execute(() -> fail(new IOException("The file changed size between the stat and the open: expected " + expectedTotal + " bytes")));
+						return;
+					}
 					file.position(offset);
 					ctx.executor().execute(this::writeHeadAndPump);
 				} catch (Throwable openFailure) {
@@ -427,7 +460,6 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 						tracker.complete(span, 404, 0);
 						respondOrClose(ctx, STATUS_404, 0, null, null, keepAlive);
 						activeStream = null;
-						streaming = false;
 					});
 				}
 			});
@@ -436,7 +468,8 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		// The head is in flight from here on, so the only honest completion of a mid-stream failure is dropping the connection.
 		private void writeHeadAndPump() {
 			armFuse();
-			ChannelFuture headWritten = ctx.writeAndFlush(response(status, length, etag, contentRange, null));
+			// A body whose connection closes when it completes announces the close, so a pipelining client knows its queued request is lost.
+			ChannelFuture headWritten = ctx.writeAndFlush(response(status, length, etag, contentRange, null, !keepAlive));
 			headWritten.addListener(future -> {
 				if (future.isSuccess()) pump();
 				else fail(causeOf(future));
@@ -463,10 +496,11 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			try {
 				if (file == null) {
 					file = FileChannel.open(path, StandardOpenOption.READ);
+					if (file.size() != expectedTotal) throw new IOException("The file changed size between the stat and the open: expected " + expectedTotal + " bytes");
 					file.position(offset);
 				}
 				if (codec == null) {
-					int chunk = (int) Math.min((long) WIRE_CHUNK_BYTES, remaining);
+					int chunk = (int) Math.min((long) STREAM_WRITE_BYTES, remaining);
 					out = ctx.alloc().heapBuffer(chunk, chunk);
 					int read = fill(file, out.nioBuffer(0, chunk));
 					if (read != chunk) throw new IOException("File ended before the response was fully streamed");
@@ -478,7 +512,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 				}
 				if (compressor == null) {
 					// One continuous zstd stream per response: the ratio receipt assumes the whole file shares a dictionary.
-					frames = new ByteArrayOutputStream(WIRE_CHUNK_BYTES);
+					frames = new ByteArrayOutputStream(STREAM_WRITE_BYTES);
 					compressor = codec.wrap(frames);
 				}
 				long consumed = 0;
@@ -495,7 +529,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 						compressor.close(); // flushes the encoder's tail into the frame buffer
 					}
 					tracker.progress(span, flushed);
-				} while (!last && frames.size() < WIRE_CHUNK_BYTES / 2);
+				} while (!last && frames.size() < STREAM_WRITE_BYTES);
 				byte[] frame = frames.toByteArray();
 				frames.reset();
 				flushed += frame.length;
@@ -575,7 +609,6 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			bytesServed += sent;
 			closeFile();
 			activeStream = null;
-			streaming = false;
 			if (failure == null && keepAlive && ctx.channel().isActive()) serveLoop(ctx);
 			else ctx.channel().close();
 		}
@@ -597,14 +630,26 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 	/** The negotiated head: no length exists yet, so the body is framed chunked, the coding is named, and a range keeps its Content-Range. */
 	private static ByteBuf chunkedResponse(String status, String contentRange, String etag, WireCodec codec) {
-		StringBuilder head = new StringBuilder(160);
+		StringBuilder head = new StringBuilder(192);
 		head.append("HTTP/1.1 ").append(status).append("\r\n");
+		head.append("Date: ").append(httpDate()).append("\r\n");
 		head.append("Content-Type: ").append(CONTENT_TYPE).append("\r\n");
 		if (etag != null) head.append("ETag: \"").append(etag).append("\"\r\n");
 		if (contentRange != null) head.append("Content-Range: ").append(contentRange).append("\r\n");
 		head.append("Content-Encoding: ").append(codec.wireName()).append("\r\n").append("Vary: Accept-Encoding\r\n");
 		head.append("Transfer-Encoding: chunked\r\n\r\n");
 		return Unpooled.wrappedBuffer(head.toString().getBytes(StandardCharsets.UTF_8));
+	}
+
+	/** IMF-fixdate in GMT, reformatted only when the wall-clock second moves. */
+	private static String httpDate() {
+		long second = System.currentTimeMillis() / 1000;
+		String cached = httpDateValue;
+		if (second == httpDateSecond) return cached;
+		String fresh = HTTP_DATE_FORMAT.format(Instant.ofEpochSecond(second));
+		httpDateValue = fresh;
+		httpDateSecond = second;
+		return fresh;
 	}
 
 	/**
@@ -712,16 +757,24 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	}
 
 	private void respondThenClose(ChannelHandlerContext ctx, String status, long contentLength, String etag, String contentRange) {
-		ctx.writeAndFlush(response(status, contentLength, etag, contentRange)).addListener(ChannelFutureListener.CLOSE);
+		// The close is announced in the head, so a pipelining client knows its queued request is lost before we drop the connection.
+		ctx.writeAndFlush(response(status, contentLength, etag, contentRange, null, true)).addListener(ChannelFutureListener.CLOSE);
 	}
 
 	private static ByteBuf response(String status, long contentLength, String etag, String contentRange) {
-		return response(status, contentLength, etag, contentRange, null);
+		return response(status, contentLength, etag, contentRange, null, false);
 	}
 
 	private static ByteBuf response(String status, long contentLength, String etag, String contentRange, String contentEncoding) {
-		StringBuilder head = new StringBuilder(160);
+		return response(status, contentLength, etag, contentRange, contentEncoding, false);
+	}
+
+	private static ByteBuf response(String status, long contentLength, String etag, String contentRange, String contentEncoding, boolean connectionClose) {
+		StringBuilder head = new StringBuilder(192);
 		head.append("HTTP/1.1 ").append(status).append("\r\n");
+		head.append("Date: ").append(httpDate()).append("\r\n");
+		if (STATUS_405.equals(status)) head.append("Allow: GET\r\n");
+		if (connectionClose) head.append("Connection: close\r\n");
 		head.append("Content-Length: ").append(contentLength).append("\r\n");
 		head.append("Content-Type: ").append(CONTENT_TYPE).append("\r\n");
 		if (etag != null) head.append("ETag: \"").append(etag).append("\"\r\n");

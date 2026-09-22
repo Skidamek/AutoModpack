@@ -40,4 +40,19 @@ class WireCodecTest {
 		assertNull(WireCodec.negotiate(null));
 		assertEquals("zstd, gzip", WireCodec.offeredEncodings());
 	}
+
+	@Test
+	void negotiationMatchesTokensExactlyAndHonorsZeroQuality() {
+		// Token-exact: a name that merely contains a wire name is unknown, not a match.
+		assertNull(WireCodec.negotiate("zstandard"));
+		assertNull(WireCodec.negotiate("x-gzip"));
+		// q=0 excludes the coding; another listed codec still wins.
+		assertNull(WireCodec.negotiate("zstd;q=0"));
+		assertNull(WireCodec.negotiate("gzip;Q=0, zstd;q=0"));
+		assertEquals(WireCodec.GZIP, WireCodec.negotiate("zstd;q=0, gzip"));
+		assertEquals(WireCodec.ZSTD, WireCodec.negotiate("zstd;q=0.001"));
+		assertEquals(WireCodec.ZSTD, WireCodec.negotiate("ZSTD"));
+		// An unparseable q excludes too: never send what cannot be ruled in.
+		assertNull(WireCodec.negotiate("zstd;q=maybe"));
+	}
 }

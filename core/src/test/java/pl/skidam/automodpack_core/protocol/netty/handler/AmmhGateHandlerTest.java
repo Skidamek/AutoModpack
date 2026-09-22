@@ -163,7 +163,7 @@ class AmmhGateHandlerTest {
 	}
 
 	private static String request(String target) {
-		return "GET " + target + " HTTP/1.1\r\n\r\n";
+		return "GET " + target + " HTTP/1.1\r\nHost: contract.test\r\n\r\n";
 	}
 
 	private static String drain(EmbeddedChannel channel) {

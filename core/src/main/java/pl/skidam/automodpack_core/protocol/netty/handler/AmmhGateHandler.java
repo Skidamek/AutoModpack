@@ -10,6 +10,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.handler.codec.ByteToMessageDecoder;
+import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
 
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
@@ -53,6 +54,18 @@ public class AmmhGateHandler extends ByteToMessageDecoder {
 		// The post-magic bytes ride the decoder's output list, so they replay into the contract stack the removal installs.
 		out.add(in.readRetainedSlice(in.readableBytes()));
 		swapToContract(ctx);
+	}
+
+	@Override
+	public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+		// A decoder without this override lets the dedicated port's all-idle reap traverse to the tail, where it closes
+		// nothing - a silent connection would hold a public FD forever. On the shared Minecraft socket the idle event is
+		// not ours; after the swap the contract handler owns it.
+		if (!sharedMinecraftSocket && evt instanceof IdleStateEvent) {
+			ctx.close();
+			return;
+		}
+		super.userEventTriggered(ctx, evt);
 	}
 
 	private void onMismatch(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
