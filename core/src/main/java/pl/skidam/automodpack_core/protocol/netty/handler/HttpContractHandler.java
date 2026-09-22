@@ -329,23 +329,8 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 	/** The plain body path: objects, ranged responses, and documents for clients that did not offer zstd. */
 	private boolean serveIdentity(ChannelHandlerContext ctx, Path file, long offset, long length, String status, String etag, String contentRange, boolean keepAlive, ActivityTracker.Span span) {
-		FileChannel channel = null;
-		try {
-			channel = FileChannel.open(file, StandardOpenOption.READ);
-			channel.position(offset);
-		} catch (IOException e) {
-			closeQuietly(channel);
-			tracker.complete(span, 404, 0);
-			return respondOrClose(ctx, STATUS_404, 0, null, null, keepAlive);
-		}
-
-		// The head is in flight from here on, so the only honest completion of a mid-stream failure is dropping the connection.
-		ChannelFuture headWritten = ctx.writeAndFlush(response(status, length, etag, contentRange, null));
-		streaming = true;
-		span.totalBytes = length;
-		inFlightSpan = span;
-		activeStream = new StreamedBody(ctx, file, channel, null, offset, length, keepAlive, span, status);
-		activeStream.start(headWritten);
+		activeStream = new StreamedBody(ctx, file, null, null, offset, length, keepAlive, span, status, etag, contentRange);
+		activeStream.openThenStream();
 		return false;
 	}
 
@@ -360,7 +345,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		ChannelFuture headWritten = ctx.channel().writeAndFlush(chunkedResponse(status, contentRange, etag, codec));
 		streaming = true;
 		inFlightSpan = span;
-		activeStream = new StreamedBody(ctx, file, null, codec, offset, length, keepAlive, span, status);
+		activeStream = new StreamedBody(ctx, file, null, codec, offset, length, keepAlive, span, status, etag, contentRange);
 		activeStream.start(headWritten);
 		return false;
 	}
@@ -379,6 +364,8 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		private final ChannelHandlerContext ctx;
 		private final Path path;
 		private final WireCodec codec; // null streams identity with an exact Content-Length
+		private final String etag;
+		private final String contentRange;
 		private final long offset;
 		private final long length;
 		private final boolean keepAlive;
@@ -403,11 +390,13 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		private boolean closed; // the file channel has been closed
 		private ScheduledFuture<?> fuse;
 
-		StreamedBody(ChannelHandlerContext ctx, Path path, FileChannel file, WireCodec codec, long offset, long length, boolean keepAlive, ActivityTracker.Span span, String status) {
+		StreamedBody(ChannelHandlerContext ctx, Path path, FileChannel file, WireCodec codec, long offset, long length, boolean keepAlive, ActivityTracker.Span span, String status, String etag, String contentRange) {
 			this.ctx = ctx;
 			this.path = path;
 			this.file = file;
 			this.codec = codec;
+			this.etag = etag;
+			this.contentRange = contentRange;
 			this.offset = offset;
 			this.length = length;
 			this.fileRemaining = length;
@@ -416,13 +405,47 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			this.status = status;
 		}
 
-		/** Starts streaming once the head is on the wire; a failed head ends the response before any body byte. */
+		/** Starts streaming once the negotiated head is on the wire; a failed head ends the response before any body byte. */
 		void start(ChannelFuture headWritten) {
-			fuse = ctx.executor().scheduleWithFixedDelay(this::checkFuse, fuseTickSeconds, fuseTickSeconds, TimeUnit.SECONDS);
+			armFuse();
 			headWritten.addListener(future -> {
 				if (future.isSuccess()) pump();
 				else fail(causeOf(future));
 			});
+		}
+
+		/** Opens the file off the loop, then writes the head and streams - an unopenable object still answers 404, since the head carries no body bytes yet. */
+		void openThenStream() {
+			diskReads.execute(() -> {
+				try {
+					file = FileChannel.open(path, StandardOpenOption.READ);
+					file.position(offset);
+					ctx.executor().execute(this::writeHeadAndPump);
+				} catch (Throwable openFailure) {
+					ctx.executor().execute(() -> {
+						closeFile();
+						tracker.complete(span, 404, 0);
+						respondOrClose(ctx, STATUS_404, 0, null, null, keepAlive);
+						activeStream = null;
+						streaming = false;
+					});
+				}
+			});
+		}
+
+		// The head is in flight from here on, so the only honest completion of a mid-stream failure is dropping the connection.
+		private void writeHeadAndPump() {
+			armFuse();
+			ChannelFuture headWritten = ctx.writeAndFlush(response(status, length, etag, contentRange, null));
+			headWritten.addListener(future -> {
+				if (future.isSuccess()) pump();
+				else fail(causeOf(future));
+			});
+		}
+
+		private void armFuse() {
+			stallDeadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(stallSeconds);
+			fuse = ctx.executor().scheduleWithFixedDelay(this::checkFuse, fuseTickSeconds, fuseTickSeconds, TimeUnit.SECONDS);
 		}
 
 		/** Dispatches a read while the depth window has room; runs on the event loop with every other state change. */
@@ -504,7 +527,6 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 				out.release();
 				return;
 			}
-			readPosition += consumed;
 			fileRemaining -= consumed;
 			if (last) eof = true;
 			reading = false;

@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterEach;
@@ -71,7 +72,15 @@ class AmmhGateHandlerTest {
 		} finally {
 			amok.release();
 		}
-		assertTrue(drain(channel).startsWith("HTTP/1.1 200 OK\r\n"));
+		// The contract stack opens files on its reader pool; the response arrives over a few task rounds.
+		long responseDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		String response = drain(channel);
+		while (!response.startsWith("HTTP/1.1 200 OK\r\n") && System.nanoTime() < responseDeadline) {
+			Thread.sleep(10);
+			channel.runPendingTasks();
+			response = drain(channel);
+		}
+		assertTrue(response.startsWith("HTTP/1.1 200 OK\r\n"), response);
 		assertNull(channel.pipeline().get(AmmhGateHandler.class));
 		assertNotNull(channel.pipeline().get(HttpContractHandler.class));
 		channel.finishAndReleaseAll();
@@ -130,9 +139,18 @@ class AmmhGateHandlerTest {
 		} finally {
 			amok.release();
 		}
-		assertTrue(drain(channel).startsWith("HTTP/1.1 200 OK\r\n"));
+		// The contract stack opens files on its reader pool; the response arrives over a few task rounds.
+		long responseDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		String response = drain(channel);
+		while (!response.startsWith("HTTP/1.1 200 OK\r\n") && System.nanoTime() < responseDeadline) {
+			Thread.sleep(10);
+			channel.runPendingTasks();
+			response = drain(channel);
+		}
+		assertTrue(response.startsWith("HTTP/1.1 200 OK\r\n"), response);
 		assertNull(channel.pipeline().get(AmmhGateHandler.class));
 		assertNotNull(channel.pipeline().get(HttpContractHandler.class));
+		assertEquals(0, vanilla.received.get());
 		channel.finishAndReleaseAll();
 	}
 
