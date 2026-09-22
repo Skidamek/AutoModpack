@@ -13,7 +13,11 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPInputStream;
 
 import org.junit.jupiter.api.AfterEach;
@@ -24,6 +28,7 @@ import org.junit.jupiter.api.io.TempDir;
 import io.airlift.compress.zstd.ZstdInputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.util.ReferenceCountUtil;
 
@@ -37,6 +42,7 @@ import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
@@ -209,6 +215,7 @@ class HttpContractHandlerTest {
 		EmbeddedChannel channel = channel();
 
 		byte[] response = exchangeBytes(channel, request("/head", "Accept-Encoding: zstd"));
+		System.out.println("PROBE-LEN=" + response.length + " PROBE-TEXT=" + new String(response, 0, Math.min(response.length, 300), StandardCharsets.US_ASCII).replace('\r', '|').replace('\n', '~'));
 		String head = headOf(response);
 		byte[] body = deframe(response);
 		assertTrue(head.startsWith("HTTP/1.1 200 OK\r\n"), head);
@@ -281,7 +288,7 @@ class HttpContractHandlerTest {
 
 	private static byte[] exchangeBytes(EmbeddedChannel channel, String request) {
 		channel.writeInbound(Unpooled.wrappedBuffer(request.getBytes(StandardCharsets.UTF_8)));
-		channel.runPendingTasks();
+		settle(channel);
 		ByteArrayOutputStream response = new ByteArrayOutputStream();
 		Object message;
 		while ((message = channel.readOutbound()) != null) {
@@ -410,9 +417,63 @@ class HttpContractHandlerTest {
 		return request.append("\r\n").toString();
 	}
 
+	/** The stall fuse: a client that stops draining mid-response finds its connection closed inside the stall window. */
+	@Test
+	void aStoppedDrainerIsClosedByTheStallFuse() throws Exception {
+		byte[] body = new byte[NetUtils.WIRE_CHUNK_BYTES * 2 + 1024];
+		Path object = tempDir.resolve("stall.bin");
+		Files.write(object, body);
+		ExecutorService readers = Executors.newFixedThreadPool(2);
+		class SlowChannel extends EmbeddedChannel {
+			volatile boolean writable = true;
+			SlowChannel(ChannelHandler handler) {
+				super(handler);
+			}
+
+			@Override
+			public boolean isWritable() {
+				return writable;
+			}
+		}
+		// One-second fuse ticks against a three-second window: the channel stops being writable after the first
+		// chunk, so the completed-write counter freezes and the fuse is the only thing left to act.
+		NettyServer stallServer = new NettyServer() {
+			@Override
+			public Optional<Path> getPath(String requestKey) {
+				return HashUtils.isSha1(requestKey) ? Optional.of(object) : Optional.empty();
+			}
+		};
+		SlowChannel channel = new SlowChannel(new HttpContractHandler(stallServer, readers, 1, 3));
+		channels.add(channel);
+		channel.writeInbound(Unpooled.wrappedBuffer(request("/objects/" + HashUtils.sha1(body)).getBytes(StandardCharsets.UTF_8)));
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (channel.outboundMessages().size() < 2 && System.nanoTime() < deadline) channel.runPendingTasks();
+		assertTrue(channel.outboundMessages().size() >= 2, "the head and the first chunk must stream before the stall");
+		channel.writable = false; // the peer stops draining here: no buffer ever completes writing again
+		long realDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (channel.isActive() && System.nanoTime() < realDeadline) {
+			channel.runScheduledPendingTasks();
+			channel.runPendingTasks();
+			Thread.sleep(100);
+		}
+		assertFalse(channel.isActive(), "the stall fuse must close the connection");
+		readers.shutdownNow();
+	}
+
+	/** Runs loop tasks until a full pass moves nothing: a streamed response unwinds over several task rounds. */
+	private static void settle(EmbeddedChannel channel) {
+		int previous = -1;
+		while (true) {
+			channel.runPendingTasks();
+			int size = channel.outboundMessages().size();
+			if (size == previous) return;
+			previous = size;
+		}
+	}
+
 	private static String exchange(EmbeddedChannel channel, String request) {
 		channel.writeInbound(Unpooled.wrappedBuffer(request.getBytes(StandardCharsets.UTF_8)));
-		channel.runPendingTasks();
+		settle(channel);
 		return drain(channel);
 	}
 

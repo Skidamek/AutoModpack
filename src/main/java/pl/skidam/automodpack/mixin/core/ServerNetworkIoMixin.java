@@ -21,7 +21,7 @@ public abstract class ServerNetworkIoMixin {
 	private void injectAutoModpackHost(Channel channel, Operation<Void> original) {
 		original.call(channel);
 		if (hostServer != null && hostServer.isSharedMagicEnabled()) {
-			channel.pipeline().addFirst(MOD_ID + "-magic-gate", new AmmhGateHandler(hostServer, hostServer.senderExecutor(), true));
+			channel.pipeline().addFirst(MOD_ID + "-magic-gate", new AmmhGateHandler(hostServer, true));
 			return;
 		}
 		if (Common.server != null && ServerHolepunchBridge.isRegistered()) {

@@ -5,7 +5,6 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.HTTP_IDLE_REAP_SECOND
 import static pl.skidam.automodpack_core.protocol.NetUtils.MAGIC_AMOK;
 
 import java.util.List;
-import java.util.concurrent.Executor;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -25,12 +24,10 @@ import pl.skidam.automodpack_core.protocol.netty.detectors.MatchResult;
 public class AmmhGateHandler extends ByteToMessageDecoder {
 
 	private final NettyServer server;
-	private final Executor senders;
 	private final boolean sharedMinecraftSocket;
 
-	public AmmhGateHandler(NettyServer server, Executor senders, boolean sharedMinecraftSocket) {
+	public AmmhGateHandler(NettyServer server, boolean sharedMinecraftSocket) {
 		this.server = server;
-		this.senders = senders;
 		this.sharedMinecraftSocket = sharedMinecraftSocket;
 	}
 

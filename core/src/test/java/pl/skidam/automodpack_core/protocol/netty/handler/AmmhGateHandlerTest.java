@@ -48,7 +48,7 @@ class AmmhGateHandlerTest {
 		Constants.serverConfig.validateSecrets = false;
 		server = new NettyServer();
 		server.startSharedTraffic();
-		server.startSenders();
+		server.startReaders();
 	}
 
 	@AfterEach
@@ -60,7 +60,7 @@ class AmmhGateHandlerTest {
 	@Test
 	void dedicatedMagicMatchSwapsTheChannelOntoTheContractStack() throws Exception {
 		fixture();
-		EmbeddedChannel channel = new EmbeddedChannel(new AmmhGateHandler(server, Runnable::run, false));
+		EmbeddedChannel channel = new EmbeddedChannel(new AmmhGateHandler(server, false));
 
 		channel.writeInbound(Unpooled.wrappedBuffer(magicPacket("automodpack.example", request("/head"))));
 		channel.runPendingTasks();
@@ -80,7 +80,7 @@ class AmmhGateHandlerTest {
 	@Test
 	void dedicatedNonMagicTrafficIsClosed() throws Exception {
 		fixture();
-		EmbeddedChannel channel = new EmbeddedChannel(new AmmhGateHandler(server, Runnable::run, false));
+		EmbeddedChannel channel = new EmbeddedChannel(new AmmhGateHandler(server, false));
 
 		channel.writeInbound(Unpooled.wrappedBuffer("GET /head HTTP/1.1\r\n\r\n".getBytes(StandardCharsets.UTF_8)));
 
@@ -93,7 +93,7 @@ class AmmhGateHandlerTest {
 	void sharedNonMagicTrafficPassesThroughToMinecraftUntouched() {
 		EmbeddedChannel channel = new EmbeddedChannel();
 		// The production name: the contract handler is added as "automodpack" during the swap, so the gate must not hold it.
-		channel.pipeline().addFirst("automodpack-magic-gate", new AmmhGateHandler(server, Runnable::run, true));
+		channel.pipeline().addFirst("automodpack-magic-gate", new AmmhGateHandler(server, true));
 		byte[] minecraftHandshake = {0x10, 0x00, 0x01, 0x02, 0x03};
 
 		assertTrue(channel.writeInbound(Unpooled.wrappedBuffer(minecraftHandshake)));
@@ -117,7 +117,7 @@ class AmmhGateHandlerTest {
 		EmbeddedChannel channel = new EmbeddedChannel();
 		CountingVanillaHandler vanilla = new CountingVanillaHandler();
 		// The production name: the swap adds the contract handler as "automodpack", so the gate must not hold that name.
-		channel.pipeline().addFirst("automodpack-magic-gate", new AmmhGateHandler(server, Runnable::run, true));
+		channel.pipeline().addFirst("automodpack-magic-gate", new AmmhGateHandler(server, true));
 		channel.pipeline().addLast(vanilla);
 
 		channel.writeInbound(Unpooled.wrappedBuffer(magicPacket("automodpack.example", request("/head"))));

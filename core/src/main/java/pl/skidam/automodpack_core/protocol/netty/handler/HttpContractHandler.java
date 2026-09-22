@@ -18,10 +18,11 @@ import java.nio.file.StandardOpenOption;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.Executor;
-import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -29,6 +30,7 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.timeout.IdleStateEvent;
+import io.netty.util.concurrent.Future;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
@@ -50,10 +52,11 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	/** Tripwire past any real request header block; an honest client holds ≤ 8 requests ≈ 2 KB of headers in flight, 4× under this cap. Only a broken client touches it. */
 	private static final int MAX_HEADER_BLOCK_BYTES = 8 * 1024;
 
-	// Stream-compression gauges: one frame's worth of file input and the frame size the wire sees. 256 KiB in bounds
-	// each frame's resident bytes; the frame count rides the write watermark, not a response-size cap.
+	// Stream-compression gauge: one read's worth of file input per task; the compressor's output drains as one chunked
+	// frame per task, so a response's resident encoding state is one input chunk plus one output frame.
 	private static final int COMPRESS_INPUT_CHUNK = 256 * 1024;
-	private static final int FRAME_BYTES = 192 * 1024;
+	// The drain fuse ticks this often; a peer that completes nothing for stallSeconds is declared gone.
+	private static final long FUSE_TICK_SECONDS = 15;
 	private static final byte[] CRLF = {'\r', '\n'};
 	private static final byte[] FINAL_CHUNK = {'0', '\r', '\n', '\r', '\n'};
 
@@ -71,18 +74,28 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	private static final String CONTENT_TYPE = "application/octet-stream";
 
 	private final NettyServer server;
-	private final Executor senders;
+	private final Executor diskReads;
+	private final long fuseTickSeconds;
+	private final long stallSeconds;
 	private final ActivityTracker tracker;
 	private ByteBuf cumulation;
 	private volatile boolean streaming;
-	// The one response body currently streaming; the connection drops must end its span even when finishStream never runs.
+	// The one response body currently streaming; the connection drops must end its span even when complete never runs.
 	private ActivityTracker.Span inFlightSpan;
+	// Same body as a state object: the loop writes from it when the channel turns writable, and the fuse watches it.
+	private StreamedBody activeStream;
 	private int responsesServed;
 	private long bytesServed;
 
-	public HttpContractHandler(NettyServer server, Executor senders) {
+	public HttpContractHandler(NettyServer server, Executor diskReads) {
+		this(server, diskReads, FUSE_TICK_SECONDS, TRANSFER_WRITE_STALL_TIMEOUT.toSeconds());
+	}
+
+	HttpContractHandler(NettyServer server, Executor diskReads, long fuseTickSeconds, long stallSeconds) {
 		this.server = server;
-		this.senders = senders;
+		this.diskReads = diskReads;
+		this.fuseTickSeconds = fuseTickSeconds;
+		this.stallSeconds = stallSeconds;
 		this.tracker = server.activityTracker();
 	}
 
@@ -113,15 +126,25 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	}
 
 	@Override
+	public void channelWritabilityChanged(ChannelHandlerContext ctx) {
+		// The watermark turning writable is the stream scheduler's tick: whatever chunk the reader already produced
+		// goes out here, and the next read is dispatched behind it.
+		if (activeStream != null) activeStream.pump();
+		ctx.fireChannelWritabilityChanged();
+	}
+
+	@Override
 	public void channelInactive(ChannelHandlerContext ctx) {
 		LOGGER.info("HTTP contract connection closed: responses={} bytes={} streaming={} pendingHeaders={}B", responsesServed, bytesServed, streaming,
 				cumulation == null ? 0 : cumulation.readableBytes());
+		if (activeStream != null) activeStream.discard();
 		if (inFlightSpan != null) tracker.completeDropped(inFlightSpan);
 		releaseCumulation();
 	}
 
 	@Override
 	public void handlerRemoved(ChannelHandlerContext ctx) {
+		if (activeStream != null) activeStream.discard();
 		releaseCumulation();
 	}
 
@@ -321,15 +344,8 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		streaming = true;
 		span.totalBytes = length;
 		inFlightSpan = span;
-		final FileChannel opened = channel;
-		final boolean responseKeepAlive = keepAlive;
-		try {
-			senders.execute(() -> streamBody(ctx, opened, length, headWritten, responseKeepAlive, span, status));
-		} catch (RejectedExecutionException rejected) {
-			closeQuietly(opened);
-			tracker.complete(span, statusNumber(status), 0);
-			ctx.close();
-		}
+		activeStream = new StreamedBody(ctx, file, channel, null, offset, length, keepAlive, span, status);
+		activeStream.start(headWritten);
 		return false;
 	}
 
@@ -340,119 +356,221 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	 */
 	private boolean serveNegotiated(ChannelHandlerContext ctx, Path file, long offset, long length, String status, String etag, String contentRange, boolean keepAlive,
 			ActivityTracker.Span span, String acceptEncoding) {
+		WireCodec codec = WireCodec.negotiate(acceptEncoding);
+		ChannelFuture headWritten = ctx.channel().writeAndFlush(chunkedResponse(status, contentRange, etag, codec));
 		streaming = true;
 		inFlightSpan = span;
-		try {
-			senders.execute(() -> {
-				WireCodec codec = WireCodec.negotiate(acceptEncoding);
-				streamCompressedBody(ctx, file, offset, length, status, contentRange, codec, etag, keepAlive, span);
-			});
-		} catch (RejectedExecutionException rejected) {
-			streaming = false;
-			tracker.complete(span, statusNumber(status), 0);
-			ctx.close();
-		}
+		activeStream = new StreamedBody(ctx, file, null, codec, offset, length, keepAlive, span, status);
+		activeStream.start(headWritten);
 		return false;
 	}
 
-	/** Streams the selected slice through the codec into chunked frames, queued ahead of the peer's drain until the watermark pauses them. */
-	private void streamCompressedBody(ChannelHandlerContext ctx, Path file, long offset, long length, String status, String contentRange, WireCodec codec, String etag,
-			boolean keepAlive, ActivityTracker.Span span) {
-		Channel channel = ctx.channel();
-		ChannelFuture headWritten = channel.writeAndFlush(chunkedResponse(status, contentRange, etag, codec));
-		Throwable failure = awaitWritten(channel, headWritten);
-		if (failure == null && !headWritten.isSuccess()) failure = causeOf(headWritten);
-		FrameSink frames = new FrameSink(channel);
-		try (FileChannel source = FileChannel.open(file, StandardOpenOption.READ); OutputStream compressor = codec.wrap(frames)) {
-			source.position(offset);
-			ByteBuffer buffer = ByteBuffer.allocate(COMPRESS_INPUT_CHUNK);
-			long remaining = length;
-			while (failure == null && remaining > 0) {
-				buffer.clear().limit((int) Math.min(buffer.capacity(), remaining));
-				int read = source.read(buffer);
-				if (read < 0) break;
-				remaining -= read;
-				compressor.write(buffer.array(), 0, read);
-				tracker.progress(span, frames.flushed());
-				frames.frameIfDue();
-			}
-		} catch (Exception e) {
-			failure = e;
-		}
-		try {
-			if (failure == null) {
-				frames.frameRemaining();
-				ChannelFuture last = channel.writeAndFlush(Unpooled.wrappedBuffer(FINAL_CHUNK));
-				failure = awaitWritten(channel, last);
-				if (failure == null && !last.isSuccess()) failure = causeOf(last);
-			}
-		} catch (IOException e) {
-			failure = e;
-		}
-		Throwable finalFailure = failure;
-		long sentBytes = frames.flushed();
-		if (finalFailure != null) LOGGER.error("The streamed response to {} died mid-body ({} bytes sent)", span.routeKey, sentBytes, finalFailure);
-		responsesServed++;
-		bytesServed += sentBytes;
-		executeOnLoop(channel, () -> finishStream(ctx, span, status, sentBytes, finalFailure, keepAlive));
-	}
-
-	/** Collects compressor output until it holds a frame's worth, then writes it as one sized chunk. Not thread-safe; owned by one sender task. */
-	private final class FrameSink extends OutputStream {
-		private final Channel channel;
-		private final ByteArrayOutputStream buffer = new ByteArrayOutputStream(FRAME_BYTES);
-		private long flushed;
-
-		FrameSink(Channel channel) {
-			this.channel = channel;
-		}
-
-		long flushed() {
-			return flushed;
-		}
-
-		@Override
-		public void write(int b) {
-			buffer.write(b);
-		}
-
-		@Override
-		public void write(byte[] source, int offset, int length) {
-			buffer.write(source, offset, length);
-		}
-
-		void frameIfDue() throws IOException {
-			if (buffer.size() >= FRAME_BYTES) frame();
-		}
-
-		void frameRemaining() throws IOException {
-			if (buffer.size() > 0) frame();
-		}
-
-		/** Emits the buffered bytes as one sized chunk; only a congested channel blocks the next compress. */
-		private void frame() throws IOException {
-			byte[] bytes = buffer.toByteArray();
-			buffer.reset();
-			flushed += bytes.length;
-			byte[] sizeLine = (Integer.toHexString(bytes.length) + "\r\n").getBytes(StandardCharsets.UTF_8);
-			ChannelFuture written = channel.writeAndFlush(Unpooled.wrappedBuffer(sizeLine, bytes, CRLF));
-			Throwable failure = awaitWhenCongested(channel, written);
-			if (failure != null) throw failure instanceof IOException io ? io : new IOException(failure);
-		}
-	}
-
 	/**
-	 * The streaming backpressure point: a write whose channel still has queue room is left to drain while the next chunk
-	 * is read or compressed; only a channel past its high watermark waits, under the same stall window as before. A
-	 * channel with room cannot hide a failure for long - every later write checks the queue - and a response's final
-	 * write is always awaited, which completes every write queued before it.
+	 * One streamed response. The event loop writes a buffer whenever the channel is writable and never blocks: file
+	 * reads and compression run on the bounded reader pool, which keeps at most two buffers in flight - one draining
+	 * on the wire, one being read or compressed - so the disk hides behind the wire and a slow client parks no thread.
+	 * The fuse guards the drain: a scheduled check compares the completed-write counter every {@code fuseTickSeconds},
+	 * and a peer that completes nothing for {@code stallSeconds} is declared gone - a draining peer resets it with
+	 * every chunk, so only a silently stopped one trips. Every field here is loop-confined except the file channel,
+	 * the compressor and the frame buffer, which only the serialized read tasks touch; the executor handoffs in
+	 * between publish them.
 	 */
-	private static Throwable awaitWhenCongested(Channel channel, ChannelFuture written) {
-		if (written.isDone()) return written.isSuccess() ? null : causeOf(written);
-		if (channel.isWritable()) return null;
-		Throwable failure = awaitWritten(channel, written);
-		if (failure == null && !written.isSuccess()) failure = causeOf(written);
-		return failure;
+	private final class StreamedBody {
+		private final ChannelHandlerContext ctx;
+		private final Path path;
+		private final WireCodec codec; // null streams identity with an exact Content-Length
+		private final long offset;
+		private final long length;
+		private final boolean keepAlive;
+		private final ActivityTracker.Span span;
+		private final String status;
+
+		private FileChannel file; // opened by the caller for identity, by the first read for negotiated
+		private OutputStream compressor; // the codec's continuous stream; read tasks only
+		private ByteArrayOutputStream frames; // its sink, drained on every emitted frame; read tasks only
+		private long flushed; // compressed wire bytes emitted so far; read tasks only
+		private long readPosition; // loop mirror of the file cursor
+		private long fileRemaining; // loop mirror of the file bytes left
+		private long sent; // wire bytes whose writes have completed
+		private long completed; // the fuse's completed-write counter
+		private long fuseMark;
+		private long stallDeadlineNanos = Long.MAX_VALUE;
+		private int stallTicks;
+		private int draining; // buffers handed to the socket and not yet fully written
+		private boolean reading; // a read task is queued or running
+		private boolean eof; // the file has no bytes left
+		private boolean done; // finished or failed; every later callback is ignored
+		private boolean closed; // the file channel has been closed
+		private ScheduledFuture<?> fuse;
+
+		StreamedBody(ChannelHandlerContext ctx, Path path, FileChannel file, WireCodec codec, long offset, long length, boolean keepAlive, ActivityTracker.Span span, String status) {
+			this.ctx = ctx;
+			this.path = path;
+			this.file = file;
+			this.codec = codec;
+			this.offset = offset;
+			this.length = length;
+			this.fileRemaining = length;
+			this.keepAlive = keepAlive;
+			this.span = span;
+			this.status = status;
+		}
+
+		/** Starts streaming once the head is on the wire; a failed head ends the response before any body byte. */
+		void start(ChannelFuture headWritten) {
+			fuse = ctx.executor().scheduleWithFixedDelay(this::checkFuse, fuseTickSeconds, fuseTickSeconds, TimeUnit.SECONDS);
+			headWritten.addListener(future -> {
+				if (future.isSuccess()) pump();
+				else fail(causeOf(future));
+			});
+		}
+
+		/** Dispatches a read while the depth window has room; runs on the event loop with every other state change. */
+		private void pump() {
+			if (done || eof || reading || draining >= 2 || !ctx.channel().isWritable()) return;
+			reading = true;
+			long position = offset + (length - fileRemaining);
+			long remaining = fileRemaining;
+			diskReads.execute(() -> read(position, remaining));
+		}
+
+		/** Reads and encodes one chunk off the loop; reports it back to the loop, which owns every field touched there. */
+		private void read(long position, long remaining) {
+			ByteBuf out = null;
+			try {
+				if (file == null) {
+					file = FileChannel.open(path, StandardOpenOption.READ);
+					file.position(offset);
+				}
+				if (codec == null) {
+					int chunk = (int) Math.min((long) WIRE_CHUNK_BYTES, remaining);
+					out = ctx.alloc().heapBuffer(chunk, chunk);
+					int read = fill(file, out.nioBuffer(0, chunk));
+					if (read != chunk) throw new IOException("File ended before the response was fully streamed");
+					out.writerIndex(read);
+					boolean last = remaining == chunk;
+					ByteBuf finalOut = out;
+					ctx.executor().execute(() -> deliver(finalOut, chunk, last, chunk));
+					return;
+				}
+				if (compressor == null) {
+					// One continuous zstd stream per response: the ratio receipt assumes the whole file shares a dictionary.
+					frames = new ByteArrayOutputStream(WIRE_CHUNK_BYTES);
+					compressor = codec.wrap(frames);
+				}
+				long consumed = 0;
+				boolean last = false;
+				do {
+					int chunk = (int) Math.min((long) COMPRESS_INPUT_CHUNK, remaining - consumed);
+					ByteBuffer input = ByteBuffer.allocate(chunk);
+					int read = file.read(input, position + consumed);
+					if (read < 0) throw new IOException("File ended before the response was fully streamed");
+					compressor.write(input.array(), 0, read);
+					consumed += read;
+					if (consumed == remaining) {
+						last = true;
+						compressor.close(); // flushes the encoder's tail into the frame buffer
+					}
+					tracker.progress(span, flushed);
+				} while (!last && frames.size() < WIRE_CHUNK_BYTES / 2);
+				byte[] frame = frames.toByteArray();
+				frames.reset();
+				flushed += frame.length;
+				byte[] sizeLine = (Integer.toHexString(frame.length) + "\r\n").getBytes(StandardCharsets.US_ASCII);
+				if (last) {
+					CompositeByteBuf composite = ctx.alloc().compositeBuffer();
+					composite.addComponent(true, Unpooled.wrappedBuffer(sizeLine));
+					composite.addComponent(true, Unpooled.wrappedBuffer(frame));
+					composite.addComponent(true, Unpooled.wrappedBuffer(CRLF));
+					composite.addComponent(true, Unpooled.wrappedBuffer(FINAL_CHUNK));
+					out = composite;
+				} else {
+					out = Unpooled.wrappedBuffer(sizeLine, frame, CRLF);
+				}
+				ByteBuf finalOut = out;
+				long consumedTotal = consumed;
+				boolean finalSegment = last;
+				long wireBytes = sizeLine.length + frame.length + CRLF.length + (last ? FINAL_CHUNK.length : 0);
+				ctx.executor().execute(() -> deliver(finalOut, consumedTotal, finalSegment, wireBytes));
+			} catch (Throwable readFailure) {
+				if (out != null) out.release();
+				ctx.executor().execute(() -> fail(readFailure));
+			}
+		}
+
+		/** Writes one delivered chunk; its completion is both the fuse's progress and the depth window's refill. */
+		private void deliver(ByteBuf out, long consumed, boolean last, long wireBytes) {
+			if (done) {
+				out.release();
+				return;
+			}
+			readPosition += consumed;
+			fileRemaining -= consumed;
+			if (last) eof = true;
+			reading = false;
+			draining++;
+			ctx.writeAndFlush(out).addListener(future -> {
+				completed += wireBytes;
+				sent += wireBytes;
+				draining--;
+				if (done) return;
+				if (!future.isSuccess()) {
+					fail(causeOf(future));
+					return;
+				}
+				if (eof && draining == 0) finish();
+				else pump();
+			});
+			pump();
+		}
+
+		private void checkFuse() {
+			if (done) return;
+			long now = System.nanoTime();
+			if (completed > fuseMark) {
+				fuseMark = completed;
+				stallDeadlineNanos = now + TimeUnit.SECONDS.toNanos(stallSeconds);
+				return;
+			}
+			if (now >= stallDeadlineNanos) fail(new IOException("Write stalled: the peer stopped draining the connection"));
+		}
+
+		private void finish() {
+			complete(null);
+		}
+
+		private void fail(Throwable failure) {
+			if (done) return;
+			LOGGER.error("The streamed response to {} died mid-body ({} bytes sent)", span.routeKey, sent, failure);
+			complete(failure);
+		}
+
+		private void complete(Throwable failure) {
+			done = true;
+			if (fuse != null) fuse.cancel(false);
+			tracker.complete(span, statusNumber(status), sent);
+			responsesServed++;
+			bytesServed += sent;
+			closeFile();
+			activeStream = null;
+			streaming = false;
+			if (failure == null && keepAlive && ctx.channel().isActive()) serveLoop(ctx);
+			else ctx.channel().close();
+		}
+
+		/** Disconnect cleanup: everything the loop can no longer drive goes away with the channel. */
+		private void discard() {
+			done = true;
+			if (fuse != null) fuse.cancel(false);
+			closeFile();
+		}
+
+		private void closeFile() {
+			if (closed) return;
+			closed = true;
+			closeQuietly(file);
+			file = null;
+		}
 	}
 
 	/** The negotiated head: no length exists yet, so the body is framed chunked, the coding is named, and a range keeps its Content-Range. */
@@ -507,75 +625,6 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		}
 		respondThenClose(ctx, status, contentLength, etag, contentRange);
 		return false;
-	}
-
-	private void streamBody(ChannelHandlerContext ctx, FileChannel file, long length, ChannelFuture headWritten, boolean keepAlive, ActivityTracker.Span span, String status) {
-		// User-space copy instead of sendfile on purpose: one memcpy per 4 MiB chunk is ~0.2 ms against a home uplink
-		// draining the same chunk for seconds, and ranged responses re-open the file per chunk anyway. Only a
-		// LAN-targeted server would measure the difference; revisit there, not here.
-		Channel channel = ctx.channel();
-		Throwable failure = awaitWritten(channel, headWritten);
-		if (failure == null && !headWritten.isSuccess()) failure = causeOf(headWritten);
-		long sent = 0;
-		ChannelFuture lastWritten = headWritten;
-		try {
-			while (failure == null && sent < length) {
-				int chunkLength = (int) Math.min(WIRE_CHUNK_BYTES, length - sent);
-				ByteBuf chunk = channel.alloc().heapBuffer(chunkLength, chunkLength);
-				// Owned by the write once handed to writeAndFlush; until then every exit must release it.
-				try {
-					ByteBuffer buffer = chunk.nioBuffer(0, chunkLength);
-					int read = fill(file, buffer);
-					if (read <= 0) {
-						failure = new IOException("File ended before the response was fully streamed");
-						chunk.release();
-						break;
-					}
-					chunk.writerIndex(read);
-					sent += read;
-				} catch (Exception e) {
-					chunk.release();
-					throw e;
-				}
-				lastWritten = channel.writeAndFlush(chunk);
-				tracker.progress(span, sent);
-				failure = awaitWhenCongested(channel, lastWritten);
-			}
-			if (failure == null && sent < length) failure = new IOException("File ended before the response was fully streamed");
-			// The queued chunks ahead of the last one complete with it; only here does the whole body count as delivered.
-			if (failure == null) {
-				failure = awaitWritten(channel, lastWritten);
-				if (failure == null && !lastWritten.isSuccess()) failure = causeOf(lastWritten);
-			}
-		} catch (Exception e) {
-			failure = e;
-		} finally {
-			closeQuietly(file);
-		}
-
-		Throwable finalFailure = failure;
-		long sentBytes = sent;
-		responsesServed++;
-		bytesServed += sentBytes;
-		executeOnLoop(channel, () -> finishStream(ctx, span, status, sentBytes, finalFailure, keepAlive));
-	}
-
-	private void finishStream(ChannelHandlerContext ctx, ActivityTracker.Span span, String status, long bytesSent, Throwable failure, boolean keepAlive) {
-		Channel channel = ctx.channel();
-		inFlightSpan = null;
-		tracker.complete(span, statusNumber(status), bytesSent);
-		if (failure != null) {
-			// Body bytes are already in flight: an error status cannot follow them, the log is the only receipt.
-			LOGGER.error("HTTP response of {} bytes failed: {}", bytesSent, failure.getMessage(), failure);
-			channel.close();
-			return;
-		}
-		streaming = false;
-		if (keepAlive && channel.isActive()) {
-			serveLoop(ctx);
-		} else {
-			channel.close();
-		}
 	}
 
 	/**
@@ -660,30 +709,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		return Unpooled.wrappedBuffer(head.toString().getBytes(StandardCharsets.UTF_8));
 	}
 
-	/** The transfer stall window: a peer that stops draining cannot pin the connection past the timeout without progress. */
-	private static Throwable awaitWritten(Channel channel, ChannelFuture written) {
-		long stallWindowNanos = TRANSFER_WRITE_STALL_TIMEOUT.toNanos();
-		long progressDeadline = System.nanoTime() + stallWindowNanos;
-		long lastPending = -1;
-		try {
-			while (!written.await(1, TimeUnit.SECONDS)) {
-				long pending = channel.isWritable() ? 0 : channel.bytesBeforeWritable();
-				if (pending != lastPending) {
-					lastPending = pending;
-					progressDeadline = System.nanoTime() + stallWindowNanos;
-				} else if (System.nanoTime() - progressDeadline >= 0) {
-					channel.close();
-					return new IOException("Write stalled: the peer stopped draining the connection");
-				}
-			}
-			return null;
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			return e;
-		}
-	}
-
-	private static Throwable causeOf(ChannelFuture future) {
+	private static Throwable causeOf(Future<?> future) {
 		Throwable cause = future.cause();
 		return cause != null ? cause : new IOException("Unknown");
 	}
@@ -706,11 +732,4 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		}
 	}
 
-	private static void executeOnLoop(Channel channel, Runnable action) {
-		try {
-			channel.eventLoop().execute(action);
-		} catch (RejectedExecutionException rejected) {
-			// The loop is shutting down with its channel; there is no stream left to finish.
-		}
-	}
 }

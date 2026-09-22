@@ -49,7 +49,7 @@ public class NettyServer {
 	private volatile TrafficShaper trafficShaper;
 	private volatile Map<String, Path> paths = Map.of();
 	private MultithreadEventLoopGroup eventLoopGroup;
-	private ExecutorService senderExecutor;
+	private ExecutorService diskReads;
 	private ChannelFuture serverChannel;
 	private volatile boolean sharedMagicEnabled;
 	private volatile boolean holepunchActive;
@@ -165,7 +165,7 @@ public class NettyServer {
 			LOGGER.info("Internal TLS termination is disabled; the listener serves plaintext and expects TLS to be terminated in front of it");
 
 		try {
-			startSenders();
+			startReaders();
 
 			prepareTls();
 
@@ -185,8 +185,8 @@ public class NettyServer {
 
 			if (serverConfig.bindPort == -1) {
 				LOGGER.info("{} is advertised without a built-in listener; expecting the endpoint to be served externally", connectionMode);
-				senderExecutor.shutdownNow();
-				senderExecutor = null;
+				diskReads.shutdownNow();
+				diskReads = null;
 				return Optional.empty();
 			}
 
@@ -234,7 +234,7 @@ public class NettyServer {
 						ch.pipeline().addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, NetUtils.HTTP_IDLE_REAP_SECONDS));
 						ch.pipeline().addLast("traffic-shaper", NettyServer.this.trafficHandler());
 						if (connectionMode == ModpackConnectionMode.MAGIC) {
-							ch.pipeline().addLast(MOD_ID + "-magic-gate", new AmmhGateHandler(NettyServer.this, senderExecutor, false));
+							ch.pipeline().addLast(MOD_ID + "-magic-gate", new AmmhGateHandler(NettyServer.this, false));
 							return;
 						}
 						installContractHandlers(ch.pipeline());
@@ -250,7 +250,7 @@ public class NettyServer {
 		pipeline.channel().config().setWriteBufferWaterMark(new WriteBufferWaterMark(NetUtils.WRITE_BUFFER_LOW_WATER, NetUtils.WRITE_BUFFER_HIGH_WATER));
 		if (sslCtx != null) pipeline.addLast("tls", sslCtx.newHandler(pipeline.channel().alloc()));
 		else LOGGER.debug("TLS termination handled externally: {}", pipeline.channel().remoteAddress());
-		pipeline.addLast(MOD_ID, new HttpContractHandler(this, senderExecutor));
+		pipeline.addLast(MOD_ID, new HttpContractHandler(this, diskReads));
 	}
 
 	private void prepareTls() throws Exception {
@@ -310,8 +310,8 @@ public class NettyServer {
 			eventLoopGroup = null;
 		}
 
-		if (senderExecutor != null) senderExecutor.shutdownNow();
-		senderExecutor = null;
+		if (diskReads != null) diskReads.shutdownNow();
+		diskReads = null;
 
 		sslCtx = null;
 		certificateFingerprint = null;
@@ -323,18 +323,18 @@ public class NettyServer {
 	}
 
 	/** The pool body-streaming workers run on: one worker per in-flight response, each holding one FileChannel and one reusable chunk buffer off the event loop. */
-	public ExecutorService senderExecutor() {
-		return senderExecutor;
+	public ExecutorService diskReads() {
+		return diskReads;
 	}
 
-	/** Starts the body-streaming pool; every hosting shape streams bodies, so this must run before any listener or swap goes live. */
-	public void startSenders() {
-		// One streaming worker per in-flight response and the contract serves one response per connection at a time, so
-		// the ceiling is the connection count: 128 hosts 25 clients x 5 lanes with headroom. A saturated pool queues the
-		// response behind the next freed worker instead of spawning threads past the ceiling - the previous unbounded
-		// cached pool let every extra client grow the server's thread count without a bound.
-		senderExecutor = Executors.newFixedThreadPool(128, r -> {
-			Thread t = new Thread(r, "automodpack-sender");
+	/** Starts the file-reader pool; every hosting shape streams bodies, so this must run before any listener or swap goes live. */
+	public void startReaders() {
+		// Reads are the only blocking work left in streaming: the event loop writes whenever the channel is writable,
+		// and each response keeps at most two 4 MiB chunks in flight. Four sequential readers saturate any disk, so the
+		// count is a constant that never grows with the client count - the old thread-per-response pool grew one parked
+		// thread per connection for a whole drain.
+		diskReads = Executors.newFixedThreadPool(4, r -> {
+			Thread t = new Thread(r, "automodpack-disk-reader");
 			t.setDaemon(true);
 			return t;
 		});
