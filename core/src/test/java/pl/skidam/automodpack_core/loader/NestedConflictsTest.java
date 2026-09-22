@@ -128,6 +128,64 @@ class NestedConflictsTest {
 	}
 
 	@Test
+	void aWinnerSharingAnIdWithAnAlreadyEmittedWinnerIsNotEmittedAgain() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
+				tree("/META-INF/jars/a.jar", "2.0.0", Set.of("x"), Set.of()),
+				tree("/META-INF/jars/b.jar", "1.0.0", Set.of("x", "y"), Set.of()));
+		StandardRoot standard = standard("mods/local.jar", nested(Set.of("x"), "1.0.0"), nested(Set.of("y"), "0.5.0"));
+
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(standard), Set.of());
+
+		// Both jars win an id and both collide with the root, but emitting both would put two jars declaring x into one bundle: b loses its shared id to a and stays out.
+		assertEquals(1, candidates.size());
+		assertEquals(Path.of("nested/pack.jar/META-INF/jars/a.jar"), candidates.get(0).mod().path());
+	}
+
+	@Test
+	void aBundledPackRootDragsAnotherPackRootProvidingItsDependency() {
+		FileInspection.Mod rootA = tree("a.jar", "1.0.0", Set.of("a"), Set.of("b"));
+		FileInspection.Mod rootB = tree("b.jar", "1.0.0", Set.of("b"), Set.of());
+		StandardRoot dependent = standard("mods/one.jar", Set.of("one"), Set.of("a"));
+
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot("mods/a.jar", rootA), packRoot("mods/b.jar", rootB)), List.of(dependent), Set.of());
+
+		// The dependent's provider is pack root a itself; a needs b, and b is another pack root - it is dragged with the same colliders.
+		assertEquals(List.of("a.jar", "b.jar"), paths(candidates));
+		assertEquals(List.of(new Collider("mods/one.jar", ROOT_HASH)), candidates.get(0).colliders());
+		assertEquals(candidates.get(0).colliders(), candidates.get(1).colliders());
+	}
+
+	@Test
+	void aNestedProviderDragsAProviderFromADifferentPackRoot() {
+		FileInspection.Mod rootA = tree("a.jar", "1.0.0", Set.of("a"), Set.of(),
+				tree("/META-INF/jars/p.jar", "2.0.0", Set.of("d"), Set.of("e")));
+		FileInspection.Mod rootB = tree("b.jar", "1.0.0", Set.of("b"), Set.of(),
+				tree("/META-INF/jars/e.jar", "1.0.0", Set.of("e"), Set.of()));
+		StandardRoot dependent = standard("mods/one.jar", Set.of("one"), Set.of("d"));
+
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot("mods/a.jar", rootA), packRoot("mods/b.jar", rootB)), List.of(dependent), Set.of());
+
+		// The provider is resolved against the whole pool, so e.jar under pack root b serves p.jar's dependency across roots.
+		assertEquals(List.of("nested/a.jar/META-INF/jars/p.jar", "nested/b.jar/META-INF/jars/e.jar"), paths(candidates));
+		assertEquals(List.of(new Collider("mods/one.jar", ROOT_HASH)), candidates.get(0).colliders());
+		assertEquals(candidates.get(0).colliders(), candidates.get(1).colliders());
+	}
+
+	@Test
+	void aDependencyProvidedByAStandardRootIsNeverBundled() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
+				tree("/META-INF/jars/w.jar", "2.0.0", Set.of("a"), Set.of("sib")),
+				tree("/META-INF/jars/sib.jar", "1.0.0", Set.of("sib"), Set.of()));
+		StandardRoot beaten = standard("mods/local.jar", nested(Set.of("a"), "1.0.0"));
+		StandardRoot provider = standard("mods/provider.jar", Set.of("sib"), Set.of());
+
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(beaten, provider), Set.of());
+
+		// The winner is copied, but its dependency is already served by a standard root - bundling sib.jar would duplicate it.
+		assertEquals(List.of("nested/pack.jar/META-INF/jars/w.jar"), paths(candidates));
+	}
+
+	@Test
 	void aDependencyOfADraggedSiblingIsDraggedToo() {
 		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
 				tree("/META-INF/jars/w.jar", "2.0.0", Set.of("a"), Set.of("d1")),
