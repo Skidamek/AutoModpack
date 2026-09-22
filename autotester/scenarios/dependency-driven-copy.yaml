@@ -9,9 +9,10 @@ description: |
   pass, so the native pass that resolves the user mod cannot see the nesting and
   a plain relaunch would boot-crash. Instead the server publishes generation 1
   (same nested pack mod, refreshed config), and the sync's plan phase must detect
-  the unmet dependency and copy the nested library out into the standard mods
-  directory (as a generated copy), so the next launch resolves everything
-  natively and the player reaches the game with the user mod loaded.
+  the unmet dependency and pack the nested library out into the standard mods
+  directory inside the single generated dependency bundle (mods/automodpack-generated.jar),
+  so the next launch resolves everything natively and the player reaches the game
+  with the user mod loaded.
 
 renderClient: true
 
@@ -76,24 +77,21 @@ flow:
     patchNotes: "Update 2: refreshed story config, same nested dependency pack."
     timeout: 300s
   - do: wait_for
-    name: wait for the sync to land the copied nested library beside the user mod
+    name: wait for the sync to land the generated dependency bundle beside the user mod
     timeout: 120s
     until:
       only_files:
         dir: mods
-        patterns: ["automodpack.jar", "nesteddep-user*.jar", "nesteddep-lib*.jar"]
-  - do: assert_mod_fixture
-    name: the copied library is the intact nested fixture jar at its deterministic landing name
-    path: mods/nesteddep-lib-1.0.0.jar
-    fixture: { modId: nesteddep_lib, version: "1.0.0", marker: nesteddep-lib }
+        patterns: ["automodpack.jar", "nesteddep-user*.jar", "automodpack-generated.jar"]
   - use: restart_client
   # The post-update boot is the contract: fabric-loader must resolve the user mod
-  # and the copied library natively. Wait for the resolved-mod dump rather than
-  # the in-game bridge: the launch apply can ask for one more restart after
-  # resolution when it re-judges the generated copy's ownership; a missing copy
-  # would crash resolution instead and trip the dependency-error matcher below.
+  # and the library nested inside the generated bundle natively. Wait for the
+  # resolved-mod dump rather than the in-game bridge: the launch apply can ask for
+  # one more restart after resolution when it re-judges the generated copy's
+  # ownership; a missing library would crash resolution instead and trip the
+  # dependency-error matcher below.
   - do: launch_client
-    name: relaunch the updated client with the copied library and the user mod
+    name: relaunch the updated client with the bundled library and the user mod
   - do: wait_for
     name: wait for the post-update resolved-mod dump
     timeout: 120s
@@ -105,7 +103,7 @@ flow:
           - 'nesteddep_user'
           - 'nesteddep_lib'
   - do: assert
-    name: the user mod and the copied library both load natively and no dependency error appears
+    name: the user mod and the bundled library both load natively and no dependency error appears
     that:
       all:
         - log:
