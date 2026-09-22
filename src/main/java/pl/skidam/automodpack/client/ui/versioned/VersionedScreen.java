@@ -100,7 +100,7 @@ public class VersionedScreen extends Screen {
 
 	// The mirror only exists where the frame runs the widget pass itself; 26.x walks the vanilla list.
 	/*? if <26.1 {*/
-	@Override
+	/*@Override
 	protected void removeWidget(GuiEventListener listener) {
 		super.removeWidget(listener);
 		renderOrder.remove(listener);
@@ -111,7 +111,7 @@ public class VersionedScreen extends Screen {
 		super.clearWidgets();
 		renderOrder.clear();
 	}
-	/*?}*/
+	*//*?}*/
 
 	/**
 	 * The one frame order on every version: background, widgets, the screen's own content over them, then the
@@ -721,7 +721,7 @@ public class VersionedScreen extends Screen {
 	/*? if >= 1.21.9 {*/
 	@Override
 	public boolean keyPressed(KeyEvent event) {
-		return onKeyPress(event.key(), event.scancode(), event.modifiers());
+		return onKeyPress(event.key(), event.keycode(), event.modifiers());
 	}
 
 	// Subclasses override this instead of keyPressed, whose signature differs across versions

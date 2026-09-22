@@ -23,7 +23,7 @@ wiki {
 	}
 }
 
-stonecutter active "26.2-fabric" // [SC] DO NOT EDIT
+stonecutter active "26.3-fabric" // [SC] DO NOT EDIT
 
 fun structuredString(vararg path: String): String =
 	stonecutter.properties
