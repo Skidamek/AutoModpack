@@ -24,7 +24,8 @@ import pl.skidam.automodpack_core.update.JournalMirror;
 /**
  * Builds the history projection from the pack's journal mirror, the client's replica of the server journal.
  * Screens receive only immutable display data; every journal entry already carries its own diff. The locally
- * active generation is the current one, and only its older locally restorable generations offer a restore.
+ * active generation is the current one, and only its older locally restorable generations at or after the last
+ * compaction boundary offer a restore - the cleanup retired everything older on this computer.
  */
 final class GenerationHistoryController {
 	private GenerationHistoryController() {}
@@ -44,9 +45,10 @@ final class GenerationHistoryController {
 				Set<Long> restorableSeqs = new TreeSet<>();
 				if (activePack) {
 					ClientGenerationStore generations = new ClientGenerationStore(storage);
+					long boundarySeq = generations.compactionReceipt(modpackId).map(ClientGenerationStore.CompactionReceipt::boundarySeq).orElse(0L);
 					for (JournalEntry entry : journal) {
 						if (entry.contentToken().equals(active.contentToken)) currentSeq = entry.seq();
-						else if (generations.locallyRestorable(modpackId, entry)) restorableSeqs.add(entry.seq());
+						else if (entry.seq() >= boundarySeq && generations.locallyRestorable(modpackId, entry)) restorableSeqs.add(entry.seq());
 					}
 				}
 				Consumer<JournalEntry> restore = activePack ? entry -> SwitchFlow.rollback(storage, modpackId, entry, modpackName, closed) : null;
