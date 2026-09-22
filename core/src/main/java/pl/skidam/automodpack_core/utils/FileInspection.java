@@ -270,9 +270,11 @@ public class FileInspection {
 						String depId = MiniToml.getString(depTable, "modId");
 						if (depId == null) continue;
 
-						// Legacy entries gate on mandatory (absent means true), NeoForge 20.5+ entries on type; type wins when both exist.
+						// NeoForge 20.5+ gates on type alone and never reads mandatory; legacy Forge gates on mandatory
+						// (absent means true). Type wins when both exist, matching the loader that parses this file.
 						boolean required;
 						if (depTable.get("type") instanceof String typeName) required = "required".equalsIgnoreCase(typeName);
+						else if ("neoforge".equals(Constants.LOADER)) required = true;
 						else required = !(depTable.get("mandatory") instanceof Boolean flag && !flag);
 						if (!required) continue;
 

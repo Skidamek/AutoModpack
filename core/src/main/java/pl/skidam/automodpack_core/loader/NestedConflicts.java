@@ -83,8 +83,9 @@ public final class NestedConflicts {
 	 * materialized path); each winner with a colliding standard root is emitted - unless another emitted jar
 	 * already claims one of its ids, which would put two jars declaring that id into one bundle - and every emitted
 	 * jar drags the pool's provider of each unprovided declared dependency, recursively, with the emitter's
-	 * colliders. A jar sharing an id with an emitted jar or a pack root is never dragged or re-emitted - either
-	 * would make the loader's per-id solver drop the owner. Afterwards, a standard root whose hard dependency id
+	 * colliders. A jar sharing an id with an emitted jar or a pack root is never dragged or re-emitted: the
+	 * loader's solver selects one whole candidate jar per id and discards the loser completely, so a jar that
+	 * loses a shared id takes its every other id out of the bundle with it. Afterwards, a standard root whose hard dependency id
 	 * nothing in the standard mods directory provides gets the best provider from the pack copied out - a pack root
 	 * preferred over a nested jar - colliding with the dependent roots so the copy lives and dies with their
 	 * survival under the plan. A dependency provided by a force-copy pack root is left alone: that root lands in

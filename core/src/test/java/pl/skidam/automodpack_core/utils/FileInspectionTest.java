@@ -14,6 +14,7 @@ import java.util.zip.ZipOutputStream;
 
 import org.junit.jupiter.api.Test;
 
+import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 class FileInspectionTest {
@@ -42,8 +43,8 @@ class FileInspectionTest {
 				modId = "incompatible_type"
 				type = "incompatible"
 				[[dependencies.tomlmod]]
-				modId = "embed_type"
-				type = "embed"
+				modId = "discouraged_type"
+				type = "discouraged"
 				[[dependencies.tomlmod]]
 				modId = "required_type"
 				type = "required"
@@ -58,6 +59,32 @@ class FileInspectionTest {
 
 			assertEquals(Set.of("required_default", "mandatory_explicit", "required_type", "minecraft"), mod.deps());
 		} finally {
+			Files.deleteIfExists(jar);
+		}
+	}
+
+	@Test
+	void tomlMandatoryIsLoaderSpecificOnLegacyEntries() throws IOException {
+		Path jar = Files.createTempDirectory("toml-metadata-").resolve("tomlmod.jar");
+		String toml = """
+				modLoader = "javafml"
+				[[mods]]
+				modId = "tomlmod"
+				[[dependencies.tomlmod]]
+				modId = "legacy_optional"
+				mandatory = false
+				""";
+		String previousLoader = Constants.LOADER;
+
+		try {
+			Files.write(jar, jar(Map.of("META-INF/mods.toml", toml.getBytes(StandardCharsets.UTF_8))));
+			// Forge reads legacy mandatory (false = optional); NeoForge ignores it - absent type is required.
+			Constants.LOADER = "forge";
+			assertEquals(Set.of(), inspect(jar).deps());
+			Constants.LOADER = "neoforge";
+			assertEquals(Set.of("legacy_optional"), inspect(jar).deps());
+		} finally {
+			Constants.LOADER = previousLoader;
 			Files.deleteIfExists(jar);
 		}
 	}
