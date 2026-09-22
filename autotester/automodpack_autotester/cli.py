@@ -16,7 +16,7 @@ import docker as docker_py
 from filelock import Timeout
 
 from .cache import deduplicate_asset_objects
-from .client_steps import parse_netem
+from .client_steps import parse_loss, parse_netem
 from .config import (
     REPO_ROOT,
     ROOT,

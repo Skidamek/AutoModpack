@@ -95,11 +95,24 @@ public final class ClientGenerationStore {
 		Objects.requireNonNull(platform, "platform");
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null) return Optional.empty();
+		return Optional.of(resolveActive(state, platform));
+	}
+
+	/** Same, resolving under the stored selection's own platform: the exact platform the selection last committed under. */
+	public Optional<SelectedModpackTarget> readActiveTarget() throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+		if (state == null) return Optional.empty();
+		ClientPlatform platform = ClientPlatform.effective(new ClientSelectionStore(storage.selectionFile()).get(state.modpackId).orElse(null));
+		return Optional.of(resolveActive(state, platform));
+	}
+
+	private SelectedModpackTarget resolveActive(ClientStorageJsons.ClientGenerationStateFields state, ClientPlatform platform) throws IOException {
+		Objects.requireNonNull(platform, "platform");
 		PackDocument document = document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger));
 		Optional<SelectionIntent> stored = new ClientSelectionStore(storage.selectionFile()).get(state.modpackId);
-		return Optional.of(stored.isPresent()
+		return stored.isPresent()
 				? SelectedModpackTarget.prepare(document, null, stored.get(), platform)
-				: SelectedModpackTarget.prepareDefault(document, platform));
+				: SelectedModpackTarget.prepareDefault(document, platform);
 	}
 
 	/** One pending transaction's target document: the transaction carries the exact ledger, the mirror entry the creation time. */
