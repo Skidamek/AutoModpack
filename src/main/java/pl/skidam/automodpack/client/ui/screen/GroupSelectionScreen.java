@@ -594,8 +594,11 @@ public class GroupSelectionScreen extends VersionedScreen {
 	}
 
 	private boolean canSave() {
+		ClientPlatform savedPlatform = initialSelection.platform();
+		ClientPlatform currentPlatform = currentIntent().platform();
+		boolean platformChanged = currentPlatform != null ? !currentPlatform.equals(savedPlatform) : savedPlatform != null && !savedPlatform.equals(detectedPlatform);
 		return resolutionError.isEmpty()
-				&& (selectionAction != null || !initialSelection.equals(currentIntent()) || !Objects.equals(initialSelection.platform(), currentIntent().platform()));
+				&& (selectionAction != null || !initialSelection.equals(currentIntent()) || platformChanged);
 	}
 
 	/** The estimated download size of the current selection: unique SHA-1s across the selected groups, shared files counted once. */
