@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import pl.skidam.automodpack_core.loader.NestedConflicts.Candidate;
 import pl.skidam.automodpack_core.loader.NestedConflicts.Collider;
 import pl.skidam.automodpack_core.loader.NestedConflicts.StandardRoot;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.FileInspection;
 
 class NestedConflictsTest {
@@ -207,17 +208,70 @@ class NestedConflictsTest {
 		// Without knowing the copy, the scan counts it as provision and satisfies its own dependency - the retirement trap.
 		assertEquals(0, NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent, copy), Set.of()).size());
 		// Knowing it, the detector keeps emitting the copy while the dependent lives, so the plan never retires it.
-		List<Candidate> stable = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent, copy), Set.of(), Set.of("mods/d-1.0.0.jar"));
+		List<Candidate> stable = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent, copy), Set.of(), Set.of("mods/d-1.0.0.jar"), Set.of());
 		assertEquals(1, stable.size());
 	}
 
 	@Test
-	void aPackRootCoveredDependencyIsNotServed() {
+	void anUnmetDependencyIsServedByThePackRootItself() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack", "d"), Set.of());
+		StandardRoot dependent = standard("mods/one.jar", Set.of("one"), Set.of("d"));
+
+		// A pack-root id no longer suppresses the copy: the pack's authoritative jar is the provider now.
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent), Set.of("d"), Set.of(), Set.of());
+
+		assertEquals(List.of("pack.jar"), paths(candidates));
+		assertEquals(List.of(new Collider("mods/one.jar", ROOT_HASH)), candidates.get(0).colliders());
+	}
+
+	@Test
+	void aPackRootProviderBeatsANestedProviderOfTheSameId() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack", "d"), Set.of(),
+				tree("/META-INF/jars/nested.jar", "9.0.0", Set.of("d"), Set.of()));
+		StandardRoot dependent = standard("mods/one.jar", Set.of("one"), Set.of("d"));
+
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent), Set.of("d"), Set.of(), Set.of());
+
+		assertEquals(List.of("pack.jar"), paths(candidates));
+	}
+
+	@Test
+	void aForceCopyPackRootSuppressesTheDependencyCopy() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack", "d"), Set.of());
+		StandardRoot dependent = standard("mods/one.jar", Set.of("one"), Set.of("d"));
+
+		// The force-copy lands the real root in the standard mods directory, so the dependency is will-be-provided.
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot("mods/pack.jar", packRoot)), List.of(dependent), Set.of("d"), Set.of(), Set.of("MODS/Pack.jar"));
+
+		assertTrue(candidates.isEmpty());
+	}
+
+	@Test
+	void aForceCopyPackRootAlsoProvidesItsNestedIds() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
+				tree("/META-INF/jars/d.jar", "1.0.0", Set.of("d"), Set.of()));
+		StandardRoot dependent = standard("mods/one.jar", Set.of("one"), Set.of("d"));
+
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot("mods/pack.jar", packRoot)), List.of(dependent), Set.of("pack"), Set.of(), Set.of("mods/pack.jar"));
+
+		assertTrue(candidates.isEmpty());
+	}
+
+	@Test
+	void aPreviouslyGeneratedBundleDoesNotProvisionItsContentsDependencies() {
 		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
 				tree("/META-INF/jars/p.jar", "2.0.0", Set.of("d"), Set.of()));
 		StandardRoot dependent = standard("mods/one.jar", Set.of("one"), Set.of("d"));
+		String bundlePath = "mods/" + ModpackPathPolicy.GENERATED_BUNDLE_NAME;
+		StandardRoot bundle = standard(bundlePath, Set.of("automodpack_generated", "d"), Set.of());
 
-		assertTrue(NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent), Set.of("d")).isEmpty());
+		// Without knowing the bundle, its ids count as provision and the emission would retire itself.
+		assertEquals(0, NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent, bundle), Set.of("pack"), Set.of(), Set.of()).size());
+		// Knowing the reserved path, the detector keeps emitting while the dependent lives.
+		List<Candidate> stable = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent, bundle), Set.of("pack"), Set.of(bundlePath), Set.of());
+		assertEquals(1, stable.size());
+		assertEquals(Path.of("nested/pack.jar/META-INF/jars/p.jar"), stable.get(0).mod().path());
+		assertEquals(List.of(new Collider("mods/one.jar", ROOT_HASH)), stable.get(0).colliders());
 	}
 
 	@Test
@@ -238,7 +292,11 @@ class NestedConflictsTest {
 	}
 
 	private static NestedConflicts.PackRoot packRoot(FileInspection.Mod tree) {
-		return new NestedConflicts.PackRoot(tree, Path.of("nested").resolve(tree.path()));
+		return packRoot("mods/pack.jar", tree);
+	}
+
+	private static NestedConflicts.PackRoot packRoot(String logicalPath, FileInspection.Mod tree) {
+		return new NestedConflicts.PackRoot(logicalPath, tree, Path.of("nested").resolve(tree.path()));
 	}
 
 	private static FileInspection.Mod nested(Set<String> ids, String version) {
