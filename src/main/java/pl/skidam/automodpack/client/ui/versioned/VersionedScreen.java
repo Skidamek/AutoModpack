@@ -193,7 +193,12 @@ public class VersionedScreen extends Screen {
 	/*? if >= 1.21.9 {*/
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean bl) {
-		if (event.button() == 0) for (DropdownWidget dropdown : dropdowns) if (dropdown.consumeMenuClick(event.x(), event.y(), event.button())) return true;
+		/*? if >= 26.3 {*/
+		int primaryButton = 1;
+		/*?} else {*/
+		/*int primaryButton = 0;
+		*//*?}*/
+		if (event.button() == primaryButton) for (DropdownWidget dropdown : dropdowns) if (dropdown.consumeMenuClick(event.x(), event.y(), event.button())) return true;
 		return super.mouseClicked(event, bl);
 	}
 	/*?} else {*/
