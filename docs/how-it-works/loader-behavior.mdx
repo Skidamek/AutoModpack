@@ -33,9 +33,12 @@ mods/automodpack-generated.jar
 
 This file is created, updated, and deleted by AutoModpack. It carries every jar the
 loader needs inside it and nothing else — when the pack or your mods change, its content
-is regenerated; when nothing needs it anymore, it disappears. Don't edit or rename it:
-deleting it is safe (it comes back), but renaming it leaves a stray duplicate that will
-be cleaned up on the next repair.
+is regenerated; when nothing needs it anymore, it disappears. Do not delete or rename it:
+while it is missing, the loader fails mod resolution before AutoModpack can run — the
+game will not start, and no AutoModpack screen is reachable. Restore the file manually
+(for example from the recycle bin), remove the mod that needed it, or reinstall the pack.
+Renaming it leaves a stray duplicate behind — the real file comes back, and the stray is
+cleaned up by the next repair.
 
 Two rules worth knowing:
 
