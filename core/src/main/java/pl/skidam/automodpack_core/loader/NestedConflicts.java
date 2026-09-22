@@ -14,6 +14,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 
@@ -99,6 +100,7 @@ public final class NestedConflicts {
 
 	public static List<Candidate> detect(List<PackRoot> packRoots, List<StandardRoot> standardRoots, Set<String> packRootIds, Set<String> previouslyCopiedPaths, Set<String> forceCopyPaths) {
 		// The managed bundle is never scanned as a standard root: its stale nests would phantom-collide a fresh selection against the bundle itself one generation past their last dependent.
+		standardRoots = standardRoots.stream().filter(root -> !ModpackPathPolicy.isGeneratedBundlePath(root.logicalPath())).toList();
 		List<Node> roots = new ArrayList<>();
 		for (PackRoot packRoot : packRoots) {
 			if (packRoot.tree().path() == null) continue;
@@ -176,6 +178,7 @@ public final class NestedConflicts {
 		private final Set<String> providedByStandards;
 		private final Set<String> providedByForceCopy;
 		private final Set<String> claimed;
+		private final Set<String> emittedIds = new HashSet<>();
 		private final Set<Node> emitted = new HashSet<>();
 		private final List<Candidate> candidates = new ArrayList<>();
 
@@ -190,19 +193,18 @@ public final class NestedConflicts {
 
 		/** Whether {@code id} is provided once the emitted jars land: by a scanned standard root, a force-copy pack root, or an already-emitted jar. A covered pack id is not - the pack root shipping it serves then. */
 		private boolean provided(String id) {
-			return providedByStandards.contains(id) || providedByForceCopy.contains(id) || (claimed.contains(id) && !coveredIds.contains(id));
-		}
-
-		/** Whether {@code id} is taken by an emitted jar, as opposed to a covered pack id. */
-		private boolean emittedId(String id) {
-			return claimed.contains(id) && !coveredIds.contains(id);
+			return providedByStandards.contains(id) || providedByForceCopy.contains(id) || emittedIds.contains(id);
 		}
 
 		/** Records {@code node} as an emitted candidate carrying {@code colliders} and takes its ids. */
 		private void emit(Node node, List<Collider> colliders) {
 			FileInspection.Mod mod = node.mod;
 			candidates.add(new Candidate(mod.at(sourcePath(node)), colliders));
-			for (String id : mod.IDs()) claimed.add(id.toLowerCase(Locale.ROOT));
+			for (String id : mod.IDs()) {
+				String normalized = id.toLowerCase(Locale.ROOT);
+				claimed.add(normalized);
+				emittedIds.add(normalized);
+			}
 			emitted.add(node);
 		}
 
@@ -232,8 +234,9 @@ public final class NestedConflicts {
 			for (Node node : pool) {
 				FileInspection.Mod mod = node.mod;
 				if (emitted.contains(node)) continue;
-				// A nested jar sharing any claimed id never serves; a pack root only steps aside for an id another emission already took - its own covered ids are its own.
-				if (mod.IDs().stream().anyMatch(id -> (node.parent != null ? claimed.contains(id.toLowerCase(Locale.ROOT)) : emittedId(id.toLowerCase(Locale.ROOT))))) continue;
+				// A jar sharing an id an emission already took never serves again; a nested jar sharing any covered pack id never serves either.
+				if (mod.IDs().stream().anyMatch(id -> emittedIds.contains(id.toLowerCase(Locale.ROOT)))) continue;
+				if (node.parent != null && mod.IDs().stream().anyMatch(id -> claimed.contains(id.toLowerCase(Locale.ROOT)))) continue;
 				if (!provides(mod, dependencyId)) continue;
 				if (provider == null || beatsProvider(node, provider)) provider = node;
 			}
@@ -256,7 +259,7 @@ public final class NestedConflicts {
 				for (String dependency : root.mod().deps()) {
 					String id = dependency.toLowerCase(Locale.ROOT);
 					if (providedByStandards.contains(id) || providedByForceCopy.contains(id)) continue;
-					if (emittedId(id)) {
+					if (emittedIds.contains(id)) {
 						claimDependent(id, root);
 						continue;
 					}

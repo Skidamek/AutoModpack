@@ -263,7 +263,9 @@ class NestedConflictsTest {
 		StandardRoot one = standard("mods/one.jar", Set.of("one"), Set.of("lib", "b"));
 		StandardRoot two = standard("mods/two.jar", Set.of("two"), Set.of("lib"));
 
-		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(first), packRoot(second)), List.of(one, two), Set.of());
+		// Production computes packRootIds from every target mod's id, so the shared id is a covered id -
+		// the exact shape that blinded the old claimed-based guard.
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(first), packRoot(second)), List.of(one, two), Set.of("lib", "a", "b"));
 
 		// "b" resolves to the second root first; when "lib" then resolves, the already-emitted second root
 		// provides it - and the shared-id guard stops the first root from putting "lib" into the bundle twice.
@@ -345,9 +347,10 @@ class NestedConflictsTest {
 		String bundlePath = "mods/" + ModpackPathPolicy.GENERATED_BUNDLE_NAME;
 		StandardRoot bundle = standard(bundlePath, Set.of("automodpack_generated", "d"), Set.of());
 
-		// Without knowing the bundle, its ids count as provision and the emission would retire itself.
-		assertEquals(0, NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent, bundle), Set.of("pack"), Set.of(), Set.of()).size());
-		// Knowing the reserved path, the detector keeps emitting while the dependent lives.
+		// The reserved path never provisions its contents' dependencies - with or without previous-state knowledge,
+		// the dependent keeps the bundle alive instead of the bundle retiring itself.
+		List<Candidate> unaware = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent, bundle), Set.of("pack"), Set.of(), Set.of());
+		assertEquals(1, unaware.size());
 		List<Candidate> stable = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent, bundle), Set.of("pack"), Set.of(bundlePath), Set.of());
 		assertEquals(1, stable.size());
 		assertEquals(Path.of("nested/pack.jar/META-INF/jars/p.jar"), stable.get(0).mod().path());
