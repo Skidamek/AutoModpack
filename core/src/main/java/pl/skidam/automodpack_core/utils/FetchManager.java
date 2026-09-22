@@ -35,6 +35,7 @@ public class FetchManager {
 	private final Lookups lookups;
 
 	private final Object metadataRefetchLock = new Object();
+	private CompletableFuture<Map<String, List<DownloadSource>>> inFlightRefetch;
 	private final Map<String, DeadLink> pendingMetadataRefetch = new HashMap<>();
 	private final Map<String, List<DownloadSource>> resolvedMetadataRefetches = new HashMap<>();
 	private final Set<String> refetchedSha1s = new HashSet<>();
@@ -206,18 +207,33 @@ public class FetchManager {
 		}
 	}
 
-	/** Waits for one batched refetch covering every sha1 whose platform link died, so concurrent dead links share the bulk calls. */
+	/**
+	 * Waits for one batched refetch covering every sha1 whose platform link died, so concurrent dead links share the
+	 * bulk calls. The batch's HTTP round trips run outside the lock - one worker's refetch never serializes another's
+	 * behind it - and the in-flight future is shared, so workers joining a batch already being fetched wait for it
+	 * instead of re-asking the platforms for the same hashes.
+	 */
 	public List<DownloadSource> awaitMetadataRefetch(String sha1) {
 		String normalizedSha1 = sha1.toLowerCase(Locale.ROOT);
-		synchronized (metadataRefetchLock) {
-			List<DownloadSource> resolved = resolvedMetadataRefetches.remove(normalizedSha1);
-			if (resolved != null) return resolved;
-			if (!pendingMetadataRefetch.containsKey(normalizedSha1)) return List.of();
-			Map<String, DeadLink> batch = new LinkedHashMap<>(pendingMetadataRefetch);
-			pendingMetadataRefetch.clear();
-			resolvedMetadataRefetches.putAll(refetchPlatformMetadata(batch));
-			List<DownloadSource> fresh = resolvedMetadataRefetches.remove(normalizedSha1);
-			return fresh == null ? List.of() : fresh;
+		while (true) {
+			CompletableFuture<Map<String, List<DownloadSource>>> inFlight;
+			synchronized (metadataRefetchLock) {
+				List<DownloadSource> resolved = resolvedMetadataRefetches.remove(normalizedSha1);
+				if (resolved != null) return resolved;
+				if (!pendingMetadataRefetch.containsKey(normalizedSha1)) return List.of();
+				if (inFlightRefetch != null && inFlightRefetch.isDone()) inFlightRefetch = null;
+				if (inFlightRefetch == null) {
+					Map<String, DeadLink> batch = new LinkedHashMap<>(pendingMetadataRefetch);
+					pendingMetadataRefetch.clear();
+					inFlightRefetch = CompletableFuture.supplyAsync(() -> refetchPlatformMetadata(batch), DownloadClient.NET_EXECUTOR);
+				}
+				inFlight = inFlightRefetch;
+			}
+			Map<String, List<DownloadSource>> fresh = inFlight.join();
+			synchronized (metadataRefetchLock) {
+				for (Map.Entry<String, List<DownloadSource>> entry : fresh.entrySet())
+					resolvedMetadataRefetches.put(entry.getKey(), entry.getValue());
+			}
 		}
 	}
 
