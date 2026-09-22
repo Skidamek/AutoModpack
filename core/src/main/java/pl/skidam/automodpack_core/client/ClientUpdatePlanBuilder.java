@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.client;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystemException;
 import java.nio.file.FileSystems;
@@ -10,7 +11,9 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.DigestOutputStream;
 import java.util.*;
+import java.util.HexFormat;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -526,22 +529,25 @@ final class ClientUpdatePlanBuilder {
 			for (NestedConflicts.Candidate candidate : NestedConflicts.detect(packRoots, standardRoots, packRootIds, previouslyCopiedPaths, forceCopyPaths)) {
 				Path nestedJar = candidate.mod().path();
 				if (nestedJar == null || !Files.isRegularFile(nestedJar)) continue;
-				items.add(new GeneratedBundle.Item(nestedJar.getFileName().toString(), () -> Files.readAllBytes(nestedJar)));
+				items.add(new GeneratedBundle.Item(nestedJar.getFileName().toString(), GeneratedBundle.source(nestedJar)));
 				candidate.mod().IDs().forEach(bundledIds::add);
 				colliders.addAll(candidate.colliders());
 			}
 			if (items.isEmpty()) return List.of();
-			byte[] bundle = GeneratedBundle.generate(items);
-			String hash = HashUtils.sha1(bundle);
-			Path storeFile = storage.objectFile(hash);
-			if (!FileIntegrity.matchesNamed(storeFile, bundle.length, hash, cache)) {
-				Path temporary = Files.createTempFile(storage.stagingDirectory(), "bundle-", ".jar");
-				try {
-					Files.write(temporary, bundle);
-					VerifiedFileTransfer.copyAtomicImmutable(temporary, storeFile, bundle.length, hash, cache);
-				} finally {
-					Files.deleteIfExists(temporary);
+			Path staging = Files.createTempFile(storage.stagingDirectory(), "bundle-", ".jar");
+			String hash;
+			long size;
+			try {
+				CountingDigestStream counting = new CountingDigestStream(Files.newOutputStream(staging));
+				try (OutputStream out = counting) {
+					GeneratedBundle.generate(items, out);
 				}
+				hash = HexFormat.of().formatHex(counting.digest());
+				size = counting.size;
+				Path storeFile = storage.objectFile(hash);
+				if (!FileIntegrity.matchesNamed(storeFile, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(staging, storeFile, size, hash, cache);
+			} finally {
+				Files.deleteIfExists(staging);
 			}
 			String relativePath = LogicalPath.normalize(ModpackPathPolicy.MODS_ROOT + "/" + ModpackPathPolicy.GENERATED_BUNDLE_NAME);
 			Path liveBundle = storage.gameDirectory().resolve(relativePath);
@@ -549,7 +555,7 @@ final class ClientUpdatePlanBuilder {
 				LOGGER.warn("A foreign file occupies the reserved generated-bundle path {}; this plan installs no generated dependency copies", relativePath);
 				return List.of();
 			}
-			return List.of(new UpdatePlanner.NestedCandidate(new UpdatePlan.NestedCopy(relativePath, hash, bundle.length, bundledIds), colliders));
+			return List.of(new UpdatePlanner.NestedCandidate(new UpdatePlan.NestedCopy(relativePath, hash, size, bundledIds), colliders));
 		} finally {
 			FileTrees.delete(inspectionDirectory);
 		}
@@ -607,6 +613,31 @@ final class ClientUpdatePlanBuilder {
 		} catch (UnsupportedOperationException | FileSystemException ignored) {
 		}
 		VerifiedFileTransfer.copyAtomic(source, inspectionPath, size, sha1, cache);
+	}
+
+	/** Hashes and counts the bundle bytes while they stream to the staging file, so its identity never needs a second pass. */
+	private static final class CountingDigestStream extends DigestOutputStream {
+		private long size;
+
+		CountingDigestStream(OutputStream out) {
+			super(out, HashUtils.newSha1Digest());
+		}
+
+		byte[] digest() {
+			return getMessageDigest().digest();
+		}
+
+		@Override
+		public void write(int b) throws IOException {
+			super.write(b);
+			size++;
+		}
+
+		@Override
+		public void write(byte[] b, int off, int len) throws IOException {
+			super.write(b, off, len);
+			size += len;
+		}
 	}
 
 	private Set<String> getForceCopyMods(ModpackJsons.ModpackContentFields modpackContentFields, FileCache cache, ModFileCache modCache, ClientProjectionView.Snapshot projection) {
