@@ -114,28 +114,6 @@ def _object_path(ctx, object_hash):
     digest = str(object_hash).lower()
     return ctx.game_dir / "automodpack" / "client" / "data" / "objects" / digest[:2] / digest[2:]
 
-
-    original_path = step.get("originalPath")
-    reason = step.get("reason")
-    fixture = ctx.resolve(step.get("fixture"))
-    fixture_hash = hashlib.sha1(valid_mod_jar_bytes(fixture, ctx.target.minecraft)).hexdigest() if isinstance(fixture, dict) else None
-    content_hash = hashlib.sha1(str(ctx.resolve(step["content"])).encode("utf-8")).hexdigest() if "content" in step else None
-    result = []
-    for claim in claims:
-        if not isinstance(claim, dict):
-            continue
-        if original_path is not None and claim.get("originalPath") != str(ctx.resolve(original_path)):
-            continue
-        if reason is not None and claim.get("reason") != str(ctx.resolve(reason)):
-            continue
-        if fixture_hash is not None and claim.get("objectHash") != fixture_hash:
-            continue
-        if content_hash is not None and claim.get("objectHash") != content_hash:
-            continue
-        result.append(claim)
-    return manifest, result
-
-
 @verb("wait_file")
 def wait_file(ctx, step):
     template = str(step["path"])
