@@ -20,6 +20,7 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.loader.GeneratedBundle;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.loader.NestedConflicts;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
@@ -152,16 +153,16 @@ final class ClientUpdatePlanBuilder {
 		List<UpdatePlan.ModInfo> standardMods = new ArrayList<>();
 		for (NestedConflicts.StandardRoot root : standardRoots)
 			standardMods.add(new UpdatePlan.ModInfo(root.logicalPath(), root.mod().hash(), Files.size(root.mod().path()), root.mod().version(), root.mod().IDs(), root.mod().deps()));
+		List<UpdatePlan.NestedCopy> previousCopies = previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies();
 		List<UpdatePlanner.NestedCandidate> nestedCandidates = input.prepareObjects()
-				? inspectNestedCopies(input.target(), cache, modCache, projection, targetMods, standardRoots,
-						previousGeneratedState == null ? Set.of() : previousGeneratedState.nestedCopies().stream().map(UpdatePlan.NestedCopy::relativePath).collect(Collectors.toSet()))
+				? inspectNestedCopies(input.target(), cache, projection, targetMods, standardRoots, previousCopies, forceCopyServices)
 				: readGeneratedCopyState(input.target(), input.selectedTarget().selection().intent()).nestedCopies().stream().map(UpdatePlanner.NestedCandidate::previous).toList();
 		ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = input.connectionInfo() == null || !input.connectionInfo().isComplete()
 				? ModpackUtils.planCachedModpackSelection(input.target().modpackId, logicalConfig)
 				: ModpackUtils.planModpackSelection(input.target().modpackId, input.connectionInfo(), logicalConfig);
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, input.target(), files, forceCopyServices, targetMods, standardMods,
-				previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies(), nestedCandidates, selection, plannedConfig, input.consentedLocalModFiles()));
+				previousCopies, nestedCandidates, selection, plannedConfig, input.consentedLocalModFiles()));
 		if (!LauncherVersionSwapper.requiresLoaderVersionSwap(input.target().loader, input.target().loaderVersion, logicalConfig.syncLoaderVersion, loaderType))
 			return new PreparedPlan(plan, files, targetOverlay.digest(), expectedClientConfig);
 		return new PreparedPlan(plan.withRestartReason(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION), files, targetOverlay.digest(), expectedClientConfig);
@@ -487,8 +488,17 @@ final class ClientUpdatePlanBuilder {
 		return roots;
 	}
 
-	private List<UpdatePlanner.NestedCandidate> inspectNestedCopies(ModpackJsons.ModpackContentFields target, FileCache cache, ModFileCache modCache,
-			ClientProjectionView.Snapshot projection, List<UpdatePlan.ModInfo> targetMods, List<NestedConflicts.StandardRoot> standardRoots, Set<String> previouslyCopiedPaths) throws IOException {
+	/**
+	 * Detects the jars the standard roots need from the pack and bundles them into the one reserved generated
+	 * jar: selection stays per-jar (conflict winners, their dependency drags, dependency-driven providers), but
+	 * the emission is a single deterministic bundle at {@link ModpackPathPolicy#GENERATED_BUNDLE_NAME}, hashed
+	 * and acquired into the object store as one content object. The bundle never provisions its own contents'
+	 * dependencies: when the previous state lists the reserved path it is passed to the detector as a previously
+	 * generated copy.
+	 */
+	private List<UpdatePlanner.NestedCandidate> inspectNestedCopies(ModpackJsons.ModpackContentFields target, FileCache cache,
+			ClientProjectionView.Snapshot projection, List<UpdatePlan.ModInfo> targetMods, List<NestedConflicts.StandardRoot> standardRoots,
+			List<UpdatePlan.NestedCopy> previousCopies, Set<String> forceCopyPaths) throws IOException {
 		if (!modpackLoader.discoversNestedConflicts()) return List.of();
 		Path inspectionDirectory = Files.createTempDirectory(storage.stagingDirectory(), "inspection-");
 		try {
@@ -503,40 +513,56 @@ final class ClientUpdatePlanBuilder {
 				// Fresh inspection on purpose: the detector derives every nested jar's materialized path from the
 				// parent chain of entry paths, which the content-keyed mod cache does not preserve.
 				FileInspection.Mod root = FileInspection.getMod(inspectionPath, cache);
-				if (root != null) packRoots.add(new NestedConflicts.PackRoot(root, inspectionDirectory.resolve(NESTED_EXTRACTION_ROOT).resolve(logicalPath)));
+				if (root != null) packRoots.add(new NestedConflicts.PackRoot(logicalPath, root, inspectionDirectory.resolve(NESTED_EXTRACTION_ROOT).resolve(logicalPath)));
 			}
 			extractNestedJars(inspectionDirectory);
 
 			Set<String> packRootIds = new HashSet<>();
 			targetMods.forEach(mod -> packRootIds.addAll(mod.ids()));
-			Set<String> takenNames = new HashSet<>();
-			if (Files.isDirectory(storage.modsDirectory())) {
-				try (Stream<Path> stream = Files.list(storage.modsDirectory())) {
-					stream.filter(Files::isRegularFile).forEach(path -> takenNames.add(path.getFileName().toString()));
-				}
-			}
-			List<UpdatePlanner.NestedCandidate> candidates = new ArrayList<>();
-			for (NestedConflicts.Candidate candidate : NestedConflicts.detect(packRoots, standardRoots, packRootIds, previouslyCopiedPaths)) {
+			List<GeneratedBundle.Item> items = new ArrayList<>();
+			Set<String> bundledIds = new LinkedHashSet<>();
+			Set<NestedConflicts.Collider> colliders = new LinkedHashSet<>();
+			Set<String> previouslyCopiedPaths = previousCopies.stream().map(UpdatePlan.NestedCopy::relativePath).collect(Collectors.toSet());
+			for (NestedConflicts.Candidate candidate : NestedConflicts.detect(packRoots, standardRoots, packRootIds, previouslyCopiedPaths, forceCopyPaths)) {
 				Path nestedJar = candidate.mod().path();
 				if (nestedJar == null || !Files.isRegularFile(nestedJar)) continue;
-				long size = Files.size(nestedJar);
-				FileInspection.Mod resolved = modCache.getModOrNull(nestedJar, cache);
-				if (resolved == null || resolved.hash() == null) continue;
-				String hash = resolved.hash();
-				Path storeFile = storage.objectFile(hash);
-				if (!FileIntegrity.matchesNamed(storeFile, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(nestedJar, storeFile, size, hash, cache);
-				String landing = NestedConflicts.landingName(nestedJar.getFileName().toString(), hash, takenNames);
-				if (!takenNames.add(landing)) throw new IOException("Nested mod conflicts share a loader-facing target path: " + landing);
-				Path targetPath = storage.modsDirectory().resolve(landing).normalize();
-				if (!targetPath.startsWith(storage.gameDirectory())) throw new IOException("Nested mod target escaped the game directory: " + targetPath);
-				String relativePath = LogicalPath.normalize(storage.gameDirectory().relativize(targetPath).toString());
-				candidates.add(new UpdatePlanner.NestedCandidate(new UpdatePlan.NestedCopy(relativePath, hash, size, candidate.mod().IDs()), candidate.mod().version(),
-						Set.copyOf(candidate.colliders())));
+				items.add(new GeneratedBundle.Item(nestedJar.getFileName().toString(), () -> Files.readAllBytes(nestedJar)));
+				candidate.mod().IDs().forEach(bundledIds::add);
+				colliders.addAll(candidate.colliders());
 			}
-			return candidates;
+			if (items.isEmpty()) return List.of();
+			byte[] bundle = GeneratedBundle.generate(items);
+			String hash = HashUtils.sha1(bundle);
+			Path storeFile = storage.objectFile(hash);
+			if (!FileIntegrity.matchesNamed(storeFile, bundle.length, hash, cache)) {
+				Path temporary = Files.createTempFile(storage.stagingDirectory(), "bundle-", ".jar");
+				try {
+					Files.write(temporary, bundle);
+					VerifiedFileTransfer.copyAtomicImmutable(temporary, storeFile, bundle.length, hash, cache);
+				} finally {
+					Files.deleteIfExists(temporary);
+				}
+			}
+			String relativePath = LogicalPath.normalize(ModpackPathPolicy.MODS_ROOT + "/" + ModpackPathPolicy.GENERATED_BUNDLE_NAME);
+			Path liveBundle = storage.gameDirectory().resolve(relativePath);
+			if (Files.exists(liveBundle, LinkOption.NOFOLLOW_LINKS) && !isGeneratedBundle(liveBundle, relativePath, hash, previousCopies, cache)) {
+				LOGGER.warn("A foreign file occupies the reserved generated-bundle path {}; this plan installs no generated dependency copies", relativePath);
+				return List.of();
+			}
+			return List.of(new UpdatePlanner.NestedCandidate(new UpdatePlan.NestedCopy(relativePath, hash, bundle.length, bundledIds), null, colliders));
 		} finally {
 			FileTrees.delete(inspectionDirectory);
 		}
+	}
+
+	/** Whether the file at the reserved bundle path is ours: the freshly generated bytes or a previous generation's bundle. */
+	private static boolean isGeneratedBundle(Path liveBundle, String relativePath, String bundleHash, List<UpdatePlan.NestedCopy> previousCopies, FileCache cache) throws IOException {
+		if (!Files.isRegularFile(liveBundle, LinkOption.NOFOLLOW_LINKS)) return false;
+		String observed = cache.getOrComputeHash(liveBundle);
+		if (observed.equalsIgnoreCase(bundleHash)) return true;
+		for (UpdatePlan.NestedCopy previous : previousCopies)
+			if (previous.relativePath().equalsIgnoreCase(relativePath) && previous.sha1().equalsIgnoreCase(observed)) return true;
+		return false;
 	}
 
 	/** Extracts every jar nested inside the materialized pack roots, recursively, under nested/, mirroring each jar's entry path so extraction is deterministic. */
