@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 
@@ -153,13 +154,12 @@ public final class NestedConflicts {
 	}
 
 	/**
-	 * Where the extractor materialized a nested jar: its parent's path followed by the entry path inside the parent. The leading root separator is stripped for both separator styles - on Windows a path with a root would
-	 * make {@link Path#resolve} drop the parent entirely.
+	 * Where the extractor materialized a nested jar: its parent's path followed by the entry path inside the parent.
+	 * The entry goes through the canonical normalizer - on Windows its root separator would make {@link Path#resolve}
+	 * drop the parent entirely.
 	 */
 	private static Path extractedPath(Path parentPath, Path entryPath) {
-		String relative = entryPath.toString();
-		while (!relative.isEmpty() && (relative.charAt(0) == '/' || relative.charAt(0) == '\\')) relative = relative.substring(1);
-		return parentPath.resolve(relative);
+		return parentPath.resolve(LogicalPath.normalize(entryPath.toString()));
 	}
 
 	/**
