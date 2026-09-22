@@ -257,6 +257,21 @@ class NestedConflictsTest {
 	}
 
 	@Test
+	void twoPackRootsSharingAnIdEmitOnlyOneOfThem() {
+		FileInspection.Mod first = tree("r1.jar", "1.0.0", Set.of("lib", "a"), Set.of());
+		FileInspection.Mod second = tree("r2.jar", "1.0.0", Set.of("lib", "b"), Set.of());
+		StandardRoot one = standard("mods/one.jar", Set.of("one"), Set.of("lib", "b"));
+		StandardRoot two = standard("mods/two.jar", Set.of("two"), Set.of("lib"));
+
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(first), packRoot(second)), List.of(one, two), Set.of());
+
+		// "b" resolves to the second root first; when "lib" then resolves, the already-emitted second root
+		// provides it - and the shared-id guard stops the first root from putting "lib" into the bundle twice.
+		assertEquals(1, candidates.size());
+		assertEquals(Set.of("lib", "b"), candidates.get(0).mod().IDs());
+	}
+
+	@Test
 	void aPackRootClaimingTheReservedBundleIdIsRejected() {
 		FileInspection.Mod impostor = tree("impostor.jar", "1.0.0", Set.of(GeneratedBundle.MOD_ID), Set.of());
 

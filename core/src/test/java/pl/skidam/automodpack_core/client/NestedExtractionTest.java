@@ -17,6 +17,24 @@ import pl.skidam.automodpack_core.utils.FileTrees;
 class NestedExtractionTest {
 
 	@Test
+	void backslashEntryNamesMaterializeAtTheCanonicalDerivedPath() throws IOException {
+		Path inspection = Files.createTempDirectory("nested-extraction-");
+		try {
+			Path root = inspection.resolve("mods").resolve("pack.jar");
+			Files.createDirectories(root.getParent());
+			Files.write(root, jar(Map.of("META-INF/jars/a\\b.jar", jar(Map.of("x.txt", "x".getBytes())))));
+
+			ClientUpdatePlanBuilder.extractNestedJars(inspection);
+
+			// The detector derives paths through LogicalPath.normalize, which splits backslash names - extraction must agree.
+			Path base = inspection.resolve("nested").resolve("mods").resolve("pack.jar");
+			assertTrue(Files.isRegularFile(base.resolve("META-INF/jars/a/b.jar")), "extracted: " + list(inspection));
+		} finally {
+			FileTrees.delete(inspection);
+		}
+	}
+
+	@Test
 	void extractionFlattensEveryDepthUnderTheRootPrefix() throws IOException {
 		Path inspection = Files.createTempDirectory("nested-extraction-");
 		try {

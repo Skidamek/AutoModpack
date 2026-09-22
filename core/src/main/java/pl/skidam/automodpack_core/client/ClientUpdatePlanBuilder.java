@@ -588,7 +588,7 @@ final class ClientUpdatePlanBuilder {
 					for (Path entry : stream.filter(JarUtils::isRegularJar).sorted().toList()) entries.add(entry);
 				}
 				for (Path entry : entries) {
-					String flattened = fs.getPath("/").relativize(entry).toString();
+					String flattened = LogicalPath.normalize(fs.getPath("/").relativize(entry).toString());
 					Path target = nestedDirectory.resolve(current.targetPrefix()).resolve(flattened).normalize();
 					if (!target.startsWith(nestedDirectory)) throw new IOException("Nested mod entry escaped the inspection directory: " + entry);
 					Files.createDirectories(target.getParent());

@@ -98,6 +98,7 @@ public final class NestedConflicts {
 	}
 
 	public static List<Candidate> detect(List<PackRoot> packRoots, List<StandardRoot> standardRoots, Set<String> packRootIds, Set<String> previouslyCopiedPaths, Set<String> forceCopyPaths) {
+		// The managed bundle is never scanned as a standard root: its stale nests would phantom-collide a fresh selection against the bundle itself one generation past their last dependent.
 		List<Node> roots = new ArrayList<>();
 		for (PackRoot packRoot : packRoots) {
 			if (packRoot.tree().path() == null) continue;
@@ -222,13 +223,17 @@ public final class NestedConflicts {
 			}
 		}
 
-		/** The best pack jar providing {@code dependencyId}: a pack root beats a nested jar, then {@link #winsJar} applies; an emitted jar never serves again and a nested jar sharing any claimed id never serves. */
+		/**
+		 * The best pack jar providing {@code dependencyId}: a pack root beats a nested jar, then {@link #winsJar} applies; an emitted jar never serves again, a nested jar sharing any claimed id never serves, and a pack
+		 * root sharing an id an emission already took never serves either.
+		 */
 		private Node provider(String dependencyId) {
 			Node provider = null;
 			for (Node node : pool) {
 				FileInspection.Mod mod = node.mod;
 				if (emitted.contains(node)) continue;
-				if (node.parent != null && mod.IDs().stream().anyMatch(id -> claimed.contains(id.toLowerCase(Locale.ROOT)))) continue;
+				// A nested jar sharing any claimed id never serves; a pack root only steps aside for an id another emission already took - its own covered ids are its own.
+				if (mod.IDs().stream().anyMatch(id -> (node.parent != null ? claimed.contains(id.toLowerCase(Locale.ROOT)) : emittedId(id.toLowerCase(Locale.ROOT))))) continue;
 				if (!provides(mod, dependencyId)) continue;
 				if (provider == null || beatsProvider(node, provider)) provider = node;
 			}
