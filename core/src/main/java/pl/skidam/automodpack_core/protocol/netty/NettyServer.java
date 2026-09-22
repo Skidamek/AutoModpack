@@ -329,7 +329,11 @@ public class NettyServer {
 
 	/** Starts the body-streaming pool; every hosting shape streams bodies, so this must run before any listener or swap goes live. */
 	public void startSenders() {
-		senderExecutor = Executors.newCachedThreadPool(r -> {
+		// One streaming worker per in-flight response and the contract serves one response per connection at a time, so
+		// the ceiling is the connection count: 128 hosts 25 clients x 5 lanes with headroom. A saturated pool queues the
+		// response behind the next freed worker instead of spawning threads past the ceiling - the previous unbounded
+		// cached pool let every extra client grow the server's thread count without a bound.
+		senderExecutor = Executors.newFixedThreadPool(128, r -> {
 			Thread t = new Thread(r, "automodpack-sender");
 			t.setDaemon(true);
 			return t;
