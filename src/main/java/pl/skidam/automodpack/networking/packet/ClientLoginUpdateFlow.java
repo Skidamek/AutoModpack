@@ -84,9 +84,10 @@ final class ClientLoginUpdateFlow {
 			answered.complete(LoginUpdateResponse.CONTINUE);
 		});
 		Runnable cancel = () -> ModpackUpdater.executor().execute(() -> {
+			// The answer must flush before the channel closes, or the server never records the cancellation.
+			answered.complete(LoginUpdateResponse.JOIN_CANCELLED);
 			disconnectImmediately(handler);
 			ScreenImpl.multiplayer();
-			answered.complete(LoginUpdateResponse.JOIN_CANCELLED);
 		});
 		ScreenManager.modpackOffer(syncModpack, joinWithout, cancel);
 		return answered;
