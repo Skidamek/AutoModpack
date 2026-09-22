@@ -76,17 +76,16 @@ public final class UpdatePlanner {
 	}
 
 	/**
-	 * In-memory planning input for one generated copy: the persisted {@link NestedCopy} shape plus the version string
-	 * of the nested jar and the standard roots whose survival requires the copy. Without collision knowledge
-	 * (previous-state input) a candidate is never filtered.
+	 * In-memory planning input for one generated copy: the {@link NestedCopy} shape plus the standard roots whose
+	 * survival requires the copy. Without collision knowledge (previous-state input) a candidate is never filtered.
 	 */
-	public record NestedCandidate(NestedCopy copy, String version, Set<NestedConflicts.Collider> colliders) {
+	public record NestedCandidate(NestedCopy copy, Set<NestedConflicts.Collider> colliders) {
 		public NestedCandidate {
 			colliders = colliders == null ? Set.of() : Set.copyOf(colliders);
 		}
 
 		public static NestedCandidate previous(NestedCopy copy) {
-			return new NestedCandidate(copy, null, Set.of());
+			return new NestedCandidate(copy, Set.of());
 		}
 	}
 
@@ -202,7 +201,7 @@ public final class UpdatePlanner {
 		// Duplicate disposition must precede nested-copy planning so a candidate's colliders are judged against
 		// the plan that already decided the fate of the standard roots they collide with.
 		planDuplicates(target.modpackId, input.targetMods(), input.standardMods(), liveCopyPaths, installedLedger, session, listedPins);
-		List<NestedCopy> generatedCopies = ownedNestedCopies(survivingNestedCandidates(input.nestedCandidates(), session));
+		List<NestedCopy> generatedCopies = survivingNestedCandidates(input.nestedCandidates(), session).stream().map(NestedCandidate::copy).sorted(Comparator.comparing(NestedCopy::relativePath)).toList();
 		planNestedCopies(input.previousNestedCopies(), generatedCopies, session);
 		planBaselineCaptures(input.files(), session);
 		return session.finalState(target.modpackId, packTarget, input.plannedClientConfig(), input.files(), target, ledger, false, null, generatedCopies);
@@ -514,23 +513,6 @@ public final class UpdatePlanner {
 	private static boolean survives(NestedConflicts.Collider collider, PlanningSession session) {
 		FileState state = session.projected(new FileKey(Root.GAME_DIR, LogicalPath.normalize(collider.logicalPath())));
 		return state != null && state.regularFile() && hashesEqual(state.sha1(), collider.sha1());
-	}
-
-	private static List<NestedCopy> ownedNestedCopies(List<NestedCandidate> candidates) {
-		Map<String, NestedCandidate> winnerById = new HashMap<>();
-		for (NestedCandidate candidate : candidates)
-			for (String id : candidate.copy().ids())
-				winnerById.merge(id, candidate, (current, challenger) -> winsVersion(challenger.version(), challenger.copy().relativePath(), current.version(), current.copy().relativePath()) ? challenger : current);
-		Set<NestedCandidate> winners = new HashSet<>(winnerById.values());
-		Set<String> claimedIds = new HashSet<>();
-		List<NestedCopy> owned = new ArrayList<>();
-		for (NestedCandidate candidate : candidates.stream().sorted(Comparator.comparing(candidate -> candidate.copy().relativePath())).toList()) {
-			if (!winners.contains(candidate)) continue;
-			if (candidate.copy().ids().stream().anyMatch(claimedIds::contains)) continue;
-			owned.add(candidate.copy());
-			claimedIds.addAll(candidate.copy().ids());
-		}
-		return List.copyOf(owned);
 	}
 
 	/** Whether the challenger beats the incumbent on version, with a lexicographically smaller path breaking ties. */

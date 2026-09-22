@@ -596,7 +596,7 @@ class UpdatePlannerTest {
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
 				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true));
-		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("sodium")), "2.0.0",
+		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("sodium")),
 				Set.of(new NestedConflicts.Collider("mods/local.jar", OLD_HASH)));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(),
@@ -618,7 +618,7 @@ class UpdatePlannerTest {
 				new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
 				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true),
 				new FileKey(Root.GAME_DIR, "mods/other.jar"), new FileState(OTHER_HASH, 7, true));
-		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("sodium")), "2.0.0",
+		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("sodium")),
 				Set.of(new NestedConflicts.Collider("mods/local.jar", OLD_HASH), new NestedConflicts.Collider("mods/other.jar", OTHER_HASH)));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(),
@@ -645,7 +645,7 @@ class UpdatePlannerTest {
 				new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
 				new FileKey(Root.PROJECTION, "mods/other.jar"), new FileState(OTHER_HASH, 9, true),
 				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true));
-		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/provider.jar", TARGET_HASH, 9, Set.of("d")), "2.0.0",
+		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/provider.jar", TARGET_HASH, 9, Set.of("d")),
 				Set.of(new NestedConflicts.Collider("mods/local.jar", OLD_HASH)));
 
 		UpdatePlan dropped = UpdatePlanner.plan(new UpdatePlanner.Input(null, targetWithDuplicate, files, Set.of(),
@@ -670,24 +670,18 @@ class UpdatePlannerTest {
 	}
 
 	@Test
-	void generatedCopiesKeepTheHighestVersionPerIdRegardlessOfPathOrder() {
-		UpdatePlanner.NestedCandidate lower = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/a.jar", OLD_HASH, 8, Set.of("Shared")), "1.0.0", Set.of());
-		UpdatePlanner.NestedCandidate higher = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/b.jar", TARGET_HASH, 9, Set.of("shared")), "2.0.0", Set.of());
+	void previousStateCandidatesCarryNoCollisionKnowledgeAndPlanZeroOperationsOnTheLiveBundle() {
+		// The persisted generated-copy state has no ids and no colliders; wrapping it as previous candidates (the
+		// login estimate's input) must keep the bundle owned exactly as-is instead of retiring the live copy.
+		NestedCopy bundle = new NestedCopy("mods/automodpack-generated.jar", TARGET_HASH, 9, Set.of());
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/automodpack-generated.jar"), new FileState(TARGET_HASH, 9, true));
 
-		UpdatePlan byVersion = UpdatePlanner.plan(new UpdatePlanner.Input(null, manifest(Map.of(), ledger()), Map.of(), Set.of(), List.of(), List.of(),
-				List.of(), List.of(lower, higher), null, new ClientConfigJsons.ClientConfigFieldsV3()));
+		UpdatePlan plan = planWithGeneratedCopies(manifest(Map.of(), ledger()), files, List.of(bundle), List.of(bundle));
 
-		assertEquals(1, byVersion.generatedCopies().size());
-		assertEquals("mods/b.jar", byVersion.generatedCopies().get(0).relativePath());
-
-		UpdatePlanner.NestedCandidate first = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/a.jar", OLD_HASH, 8, Set.of("shared")), "1.0.0", Set.of());
-		UpdatePlanner.NestedCandidate second = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/b.jar", TARGET_HASH, 9, Set.of("shared")), "1.0.0", Set.of());
-
-		UpdatePlan byPath = UpdatePlanner.plan(new UpdatePlanner.Input(null, manifest(Map.of(), ledger()), Map.of(), Set.of(), List.of(), List.of(),
-				List.of(), List.of(second, first), null, new ClientConfigJsons.ClientConfigFieldsV3()));
-
-		assertEquals(1, byPath.generatedCopies().size());
-		assertEquals("mods/a.jar", byPath.generatedCopies().get(0).relativePath());
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.relativePath().equals("mods/automodpack-generated.jar")));
+		assertEquals(1, plan.generatedCopies().size());
+		assertEquals("mods/automodpack-generated.jar", plan.generatedCopies().get(0).relativePath());
+		assertEquals(TARGET_HASH, plan.generatedCopies().get(0).sha1());
 	}
 
 	@Test

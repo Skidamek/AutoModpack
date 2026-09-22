@@ -549,7 +549,7 @@ final class ClientUpdatePlanBuilder {
 				LOGGER.warn("A foreign file occupies the reserved generated-bundle path {}; this plan installs no generated dependency copies", relativePath);
 				return List.of();
 			}
-			return List.of(new UpdatePlanner.NestedCandidate(new UpdatePlan.NestedCopy(relativePath, hash, bundle.length, bundledIds), null, colliders));
+			return List.of(new UpdatePlanner.NestedCandidate(new UpdatePlan.NestedCopy(relativePath, hash, bundle.length, bundledIds), colliders));
 		} finally {
 			FileTrees.delete(inspectionDirectory);
 		}
