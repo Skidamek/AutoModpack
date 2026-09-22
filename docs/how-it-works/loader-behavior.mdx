@@ -1,0 +1,69 @@
+---
+title: Loader behavior
+description: How AutoModpack hosts pack mods on Fabric, Forge, and NeoForge — what loads in place, what gets copied, and why.
+---
+
+# Loader behavior
+
+AutoModpack keeps pack mods out of your `mods/` folder by loading them from its own
+directory (`automodpack/client/active/mods/`). How that works — and what still ends up
+in `mods/` — depends on the mod loader, because each loader discovers mods differently.
+
+## Loading in place (the default, every loader)
+
+- **Forge and NeoForge** discover mod files from a fixed set of locations. AutoModpack
+  registers the active pack directory with the loader itself (a locator on NeoForge, an
+  additional-locations hook on Forge), so pack mods flow through the same discovery pass
+  as your own mods. Dependencies between a pack mod and your mod resolve normally.
+- **Fabric** has no way to add a second mod directory. AutoModpack therefore loads pack
+  mods through a second discovery pass after the loader has already resolved `mods/`.
+
+Everything below exists because of the consequences of that Fabric difference.
+
+## The generated bundle (Fabric)
+
+On Fabric, a dependency that exists *only inside the pack* — a library nested in one of
+its jars, or a pack mod your own mod needs — is invisible to the pass that resolves your
+`mods/` mods. AutoModpack detects exactly those unmet dependencies and writes **one**
+generated jar:
+
+```
+mods/automodpack-generated.jar
+```
+
+This file is created, updated, and deleted by AutoModpack. It carries every jar the
+loader needs inside it and nothing else — when the pack or your mods change, its content
+is regenerated; when nothing needs it anymore, it disappears. Don't edit or rename it:
+deleting it is safe (it comes back), but renaming it leaves a stray duplicate that will
+be cleaned up on the next repair.
+
+Two rules worth knowing:
+
+- If the pack updates any jar inside the bundle, the bundle is regenerated and a restart
+  is required — the old copy was already loaded into the game.
+- The bundle never appears for packs whose dependencies are all satisfied without it.
+
+## Force-copied mods (Forge and NeoForge)
+
+Both Forge and NeoForge pick the mod that provides the **early loading window**
+(`IMMEDIATE_WINDOW_PROVIDER`) *before* mod discovery and run it immediately — before
+AutoModpack's pack directory is reachable. If the pack ships such a mod, AutoModpack
+copies it into `mods/` so the loader finds it in time, and asks for a restart:
+
+- Forge: `FORGE_IMMEDIATE_WINDOW_PROVIDER`
+- NeoForge: `NEOFORGE_IMMEDIATE_WINDOW_PROVIDER` (all supported NeoForge generations)
+
+This is the only case where a pack mod is copied into `mods/` on Forge or NeoForge, and
+it applies whether AutoModpack is online or syncing offline from the stored generation.
+
+## Why your mods folder stays clean
+
+| Loader | Pack mods live in | What can appear in `mods/` |
+|---|---|---|
+| Forge | active projection (discovered in place) | early-window provider mods, if the pack ships one |
+| NeoForge | active projection (discovered in place) | early-window provider mods, if the pack ships one |
+| Fabric | active projection (second discovery pass) | `automodpack-generated.jar`, when a dependency needs it |
+
+The name `automodpack-generated.jar` is reserved: a pack cannot ship a file under that
+name, and a file you place there yourself will be reported as a conflict rather than
+silently overwritten.
