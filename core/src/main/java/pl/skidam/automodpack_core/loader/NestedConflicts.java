@@ -153,10 +153,13 @@ public final class NestedConflicts {
 		for (Node child : node.children) collectNested(child, into);
 	}
 
-	/** Where the extractor materialized a nested jar: its parent's path followed by the entry path inside the parent. */
+	/**
+	 * Where the extractor materialized a nested jar: its parent's path followed by the entry path inside the parent. The leading root separator is stripped for both separator styles - on Windows a path with a root would
+	 * make {@link Path#resolve} drop the parent entirely.
+	 */
 	private static Path extractedPath(Path parentPath, Path entryPath) {
 		String relative = entryPath.toString();
-		while (relative.startsWith("/")) relative = relative.substring(1);
+		while (!relative.isEmpty() && (relative.charAt(0) == '/' || relative.charAt(0) == '\\')) relative = relative.substring(1);
 		return parentPath.resolve(relative);
 	}
 
