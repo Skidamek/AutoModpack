@@ -52,8 +52,10 @@ public class DownloadClient implements PackTransport {
 
 	// The pooled pipeline lanes. They buy exactly two physical things: loss-regime multiplication (a lost segment stalls
 	// one lane's pipeline, not the transfer) and streaming through a lane re-handshake; on a clean link a single
-	// connection is already bandwidth-equivalent. The count is the B1 netem matrix's decision, kept alongside the
-	// platform-worker count it used to be welded to.
+	// connection is already bandwidth-equivalent. Measured on the bench fixture (101 files, ~250 MiB): clean and
+	// 0.1%-loss runs are indistinguishable across {1,3,5} lanes, while at 1% loss + 100 ms delay the same transfer
+	// takes 230 s at 5 lanes, 442 s at 3, and 910 s at 1 - the stall regime scales near-linearly with lanes, so the
+	// count stays 5. Kept split from the platform-worker count it used to be welded to.
 	public static final int LANES = 5;
 
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
