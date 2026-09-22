@@ -264,7 +264,16 @@ public class ModpackUpdater implements AutoCloseable {
 
 	/** Trusted bootstrap install: apply the selected pack on this launch without a review screen. */
 	public void applyTrustedInstall() {
-		applySelectedTargetWithoutReview(true);
+		applySelectedTargetWithoutReview(true, false);
+	}
+
+	/**
+	 * Offline launch apply for an unreachable server: the resolved target is the stored active one, so the plan runs
+	 * without the transfer-session guard and acquisition may only draw on local content. The normal launch-apply tails
+	 * handle the restart demand, so force-copy corrections still land and are narrated like the online apply.
+	 */
+	public void applyStoredTargetOffline() {
+		applySelectedTargetWithoutReview(false, true);
 	}
 
 	/**
@@ -310,7 +319,7 @@ public class ModpackUpdater implements AutoCloseable {
 	 */
 	public UpdateOutcome processModpackUpdate(boolean showWaitingScreen) {
 		if (preload) {
-			applySelectedTargetWithoutReview(false);
+			applySelectedTargetWithoutReview(false, false);
 			return UpdateOutcome.APPLIED;
 		}
 
@@ -352,22 +361,23 @@ public class ModpackUpdater implements AutoCloseable {
 	 * authority: copies or deletes in the standard mods folder, a loader-version swap, and the other restart reasons
 	 * stop this process so the next launch sees the real {@code mods/} tree. Projection-only work loads in this process.
 	 * A deferred transaction restarts for the detached helper. First install waits for in-game review unless
-	 * {@code applyFirstInstall} is set (trusted bootstrap).
+	 * {@code applyFirstInstall} is set (trusted bootstrap). Offline skips the live-connection guard because the target
+	 * was resolved from local storage; acquisition still fails loudly when content is missing locally.
 	 */
-	private void applySelectedTargetWithoutReview(boolean applyFirstInstall) {
-		runReviewedFlow(new ApplyFlow("Launch apply", () -> new ReLauncher(UpdateType.UPDATE, changelogs).restart(true), e -> {
+	private void applySelectedTargetWithoutReview(boolean applyFirstInstall, boolean offline) {
+		runReviewedFlow(new ApplyFlow(offline ? "Offline launch apply" : "Launch apply", () -> new ReLauncher(UpdateType.UPDATE, changelogs).restart(true), e -> {
 			LOGGER.error("Failed to apply the selected modpack; no projection changes were made outside the existing transaction guarantees", e);
 			if (!preload && !review.abortedByPlayer(e)) showUpdateFailure(e);
-		}, this::closeLaunchApply), () -> launchApply(applyFirstInstall));
+		}, this::closeLaunchApply), () -> launchApply(applyFirstInstall, offline));
 	}
 
 	/** The launch apply's own steps: resolve the target, prepare without a preview, and commit the approved plan. */
-	private void launchApply(boolean applyFirstInstall) throws Exception {
+	private void launchApply(boolean applyFirstInstall, boolean offline) throws Exception {
 		if (selectedTarget == null || serverModpackContent == null) {
 			LOGGER.info("Skipping launch apply because no resolved target is available");
 			return;
 		}
-		requireLiveConnection();
+		if (!offline) requireLiveConnection();
 		review.firstConnection(!new ClientGenerationStore(storage).hasLocalState(selectedTarget.manifest().modpackId()));
 		review.resetLocalModConsent();
 		if (review.firstConnection() && !applyFirstInstall) {
@@ -430,6 +440,7 @@ public class ModpackUpdater implements AutoCloseable {
 			if (!changelogs.changedOrRemovedPaths().isEmpty()) SessionUpdateState.markAppliedContentNotLoaded();
 			return;
 		}
+		LOGGER.info("Restart required because: {}", String.join(", ", applyResult.reasonDescriptions()));
 		new ReLauncher(RestartDecision.launchRestartType(review.firstConnection(), applyResult.restartReasons()), changelogs).restart(true);
 	}
 
@@ -483,6 +494,7 @@ public class ModpackUpdater implements AutoCloseable {
 			return;
 		}
 		LOGGER.info("Update applied with in-game restart demand {}; asking the player to restart", demand);
+		LOGGER.info("Restart required because: {}", String.join(", ", applyResult.reasonDescriptions()));
 		ScreenManager.restart(RestartDecision.applyRestartType(fullDownload, applyResult.restartReasons()), changelogs);
 	}
 

@@ -97,7 +97,7 @@ public final class ClientLaunch {
 			// next launch with the server up catches up. One calm line says so; the cause stays at debug.
 			LOGGER.info("Modpack server {} is unreachable; continuing with the local state without a sync", AddressHelpers.formatAddress(connectionInfo.origin));
 			LOGGER.debug("Manifest fetch did not succeed", manifestResult.failure());
-			loadLocalModpack(connectionInfo, secret, hasActiveProjection());
+			reconcileStoredTarget(connectionInfo, secret);
 			return;
 		}
 
@@ -137,6 +137,22 @@ public final class ClientLaunch {
 	private void loadLocalModpack(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean projectionActive) throws Exception {
 		if (!projectionActive) return;
 		new ModpackUpdater(connectionInfo, secret, storage).loadModpack();
+	}
+
+	/**
+	 * The server is unreachable, so the launch apply targets the stored active projection: its force-copy corrections
+	 * (e.g. early-window service jars that must not load in place) still have to land in the standard mods folder
+	 * offline. The updater's launch-apply tails hot-load the projection afterwards, and a target that cannot be
+	 * resolved falls back to the plain projection load.
+	 */
+	private void reconcileStoredTarget(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) throws Exception {
+		if (!hasActiveProjection()) return;
+		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget().orElse(null);
+		if (target == null) {
+			loadLocalModpack(connectionInfo, secret, true);
+			return;
+		}
+		new ModpackUpdater(target, connectionInfo, secret, storage).applyStoredTargetOffline();
 	}
 
 	/** The active pointer is unique state whose unusable content fails the boot in place, so its read failure propagates instead of reading as no projection. */

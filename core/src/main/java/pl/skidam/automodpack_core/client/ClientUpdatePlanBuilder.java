@@ -530,7 +530,12 @@ final class ClientUpdatePlanBuilder {
 			Path modPath = resolvedObject(item, projection, cache);
 			if (modPath == null) continue;
 			FileInspection.Mod mod = modCache.getModOrNull(modPath, item.sha1, cache);
-			if (mod != null && !Collections.disjoint(mod.services(), forceCopyServices)) forceCopyMods.add(item.file);
+			if (mod != null) {
+				if (!Collections.disjoint(mod.services(), forceCopyServices)) forceCopyMods.add(item.file);
+				continue;
+			}
+			// A service-only jar has no mod metadata, so the inspection above misses it; its services are the only identity to check.
+			if (!FileInspection.getServices(modPath, forceCopyServices).isEmpty()) forceCopyMods.add(item.file);
 		}
 		return forceCopyMods;
 	}

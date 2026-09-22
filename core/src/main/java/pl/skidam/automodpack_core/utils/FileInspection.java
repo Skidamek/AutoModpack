@@ -404,6 +404,17 @@ public class FileInspection {
 		return found;
 	}
 
+	/** Same over a jar file: the only service read that works for a service-only jar, which has no mod metadata to inspect. */
+	public static Set<String> getServices(Path file, Set<String> ofInterest) {
+		if (isJarInvalid(file)) return Set.of();
+		try (FileSystem fs = FileSystems.newFileSystem(file)) {
+			return getServices(fs, ofInterest);
+		} catch (IOException e) {
+			LOGGER.debug("Failed to read loader services of {}", file);
+			return Set.of();
+		}
+	}
+
 	/**
 	 * @param stopAtFirst
 	 *            {@code true} to stop at the first match (the {@link #hasSpecificServices}

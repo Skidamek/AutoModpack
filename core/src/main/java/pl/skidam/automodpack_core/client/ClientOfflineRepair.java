@@ -75,7 +75,9 @@ public final class ClientOfflineRepair {
 				Path source = verifiedSource(item.file, size, item.sha1, cache);
 				if (source == null) continue;
 				FileInspection.Mod mod = modCache.getModOrNull(source, item.sha1, cache);
-				if (mod != null && !Collections.disjoint(mod.services(), services)) paths.add(LogicalPath.normalize(item.file));
+				// A service-only jar has no mod metadata, so the inspection above misses it; its services are the only identity to check.
+				boolean forceCopy = mod != null ? !Collections.disjoint(mod.services(), services) : !FileInspection.getServices(source, services).isEmpty();
+				if (forceCopy) paths.add(LogicalPath.normalize(item.file));
 			}
 		}
 		return Set.copyOf(paths);
