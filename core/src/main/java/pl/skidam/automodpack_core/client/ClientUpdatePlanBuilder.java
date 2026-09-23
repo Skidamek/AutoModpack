@@ -479,6 +479,8 @@ final class ClientUpdatePlanBuilder {
 				FileInspection.Mod mod = modCache.getModOrNull(path, cache);
 				if (mod == null) continue;
 				String relativePath = LogicalPath.normalize(storage.gameDirectory().relativize(path.toAbsolutePath().normalize()).toString());
+				// The managed bundle is a root jar with a manifest, so the scan would otherwise see it as a player mod.
+				if (ModpackPathPolicy.isGeneratedBundlePath(relativePath)) continue;
 				roots.add(new NestedConflicts.StandardRoot(relativePath, mod));
 			}
 		}
@@ -535,7 +537,7 @@ final class ClientUpdatePlanBuilder {
 		} finally {
 			Files.deleteIfExists(staging);
 		}
-		String relativePath = LogicalPath.normalize(ModpackPathPolicy.MODS_ROOT + "/" + ModpackPathPolicy.GENERATED_BUNDLE_NAME);
+		String relativePath = ModpackPathPolicy.generatedBundlePath();
 		Path liveBundle = storage.gameDirectory().resolve(relativePath);
 		if (Files.exists(liveBundle, LinkOption.NOFOLLOW_LINKS) && !isGeneratedBundle(liveBundle, relativePath, hash, previousCopies, cache)) {
 			LOGGER.warn("A foreign file occupies the reserved generated-bundle path {}; this plan installs no generated dependency copies", relativePath);
