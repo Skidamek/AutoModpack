@@ -101,6 +101,66 @@ class ManifestFetcherMirrorChainTest {
 		assertEquals(new String(headBytes, StandardCharsets.UTF_8), Files.readString(storage.historyHeadFile(MODPACK_ID), StandardCharsets.UTF_8));
 	}
 
+
+	/**
+	 * The S3 hosting shape end to end: the host mints MD5 etags that are never our sha1, so only the client's cached
+	 * host validator earns a 304. First contact is unconditional; the second sync replays the cached etags and both
+	 * documents answer 304; a changed generation answers 200, refreshes the cache, and the sync after that is 304s
+	 * again. Two requests per unchanged sync, zero bodies - the whole point of bucket hosting.
+	 */
+	@Test
+	void aForeignEtagHostCachesValidatorsAndUnchangedSyncsStayCheap() throws Exception {
+		server = new ConditionalFetchTest.ContractServer();
+		server.foreignEtags.set(true);
+		GroupManifest manifest = TestPacks.manifest("foreign etag test", "config/example.txt", "chain-content");
+		GenerationJsons.HeadDocumentFields head = TestPacks.head(manifest);
+		byte[] headBytes = ConfigTools.GSON.toJson(head).getBytes(StandardCharsets.UTF_8);
+		server.store().put("head", headBytes);
+		server.store().put("journal", journalBytes(head.contentToken, manifest));
+
+		ClientStorage storage = storage();
+		var first = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
+		assertTrue(first.successful(), () -> "first fetch failed: " + first.failure());
+		storage.writeActiveState(MODPACK_ID, head.contentToken, head.ownershipLedger);
+
+		int afterFirst = server.requests.size();
+		var second = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
+		assertTrue(second.successful(), () -> "second fetch failed: " + second.failure());
+		assertEquals(new String(headBytes, StandardCharsets.UTF_8), Files.readString(storage.historyHeadFile(MODPACK_ID)));
+		// The recheck pipelines head + journal: exactly two more requests, both carrying the cached foreign etag
+		// behind the mirror sha1, both answered 304.
+		assertEquals(afterFirst + 2, server.requests.size(), "requests=" + server.requests + " ifnm=" + server.ifNoneMatchLog);
+		assertTrue(server.ifNoneMatchLog.stream().anyMatch(value -> value.contains(server.foreignEtag(headBytes))),
+				"the replayed foreign etag must ride the dual validator");
+		assertTrue(server.ifNoneMatchLog.stream().allMatch(value -> value.startsWith("\"") && value.contains("\", \"")),
+				"every conditional request carries the sha1 first and the host etag behind it");
+
+		// A changed generation: both documents answer 200, the new bytes land in the mirrors, and the freshly served
+		// etags are cached - the sync after the change is 304s again.
+		GroupManifest updated = TestPacks.manifest("foreign etag test", "config/example.txt", "changed-content");
+		GenerationJsons.HeadDocumentFields newHead = TestPacks.head(updated);
+		byte[] newHeadBytes = ConfigTools.GSON.toJson(newHead).getBytes(StandardCharsets.UTF_8);
+		byte[] newJournalBytes = journalBytes(newHead.contentToken, updated);
+		server.store().put("head", newHeadBytes);
+		server.store().put("journal", newJournalBytes);
+		int afterSecond = server.requests.size();
+		var third = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
+		assertTrue(third.successful(), () -> "third fetch failed: " + third.failure());
+		assertEquals(new String(newHeadBytes, StandardCharsets.UTF_8), Files.readString(storage.historyHeadFile(MODPACK_ID)));
+		assertEquals(afterSecond + 2, server.requests.size(), "a changed generation must be served, not 304'd");
+		// The install the third sync drives: the active generation moves to the new token, so the next recheck vouches.
+		storage.writeActiveState(MODPACK_ID, newHead.contentToken, newHead.ownershipLedger);
+
+		int afterThird = server.requests.size();
+		var fourth = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
+		assertTrue(fourth.successful(), () -> "fourth fetch failed: " + fourth.failure());
+		assertEquals(afterThird + 2, server.requests.size());
+		// The pipelined pair logs head first, journal second; both must carry the NEW generation's cached etags.
+		var lastTwo = server.ifNoneMatchLog.subList(server.ifNoneMatchLog.size() - 2, server.ifNoneMatchLog.size());
+		assertTrue(lastTwo.get(0).contains(server.foreignEtag(newHeadBytes)), "head validator must be the new generation's etag");
+		assertTrue(lastTwo.get(1).contains(server.foreignEtag(newJournalBytes)), "journal validator must be the new generation's etag");
+	}
+
 	private byte[] journalBytes(String headToken, GroupManifest manifest) throws IOException {
 		Path file = Files.createTempFile(temporaryDirectory, "journal-", ".jsonl");
 		Journal journal = Journal.open(file);

@@ -636,16 +636,16 @@ public class DownloadClient implements PackTransport {
 		return withSlot(0, WIRE_CHUNK_BYTES, connection -> connection.sendDownloadFile(sha1Hex, ObjectTake.wholeObject(destination, tap, maxBytes)));
 	}
 
-	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers 304 and {@code destination} is not written. */
+	/** Document fetch (reserved keys) under the conditional, null for unconditional: a matching validator answers 304 and {@code destination} is not written. */
 	@Override
-	public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer chunkCallback) {
-		return withSlot(0, WIRE_CHUNK_BYTES, connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex, chunkCallback, null));
+	public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, DocumentConditional conditional, IntConsumer chunkCallback) {
+		return withSlot(0, WIRE_CHUNK_BYTES, connection -> connection.sendDownloadDocument(key, destination, conditional, chunkCallback, null));
 	}
 
 	/** The same fetch with a tap: served body bytes reach the tap (decode-while-downloading) and the destination alike. */
 	@Override
-	public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, OutputStream tap) {
-		return withSlot(0, WIRE_CHUNK_BYTES, connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex, null, tap));
+	public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, DocumentConditional conditional, OutputStream tap) {
+		return withSlot(0, WIRE_CHUNK_BYTES, connection -> connection.sendDownloadDocument(key, destination, conditional, null, tap));
 	}
 
 	/** The error a submit is refused with once the client is closed or aborted; aborted names the abort, every other death reads as closed. */

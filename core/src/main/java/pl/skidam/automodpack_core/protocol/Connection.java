@@ -28,6 +28,7 @@ import java.util.function.IntConsumer;
 
 import javax.net.ssl.SSLSocket;
 
+import pl.skidam.automodpack_core.protocol.PackTransport.DocumentConditional;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /**
@@ -47,8 +48,8 @@ class Connection implements AutoCloseable {
 	private static final int MAX_REDIRECTS = 3;
 	// Response header lines are tiny; a line past this or a block of this many lines is a hostile or broken peer.
 	private static final int MAX_HEADER_LINES = 128;
-	/** The document verdict for one conditional response; the body hash decides, never the status alone. */
-	private record ResponseHead(int status, Long contentLength, String contentRange, String contentEncoding, String location, boolean connectionClose, boolean chunked, boolean http10) {}
+	/** The document verdict for one conditional response; the body hash decides, never the status alone. The raw {@code etag} rides along so document fetches can cache the host's own validator. */
+	private record ResponseHead(int status, Long contentLength, String contentRange, String contentEncoding, String location, String etag, boolean connectionClose, boolean chunked, boolean http10) {}
 
 	private final SSLSocket socket;
 	private final Socket transport;
@@ -147,14 +148,14 @@ class Connection implements AutoCloseable {
 		}
 	}
 
-	/** Document request (reserved keys); a non-null expected hash may be answered 304, and the 200 body hash is the ground truth. */
-	public CompletableFuture<DocumentFetch> sendDownloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer chunkCallback) {
-		return submit(new DocumentRequest("/" + new String(key, StandardCharsets.UTF_8), destination, expectedSha1Hex, chunkCallback, null));
+	/** Document request (reserved keys) under the conditional, null for unconditional: a matching validator answers 304, and the 200 body hash is the ground truth. */
+	public CompletableFuture<DocumentFetch> sendDownloadDocument(byte[] key, Path destination, DocumentConditional conditional, IntConsumer chunkCallback) {
+		return submit(new DocumentRequest("/" + new String(key, StandardCharsets.UTF_8), destination, conditional, chunkCallback, null));
 	}
 
 	/** The same request with a tap: served body bytes reach the tap (decode-while-downloading) and the destination alike. */
-	public CompletableFuture<DocumentFetch> sendDownloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer chunkCallback, OutputStream tap) {
-		return submit(new DocumentRequest("/" + new String(key, StandardCharsets.UTF_8), destination, expectedSha1Hex, chunkCallback, tap));
+	public CompletableFuture<DocumentFetch> sendDownloadDocument(byte[] key, Path destination, DocumentConditional conditional, IntConsumer chunkCallback, OutputStream tap) {
+		return submit(new DocumentRequest("/" + new String(key, StandardCharsets.UTF_8), destination, conditional, chunkCallback, tap));
 	}
 
 	/** Registers one request and queues its head for the writer; the pool only hands out room, so an over-submit is a tripwire, not a flow-control path. */
@@ -457,45 +458,54 @@ class Connection implements AutoCloseable {
 	}
 
 	private final class DocumentRequest extends Pending<DocumentFetch> {
-		private final String expectedSha1Hex;
+		private final DocumentConditional conditional;
 		private final OutputStream tap;
 
-		DocumentRequest(String path, Path destination, String expectedSha1Hex, IntConsumer chunks, OutputStream tap) {
+		DocumentRequest(String path, Path destination, DocumentConditional conditional, IntConsumer chunks, OutputStream tap) {
 			// Documents debit one chunk flat: their size is unknown before the head, so a large journal under-debits and
 			// over-admits the requests behind it by a little - the window stays the bound, just a slightly loose one.
 			super(path, destination, chunks, WIRE_CHUNK_BYTES);
-			this.expectedSha1Hex = expectedSha1Hex;
+			this.conditional = conditional;
 			this.tap = tap;
 		}
 
 		@Override
 		String headers() {
-			String conditional = expectedSha1Hex == null ? "" : "If-None-Match: \"" + expectedSha1Hex + "\"\r\n";
-			return conditional + ACCEPT_ENCODING;
+			String ifNoneMatch = conditional == null ? null : conditional.ifNoneMatchValue();
+			return ifNoneMatch == null ? ACCEPT_ENCODING : "If-None-Match: " + ifNoneMatch + "\r\n" + ACCEPT_ENCODING;
 		}
 
 		@Override
 		void deliver(ResponseHead head) throws IOException {
+			String sha1Hex = conditional == null ? null : conditional.sha1Hex();
 			if (head.status() == 304) {
-				if (expectedSha1Hex == null) throw new IOException("HTTP 304 without a sent If-None-Match");
-				future.complete(new DocumentFetch(null, true));
+				// The host matched a validator we sent - either the vouched sha1 or the host's own etag behind it, and
+				// the host etag is only ever sent behind a vouch, so a 304 always means the vouched mirror is current.
+				// No etag rides a 304: the caller keeps the cached one.
+				if (ifNoneMatchSent()) throw new IOException("HTTP 304 without a sent If-None-Match");
+				future.complete(new DocumentFetch(null, true, null));
 				return;
 			}
 			if (head.status() == 200) {
-				if (expectedSha1Hex == null) {
+				if (sha1Hex == null) {
 					consumeBody(head, destination, 0, chunks, null, null, true, -1L);
-					future.complete(new DocumentFetch(destination, false));
+					future.complete(new DocumentFetch(destination, false, head.etag()));
 					return;
 				}
 				// A conditional document's body hash is the ground truth, so a host that ignores the condition still reads as unchanged when the bytes match the expectation.
 				MessageDigest hash = HashUtils.newSha1Digest();
 				consumeBody(head, destination, 0, chunks, hash, null, true, -1L);
-				future.complete(new DocumentFetch(destination, HexFormat.of().formatHex(hash.digest()).equals(expectedSha1Hex)));
+				boolean unchanged = HexFormat.of().formatHex(hash.digest()).equals(sha1Hex);
+				future.complete(new DocumentFetch(destination, unchanged, head.etag()));
 				return;
 			}
 			// Same rule as the object path: a framed error status fails this request only.
 			discardBody(head);
 			future.completeExceptionally(statusFailure(head, false));
+		}
+
+		private boolean ifNoneMatchSent() {
+			return conditional == null || conditional.ifNoneMatchValue() == null;
 		}
 	}
 
@@ -535,7 +545,7 @@ class Connection implements AutoCloseable {
 		String contentLengthValue = head.headerValue("content-length");
 		Long contentLength = contentLengthValue == null ? null : parseContentLength(contentLengthValue);
 		String connection = head.headerValue("connection");
-		return new ResponseHead(head.status(), contentLength, head.headerValue("content-range"), head.headerValue("content-encoding"), head.headerValue("location"),
+		return new ResponseHead(head.status(), contentLength, head.headerValue("content-range"), head.headerValue("content-encoding"), head.headerValue("location"), head.headerValue("etag"),
 				head.http10() || hasConnectionToken(connection, "close"), chunkedFraming(head.headerValue("transfer-encoding"), head.http10()), head.http10());
 	}
 

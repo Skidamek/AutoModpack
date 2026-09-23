@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.client;
 import static pl.skidam.automodpack_core.Constants.*;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -24,6 +25,7 @@ import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
+import pl.skidam.automodpack_core.protocol.PackTransport.DocumentConditional;
 import pl.skidam.automodpack_core.protocol.DocumentFetch;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.MissingObjectException;
@@ -97,7 +99,7 @@ public final class ManifestFetcher {
 		CompletableFuture<ManifestFetchResult> fetch = createTransport(connectionInfo, secret == null ? null : secret.secret(), manualValidationCallbackAsync(connectionInfo, allowAskingUser))
 				.thenCompose(transport -> {
 					abandonment.opened.set(transport);
-					return fetchModpackContentAsync(storage, transport, ModpackId.isValid(selectedModpackId) ? selectedModpackId : null).handle((fetched, error) -> {
+					return fetchModpackContentAsync(storage, connectionInfo, transport, ModpackId.isValid(selectedModpackId) ? selectedModpackId : null).handle((fetched, error) -> {
 						if (error != null || fetched == null) {
 							transport.close();
 							Throwable cause = error == null ? new IOException("Server returned no usable modpack content") : Throwables.unwrap(error);
@@ -147,7 +149,9 @@ public final class ManifestFetcher {
 	 * short-circuit covers the transfer only: every caller still verifies the local projection against the content, so
 	 * a corrupted or removed file is repaired even when the server head never moved.
 	 */
-	private static CompletableFuture<GenerationJsons.HeadDocumentFields> fetchModpackContentAsync(ClientStorage storage, PackTransport transport, String selectedModpackId) {
+	private static CompletableFuture<GenerationJsons.HeadDocumentFields> fetchModpackContentAsync(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, PackTransport transport, String selectedModpackId) {
+		final HostValidatorCache validators = HostValidatorCache.load(storage);
+		final InetSocketAddress endpoint = connectionInfo.endpoint;
 		final String headExpected;
 		final String journalExpected;
 		if (selectedModpackId != null) {
@@ -168,16 +172,22 @@ public final class ManifestFetcher {
 			headExpected = null;
 			journalExpected = null;
 		}
+		// The host's own cached etag rides behind the vouched sha1 (never alone - a 304 must always stand for "the
+		// vouched mirror is current"), so foreign hosts whose ETags are not our sha1 can answer 304 too.
+		DocumentConditional headConditional = headExpected == null ? null
+				: new DocumentConditional(headExpected, validators.get(endpoint, GenerationHosting.HEAD_DOCUMENT_KEY));
+		DocumentConditional journalConditional = journalExpected == null ? null
+				: new DocumentConditional(journalExpected, validators.get(endpoint, GenerationHosting.JOURNAL_KEY));
 
 		// When the mirror vouches, the journal request is decided before either request is sent, so it pipelines behind
 		// the head: a matching pair answers in one round trip, and a moved head still hands back the journal that head
 		// wants - the same request the sequential chain would have issued after parsing. The head leads the wire: it is
 		// the gate whose answer decides everything else, and on a close-framed host its body ends the lane only after
 		// both requests are in flight.
-		CompletableFuture<DocumentFetch> headFetched = transport.downloadDocument(GenerationHosting.HEAD_DOCUMENT_KEY.getBytes(StandardCharsets.UTF_8), storage.modpackContentTempFile(), headExpected, (IntConsumer) null);
-		CompletableFuture<DocumentFetch> journalFetched = headExpected == null ? null : fetchPipelinedJournal(transport, storage, journalExpected);
+		CompletableFuture<DocumentFetch> headFetched = transport.downloadDocument(GenerationHosting.HEAD_DOCUMENT_KEY.getBytes(StandardCharsets.UTF_8), storage.modpackContentTempFile(), headConditional, (IntConsumer) null);
+		CompletableFuture<DocumentFetch> journalFetched = headExpected == null ? null : fetchPipelinedJournal(transport, storage, journalConditional);
 		return headFetched
-				.thenComposeAsync(fetch -> applyFetchedHead(storage, transport, selectedModpackId, headExpected, journalExpected, journalFetched, fetch), DownloadClient.NET_EXECUTOR).whenComplete((ignored, error) -> {
+				.thenComposeAsync(fetch -> applyFetchedHead(storage, connectionInfo, transport, selectedModpackId, headExpected, journalExpected, journalFetched, fetch, validators), DownloadClient.NET_EXECUTOR).whenComplete((ignored, error) -> {
 					try {
 						Files.deleteIfExists(storage.modpackContentTempFile());
 					} catch (IOException e) {
@@ -187,8 +197,8 @@ public final class ManifestFetcher {
 	}
 
 	/** One full journal fetch into the temp file; callers delete the temp only after their last consumer of the fetch has run. */
-	private static CompletableFuture<DocumentFetch> fetchJournal(PackTransport transport, ClientStorage storage, String journalExpected) {
-		return transport.downloadDocument(GenerationHosting.JOURNAL_KEY.getBytes(StandardCharsets.UTF_8), storage.journalTempFile(), journalExpected, (IntConsumer) null);
+	private static CompletableFuture<DocumentFetch> fetchJournal(PackTransport transport, ClientStorage storage, DocumentConditional journalConditional) {
+		return transport.downloadDocument(GenerationHosting.JOURNAL_KEY.getBytes(StandardCharsets.UTF_8), storage.journalTempFile(), journalConditional, (IntConsumer) null);
 	}
 
 	/**
@@ -196,12 +206,12 @@ public final class ManifestFetcher {
 	 * so the pipelined journal response never parses behind it. One re-issue on a fresh lane recovers it; a status
 	 * verdict (a rejected secret, a missing document) is the server's answer and never retries.
 	 */
-	private static CompletableFuture<DocumentFetch> fetchPipelinedJournal(PackTransport transport, ClientStorage storage, String journalExpected) {
-		return fetchJournal(transport, storage, journalExpected).exceptionallyCompose(error -> {
+	private static CompletableFuture<DocumentFetch> fetchPipelinedJournal(PackTransport transport, ClientStorage storage, DocumentConditional journalConditional) {
+		return fetchJournal(transport, storage, journalConditional).exceptionallyCompose(error -> {
 			Throwable cause = Throwables.unwrap(error);
 			if (!(cause instanceof IOException) || cause instanceof UnauthorizedException || cause instanceof MissingObjectException) return CompletableFuture.failedFuture(error);
 			LOGGER.warn("The pipelined journal fetch lost its lane; fetching the journal again on a fresh one", cause);
-			return fetchJournal(transport, storage, journalExpected);
+			return fetchJournal(transport, storage, journalConditional);
 		});
 	}
 
@@ -214,17 +224,20 @@ public final class ManifestFetcher {
 	}
 
 	/** Applies one head fetch answer: parses the served or mirrored document, writes a fresh fetch through to the mirror, then syncs the journal vouch. */
-	private static CompletableFuture<GenerationJsons.HeadDocumentFields> applyFetchedHead(ClientStorage storage, PackTransport transport, String selectedModpackId, String headExpected, String journalExpected,
-			CompletableFuture<DocumentFetch> journalFetched, DocumentFetch fetch) {
+	private static CompletableFuture<GenerationJsons.HeadDocumentFields> applyFetchedHead(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, PackTransport transport, String selectedModpackId, String headExpected, String journalExpected,
+			CompletableFuture<DocumentFetch> journalFetched, DocumentFetch fetch, HostValidatorCache validators) {
+		InetSocketAddress endpoint = connectionInfo.endpoint;
 		GenerationJsons.HeadDocumentFields content;
 		if (fetch.unchanged()) {
 			// The validator is the only thing that can make UNCHANGED a truthful answer; anything else is a broken or
 			// hostile server, and no mirror may be trusted on its word.
 			if (headExpected == null) return CompletableFuture.failedFuture(new IOException("Server answered UNCHANGED to an unconditional head request"));
 			// A conditional match: the server sent nothing, or it ignored the validator and the body hashed to the
-			// expectation - either way the mirror holds exactly those bytes, so the content reads from there.
+			// expectation - either way the mirror holds exactly those bytes, so the content reads from there. A body
+			// that did arrive verified the mirror byte-for-byte, so its etag is cacheable.
 			Path source = fetch.path() != null ? fetch.path() : storage.historyHeadFile(selectedModpackId);
 			content = ModpackContentTools.readHeadDocument(source);
+			if (fetch.path() != null) validators.put(endpoint, GenerationHosting.HEAD_DOCUMENT_KEY, fetch.etag());
 		} else {
 			LOGGER.info("Fetched the head document from the server (installed mirror {})", headExpected == null ? "did not vouch" : "is stale");
 			content = ModpackContentTools.readHeadDocument(storage.modpackContentTempFile());
@@ -232,6 +245,8 @@ public final class ManifestFetcher {
 				try {
 					// Write-through before the caller's temp deletion; the swap moves the temp into the mirror.
 					new HeadMirror(storage).replaceFrom(storage.modpackContentTempFile());
+					// The mirror now holds the served bytes, so the served etag stands for them and may be replayed.
+					validators.put(endpoint, GenerationHosting.HEAD_DOCUMENT_KEY, fetch.etag());
 				} catch (IOException e) {
 					return CompletableFuture.failedFuture(e);
 				}
@@ -242,7 +257,7 @@ public final class ManifestFetcher {
 			if (journalFetched != null) journalFetched.whenComplete((ignored, error) -> deleteJournalTemp(storage));
 			return CompletableFuture.completedFuture(null);
 		}
-		CompletableFuture<Boolean> journalSync = syncJournalMirror(storage, transport, content, journalExpected, journalFetched);
+		CompletableFuture<Boolean> journalSync = syncJournalMirror(storage, connectionInfo, transport, content, journalExpected, journalFetched, validators);
 		if (!fetch.unchanged()) return journalSync.thenApply(journalRefetched -> content);
 		// The validator matched, so the head mirror - and the journal that vouched for it - already hold what the
 		// server serves: a journal fetch that keeps failing even after its fresh-lane re-issue must not discard a
@@ -263,8 +278,8 @@ public final class ManifestFetcher {
 	 * request the gate would have issued, and a body the server did send is always fresher than deciding from the
 	 * gate alone. Returns whether the journal was actually refetched.
 	 */
-	private static CompletableFuture<Boolean> syncJournalMirror(ClientStorage storage, PackTransport transport, GenerationJsons.HeadDocumentFields content, String journalExpected,
-			CompletableFuture<DocumentFetch> journalFetched) {
+	private static CompletableFuture<Boolean> syncJournalMirror(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, PackTransport transport, GenerationJsons.HeadDocumentFields content, String journalExpected,
+			CompletableFuture<DocumentFetch> journalFetched, HostValidatorCache validators) {
 		if (content == null) return CompletableFuture.completedFuture(false);
 		String modpackId;
 		JournalMirror mirror = new JournalMirror(storage);
@@ -279,13 +294,18 @@ public final class ManifestFetcher {
 		if (journalFetched == null) {
 			if (!mirror.isStale(modpackId, content.contentToken)) return CompletableFuture.completedFuture(false);
 			LOGGER.info("Journal mirror is stale for modpack {}; fetching the full journal from the server", modpackId);
-			journalFetched = fetchJournal(transport, storage, journalExpected);
+			journalFetched = fetchJournal(transport, storage, journalExpected == null ? null
+					: new DocumentConditional(journalExpected, validators.get(connectionInfo.endpoint, GenerationHosting.JOURNAL_KEY)));
 		}
 		return journalFetched.thenComposeAsync(fetch -> {
 			try {
 				if (fetch.unchanged() && journalExpected == null) throw new IOException("Server answered UNCHANGED to an unconditional journal request");
 				// A conditional match means the served journal equals the mirror's own bytes: nothing to replace.
-				if (!fetch.unchanged()) mirror.replaceFrom(modpackId, fetch.path());
+				if (!fetch.unchanged()) {
+					mirror.replaceFrom(modpackId, fetch.path());
+					// The mirror now holds the served bytes, so the served etag stands for them and may be replayed.
+					validators.put(connectionInfo.endpoint, GenerationHosting.JOURNAL_KEY, fetch.etag());
+				}
 				return CompletableFuture.completedFuture(!fetch.unchanged());
 			} catch (IOException e) {
 				return CompletableFuture.failedFuture(e);

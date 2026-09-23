@@ -113,11 +113,11 @@ class ConditionalFetchTest {
 			server.store.put("head", head);
 			server.store.put("journal", journal);
 			try (DownloadClient client = client(server, "test-secret")) {
-				var unchangedHead = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), HashUtils.sha1(head), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var unchangedHead = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), new PackTransport.DocumentConditional(HashUtils.sha1(head), null), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertNull(unchangedHead.path());
 				assertTrue(unchangedHead.unchanged());
 
-				var unchangedJournal = client.downloadDocument("journal".getBytes(StandardCharsets.UTF_8), directory.resolve("journal"), HashUtils.sha1(journal), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var unchangedJournal = client.downloadDocument("journal".getBytes(StandardCharsets.UTF_8), directory.resolve("journal"), new PackTransport.DocumentConditional(HashUtils.sha1(journal), null), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertNull(unchangedJournal.path());
 				assertTrue(unchangedJournal.unchanged());
 				assertFalse(Files.exists(directory.resolve("head")));
@@ -134,11 +134,11 @@ class ConditionalFetchTest {
 			server.store.put("head", oldHead);
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("head");
-				var first = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, HashUtils.sha1(oldHead), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var first = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, new PackTransport.DocumentConditional(HashUtils.sha1(oldHead), null), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertTrue(first.unchanged());
 
 				server.store.put("head", newHead);
-				var second = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, HashUtils.sha1(oldHead), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var second = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, new PackTransport.DocumentConditional(HashUtils.sha1(oldHead), null), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertFalse(second.unchanged());
 				assertEquals(destination, second.path());
 				assertArrayEquals(newHead, Files.readAllBytes(destination));
@@ -155,7 +155,7 @@ class ConditionalFetchTest {
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("head");
 				// The host ignored the conditional and sent the full body; the hash-compare is the ground truth.
-				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, HashUtils.sha1(head), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, new PackTransport.DocumentConditional(HashUtils.sha1(head), null), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertEquals(destination, fetch.path());
 				assertTrue(fetch.unchanged());
 				assertArrayEquals(head, Files.readAllBytes(destination));
@@ -236,7 +236,7 @@ class ConditionalFetchTest {
 			server.store.put("head", head);
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("head");
-				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, HashUtils.sha1(head), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, new PackTransport.DocumentConditional(HashUtils.sha1(head), null), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertEquals(destination, fetch.path());
 				assertTrue(fetch.unchanged(), "the decoded body hash still reads as unchanged");
 				assertArrayEquals(head, Files.readAllBytes(destination));
@@ -491,6 +491,34 @@ class ConditionalFetchTest {
 	}
 
 	/** One TLS server speaking the HTTP contract side against an in-memory object store. */
+
+	/** The S3 class of host: ETags are foreign tokens, and only the host's own token in a dual validator earns a 304. */
+	@Test
+	void aForeignEtagHostAnswersTheDualValidatorAndIsReplayed(@TempDir Path directory) throws Exception {
+		try (ContractServer server = new ContractServer()) {
+			server.foreignEtags.set(true);
+			byte[] head = "head-document-for-a-foreign-etag-host".getBytes(StandardCharsets.UTF_8);
+			server.store.put("head", head);
+			String sha1 = HashUtils.sha1(head);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("head");
+				// First contact is unconditional and carries the host's own etag home for next time.
+				var first = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertEquals(destination, first.path());
+				assertEquals(ContractServer.foreignEtag(head), first.etag());
+
+				// The dual validator - our sha1 first, the host's token behind it - matches on the host's side: 304.
+				var second = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination,
+						new PackTransport.DocumentConditional(sha1, first.etag()), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertNull(second.path());
+				assertTrue(second.unchanged());
+				assertArrayEquals(head, Files.readAllBytes(destination));
+				// One validator-carrying request: the dual value (its embedded quotes read as two list items in the toString).
+				assertEquals(List.of('"' + sha1 + "\", " + ContractServer.foreignEtag(head)), server.ifNoneMatchLog);
+			}
+		}
+	}
+
 	static final class ContractServer implements AutoCloseable {
 		private final ServerSocket server;
 		private final SSLContext context;
@@ -509,6 +537,8 @@ class ConditionalFetchTest {
 		final AtomicBoolean chunkedObjects = new AtomicBoolean(false);
 		final AtomicBoolean delayFinalChunk = new AtomicBoolean(false);
 		final AtomicBoolean lastResponseZstd = new AtomicBoolean(false);
+		final AtomicBoolean foreignEtags = new AtomicBoolean(false); // S3-style: ETags are MD5 tokens, never our sha1
+		final List<String> ifNoneMatchLog = new CopyOnWriteArrayList<>();
 		final AtomicBoolean sawAcceptEncoding = new AtomicBoolean(false);
 		/** When set, a plain 200 response carries this raw Transfer-Encoding value on top of its Content-Length. */
 		final AtomicReference<String> extraTransferEncoding = new AtomicReference<>();
@@ -603,6 +633,7 @@ class ConditionalFetchTest {
 					requests.add(request.path);
 					if (secretRecorded.compareAndSet(false, true)) firstAuthorization.complete(request.authorization);
 					if (request.acceptEncoding != null) sawAcceptEncoding.set(true);
+				if (request.ifNoneMatch != null) ifNoneMatchLog.add(request.ifNoneMatch);
 					CountDownLatch pipeline = expectedPipeline;
 					if (pipeline != null) pipeline.countDown();
 					responder.execute(() -> answer(socket, out, request, pipeline, answering));
@@ -651,6 +682,18 @@ class ConditionalFetchTest {
 					out.write(content);
 					out.flush();
 					socket.close();
+					return;
+				}
+				if (!request.path.startsWith("/objects/") && foreignEtags.get()) {
+					// The S3 class of host: ETag is an MD5 token, and only a matching token in the validator list earns a
+					// 304 - our sha1 is invisible to it, exactly like a real bucket.
+					String etag = foreignEtag(content);
+					if (request.ifNoneMatch != null && List.of(request.ifNoneMatch.split(",")).stream()
+							.map(String::trim).anyMatch(etag::equals)) {
+						respond(out, "304 Not Modified", new byte[0], "ETag: " + etag);
+						return;
+					}
+					respond(out, "200 OK", content, "ETag: " + etag);
 					return;
 				}
 				if (!request.path.startsWith("/objects/") && request.ifNoneMatch != null && cooperate.get()
@@ -791,6 +834,15 @@ class ConditionalFetchTest {
 		}
 
 		private record Request(String path, String authorization, String ifNoneMatch, String range, String acceptEncoding) {}
+
+		/** The S3-style validator minted for one document's bytes: an MD5 token in quotes, never our sha1. */
+		static String foreignEtag(byte[] content) {
+			try {
+				return '"' + java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("MD5").digest(content)) + '"';
+			} catch (java.security.NoSuchAlgorithmException e) {
+				throw new IllegalStateException(e);
+			}
+		}
 
 		private static Request parseRequest(String head) {
 			String[] lines = head.split("\r\n", -1);

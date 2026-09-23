@@ -395,12 +395,12 @@ class DownloadManagerPlatformTest {
 		}
 
 		@Override
-		public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer progress) {
+		public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, PackTransport.DocumentConditional conditional, IntConsumer progress) {
 			return CompletableFuture.failedFuture(new IOException("documents are not part of this test"));
 		}
 
 		@Override
-		public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, OutputStream tap) {
+		public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, PackTransport.DocumentConditional conditional, OutputStream tap) {
 			return CompletableFuture.failedFuture(new IOException("documents are not part of this test"));
 		}
 
