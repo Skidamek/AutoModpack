@@ -380,11 +380,26 @@ public final class ClientGenerationStore {
 		return head != null && entry.contentToken().equals(head.contentToken) ? head.waitingMusicSha1 : "";
 	}
 
+	/**
+	 * One mirror can carry several generations per content token: a policy-only publish changes the policy document
+	 * while the file tree - and with it the token - stays put. Resolution is newest-first and prefers the newest entry
+	 * whose policy document the client witnessed, because the CAS only ever stores policies of fetched heads and older
+	 * same-token policies may never have existed locally. An entry whose policy object is absent can never silently
+	 * stand in for one that is present; when nothing reconstructs, the newest token match is returned for its
+	 * missing-object error, naming the policy sha1 the server currently serves.
+	 */
 	private JournalEntry mirrorEntry(String modpackId, String contentToken) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		String normalizedToken = HashUtils.normalizeSha1(contentToken);
-		for (JournalEntry entry : new JournalMirror(storage).entries(normalizedModpackId))
-			if (entry.contentToken().equals(normalizedToken)) return entry;
+		JournalEntry newest = null;
+		JournalEntry newestWitnessed = null;
+		for (JournalEntry entry : new JournalMirror(storage).entries(normalizedModpackId)) {
+			if (!entry.contentToken().equals(normalizedToken)) continue;
+			newest = entry;
+			if (Files.exists(storage.objectFile(ClientObjectStore.normalizeHash(entry.policySha1())), LinkOption.NOFOLLOW_LINKS)) newestWitnessed = entry;
+		}
+		if (newestWitnessed != null) return newestWitnessed;
+		if (newest != null) return newest;
 		throw new IOException("The journal mirror has no entry for generation " + normalizedToken + ": " + normalizedModpackId);
 	}
 
