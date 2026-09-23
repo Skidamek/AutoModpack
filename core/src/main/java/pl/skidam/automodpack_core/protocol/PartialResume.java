@@ -36,7 +36,7 @@ public final class PartialResume {
 		return size;
 	}
 
-	private static void deleteQuietly(Path path) {
+	static void deleteQuietly(Path path) {
 		try {
 			Files.deleteIfExists(path);
 		} catch (IOException ignored) {

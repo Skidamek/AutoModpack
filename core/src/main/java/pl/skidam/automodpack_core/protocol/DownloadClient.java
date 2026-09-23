@@ -15,7 +15,6 @@ import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -24,8 +23,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 
@@ -349,13 +350,19 @@ public class DownloadClient implements PackTransport {
 	}
 
 	private void reapLanes() {
-		for (Iterator<Connection> iterator = lanes.iterator(); iterator.hasNext();) {
-			Connection connection = iterator.next();
-			if (!connection.isActive()) {
-				iterator.remove();
-				WireTrace.log("LANE_REAP", "conn", connection.traceId(), "lanes", lanes.size());
-				closeQuietly(connection);
-			}
+		List<Connection> dead = null;
+		for (Connection connection : lanes) {
+			if (connection.isActive()) continue;
+			if (dead == null) dead = new ArrayList<>();
+			dead.add(connection);
+		}
+		if (dead == null) return;
+		// Removed before closing: closing a lane fails its pending takes synchronously, which can re-enter the pool on
+		// the same thread, and a nested reap must see a structurally consistent list, not an iterator mid-removal.
+		lanes.removeAll(dead);
+		for (Connection connection : dead) {
+			WireTrace.log("LANE_REAP", "conn", connection.traceId(), "lanes", lanes.size());
+			closeQuietly(connection);
 		}
 	}
 
@@ -415,13 +422,6 @@ public class DownloadClient implements PackTransport {
 		return PartialResume.offset(destination, fileSize);
 	}
 
-	private static void deleteQuietly(Path path) {
-		try {
-			Files.deleteIfExists(path);
-		} catch (IOException ignored) {
-		}
-	}
-
 	/**
 	 * One transfer's tiling, window accounting and completion barrier. The first take rides the credit acquired at
 	 * dispatch and covers the streamer's head chunk; every further take acquires its own credit and claims the
@@ -429,7 +429,7 @@ public class DownloadClient implements PackTransport {
 	 * transfer. All bookkeeping runs inside the transfer lock, one thread at a time; the pacer lock is always
 	 * taken either alone or inside the transfer lock, never the other way round.
 	 */
-	private final class ObjectTransfer {
+	final class ObjectTransfer {
 		// Survives two consecutive lane deaths (each retry picks a fresh lane via laneCounter); a third failure means the server, not a lane, is gone.
 		private static final int MAX_TAKE_ATTEMPTS = 3;
 
@@ -479,7 +479,7 @@ public class DownloadClient implements PackTransport {
 			long headEnd = openEnded ? -1 : Math.min(offset + (long) WIRE_CHUNK_BYTES, fileSize) - 1;
 			int lane = Math.floorMod(laneCounter.getAndIncrement(), LANES);
 			LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", lane, offset, headEnd, objectName());
-			submitTake(new Take(offset, headEnd, lane, 1), new AtomicLong());
+			submitTake(new Take(offset, headEnd, lane, 1, 0), new AtomicLong());
 			if (!openEnded) pump();
 			return future;
 		}
@@ -521,20 +521,31 @@ public class DownloadClient implements PackTransport {
 			long stealFrom = Math.max(floor(), cursor - (long) WIRE_CHUNK_BYTES);
 			cursor = stealFrom;
 			pendingItems++;
-			return new Take(stealFrom, takeEnd, Math.floorMod(laneCounter.getAndIncrement(), LANES), 1);
+			return new Take(stealFrom, takeEnd, Math.floorMod(laneCounter.getAndIncrement(), LANES), 1, 0);
 		}
 
 		private void submitTake(Take take, AtomicLong takeBytes) {
 			long takeStart = System.nanoTime();
-			// Same call pattern as the app's progress hook: decoded byte counts per read chunk.
+			long budgetNanos = takeBudgetNanos(sliceBytes(take));
+			AtomicReference<Connection> lane = new AtomicReference<>();
+			AtomicBoolean fused = new AtomicBoolean();
+			// Same call pattern as the app's progress hook: decoded byte counts per read chunk, reported only past the
+			// retried attempt's watermark so already-counted bytes never re-fire. Past the rate-floor budget the lane is
+			// closed asynchronously - never synchronously from the reader's own callback stack - and the retry ladder
+			// recovers the take; a persistently trickling host burns its attempts and fails the transfer loudly.
 			IntConsumer chunkCallback = bytes -> {
-				takeBytes.addAndGet(bytes);
-				if (progress != null) progress.accept(bytes);
+				long cumulative = takeBytes.addAndGet(bytes);
+				long counted = Math.min(bytes, Math.max(0, cumulative - take.progressBase()));
+				if (progress != null && counted > 0) progress.accept((int) counted);
+				if (System.nanoTime() - takeStart > budgetNanos && fused.compareAndSet(false, true) && lane.get() != null) NET_EXECUTOR.execute(() -> closeQuietly(lane.get()));
 			};
 			CompletableFuture<Path> future;
 			try {
 				// A stale range already surfaces as StaleRangeException from the response parse; no mapping happens here.
-				future = withSlot(take.lane(), connection -> connection.sendDownloadFile(sha1Hex, destination, chunkCallback, take.start(), take.end(), null, true, -1L, fileSize));
+				future = withSlot(take.lane(), connection -> {
+					lane.set(connection);
+					return connection.sendDownloadFile(sha1Hex, destination, chunkCallback, take.start(), take.end(), null, true, -1L, fileSize);
+				});
 			} catch (Throwable submitFailure) {
 				// The submit never produced a request: the settle path retries or books it like any other failure.
 				WireTrace.log("TAKE_FAIL", "object", objectName(), "item", take.start() + "-" + take.end(), "error", submitFailure);
@@ -544,12 +555,23 @@ public class DownloadClient implements PackTransport {
 			future.whenComplete((path, takeError) -> onTakeSettled(take, takeBytes, System.nanoTime() - takeStart, takeError));
 		}
 
+		/** The take's slice size: a bounded take's exact range, or the open-ended tail behind its start. */
+		private long sliceBytes(Take take) {
+			return take.end() >= 0 ? take.end() - take.start() + 1 : fileSize - take.start();
+		}
+
+		/** The trickle fuse budget: a slice must drain within the rate floor, but never inside the write-stall window. */
+		static long takeBudgetNanos(long sliceBytes) {
+			if (sliceBytes > Long.MAX_VALUE / 1_000_000_000L) return Long.MAX_VALUE; // the honest budget for a >8.6 GiB slice saturates instead of overflowing negative
+			return Math.max(TRANSFER_WRITE_STALL_TIMEOUT.toNanos(), sliceBytes * 1_000_000_000L / TAKE_RATE_FLOOR_BYTES_PER_SECOND);
+		}
+
 		private void onTakeSettled(Take take, AtomicLong takeBytes, long nanos, Throwable takeError) {
 			if (takeError instanceof RangeIgnoredException) markRangeIgnoredHost();
 			if (takeError != null && take.attempt() < MAX_TAKE_ATTEMPTS && retryWorth(takeError)) {
 				WireTrace.log("TAKE_RETRY", "object", objectName(), "item", take.start() + "-" + take.end(), "attempt", take.attempt(), "error", takeError);
 				// The credit stays held and the barrier stays charged: the retried range is the same one unsettled unit of work.
-				submitTake(new Take(take.start(), take.end(), Math.floorMod(laneCounter.getAndIncrement(), LANES), take.attempt() + 1), takeBytes);
+				submitTake(new Take(take.start(), take.end(), Math.floorMod(laneCounter.getAndIncrement(), LANES), take.attempt() + 1, takeBytes.get()), takeBytes);
 				return;
 			}
 			pacer.settle(verdictOf(takeError), takeBytes.get(), nanos, take.lane());
@@ -594,7 +616,7 @@ public class DownloadClient implements PackTransport {
 			if (failure != null) {
 				if (positionedWrites) {
 					// The positioned writes left holes behind the streamed prefix: the partial is worthless for resume.
-					deleteQuietly(destination);
+					PartialResume.deleteQuietly(destination);
 				}
 				WireTrace.log("DONE", "object", objectName(), "status", "fail:" + Throwables.detail(failure));
 				future.completeExceptionally(failure);
@@ -608,7 +630,7 @@ public class DownloadClient implements PackTransport {
 			return destination.getFileName().toString();
 		}
 
-		private record Take(long start, long end, int lane, int attempt) {}
+		private record Take(long start, long end, int lane, int attempt, long progressBase) {}
 	}
 
 	/** The waiting-track fetch: one identity GET with no negotiation and no resume, aborted past maxBytes. */
@@ -633,10 +655,13 @@ public class DownloadClient implements PackTransport {
 	@Override
 	public void abortTransfers() {
 		List<Connection> connections;
+		List<SlotWaiter<?>> waiters;
 		synchronized (poolLock) {
 			if (closed) return;
 			connections = new ArrayList<>(lanes);
+			waiters = new ArrayList<>(slotWaiters);
 			lanes.clear();
+			slotWaiters.clear();
 		}
 		// Flagged before the lanes close: a take that fails on the close must already see its transfer as aborted, or
 		// its retry slips past this method onto the freshly reopened pool and completes a transfer nobody wants.
@@ -646,9 +671,9 @@ public class DownloadClient implements PackTransport {
 		}
 		transfers.forEach(ObjectTransfer::abort);
 		connections.forEach(DownloadClient::closeQuietly);
-		synchronized (poolLock) {
-			if (!closed) pumpPool();
-		}
+		// Queued waiters never reach a lane: a cancelled run sends no requests, so no pump reopens connections for them.
+		IOException aborted = new IOException("Download aborted");
+		waiters.forEach(waiter -> waiter.future().completeExceptionally(aborted));
 	}
 
 	@Override

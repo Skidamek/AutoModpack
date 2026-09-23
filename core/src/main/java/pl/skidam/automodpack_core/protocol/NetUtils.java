@@ -50,6 +50,11 @@ public class NetUtils {
 	// response completes a STREAM_WRITE_BYTES write at least every ~17 s at the drain floor (~31 KB/s per client),
 	// 3.5x inside this window - so the reap never interrupts a live transfer.
 	public static final int HTTP_IDLE_REAP_SECONDS = 60;
+	// The client's trickle fuse floor: a take draining under this rate is fused past its takeBudgetNanos. 4x under the
+	// 62.5 KB/s one lane's congested share of the 5 Mbps reference uplink gives (125 KB/s per lane, halved once by the
+	// pacer) and 3x over the 5 KB/s trickle probe that parked a real sync forever, so only a broken take ever touches
+	// it - a 4 MiB take must then complete within ~256 s.
+	public static final int TAKE_RATE_FLOOR_BYTES_PER_SECOND = 16 * 1024;
 	// Pre-configuration keepalive cadence: NAT mappings and holepunch relay bindings typically decay after 30-60s of
 	// silence, so a 20s heartbeat sits well inside that band while costing the parked client one tiny ranged GET.
 	public static final Duration PRE_CONFIGURATION_KEEPALIVE_INTERVAL = Duration.ofSeconds(20);
