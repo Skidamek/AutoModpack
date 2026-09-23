@@ -302,8 +302,8 @@ public class DownloadClient implements PackTransport {
 	private <T> CompletableFuture<T> withSlot(int lane, long debit, Function<Connection, CompletableFuture<T>> operation) {
 		CompletableFuture<T> future = new CompletableFuture<>();
 		synchronized (poolLock) {
-			if (closed) {
-				future.completeExceptionally(new IOException("Download client is closed"));
+			if (closed || aborted) {
+				future.completeExceptionally(deadClientError());
 				return future;
 			}
 			slotWaiters.add(new SlotWaiter<>(lane, debit, operation, future));
@@ -320,15 +320,15 @@ public class DownloadClient implements PackTransport {
 			if (connection == null) break;
 			slotWaiters.remove().dispatch(connection);
 		}
-		while (!closed && !slotWaiters.isEmpty() && lanes.size() + openingConnections < LANES) {
+		while (!closed && !aborted && !slotWaiters.isEmpty() && lanes.size() + openingConnections < LANES) {
 			SlotWaiter<?> waiter = slotWaiters.remove();
 			openingConnections++;
 			openConnectionAsync().whenComplete((connection, error) -> {
 				synchronized (poolLock) {
 					openingConnections--;
-					if (closed) {
+					if (closed || aborted) {
 						if (connection != null) closeQuietly(connection);
-						waiter.future().completeExceptionally(new IOException("Download client is closed"));
+						waiter.future().completeExceptionally(deadClientError());
 					} else if (error != null) {
 						WireTrace.log("LANE_FAIL", "lane", waiter.lane(), "error", Throwables.unwrap(error));
 						waiter.future().completeExceptionally(Throwables.unwrap(error));
@@ -635,6 +635,11 @@ public class DownloadClient implements PackTransport {
 		return withSlot(0, WIRE_CHUNK_BYTES, connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex, null, tap));
 	}
 
+	/** The error a submit is refused with once the client is closed or aborted; aborted names the abort, every other death reads as closed. */
+	private IOException deadClientError() {
+		return new IOException(aborted ? "Download aborted" : "Download client is closed");
+	}
+
 	/** Drops every pooled and in-flight transfer connection so a cancelled run cannot poison the next one. */
 	@Override
 	public void abortTransfers() {
@@ -651,7 +656,8 @@ public class DownloadClient implements PackTransport {
 			slotWaiters.clear();
 		}
 		connections.forEach(DownloadClient::closeQuietly);
-		// Queued waiters never reach a lane: a cancelled run sends no requests, so no pump reopens connections for them.
+		// Queued waiters never reach a lane and later submits are refused outright by the aborted gate, so no pump
+		// reopens connections: a cancelled run sends no requests.
 		IOException aborted = new IOException("Download aborted");
 		waiters.forEach(waiter -> waiter.future().completeExceptionally(aborted));
 	}

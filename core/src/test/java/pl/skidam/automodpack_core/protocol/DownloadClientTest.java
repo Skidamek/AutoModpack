@@ -31,6 +31,7 @@ import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
@@ -207,7 +208,7 @@ class DownloadClientTest {
 	}
 
 	@Test
-	void abortTransfersFailsInFlightDownloadAndAllowsARetry(@TempDir Path directory) throws Exception {
+	void abortTransfersFailsTheInFlightDownloadAndAnAbortedClientSendsNoMoreRequests(@TempDir Path directory) throws Exception {
 		KeyPair keyPair = NetUtils.generateKeyPair();
 		X509Certificate certificate = NetUtils.selfSign(keyPair);
 		String fingerprint = NetUtils.getFingerprint(certificate);
@@ -219,8 +220,13 @@ class DownloadClientTest {
 				assertTrue(server.receivedRequest().await(AWAIT_SECONDS, TimeUnit.SECONDS));
 				client.abortTransfers();
 				assertThrows(Exception.class, () -> first.get(AWAIT_SECONDS, TimeUnit.SECONDS));
-				server.allowResponses(2);
-				assertEquals(directory.resolve("second"), client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("second"), -1L, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				int connectionsAtAbort = server.acceptedConnections();
+
+				// The aborted gate stays shut: a submit after the abort is refused without opening a lane, so a cancelled run sends no requests.
+				ExecutionException rejected = assertThrows(ExecutionException.class,
+						() -> client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("second"), -1L, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertEquals("Download aborted", rejected.getCause().getMessage());
+				assertEquals(connectionsAtAbort, server.acceptedConnections(), "an aborted client must never reopen a lane");
 			}
 		}
 	}
