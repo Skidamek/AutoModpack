@@ -9,7 +9,13 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Locale;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.IntConsumer;
 
 import org.apache.logging.log4j.LogManager;
@@ -20,6 +26,7 @@ import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.protocol.StaleRangeException;
 import pl.skidam.automodpack_core.protocol.WireCodec;
+import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.HttpClientPool;
 
@@ -29,6 +36,20 @@ public class HttpFileDownloader {
 
 	// A download worker reuses one 512 KiB read buffer for every attempt instead of allocating half a MiB per call.
 	private static final ThreadLocal<byte[]> READ_BUFFERS = ThreadLocal.withInitial(() -> new byte[NetUtils.READ_BUFFER_BYTES]);
+
+	// The body-stall tripwire, the same receipt as the wire's TRANSFER_WRITE_STALL_TIMEOUT: a CDN body that delivers
+	// zero bytes for 90 s is gone. A live link resets the window with every read - at the receipted drain floor
+	// (~31 KB/s, the 20-client share of a 5 Mbps uplink) a 512 KiB READ_BUFFER_BYTES read completes every ~17 s, 5x
+	// inside the window - so only a stalled or silently dropped body ever touches it. The request timeout covers the
+	// response head only; tripping closes the body stream under its blocked reader, the read throws, and the platform
+	// retry ladder recovers the attempt from the stored partial.
+	private static final Duration BODY_STALL_TIMEOUT = NetUtils.TRANSFER_WRITE_STALL_TIMEOUT;
+	// The fuse ticks six times inside its window, so a stall trips at most one tick past the 90 s line.
+	private static final long STALL_FUSE_TICK_SECONDS = 15;
+
+	/** The one daemon checker for every in-flight platform body; it lives as long as the JVM, like NET_EXECUTOR. */
+	private static final ScheduledExecutorService BODY_STALL_WATCHDOG = Executors.newSingleThreadScheduledExecutor(
+			new CustomThreadFactoryBuilder().setNameFormat("AutoModpackBodyStallFuse").setDaemon(true).build());
 
 	/**
 	 * Downloads a file from a URL to a target path using HTTP/2 if available.
@@ -98,15 +119,33 @@ public class HttpFileDownloader {
 				InputStream in = codec == null ? rawIn : codec.unwrap(rawIn);
 				OutputStream out = writeOffset > 0 ? LocalFileWriter.openAt(target, writeOffset) : LocalFileWriter.open(target)) {
 
-			byte[] buffer = READ_BUFFERS.get();
-			int bytesRead;
-			while ((bytesRead = in.read(buffer)) != -1) {
-				if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
-				out.write(buffer, 0, bytesRead);
-
-				if (progressAction != null) progressAction.accept(bytesRead);
+			AtomicLong lastProgressNanos = new AtomicLong(System.nanoTime());
+			ScheduledFuture<?> stallFuse = armBodyStallFuse(rawIn, lastProgressNanos, target.getFileName());
+			try {
+				byte[] buffer = READ_BUFFERS.get();
+				int bytesRead;
+				while ((bytesRead = in.read(buffer)) != -1) {
+					if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+					out.write(buffer, 0, bytesRead);
+					lastProgressNanos.set(System.nanoTime());
+					if (progressAction != null) progressAction.accept(bytesRead);
+				}
+			} finally {
+				stallFuse.cancel(false);
 			}
 		}
+	}
+
+	/** The per-download body fuse: zero bytes for BODY_STALL_TIMEOUT closes the body stream under its blocked reader. */
+	private static ScheduledFuture<?> armBodyStallFuse(InputStream body, AtomicLong lastProgressNanos, Object fileName) {
+		return BODY_STALL_WATCHDOG.scheduleWithFixedDelay(() -> {
+			if (System.nanoTime() - lastProgressNanos.get() < BODY_STALL_TIMEOUT.toNanos()) return;
+			LOGGER.warn("The platform download body of {} delivered no bytes for {} s; closing it for the retry ladder", fileName, BODY_STALL_TIMEOUT.toSeconds());
+			try {
+				body.close();
+			} catch (IOException ignored) {
+			}
+		}, STALL_FUSE_TICK_SECONDS, STALL_FUSE_TICK_SECONDS, TimeUnit.SECONDS);
 	}
 
 	private HttpResponse<InputStream> send(DownloadSource source, URI uri, boolean authenticate, long offset, HttpClient client, Path target)
