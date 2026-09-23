@@ -233,12 +233,18 @@ class Connection implements AutoCloseable {
 				return;
 			}
 			if (settled) {
+				boolean polled;
 				synchronized (gate) {
-					Pending<?> completed = pending.pollFirst();
 					// The debit releases before the pool's callback runs, so the waiter the freed room admits sees the
 					// released bytes in this same call stack - a settle never idles a lane that still has work.
-					unsettledBytes -= completed.debit;
+					// A concurrent submit whose write just failed can empty the queue between the peek above and this
+					// settle: its failPending already zeroed the books, freed the slot, and killed the lane, so the
+					// reader exits with it instead of settling a request that is no longer queued.
+					Pending<?> completed = pending.pollFirst();
+					polled = completed != null;
+					if (polled) unsettledBytes -= completed.debit;
 				}
+				if (!polled) return;
 				try {
 					onSlotFreed.run();
 				} catch (Throwable failure) {
