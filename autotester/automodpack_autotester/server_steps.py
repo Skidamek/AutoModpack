@@ -195,9 +195,9 @@ def _launch_server(ctx: Context):
     if ":" not in img:
         tag = str(settings.get("images", {}).get("serverTagTemplate", "java{java}")).format(java=target.java)
         img = f"{img}:{tag}"
-    # NET_ADMIN is only needed so the --loss qdisc can be applied from inside; never granted otherwise.
+    # NET_ADMIN is only needed so the --loss / --server-netem qdiscs can be applied from inside; never granted otherwise.
     _run_container(name=ctx.srv_name, image=img, network=ctx.net_name, env=env, mounts=mounts, labels=resource_labels(ctx.resource_scope),
-                   cap_add=["NET_ADMIN"] if ctx.loss else None)
+                   cap_add=["NET_ADMIN"] if ctx.loss or ctx.server_netem else None)
 
 
 @verb("launch_server")
