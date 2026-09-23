@@ -21,6 +21,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -49,6 +50,13 @@ public class DownloadClient implements PackTransport {
 	/** The transport's own async callbacks (connection IO, manifest and platform fetches); app work belongs to the app's executor. */
 	public static final ExecutorService NET_EXECUTOR = Executors.newCachedThreadPool(r -> {
 		Thread t = new Thread(r, "automodpack-net");
+		t.setDaemon(true);
+		return t;
+	});
+
+	/** One daemon clock for delayed take retries (a throttled host's Retry-After); the wait never parks a lane's reader. */
+	private static final ScheduledExecutorService RETRY_SCHEDULER = Executors.newSingleThreadScheduledExecutor(r -> {
+		Thread t = new Thread(r, "automodpack-retry-clock");
 		t.setDaemon(true);
 		return t;
 	});
@@ -558,6 +566,17 @@ public class DownloadClient implements PackTransport {
 		}
 
 		/**
+		 * The wait before one throttled retry: the provider's Retry-After when it sent one (already clamped to the
+		 * network timeout by the wire), else a bounded default with jitter so a stampede of clients does not retry in
+		 * lockstep. Plain failures - lane deaths, timeouts - retry immediately as always.
+		 */
+		static long retryDelayMillis(Throwable takeError) {
+			if (!(takeError instanceof HostThrottleException throttled)) return 0;
+			if (throttled.retryAfterMillis() > 0) return throttled.retryAfterMillis();
+			return 1000 + java.util.concurrent.ThreadLocalRandom.current().nextLong(1000);
+		}
+
+				/**
 		 * The trickle fuse budget: a slice must drain within the {@link NetUtils#TAKE_RATE_FLOOR_BYTES_PER_SECOND}
 		 * rate (a 4 MiB slice gets ~1024 s, its congested-share drain at 6.25 KiB/s needs ~655 s), but never inside
 		 * the 90 s write-stall window.
@@ -571,9 +590,17 @@ public class DownloadClient implements PackTransport {
 			if (takeError instanceof RangeIgnoredException) markRangeIgnoredHost();
 			if (takeError != null && take.attempt() < MAX_TAKE_ATTEMPTS && retryWorth(takeError)) {
 				takeRetries.incrementAndGet();
-				WireTrace.log("TAKE_RETRY", "object", objectName(), "item", take.start() + "-" + take.end(), "attempt", take.attempt(), "error", takeError);
-				// The barrier stays charged: the retried range is the same one unsettled unit of work.
-				submitTake(new Take(take.start(), take.end(), Math.floorMod(laneCounter.getAndIncrement(), LANES), take.attempt() + 1, takeBytes.get()), takeBytes);
+				// The barrier stays charged: the retried range is the same one unsettled unit of work. A throttled
+				// answer waits out its window on the retry clock instead of an immediate re-issue - the wait never
+				// parks a lane's reader, and an abort while waiting settles the take as cancelled, not restarted.
+				long delayMillis = retryDelayMillis(takeError);
+				Runnable retry = () -> {
+					if (aborted) onTakeSettled(take, takeBytes, new IOException("Download aborted"));
+					else submitTake(new Take(take.start(), take.end(), Math.floorMod(laneCounter.getAndIncrement(), LANES), take.attempt() + 1, takeBytes.get()), takeBytes);
+				};
+				if (delayMillis > 0) RETRY_SCHEDULER.schedule(retry, delayMillis, TimeUnit.MILLISECONDS);
+				else retry.run();
+				WireTrace.log("TAKE_RETRY", "object", objectName(), "item", take.start() + "-" + take.end(), "attempt", take.attempt(), "delay", delayMillis + "ms", "error", takeError);
 				return;
 			}
 			// The take's whole life is over: its cumulative count is the honest number of bytes its range put on the wire.

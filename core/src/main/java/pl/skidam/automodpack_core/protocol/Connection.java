@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.protocol;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.PIPELINE_MAX_REQUESTS;
+import static pl.skidam.automodpack_core.protocol.NetUtils.NETWORK_TIMEOUT;
 import static pl.skidam.automodpack_core.protocol.NetUtils.PIPELINE_WINDOW_BYTES;
 import static pl.skidam.automodpack_core.protocol.NetUtils.READ_BUFFER_BYTES;
 import static pl.skidam.automodpack_core.protocol.NetUtils.USER_AGENT;
@@ -48,8 +49,9 @@ class Connection implements AutoCloseable {
 	private static final int MAX_REDIRECTS = 3;
 	// Response header lines are tiny; a line past this or a block of this many lines is a hostile or broken peer.
 	private static final int MAX_HEADER_LINES = 128;
-	/** The document verdict for one conditional response; the body hash decides, never the status alone. The raw {@code etag} rides along so document fetches can cache the host's own validator. */
-	private record ResponseHead(int status, Long contentLength, String contentRange, String contentEncoding, String location, String etag, boolean connectionClose, boolean chunked, boolean http10) {}
+	/** The document verdict for one conditional response; the body hash decides, never the status alone. The raw {@code etag} rides along so document fetches can cache the host's own validator, and a throttled answer's {@code retryAfterSeconds} drives the retry delay. */
+	private record ResponseHead(int status, Long contentLength, String contentRange, String contentEncoding, String location, String etag, Long retryAfterSeconds, boolean connectionClose, boolean chunked,
+			boolean http10) {}
 
 	private final SSLSocket socket;
 	private final Socket transport;
@@ -451,6 +453,16 @@ class Connection implements AutoCloseable {
 				future.complete(destination);
 				return;
 			}
+			if (head.status() == 503 || head.status() == 429) {
+				// A throttled host answers inside its own frame: discard exactly that frame and fail only this take,
+				// with the provider's Retry-After when given - the lane stays aligned and the retry ladder waits out
+				// the throttle window instead of burning attempts (and the lane) against a busy bucket.
+				discardBody(head);
+				long retryAfterMillis = head.retryAfterSeconds() == null ? -1
+						: Math.min(Math.max(head.retryAfterSeconds(), 0), NETWORK_TIMEOUT.toSeconds()) * 1000L;
+				future.completeExceptionally(new HostThrottleException(head.status(), retryAfterMillis));
+				return;
+			}
 			discardBody(head);
 			// A failed response is thrown, not completed quietly: the reader treats any failure on the connection as lost alignment and fails every pending request with it.
 			throw statusFailure(head, take.offset() > 0 || take.endInclusive() >= 0);
@@ -545,7 +557,16 @@ class Connection implements AutoCloseable {
 		String contentLengthValue = head.headerValue("content-length");
 		Long contentLength = contentLengthValue == null ? null : parseContentLength(contentLengthValue);
 		String connection = head.headerValue("connection");
-		return new ResponseHead(head.status(), contentLength, head.headerValue("content-range"), head.headerValue("content-encoding"), head.headerValue("location"), head.headerValue("etag"),
+		String retryAfter = head.headerValue("retry-after");
+		Long retryAfterSeconds = null;
+		if (retryAfter != null) {
+			try {
+				retryAfterSeconds = Long.parseLong(retryAfter.trim());
+			} catch (NumberFormatException unparseable) {
+				retryAfterSeconds = null; // date-form and garbage parse as absent: the ladder's default delay covers them
+			}
+		}
+		return new ResponseHead(head.status(), contentLength, head.headerValue("content-range"), head.headerValue("content-encoding"), head.headerValue("location"), head.headerValue("etag"), retryAfterSeconds,
 				head.http10() || hasConnectionToken(connection, "close"), chunkedFraming(head.headerValue("transfer-encoding"), head.http10()), head.http10());
 	}
 

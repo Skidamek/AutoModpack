@@ -22,6 +22,7 @@ import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -519,6 +520,41 @@ class ConditionalFetchTest {
 		}
 	}
 
+
+	/** A rate-capped bucket answers 503 + Retry-After: the take waits out the window and retries on the same lane, and its pipelined neighbor is untouched. */
+	@Test
+	void aThrottledObjectRetriesOnTheSameLaneWithoutKillingItsNeighbors(@TempDir Path directory) throws Exception {
+		try (ContractServer server = new ContractServer()) {
+			List<String> hashes = storeObjects(server, 2);
+			server.throttleNextObjectRequests(1, 1);
+			try (DownloadClient client = client(server, "test-secret")) {
+				// Object transfers carry the retry ladder: the throttled take waits out its Retry-After and lands byte-exact.
+				var first = client.downloadObject(hashes.get(0).getBytes(StandardCharsets.UTF_8), directory.resolve("throttled"),
+						server.store().get(hashes.get(0)).length, null);
+				var neighbor = client.downloadObject(hashes.get(1).getBytes(StandardCharsets.UTF_8), directory.resolve("neighbor"),
+						server.store().get(hashes.get(1)).length, null);
+				assertArrayEquals(server.store().get(hashes.get(0)), Files.readAllBytes(first.get(AWAIT_SECONDS, TimeUnit.SECONDS)));
+				assertArrayEquals(server.store().get(hashes.get(1)), Files.readAllBytes(neighbor.get(AWAIT_SECONDS, TimeUnit.SECONDS)));
+			}
+			assertEquals(1, server.connections.get(), "the throttled take must wait and retry on the same lane, not open a fresh one");
+		}
+	}
+
+
+	/** Stores {@code count} generated objects under their sha1 keys and returns the keys. */
+	private static List<String> storeObjects(ContractServer server, int count) {
+		List<String> hashes = new ArrayList<>();
+		byte[] seed = new byte[16];
+		for (int i = 0; i < count; i++) {
+			new SecureRandom().nextBytes(seed);
+			byte[] object = ("stored-object-" + new java.math.BigInteger(1, seed).toString(16)).getBytes(StandardCharsets.UTF_8);
+			String sha1 = HashUtils.sha1(object);
+			server.store().put(sha1, object);
+			hashes.add(sha1);
+		}
+		return hashes;
+	}
+
 	static final class ContractServer implements AutoCloseable {
 		private final ServerSocket server;
 		private final SSLContext context;
@@ -538,6 +574,14 @@ class ConditionalFetchTest {
 		final AtomicBoolean delayFinalChunk = new AtomicBoolean(false);
 		final AtomicBoolean lastResponseZstd = new AtomicBoolean(false);
 		final AtomicBoolean foreignEtags = new AtomicBoolean(false); // S3-style: ETags are MD5 tokens, never our sha1
+		final AtomicInteger throttleRemaining = new AtomicInteger();
+		final AtomicInteger throttleRetryAfterSeconds = new AtomicInteger(1);
+
+		/** Arms a burst throttle: the next {@code n} object requests answer 503 with the given Retry-After, like a rate-capped bucket. */
+		void throttleNextObjectRequests(int n, int retryAfterSeconds) {
+			throttleRetryAfterSeconds.set(retryAfterSeconds);
+			throttleRemaining.set(n);
+		}
 		final List<String> ifNoneMatchLog = new CopyOnWriteArrayList<>();
 		final AtomicBoolean sawAcceptEncoding = new AtomicBoolean(false);
 		/** When set, a plain 200 response carries this raw Transfer-Encoding value on top of its Content-Length. */
@@ -673,6 +717,10 @@ class ConditionalFetchTest {
 				byte[] content = key == null ? null : store.get(key);
 				if (content == null) {
 					respond(out, "404 Not Found", new byte[0]);
+					return;
+				}
+				if (request.path.startsWith("/objects/") && throttleRemaining.getAndDecrement() > 0) {
+					respond(out, "503 Service Unavailable", new byte[0], "Retry-After: " + throttleRetryAfterSeconds.get());
 					return;
 				}
 				// The barebones static host class without a Content-Length on documents: the body ends only with the

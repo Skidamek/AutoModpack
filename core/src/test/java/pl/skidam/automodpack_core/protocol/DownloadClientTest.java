@@ -72,6 +72,15 @@ class DownloadClientTest {
 		assertEquals(1_024_000_000_000L, DownloadClient.ObjectTransfer.takeBudgetNanos(4L * 1024 * 1024));
 	}
 
+	/** Throttled retries wait out the provider's window (clamped by the wire) or a bounded jittered default; plain failures retry immediately. */
+	@Test
+	void throttledRetryDelayHonorsRetryAfterAndJittersTheFallback() {
+		assertEquals(1000, DownloadClient.ObjectTransfer.retryDelayMillis(new HostThrottleException(503, 1000)));
+		long fallback = DownloadClient.ObjectTransfer.retryDelayMillis(new HostThrottleException(429, -1));
+		assertTrue(fallback >= 1000 && fallback < 2000, "the jittered default must stay in its bounded band: " + fallback);
+		assertEquals(0, DownloadClient.ObjectTransfer.retryDelayMillis(new IOException("a lane death retries at once")));
+	}
+
 	@Test
 	void localDestinationOpenFailureHasTypedStorageBoundary(@TempDir Path directory) throws Exception {
 		Path destination = Files.createDirectory(directory.resolve("destination"));
