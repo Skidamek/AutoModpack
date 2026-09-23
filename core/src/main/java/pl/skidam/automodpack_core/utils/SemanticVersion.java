@@ -9,16 +9,18 @@ import java.util.regex.Pattern;
 /**
  * A mod version split into numeric and alphabetical runs, ordered the way mod loaders order them: numbers
  * numerically with missing components as zero, alphabetical runs case-insensitively, a known pre-release
- * label (dev, a/alpha, b/beta, pre/preview, rc) below the plain release, and any other trailing runs above
- * it. Build metadata (+...) never affects ordering.
+ * label (dev, snapshot, a/alpha, b/beta, pre/preview, rc) below the plain release, and any other trailing
+ * runs above it - deliberate, because a suffixed variant ({@code 1.0.0-FABRIC}) usually denotes a newer
+ * build of the same release, while the ladder carries the labels whose ecosystem meaning is strictly
+ * older-than-release. Build metadata (+...) never affects ordering.
  */
 public record SemanticVersion(int major, int minor, int patch, List<Part> tail) implements Comparable<SemanticVersion> {
 
 	// Regex for basic X.Y.Z(-PRERELEASE)?
 	private static final Pattern VERSION_PATTERN = Pattern.compile("^(\\d+)\\.(\\d+)\\.(\\d+)(?:-(.+))?$");
 
-	private static final Map<String, Integer> PRE_RELEASE_RUNGS = Map.of("dev", 1, "a", 2, "alpha", 2, "b", 3, "beta", 3, "pre", 4, "preview", 4, "rc", 5);
-	private static final int RELEASE_RUNG = 6;
+	private static final Map<String, Integer> PRE_RELEASE_RUNGS = Map.of("dev", 1, "snapshot", 2, "a", 3, "alpha", 3, "b", 4, "beta", 4, "pre", 5, "preview", 5, "rc", 6);
+	private static final int RELEASE_RUNG = 7;
 
 	/** One maximal run of the version: a number or a case-folded alphabetical run; exactly one of the two is present. */
 	public record Part(long number, String alpha) {

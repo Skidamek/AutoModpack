@@ -11,6 +11,9 @@ class SemanticVersionTest {
 		assertEquals(0, compare("1.0.0+build.5", "1.0.0+build.2"));
 		assertEquals(0, compare("v1.2.3", "1.2.3"));
 		assertOrder("1.0.0-beta.1", "1.0.0-rc.1", "1.0.0");
+		assertOrder("1.0.0-dev", "1.0.0-SNAPSHOT", "1.0.0-alpha.1");
+		assertTrue(compare("1.0.0-SNAPSHOT", "1.0.0") < 0);
+		assertTrue(compare("1.0.0-fabric", "1.0.0") > 0);
 		assertTrue(compare("0.5.3f", "0.5.3") > 0);
 		assertTrue(compare("1.16", "1.16.5") < 0);
 		assertTrue(compare("1.19.2-v2", "1.19.2") > 0);
