@@ -346,6 +346,20 @@ class ModpackExecutorTest {
 			assertEquals(exported, executor.exportHttp(exportRoot));
 			assertEquals(exported, executor.exportHttp(Path.of("relative-export")));
 			assertTrue(Files.exists(server.resolve("relative-export").resolve(GenerationHosting.HEAD_DOCUMENT_KEY)));
+
+			// A synced tree serves keys in write order, so every object lands before the journal and the journal
+			// before the head: the head is the commit pointer and nothing may observe the new head beside the old
+			// journal. Copies carry their copy time, so the mtimes read as the write order (ties allowed).
+			long newestObject = 0;
+			try (var stream = Files.list(exportRoot.resolve("objects"))) {
+				for (Path object : stream.toList()) {
+					newestObject = Math.max(newestObject, Files.getLastModifiedTime(object).toMillis());
+				}
+			}
+			long journal = Files.getLastModifiedTime(exportRoot.resolve(GenerationHosting.JOURNAL_KEY)).toMillis();
+			long head = Files.getLastModifiedTime(exportRoot.resolve(GenerationHosting.HEAD_DOCUMENT_KEY)).toMillis();
+			assertTrue(newestObject <= journal, "every object must land before the journal");
+			assertTrue(journal <= head, "the journal must land before the head");
 		} finally {
 			executor.stop();
 			snapshot.restore();

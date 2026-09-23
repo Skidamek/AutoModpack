@@ -239,9 +239,11 @@ public class ModpackExecutor {
 		int written = 0, omitted = 0, unresolvable = 0;
 		for (Map.Entry<String, Path> entry : hosting.asMap().entrySet()) {
 			String key = entry.getKey();
+			// The reserved documents are written after every object, in Phase-A order below: a tree published by a
+			// copy tool (aws s3 sync, rclone) serves its keys in write order, and the head is the commit pointer.
+			if (isReservedDocument(key)) continue;
 			Path destination;
-			if (isReservedDocument(key)) destination = target.resolve(key);
-			else {
+			{
 				String sha1 = HashUtils.normalizeSha1(key);
 				Long served = platformServed.get(sha1);
 				if (served != null && served.longValue() == Files.size(entry.getValue())) {
@@ -260,6 +262,15 @@ public class ModpackExecutor {
 				continue;
 			}
 			copyAtomically(entry.getValue(), destination);
+			written++;
+		}
+		// Documents land after every object, journal before head: a bucket synced with aws s3 sync or rclone serves
+		// its keys in write order, so a client can never see the new head beside the old journal - the head is the
+		// commit pointer of the whole tree and lands last.
+		for (String key : new String[]{GenerationHosting.JOURNAL_KEY, GenerationHosting.HEAD_DOCUMENT_KEY}) {
+			Path source = hosting.get(key);
+			if (source == null) continue;
+			copyAtomically(source, target.resolve(key));
 			written++;
 		}
 		return new ExportHttpResult.Exported(written, omitted, unresolvable);
