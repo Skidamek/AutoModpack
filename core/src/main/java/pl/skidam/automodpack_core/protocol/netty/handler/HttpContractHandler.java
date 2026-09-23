@@ -4,6 +4,7 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.serverConfig;
 import static pl.skidam.automodpack_core.protocol.NetUtils.STREAM_WRITE_BYTES;
 import static pl.skidam.automodpack_core.protocol.NetUtils.TRANSFER_WRITE_STALL_TIMEOUT;
+import static pl.skidam.automodpack_core.protocol.NetUtils.closeQuietly;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -457,18 +458,11 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		void openThenStream() {
 			diskReads.execute(() -> {
 				try {
-					file = FileChannel.open(path, StandardOpenOption.READ);
-					if (file.size() != expectedTotal) {
-						// A publish swapped the file between the stat and the open; serving would mix generations, so die loudly and let the client retry into the new one.
-						ctx.executor().execute(() -> {
-							// Book the error verdict - nothing was served - instead of the phantom 200/206 the fail path would record.
-							tracker.complete(span, 404, 0);
-							fail(new IOException("The file changed size between the stat and the open: expected " + expectedTotal + " bytes"));
-						});
-						return;
-					}
-					file.position(offset);
+					file = openVerified();
 					ctx.executor().execute(this::writeHeadAndPump);
+				} catch (GenerationSwapped swapped) {
+					// A publish swapped the file between the stat and the open; serving would mix generations, so die loudly and let the client retry into the new one.
+					ctx.executor().execute(() -> fail(swapped));
 				} catch (Throwable openFailure) {
 					ctx.executor().execute(() -> {
 						closeFile();
@@ -479,6 +473,26 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 					});
 				}
 			});
+		}
+
+		/**
+		 * Opens the response's file at its offset. A size that disagrees with the stat means a publish swapped the file
+		 * between the stat and the open: the 404 verdict is booked first - nothing was served - and a
+		 * {@link GenerationSwapped} flies, since serving would mix generations.
+		 */
+		private FileChannel openVerified() throws IOException {
+			FileChannel channel = FileChannel.open(path, StandardOpenOption.READ);
+			try {
+				if (channel.size() != expectedTotal) {
+					tracker.complete(span, 404, 0);
+					throw new GenerationSwapped("The file changed size between the stat and the open: expected " + expectedTotal + " bytes");
+				}
+				channel.position(offset);
+				return channel;
+			} catch (IOException e) {
+				closeQuietly(channel);
+				throw e;
+			}
 		}
 
 		// The head is in flight from here on, so the only honest completion of a mid-stream failure is dropping the connection.
@@ -510,15 +524,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		private void read(long position, long remaining) {
 			ByteBuf out = null;
 			try {
-				if (file == null) {
-					file = FileChannel.open(path, StandardOpenOption.READ);
-					if (file.size() != expectedTotal) {
-						// Book the error verdict before failing - nothing was served - instead of the phantom 200/206 head.
-						tracker.complete(span, 404, 0);
-						throw new IOException("The file changed size between the stat and the open: expected " + expectedTotal + " bytes");
-					}
-					file.position(offset);
-				}
+				if (file == null) file = openVerified();
 				if (codec == null) {
 					int chunk = (int) Math.min((long) STREAM_WRITE_BYTES, remaining);
 					out = ctx.alloc().heapBuffer(chunk, chunk);
@@ -753,6 +759,13 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 	private record ByteRange(long start, long endInclusive, boolean satisfiable) {}
 
+	/** The file a streamed head promised changed size between the stat and the open: a publish swapped it, and serving would mix generations. */
+	private static final class GenerationSwapped extends IOException {
+		GenerationSwapped(String message) {
+			super(message);
+		}
+	}
+
 	/** The route table is the URL contract: the two document names and the content-addressed objects. */
 	private static String routeKey(String target) {
 		if (target.equals("/" + GenerationHosting.HEAD_DOCUMENT_KEY)) return GenerationHosting.HEAD_DOCUMENT_KEY;
@@ -788,10 +801,6 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		return response(status, contentLength, etag, contentRange, null, false);
 	}
 
-	private static ByteBuf response(String status, long contentLength, String etag, String contentRange, String contentEncoding) {
-		return response(status, contentLength, etag, contentRange, contentEncoding, false);
-	}
-
 	private static ByteBuf response(String status, long contentLength, String etag, String contentRange, String contentEncoding, boolean connectionClose) {
 		StringBuilder head = new StringBuilder(192);
 		head.append("HTTP/1.1 ").append(status).append("\r\n");
@@ -820,14 +829,6 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			length += read;
 		}
 		return length;
-	}
-
-	private static void closeQuietly(FileChannel file) {
-		if (file == null) return;
-		try {
-			file.close();
-		} catch (IOException ignored) {
-		}
 	}
 
 }
