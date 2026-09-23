@@ -524,7 +524,13 @@ public class DownloadClient implements PackTransport {
 				long counted = Math.min(bytes, Math.max(0, cumulative - take.progressBase()));
 				if (progress != null && counted > 0) progress.accept((int) counted);
 				long firstByte = firstByteNanos.get();
-				if (firstByte != 0 && System.nanoTime() - firstByte > budgetNanos && fused.compareAndSet(false, true)) {
+				long waitedNanos = System.nanoTime() - firstByte;
+				if (firstByte != 0 && waitedNanos > budgetNanos && fused.compareAndSet(false, true)) {
+					WireTrace.log("TAKE_FUSED", "object", objectName(), "item", take.start() + "-" + take.end(), "waited", waitedNanos, "budget", budgetNanos);
+					// Named at warn so a field report reads "pathological host", never the lane-died line the closed
+					// lane's reader emits right after.
+					LOGGER.warn("Take of {} on {} drained {} bytes in {} s, under the {} B/s floor; fusing the lane and letting the retry ladder recover it",
+							objectName(), connectionInfo.endpoint.getHostString(), ByteFormat.formatSize(sliceBytes(take)), waitedNanos / 1_000_000_000L, TAKE_RATE_FLOOR_BYTES_PER_SECOND);
 					Connection fusedLane = lane.get();
 					if (fusedLane != null) NET_EXECUTOR.execute(() -> closeQuietly(fusedLane));
 				}
@@ -551,7 +557,11 @@ public class DownloadClient implements PackTransport {
 			return take.end() >= 0 ? take.end() - take.start() + 1 : fileSize - take.start();
 		}
 
-		/** The trickle fuse budget: a slice must drain within the rate floor, but never inside the write-stall window. */
+		/**
+		 * The trickle fuse budget: a slice must drain within the {@link NetUtils#TAKE_RATE_FLOOR_BYTES_PER_SECOND}
+		 * rate (a 4 MiB slice gets ~1024 s, its congested-share drain at 6.25 KiB/s needs ~655 s), but never inside
+		 * the 90 s write-stall window.
+		 */
 		static long takeBudgetNanos(long sliceBytes) {
 			if (sliceBytes > Long.MAX_VALUE / 1_000_000_000L) return Long.MAX_VALUE; // the honest budget for a >8.6 GiB slice saturates instead of overflowing negative
 			return Math.max(TRANSFER_WRITE_STALL_TIMEOUT.toNanos(), sliceBytes * 1_000_000_000L / TAKE_RATE_FLOOR_BYTES_PER_SECOND);

@@ -43,20 +43,26 @@ public class NetUtils {
 	// floor (the 20-client share of a 5 Mbps uplink, ~31 KB/s per client) a STREAM_WRITE_BYTES write
 	// completes at least every ~17 s, 5x inside this window. A genuinely dead peer also surfaces
 	// through its own 60 s read deadline closing the socket, so this fuse is never the first thing
-	// to fire on a healthy connection.
+	// to fire on a healthy connection. This 20-client envelope is load-bearing for the client's
+	// trickle fuse floor (TAKE_RATE_FLOOR_BYTES_PER_SECOND): changing it requires re-deriving that floor.
 	public static final Duration TRANSFER_WRITE_STALL_TIMEOUT = Duration.ofSeconds(90);
 	// The idle reap for public contract connections, in seconds of no reads and no writes. It sits far past any
 	// client's keep-alive reuse window while staying inside a minute-scale patience for silent sockets, and a streamed
 	// response completes a STREAM_WRITE_BYTES write at least every ~17 s at the drain floor (~31 KB/s per client),
-	// 3.5x inside this window - so the reap never interrupts a live transfer.
+	// 3.5x inside this window - so the reap never interrupts a live transfer. The same envelope is load-bearing for
+	// the client's trickle fuse floor (TAKE_RATE_FLOOR_BYTES_PER_SECOND): changing it requires re-deriving that floor.
 	public static final int HTTP_IDLE_REAP_SECONDS = 60;
 	// The client's trickle fuse floor: a take draining under this rate is fused past its takeBudgetNanos, counted from
-	// the take's FIRST drained byte - queueing behind a lane's serially served predecessors is the flow control working
-	// (8 takes x a 125 KB/s lane share can legitimately wait minutes), and only an actively draining take can prove a
-	// trickle. 4x under the 62.5 KB/s one lane's congested share of the 5 Mbps reference uplink gives and 3x over the
-	// 5 KB/s trickle probe that parked a real sync forever, so only a broken take ever touches it - a 4 MiB take must
-	// then drain within ~256 s.
-	public static final int TAKE_RATE_FLOOR_BYTES_PER_SECOND = 16 * 1024;
+	// the take's FIRST drained byte - queueing behind a lane's serially served predecessors is the flow control working,
+	// and only an actively draining take can prove a trickle. The floor sits just below the documented per-lane
+	// congested share: 6.25 KiB/s = 5 mbit / 20 clients / 5 lanes, where a 4 MiB take needs ~655 s - at the old
+	// 16 KiB/s floor that regime mass-failed against its 256 s budget. 4 KiB/s gives a uniform 1.56x margin because
+	// takeBudgetNanos is proportional above the 90 s stall floor, and it still holds ~30 clients on the reference
+	// uplink: the 30-client share is 5 mbit / 30 clients / 5 lanes = ~4.2 KiB/s per lane, just above the floor. The
+	// trade, said out loud: a 5 KiB/s dripping host now completes a 4 MiB take in ~819 s (~14 minutes) -
+	// slow-but-completing with cancel is the mitigation, genuinely dead peers still die at the 60 s read deadline,
+	// and this fuse is a long-tail backstop against sub-floor drips, not a fast-fail.
+	public static final int TAKE_RATE_FLOOR_BYTES_PER_SECOND = 4 * 1024;
 	// Pre-configuration keepalive cadence: NAT mappings and holepunch relay bindings typically decay after 30-60s of
 	// silence, so a 20s heartbeat sits well inside that band while costing the parked client one tiny ranged GET.
 	public static final Duration PRE_CONFIGURATION_KEEPALIVE_INTERVAL = Duration.ofSeconds(20);

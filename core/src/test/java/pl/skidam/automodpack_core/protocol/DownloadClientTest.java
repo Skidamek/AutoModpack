@@ -65,11 +65,11 @@ class DownloadClientTest {
 	 */
 	private static final int AWAIT_SECONDS = 20;
 
-	/** The trickle fuse budget: a 4 MiB slice drains inside the rate floor (exactly 256 s), a tiny slice never sits under the 90 s stall window. */
+	/** The trickle fuse budget: a 4 MiB slice drains inside the rate floor (exactly 1024 s), a tiny slice never sits under the 90 s stall window. */
 	@Test
 	void takeBudgetSizesBySliceWithAStallFloor() {
 		assertEquals(90_000_000_000L, DownloadClient.ObjectTransfer.takeBudgetNanos(1));
-		assertEquals(256_000_000_000L, DownloadClient.ObjectTransfer.takeBudgetNanos(4L * 1024 * 1024));
+		assertEquals(1_024_000_000_000L, DownloadClient.ObjectTransfer.takeBudgetNanos(4L * 1024 * 1024));
 	}
 
 	@Test
