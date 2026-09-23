@@ -73,11 +73,6 @@ public class ModpackExecutor {
 		this(serverRoot, groupRoot, generationRoot, new Deps(new GenerationStore(generationRoot, dataLocation.layout().objectsDirectory(), dataLocation), candidateScan, creationExecutor));
 	}
 
-	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, GenerationStore generationStore, CandidateScan candidateScan,
-			ThreadPoolExecutor creationExecutor, HostingBinder hostingBinder) {
-		this(serverRoot, groupRoot, generationRoot, new Deps(generationStore, candidateScan, creationExecutor));
-	}
-
 	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, Deps deps) {
 		this.serverRoot = serverRoot.toAbsolutePath().normalize();
 		this.groupRoot = groupRoot.toAbsolutePath().normalize();
@@ -257,7 +252,7 @@ public class ModpackExecutor {
 			// Objects are immutable and named by their hash, so an already-present file of any size is the same bytes
 			// and the copy is skipped. Documents are the opposite: fixed-shape bodies whose bytes change while their
 			// size stays, and they are the one file whose freshness the mirror exists to serve - always re-exported.
-			if (!isReservedDocument(key) && Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) && Files.size(destination) == Files.size(entry.getValue())) {
+			if (Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) && Files.size(destination) == Files.size(entry.getValue())) {
 				written++;
 				continue;
 			}
