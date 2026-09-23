@@ -1,0 +1,1674 @@
+id: tiny-files
+description: 'Pipeline-depth benchmark: host a ~800-file pack of 16 KiB deterministic files (~12.5 MiB) so the download is one small take per file, and time the client''s first full download. Timings are
+  read from the client log; the flow itself only requires the pack to land.'
+renderClient: true
+connectionPaths:
+- mode: HTTP
+  bindPort: 25567
+  endpointPort: 25567
+flow:
+- use: boot
+- use: accept_certificate
+- do: wait_for
+  name: wait for the first-connection prompt
+  timeout: 90s
+  until:
+    screen: PackConfirmScreen
+- do: wait_for
+  name: wait for the unverified ack checkbox after the lock
+  timeout: 20s
+  until:
+    element:
+      key: automodpack.confirm.ack
+      enabled: true
+  when:
+    element:
+      key: automodpack.confirm.ack
+- do: click
+  name: acknowledge unverified risk
+  select:
+    key: automodpack.confirm.ack
+  when:
+    element:
+      key: automodpack.confirm.ack
+- do: wait_for
+  name: wait for download to unlock
+  timeout: 20s
+  until:
+    element:
+      key: automodpack.firstConnect.download
+      enabled: true
+- do: click
+  name: accept first connection
+  select:
+    key: automodpack.firstConnect.download
+- do: wait_for
+  name: catch the download screen while the pack transfers
+  timeout: 120s
+  until:
+    any:
+    - screen: DownloadScreen
+    - screen: RestartScreen
+  skip_if:
+    screen_not:
+    - PackConfirmScreen
+    - DownloadScreen
+    - RestartScreen
+- do: wait_file
+  name: wait for the modpack marker file
+  path: ${active_dir}/${marker}
+  timeout: 24m
+- do: quit
+  name: quit the client
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: 'false'
+    modrinth:
+      projects:
+      - ferrite-core?
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  files:
+  - path: config/tiny/tiny-001.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-002.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-003.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-004.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-005.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-006.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-007.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-008.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-009.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-010.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-011.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-012.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-013.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-014.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-015.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-016.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-017.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-018.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-019.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-020.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-021.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-022.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-023.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-024.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-025.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-026.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-027.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-028.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-029.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-030.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-031.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-032.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-033.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-034.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-035.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-036.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-037.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-038.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-039.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-040.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-041.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-042.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-043.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-044.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-045.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-046.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-047.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-048.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-049.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-050.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-051.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-052.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-053.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-054.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-055.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-056.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-057.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-058.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-059.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-060.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-061.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-062.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-063.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-064.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-065.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-066.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-067.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-068.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-069.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-070.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-071.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-072.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-073.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-074.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-075.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-076.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-077.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-078.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-079.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-080.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-081.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-082.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-083.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-084.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-085.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-086.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-087.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-088.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-089.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-090.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-091.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-092.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-093.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-094.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-095.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-096.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-097.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-098.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-099.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-100.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-101.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-102.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-103.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-104.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-105.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-106.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-107.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-108.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-109.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-110.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-111.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-112.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-113.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-114.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-115.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-116.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-117.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-118.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-119.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-120.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-121.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-122.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-123.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-124.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-125.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-126.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-127.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-128.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-129.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-130.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-131.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-132.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-133.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-134.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-135.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-136.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-137.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-138.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-139.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-140.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-141.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-142.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-143.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-144.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-145.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-146.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-147.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-148.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-149.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-150.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-151.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-152.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-153.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-154.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-155.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-156.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-157.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-158.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-159.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-160.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-161.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-162.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-163.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-164.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-165.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-166.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-167.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-168.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-169.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-170.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-171.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-172.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-173.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-174.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-175.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-176.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-177.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-178.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-179.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-180.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-181.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-182.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-183.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-184.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-185.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-186.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-187.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-188.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-189.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-190.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-191.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-192.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-193.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-194.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-195.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-196.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-197.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-198.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-199.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-200.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-201.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-202.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-203.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-204.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-205.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-206.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-207.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-208.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-209.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-210.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-211.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-212.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-213.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-214.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-215.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-216.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-217.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-218.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-219.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-220.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-221.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-222.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-223.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-224.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-225.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-226.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-227.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-228.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-229.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-230.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-231.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-232.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-233.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-234.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-235.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-236.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-237.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-238.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-239.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-240.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-241.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-242.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-243.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-244.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-245.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-246.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-247.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-248.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-249.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-250.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-251.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-252.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-253.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-254.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-255.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-256.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-257.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-258.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-259.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-260.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-261.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-262.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-263.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-264.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-265.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-266.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-267.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-268.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-269.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-270.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-271.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-272.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-273.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-274.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-275.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-276.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-277.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-278.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-279.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-280.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-281.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-282.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-283.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-284.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-285.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-286.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-287.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-288.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-289.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-290.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-291.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-292.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-293.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-294.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-295.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-296.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-297.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-298.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-299.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-300.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-301.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-302.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-303.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-304.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-305.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-306.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-307.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-308.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-309.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-310.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-311.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-312.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-313.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-314.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-315.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-316.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-317.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-318.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-319.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-320.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-321.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-322.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-323.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-324.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-325.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-326.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-327.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-328.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-329.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-330.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-331.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-332.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-333.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-334.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-335.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-336.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-337.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-338.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-339.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-340.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-341.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-342.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-343.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-344.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-345.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-346.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-347.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-348.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-349.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-350.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-351.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-352.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-353.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-354.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-355.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-356.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-357.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-358.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-359.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-360.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-361.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-362.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-363.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-364.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-365.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-366.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-367.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-368.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-369.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-370.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-371.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-372.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-373.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-374.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-375.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-376.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-377.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-378.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-379.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-380.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-381.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-382.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-383.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-384.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-385.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-386.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-387.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-388.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-389.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-390.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-391.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-392.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-393.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-394.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-395.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-396.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-397.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-398.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-399.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-400.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-401.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-402.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-403.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-404.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-405.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-406.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-407.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-408.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-409.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-410.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-411.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-412.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-413.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-414.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-415.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-416.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-417.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-418.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-419.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-420.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-421.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-422.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-423.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-424.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-425.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-426.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-427.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-428.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-429.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-430.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-431.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-432.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-433.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-434.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-435.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-436.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-437.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-438.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-439.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-440.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-441.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-442.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-443.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-444.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-445.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-446.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-447.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-448.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-449.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-450.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-451.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-452.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-453.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-454.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-455.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-456.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-457.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-458.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-459.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-460.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-461.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-462.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-463.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-464.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-465.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-466.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-467.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-468.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-469.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-470.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-471.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-472.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-473.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-474.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-475.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-476.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-477.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-478.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-479.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-480.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-481.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-482.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-483.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-484.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-485.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-486.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-487.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-488.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-489.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-490.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-491.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-492.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-493.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-494.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-495.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-496.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-497.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-498.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-499.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-500.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-501.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-502.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-503.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-504.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-505.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-506.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-507.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-508.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-509.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-510.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-511.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-512.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-513.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-514.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-515.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-516.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-517.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-518.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-519.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-520.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-521.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-522.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-523.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-524.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-525.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-526.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-527.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-528.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-529.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-530.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-531.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-532.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-533.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-534.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-535.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-536.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-537.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-538.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-539.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-540.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-541.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-542.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-543.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-544.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-545.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-546.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-547.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-548.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-549.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-550.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-551.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-552.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-553.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-554.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-555.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-556.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-557.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-558.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-559.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-560.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-561.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-562.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-563.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-564.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-565.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-566.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-567.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-568.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-569.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-570.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-571.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-572.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-573.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-574.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-575.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-576.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-577.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-578.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-579.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-580.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-581.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-582.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-583.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-584.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-585.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-586.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-587.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-588.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-589.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-590.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-591.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-592.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-593.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-594.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-595.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-596.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-597.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-598.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-599.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-600.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-601.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-602.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-603.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-604.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-605.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-606.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-607.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-608.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-609.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-610.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-611.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-612.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-613.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-614.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-615.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-616.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-617.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-618.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-619.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-620.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-621.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-622.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-623.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-624.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-625.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-626.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-627.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-628.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-629.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-630.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-631.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-632.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-633.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-634.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-635.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-636.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-637.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-638.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-639.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-640.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-641.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-642.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-643.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-644.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-645.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-646.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-647.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-648.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-649.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-650.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-651.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-652.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-653.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-654.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-655.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-656.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-657.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-658.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-659.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-660.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-661.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-662.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-663.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-664.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-665.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-666.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-667.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-668.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-669.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-670.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-671.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-672.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-673.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-674.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-675.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-676.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-677.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-678.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-679.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-680.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-681.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-682.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-683.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-684.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-685.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-686.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-687.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-688.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-689.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-690.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-691.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-692.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-693.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-694.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-695.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-696.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-697.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-698.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-699.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-700.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-701.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-702.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-703.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-704.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-705.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-706.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-707.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-708.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-709.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-710.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-711.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-712.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-713.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-714.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-715.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-716.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-717.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-718.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-719.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-720.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-721.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-722.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-723.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-724.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-725.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-726.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-727.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-728.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-729.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-730.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-731.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-732.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-733.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-734.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-735.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-736.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-737.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-738.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-739.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-740.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-741.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-742.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-743.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-744.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-745.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-746.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-747.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-748.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-749.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-750.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-751.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-752.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-753.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-754.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-755.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-756.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-757.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-758.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-759.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-760.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-761.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-762.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-763.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-764.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-765.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-766.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-767.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-768.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-769.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-770.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-771.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-772.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-773.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-774.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-775.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-776.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-777.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-778.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-779.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-780.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-781.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-782.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-783.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-784.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-785.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-786.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-787.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-788.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-789.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-790.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-791.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-792.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-793.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-794.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-795.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-796.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-797.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-798.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-799.bin
+    sizeBytes: 16384
+  - path: config/tiny/tiny-800.bin
+    sizeBytes: 16384
