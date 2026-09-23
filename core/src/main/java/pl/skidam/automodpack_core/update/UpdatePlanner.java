@@ -155,6 +155,17 @@ public final class UpdatePlanner {
 			session.restart(RestartReason.FIXED_NESTED_MODS);
 		}
 
+		// The reserved path is the one game-directory file no manifest can ship, so removal owns it even when the copy-state
+		// doc is missing or predates the file: retiring the observed bytes keeps a stale bundle from loading on.
+		FileKey reservedBundle = new FileKey(Root.GAME_DIR, ModpackPathPolicy.generatedBundlePath());
+		if (!session.hasOperation(reservedBundle)) {
+			FileState bundleState = session.projected(reservedBundle);
+			if (bundleState != null && bundleState.regularFile() && bundleState.sha1() != null) {
+				session.delete(reservedBundle, bundleState.sha1());
+				session.restart(RestartReason.FIXED_NESTED_MODS);
+			}
+		}
+
 		for (OwnershipLedger.Entry ledgerEntry : ledger.entries().values()) {
 			Optional<FileKey> candidateKey = managedCleanupKey(ledgerEntry.logicalPath());
 			if (candidateKey.isEmpty()) continue;
@@ -495,7 +506,8 @@ public final class UpdatePlanner {
 				if (current != null && (previous == null || !matches(current, previous.sha1(), previous.size()))) {
 					continue;
 				}
-				String expectedExistingHash = previous == null ? null : previous.sha1();
+				// A copy the scan saw absent installs as absent-at-apply: expecting the recorded bytes would demand a file known to be missing and replan-loop on every apply.
+				String expectedExistingHash = current == null ? null : previous.sha1();
 				session.install(key, copy.sha1(), copy.size(), expectedExistingHash);
 				session.restart(RestartReason.FIXED_NESTED_MODS);
 			}

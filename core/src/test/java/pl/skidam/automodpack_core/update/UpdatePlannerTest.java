@@ -12,6 +12,7 @@ import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.NestedConflicts;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 
 class UpdatePlannerTest {
@@ -368,6 +369,18 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void absentPreviousCopyInstallsWithoutExpectingTheRecordedBytes() {
+		List<NestedCopy> previous = List.of(new NestedCopy("mods/nested.jar", OLD_HASH, 8, Set.of("nested")));
+		List<NestedCopy> targetCopies = List.of(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("nested")));
+
+		UpdatePlan plan = planWithGeneratedCopies(manifest(Map.of(), ledger()), Map.of(), previous, targetCopies);
+
+		Operation operation = plan.operations().stream().filter(value -> value.root() == Root.GAME_DIR && value.relativePath().equals("mods/nested.jar")).findFirst().orElseThrow();
+		assertEquals(OperationType.INSTALL_OBJECT, operation.operation());
+		assertNull(operation.expectedExistingHash());
+	}
+
+	@Test
 	void removalCleansEveryGeneratedCopyStateEntryIncludingDriftedOnes() {
 		ModpackJsons.ModpackContentFields installed = manifest(Map.of("mods/root.jar", item("mods/root.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/root.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
@@ -395,6 +408,24 @@ class UpdatePlannerTest {
 				.noneMatch(file -> file.root() == Root.GAME_DIR && (file.relativePath().equals("mods/nested.jar") || file.relativePath().equals("mods/nested-edited.jar")) && file.present()));
 		assertTrue(plan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals("mods/local.jar") && file.present()));
 		assertTrue(plan.restartReasons().contains(RestartReason.SELECTED_MODPACK));
+	}
+
+	@Test
+	void removalWithoutACopyStateDocStillRetiresTheReservedBundlePath() {
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of("mods/root.jar", item("mods/root.jar", TARGET_HASH, 9, "mod")),
+				ledger(entry("mods/root.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		Map<String, InstanceTree.TrackedFile> baseline = Map.of();
+		Map<FileKey, FileState> files = Map.of(
+				new FileKey(Root.PROJECTION, "mods/root.jar"), new FileState(TARGET_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, "mods/root.jar"), new FileState(TARGET_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, ModpackPathPolicy.generatedBundlePath()), new FileState(OLD_HASH, 8, true));
+
+		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		Operation operation = plan.operations().stream().filter(value -> value.root() == Root.GAME_DIR && value.relativePath().equals(ModpackPathPolicy.generatedBundlePath())).findFirst().orElseThrow();
+		assertEquals(OperationType.DELETE, operation.operation());
+		assertEquals(OLD_HASH, operation.expectedExistingHash());
 	}
 
 	@Test

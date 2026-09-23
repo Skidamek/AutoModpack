@@ -29,7 +29,12 @@ public final class ModpackPathPolicy {
 
 	/** Whether {@code logicalPath} is the client's generated dependency bundle, the one file name a modpack manifest can never claim. */
 	public static boolean isGeneratedBundlePath(String logicalPath) {
-		return logicalPath.equalsIgnoreCase(MODS_PREFIX + GENERATED_BUNDLE_NAME);
+		return logicalPath.equalsIgnoreCase(generatedBundlePath());
+	}
+
+	/** The game-directory path the client's generated dependency bundle lives at. */
+	public static String generatedBundlePath() {
+		return LogicalPath.normalize(MODS_PREFIX + GENERATED_BUNDLE_NAME);
 	}
 
 	public static String typeForPath(String logicalPath) {
