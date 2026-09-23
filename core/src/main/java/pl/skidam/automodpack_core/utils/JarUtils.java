@@ -43,7 +43,14 @@ public class JarUtils {
 				zip.close();
 				throw new IOException("Nested jar entry " + entries.get(0) + " is missing from " + jar);
 			}
-			return new FilterInputStream(zip.getInputStream(entry)) {
+			InputStream stream;
+			try {
+				stream = zip.getInputStream(entry);
+			} catch (IOException e) {
+				zip.close();
+				throw e;
+			}
+			return new FilterInputStream(stream) {
 				@Override
 				public void close() throws IOException {
 					super.close();
