@@ -529,9 +529,7 @@ public final class UpdatePlanner {
 
 	/** Whether the challenger beats the incumbent on version, with a lexicographically smaller path breaking ties. */
 	private static boolean winsVersion(String challengerVersion, String challengerPath, String incumbentVersion, String incumbentPath) {
-		int comparison = SemanticVersion.compareVersionStrings(challengerVersion, incumbentVersion);
-		if (comparison != 0) return comparison > 0;
-		return challengerPath.compareTo(incumbentPath) < 0;
+		return SemanticVersion.wins(challengerVersion, challengerPath, incumbentVersion, incumbentPath);
 	}
 
 	private static void planDuplicates(String modpackId, List<ModInfo> targetMods, List<ModInfo> standardMods, Set<String> liveCopyPaths,

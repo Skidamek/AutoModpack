@@ -129,6 +129,17 @@ public record SemanticVersion(long major, long minor, long patch, List<Part> tai
 		return String.valueOf(left).compareTo(String.valueOf(right));
 	}
 
+	/**
+	 * The one winner-election every duplicate resolution shares - the nested-jar scanner and the update planner's
+	 * duplicate disposition alike: the higher version wins, and an equal version breaks the tie on the
+	 * lexicographically smaller name, so the same candidates elect the same jar wherever they meet.
+	 */
+	public static boolean wins(String challengerVersion, String challengerName, String incumbentVersion, String incumbentName) {
+		int comparison = compareVersionStrings(challengerVersion, incumbentVersion);
+		if (comparison != 0) return comparison > 0;
+		return challengerName.compareTo(incumbentName) < 0;
+	}
+
 	private int rung() {
 		if (tail.isEmpty()) return RELEASE_RUNG;
 		Part first = tail.get(0);

@@ -395,8 +395,6 @@ public final class NestedConflicts {
 
 	/** Winner order between two jars competing for one id: higher version wins, a lexicographically smaller entry name breaks ties. */
 	private static boolean winsJar(Node challenger, Node current) {
-		int comparison = SemanticVersion.compareVersionStrings(challenger.mod.version(), current.mod.version());
-		if (comparison != 0) return comparison > 0;
-		return challenger.entryName.compareTo(current.entryName) < 0;
+		return SemanticVersion.wins(challenger.mod.version(), challenger.entryName, current.mod.version(), current.entryName);
 	}
 }
