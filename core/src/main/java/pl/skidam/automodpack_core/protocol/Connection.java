@@ -160,8 +160,10 @@ class Connection implements AutoCloseable {
 				writeRequest(request.path, request.headers());
 			} catch (IOException e) {
 				WireTrace.log("SUBMIT_REJECT", "conn", traceId, "task", shortPath(request.originPath), "why", "write:" + e);
-				request.future.completeExceptionally(e);
+				// Same order as the reader's death path: the lane is dead before the failure is announced, so an inline
+				// re-issue lands on a fresh lane instead of this one, whose write just failed.
 				failPending(e);
+				request.future.completeExceptionally(e);
 				return request.future;
 			}
 			pending.addLast(request);
