@@ -524,7 +524,10 @@ public class DownloadClient implements PackTransport {
 				long counted = Math.min(bytes, Math.max(0, cumulative - take.progressBase()));
 				if (progress != null && counted > 0) progress.accept((int) counted);
 				long firstByte = firstByteNanos.get();
-				if (firstByte != 0 && System.nanoTime() - firstByte > budgetNanos && fused.compareAndSet(false, true) && lane.get() != null) NET_EXECUTOR.execute(() -> closeQuietly(lane.get()));
+				if (firstByte != 0 && System.nanoTime() - firstByte > budgetNanos && fused.compareAndSet(false, true)) {
+					Connection fusedLane = lane.get();
+					if (fusedLane != null) NET_EXECUTOR.execute(() -> closeQuietly(fusedLane));
+				}
 			};
 			CompletableFuture<Path> future;
 			try {

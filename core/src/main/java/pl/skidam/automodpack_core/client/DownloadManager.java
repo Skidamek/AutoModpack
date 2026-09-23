@@ -66,6 +66,8 @@ public class DownloadManager implements DownloadView {
 	private final Map<FileInspection.HashPathPair, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
 	// Dispatch order: largest file first, enqueue order breaks ties - a persistent queue, so ordering costs O(log N) per
 	// insert/poll instead of a full copy and sort per dispatch. Mutated only under the manager monitor, like the map.
+	// Largest-first governs enqueue order only: past it the pool's waiter queue is FIFO, so a tiny file can wait one
+	// pipeline generation behind big first-takes - no starvation, every settle re-pumps the queue.
 	private final PriorityQueue<QueuedDownload> dispatchOrder = new PriorityQueue<>((first, second) -> {
 		int bySize = Long.compare(second.fileSize, first.fileSize);
 		return bySize != 0 ? bySize : Integer.compare(first.seq, second.seq);

@@ -101,7 +101,8 @@ public final class HttpClientPool {
 	}
 
 	private static HttpClient client(HttpClient.Redirect redirects) {
+		// Daemon pool threads: a parked client must never hold the JVM open.
 		return HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).followRedirects(redirects).connectTimeout(NetUtils.NETWORK_TIMEOUT)
-				.executor(Executors.newCachedThreadPool()).build();
+				.executor(Executors.newCachedThreadPool(new CustomThreadFactoryBuilder().setNameFormat("AutoModpackHttpClient-%d").setDaemon(true).build())).build();
 	}
 }
