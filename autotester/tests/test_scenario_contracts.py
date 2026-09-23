@@ -52,6 +52,30 @@ def test_connection_path_variants_keep_modes_independent():
     assert "connectionPath" not in scenario
 
 
+def test_validation_allows_only_advertised_http_endpoints_without_a_listener():
+    externally_served = {
+        "id": "static-host",
+        "connectionPaths": [
+            {"mode": "HTTP", "bindPort": -1, "endpointPort": 8443, "advertisedEndpointHost": "automodpack-static-host"},
+        ],
+    }
+    assert not any(
+        "bindPort" in problem
+        for problem in validate_scenario(externally_served, load_macros(), load_targets())
+    )
+
+    listener_less = {
+        "id": "listener-less",
+        "connectionPaths": [
+            {"mode": "HTTP", "bindPort": -1, "endpointPort": 8443},
+        ],
+    }
+    assert any(
+        "needs the dedicated listener" in problem
+        for problem in validate_scenario(listener_less, load_macros(), load_targets())
+    )
+
+
 def test_validation_rejects_generation_fixture_on_non_jar_path():
     scenario = {
         "id": "fixture-validation",

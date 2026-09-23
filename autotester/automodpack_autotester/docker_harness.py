@@ -59,7 +59,7 @@ def _remove_volume(name):
         pass
 
 
-def _run_container(name, image, network, env, mounts, command=None, user=None, entrypoint=None, labels=None, cap_add=None):
+def _run_container(name, image, network, env, mounts, command=None, user=None, entrypoint=None, labels=None, cap_add=None, aliases=None):
     volumes = {}
     for host, container_path, readonly in mounts:
         volumes[str(host)] = {"bind": container_path, "mode": "ro" if readonly else "rw"}
@@ -76,6 +76,12 @@ def _run_container(name, image, network, env, mounts, command=None, user=None, e
         kwargs["network_mode"] = "host"
     else:
         kwargs["network"] = network
+        if aliases:
+            # A stable DNS name alongside the random container name, so scenarios can
+            # advertise an endpoint whose hostname does not change per case.
+            kwargs["networking_config"] = {
+                network: docker_py.types.EndpointConfig(_docker.api._version, aliases=list(aliases)),
+            }
     if entrypoint is not None:
         kwargs["entrypoint"] = entrypoint
     return _docker.containers.run(**kwargs)

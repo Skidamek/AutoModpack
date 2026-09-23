@@ -5,6 +5,8 @@ paths:
 images:
   server: itzg/minecraft-server
   client: automodpack-autotest-client:local
+  # Barebones static HTTPS host (python http.server + self-signed TLS) serving an exported contract tree.
+  staticHost: automodpack-autotest-static-host:local
   serverTagTemplate: "java{java}"
 
 run:

@@ -297,11 +297,18 @@ def main(argv: list[str] | None = None) -> int:
             buildargs["HEADLESSMC_REPO"] = str(hmc["repo"])
         if hmc.get("ref"):
             buildargs["HEADLESSMC_REF"] = str(hmc["ref"])
-        docker_py.from_env().images.build(
+        images = docker_py.from_env().images
+        images.build(
             path=str(ROOT / "docker" / "client"),
             dockerfile="Dockerfile",
             tag=img,
             buildargs=buildargs,
+            rm=True,
+        )
+        images.build(
+            path=str(ROOT / "docker" / "static-host"),
+            dockerfile="Dockerfile",
+            tag=str(s.get("images", {}).get("staticHost", "automodpack-autotest-static-host:local")),
             rm=True,
         )
         return 0

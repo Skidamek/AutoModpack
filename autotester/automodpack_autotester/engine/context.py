@@ -31,6 +31,10 @@ class Context:
     marker_rel: Path
     scenario_files: list  # list[HostedFile]
     expected_mods: list
+    # The barebones static HTTPS host container (static-host scenarios); removed
+    # with the case whether or not the flow ever started it.
+    static_name: str = ""
+    static_host_image: str = ""
     # Address the client uses to reach the server. On bridge networking this is
     # the server container name; on host networking it's localhost.
     server_host: str | None = None
