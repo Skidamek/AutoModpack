@@ -35,6 +35,11 @@ class Context:
     # with the case whether or not the flow ever started it.
     static_name: str = ""
     static_host_image: str = ""
+    # The S3-compatible host (MinIO) and its one-shot upload client (s3-host
+    # scenarios); removed with the case like the static host.
+    s3_name: str = ""
+    minio_image: str = ""
+    minio_client_image: str = ""
     # Address the client uses to reach the server. On bridge networking this is
     # the server container name; on host networking it's localhost.
     server_host: str | None = None

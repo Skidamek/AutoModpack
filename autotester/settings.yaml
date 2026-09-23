@@ -7,6 +7,9 @@ images:
   client: automodpack-autotest-client:local
   # Barebones static HTTPS host (python http.server + self-signed TLS) serving an exported contract tree.
   staticHost: automodpack-autotest-static-host:local
+  # quay.io carries the same images where docker.io is rate-limited or blocked.
+  minio: quay.io/minio/minio:latest
+  minioClient: quay.io/minio/mc:latest
   serverTagTemplate: "java{java}"
 
 run:

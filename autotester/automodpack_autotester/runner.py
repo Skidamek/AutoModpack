@@ -14,7 +14,7 @@ import time
 import zipfile
 from pathlib import Path
 
-from . import client_steps, server_steps, staging_steps, static_host  # noqa: F401  -- import for verb registration
+from . import client_steps, server_steps, s3_host, staging_steps, static_host  # noqa: F401  -- import for verb registration
 from .config import Target, load_macros, parse_server_files
 from .docker_harness import _assert_running, _container_logs, _ensure_network, _remove_container, _remove_network
 from .engine import ClientExited, Context, run_flow
@@ -130,6 +130,7 @@ def run_case(
     cli_name = f"{resource_prefix}-c-{secrets.token_hex(4)}"[:63]
     prep_name = cli_name.replace("-c-", "-p-", 1)
     static_name = f"{resource_prefix}-h-{secrets.token_hex(4)}"[:63]
+    s3_name = f"{resource_prefix}-o-{secrets.token_hex(4)}"[:63]
     server_host = "127.0.0.1" if net_mode == "host" else srv_name
     token = secrets.token_hex(16)
     case_seconds = float(settings.get("timeouts", {}).get("caseSeconds", 1800))
@@ -143,7 +144,7 @@ def run_case(
             return
         deadline_expired.set()
         logger.error("[%s] case exceeded its %.0fs deadline; removing its Docker resources", target.id, case_seconds)
-        for name in (cli_name, prep_name, srv_name, static_name):
+        for name in (cli_name, prep_name, srv_name, static_name, s3_name):
             try:
                 _remove_container(name)
             except Exception:
@@ -185,6 +186,9 @@ def run_case(
             server_host=server_host,
             static_name=static_name,
             static_host_image=str(settings.get("images", {}).get("staticHost", "automodpack-autotest-static-host:local")),
+            s3_name=s3_name,
+            minio_image=str(settings.get("images", {}).get("minio", "minio/minio:latest")),
+            minio_client_image=str(settings.get("images", {}).get("minioClient", "minio/mc:latest")),
             resource_scope=resource_scope,
             netem=list(netem or []),
             loss=loss,
@@ -248,7 +252,7 @@ def run_case(
 
     finally:
         case_finished.set()
-        for name in [cli_name, prep_name, srv_name, static_name]:
+        for name in [cli_name, prep_name, srv_name, static_name, s3_name]:
             try:
                 logs = _container_logs(name)
                 if logs:
