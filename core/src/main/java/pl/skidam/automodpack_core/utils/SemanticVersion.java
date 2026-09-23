@@ -12,9 +12,12 @@ import java.util.regex.Pattern;
  * label (dev, snapshot, a/alpha, b/beta, pre/preview, rc) below the plain release, and any other trailing
  * runs above it - deliberate, because a suffixed variant ({@code 1.0.0-FABRIC}) usually denotes a newer
  * build of the same release, while the ladder carries the labels whose ecosystem meaning is strictly
- * older-than-release. Build metadata (+...) never affects ordering.
+ * older-than-release. Numeric first runs rank above the release too, and cannot be demoted the way semver
+ * demotes {@code 1.0.0-1}: parsing loses the separator, so {@code 1.0.0-1} and {@code 1.0.0.1} are the same
+ * version here, and a four-component version ({@code 14.23.5.2859}) must outrank its three-component base.
+ * Build metadata (+...) never affects ordering.
  */
-public record SemanticVersion(int major, int minor, int patch, List<Part> tail) implements Comparable<SemanticVersion> {
+public record SemanticVersion(long major, long minor, long patch, List<Part> tail) implements Comparable<SemanticVersion> {
 
 	// Regex for basic X.Y.Z(-PRERELEASE)?
 	private static final Pattern VERSION_PATTERN = Pattern.compile("^(\\d+)\\.(\\d+)\\.(\\d+)(?:-(.+))?$");
@@ -67,7 +70,7 @@ public record SemanticVersion(int major, int minor, int patch, List<Part> tail) 
 			if (taken < 3 && part.numeric()) core[taken++] = part.number();
 			else tail.add(part);
 		}
-		return new SemanticVersion((int) core[0], (int) core[1], (int) core[2], tail);
+		return new SemanticVersion(core[0], core[1], core[2], tail);
 	}
 
 	/** Splits into maximal numeric and alphabetical runs; every other character separates runs. */
@@ -84,16 +87,18 @@ public record SemanticVersion(int major, int minor, int patch, List<Part> tail) 
 					alpha = null;
 				}
 				number = (number == null ? 0 : number) * 10 + (version.charAt(index) - '0');
+				// Once the accumulation overflows it stays negative until it is flushed, so clamping here keeps every longer run at the ceiling instead of letting it wrap back into range.
+				if (number < 0) number = Long.MAX_VALUE;
 			} else if (letter) {
 				if (number != null) {
-					parts.add(Part.numeric(saturate(number)));
+					parts.add(Part.numeric(number));
 					number = null;
 				}
 				if (alpha == null) alpha = new StringBuilder();
 				alpha.append(Character.toLowerCase(version.charAt(index)));
 			} else {
 				if (number != null) {
-					parts.add(Part.numeric(saturate(number)));
+					parts.add(Part.numeric(number));
 					number = null;
 				}
 				if (alpha != null) {
@@ -103,10 +108,6 @@ public record SemanticVersion(int major, int minor, int patch, List<Part> tail) 
 			}
 		}
 		return parts;
-	}
-
-	private static long saturate(long number) {
-		return number < 0 ? Long.MAX_VALUE : number;
 	}
 
 	/** Whether the version carries no known pre-release label; final/release spell it explicitly. */
@@ -136,9 +137,9 @@ public record SemanticVersion(int major, int minor, int patch, List<Part> tail) 
 
 	@Override
 	public int compareTo(SemanticVersion other) {
-		if (major != other.major) return Integer.compare(major, other.major);
-		if (minor != other.minor) return Integer.compare(minor, other.minor);
-		if (patch != other.patch) return Integer.compare(patch, other.patch);
+		if (major != other.major) return Long.compare(major, other.major);
+		if (minor != other.minor) return Long.compare(minor, other.minor);
+		if (patch != other.patch) return Long.compare(patch, other.patch);
 		int rung = rung(), otherRung = other.rung();
 		if (rung != otherRung) return Integer.compare(rung, otherRung);
 		for (int index = 0; index < Math.min(tail.size(), other.tail.size()); index++) {

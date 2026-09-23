@@ -33,6 +33,16 @@ class SemanticVersionTest {
 		assertEquals("1.2.3.rc.9", SemanticVersion.parse("1.2.3-rc.9").toString());
 	}
 
+	@Test
+	void hugeRunsSaturateAndCoreComponentsKeepTheirOrder() {
+		for (int digits = 19; digits <= 45; digits++) {
+			SemanticVersion saturated = SemanticVersion.parseOrNull("1.0.0-" + "9".repeat(digits));
+			assertEquals(Long.MAX_VALUE, saturated.tail().get(0).number(), digits + " digits");
+		}
+		assertOrder("4294967297.0.0", "8589934593.0.0", "12884901889.0.0");
+		assertTrue(compare("1.0.0-" + "9".repeat(40), "1.0.0") > 0);
+	}
+
 	private static int compare(String left, String right) {
 		return SemanticVersion.parseOrNull(left).compareTo(SemanticVersion.parseOrNull(right));
 	}
