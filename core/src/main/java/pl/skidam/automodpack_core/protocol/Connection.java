@@ -274,9 +274,9 @@ class Connection implements AutoCloseable {
 				LOGGER.warn("The modpack wire lane died: conn={} pending={} request={} failure={}", traceId, waiting, request.originPath, failure.toString());
 				WireTrace.log("READER_EXIT", "conn", traceId, "reason", "fail:" + failure);
 				// The lane is marked dead before any failure is announced: a dependent that re-issues its request inline
-				// must land on a fresh lane, never on this dying one.
+				// must land on a fresh lane, never on this dying one. The peeked request is still first in pending,
+				// so failPending's snapshot completes its future too.
 				failPending(failure);
-				request.future.completeExceptionally(failure);
 				return;
 			}
 			if (settled) {
@@ -395,6 +395,13 @@ class Connection implements AutoCloseable {
 			return take.limitBytes() >= 0 && head.contentLength() != null && head.contentLength() > take.limitBytes();
 		}
 
+		/** Consumes the body into the destination; a body that busts the take's byte limit fails this take alone and reports true. */
+		private boolean consumeAndComplete(ResponseHead head, long writeOffset) throws IOException {
+			if (!consumeBody(head, destination, writeOffset, chunks, null, take.tap(), false, take.limitBytes())) return false;
+			future.completeExceptionally(new IOException("Object exceeds the " + take.limitBytes() + " byte limit for " + originPath));
+			return true;
+		}
+
 		@Override
 		void deliver(ResponseHead head) throws IOException {
 			if (overLimit(head)) {
@@ -408,10 +415,7 @@ class Connection implements AutoCloseable {
 				// reject after the fact. An encoded body is framed chunked and has no length by design.
 				if (head.contentLength() == null && !head.chunked()) throw new IOException("HTTP 206 without Content-Length");
 				PartialResume.requireResumeStart(head.contentRange(), take.offset());
-				if (consumeBody(head, destination, take.offset(), chunks, null, take.tap(), false, take.limitBytes())) {
-					future.completeExceptionally(new IOException("Object exceeds the " + take.limitBytes() + " byte limit for " + originPath));
-					return;
-				}
+				if (consumeAndComplete(head, take.offset())) return;
 				future.complete(destination);
 				return;
 			}
@@ -429,10 +433,7 @@ class Connection implements AutoCloseable {
 						future.completeExceptionally(new RangeIgnoredException(originPath));
 						return;
 					}
-					if (consumeBody(head, destination, take.offset(), chunks, null, take.tap(), false, take.limitBytes())) {
-						future.completeExceptionally(new IOException("Object exceeds the " + take.limitBytes() + " byte limit for " + originPath));
-						return;
-					}
+					if (consumeAndComplete(head, take.offset())) return;
 					future.complete(destination);
 					return;
 				}
@@ -449,10 +450,7 @@ class Connection implements AutoCloseable {
 					throw new IOException("Served object length " + head.contentLength() + " does not match the expected object size " + take.expectedSize() + " for " + originPath);
 				boolean resumed = take.offset() > 0 && head.contentRange() != null;
 				if (resumed) PartialResume.requireResumeStart(head.contentRange(), take.offset());
-				if (consumeBody(head, destination, resumed ? take.offset() : 0, chunks, null, take.tap(), false, take.limitBytes())) {
-					future.completeExceptionally(new IOException("Object exceeds the " + take.limitBytes() + " byte limit for " + originPath));
-					return;
-				}
+				if (consumeAndComplete(head, resumed ? take.offset() : 0)) return;
 				future.complete(destination);
 				return;
 			}
