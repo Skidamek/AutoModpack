@@ -14,7 +14,6 @@ import java.util.zip.ZipOutputStream;
 
 import org.junit.jupiter.api.Test;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 class FileInspectionTest {
@@ -64,8 +63,7 @@ class FileInspectionTest {
 	}
 
 	@Test
-	void tomlMandatoryIsLoaderSpecificOnLegacyEntries() throws IOException {
-		Path jar = Files.createTempDirectory("toml-metadata-").resolve("tomlmod.jar");
+	void tomlDependencySemanticsFollowTheMetadataFile() throws IOException {
 		String toml = """
 				modLoader = "javafml"
 				[[mods]]
@@ -74,18 +72,20 @@ class FileInspectionTest {
 				modId = "legacy_optional"
 				mandatory = false
 				""";
-		String previousLoader = Constants.LOADER;
+
+		Path forge = Files.createTempDirectory("toml-metadata-").resolve("forgemod.jar");
+		Path neoforge = Files.createTempDirectory("toml-metadata-").resolve("neoforgemod.jar");
 
 		try {
-			Files.write(jar, jar(Map.of("META-INF/mods.toml", toml.getBytes(StandardCharsets.UTF_8))));
-			// Forge reads legacy mandatory (false = optional); NeoForge ignores it - absent type is required.
-			Constants.LOADER = "forge";
-			assertEquals(Set.of(), inspect(jar).deps());
-			Constants.LOADER = "neoforge";
-			assertEquals(Set.of("legacy_optional"), inspect(jar).deps());
+			// Forge reads META-INF/mods.toml and honors mandatory; NeoForge reads neoforge.mods.toml and ignores
+			// it - an absent type is required. Which file the jar carries decides, not the running loader.
+			Files.write(forge, jar(Map.of("META-INF/mods.toml", toml.getBytes(StandardCharsets.UTF_8))));
+			assertEquals(Set.of(), inspect(forge).deps());
+			Files.write(neoforge, jar(Map.of("META-INF/neoforge.mods.toml", toml.getBytes(StandardCharsets.UTF_8))));
+			assertEquals(Set.of("legacy_optional"), inspect(neoforge).deps());
 		} finally {
-			Constants.LOADER = previousLoader;
-			Files.deleteIfExists(jar);
+			Files.deleteIfExists(forge);
+			Files.deleteIfExists(neoforge);
 		}
 	}
 

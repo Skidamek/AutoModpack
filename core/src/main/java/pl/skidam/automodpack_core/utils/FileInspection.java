@@ -201,7 +201,7 @@ public class FileInspection {
 						public void close() {}
 					}, StandardCharsets.UTF_8));
 
-					if (name.endsWith(".toml")) metadata = parseTomlMetadata(reader);
+					if (name.endsWith(".toml")) metadata = parseTomlMetadata(reader, name.endsWith("neoforge.mods.toml"));
 					else metadata = parseJsonMetadata(reader);
 				} else if (JarUtils.hasJarExtension(name)) {
 					// Wrap ZIS to protect current stream position
@@ -231,7 +231,7 @@ public class FileInspection {
 
 		try (BufferedReader reader = Files.newBufferedReader(metaPath)) {
 			if (metaPath.toString().endsWith(".toml")) {
-				return parseTomlMetadata(reader);
+				return parseTomlMetadata(reader, metaPath.getFileName().toString().equals("neoforge.mods.toml"));
 			} else {
 				return parseJsonMetadata(reader);
 			}
@@ -241,7 +241,7 @@ public class FileInspection {
 		return null;
 	}
 
-	private static ModMetadata parseTomlMetadata(BufferedReader reader) {
+	private static ModMetadata parseTomlMetadata(BufferedReader reader, boolean neoforgeSemantics) {
 		try {
 			Map<String, Object> result = MiniToml.parse(reader);
 			List<Map<String, Object>> mods = MiniToml.getTables(result, "mods");
@@ -271,11 +271,13 @@ public class FileInspection {
 						String depId = MiniToml.getString(depTable, "modId");
 						if (depId == null) continue;
 
-						// NeoForge 20.5+ gates on type alone and never reads mandatory; legacy Forge gates on mandatory
-						// (absent means true). Type wins when both exist, matching the loader that parses this file.
+						// NeoForge 20.5+ reads neoforge.mods.toml, gates on type alone and never reads mandatory; legacy
+						// Forge reads META-INF/mods.toml and gates on mandatory (absent means true). Type wins when both
+						// exist. The metadata file names the semantics, so a jar parses the same on every loader - a
+						// fabric client planning a neoforge pack included.
 						boolean required;
 						if (depTable.get("type") instanceof String typeName) required = "required".equalsIgnoreCase(typeName);
-						else if ("neoforge".equals(Constants.LOADER)) required = true;
+						else if (neoforgeSemantics) required = true;
 						else required = !(depTable.get("mandatory") instanceof Boolean flag && !flag);
 						if (!required) continue;
 
