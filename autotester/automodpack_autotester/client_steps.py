@@ -217,13 +217,7 @@ def _apply_loss(ctx: Context) -> None:
     own --netem knob for delay/rate. Same teardown story as --netem: the container is ephemeral."""
     if not ctx.loss:
         return
-    _disable_iface_offloads(ctx.srv_name)
-    _disable_peer_offloads_of(ctx.srv_name)
-    result = _container(ctx.srv_name).exec_run(["tc", "qdisc", "add", "dev", "eth0", "root", "netem", "loss", ctx.loss], user="root")
-    output = _exec_output(result)
-    if result.exit_code != 0:
-        raise RuntimeError(f"server container could not apply the loss qdisc ({result.exit_code}): {output}")
-    logger.info("Applied loss qdisc to %s eth0: %s", ctx.srv_name, ctx.loss)
+    _shape_egress(ctx.srv_name, ["loss", ctx.loss], "loss")
 
 
 def _apply_server_netem(ctx: Context) -> None:
@@ -233,21 +227,11 @@ def _apply_server_netem(ctx: Context) -> None:
     the runner rejects combining. Same teardown story as every netem knob: ephemeral container."""
     if not ctx.server_netem:
         return
-    _disable_iface_offloads(ctx.srv_name)
-    _disable_peer_offloads_of(ctx.srv_name)
-    result = _container(ctx.srv_name).exec_run(["tc", "qdisc", "add", "dev", "eth0", "root", "netem", *ctx.server_netem], user="root")
-    output = _exec_output(result)
-    if result.exit_code != 0:
-        raise RuntimeError(f"server container could not apply the netem qdisc ({result.exit_code}): {output}")
-    logger.info("Applied server netem qdisc to %s eth0: %s", ctx.srv_name, " ".join(ctx.server_netem))
+    _shape_egress(ctx.srv_name, ctx.server_netem, "server netem")
 
 
 def _apply_netem(ctx: Context) -> None:
     """Shape the running client container's eth0 with the --netem qdisc.
-
-    No teardown counterpart exists on purpose: the container is ephemeral and is
-    removed with the case, and every (re)launch re-applies the qdisc on the fresh
-    container. Runs as root because the game user holds no effective capabilities.
 
     Known limit: delay shapes exactly, but netem's rate can still run several-fold
     high on a docker bridge even with veth offloads off on both ends - treat the
@@ -255,26 +239,31 @@ def _apply_netem(ctx: Context) -> None:
     """
     if not ctx.netem:
         return
-    # TSO/GSO let the stack emit super-packets the qdisc counts as one, inflating any rate
-    # limit several-fold. Offloads must go off on BOTH ends of the veth pair: the container
-    # side so the qdisc sees segmented packets, the host peer so segmenting survives the hop.
-    _disable_iface_offloads(ctx.cli_name)
-    _disable_peer_offloads(ctx)
-    result = _container(ctx.cli_name).exec_run(["tc", "qdisc", "add", "dev", "eth0", "root", "netem", *ctx.netem], user="root")
+    _shape_egress(ctx.cli_name, ctx.netem, "netem")
+
+
+def _shape_egress(container_name: str, qdisc: list[str], label: str) -> None:
+    """One root netem qdisc on a container's eth0; runs as root because the game user holds no
+    effective capabilities.
+
+    TSO/GSO let the stack emit super-packets the qdisc counts as one, inflating any rate
+    limit several-fold. Offloads must go off on BOTH ends of the veth pair: the container
+    side so the qdisc sees segmented packets, the host peer so segmenting survives the hop.
+    No teardown counterpart exists on purpose: the container is ephemeral and is removed
+    with the case, and every (re)launch re-applies the qdisc on the fresh container.
+    """
+    _disable_iface_offloads(container_name)
+    _disable_peer_offloads_of(container_name)
+    result = _container(container_name).exec_run(["tc", "qdisc", "add", "dev", "eth0", "root", "netem", *qdisc], user="root")
     output = _exec_output(result)
     if result.exit_code != 0:
-        raise RuntimeError(f"client container could not apply the netem qdisc ({result.exit_code}): {output}")
-    logger.info("Applied netem qdisc to %s eth0: %s", ctx.cli_name, " ".join(ctx.netem))
+        raise RuntimeError(f"{container_name} container could not apply the {label} qdisc ({result.exit_code}): {output}")
+    logger.info("Applied %s qdisc to %s eth0: %s", label, container_name, " ".join(qdisc))
 
 
 def _disable_iface_offloads(container_name: str) -> None:
     """Turns offloads off on a container's eth0 so the qdisc sees segmented packets; best effort by design."""
     _container(container_name).exec_run(["ethtool", "-K", "eth0", "tso", "off", "gso", "off", "gro", "off"], user="root")
-
-
-def _disable_peer_offloads(ctx: Context) -> None:
-    """Turns offloads off on the host-side veth peer of the client's eth0; best effort by design."""
-    _disable_peer_offloads_of(ctx.cli_name)
 
 
 def _disable_peer_offloads_of(container_name: str) -> None:

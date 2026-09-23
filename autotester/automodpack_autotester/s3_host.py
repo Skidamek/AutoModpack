@@ -86,9 +86,9 @@ def _v_start_s3_host(ctx: Context, step):
         # The alias targets the container's plain name on purpose: MINIO_DOMAIN
         # makes vhost style authoritative for pack.s3, and mc speaks path style.
         command=[f"mc alias set local https://{ctx.s3_name}:{ENDPOINT_PORT} automodpack automodpack-autotest --insecure "
-                 "&& mc --insecure mb --ignore-existing local/pack "
-                 "&& mc --insecure mirror --overwrite /srv/export local/pack "
-                 "&& mc --insecure anonymous set download local/pack"],
+                 f"&& mc --insecure mb --ignore-existing local/{BUCKET} "
+                 f"&& mc --insecure mirror --overwrite /srv/export local/{BUCKET} "
+                 f"&& mc --insecure anonymous set download local/{BUCKET}"],
         labels=resource_labels(ctx.resource_scope),
     )
     _wait_exited(mc_name, timeout=300)
