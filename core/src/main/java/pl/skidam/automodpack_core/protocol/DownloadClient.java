@@ -507,7 +507,6 @@ public class DownloadClient implements PackTransport {
 
 		private void submitTake(Take take, AtomicLong takeBytes) {
 			takesSubmitted.incrementAndGet();
-			long takeStart = System.nanoTime();
 			long budgetNanos = takeBudgetNanos(sliceBytes(take));
 			AtomicReference<Connection> lane = new AtomicReference<>();
 			AtomicBoolean fused = new AtomicBoolean();
@@ -515,11 +514,14 @@ public class DownloadClient implements PackTransport {
 			// retried attempt's watermark so already-counted bytes never re-fire. Past the rate-floor budget the lane is
 			// closed asynchronously - never synchronously from the reader's own callback stack - and the retry ladder
 			// recovers the take; a persistently trickling host burns its attempts and fails the transfer loudly.
+			AtomicLong firstByteNanos = new AtomicLong();
 			IntConsumer chunkCallback = bytes -> {
+				firstByteNanos.compareAndSet(0, System.nanoTime());
 				long cumulative = takeBytes.addAndGet(bytes);
 				long counted = Math.min(bytes, Math.max(0, cumulative - take.progressBase()));
 				if (progress != null && counted > 0) progress.accept((int) counted);
-				if (System.nanoTime() - takeStart > budgetNanos && fused.compareAndSet(false, true) && lane.get() != null) NET_EXECUTOR.execute(() -> closeQuietly(lane.get()));
+				long firstByte = firstByteNanos.get();
+				if (firstByte != 0 && System.nanoTime() - firstByte > budgetNanos && fused.compareAndSet(false, true) && lane.get() != null) NET_EXECUTOR.execute(() -> closeQuietly(lane.get()));
 			};
 			CompletableFuture<Path> future;
 			try {
