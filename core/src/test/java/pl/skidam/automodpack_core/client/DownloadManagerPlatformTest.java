@@ -13,10 +13,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.zip.GZIPOutputStream;
 
@@ -50,6 +52,10 @@ class DownloadManagerPlatformTest {
 	private static final Map<String, byte[]> CONTENTS = new HashMap<>();
 	/** Every request the resume-lab endpoints answered, so the tests can fail fast on the wire behavior after the run. */
 	private static final List<ServedRequest> RESUME_REQUESTS = new ArrayList<>();
+	/** Every /held request path in arrival order, so the dispatch-order test can read the wire instead of guessing. */
+	private static final List<String> HELD_REQUESTS = new CopyOnWriteArrayList<>();
+	/** Per-path gates: a /held request waits for its release, which is what holds a platform worker slot. */
+	private static final Map<String, CountDownLatch> HELD_LATCHES = new ConcurrentHashMap<>();
 
 	private record ServedRequest(String scenario, String range, String userAgent) {}
 
@@ -68,7 +74,14 @@ class DownloadManagerPlatformTest {
 		CONTENTS.put("multi-chunk.bin", deterministic("multi-chunk", 12_582_912));
 		CONTENTS.put("validates-ünïcode.jar", deterministic("unicode", 4096));
 		CONTENTS.put("resume.bin", deterministic("resume", 1_048_576));
+		CONTENTS.put("held.bin", deterministic("held", 8192));
+		// Without an executor every exchange would run on one dispatcher thread, and a held exchange would starve the rest.
 		server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		server.setExecutor(Executors.newCachedThreadPool(r -> {
+			Thread t = new Thread(r, "platform-test-http");
+			t.setDaemon(true);
+			return t;
+		}));
 		server.createContext("/good", exchange -> {
 			byte[] body = CONTENTS.get(exchange.getRequestURI().getPath().substring("/good/".length()));
 			if (body == null) {
@@ -92,6 +105,22 @@ class DownloadManagerPlatformTest {
 			exchange.close();
 		});
 		server.createContext("/resume-lab", exchange -> serveResumeLab(exchange));
+		server.createContext("/held", exchange -> {
+			String name = exchange.getRequestURI().getPath().substring("/held/".length());
+			HELD_REQUESTS.add(name);
+			CountDownLatch latch = HELD_LATCHES.get(name);
+			if (latch != null) try {
+				latch.await();
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			byte[] body = CONTENTS.get(name);
+			exchange.sendResponseHeaders(200, body.length == 0 ? -1 : body.length);
+			if (body.length > 0) try (OutputStream out = exchange.getResponseBody()) {
+				out.write(body);
+			}
+			exchange.close();
+		});
 		server.createContext("/redirect", exchange -> {
 			exchange.getResponseHeaders().set("Location", "/good/" + exchange.getRequestURI().getPath().substring("/redirect/".length()));
 			exchange.sendResponseHeaders(302, -1);
@@ -181,11 +210,11 @@ class DownloadManagerPlatformTest {
 	}
 
 	/**
-	 * Dispatch order is largest first regardless of enqueue order. Deterministic without racing the worker threads: the
-	 * small file is enqueued against an empty wire window (turned away into the queue), then the large file's dispatch
-	 * drains a queue holding both and must hand the single granted wire slot to the larger one. If the order ever
-	 * regressed to enqueue order, the small file would take the slot and the large file's fetch never happens. The
-	 * large file's promotion is awaited too, so no staging file outlives the test's temp directory.
+	 * Dispatch order is largest first regardless of enqueue order. Deterministic without racing the worker threads: held
+	 * platform downloads occupy the whole worker budget, so the small file enqueues and the large one queues behind it;
+	 * releasing exactly one holder frees exactly one worker slot, and that slot must go to the larger queued file. If
+	 * the order ever regressed to enqueue order, the small file would take the slot and the large one would still be
+	 * parked at its latch when the released slot's file arrives.
 	 */
 	@Test
 	void dispatchesTheLargestQueuedFileFirstRegardlessOfEnqueueOrder() throws Exception {
@@ -193,25 +222,46 @@ class DownloadManagerPlatformTest {
 		PlatformCache cache = PlatformCache.open(tempDir.resolve("platform-cache"));
 		byte[] smallContent = CONTENTS.get("one-byte.txt");
 		byte[] largeContent = CONTENTS.get("multi-chunk.bin");
-		FakeTransport transport = new FakeTransport(largeContent);
-		transport.wirePermits = new AtomicInteger(0); // no wire room: the small file is queued, never dispatched
-		String smallSha1 = HashUtils.getHash(writeExpected("order-small.bin", smallContent));
-		String largeSha1 = HashUtils.getHash(writeExpected("order-large.bin", largeContent));
-		CountDownLatch largeFetched = new CountDownLatch(1);
-		transport.onFetch = key -> {
-			if (key.equals(largeSha1)) largeFetched.countDown();
-		};
-		DownloadManager manager = new DownloadManager(smallContent.length + largeContent.length, layout, cache);
-		manager.attachTransport(transport);
-		CountDownLatch largeAcquired = new CountDownLatch(1);
-		manager.download(tempDir.resolve("active").resolve("order-small.bin"), smallSha1, null, "mods", List.of(), smallContent.length, () -> {}, category -> {});
-		transport.wirePermits = new AtomicInteger(1); // exactly one slot: the next drain decides between the queued pair
-		manager.download(tempDir.resolve("active").resolve("order-large.bin"), largeSha1, null, "mods", List.of(), largeContent.length, largeAcquired::countDown, category -> {});
-		assertTrue(largeFetched.await(10, TimeUnit.SECONDS), "the large file must take the single wire slot; fetches were " + transport.fetches);
-		assertTrue(largeAcquired.await(10, TimeUnit.SECONDS), "the large file must finish promoting before the teardown");
-		assertEquals(List.of(largeSha1), transport.fetches, "the large queued file dispatches first; the small one stays queued without a slot");
-		manager.cancelAllAndShutdown(); // the small file can never finish (no slot left), so joinAll is not an option
+		byte[] heldContent = CONTENTS.get("held.bin");
+		List<String> holderNames = List.of("chunk-under.bin", "chunk-exact.bin", "chunk-over.bin", "held.bin", "resume.bin");
+		long totalBytes = holderNames.size() * (long) heldContent.length + smallContent.length + largeContent.length;
+		DownloadManager manager = new DownloadManager(totalBytes, layout, cache);
+		manager.attachTransport(new FakeTransport(null)); // any host fetch would fail this test loudly
+		for (String holder : holderNames) HELD_LATCHES.put(holder, new CountDownLatch(1));
+		HELD_LATCHES.put("one-byte.txt", new CountDownLatch(1));
+		HELD_LATCHES.put("multi-chunk.bin", new CountDownLatch(1));
+		for (String holder : holderNames) enqueuePlatformDownload(manager, holder, CONTENTS.get(holder), "/held/" + holder);
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (HELD_REQUESTS.size() < DownloadManager.PLATFORM_WORKERS && System.nanoTime() < deadline) Thread.sleep(10);
+		assertEquals(DownloadManager.PLATFORM_WORKERS, HELD_REQUESTS.size(), "the held downloads must occupy every worker slot before the pair enqueues: " + HELD_REQUESTS);
+		enqueuePlatformDownload(manager, "order-small.bin", smallContent, "/held/one-byte.txt");
+		enqueuePlatformDownload(manager, "order-large.bin", largeContent, "/held/multi-chunk.bin");
+		HELD_LATCHES.get(holderNames.get(0)).countDown(); // exactly one worker slot frees
+		awaitHeld("multi-chunk.bin");
+		assertFalse(HELD_REQUESTS.contains("one-byte.txt"), "the small queued file must stay parked; the released slot went to the larger one: " + HELD_REQUESTS);
+		HELD_LATCHES.values().forEach(CountDownLatch::countDown);
+		deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (HELD_REQUESTS.size() < HELD_LATCHES.size() && System.nanoTime() < deadline) Thread.sleep(10);
+		manager.joinAll();
+		manager.finish();
 		cache.close();
+		assertArrayEquals(smallContent, Files.readAllBytes(layout.objectFile(HashUtils.getHash(writeExpected("order-small.bin", smallContent)))));
+		assertArrayEquals(largeContent, Files.readAllBytes(layout.objectFile(HashUtils.getHash(writeExpected("order-large.bin", largeContent)))));
+	}
+
+	/** Queues one file whose only source is a /held path, so the attempt parks at that path's latch. */
+	private void enqueuePlatformDownload(DownloadManager manager, String name, byte[] content, String heldPath) throws IOException {
+		String sha1 = HashUtils.getHash(writeExpected(name, content));
+		Path destination = tempDir.resolve("active").resolve(name);
+		List<DownloadSource> sources = List.of(new DownloadSource("http://127.0.0.1:" + server.getAddress().getPort() + heldPath, DownloadSource.Provider.MODRINTH));
+		manager.download(destination, sha1, null, "mods", sources, content.length, () -> {}, category -> {});
+	}
+
+	/** Fails fast once the named request reaches the server: its dispatch happened, whatever parked at the latch. */
+	private static void awaitHeld(String name) throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (!HELD_REQUESTS.contains(name) && System.nanoTime() < deadline) Thread.sleep(10);
+		assertTrue(HELD_REQUESTS.contains(name), name + " must have been dispatched, arrivals were " + HELD_REQUESTS);
 	}
 
 	private Path downloadViaPlatform(String name, String contentKey, String serverPath, FakeTransport transport) throws Exception {
@@ -305,10 +355,6 @@ class DownloadManagerPlatformTest {
 		private final List<String> fetches = new ArrayList<>();
 		private final List<Long> resumeOffsets = new ArrayList<>();
 		private final AtomicInteger failures = new AtomicInteger();
-		// Optional test hooks: onFetch fires after each recorded fetch; wirePermits, when non-null, caps how many
-		// hasWireRoom calls may answer true (each true consumes one).
-		private Consumer<String> onFetch;
-		private AtomicInteger wirePermits;
 
 		FakeTransport(byte[] servedBytes) {
 			this.servedBytes = servedBytes;
@@ -318,7 +364,6 @@ class DownloadManagerPlatformTest {
 		public CompletableFuture<Path> downloadObject(byte[] key, Path destination, long fileSize, IntConsumer progress) {
 			String fetched = new String(key, StandardCharsets.UTF_8);
 			fetches.add(fetched);
-			if (onFetch != null) onFetch.accept(fetched);
 			if (servedBytes == null) {
 				failures.incrementAndGet();
 				return CompletableFuture.failedFuture(new IOException("no host wire in this test"));
@@ -357,11 +402,6 @@ class DownloadManagerPlatformTest {
 		@Override
 		public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, OutputStream tap) {
 			return CompletableFuture.failedFuture(new IOException("documents are not part of this test"));
-		}
-
-		@Override
-		public boolean hasWireRoom() {
-			return wirePermits == null || wirePermits.getAndDecrement() > 0;
 		}
 
 		@Override

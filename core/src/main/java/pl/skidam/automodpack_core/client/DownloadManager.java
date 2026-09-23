@@ -18,7 +18,6 @@ import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.protocol.StaleRangeException;
 import pl.skidam.automodpack_core.protocol.WireTrace;
-import pl.skidam.automodpack_core.protocol.WireWindowFullException;
 import pl.skidam.automodpack_core.screen.DownloadView;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
@@ -46,7 +45,7 @@ public class DownloadManager implements DownloadView {
 	private static final int MAX_DOWNLOAD_ATTEMPTS = 2;
 	// Platform attempts are blocking whole-file HTTP pulls, unrelated to the host wire's lane count this used to be
 	// welded to: five concurrent CDN downloads saturate any home link while bounding the parallelism any one CDN sees.
-	private static final int PLATFORM_WORKERS = 5;
+	static final int PLATFORM_WORKERS = 5;
 	private static final int HTTP_UNAUTHORIZED = 401;
 	private static final int HTTP_NOT_FOUND = 404;
 	private static final int HTTP_GONE = 410;
@@ -125,8 +124,9 @@ public class DownloadManager implements DownloadView {
 	private boolean pumping;
 
 	private synchronized void downloadNext() {
-		// Drain, don't dribble: every settle and every finalize pumps the dispatch until the wire window or the worker
-		// budget is full, so concurrency tracks the window as it grows instead of riding one file per settle.
+		// Drain, don't dribble: every settle and every finalize pumps the dispatch until the worker budget is full or
+		// the queue is empty - host transfers occupy no worker, so they all dispatch at once and their takes queue on
+		// the transport's lanes.
 		if (pumping) return;
 		pumping = true;
 		try {
@@ -168,14 +168,8 @@ public class DownloadManager implements DownloadView {
 		String activeDomain = chosenDomain;
 
 		boolean hostServed = activeDomain.equals(INTERNAL_CLIENT_SOURCE) && transport != null;
-		if (hostServed) {
-			if (!transport.hasWireRoom()) {
-				// The transport's wire window is full: put the task back; the next settle re-runs the dispatch.
-				WireTrace.log("WINDOW_FULL", "task", task.file.getFileName());
-				requeue(key, task);
-				return false;
-			}
-		} else if (platformTasksInFlight() >= PLATFORM_WORKERS) {
+		// Host transfers occupy no worker, so only the platform budget gates a dispatch; their takes queue on the transport's lanes.
+		if (!hostServed && platformTasksInFlight() >= PLATFORM_WORKERS) {
 			requeue(key, task);
 			return false;
 		}
@@ -347,7 +341,7 @@ public class DownloadManager implements DownloadView {
 		}
 	}
 
-	/** The blocking platform path: one HTTP download from the picked source, resuming behind the stored partial. The transport's wire window is not involved. */
+	/** The blocking platform path: one HTTP download from the picked source, resuming behind the stored partial. The host transport is not involved. */
 	private boolean attemptPlatformDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, DownloadSource source, Path partial) throws InterruptedException {
 		refreshDeadLinkSources(hashPathPair.hash(), task);
 		long offset = PartialResume.offset(partial, task.fileSize);
@@ -397,7 +391,7 @@ public class DownloadManager implements DownloadView {
 		cleanupAndFinalize(hashPathPair, task, storeFile, downloaded, false);
 	}
 
-	/** The host path: the transport owns the whole transfer - resume, tiling, pacing - and its future finalizes the task, so the worker is free at once. */
+	/** The host path: the transport owns the whole transfer - resume, tiling, flow control - and its future finalizes the task, so the worker is free at once. */
 	private void downloadFromHost(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path partial) {
 		long attemptStart = System.nanoTime();
 		AtomicLong attemptBytes = new AtomicLong(0);
@@ -422,13 +416,6 @@ public class DownloadManager implements DownloadView {
 	private void finishHostFile(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path partial, Throwable error) {
 		if (error != null) {
 			error = Throwables.unwrap(error);
-			if (error instanceof WireWindowFullException) {
-				// The window filled between the dispatch peek and the transfer's first take: requeue, the next settle rediscovers this task.
-				downloadsInProgress.remove(hashPathPair);
-				activeTemporaryFiles.remove(hashPathPair);
-				requeue(hashPathPair, task);
-				return;
-			}
 			if (cancelled || error instanceof InterruptedException) {
 				task.lastFailureCategory = FailureCategory.CANCELLED;
 				deletePartial(task); // the writers died with the aborted lanes; the partial is a hole-riddled relic
@@ -528,7 +515,7 @@ public class DownloadManager implements DownloadView {
 				if (handleRetry(key, task, interrupted)) activeTemporaryFiles.remove(key);
 			}
 		} finally {
-			if (downloadsInProgress.isEmpty() && queuedDownloads.isEmpty() && transport != null) LOGGER.info("[download] {} window summary: {}", task.file.getFileName(), transport.windowSummary());
+			if (downloadsInProgress.isEmpty() && queuedDownloads.isEmpty() && transport != null) LOGGER.info("[download] {} transfer summary: {}", task.file.getFileName(), transport.windowSummary());
 			if (!interrupted && !cancelled && !downloadExecutor.isShutdown()) downloadNext();
 		}
 	}

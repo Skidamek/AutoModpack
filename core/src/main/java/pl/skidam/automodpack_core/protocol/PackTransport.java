@@ -8,13 +8,13 @@ import java.util.function.IntConsumer;
 /**
  * The client transfer seam: one open transfer session to the pack's host, whatever serves it. The client never
  * distinguishes hostings, so every transport answers the same requests - whole objects by sha1, documents by reserved
- * key with conditionals, and the identity fetch for the waiting track. Each transport owns its wire window: resume,
- * chunk tiling, idle-lane stealing and pacing live behind {@link #downloadObject}, and on success the destination
- * holds the FULL object bytes while promotion judges the assembled whole.
+ * key with conditionals, and the identity fetch for the waiting track. Each transport owns its transfer tiling: resume,
+ * chunk tiling and idle-lane stealing live behind {@link #downloadObject}, and on success the destination holds the
+ * FULL object bytes while promotion judges the assembled whole.
  */
 public interface PackTransport extends AutoCloseable {
 
-	/** One complete object transfer: on success the destination holds the FULL object bytes; the transport owns resume, chunking, stealing and pacing. */
+	/** One complete object transfer: on success the destination holds the FULL object bytes; the transport owns resume, chunking and stealing. */
 	CompletableFuture<Path> downloadObject(byte[] sha1Hex, Path destination, long fileSize, IntConsumer progress);
 
 	/** The waiting-track fetch: single identity GET (no negotiation, no resume), aborted past maxBytes. */
@@ -29,10 +29,7 @@ public interface PackTransport extends AutoCloseable {
 	 */
 	CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, OutputStream tap);
 
-	/** Whether one more transfer fits the transport's wire window; false means the caller should requeue and let the next settle re-run the dispatch. */
-	boolean hasWireRoom();
-
-	/** The one-line window receipt (window path, request duration estimate, per-lane settle rates) a run summary carries. */
+	/** The one-line transfer receipt (takes, retries, bytes over the lanes) a run summary carries. */
 	String windowSummary();
 
 	/** Drops every in-flight transfer so a cancelled run cannot poison the next one. */

@@ -8,10 +8,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -24,8 +22,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 
 /**
  * The whole-object transfer contract: exact tiling across chunk edges (every byte requested exactly once), resume
- * behind the stored prefix, the complete-size shortcut that never touches the wire, and the typed window-full failure
- * the caller requeues on.
+ * behind the stored prefix, and the complete-size shortcut that never touches the wire.
  */
 class DownloadObjectTest {
 	/** Generous bound for loopback handshakes that complete in milliseconds when warm; cold CI runners have blown past five seconds here. */
@@ -47,6 +44,7 @@ class DownloadObjectTest {
 				Path destination = directory.resolve("object");
 				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertTrue(client.windowSummary().contains("3 takes (0 retried)"), "the honest receipt counts the three takes: " + client.windowSummary());
 			}
 			long next = 0;
 			for (long[] range : server.ranges.stream().sorted(Comparator.comparingLong(range -> range[0])).toList()) {
@@ -80,33 +78,34 @@ class DownloadObjectTest {
 		}
 	}
 
-	/** The window starts at one lane's pipeline depth, so the transfer past it fails typed before anything is sent, and the gate the caller peeks reads full. */
+	/**
+	 * The one physical flow-control bound: a transfer past the pool's depth fills exactly the pool's pipeline slots and
+	 * queues the rest of its tiles behind unsettled takes - nothing fails window-full, nothing stalls.
+	 */
 	@Test
-	void theTransferPastTheWindowFailsTypedWithoutSending(@TempDir Path directory) throws Exception {
+	void aTransferPastThePoolDepthKeepsAtMostThePoolSlotsUnsettled(@TempDir Path directory) throws Exception {
 		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
-			List<String> hashes = new ArrayList<>();
-			for (int i = 0; i < Connection.PIPELINE_DEPTH + 1; i++) {
-				byte[] object = ("window-full-object-" + i).getBytes(StandardCharsets.UTF_8);
-				String sha1 = HashUtils.sha1(object);
-				server.store().put(sha1, object);
-				hashes.add(sha1);
-			}
-			server.setResponseDelayMillis(30_000); // no settles while the test runs: the window stays at its lane-depth start
+			// The hash is unstored and every response is delayed far past the test: nothing settles, so the wire shows the raw bound.
+			byte[] sha1 = HashUtils.sha1("an-unstored-oversized-object".getBytes(StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
+			int poolSlots = DownloadClient.LANES * Connection.PIPELINE_DEPTH;
+			long fileSize = (long) NetUtils.WIRE_CHUNK_BYTES * poolSlots + 1; // tiles into poolSlots + 1 takes, one past the bound
+			server.setResponseDelayMillis(30_000);
 			try (DownloadClient client = client(server, "test-secret")) {
-				List<CompletableFuture<Path>> futures = new ArrayList<>();
-				for (int i = 0; i < hashes.size(); i++) {
-					futures.add(client.downloadObject(hashes.get(i).getBytes(StandardCharsets.UTF_8), directory.resolve("object-" + i), 20, null));
-				}
-				assertFalse(client.hasWireRoom(), "one lane's depth of takes fills the window");
-				var thrown = assertThrows(ExecutionException.class, () -> futures.get(futures.size() - 1).get(5, TimeUnit.SECONDS));
-				assertInstanceOf(WireWindowFullException.class, rootCause(thrown));
+				CompletableFuture<Path> transfer = client.downloadObject(sha1, directory.resolve("object"), fileSize, null);
+				long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+				while (server.requests.size() < poolSlots && System.nanoTime() < deadline) Thread.sleep(50);
+				assertEquals(poolSlots, server.requests.size(), "the transfer must fill exactly the pool's pipeline slots, requests: " + server.requests.size());
+				Thread.sleep(1_000); // the quiet period: with nothing settling, not one more take may hit the wire
+				assertEquals(poolSlots, server.requests.size(), "takes past the bound must queue unsettled, requests: " + server.requests.size());
+				client.abortTransfers();
+				assertThrows(ExecutionException.class, () -> transfer.get(5, TimeUnit.SECONDS), "an aborted transfer must fail, never hang");
 			}
 		}
 	}
 
-	/** A 404 is a pack-hygiene verdict, not congestion: the failing range is never retried and the window never moves. */
+	/** A 404 is a pack-hygiene verdict, not congestion: the failing range is never retried. */
 	@Test
-	void aMissingObjectFailsTheTransferWithoutRetryingARangeOrMovingTheWindow(@TempDir Path directory) throws Exception {
+	void aMissingObjectFailsTheTransferWithoutRetryingARange(@TempDir Path directory) throws Exception {
 		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
 			// The hash is well-formed but the server stores nothing under it: every take is answered 404.
 			byte[] sha1 = HashUtils.sha1("a-missing-object".getBytes(StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
@@ -116,13 +115,12 @@ class DownloadObjectTest {
 				var thrown = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1, directory.resolve("object"), fileSize, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertInstanceOf(MissingObjectException.class, rootCause(thrown));
 				assertTrue(server.pipelineArrived(), "all three takes reached the socket before the first answer");
-				assertFalse(client.windowSummary().contains("→"), () -> "a permanent verdict must not move the window: " + client.windowSummary());
 			}
 			assertEquals(3, server.requests.size(), "each take asked exactly once - a 404 range is never retried");
 		}
 	}
 
-	/** A dropped lane is transient: the failed ranges retry in place and the transfer still promotes, without moving the window. */
+	/** A dropped lane is transient: the failed ranges retry in place and the transfer still promotes. */
 	@Test
 	void aDroppedRangeRetriesInPlaceAndStillPromotes(@TempDir Path directory) throws Exception {
 		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
@@ -136,7 +134,9 @@ class DownloadObjectTest {
 				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertArrayEquals(object, Files.readAllBytes(destination));
 				assertTrue(server.requests.size() > 3, "the dropped take must have been retried, requests: " + server.requests.size());
-				assertFalse(client.windowSummary().contains("→"), () -> "a recovered transient failure must not move the window: " + client.windowSummary());
+				// The drop closes the whole lane, so every take pipelined behind it retries together; the exact count is
+				// the scheduler's business. The receipt must count them honestly: at least one retry, every take booked.
+				assertTrue(client.windowSummary().matches("\\d+ takes \\([1-9]\\d* retried\\), [\\d.]+ \\S+ over 5 lanes"), "the honest receipt counts the lane's retried takes: " + client.windowSummary());
 			}
 		}
 	}
@@ -160,7 +160,6 @@ class DownloadObjectTest {
 				// The manager requeues the task; under the flag it skips tiling and rides one open-ended take.
 				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertArrayEquals(object, Files.readAllBytes(destination));
-				assertFalse(client.windowSummary().contains("→"), () -> "a permanent capability verdict must not move the window: " + client.windowSummary());
 			}
 			assertTrue(server.ranges.isEmpty(), "every take was answered by the barebones head rules, never a 206");
 		}

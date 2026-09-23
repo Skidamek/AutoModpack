@@ -36,6 +36,7 @@ import javax.net.ssl.SSLSocket;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.ByteFormat;
 import pl.skidam.automodpack_core.utils.Throwables;
 import pl.skidam.mcholepunch.HolepunchClient;
 import pl.skidam.mcholepunch.HolepunchConnection;
@@ -71,14 +72,14 @@ public class DownloadClient implements PackTransport {
 	// task on this client then takes the object open-ended instead of tiling. One client is one endpoint - all lanes
 	// terminate on the same peer and redirects drop authority - so the capability verdict is per client, not per file.
 	volatile boolean rangeIgnoredHost;
-	// The transport's wire window: the number of unsettled takes it may keep on the lanes. The cap is the receipted
-	// lanes × pipeline depth; the pacer starts at one lane's depth, doubles every clean cycle and halves on congestion.
-	private final WirePacer pacer = new WirePacer(LANES * Connection.PIPELINE_DEPTH, LANES);
-	// The live transfers, so a settle anywhere revives one whose takes all settled while the window was full - a dormant
-	// transfer has nothing in flight, so nothing else would ever hand the freed credit to it. Own lock: never taken
-	// while holding a transfer's lock or the pool lock.
-	private final Object transferRegistryLock = new Object();
-	private final List<ObjectTransfer> activeTransfers = new ArrayList<>();
+	// Set by abortTransfers before its lanes close: a take failing on the closed lanes must not retry onto the pool
+	// it was aborted against. The client is never reused for transfers after an abort (every run gets a fresh client
+	// from ManifestFetcher), so one flag covers every transfer.
+	private volatile boolean aborted;
+	// The run's honest totals: takes sent (retries included), takes that were retries, and bytes that arrived.
+	private final AtomicLong takesSubmitted = new AtomicLong();
+	private final AtomicLong takeRetries = new AtomicLong();
+	private final AtomicLong bytesDownloaded = new AtomicLong();
 	private final Object poolLock = new Object();
 	// The lanes, in creation order: worker i submits to lane i when it has a free slot, so the scheduler's largest-first
 	// dispatch puts concurrent big files on distinct lanes while small files fill each lane's depth. ≤ 8 × 10 KB = 80 KB
@@ -390,8 +391,7 @@ public class DownloadClient implements PackTransport {
 
 	/**
 	 * One complete object transfer: on success the destination holds the FULL object bytes. Resume validation and the
-	 * zero-size shortcut run on the calling thread exactly as the old manager's dispatch did; the wire credit for the
-	 * first take is taken here too, so a full window fails the future before anything is sent and the caller requeues.
+	 * zero-size shortcut run on the calling thread exactly as the old manager's dispatch did.
 	 */
 	@Override
 	public CompletableFuture<Path> downloadObject(byte[] sha1Hex, Path destination, long fileSize, IntConsumer progress) {
@@ -407,10 +407,6 @@ public class DownloadClient implements PackTransport {
 				// A complete-sized destination skips the network; the caller's promotion judges it for free.
 				return CompletableFuture.completedFuture(destination);
 			}
-			if (!pacer.tryAcquire()) {
-				// The caller requeues on this type without burning retry budget; no credit is held, so none is released.
-				return CompletableFuture.failedFuture(new WireWindowFullException());
-			}
 			return new ObjectTransfer(sha1Hex, destination, fileSize, offset, progress).start();
 		} catch (IOException e) {
 			return CompletableFuture.failedFuture(e);
@@ -423,15 +419,20 @@ public class DownloadClient implements PackTransport {
 	}
 
 	/**
-	 * One transfer's tiling, window accounting and completion barrier. The first take rides the credit acquired at
-	 * dispatch and covers the streamer's head chunk; every further take acquires its own credit and claims the
-	 * uncovered tail. A failed take retries its own range in place a bounded number of times before failing the
-	 * transfer. All bookkeeping runs inside the transfer lock, one thread at a time; the pacer lock is always
-	 * taken either alone or inside the transfer lock, never the other way round.
+	 * One transfer's tiling and completion barrier. The first take covers the streamer's head chunk; every further
+	 * take claims the uncovered tail. A failed take retries its own range in place a bounded number of times before
+	 * failing the transfer. All bookkeeping runs inside the transfer lock, one thread at a time.
 	 */
 	final class ObjectTransfer {
 		// Survives two consecutive lane deaths (each retry picks a fresh lane via laneCounter); a third failure means the server, not a lane, is gone.
 		private static final int MAX_TAKE_ATTEMPTS = 3;
+		// The one physical flow-control bound, receipted: a transfer may never hold more unsettled takes than the
+		// whole pool has pipeline slots (5 lanes × depth 8 = 40), so its takes fill every lane exactly once and
+		// further tiles queue as settles free them. Transfers under 40 tiles (~160 MiB) never gate at all, and since
+		// the pump only stops early while takes are still outstanding, every transfer owns at least one unsettled
+		// take until its range is fully claimed - its own settles always re-pump it, so nothing can go dormant and
+		// no revive path is needed.
+		private static final int MAX_OUTSTANDING_TAKES = LANES * Connection.PIPELINE_DEPTH;
 
 		private final byte[] sha1Hex;
 		private final Path destination;
@@ -453,8 +454,6 @@ public class DownloadClient implements PackTransport {
 		private Throwable error;
 		// A positioned tail take wrote bytes: the partial is hole-riddled and its size no longer reads as a resume prefix.
 		private boolean positionedWrites;
-		// Set when the client aborts: this transfer's failed takes must not retry onto freshly reopened lanes.
-		private volatile boolean aborted;
 		// A range-ignoring host serves every bounded take as a full 200, so tiling would only re-detect the same verdict
 		// per slice: one open-ended take covers the object, and the cursor stays at the resume offset so no tail is claimed.
 		private final boolean openEnded;
@@ -470,9 +469,6 @@ public class DownloadClient implements PackTransport {
 		}
 
 		CompletableFuture<Path> start() {
-			synchronized (transferRegistryLock) {
-				activeTransfers.add(this);
-			}
 			synchronized (lock) {
 				pendingItems = 1;
 			}
@@ -484,27 +480,12 @@ public class DownloadClient implements PackTransport {
 			return future;
 		}
 
-		/** A settle anywhere may have freed the credit this dormant transfer waits for: with nothing in flight, no settle of its own will ever re-pump it. */
-		void revive() {
-			synchronized (lock) {
-				if (pendingItems != 0 || error != null || cursor <= floor()) return;
-			}
-			pump();
-		}
-
-		void abort() {
-			aborted = true;
-		}
-
-		/** Issues tail takes while the window has room; every settle releases its credit and re-pumps. */
+		/** Issues tail takes while the transfer holds fewer unsettled takes than the pool's pipeline slots; every settle re-pumps. */
 		private void pump() {
-			while (pacer.tryAcquire()) {
+			while (true) {
 				Take take;
 				synchronized (lock) {
-					if (error != null || cursor <= floor()) {
-						pacer.release(); // nothing left to take
-						return;
-					}
+					if (error != null || pendingItems >= MAX_OUTSTANDING_TAKES || cursor <= floor()) return;
 					take = claimLocked();
 				}
 				LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", take.lane(), take.start(), take.end(), objectName());
@@ -525,6 +506,7 @@ public class DownloadClient implements PackTransport {
 		}
 
 		private void submitTake(Take take, AtomicLong takeBytes) {
+			takesSubmitted.incrementAndGet();
 			long takeStart = System.nanoTime();
 			long budgetNanos = takeBudgetNanos(sliceBytes(take));
 			AtomicReference<Connection> lane = new AtomicReference<>();
@@ -549,10 +531,10 @@ public class DownloadClient implements PackTransport {
 			} catch (Throwable submitFailure) {
 				// The submit never produced a request: the settle path retries or books it like any other failure.
 				WireTrace.log("TAKE_FAIL", "object", objectName(), "item", take.start() + "-" + take.end(), "error", submitFailure);
-				onTakeSettled(take, takeBytes, System.nanoTime() - takeStart, submitFailure);
+				onTakeSettled(take, takeBytes, submitFailure);
 				return;
 			}
-			future.whenComplete((path, takeError) -> onTakeSettled(take, takeBytes, System.nanoTime() - takeStart, takeError));
+			future.whenComplete((path, takeError) -> onTakeSettled(take, takeBytes, takeError));
 		}
 
 		/** The take's slice size: a bounded take's exact range, or the open-ended tail behind its start. */
@@ -566,15 +548,17 @@ public class DownloadClient implements PackTransport {
 			return Math.max(TRANSFER_WRITE_STALL_TIMEOUT.toNanos(), sliceBytes * 1_000_000_000L / TAKE_RATE_FLOOR_BYTES_PER_SECOND);
 		}
 
-		private void onTakeSettled(Take take, AtomicLong takeBytes, long nanos, Throwable takeError) {
+		private void onTakeSettled(Take take, AtomicLong takeBytes, Throwable takeError) {
 			if (takeError instanceof RangeIgnoredException) markRangeIgnoredHost();
 			if (takeError != null && take.attempt() < MAX_TAKE_ATTEMPTS && retryWorth(takeError)) {
+				takeRetries.incrementAndGet();
 				WireTrace.log("TAKE_RETRY", "object", objectName(), "item", take.start() + "-" + take.end(), "attempt", take.attempt(), "error", takeError);
-				// The credit stays held and the barrier stays charged: the retried range is the same one unsettled unit of work.
+				// The barrier stays charged: the retried range is the same one unsettled unit of work.
 				submitTake(new Take(take.start(), take.end(), Math.floorMod(laneCounter.getAndIncrement(), LANES), take.attempt() + 1, takeBytes.get()), takeBytes);
 				return;
 			}
-			pacer.settle(verdictOf(takeError), takeBytes.get(), nanos, take.lane());
+			// The take's whole life is over: its cumulative count is the honest number of bytes its range put on the wire.
+			bytesDownloaded.addAndGet(takeBytes.get());
 			boolean done;
 			Throwable failure;
 			synchronized (lock) {
@@ -585,7 +569,6 @@ public class DownloadClient implements PackTransport {
 			}
 			if (done) finish(failure);
 			else pump();
-			reviveDormant();
 		}
 
 		/** Marks the whole client degraded once, with the one loud line naming the host every lane of this client terminates on. */
@@ -597,22 +580,17 @@ public class DownloadClient implements PackTransport {
 			LOGGER.warn("Host {} ignores HTTP Range requests; every object on this client now downloads in one open-ended take", connectionInfo.endpoint.getHostString());
 		}
 
-		private static WirePacer.Verdict verdictOf(Throwable error) {
-			if (error == null) return WirePacer.Verdict.OK;
-			if (error instanceof MissingObjectException || error instanceof UnauthorizedException || error instanceof StaleRangeException || error instanceof LocalStorageException
-					|| error instanceof RangeIgnoredException)
-				return WirePacer.Verdict.PERMANENT;
-			return WirePacer.Verdict.CONGESTED;
+		/** Pack-hygiene verdicts are final for the range; anything else (a lost lane, a timeout) is worth another attempt. */
+		private static boolean permanentFailure(Throwable error) {
+			return error instanceof MissingObjectException || error instanceof UnauthorizedException || error instanceof StaleRangeException || error instanceof LocalStorageException
+					|| error instanceof RangeIgnoredException;
 		}
 
 		private boolean retryWorth(Throwable error) {
-			return verdictOf(error) == WirePacer.Verdict.CONGESTED && !aborted;
+			return !permanentFailure(error) && !aborted;
 		}
 
 		private void finish(Throwable failure) {
-			synchronized (transferRegistryLock) {
-				activeTransfers.remove(this);
-			}
 			if (failure != null) {
 				if (positionedWrites) {
 					// The positioned writes left holes behind the streamed prefix: the partial is worthless for resume.
@@ -654,6 +632,9 @@ public class DownloadClient implements PackTransport {
 	/** Drops every pooled and in-flight transfer connection so a cancelled run cannot poison the next one. */
 	@Override
 	public void abortTransfers() {
+		// Flagged before the lanes close: a take that fails on the close must already see the client as aborted, or
+		// its retry slips past this method onto the freshly reopened pool and completes a transfer nobody wants.
+		aborted = true;
 		List<Connection> connections;
 		List<SlotWaiter<?>> waiters;
 		synchronized (poolLock) {
@@ -663,38 +644,16 @@ public class DownloadClient implements PackTransport {
 			lanes.clear();
 			slotWaiters.clear();
 		}
-		// Flagged before the lanes close: a take that fails on the close must already see its transfer as aborted, or
-		// its retry slips past this method onto the freshly reopened pool and completes a transfer nobody wants.
-		List<ObjectTransfer> transfers;
-		synchronized (transferRegistryLock) {
-			transfers = new ArrayList<>(activeTransfers);
-		}
-		transfers.forEach(ObjectTransfer::abort);
 		connections.forEach(DownloadClient::closeQuietly);
 		// Queued waiters never reach a lane: a cancelled run sends no requests, so no pump reopens connections for them.
 		IOException aborted = new IOException("Download aborted");
 		waiters.forEach(waiter -> waiter.future().completeExceptionally(aborted));
 	}
 
-	@Override
-	public boolean hasWireRoom() {
-		return pacer.hasRoom();
-	}
-
-	/** Offers freed credits to transfers with nothing in flight; their own settles can never wake them. */
-	private void reviveDormant() {
-		List<ObjectTransfer> snapshot;
-		synchronized (transferRegistryLock) {
-			if (activeTransfers.isEmpty()) return;
-			snapshot = new ArrayList<>(activeTransfers);
-		}
-		for (ObjectTransfer transfer : snapshot) transfer.revive();
-	}
-
-	/** The one-line window receipt (window path, request duration estimate, per-lane settle rates) a run summary carries. */
+	/** The one-line receipt a run summary carries: takes sent, retries and bytes arrived, over the pool's lanes. */
 	@Override
 	public String windowSummary() {
-		return pacer.summary();
+		return takesSubmitted.get() + " takes (" + takeRetries.get() + " retried), " + ByteFormat.formatSize(bytesDownloaded.get()) + " over " + LANES + " lanes";
 	}
 
 	static void closeQuietly(AutoCloseable closeable) {

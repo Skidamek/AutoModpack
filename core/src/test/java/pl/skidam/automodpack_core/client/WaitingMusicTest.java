@@ -204,11 +204,6 @@ class WaitingMusicTest {
 		}
 
 		@Override
-		public boolean hasWireRoom() {
-			return true;
-		}
-
-		@Override
 		public String windowSummary() {
 			return "no window";
 		}
