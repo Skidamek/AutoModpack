@@ -319,7 +319,12 @@ public class Commands {
 		try {
 			return ModpackConnectionMode.valueOf(value.toUpperCase(Locale.ROOT));
 		} catch (IllegalArgumentException e) {
-			throw new IllegalArgumentException("Unknown connection mode '" + value + "'; valid values: HOLEPUNCH, MAGIC, HTTP");
+			StringBuilder modes = new StringBuilder();
+			for (ModpackConnectionMode mode : ModpackConnectionMode.values()) {
+				if (modes.length() > 0) modes.append(", ");
+				modes.append(mode.name());
+			}
+			throw new IllegalArgumentException("Unknown connection mode '" + value + "'; valid values: " + modes);
 		}
 	}
 
@@ -490,7 +495,7 @@ public class Commands {
 		send(context, "/automodpack generate if-content <content-token> [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate revert <seq> confirm [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate history/storage [collect confirm]/export-http [--all] <dir>", ChatFormatting.YELLOW, false);
-		send(context, "/automodpack host start/stop/restart/connections/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
+		send(context, "/automodpack host start/stop/restart/activity/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
 	}
