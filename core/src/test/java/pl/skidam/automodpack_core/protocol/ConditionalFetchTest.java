@@ -35,6 +35,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.IntConsumer;
 import java.util.zip.GZIPOutputStream;
 
@@ -382,6 +383,65 @@ class ConditionalFetchTest {
 	}
 
 	@Test
+	void aCrossHostRedirectFailsLoudlyOnAPinnedConnection(@TempDir Path directory) throws Exception {
+		try (ContractServer server = new ContractServer()) {
+			server.redirects.put("/head", "https://cdn.example.com/head");
+			try (DownloadClient client = client(server, "test-secret")) {
+				var future = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), null, (IntConsumer) null);
+				var thrown = assertThrows(ExecutionException.class, () -> future.get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertTrue(rootCauseOf(thrown).getMessage().contains("Cross-host redirect"), String.valueOf(rootCauseOf(thrown)));
+			}
+			assertEquals(1, server.requests.size(), "the cross-host target was never fetched");
+		}
+	}
+
+	@Test
+	void aLocationCarryingEncodedCrlfFailsLoudly(@TempDir Path directory) throws Exception {
+		try (ContractServer server = new ContractServer()) {
+			server.redirects.put("/head", "/head%0d%0aX-Injected:%201");
+			try (DownloadClient client = client(server, "test-secret")) {
+				var future = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), null, (IntConsumer) null);
+				var thrown = assertThrows(ExecutionException.class, () -> future.get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertTrue(rootCauseOf(thrown).getMessage().contains("CR, LF, or space"), String.valueOf(rootCauseOf(thrown)));
+			}
+		}
+	}
+
+	@Test
+	void anUnknownTransferEncodingTokenFailsTheResponse(@TempDir Path directory) throws Exception {
+		try (ContractServer server = new ContractServer()) {
+			byte[] head = "head-document".getBytes(StandardCharsets.UTF_8);
+			server.store.put("head", head);
+			server.extraTransferEncoding.set("gzip");
+			try (DownloadClient client = client(server, "test-secret")) {
+				var future = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), null, (IntConsumer) null);
+				var thrown = assertThrows(ExecutionException.class, () -> future.get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertTrue(rootCauseOf(thrown).getMessage().contains("Transfer-Encoding"), String.valueOf(rootCauseOf(thrown)));
+			}
+		}
+	}
+
+	@Test
+	void anIdentityTransferEncodingFramesByLengthAndKeepsTheConnectionAligned(@TempDir Path directory) throws Exception {
+		try (ContractServer server = new ContractServer()) {
+			byte[] head = "head-document".getBytes(StandardCharsets.UTF_8);
+			byte[] journal = "journal-document".getBytes(StandardCharsets.UTF_8);
+			server.store.put("head", head);
+			server.store.put("journal", journal);
+			server.extraTransferEncoding.set("identity");
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path headDestination = directory.resolve("head");
+				client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), headDestination, null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertArrayEquals(head, Files.readAllBytes(headDestination));
+				Path journalDestination = directory.resolve("journal");
+				client.downloadDocument("journal".getBytes(StandardCharsets.UTF_8), journalDestination, null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertArrayEquals(journal, Files.readAllBytes(journalDestination));
+				assertEquals(1, server.connections.get(), "the identity token framed by Content-Length and both responses rode one connection");
+			}
+		}
+	}
+
+	@Test
 	void redirectLoopFailsAfterThreeHops(@TempDir Path directory) throws Exception {
 		try (ContractServer server = new ContractServer()) {
 			server.redirects.put("/head", "/head");
@@ -398,12 +458,16 @@ class ConditionalFetchTest {
 		try {
 			future.get(AWAIT_SECONDS, TimeUnit.SECONDS);
 		} catch (Exception e) {
-			Throwable cause = e.getCause();
-			while (cause.getCause() != null)
-				cause = cause.getCause();
-			return cause;
+			return rootCauseOf(e);
 		}
 		throw new AssertionError("The future was expected to fail");
+	}
+
+	private static Throwable rootCauseOf(Throwable thrown) {
+		Throwable cause = thrown;
+		while (cause.getCause() != null)
+			cause = cause.getCause();
+		return cause;
 	}
 
 	private static DownloadClient client(ContractServer server, String secret) throws Exception {
@@ -435,6 +499,7 @@ class ConditionalFetchTest {
 		final Map<String, String> redirects = new ConcurrentHashMap<>();
 		final AtomicBoolean cooperate = new AtomicBoolean(true);
 		final AtomicBoolean ignoreRanges = new AtomicBoolean(false);
+		final AtomicBoolean closeFramedObjects = new AtomicBoolean(false);
 		final AtomicBoolean requireAuth = new AtomicBoolean(false);
 		final AtomicBoolean lieAboutResumeStart = new AtomicBoolean(false);
 		final AtomicBoolean compressDocuments = new AtomicBoolean(false);
@@ -444,6 +509,8 @@ class ConditionalFetchTest {
 		final AtomicBoolean delayFinalChunk = new AtomicBoolean(false);
 		final AtomicBoolean lastResponseZstd = new AtomicBoolean(false);
 		final AtomicBoolean sawAcceptEncoding = new AtomicBoolean(false);
+		/** When set, a plain 200 response carries this raw Transfer-Encoding value on top of its Content-Length. */
+		final AtomicReference<String> extraTransferEncoding = new AtomicReference<>();
 		final AtomicInteger connections = new AtomicInteger();
 		private final AtomicInteger dropNextObjectRequests = new AtomicInteger();
 		final CompletableFuture<String> firstAuthorization = new CompletableFuture<>();
@@ -586,6 +653,14 @@ class ConditionalFetchTest {
 					respond(out, "200 OK", content);
 					return;
 				}
+				// The barebones static host class without a Content-Length: the body ends only with the connection.
+				if (request.path.startsWith("/objects/") && closeFramedObjects.get()) {
+					out.write("HTTP/1.1 200 OK\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+					out.write(content);
+					out.flush();
+					socket.close();
+					return;
+				}
 				long[] range = parseRange(request.range, content.length);
 				if (range != null && range[0] >= content.length) {
 					respond(out, "416 Range Not Satisfiable", new byte[0], "Content-Range: bytes */" + content.length);
@@ -615,7 +690,8 @@ class ConditionalFetchTest {
 					respondChunked(out, "200 OK", content, 0);
 					return;
 				}
-				respond(out, "200 OK", content);
+				String transferEncoding = extraTransferEncoding.get();
+				respond(out, "200 OK", content, transferEncoding == null ? new String[0] : new String[]{"Transfer-Encoding: " + transferEncoding});
 			} catch (Exception ignored) {
 			}
 		}

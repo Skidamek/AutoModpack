@@ -39,8 +39,9 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 class Connection implements AutoCloseable {
 
 	// The window counts unsettled takes, not bytes: against the reference envelope (5 Mbps uplink, 300 ms RTT,
-	// BDP ≈ 187 KB ≈ 19 × 10 KB responses) each lane's share of the pipe is ~4 responses, so a depth of 8 re-fills
-	// a lane inside one RTT while its head-of-line queue stays 8 responses deep. The window cap is lanes × depth.
+	// BDP ≈ 187 KB ≈ 1/22 of one 4 MiB take) a single in-flight take already keeps the pipe full on a clean link,
+	// so the depth exists for the loss regime - a lane keeps work queued while its head-of-line segment retransmits
+	// (the LANES receipt in DownloadClient carries that measurement). The window cap is lanes × depth.
 	static final int PIPELINE_DEPTH = 8;
 
 	private static final byte[] CRLF = {'\r', '\n'};
@@ -50,7 +51,7 @@ class Connection implements AutoCloseable {
 	// Response header lines are tiny; a line past this or a block of this many lines is a hostile or broken peer.
 	private static final int MAX_HEADER_LINES = 128;
 	/** The document verdict for one conditional response; the body hash decides, never the status alone. */
-	private record ResponseHead(int status, Long contentLength, String contentRange, String contentEncoding, String location, boolean connectionClose, boolean chunked) {}
+	private record ResponseHead(int status, Long contentLength, String contentRange, String contentEncoding, String location, boolean connectionClose, boolean chunked, boolean http10) {}
 
 	private final SSLSocket socket;
 	private final Socket transport;
@@ -346,7 +347,14 @@ class Connection implements AutoCloseable {
 					future.complete(destination);
 					return;
 				}
-				if (endInclusive >= 0) throw new IOException("Server ignored the Range end for " + originPath);
+				if (endInclusive >= 0) {
+					// A chunked 200 on a bounded take is unjudgeable without decode-counting the body, so it still fails loudly;
+					// a close-framed one spends the lane no matter what, so it is not drained first: the verdict marks the host
+					// range-ignoring and the manager's requeue redownloads the object in one open-ended take.
+					if (head.chunked()) throw new IOException("Server ignored the Range end for " + originPath);
+					unhealthy = true;
+					throw new RangeIgnoredException(originPath);
+				}
 				// On a full-object take a 200 without a Content-Range whose declared length differs from the expected size is the wrong object: the length comparison is the verdict, no hash needed after a full download.
 				if (head.contentRange() == null && expectedSize >= 0 && head.contentLength() != null && head.contentLength() != expectedSize)
 					throw new IOException("Served object length " + head.contentLength() + " does not match the expected object size " + expectedSize + " for " + originPath);
@@ -411,12 +419,20 @@ class Connection implements AutoCloseable {
 		return head.status() >= 300 && head.status() < 400 && head.status() != 304;
 	}
 
+	// The fake authority redirects resolve against; reserved TLD, never contacted, and not our lang namespace.
+	private static final String PINNED_AUTHORITY = "pinned.invalid";
+
 	/** The re-issued GET path: the Location resolved against the current request path, authority dropped - the connection is pinned to one TLS peer. */
 	private static String redirectTarget(String requestPath, ResponseHead head) throws IOException {
 		if (head.location() == null || head.location().isBlank()) throw new IOException("Redirect without a Location header");
-		URI resolved = URI.create("https://automodpack.invalid" + requestPath).resolve(URI.create(head.location()));
+		URI resolved = URI.create("https://" + PINNED_AUTHORITY + requestPath).resolve(URI.create(head.location()));
+		if (resolved.getHost() != null && !PINNED_AUTHORITY.equals(resolved.getHost()))
+			throw new IOException("Cross-host redirect to " + resolved.getHost() + " is unsupported on a pinned connection: " + head.location());
 		String target = resolved.getPath();
 		if (target == null || target.isEmpty()) throw new IOException("Redirect Location without a path: " + head.location());
+		// getPath decodes percent-escapes, so a Location carrying %0d%0a would otherwise be written raw into the request stream.
+		if (target.indexOf('\r') >= 0 || target.indexOf('\n') >= 0 || target.indexOf(' ') >= 0)
+			throw new IOException("Redirect Location carries a CR, LF, or space: " + head.location());
 		return target;
 	}
 
@@ -451,7 +467,30 @@ class Connection implements AutoCloseable {
 		Long contentLength = contentLengthValue == null ? null : parseContentLength(contentLengthValue);
 		String connection = head.headerValue("connection");
 		return new ResponseHead(head.status(), contentLength, head.headerValue("content-range"), head.headerValue("content-encoding"), head.headerValue("location"),
-				connection != null && connection.toLowerCase(Locale.ROOT).contains("close"), head.headerValue("transfer-encoding") != null);
+				head.http10() || hasConnectionToken(connection, "close"), chunkedFraming(head.headerValue("transfer-encoding"), head.http10()), head.http10());
+	}
+
+	/** True only when the exact comma-separated token is present; a substring match would read a proxy's own "close"-containing tokens as a close. */
+	private static boolean hasConnectionToken(String value, String wanted) {
+		if (value == null) return false;
+		for (String token : value.split(",")) {
+			if (token.trim().toLowerCase(Locale.ROOT).equals(wanted)) return true;
+		}
+		return false;
+	}
+
+	/** A chunked token frames the body chunked, only identity tokens (or no header) frame nothing, any other token is a broken or hostile peer, and chunked on a 1.0 response is invalid. */
+	private static boolean chunkedFraming(String transferEncoding, boolean http10) throws IOException {
+		if (transferEncoding == null) return false;
+		boolean chunked = false;
+		for (String token : transferEncoding.split(",")) {
+			String codings = token.trim().toLowerCase(Locale.ROOT);
+			if (codings.isEmpty() || codings.equals("identity")) continue;
+			if (!codings.equals("chunked")) throw new IOException("Unsupported Transfer-Encoding: " + transferEncoding);
+			chunked = true;
+		}
+		if (chunked && http10) throw new IOException("HTTP/1.0 response with chunked framing");
+		return chunked;
 	}
 
 	private static long parseContentLength(String value) throws IOException {

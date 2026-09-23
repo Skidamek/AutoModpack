@@ -185,6 +185,29 @@ class DownloadObjectTest {
 		}
 	}
 
+	/** A close-framed 200 on a bounded take cannot be judged by length and its body spends the lane, so the verdict fires undrained: the host degrades and the requeue rides one open-ended take. */
+	@Test
+	void aCloseFramed200OnABoundedTakeThrowsRangeIgnoredAndDegradesTheHost(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			byte[] object = new byte[256 * 1024];
+			new SecureRandom().nextBytes(object);
+			String sha1 = HashUtils.sha1(object);
+			server.store().put(sha1, object);
+			server.closeFramedObjects.set(true);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("object");
+				var thrown = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertInstanceOf(RangeIgnoredException.class, rootCause(thrown));
+				assertTrue(client.rangeIgnoredHost, "the close-framed verdict degrades the whole client");
+				assertFalse(Files.exists(destination), "the body was never consumed into the destination");
+
+				// The manager requeues the task; under the flag it skips tiling and rides one open-ended take.
+				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertArrayEquals(object, Files.readAllBytes(destination));
+			}
+		}
+	}
+
 	/** A full-object take whose declared length differs from the expected object size is the length-mismatch verdict: it fails before a body byte is consumed into the destination. */
 	@Test
 	void aWrongDeclaredLengthOnAFullObjectTakeFailsBeforeConsuming(@TempDir Path directory) throws Exception {
