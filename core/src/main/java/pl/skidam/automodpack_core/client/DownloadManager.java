@@ -345,7 +345,6 @@ public class DownloadManager implements DownloadView {
 
 	/** The blocking platform path: one HTTP download from the picked source, resuming behind the stored partial. The host transport is not involved. */
 	private boolean attemptPlatformDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, DownloadSource source, Path partial) throws InterruptedException {
-		refreshDeadLinkSources(hashPathPair.hash(), task);
 		long offset = PartialResume.offset(partial, task.fileSize);
 		long attemptStart = System.nanoTime();
 		AtomicLong attemptBytes = new AtomicLong(0);
