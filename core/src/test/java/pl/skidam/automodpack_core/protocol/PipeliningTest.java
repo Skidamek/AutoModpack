@@ -144,8 +144,8 @@ class PipeliningTest {
 
 			Path partial = directory.resolve("partial");
 			try (Connection connection = connection(server, "test-secret")) {
-				connection.sendDownloadFile(sha1.getBytes(StandardCharsets.UTF_8), partial, null, 100_000, object.length - 1, null, true, -1L, object.length).get(AWAIT_SECONDS, TimeUnit.SECONDS);
-				connection.sendDownloadFile(sha1.getBytes(StandardCharsets.UTF_8), partial, null, 0, 99_999, null, true, -1L, object.length).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				connection.sendDownloadFile(sha1.getBytes(StandardCharsets.UTF_8), Connection.ObjectTake.rangedSlice(partial, null, 100_000, object.length - 1, object.length)).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				connection.sendDownloadFile(sha1.getBytes(StandardCharsets.UTF_8), Connection.ObjectTake.rangedSlice(partial, null, 0, 99_999, object.length)).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 			}
 			assertArrayEquals(object, Files.readAllBytes(partial));
 		}

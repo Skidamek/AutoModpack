@@ -35,6 +35,7 @@ import javax.net.ssl.SSLSocket;
 
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.protocol.Connection.ObjectTake;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 import pl.skidam.automodpack_core.utils.Throwables;
@@ -528,7 +529,7 @@ public class DownloadClient implements PackTransport {
 				// A stale range already surfaces as StaleRangeException from the response parse; no mapping happens here.
 				future = withSlot(take.lane(), connection -> {
 					lane.set(connection);
-					return connection.sendDownloadFile(sha1Hex, destination, chunkCallback, take.start(), take.end(), null, true, -1L, fileSize);
+					return connection.sendDownloadFile(sha1Hex, ObjectTake.rangedSlice(destination, chunkCallback, take.start(), take.end(), fileSize));
 				});
 			} catch (Throwable submitFailure) {
 				// The submit never produced a request: the settle path retries or books it like any other failure.
@@ -613,10 +614,10 @@ public class DownloadClient implements PackTransport {
 		private record Take(long start, long end, int lane, int attempt, long progressBase) {}
 	}
 
-	/** The waiting-track fetch: one identity GET with no negotiation and no resume, aborted past maxBytes. */
+	/** The waiting-track fetch: one identity whole-object take with no negotiation and no resume, aborted past maxBytes. */
 	@Override
 	public CompletableFuture<Path> downloadSmallObject(byte[] sha1Hex, Path destination, long maxBytes, OutputStream tap) {
-		return withSlot(0, connection -> connection.sendDownloadFile(sha1Hex, destination, null, 0L, -1L, tap, false, maxBytes, -1L));
+		return withSlot(0, connection -> connection.sendDownloadFile(sha1Hex, ObjectTake.wholeObject(destination, tap, maxBytes)));
 	}
 
 	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers 304 and {@code destination} is not written. */

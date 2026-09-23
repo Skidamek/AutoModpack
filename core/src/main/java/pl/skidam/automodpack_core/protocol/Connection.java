@@ -105,18 +105,32 @@ class Connection implements AutoCloseable {
 		}
 	}
 
+	/** Object request by sha1; the take carries the take's whole shape on the wire. */
+	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, ObjectTake take) {
+		return submit(new ObjectRequest("/objects/" + new String(fileHash, StandardCharsets.UTF_8), take));
+	}
+
 	/**
-	 * Object request by sha1; the range is [{@code offset}, {@code endInclusive}] ({@code endInclusive < 0} means EOF) and is answered append-only behind a validated start.
-	 * {@code offerEncoding} is plain negotiation: true sends Accept-Encoding and may receive an encoded chunked body,
-	 * false asks for identity and an ordinary Content-Length. {@code limitBytes} rejects an object whose declared
-	 * length exceeds it before a body byte is read (negative means no limit). {@code expectedSize} is the object's
-	 * total size when the caller knows it (negative for unknown): it lets a 200 that ignores the Range be judged by
-	 * length - a declared length equal to the slice is acceptable, a longer one is the range-ignoring verdict, and a
-	 * differing length on a full-object take is the length-mismatch verdict.
+	 * One object take's full shape on the wire. {@code destination} receives the body, {@code chunks} reports decoded
+	 * byte counts per read, and {@code tap} mirrors those bytes as they decode (null for none). The range is
+	 * [{@code offset}, {@code endInclusive}] ({@code endInclusive < 0} means EOF) and is answered append-only behind a
+	 * validated start. {@code offerEncoding} is plain negotiation: true sends Accept-Encoding and may receive an encoded
+	 * chunked body, false asks for identity and an ordinary Content-Length. {@code limitBytes} rejects an object whose
+	 * declared length exceeds it before a body byte is read (negative means no limit). {@code expectedSize} is the
+	 * object's total size when the caller knows it (negative for unknown): it lets a 200 that ignores the Range be
+	 * judged by length - a declared length equal to the slice is acceptable, a longer one is the range-ignoring verdict,
+	 * and a differing length on a full-object take is the length-mismatch verdict.
 	 */
-	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback, long offset, long endInclusive, OutputStream tap, boolean offerEncoding, long limitBytes,
-			long expectedSize) {
-		return submit(new ObjectRequest("/objects/" + new String(fileHash, StandardCharsets.UTF_8), destination, offset, endInclusive, chunkCallback, tap, offerEncoding, limitBytes, expectedSize));
+	record ObjectTake(Path destination, IntConsumer chunks, long offset, long endInclusive, OutputStream tap, boolean offerEncoding, long limitBytes, long expectedSize) {
+		/** A ranged take appending behind a stored partial; encoding is offered so the body can ride compressed. */
+		static ObjectTake rangedSlice(Path destination, IntConsumer chunks, long offset, long endInclusive, long expectedSize) {
+			return new ObjectTake(destination, chunks, offset, endInclusive, null, true, -1L, expectedSize);
+		}
+
+		/** A whole-object take from zero, identity only, abandoned past {@code limitBytes}; the tap sees the bytes as they decode. */
+		static ObjectTake wholeObject(Path destination, OutputStream tap, long limitBytes) {
+			return new ObjectTake(destination, null, 0L, -1L, tap, false, limitBytes, -1L);
+		}
 	}
 
 	/** Document request (reserved keys); a non-null expected hash may be answered 304, and the 200 body hash is the ground truth. */
@@ -279,33 +293,23 @@ class Connection implements AutoCloseable {
 	}
 
 	private final class ObjectRequest extends Pending<Path> {
-		private final long offset;
-		private final long endInclusive;
-		private final OutputStream tap;
-		private final boolean offerEncoding;
-		private final long limitBytes;
-		private final long expectedSize;
+		private final ObjectTake take;
 
-		ObjectRequest(String path, Path destination, long offset, long endInclusive, IntConsumer chunks, OutputStream tap, boolean offerEncoding, long limitBytes, long expectedSize) {
-			super(path, destination, chunks);
-			this.offset = offset;
-			this.endInclusive = endInclusive;
-			this.tap = tap;
-			this.offerEncoding = offerEncoding;
-			this.limitBytes = limitBytes;
-			this.expectedSize = expectedSize;
+		ObjectRequest(String path, ObjectTake take) {
+			super(path, take.destination(), take.chunks());
+			this.take = take;
 		}
 
 		@Override
 		String headers() {
-			String end = endInclusive >= 0 ? "-" + endInclusive : "-";
-			String range = endInclusive >= 0 || offset > 0 ? "Range: bytes=" + offset + end + "\r\n" : "";
-			return range + (offerEncoding ? ACCEPT_ENCODING : "");
+			String end = take.endInclusive() >= 0 ? "-" + take.endInclusive() : "-";
+			String range = take.endInclusive() >= 0 || take.offset() > 0 ? "Range: bytes=" + take.offset() + end + "\r\n" : "";
+			return range + (take.offerEncoding() ? ACCEPT_ENCODING : "");
 		}
 
 		/** True when the guardrail applies and the response declares more bytes than it allows; no limit or no declared length never trips. */
 		private boolean overLimit(ResponseHead head) {
-			return limitBytes >= 0 && head.contentLength() != null && head.contentLength() > limitBytes;
+			return take.limitBytes() >= 0 && head.contentLength() != null && head.contentLength() > take.limitBytes();
 		}
 
 		@Override
@@ -313,16 +317,16 @@ class Connection implements AutoCloseable {
 			if (overLimit(head)) {
 				// The declared length busts the guardrail: the body is discarded so the lane stays aligned, and only this request fails.
 				discardBody(head);
-				future.completeExceptionally(new IOException("Object exceeds the " + limitBytes + " byte limit for " + originPath));
+				future.completeExceptionally(new IOException("Object exceeds the " + take.limitBytes() + " byte limit for " + originPath));
 				return;
 			}
 			if (head.status() == 206) {
 				// A 206 may only be appended behind the stored prefix when the server actually resumed at the requested offset; anything else fails fast instead of splicing together bytes that promotion would only
 				// reject after the fact. An encoded body is framed chunked and has no length by design.
 				if (head.contentLength() == null && !head.chunked()) throw new IOException("HTTP 206 without Content-Length");
-				PartialResume.requireResumeStart(head.contentRange(), offset);
-				if (consumeBody(head, destination, offset, chunks, null, tap, false, limitBytes)) {
-					future.completeExceptionally(new IOException("Object exceeds the " + limitBytes + " byte limit for " + originPath));
+				PartialResume.requireResumeStart(head.contentRange(), take.offset());
+				if (consumeBody(head, destination, take.offset(), chunks, null, take.tap(), false, take.limitBytes())) {
+					future.completeExceptionally(new IOException("Object exceeds the " + take.limitBytes() + " byte limit for " + originPath));
 					return;
 				}
 				future.complete(destination);
@@ -334,22 +338,22 @@ class Connection implements AutoCloseable {
 				// take's bytes - the whole file when the take is the whole file - so the 200 is acceptable as-is, a
 				// shorter one is a broken server, and a longer one is the range-ignoring verdict whose body is drained so
 				// the lane stays aligned. A bounded take without a declared length cannot be judged and fails as before.
-				if (endInclusive >= 0 && head.contentLength() != null) {
-					long sliceBytes = endInclusive - offset + 1;
+				if (take.endInclusive() >= 0 && head.contentLength() != null) {
+					long sliceBytes = take.endInclusive() - take.offset() + 1;
 					if (head.contentLength() < sliceBytes) throw new IOException("Declared Content-Length " + head.contentLength() + " is shorter than the " + sliceBytes + " byte slice for " + originPath);
 					if (head.contentLength() > sliceBytes) {
 						discardBody(head);
 						future.completeExceptionally(new RangeIgnoredException(originPath));
 						return;
 					}
-					if (consumeBody(head, destination, offset, chunks, null, tap, false, limitBytes)) {
-						future.completeExceptionally(new IOException("Object exceeds the " + limitBytes + " byte limit for " + originPath));
+					if (consumeBody(head, destination, take.offset(), chunks, null, take.tap(), false, take.limitBytes())) {
+						future.completeExceptionally(new IOException("Object exceeds the " + take.limitBytes() + " byte limit for " + originPath));
 						return;
 					}
 					future.complete(destination);
 					return;
 				}
-				if (endInclusive >= 0) {
+				if (take.endInclusive() >= 0) {
 					// A chunked 200 on a bounded take is unjudgeable without decode-counting the body, so it still fails loudly;
 					// a close-framed one spends the lane no matter what, so it is not drained first: the verdict marks the host
 					// range-ignoring and the manager's requeue redownloads the object in one open-ended take.
@@ -358,12 +362,12 @@ class Connection implements AutoCloseable {
 					throw new RangeIgnoredException(originPath);
 				}
 				// On a full-object take a 200 without a Content-Range whose declared length differs from the expected size is the wrong object: the length comparison is the verdict, no hash needed after a full download.
-				if (head.contentRange() == null && expectedSize >= 0 && head.contentLength() != null && head.contentLength() != expectedSize)
-					throw new IOException("Served object length " + head.contentLength() + " does not match the expected object size " + expectedSize + " for " + originPath);
-				boolean resumed = offset > 0 && head.contentRange() != null;
-				if (resumed) PartialResume.requireResumeStart(head.contentRange(), offset);
-				if (consumeBody(head, destination, resumed ? offset : 0, chunks, null, tap, false, limitBytes)) {
-					future.completeExceptionally(new IOException("Object exceeds the " + limitBytes + " byte limit for " + originPath));
+				if (head.contentRange() == null && take.expectedSize() >= 0 && head.contentLength() != null && head.contentLength() != take.expectedSize())
+					throw new IOException("Served object length " + head.contentLength() + " does not match the expected object size " + take.expectedSize() + " for " + originPath);
+				boolean resumed = take.offset() > 0 && head.contentRange() != null;
+				if (resumed) PartialResume.requireResumeStart(head.contentRange(), take.offset());
+				if (consumeBody(head, destination, resumed ? take.offset() : 0, chunks, null, take.tap(), false, take.limitBytes())) {
+					future.completeExceptionally(new IOException("Object exceeds the " + take.limitBytes() + " byte limit for " + originPath));
 					return;
 				}
 				future.complete(destination);
@@ -371,7 +375,7 @@ class Connection implements AutoCloseable {
 			}
 			discardBody(head);
 			// A failed response is thrown, not completed quietly: the reader treats any failure on the connection as lost alignment and fails every pending request with it.
-			throw statusFailure(head, offset > 0 || endInclusive >= 0);
+			throw statusFailure(head, take.offset() > 0 || take.endInclusive() >= 0);
 		}
 	}
 
