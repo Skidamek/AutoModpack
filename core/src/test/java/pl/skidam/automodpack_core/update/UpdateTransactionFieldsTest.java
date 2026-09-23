@@ -2,7 +2,6 @@ package pl.skidam.automodpack_core.update;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -43,7 +42,7 @@ class UpdateTransactionFieldsTest {
 				List.of(new UpdatePlan.Preservation(Root.PROJECTION, "config/options.txt", OBJECT_HASH, 12, UpdatePlan.PreservationProof.PLAYER_CONSENT)),
 				List.of(new UpdatePlan.BaselineCapture(Root.PROJECTION, "mods/old.jar", OBJECT_HASH, 34, false)),
 				List.of(new UpdatePlan.Conflict("packaa1", "c".repeat(40), Set.of("sodium"), "mods/a.jar", OBJECT_HASH, 1, "mods/b.jar", OBJECT_HASH, 2, UpdatePlan.ConflictAction.PRESERVE_LOCAL)),
-				List.of(new UpdatePlan.NestedCopy("mods/nested.jar", OBJECT_HASH, 2, Set.of("sodium"))), consequences);
+				List.of(new UpdatePlan.NestedCopy("mods/nested.jar", OBJECT_HASH, 2)), consequences);
 		UpdateTransaction transaction = UpdateTransaction.createRemoval(plan, ClientPlatform.LINUX, null, ledger.toFields(), "", new ClientConfigJsons.ClientConfigFieldsV3());
 
 		Path file = temporaryDirectory.resolve("update-transaction.json");
@@ -62,8 +61,6 @@ class UpdateTransactionFieldsTest {
 		assertEquals("mods/old.jar", roundTripped.plan().baselineCaptures().get(0).relativePath());
 		assertEquals(UpdatePlan.ConflictAction.PRESERVE_LOCAL, roundTripped.plan().conflicts().get(0).action());
 		assertEquals("mods/nested.jar", roundTripped.plan().generatedCopies().get(0).relativePath());
-		// Service ids are inspection-only and are not part of the durable plan.
-		assertTrue(roundTripped.plan().generatedCopies().get(0).ids().isEmpty());
 		assertEquals(ChangeSet.Kind.ADDED, roundTripped.plan().consequences().changes().get(0).kind());
 	}
 }

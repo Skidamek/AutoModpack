@@ -333,8 +333,8 @@ class UpdatePlannerTest {
 				new FileKey(Root.GAME_DIR, "mods/nested-old.jar"), new FileState(OLD_HASH, 8, true),
 				new FileKey(Root.GAME_DIR, "mods/nested-edited.jar"), new FileState(OTHER_HASH, 8, true),
 				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(TARGET_HASH, 9, true));
-		List<NestedCopy> previous = List.of(new NestedCopy("mods/nested-old.jar", OLD_HASH, 8, Set.of("nested-old")),
-				new NestedCopy("mods/nested-edited.jar", OLD_HASH, 8, Set.of("nested-edited")));
+		List<NestedCopy> previous = List.of(new NestedCopy("mods/nested-old.jar", OLD_HASH, 8),
+				new NestedCopy("mods/nested-edited.jar", OLD_HASH, 8));
 
 		UpdatePlan plan = planWithGeneratedCopies(manifest(Map.of(), ledger()), files, previous, List.of());
 
@@ -346,8 +346,8 @@ class UpdatePlannerTest {
 
 	@Test
 	void generatedCopyReplacementIsPinnedToThePreviouslyOwnedBytes() {
-		List<NestedCopy> previous = List.of(new NestedCopy("mods/nested.jar", OLD_HASH, 8, Set.of("nested")));
-		List<NestedCopy> targetCopies = List.of(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("nested")));
+		List<NestedCopy> previous = List.of(new NestedCopy("mods/nested.jar", OLD_HASH, 8));
+		List<NestedCopy> targetCopies = List.of(new NestedCopy("mods/nested.jar", TARGET_HASH, 9));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/nested.jar"), new FileState(OLD_HASH, 8, true));
 
 		UpdatePlan plan = planWithGeneratedCopies(manifest(Map.of(), ledger()), files, previous, targetCopies);
@@ -360,7 +360,7 @@ class UpdatePlannerTest {
 
 	@Test
 	void generatedCopyDoesNotOverwriteAnUnownedLocalFile() {
-		List<NestedCopy> targetCopies = List.of(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("nested")));
+		List<NestedCopy> targetCopies = List.of(new NestedCopy("mods/nested.jar", TARGET_HASH, 9));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/nested.jar"), new FileState(OTHER_HASH, 8, true));
 
 		UpdatePlan plan = planWithGeneratedCopies(manifest(Map.of(), ledger()), files, List.of(), targetCopies);
@@ -370,8 +370,8 @@ class UpdatePlannerTest {
 
 	@Test
 	void absentPreviousCopyInstallsWithoutExpectingTheRecordedBytes() {
-		List<NestedCopy> previous = List.of(new NestedCopy("mods/nested.jar", OLD_HASH, 8, Set.of("nested")));
-		List<NestedCopy> targetCopies = List.of(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("nested")));
+		List<NestedCopy> previous = List.of(new NestedCopy("mods/nested.jar", OLD_HASH, 8));
+		List<NestedCopy> targetCopies = List.of(new NestedCopy("mods/nested.jar", TARGET_HASH, 9));
 
 		UpdatePlan plan = planWithGeneratedCopies(manifest(Map.of(), ledger()), Map.of(), previous, targetCopies);
 
@@ -627,7 +627,7 @@ class UpdatePlannerTest {
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
 				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true));
-		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("sodium")),
+		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/nested.jar", TARGET_HASH, 9),
 				Set.of(new NestedConflicts.Collider("mods/local.jar", OLD_HASH)));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(),
@@ -649,7 +649,7 @@ class UpdatePlannerTest {
 				new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
 				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true),
 				new FileKey(Root.GAME_DIR, "mods/other.jar"), new FileState(OTHER_HASH, 7, true));
-		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("sodium")),
+		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/nested.jar", TARGET_HASH, 9),
 				Set.of(new NestedConflicts.Collider("mods/local.jar", OLD_HASH), new NestedConflicts.Collider("mods/other.jar", OTHER_HASH)));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(),
@@ -676,7 +676,7 @@ class UpdatePlannerTest {
 				new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
 				new FileKey(Root.PROJECTION, "mods/other.jar"), new FileState(OTHER_HASH, 9, true),
 				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true));
-		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/provider.jar", TARGET_HASH, 9, Set.of("d")),
+		UpdatePlanner.NestedCandidate candidate = new UpdatePlanner.NestedCandidate(new NestedCopy("mods/provider.jar", TARGET_HASH, 9),
 				Set.of(new NestedConflicts.Collider("mods/local.jar", OLD_HASH)));
 
 		UpdatePlan dropped = UpdatePlanner.plan(new UpdatePlanner.Input(null, targetWithDuplicate, files, Set.of(),
@@ -704,7 +704,7 @@ class UpdatePlannerTest {
 	void previousStateCandidatesCarryNoCollisionKnowledgeAndPlanZeroOperationsOnTheLiveBundle() {
 		// The persisted generated-copy state has no ids and no colliders; wrapping it as previous candidates (the
 		// login estimate's input) must keep the bundle owned exactly as-is instead of retiring the live copy.
-		NestedCopy bundle = new NestedCopy("mods/automodpack-generated.jar", TARGET_HASH, 9, Set.of());
+		NestedCopy bundle = new NestedCopy("mods/automodpack-generated.jar", TARGET_HASH, 9);
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/automodpack-generated.jar"), new FileState(TARGET_HASH, 9, true));
 
 		UpdatePlan plan = planWithGeneratedCopies(manifest(Map.of(), ledger()), files, List.of(bundle), List.of(bundle));

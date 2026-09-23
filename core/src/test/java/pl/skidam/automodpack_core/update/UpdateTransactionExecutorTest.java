@@ -77,7 +77,7 @@ class UpdateTransactionExecutorTest {
 		String rootHash = store(storage, rootBytes);
 		String nestedHash = store(storage, nestedBytes);
 		SelectedModpackTarget target = target(storage, "mods/root.jar", "mod", false, rootHash, rootBytes.length);
-		UpdatePlan.NestedCopy generated = new UpdatePlan.NestedCopy("mods/nested.jar", nestedHash, nestedBytes.length, Set.of("nested"));
+		UpdatePlan.NestedCopy generated = new UpdatePlan.NestedCopy("mods/nested.jar", nestedHash, nestedBytes.length);
 		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(
 				new Operation(Root.PROJECTION, "mods/root.jar", OperationType.INSTALL_OBJECT, rootHash, rootBytes.length, null),
 				new Operation(Root.GAME_DIR, "mods/nested.jar", OperationType.INSTALL_OBJECT, nestedHash, nestedBytes.length, null)),
@@ -101,7 +101,7 @@ class UpdateTransactionExecutorTest {
 		String rootHash = store(storage, rootBytes);
 		String nestedHash = store(storage, nestedBytes);
 		SelectedModpackTarget target = target(storage, "mods/root.jar", "mod", false, rootHash, rootBytes.length);
-		UpdatePlan.NestedCopy generated = new UpdatePlan.NestedCopy("mods/nested.jar", nestedHash, nestedBytes.length, Set.of("nested"));
+		UpdatePlan.NestedCopy generated = new UpdatePlan.NestedCopy("mods/nested.jar", nestedHash, nestedBytes.length);
 		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(
 				new Operation(Root.PROJECTION, "mods/root.jar", OperationType.INSTALL_OBJECT, rootHash, rootBytes.length, null),
 				new Operation(Root.GAME_DIR, "mods/nested.jar", OperationType.INSTALL_OBJECT, nestedHash, nestedBytes.length, null)),

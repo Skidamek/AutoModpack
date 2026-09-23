@@ -91,17 +91,17 @@ class ReviewedUpdatePlanTest {
 
 	@Test
 	void generatedCopiesArePartOfTheApprovedOutcome() {
-		NestedCopy first = new NestedCopy("mods/b.jar", OTHER_HASH, 2, Set.of("b"));
-		NestedCopy second = new NestedCopy("mods/a.jar", OBJECT_HASH, 1, Set.of("a"));
+		NestedCopy first = new NestedCopy("mods/b.jar", OTHER_HASH, 2);
+		NestedCopy second = new NestedCopy("mods/a.jar", OBJECT_HASH, 1);
 		// Same path/sha1/size in a different order, with different transient ids, is still the same index.
 		UpdatePlan approved = plan(List.of(), List.of(), new ClientConfigJsons.ClientConfigFieldsV3(), ChangeSet.empty(), List.of(first, second));
 		UpdatePlan reordered = plan(List.of(), List.of(), new ClientConfigJsons.ClientConfigFieldsV3(), ChangeSet.empty(),
-				List.of(new NestedCopy("mods/a.jar", OBJECT_HASH, 1, Set.of("ignored")), first));
+				List.of(new NestedCopy("mods/a.jar", OBJECT_HASH, 1), first));
 		assertTrue(ReviewedUpdatePlan.outcomeCompatible(approved, reordered));
 		ReviewedUpdatePlan.pending(approved).requireCompatible(reordered);
 
 		UpdatePlan drifted = plan(List.of(), List.of(), new ClientConfigJsons.ClientConfigFieldsV3(), ChangeSet.empty(),
-				List.of(new NestedCopy("mods/c.jar", OBJECT_HASH, 1, Set.of())));
+				List.of(new NestedCopy("mods/c.jar", OBJECT_HASH, 1)));
 		IllegalStateException failure = assertThrows(IllegalStateException.class, () -> ReviewedUpdatePlan.pending(approved).requireCompatible(drifted));
 		assertTrue(failure.getMessage().contains("generated copies"));
 		assertFalse(ReviewedUpdatePlan.outcomeCompatible(approved, drifted));

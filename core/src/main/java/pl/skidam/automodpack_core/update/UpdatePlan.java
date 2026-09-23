@@ -542,21 +542,19 @@ public final class UpdatePlan {
 		private String relativePath;
 		private String sha1;
 		private long size;
-		private transient Set<String> ids;
 
 		public NestedCopy() {}
 
-		public NestedCopy(String relativePath, String sha1, long size, Set<String> ids) {
+		public NestedCopy(String relativePath, String sha1, long size) {
 			this.relativePath = LogicalPath.requireCanonical(relativePath);
 			if (!HashUtils.isSha1(sha1)) throw new IllegalArgumentException("Nested-copy SHA-1 is invalid");
 			this.sha1 = HashUtils.normalizeSha1(sha1);
 			if (size < 0) throw new IllegalArgumentException("Nested-copy size is invalid");
 			this.size = size;
-			this.ids = normalizedSet(ids);
 		}
 
 		public NestedCopy validated() {
-			return new NestedCopy(relativePath, sha1, size, ids);
+			return new NestedCopy(relativePath, sha1, size);
 		}
 
 		public String relativePath() {
@@ -569,10 +567,6 @@ public final class UpdatePlan {
 
 		public long size() {
 			return size;
-		}
-
-		public Set<String> ids() {
-			return ids == null ? Set.of() : ids;
 		}
 	}
 
