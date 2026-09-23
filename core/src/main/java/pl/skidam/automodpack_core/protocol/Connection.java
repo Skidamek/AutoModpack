@@ -1,8 +1,11 @@
 package pl.skidam.automodpack_core.protocol;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.protocol.NetUtils.PIPELINE_MAX_REQUESTS;
+import static pl.skidam.automodpack_core.protocol.NetUtils.PIPELINE_WINDOW_BYTES;
 import static pl.skidam.automodpack_core.protocol.NetUtils.READ_BUFFER_BYTES;
 import static pl.skidam.automodpack_core.protocol.NetUtils.USER_AGENT;
+import static pl.skidam.automodpack_core.protocol.NetUtils.WIRE_CHUNK_BYTES;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -29,20 +32,14 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 
 /**
  * One pooled TLS connection speaking minimal HTTP/1.1 against the modpack contract: {@code GET /<document>} and
- * {@code GET /objects/<sha1>}. Up to {@link #PIPELINE_DEPTH} requests sit in flight, written as the pool hands out
- * slots, and one reader per connection consumes the responses strictly in order; a failure anywhere fails every
+ * {@code GET /objects/<sha1>}. A bounded window of unsettled request bytes sits in flight, written as the pool hands
+ * out slots, and one reader per connection consumes the responses strictly in order; a failure anywhere fails every
  * pending request, because alignment is lost and every request is an idempotent GET whose retry belongs to the
  * download manager. Bodies arrive Content-Length framed, chunked (our server streams negotiated bodies that way), or
  * close framed; content codings decode through the {@link WireCodec} registry. The parser survives foreign static
  * hosts on this fixed response subset and fails loudly on anything else.
  */
 class Connection implements AutoCloseable {
-
-	// The window counts unsettled takes, not bytes: against the reference envelope (5 Mbps uplink, 300 ms RTT,
-	// BDP ≈ 187 KB ≈ 1/22 of one 4 MiB take) a single in-flight take already keeps the pipe full on a clean link,
-	// so the depth exists for the loss regime - a lane keeps work queued while its head-of-line segment retransmits
-	// (the LANES receipt in DownloadClient carries that measurement). The window cap is lanes × depth.
-	static final int PIPELINE_DEPTH = 8;
 
 	private static final byte[] CRLF = {'\r', '\n'};
 	private static final String ACCEPT_ENCODING = "Accept-Encoding: " + WireCodec.offeredEncodings() + "\r\n";
@@ -63,10 +60,13 @@ class Connection implements AutoCloseable {
 	private final byte[] requestLineSuffix;
 	private final Runnable onSlotFreed;
 	// Guards the pending queue together with the request-head writes, so queue order always matches socket order. It is
-	// never held across a response read, and the pipelined bytes it can have unwritten are depth-capped around 10 KB -
-	// well inside kernel send buffers - so even a write taken while the pool lock is held cannot block it.
+	// never held across a response read, and each write is one flushed request head - well inside kernel send buffers -
+	// so even a write taken while the pool lock is held cannot block it.
 	private final Object gate = new Object();
 	private final ArrayDeque<Pending<?>> pending = new ArrayDeque<>();
+	// Bytes of requests written and not yet settled; guarded by gate. The window admits small takes deep and big
+	// takes shallow, so the pipeline is sized in bytes - the wire's own currency - instead of a fixed request count.
+	private long unsettledBytes;
 	private boolean readerRunning;
 	private volatile boolean unhealthy;
 	private final String traceId = Integer.toHexString(System.identityHashCode(this));
@@ -98,10 +98,10 @@ class Connection implements AutoCloseable {
 		return !unhealthy && !socket.isClosed() && (transport == null || !transport.isClosed());
 	}
 
-	/** One free pipeline slot; the pool lock serializes who acts on it. */
-	boolean hasFreeSlot() {
+	/** Room for one more request of this debit; the pool lock serializes who acts on it. */
+	boolean hasRoom(long debit) {
 		synchronized (gate) {
-			return !unhealthy && pending.size() < PIPELINE_DEPTH;
+			return !unhealthy && unsettledBytes + debit <= PIPELINE_WINDOW_BYTES && pending.size() < PIPELINE_MAX_REQUESTS;
 		}
 	}
 
@@ -119,17 +119,26 @@ class Connection implements AutoCloseable {
 	 * declared length exceeds it before a body byte is read (negative means no limit). {@code expectedSize} is the
 	 * object's total size when the caller knows it (negative for unknown): it lets a 200 that ignores the Range be
 	 * judged by length - a declared length equal to the slice is acceptable, a longer one is the range-ignoring verdict,
-	 * and a differing length on a full-object take is the length-mismatch verdict.
+	 * and a differing length on a full-object take is the length-mismatch verdict. {@code debit} is the bytes the take
+	 * holds against the pipeline window until it settles, computed once here so every submit site is self-describing.
 	 */
-	record ObjectTake(Path destination, IntConsumer chunks, long offset, long endInclusive, OutputStream tap, boolean offerEncoding, long limitBytes, long expectedSize) {
+	record ObjectTake(Path destination, IntConsumer chunks, long offset, long endInclusive, OutputStream tap, boolean offerEncoding, long limitBytes, long expectedSize, long debit) {
 		/** A ranged take appending behind a stored partial; encoding is offered so the body can ride compressed. */
 		static ObjectTake rangedSlice(Path destination, IntConsumer chunks, long offset, long endInclusive, long expectedSize) {
-			return new ObjectTake(destination, chunks, offset, endInclusive, null, true, -1L, expectedSize);
+			return new ObjectTake(destination, chunks, offset, endInclusive, null, true, -1L, expectedSize, debit(offset, endInclusive));
 		}
 
 		/** A whole-object take from zero, identity only, abandoned past {@code limitBytes}; the tap sees the bytes as they decode. */
 		static ObjectTake wholeObject(Path destination, OutputStream tap, long limitBytes) {
-			return new ObjectTake(destination, null, 0L, -1L, tap, false, limitBytes, -1L);
+			return new ObjectTake(destination, null, 0L, -1L, tap, false, limitBytes, -1L, WIRE_CHUNK_BYTES);
+		}
+
+		/**
+		 * The window debit for a take: a bounded slice charges its exact byte count; an open-ended take (endInclusive
+		 * < 0, the range-ignoring-host degrade) charges one chunk flat, since its size is unknown before the head.
+		 */
+		static long debit(long offset, long endInclusive) {
+			return endInclusive >= 0 ? endInclusive - offset + 1 : WIRE_CHUNK_BYTES;
 		}
 	}
 
@@ -143,7 +152,7 @@ class Connection implements AutoCloseable {
 		return submit(new DocumentRequest("/" + new String(key, StandardCharsets.UTF_8), destination, expectedSha1Hex, chunkCallback, tap));
 	}
 
-	/** Registers one request and writes its head; the pool only hands out free slots, so an over-submit is a tripwire, not a flow-control path. */
+	/** Registers one request and writes its head; the pool only hands out room, so an over-submit is a tripwire, not a flow-control path. */
 	private <T> CompletableFuture<T> submit(Pending<T> request) {
 		synchronized (gate) {
 			if (unhealthy) {
@@ -151,9 +160,14 @@ class Connection implements AutoCloseable {
 				request.future.completeExceptionally(new IOException("Server connection is closed"));
 				return request.future;
 			}
-			if (pending.size() >= PIPELINE_DEPTH) {
-				WireTrace.log("SUBMIT_REJECT", "conn", traceId, "task", shortPath(request.originPath), "why", "depth");
-				request.future.completeExceptionally(new IOException("Connection pipeline exceeded its depth of " + PIPELINE_DEPTH));
+			if (unsettledBytes + request.debit > PIPELINE_WINDOW_BYTES) {
+				WireTrace.log("SUBMIT_REJECT", "conn", traceId, "task", shortPath(request.originPath), "why", "window");
+				request.future.completeExceptionally(new IOException("Connection pipeline window exceeded its " + PIPELINE_WINDOW_BYTES + " byte budget"));
+				return request.future;
+			}
+			if (pending.size() >= PIPELINE_MAX_REQUESTS) {
+				WireTrace.log("SUBMIT_REJECT", "conn", traceId, "task", shortPath(request.originPath), "why", "requests");
+				request.future.completeExceptionally(new IOException("Connection pipeline exceeded its " + PIPELINE_MAX_REQUESTS + " request bound"));
 				return request.future;
 			}
 			try {
@@ -167,6 +181,7 @@ class Connection implements AutoCloseable {
 				return request.future;
 			}
 			pending.addLast(request);
+			unsettledBytes += request.debit;
 			if (!readerRunning) {
 				readerRunning = true;
 				try {
@@ -194,7 +209,7 @@ class Connection implements AutoCloseable {
 		while (true) {
 			Pending<?> request;
 			synchronized (gate) {
-				// The head stays queued while its response is read: the slot is taken until the response settles, so the depth never undercounts.
+				// The head stays queued while its response is read: its debit is held until the response settles, so the window never undercounts.
 				request = pending.peekFirst();
 				if (request == null) {
 					readerRunning = false;
@@ -219,7 +234,10 @@ class Connection implements AutoCloseable {
 			}
 			if (settled) {
 				synchronized (gate) {
-					pending.pollFirst();
+					Pending<?> completed = pending.pollFirst();
+					// The debit releases before the pool's callback runs, so the waiter the freed room admits sees the
+					// released bytes in this same call stack - a settle never idles a lane that still has work.
+					unsettledBytes -= completed.debit;
 				}
 				try {
 					onSlotFreed.run();
@@ -268,6 +286,9 @@ class Connection implements AutoCloseable {
 		synchronized (gate) {
 			failed = new ArrayList<>(pending);
 			pending.clear();
+			// The books zero before any failure is announced: a dependent re-issuing inline must see the window empty,
+			// never half-charged by requests that no longer exist (same ordering as the lane-death fix).
+			unsettledBytes = 0;
 		}
 		WireTrace.log("FAIL_PENDING", "conn", traceId, "count", failed.size(), "cause", String.valueOf(cause));
 		closeSocket();
@@ -279,14 +300,17 @@ class Connection implements AutoCloseable {
 		final String originPath;
 		final Path destination;
 		final IntConsumer chunks;
+		// The bytes this request holds against the pipeline window until it settles.
+		final long debit;
 		String path;
 		int redirects;
 
-		Pending(String path, Path destination, IntConsumer chunks) {
+		Pending(String path, Path destination, IntConsumer chunks, long debit) {
 			this.path = path;
 			this.originPath = path;
 			this.destination = destination;
 			this.chunks = chunks;
+			this.debit = debit;
 		}
 
 		abstract String headers();
@@ -298,7 +322,7 @@ class Connection implements AutoCloseable {
 		private final ObjectTake take;
 
 		ObjectRequest(String path, ObjectTake take) {
-			super(path, take.destination(), take.chunks());
+			super(path, take.destination(), take.chunks(), take.debit());
 			this.take = take;
 		}
 
@@ -386,7 +410,9 @@ class Connection implements AutoCloseable {
 		private final OutputStream tap;
 
 		DocumentRequest(String path, Path destination, String expectedSha1Hex, IntConsumer chunks, OutputStream tap) {
-			super(path, destination, chunks);
+			// Documents debit one chunk flat: their size is unknown before the head, so a large journal under-debits and
+			// over-admits the requests behind it by a little - the window stays the bound, just a slightly loose one.
+			super(path, destination, chunks, WIRE_CHUNK_BYTES);
 			this.expectedSha1Hex = expectedSha1Hex;
 			this.tap = tap;
 		}

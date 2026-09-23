@@ -507,26 +507,7 @@ class HttpContractHandlerTest {
 				return requestKey.equals(hash) ? Optional.of(object) : Optional.empty();
 			}
 		};
-		class HoldableChannel extends EmbeddedChannel {
-			volatile boolean writable = true;
-			HoldableChannel(ChannelHandler handler) {
-				super(handler);
-			}
-
-			@Override
-			public boolean isWritable() {
-				return writable;
-			}
-		}
-		HoldableChannel channel = new HoldableChannel(new HttpContractHandler(pipelineServer, Runnable::run));
-		channels.add(channel);
-
-		// Start an identity body wide enough to span several writes, then stall the drain before any body byte leaves.
-		channel.writable = false;
-		channel.writeInbound(Unpooled.wrappedBuffer(request("/objects/" + hash).getBytes(StandardCharsets.UTF_8)));
-		channel.runPendingTasks();
-		assertEquals(1, channel.outboundMessages().size(), "only the response head may be out while the drain is stalled");
-		assertTrue(((ByteBuf) channel.outboundMessages().peek()).toString(StandardCharsets.UTF_8).startsWith("HTTP/1.1 200 OK\r\n"));
+		HoldableChannel channel = holdableChannel(pipelineServer, "/objects/" + hash);
 
 		// A request pipelined mid-body is held, not answered into the first response's byte stream.
 		channel.writeInbound(Unpooled.wrappedBuffer(request("/journal").getBytes(StandardCharsets.UTF_8)));
@@ -534,8 +515,7 @@ class HttpContractHandlerTest {
 		assertEquals(1, channel.outboundMessages().size(), "a pipelined request must be held while a body streams");
 
 		// Resume the drain; the held request is served strictly after the first response completes.
-		channel.writable = true;
-		channel.pipeline().fireChannelWritabilityChanged();
+		channel.resume();
 		settle(channel);
 
 		byte[] wire = drained(channel);
@@ -546,6 +526,114 @@ class HttpContractHandlerTest {
 		String secondHead = new String(wire, secondHeadStart, Math.min(40, wire.length - secondHeadStart), StandardCharsets.US_ASCII);
 		assertTrue(secondHead.startsWith("HTTP/1.1 404 Not Found\r\n"), secondHead);
 		assertEquals(wire.length, secondHeadStart + headOf(Arrays.copyOfRange(wire, secondHeadStart, wire.length)).length());
+	}
+
+	/**
+	 * The held-request cap is deep enough for the client's whole count-tripwire pipeline: 2048 pipelined heads behind a
+	 * streaming body are all held with the connection open, then answered in order once the body finishes.
+	 */
+	@Test
+	void twoThousandFortyEightPipelinedHeadsAreHeldWhileABodyStreams() throws Exception {
+		byte[] body = new byte[NetUtils.STREAM_WRITE_BYTES * 3];
+		Path object = tempDir.resolve("held.bin");
+		Files.write(object, body);
+		String hash = HashUtils.sha1(body);
+		NettyServer heldServer = new NettyServer() {
+			@Override
+			public Optional<Path> getPath(String requestKey) {
+				return requestKey.equals(hash) ? Optional.of(object) : Optional.empty();
+			}
+		};
+		HoldableChannel channel = holdableChannel(heldServer, "/objects/" + hash);
+
+		byte[] heads = request("/journal").repeat(NetUtils.PIPELINE_MAX_REQUESTS).getBytes(StandardCharsets.UTF_8);
+		channel.writeInbound(Unpooled.wrappedBuffer(heads));
+		channel.runPendingTasks();
+		assertTrue(channel.isOpen(), "a deep pipeline of held heads must not close the connection");
+		assertEquals(1, channel.outboundMessages().size(), "every held head waits behind the streaming body");
+
+		channel.resume();
+		settle(channel);
+
+		byte[] wire = drained(channel);
+		String firstHead = headOf(wire);
+		assertTrue(firstHead.startsWith("HTTP/1.1 200 OK\r\n"), firstHead);
+		assertEquals(NetUtils.PIPELINE_MAX_REQUESTS, countOccurrences(wire, "HTTP/1.1 404 Not Found\r\n"), "every held head is answered once the body finishes");
+		assertTrue(channel.isOpen(), "serving the held pipeline keeps the connection alive");
+	}
+
+	/** The held cap is a tripwire, not a welcome: junk past 512 KiB accumulated behind a streaming body closes the connection. */
+	@Test
+	void junkPastTheHeldCapWhileABodyStreamsClosesTheConnection() throws Exception {
+		byte[] body = new byte[NetUtils.STREAM_WRITE_BYTES * 3];
+		Path object = tempDir.resolve("junk.bin");
+		Files.write(object, body);
+		String hash = HashUtils.sha1(body);
+		NettyServer junkServer = new NettyServer() {
+			@Override
+			public Optional<Path> getPath(String requestKey) {
+				return requestKey.equals(hash) ? Optional.of(object) : Optional.empty();
+			}
+		};
+		HoldableChannel channel = holdableChannel(junkServer, "/objects/" + hash);
+
+		byte[] junk = new byte[512 * 1024 + 1]; // one byte past the held cap the handler enforces behind a streaming body
+		Arrays.fill(junk, (byte) 'a');
+		channel.writeInbound(Unpooled.wrappedBuffer(junk));
+		channel.runPendingTasks();
+		assertFalse(channel.isOpen(), "junk past the held cap must close the connection");
+	}
+
+	/** Counts occurrences of a US-ASCII needle in the raw response bytes. */
+	private static int countOccurrences(byte[] wire, String needle) {
+		int count = 0;
+		for (int index = 0; index + needle.length() <= wire.length; index++) {
+			if (wire[index] != needle.charAt(0)) continue;
+			boolean matches = true;
+			for (int offset = 1; offset < needle.length(); offset++) {
+				if (wire[index + offset] != needle.charAt(offset)) {
+					matches = false;
+					break;
+				}
+			}
+			if (matches) count++;
+		}
+		return count;
+	}
+
+	/** An embedded channel whose writability the test holds, so a streaming body can be stalled mid-drain. */
+	private static final class HoldableChannel extends EmbeddedChannel {
+		private volatile boolean writable = true;
+
+		HoldableChannel(ChannelHandler handler) {
+			super(handler);
+		}
+
+		@Override
+		public boolean isWritable() {
+			return writable;
+		}
+
+		/** Starts the drain again, as the socket's writability change would. */
+		void resume() {
+			writable = true;
+			pipeline().fireChannelWritabilityChanged();
+		}
+	}
+
+	/**
+	 * Starts an identity body wide enough to span several writes, then stalls the drain before any body byte leaves:
+	 * only the response head is out and the channel accumulates whatever is pipelined next.
+	 */
+	private HoldableChannel holdableChannel(NettyServer server, String target) {
+		HoldableChannel channel = new HoldableChannel(new HttpContractHandler(server, Runnable::run));
+		channels.add(channel);
+		channel.writable = false;
+		channel.writeInbound(Unpooled.wrappedBuffer(request(target).getBytes(StandardCharsets.UTF_8)));
+		channel.runPendingTasks();
+		assertEquals(1, channel.outboundMessages().size(), "only the response head may be out while the drain is stalled");
+		assertTrue(((ByteBuf) channel.outboundMessages().peek()).toString(StandardCharsets.UTF_8).startsWith("HTTP/1.1 200 OK\r\n"));
+		return channel;
 	}
 
 	/** The stall fuse: a client that stops draining mid-response finds its connection closed inside the stall window. */

@@ -92,16 +92,17 @@ class TlsSessionResumptionTest {
 				deferred.add(certificate);
 				return CompletableFuture.completedFuture(true);
 			}, NO_HEARTBEATS).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
-				server.expectPipeline(Connection.PIPELINE_DEPTH + 1);
+				int takesPerLane = (int) (NetUtils.PIPELINE_WINDOW_BYTES / NetUtils.WIRE_CHUNK_BYTES);
+				server.expectPipeline(takesPerLane + 1);
 				List<CompletableFuture<Path>> downloads = new ArrayList<>();
-				for (int i = 0; i < Connection.PIPELINE_DEPTH + 1; i++) {
+				for (int i = 0; i < takesPerLane + 1; i++) {
 					downloads.add(client.downloadSmallObject(sha1.getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), -1L, null));
 				}
 				CompletableFuture.allOf(downloads.toArray(CompletableFuture[]::new)).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				for (CompletableFuture<Path> download : downloads) {
 					assertArrayEquals(object, Files.readAllBytes(download.getNow(null)));
 				}
-				assertEquals(2, server.connections.get(), "the request past one lane's depth opened the second lane");
+				assertEquals(2, server.connections.get(), "the request past one lane's window opened the second lane");
 			}
 			assertEquals(1, deferred.size(), () -> "the trust ladder defers exactly once per client, saw " + deferred.size());
 		}

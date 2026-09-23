@@ -239,7 +239,7 @@ class DownloadClientTest {
 				for (int i = 0; i < 6; i++) downloads.add(client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), -1L, null));
 
 				server.awaitRequests(6);
-				assertEquals(1, server.acceptedConnections(), "a lane holds eight in flight, so six requests share one connection");
+				assertEquals(1, server.acceptedConnections(), "a lane's window holds sixteen 4 MiB debits, so six requests share one connection");
 
 				server.allowResponses(6);
 				CompletableFuture.allOf(downloads.toArray(CompletableFuture[]::new)).get(AWAIT_SECONDS, TimeUnit.SECONDS);
@@ -249,7 +249,7 @@ class DownloadClientTest {
 	}
 
 	@Test
-	void laneDepthOverflowOpensASecondConnection(@TempDir Path directory) throws Exception {
+	void laneWindowOverflowOpensASecondConnection(@TempDir Path directory) throws Exception {
 		KeyPair keyPair = NetUtils.generateKeyPair();
 		X509Certificate certificate = NetUtils.selfSign(keyPair);
 		String fingerprint = NetUtils.getFingerprint(certificate);
@@ -258,13 +258,14 @@ class DownloadClientTest {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
+				int takesPerLane = (int) (NetUtils.PIPELINE_WINDOW_BYTES / NetUtils.WIRE_CHUNK_BYTES);
 				List<CompletableFuture<Path>> downloads = new ArrayList<>();
-				for (int i = 0; i < 9; i++) downloads.add(client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), -1L, null));
+				for (int i = 0; i < takesPerLane + 1; i++) downloads.add(client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), -1L, null));
 
-				server.awaitRequests(9);
-				assertEquals(2, server.acceptedConnections(), "the ninth request passes the depth of eight and opens the next lane");
+				server.awaitRequests(takesPerLane + 1);
+				assertEquals(2, server.acceptedConnections(), "the request past one lane's window opens the next lane");
 
-				server.allowResponses(9);
+				server.allowResponses(takesPerLane + 1);
 				CompletableFuture.allOf(downloads.toArray(CompletableFuture[]::new)).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 			}
 		}
@@ -280,13 +281,14 @@ class DownloadClientTest {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
+				int poolBound = (int) (DownloadClient.LANES * (NetUtils.PIPELINE_WINDOW_BYTES / NetUtils.WIRE_CHUNK_BYTES));
 				List<CompletableFuture<Path>> downloads = new ArrayList<>();
-				for (int i = 0; i < 41; i++) downloads.add(client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), -1L, null));
+				for (int i = 0; i < poolBound + 1; i++) downloads.add(client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), -1L, null));
 
-				server.awaitRequests(40);
-				assertEquals(5, server.acceptedConnections(), "5 lanes × 8 slots cap the in-flight requests; request 41 waits");
+				server.awaitRequests(poolBound);
+				assertEquals(5, server.acceptedConnections(), "5 lanes × 16 take debits cap the in-flight requests; the request past the bound waits");
 
-				server.allowResponses(41);
+				server.allowResponses(poolBound + 1);
 				CompletableFuture.allOf(downloads.toArray(CompletableFuture[]::new)).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertEquals(5, server.acceptedConnections());
 			}

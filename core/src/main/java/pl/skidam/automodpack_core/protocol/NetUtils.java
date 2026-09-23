@@ -72,6 +72,20 @@ public class NetUtils {
 	// STREAM_WRITE_BYTES below.
 	public static final int WIRE_CHUNK_BYTES = 4 * 1024 * 1024; // 4 MiB
 
+	// The per-connection unsettled-bytes pipeline window, replacing the old fixed 8-deep cap (8 takes = 32 MiB, which
+	// made a pack of tiny files pay one round trip per 40 files). Sixteen 4 MiB takes - the largest take - may sit
+	// unsettled per lane, so five lanes hold 160 MiB: 4.3x the 37.5 MB bandwidth-delay product of 1 Gbit at 300 ms,
+	// and 170x the reference 5 mbit envelope's BDP. Small takes pipeline deep instead: a pack of 16 KiB files fits a
+	// whole lane's window thousands of requests over and drains in one round-trip generation - the tiny-files bench
+	// (800 files, 300 ms delay) spent ~18 round-trip generations before the window and ~2 after, with the clean cell
+	// unchanged. The count tripwire beside it keeps the bookkeeping bounded.
+	public static final long PIPELINE_WINDOW_BYTES = 64L * 1024 * 1024;
+
+	// The per-connection count tripwire beside the byte window: 5 KB takes reach 10 MB unsettled per lane, so five
+	// lanes hold 50 MB - above the 1 Gbit/300 ms BDP even for that smallest realistic shape - while per-lane
+	// bookkeeping (futures, per-request state) stays around 2 MB. Good components never touch it.
+	public static final int PIPELINE_MAX_REQUESTS = 2048;
+
 	// The server's streamed-write granularity. The idle reap and the stall fuse see write COMPLETIONS, so the chunk
 	// must be small enough that a draining client keeps completing writes: at the receipted drain floor - the
 	// 20-client share of a 5 Mbps uplink, ~31 KB/s per client - a 512 KiB write completes at least every ~17 s,

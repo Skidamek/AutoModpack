@@ -82,10 +82,11 @@ public class DownloadClient implements PackTransport {
 	private final AtomicLong takeRetries = new AtomicLong();
 	private final AtomicLong bytesDownloaded = new AtomicLong();
 	private final Object poolLock = new Object();
-	// The lanes, in creation order: worker i submits to lane i when it has a free slot, so the scheduler's largest-first
-	// dispatch puts concurrent big files on distinct lanes while small files fill each lane's depth. ≤ 8 × 10 KB = 80 KB
-	// can queue behind one large response; the scheduler dispatches large files to their own workers first, and a
-	// non-draining peer trips the 90 s stall window on its lane alone.
+	// The lanes, in creation order: worker i submits to lane i when it has room, so the scheduler's largest-first
+	// dispatch puts concurrent big files on distinct lanes while small files fill each lane's window. Small requests
+	// are a few hundred bytes of head each, so thousands queue per lane behind one large response - the count and
+	// byte tripwires in NetUtils bound the hold; the scheduler dispatches large files to their own workers first, and
+	// a non-draining peer trips the 90 s stall window on its lane alone.
 	private final List<Connection> lanes = new ArrayList<>();
 	private final Deque<SlotWaiter<?>> slotWaiters = new ArrayDeque<>();
 	private int openingConnections;
@@ -297,15 +298,15 @@ public class DownloadClient implements PackTransport {
 		return connectionInfo.endpoint.getHostString() + ":" + connectionInfo.endpoint.getPort();
 	}
 
-	/** Queues a submit on a lane with a free slot; a new lane opens when all of them are full, past which the waiter waits. */
-	private <T> CompletableFuture<T> withSlot(int lane, Function<Connection, CompletableFuture<T>> operation) {
+	/** Queues a submit carrying {@code debit} window bytes on a lane with room; a new lane opens when all of them are full, past which the waiter waits. */
+	private <T> CompletableFuture<T> withSlot(int lane, long debit, Function<Connection, CompletableFuture<T>> operation) {
 		CompletableFuture<T> future = new CompletableFuture<>();
 		synchronized (poolLock) {
 			if (closed) {
 				future.completeExceptionally(new IOException("Download client is closed"));
 				return future;
 			}
-			slotWaiters.add(new SlotWaiter<>(lane, operation, future));
+			slotWaiters.add(new SlotWaiter<>(lane, debit, operation, future));
 			pumpPool();
 		}
 		return future;
@@ -314,7 +315,8 @@ public class DownloadClient implements PackTransport {
 	private void pumpPool() {
 		reapLanes();
 		while (!slotWaiters.isEmpty()) {
-			Connection connection = pick(slotWaiters.peek().lane());
+			SlotWaiter<?> waiter = slotWaiters.peek();
+			Connection connection = pick(waiter.lane(), waiter.debit());
 			if (connection == null) break;
 			slotWaiters.remove().dispatch(connection);
 		}
@@ -341,12 +343,12 @@ public class DownloadClient implements PackTransport {
 		}
 	}
 
-	/** Lane i serves waiter i when it has a free slot; otherwise the first lane with one does. Null means every lane is full or gone. */
-	private Connection pick(int lane) {
+	/** Lane i serves waiter i when it has room for the waiter's debit; otherwise the first lane with room does. Null means every lane is full or gone. */
+	private Connection pick(int lane, long debit) {
 		if (lanes.isEmpty()) return null;
-		if (lane < lanes.size() && lanes.get(lane).hasFreeSlot()) return lanes.get(lane);
+		if (lane < lanes.size() && lanes.get(lane).hasRoom(debit)) return lanes.get(lane);
 		for (Connection connection : lanes) {
-			if (connection.hasFreeSlot()) return connection;
+			if (connection.hasRoom(debit)) return connection;
 		}
 		return null;
 	}
@@ -375,7 +377,7 @@ public class DownloadClient implements PackTransport {
 		}
 	}
 
-	private record SlotWaiter<T>(int lane, Function<Connection, CompletableFuture<T>> operation, CompletableFuture<T> future) {
+	private record SlotWaiter<T>(int lane, long debit, Function<Connection, CompletableFuture<T>> operation, CompletableFuture<T> future) {
 		void dispatch(Connection connection) {
 			CompletableFuture<T> result;
 			try {
@@ -428,12 +430,12 @@ public class DownloadClient implements PackTransport {
 		// Survives two consecutive lane deaths (each retry picks a fresh lane via laneCounter); a third failure means the server, not a lane, is gone.
 		private static final int MAX_TAKE_ATTEMPTS = 3;
 		// The one physical flow-control bound, receipted: a transfer may never hold more unsettled takes than the
-		// whole pool has pipeline slots (5 lanes × depth 8 = 40), so its takes fill every lane exactly once and
-		// further tiles queue as settles free them. Transfers under 40 tiles (~160 MiB) never gate at all, and since
-		// the pump only stops early while takes are still outstanding, every transfer owns at least one unsettled
-		// take until its range is fully claimed - its own settles always re-pump it, so nothing can go dormant and
-		// no revive path is needed.
-		private static final int MAX_OUTSTANDING_TAKES = LANES * Connection.PIPELINE_DEPTH;
+		// whole pool's byte window holds of them (5 lanes × 64 MiB / the 4 MiB take = 80), so its takes fill every
+		// lane exactly once and further tiles queue as settles free them. Transfers under 80 tiles (~320 MiB) never
+		// gate at all, and since the pump only stops early while takes are still outstanding, every transfer owns at
+		// least one unsettled take until its range is fully claimed - its own settles always re-pump it, so nothing
+		// can go dormant and no revive path is needed.
+		private static final int MAX_OUTSTANDING_TAKES = (int) (LANES * NetUtils.PIPELINE_WINDOW_BYTES / WIRE_CHUNK_BYTES);
 
 		private final byte[] sha1Hex;
 		private final Path destination;
@@ -444,7 +446,7 @@ public class DownloadClient implements PackTransport {
 		private final CompletableFuture<Path> future = new CompletableFuture<>();
 		private final Object lock = new Object();
 		// Per-transfer round-robin lane hint: takes spread over the lanes the way the pool spreads workers, and pick()
-		// still falls back to any lane with a free slot. The simplest correct hint.
+		// still falls back to any lane with room for the take's debit. The simplest correct hint.
 		private final AtomicInteger laneCounter = new AtomicInteger();
 		// The cursor is the transfer's one uncovered-tail pointer: the streamer owns [offset, floor) and every take
 		// claims exactly [stealFrom, old cursor - 1], so the final take may be short - a whole-chunk walk past a
@@ -481,7 +483,7 @@ public class DownloadClient implements PackTransport {
 			return future;
 		}
 
-		/** Issues tail takes while the transfer holds fewer unsettled takes than the pool's pipeline slots; every settle re-pumps. */
+		/** Issues tail takes while the transfer holds fewer unsettled takes than the pool's whole-window bound; every settle re-pumps. */
 		private void pump() {
 			while (true) {
 				Take take;
@@ -527,7 +529,8 @@ public class DownloadClient implements PackTransport {
 			CompletableFuture<Path> future;
 			try {
 				// A stale range already surfaces as StaleRangeException from the response parse; no mapping happens here.
-				future = withSlot(take.lane(), connection -> {
+				long debit = ObjectTake.debit(take.start(), take.end());
+				future = withSlot(take.lane(), debit, connection -> {
 					lane.set(connection);
 					return connection.sendDownloadFile(sha1Hex, ObjectTake.rangedSlice(destination, chunkCallback, take.start(), take.end(), fileSize));
 				});
@@ -617,19 +620,19 @@ public class DownloadClient implements PackTransport {
 	/** The waiting-track fetch: one identity whole-object take with no negotiation and no resume, aborted past maxBytes. */
 	@Override
 	public CompletableFuture<Path> downloadSmallObject(byte[] sha1Hex, Path destination, long maxBytes, OutputStream tap) {
-		return withSlot(0, connection -> connection.sendDownloadFile(sha1Hex, ObjectTake.wholeObject(destination, tap, maxBytes)));
+		return withSlot(0, WIRE_CHUNK_BYTES, connection -> connection.sendDownloadFile(sha1Hex, ObjectTake.wholeObject(destination, tap, maxBytes)));
 	}
 
 	/** Document fetch (reserved keys); when {@code expectedSha1Hex} (lowercase hex) matches the served document the server answers 304 and {@code destination} is not written. */
 	@Override
 	public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, IntConsumer chunkCallback) {
-		return withSlot(0, connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex, chunkCallback, null));
+		return withSlot(0, WIRE_CHUNK_BYTES, connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex, chunkCallback, null));
 	}
 
 	/** The same fetch with a tap: served body bytes reach the tap (decode-while-downloading) and the destination alike. */
 	@Override
 	public CompletableFuture<DocumentFetch> downloadDocument(byte[] key, Path destination, String expectedSha1Hex, OutputStream tap) {
-		return withSlot(0, connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex, null, tap));
+		return withSlot(0, WIRE_CHUNK_BYTES, connection -> connection.sendDownloadDocument(key, destination, expectedSha1Hex, null, tap));
 	}
 
 	/** Drops every pooled and in-flight transfer connection so a cancelled run cannot poison the next one. */

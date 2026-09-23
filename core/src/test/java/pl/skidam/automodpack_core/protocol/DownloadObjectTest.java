@@ -79,24 +79,24 @@ class DownloadObjectTest {
 	}
 
 	/**
-	 * The one physical flow-control bound: a transfer past the pool's depth fills exactly the pool's pipeline slots and
-	 * queues the rest of its tiles behind unsettled takes - nothing fails window-full, nothing stalls.
+	 * The one physical flow-control bound: a transfer past the pool's window fills exactly the pool's unsettled-take
+	 * bound and queues the rest of its tiles behind unsettled takes - nothing fails window-full, nothing stalls.
 	 */
 	@Test
-	void aTransferPastThePoolDepthKeepsAtMostThePoolSlotsUnsettled(@TempDir Path directory) throws Exception {
+	void aTransferPastThePoolWindowKeepsAtMostThePoolBoundUnsettled(@TempDir Path directory) throws Exception {
 		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
 			// The hash is unstored and every response is delayed far past the test: nothing settles, so the wire shows the raw bound.
 			byte[] sha1 = HashUtils.sha1("an-unstored-oversized-object".getBytes(StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
-			int poolSlots = DownloadClient.LANES * Connection.PIPELINE_DEPTH;
-			long fileSize = (long) NetUtils.WIRE_CHUNK_BYTES * poolSlots + 1; // tiles into poolSlots + 1 takes, one past the bound
+			int poolBound = (int) (DownloadClient.LANES * (NetUtils.PIPELINE_WINDOW_BYTES / NetUtils.WIRE_CHUNK_BYTES));
+			long fileSize = (long) NetUtils.WIRE_CHUNK_BYTES * poolBound + 1; // tiles into poolBound + 1 takes, one past the bound
 			server.setResponseDelayMillis(30_000);
 			try (DownloadClient client = client(server, "test-secret")) {
 				CompletableFuture<Path> transfer = client.downloadObject(sha1, directory.resolve("object"), fileSize, null);
 				long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
-				while (server.requests.size() < poolSlots && System.nanoTime() < deadline) Thread.sleep(50);
-				assertEquals(poolSlots, server.requests.size(), "the transfer must fill exactly the pool's pipeline slots, requests: " + server.requests.size());
+				while (server.requests.size() < poolBound && System.nanoTime() < deadline) Thread.sleep(50);
+				assertEquals(poolBound, server.requests.size(), "the transfer must fill exactly the pool's unsettled-take bound, requests: " + server.requests.size());
 				Thread.sleep(1_000); // the quiet period: with nothing settling, not one more take may hit the wire
-				assertEquals(poolSlots, server.requests.size(), "takes past the bound must queue unsettled, requests: " + server.requests.size());
+				assertEquals(poolBound, server.requests.size(), "takes past the bound must queue unsettled, requests: " + server.requests.size());
 				client.abortTransfers();
 				assertThrows(ExecutionException.class, () -> transfer.get(5, TimeUnit.SECONDS), "an aborted transfer must fail, never hang");
 			}

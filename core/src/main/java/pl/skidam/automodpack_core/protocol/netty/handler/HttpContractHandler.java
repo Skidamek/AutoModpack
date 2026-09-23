@@ -46,14 +46,21 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 /**
  * Serves the URL contract (GET /head, GET /journal, GET /objects/<sha1>) over an already-TLS-terminated pipeline with
  * hand-rolled HTTP/1.1: one in-flight response per connection, keep-alive by default. Requests pipelined while a body
- * streams are held - bounded by the header-block cap - and served strictly in order, so a connection never serves two
- * bodies at once and, unlike the custom protocol, needs no per-connection in-flight transfer cap: one slot per
- * connection by construction. Our own client pipelines every lane this deep.
+ * streams are held - the first request block keeps the hostile-junk 8 KiB cap, while held heads get a 512 KiB cap that
+ * fits the client's deep pipeline - and served strictly in order, so a connection never serves two bodies at once and,
+ * unlike the custom protocol, needs no per-connection in-flight transfer cap: one slot per connection by
+ * construction. Our own client pipelines every lane this deep.
  */
 public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 	/** Tripwire past any real request header block; an honest client holds ≤ 8 requests ≈ 2 KB of headers in flight, 4× under this cap. Only a broken client touches it. */
 	private static final int MAX_HEADER_BLOCK_BYTES = 8 * 1024;
+
+	// The cap on request heads held while a response body streams: 2048 pipelined heads at ~250 bytes each need
+	// ~500 KiB, so the client's whole count-tripwire-deep pipeline (NetUtils.PIPELINE_MAX_REQUESTS) fits with margin.
+	// The hostile-junk bound above is untouched - it still governs the first request block - so a flood accumulates
+	// no more than before until a legitimate body is being streamed.
+	private static final int MAX_HELD_REQUEST_BYTES = 512 * 1024;
 
 	// Stream-compression gauge: one read's worth of file input per task; the compressor's output drains as one chunked
 	// frame per task, so a response's resident encoding state is one input chunk plus one output frame.
@@ -116,9 +123,9 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		try {
 			if (activeStream != null) {
-				// A pipelining client's next request waits until the current body drains; the header cap keeps the hold bounded.
+				// A pipelining client's next requests wait until the current body drains; the held cap keeps the hold bounded.
 				accumulate(input);
-				if (cumulation.readableBytes() > MAX_HEADER_BLOCK_BYTES) rejectUnparseable(ctx);
+				if (cumulation.readableBytes() > MAX_HELD_REQUEST_BYTES) rejectUnparseable(ctx, MAX_HELD_REQUEST_BYTES);
 				return;
 			}
 			accumulate(input);
@@ -201,15 +208,15 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			// The cap binds the block whether or not a terminator has arrived: junk-then-terminator streams must find no
 			// richer welcome than an unterminated trickle.
 			if (headerEnd < 0 || headerEnd > MAX_HEADER_BLOCK_BYTES) {
-				if (headerEnd > MAX_HEADER_BLOCK_BYTES || cumulation.readableBytes() > MAX_HEADER_BLOCK_BYTES) rejectUnparseable(ctx);
+				if (headerEnd > MAX_HEADER_BLOCK_BYTES || cumulation.readableBytes() > MAX_HEADER_BLOCK_BYTES) rejectUnparseable(ctx, MAX_HEADER_BLOCK_BYTES);
 				return;
 			}
 			if (!handleRequest(ctx, headerEnd)) return;
 		}
 	}
 
-	private void rejectUnparseable(ChannelHandlerContext ctx) {
-		LOGGER.warn("HTTP request header block exceeded {} bytes (streaming={}, pending={}B); closing the connection", MAX_HEADER_BLOCK_BYTES, activeStream != null,
+	private void rejectUnparseable(ChannelHandlerContext ctx, int capBytes) {
+		LOGGER.warn("HTTP request header block exceeded {} bytes (streaming={}, pending={}B); closing the connection", capBytes, activeStream != null,
 				cumulation == null ? 0 : cumulation.readableBytes());
 		ctx.close();
 	}
