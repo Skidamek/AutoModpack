@@ -18,6 +18,10 @@ import pl.skidam.automodpack_core.protocol.netty.detectors.MatchResult;
 /**
  * Consumes the optional PROXY protocol header on the dedicated listener and feeds the claimed source address into
  * {@link NettyServer#REAL_REMOTE_ADDR}; a first read that is not a PROXY header passes through untouched.
+ *
+ * <p>
+ * Whatever bytes arrived past the header ride {@link ByteToMessageDecoder#handlerRemoved}'s cumulation forwarding
+ * when this handler removes itself - they reach the next handler in the pipeline, never dropped.
  */
 public class ProxyProtocolHandler extends ByteToMessageDecoder {
 

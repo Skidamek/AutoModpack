@@ -263,8 +263,11 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			else if (name.equals("range")) range = value;
 			else if (name.equals("authorization")) authorization = value;
 			else if (name.equals("accept-encoding")) acceptEncoding = value;
-			else if (name.equals("host")) hostSeen = true;
-			else if (name.equals("connection")) {
+			else if (name.equals("host")) {
+				// RFC 9112 3.2: a server must reject a request carrying more than one Host header.
+				if (hostSeen) return finishBodyless(ctx, span, STATUS_400, 0, null, null, false);
+				hostSeen = true;
+			} else if (name.equals("connection")) {
 				for (String token : value.toLowerCase(Locale.ROOT).split(",")) {
 					String option = token.trim();
 					if (option.equals("close")) keepAlive = false;
@@ -376,7 +379,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	private boolean serveNegotiated(ChannelHandlerContext ctx, Path file, long offset, long length, long total, String status, String etag, String contentRange, boolean keepAlive,
 			ActivityTracker.Span span, String acceptEncoding) {
 		WireCodec codec = WireCodec.negotiate(acceptEncoding);
-		ChannelFuture headWritten = ctx.channel().writeAndFlush(chunkedResponse(status, contentRange, etag, codec));
+		ChannelFuture headWritten = ctx.channel().writeAndFlush(chunkedResponse(status, contentRange, etag, codec, !keepAlive));
 		inFlightSpan = span;
 		activeStream = new StreamedBody(ctx, file, null, codec, offset, length, total, keepAlive, span, status, etag, contentRange);
 		activeStream.start(headWritten);
@@ -457,7 +460,11 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 					file = FileChannel.open(path, StandardOpenOption.READ);
 					if (file.size() != expectedTotal) {
 						// A publish swapped the file between the stat and the open; serving would mix generations, so die loudly and let the client retry into the new one.
-						ctx.executor().execute(() -> fail(new IOException("The file changed size between the stat and the open: expected " + expectedTotal + " bytes")));
+						ctx.executor().execute(() -> {
+							// Book the error verdict - nothing was served - instead of the phantom 200/206 the fail path would record.
+							tracker.complete(span, 404, 0);
+							fail(new IOException("The file changed size between the stat and the open: expected " + expectedTotal + " bytes"));
+						});
 						return;
 					}
 					file.position(offset);
@@ -468,6 +475,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 						tracker.complete(span, 404, 0);
 						respondOrClose(ctx, STATUS_404, 0, null, null, keepAlive);
 						activeStream = null;
+						if (keepAlive && ctx.channel().isActive()) serveLoop(ctx);
 					});
 				}
 			});
@@ -504,7 +512,11 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			try {
 				if (file == null) {
 					file = FileChannel.open(path, StandardOpenOption.READ);
-					if (file.size() != expectedTotal) throw new IOException("The file changed size between the stat and the open: expected " + expectedTotal + " bytes");
+					if (file.size() != expectedTotal) {
+						// Book the error verdict before failing - nothing was served - instead of the phantom 200/206 head.
+						tracker.complete(span, 404, 0);
+						throw new IOException("The file changed size between the stat and the open: expected " + expectedTotal + " bytes");
+					}
 					file.position(offset);
 				}
 				if (codec == null) {
@@ -639,10 +651,11 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	}
 
 	/** The negotiated head: no length exists yet, so the body is framed chunked, the coding is named, and a range keeps its Content-Range. */
-	private static ByteBuf chunkedResponse(String status, String contentRange, String etag, WireCodec codec) {
+	private static ByteBuf chunkedResponse(String status, String contentRange, String etag, WireCodec codec, boolean connectionClose) {
 		StringBuilder head = new StringBuilder(192);
 		head.append("HTTP/1.1 ").append(status).append("\r\n");
 		head.append("Date: ").append(httpDate()).append("\r\n");
+		if (connectionClose) head.append("Connection: close\r\n");
 		head.append("Content-Type: ").append(CONTENT_TYPE).append("\r\n");
 		if (etag != null) head.append("ETag: \"").append(etag).append("\"\r\n");
 		if (contentRange != null) head.append("Content-Range: ").append(contentRange).append("\r\n");

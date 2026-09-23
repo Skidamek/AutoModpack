@@ -375,7 +375,6 @@ public class Commands {
 		if (entry.routeKey() != null && entry.routeKey().length() == 40) hover.add("sha1 " + entry.routeKey());
 		hover.add("address " + entry.address());
 		String size = ByteFormat.formatSize(entry.bytes());
-		if (inFlight && entry.totalBytes() > 0 && entry.totalBytes() != entry.bytes()) size += " / " + ByteFormat.formatSize(entry.totalBytes());
 		String visible = ACTIVITY_CLOCK.format(Instant.ofEpochMilli(entry.startMillis())) + " " + (entry.actor() != null ? entry.actor() : entry.address()) + " " + ByteFormat.formatETA(seconds) + " " + size + " " + condensedName(entry);
 		if (inFlight) {
 			hover.add("in flight");

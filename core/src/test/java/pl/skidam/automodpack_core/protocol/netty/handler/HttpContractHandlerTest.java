@@ -367,6 +367,30 @@ class HttpContractHandlerTest {
 	}
 
 	@Test
+	void aDuplicateHostHeaderIsABadRequest() throws Exception {
+		fixture();
+
+		EmbeddedChannel channel = channel();
+		// RFC 9112 3.2: a request carrying more than one Host header field must be rejected.
+		assertTrue(exchange(channel, "GET /head HTTP/1.1\r\nHost: contract.test\r\nHost: contract.test\r\n\r\n").startsWith("HTTP/1.1 400 Bad Request\r\n"));
+		assertFalse(channel.isOpen());
+	}
+
+	@Test
+	void aClosingNegotiatedResponseAnnouncesTheClose() throws Exception {
+		fixture();
+		EmbeddedChannel channel = channel();
+
+		byte[] response = exchangeBytes(channel, request("/head", "Accept-Encoding: zstd", "Connection: close"));
+		String head = headOf(response);
+		assertTrue(head.startsWith("HTTP/1.1 200 OK\r\n"), head);
+		assertTrue(head.contains("Transfer-Encoding: chunked\r\n"), head);
+		// The close is announced in the chunked head too, so a pipelining client knows its queued request is lost.
+		assertTrue(head.contains("Connection: close\r\n"), head);
+		assertFalse(channel.isOpen(), "a close-announced body ends the connection");
+	}
+
+	@Test
 	void http10GetsIdentityContentLengthWithoutTransferEncoding() throws Exception {
 		Fixture fixture = fixture();
 		EmbeddedChannel channel = channel();

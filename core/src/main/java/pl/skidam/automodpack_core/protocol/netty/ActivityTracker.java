@@ -28,8 +28,6 @@ public final class ActivityTracker {
 		public final String address;
 		public String routeKey;
 		public String actor;
-		/** The response size when the route's length is known up front, so in-flight progress reads as a fraction. */
-		public long totalBytes;
 		private long bytes;
 		private boolean completed;
 
@@ -39,14 +37,14 @@ public final class ActivityTracker {
 	}
 
 	/** One finished request; displayName resolves the sha1 route key against the current generation. */
-	public record Entry(long startMillis, long endMillis, long bytes, long totalBytes, int status, String routeKey, String displayName, String actor, String address) {}
+	public record Entry(long startMillis, long endMillis, long bytes, int status, String routeKey, String displayName, String actor, String address) {}
 
 	public record PlayerStats(String name, long requests, long bytes, long lastMillis) {}
 
 	public record Snapshot(long startedMillis, long totalRequests, long totalBytes, long unchangedChecks, long unauthorized, long lastUnauthorizedMillis, long writeThroughput, List<PlayerStats> players,
 			List<Entry> inFlight, List<Entry> recent) {}
 
-	private record Completed(long startMillis, long endMillis, long bytes, long totalBytes, int status, String routeKey, String actor, String address) {}
+	private record Completed(long startMillis, long endMillis, long bytes, int status, String routeKey, String actor, String address) {}
 
 	private final long startedMillis = System.currentTimeMillis();
 	private final Object lock = new Object();
@@ -92,7 +90,7 @@ public final class ActivityTracker {
 					unauthorized++;
 					lastUnauthorizedMillis = endMillis;
 				}
-				ring.addLast(new Completed(span.startMillis, endMillis, bytes, span.totalBytes, status, span.routeKey, span.actor, span.address));
+				ring.addLast(new Completed(span.startMillis, endMillis, bytes, status, span.routeKey, span.actor, span.address));
 				while (ring.size() > RING_CAPACITY) ring.removeFirst();
 			}
 			if (span.actor != null) {
@@ -123,11 +121,11 @@ public final class ActivityTracker {
 		synchronized (lock) {
 			List<Entry> inFlightEntries = new ArrayList<>();
 			for (Span span : inFlight) {
-				inFlightEntries.add(new Entry(span.startMillis, 0, span.bytes, span.totalBytes, STATUS_DROPPED, span.routeKey, displayName(span.routeKey, names), span.actor, span.address));
+				inFlightEntries.add(new Entry(span.startMillis, 0, span.bytes, STATUS_DROPPED, span.routeKey, displayName(span.routeKey, names), span.actor, span.address));
 			}
 			List<Entry> recent = new ArrayList<>(ring.size());
 			for (Completed completed : ring) {
-				recent.add(new Entry(completed.startMillis(), completed.endMillis(), completed.bytes(), completed.totalBytes(), completed.status(), completed.routeKey(),
+				recent.add(new Entry(completed.startMillis(), completed.endMillis(), completed.bytes(), completed.status(), completed.routeKey(),
 						displayName(completed.routeKey(), names), completed.actor(), completed.address()));
 			}
 			Collections.reverse(recent);
