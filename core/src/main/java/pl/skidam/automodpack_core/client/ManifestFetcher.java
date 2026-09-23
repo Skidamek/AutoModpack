@@ -25,12 +25,12 @@ import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
-import pl.skidam.automodpack_core.protocol.PackTransport.DocumentConditional;
 import pl.skidam.automodpack_core.protocol.DocumentFetch;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.MissingObjectException;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.PackTransport;
+import pl.skidam.automodpack_core.protocol.PackTransport.DocumentConditional;
 import pl.skidam.automodpack_core.protocol.UnauthorizedException;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
@@ -174,9 +174,11 @@ public final class ManifestFetcher {
 		}
 		// The host's own cached etag rides behind the vouched sha1 (never alone - a 304 must always stand for "the
 		// vouched mirror is current"), so foreign hosts whose ETags are not our sha1 can answer 304 too.
-		DocumentConditional headConditional = headExpected == null ? null
+		DocumentConditional headConditional = headExpected == null
+				? null
 				: new DocumentConditional(headExpected, validators.get(endpoint, GenerationHosting.HEAD_DOCUMENT_KEY));
-		DocumentConditional journalConditional = journalExpected == null ? null
+		DocumentConditional journalConditional = journalExpected == null
+				? null
 				: new DocumentConditional(journalExpected, validators.get(endpoint, GenerationHosting.JOURNAL_KEY));
 
 		// When the mirror vouches, the journal request is decided before either request is sent, so it pipelines behind
@@ -184,10 +186,12 @@ public final class ManifestFetcher {
 		// wants - the same request the sequential chain would have issued after parsing. The head leads the wire: it is
 		// the gate whose answer decides everything else, and on a close-framed host its body ends the lane only after
 		// both requests are in flight.
-		CompletableFuture<DocumentFetch> headFetched = transport.downloadDocument(GenerationHosting.HEAD_DOCUMENT_KEY.getBytes(StandardCharsets.UTF_8), storage.modpackContentTempFile(), headConditional, (IntConsumer) null);
+		CompletableFuture<DocumentFetch> headFetched = transport.downloadDocument(GenerationHosting.HEAD_DOCUMENT_KEY.getBytes(StandardCharsets.UTF_8), storage.modpackContentTempFile(), headConditional,
+				(IntConsumer) null);
 		CompletableFuture<DocumentFetch> journalFetched = headExpected == null ? null : fetchPipelinedJournal(transport, storage, journalConditional);
 		return headFetched
-				.thenComposeAsync(fetch -> applyFetchedHead(storage, connectionInfo, transport, selectedModpackId, headExpected, journalExpected, journalFetched, fetch, validators), DownloadClient.NET_EXECUTOR).whenComplete((ignored, error) -> {
+				.thenComposeAsync(fetch -> applyFetchedHead(storage, connectionInfo, transport, selectedModpackId, headExpected, journalExpected, journalFetched, fetch, validators), DownloadClient.NET_EXECUTOR)
+				.whenComplete((ignored, error) -> {
 					try {
 						Files.deleteIfExists(storage.modpackContentTempFile());
 					} catch (IOException e) {
@@ -224,7 +228,8 @@ public final class ManifestFetcher {
 	}
 
 	/** Applies one head fetch answer: parses the served or mirrored document, writes a fresh fetch through to the mirror, then syncs the journal vouch. */
-	private static CompletableFuture<GenerationJsons.HeadDocumentFields> applyFetchedHead(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, PackTransport transport, String selectedModpackId, String headExpected, String journalExpected,
+	private static CompletableFuture<GenerationJsons.HeadDocumentFields> applyFetchedHead(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, PackTransport transport, String selectedModpackId,
+			String headExpected, String journalExpected,
 			CompletableFuture<DocumentFetch> journalFetched, DocumentFetch fetch, HostValidatorCache validators) {
 		InetSocketAddress endpoint = connectionInfo.endpoint;
 		GenerationJsons.HeadDocumentFields content;
@@ -278,7 +283,8 @@ public final class ManifestFetcher {
 	 * request the gate would have issued, and a body the server did send is always fresher than deciding from the
 	 * gate alone. Returns whether the journal was actually refetched.
 	 */
-	private static CompletableFuture<Boolean> syncJournalMirror(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, PackTransport transport, GenerationJsons.HeadDocumentFields content, String journalExpected,
+	private static CompletableFuture<Boolean> syncJournalMirror(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, PackTransport transport, GenerationJsons.HeadDocumentFields content,
+			String journalExpected,
 			CompletableFuture<DocumentFetch> journalFetched, HostValidatorCache validators) {
 		if (content == null) return CompletableFuture.completedFuture(false);
 		String modpackId;
@@ -294,7 +300,8 @@ public final class ManifestFetcher {
 		if (journalFetched == null) {
 			if (!mirror.isStale(modpackId, content.contentToken)) return CompletableFuture.completedFuture(false);
 			LOGGER.info("Journal mirror is stale for modpack {}; fetching the full journal from the server", modpackId);
-			journalFetched = fetchJournal(transport, storage, journalExpected == null ? null
+			journalFetched = fetchJournal(transport, storage, journalExpected == null
+					? null
 					: new DocumentConditional(journalExpected, validators.get(connectionInfo.endpoint, GenerationHosting.JOURNAL_KEY)));
 		}
 		return journalFetched.thenComposeAsync(fetch -> {

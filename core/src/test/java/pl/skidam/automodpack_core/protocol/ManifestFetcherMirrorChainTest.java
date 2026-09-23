@@ -101,7 +101,6 @@ class ManifestFetcherMirrorChainTest {
 		assertEquals(new String(headBytes, StandardCharsets.UTF_8), Files.readString(storage.historyHeadFile(MODPACK_ID), StandardCharsets.UTF_8));
 	}
 
-
 	/**
 	 * The S3 hosting shape end to end: the host mints MD5 etags that are never our sha1, so only the client's cached
 	 * host validator earns a 304. First contact is unconditional; the second sync replays the cached etags and both

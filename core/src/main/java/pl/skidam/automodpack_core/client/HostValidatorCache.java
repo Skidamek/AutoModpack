@@ -4,14 +4,17 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.google.gson.reflect.TypeToken;
+
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 
 /**
@@ -42,7 +45,8 @@ public final class HostValidatorCache {
 		if (Files.isRegularFile(file)) {
 			try {
 				String json = Files.readString(file);
-				ConfigTools.GSON.<Map<String, String>>fromJson(json, new com.google.gson.reflect.TypeToken<LinkedHashMap<String, String>>() {}.getType())
+				ConfigTools.GSON.<Map<String, String>>fromJson(json, new TypeToken<LinkedHashMap<String, String>>() {
+				}.getType())
 						.forEach(entries::put);
 			} catch (IOException | RuntimeException e) {
 				LOGGER.warn("Cannot read the host validator cache {}; conditionals fall back to sha1-only", file.getFileName(), e);
@@ -72,7 +76,7 @@ public final class HostValidatorCache {
 		}
 		try {
 			Files.createDirectories(file.getParent());
-			DurableFiles.writeAtomic(file, ConfigTools.GSON.toJson(entries).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			DurableFiles.writeAtomic(file, ConfigTools.GSON.toJson(entries).getBytes(StandardCharsets.UTF_8));
 		} catch (IOException e) {
 			// A cache that cannot persist costs only the optimization: the next sync fetches unconditionally.
 			LOGGER.warn("Cannot persist the host validator cache {}", file.getFileName(), e);

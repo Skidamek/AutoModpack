@@ -16,13 +16,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyStore;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
-import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -114,11 +117,14 @@ class ConditionalFetchTest {
 			server.store.put("head", head);
 			server.store.put("journal", journal);
 			try (DownloadClient client = client(server, "test-secret")) {
-				var unchangedHead = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), new PackTransport.DocumentConditional(HashUtils.sha1(head), null), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var unchangedHead = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), new PackTransport.DocumentConditional(HashUtils.sha1(head), null), (IntConsumer) null)
+						.get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertNull(unchangedHead.path());
 				assertTrue(unchangedHead.unchanged());
 
-				var unchangedJournal = client.downloadDocument("journal".getBytes(StandardCharsets.UTF_8), directory.resolve("journal"), new PackTransport.DocumentConditional(HashUtils.sha1(journal), null), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var unchangedJournal = client
+						.downloadDocument("journal".getBytes(StandardCharsets.UTF_8), directory.resolve("journal"), new PackTransport.DocumentConditional(HashUtils.sha1(journal), null), (IntConsumer) null)
+						.get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertNull(unchangedJournal.path());
 				assertTrue(unchangedJournal.unchanged());
 				assertFalse(Files.exists(directory.resolve("head")));
@@ -135,11 +141,13 @@ class ConditionalFetchTest {
 			server.store.put("head", oldHead);
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("head");
-				var first = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, new PackTransport.DocumentConditional(HashUtils.sha1(oldHead), null), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var first = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, new PackTransport.DocumentConditional(HashUtils.sha1(oldHead), null), (IntConsumer) null).get(AWAIT_SECONDS,
+						TimeUnit.SECONDS);
 				assertTrue(first.unchanged());
 
 				server.store.put("head", newHead);
-				var second = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, new PackTransport.DocumentConditional(HashUtils.sha1(oldHead), null), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var second = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, new PackTransport.DocumentConditional(HashUtils.sha1(oldHead), null), (IntConsumer) null).get(AWAIT_SECONDS,
+						TimeUnit.SECONDS);
 				assertFalse(second.unchanged());
 				assertEquals(destination, second.path());
 				assertArrayEquals(newHead, Files.readAllBytes(destination));
@@ -156,7 +164,8 @@ class ConditionalFetchTest {
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("head");
 				// The host ignored the conditional and sent the full body; the hash-compare is the ground truth.
-				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, new PackTransport.DocumentConditional(HashUtils.sha1(head), null), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, new PackTransport.DocumentConditional(HashUtils.sha1(head), null), (IntConsumer) null).get(AWAIT_SECONDS,
+						TimeUnit.SECONDS);
 				assertEquals(destination, fetch.path());
 				assertTrue(fetch.unchanged());
 				assertArrayEquals(head, Files.readAllBytes(destination));
@@ -237,7 +246,8 @@ class ConditionalFetchTest {
 			server.store.put("head", head);
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("head");
-				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, new PackTransport.DocumentConditional(HashUtils.sha1(head), null), (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), destination, new PackTransport.DocumentConditional(HashUtils.sha1(head), null), (IntConsumer) null).get(AWAIT_SECONDS,
+						TimeUnit.SECONDS);
 				assertEquals(destination, fetch.path());
 				assertTrue(fetch.unchanged(), "the decoded body hash still reads as unchanged");
 				assertArrayEquals(head, Files.readAllBytes(destination));
@@ -520,7 +530,6 @@ class ConditionalFetchTest {
 		}
 	}
 
-
 	/** A rate-capped bucket answers 503 + Retry-After: the take waits out the window and retries on the same lane, and its pipelined neighbor is untouched. */
 	@Test
 	void aThrottledObjectRetriesOnTheSameLaneWithoutKillingItsNeighbors(@TempDir Path directory) throws Exception {
@@ -540,14 +549,13 @@ class ConditionalFetchTest {
 		}
 	}
 
-
 	/** Stores {@code count} generated objects under their sha1 keys and returns the keys. */
 	private static List<String> storeObjects(ContractServer server, int count) {
 		List<String> hashes = new ArrayList<>();
 		byte[] seed = new byte[16];
 		for (int i = 0; i < count; i++) {
 			new SecureRandom().nextBytes(seed);
-			byte[] object = ("stored-object-" + new java.math.BigInteger(1, seed).toString(16)).getBytes(StandardCharsets.UTF_8);
+			byte[] object = ("stored-object-" + new BigInteger(1, seed).toString(16)).getBytes(StandardCharsets.UTF_8);
 			String sha1 = HashUtils.sha1(object);
 			server.store().put(sha1, object);
 			hashes.add(sha1);
@@ -677,7 +685,7 @@ class ConditionalFetchTest {
 					requests.add(request.path);
 					if (secretRecorded.compareAndSet(false, true)) firstAuthorization.complete(request.authorization);
 					if (request.acceptEncoding != null) sawAcceptEncoding.set(true);
-				if (request.ifNoneMatch != null) ifNoneMatchLog.add(request.ifNoneMatch);
+					if (request.ifNoneMatch != null) ifNoneMatchLog.add(request.ifNoneMatch);
 					CountDownLatch pipeline = expectedPipeline;
 					if (pipeline != null) pipeline.countDown();
 					responder.execute(() -> answer(socket, out, request, pipeline, answering));
@@ -886,8 +894,8 @@ class ConditionalFetchTest {
 		/** The S3-style validator minted for one document's bytes: an MD5 token in quotes, never our sha1. */
 		static String foreignEtag(byte[] content) {
 			try {
-				return '"' + java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("MD5").digest(content)) + '"';
-			} catch (java.security.NoSuchAlgorithmException e) {
+				return '"' + HexFormat.of().formatHex(MessageDigest.getInstance("MD5").digest(content)) + '"';
+			} catch (NoSuchAlgorithmException e) {
 				throw new IllegalStateException(e);
 			}
 		}

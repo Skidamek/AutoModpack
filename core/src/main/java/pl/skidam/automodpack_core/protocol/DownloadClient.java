@@ -22,6 +22,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -573,10 +574,10 @@ public class DownloadClient implements PackTransport {
 		static long retryDelayMillis(Throwable takeError) {
 			if (!(takeError instanceof HostThrottleException throttled)) return 0;
 			if (throttled.retryAfterMillis() > 0) return throttled.retryAfterMillis();
-			return 1000 + java.util.concurrent.ThreadLocalRandom.current().nextLong(1000);
+			return 1000 + ThreadLocalRandom.current().nextLong(1000);
 		}
 
-				/**
+		/**
 		 * The trickle fuse budget: a slice must drain within the {@link NetUtils#TAKE_RATE_FLOOR_BYTES_PER_SECOND}
 		 * rate (a 4 MiB slice gets ~1024 s, its congested-share drain at 6.25 KiB/s needs ~655 s), but never inside
 		 * the 90 s write-stall window.
