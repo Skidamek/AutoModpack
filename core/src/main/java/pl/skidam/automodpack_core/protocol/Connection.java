@@ -157,8 +157,8 @@ class Connection implements AutoCloseable {
 					executor.execute(this::readLoop);
 				} catch (RuntimeException rejected) {
 					pending.removeLastOccurrence(request);
-					request.future.completeExceptionally(rejected);
 					failPending(rejected);
+					request.future.completeExceptionally(rejected);
 				}
 			}
 		}
@@ -195,8 +195,10 @@ class Connection implements AutoCloseable {
 				}
 				LOGGER.warn("The modpack wire lane died: conn={} pending={} request={} failure={}", traceId, waiting, request.originPath, failure.toString());
 				WireTrace.log("READER_EXIT", "conn", traceId, "reason", "fail:" + failure);
-				request.future.completeExceptionally(failure);
+				// The lane is marked dead before any failure is announced: a dependent that re-issues its request inline
+				// must land on a fresh lane, never on this dying one.
 				failPending(failure);
+				request.future.completeExceptionally(failure);
 				return;
 			}
 			if (settled) {

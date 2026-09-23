@@ -25,8 +25,10 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DocumentFetch;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.MissingObjectException;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.PackTransport;
+import pl.skidam.automodpack_core.protocol.UnauthorizedException;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
@@ -137,11 +139,14 @@ public final class ManifestFetcher {
 			journalExpected = null;
 		}
 
-		// When the mirror vouches, the journal request is decided before either request is sent, so it pipelines with
+		// When the mirror vouches, the journal request is decided before either request is sent, so it pipelines behind
 		// the head: a matching pair answers in one round trip, and a moved head still hands back the journal that head
-		// wants - the same request the sequential chain would have issued after parsing.
-		CompletableFuture<DocumentFetch> journalFetched = headExpected == null ? null : fetchJournal(transport, storage, journalExpected);
-		return transport.downloadDocument(GenerationHosting.HEAD_DOCUMENT_KEY.getBytes(StandardCharsets.UTF_8), storage.modpackContentTempFile(), headExpected, (IntConsumer) null)
+		// wants - the same request the sequential chain would have issued after parsing. The head leads the wire: it is
+		// the gate whose answer decides everything else, and on a close-framed host its body ends the lane only after
+		// both requests are in flight.
+		CompletableFuture<DocumentFetch> headFetched = transport.downloadDocument(GenerationHosting.HEAD_DOCUMENT_KEY.getBytes(StandardCharsets.UTF_8), storage.modpackContentTempFile(), headExpected, (IntConsumer) null);
+		CompletableFuture<DocumentFetch> journalFetched = headExpected == null ? null : fetchPipelinedJournal(transport, storage, journalExpected);
+		return headFetched
 				.thenComposeAsync(fetch -> applyFetchedHead(storage, transport, selectedModpackId, headExpected, journalExpected, journalFetched, fetch), DownloadClient.NET_EXECUTOR).whenComplete((ignored, error) -> {
 					try {
 						Files.deleteIfExists(storage.modpackContentTempFile());
@@ -154,6 +159,20 @@ public final class ManifestFetcher {
 	/** One full journal fetch into the temp file; callers delete the temp only after their last consumer of the fetch has run. */
 	private static CompletableFuture<DocumentFetch> fetchJournal(PackTransport transport, ClientStorage storage, String journalExpected) {
 		return transport.downloadDocument(GenerationHosting.JOURNAL_KEY.getBytes(StandardCharsets.UTF_8), storage.journalTempFile(), journalExpected, (IntConsumer) null);
+	}
+
+	/**
+	 * The pipelined journal fetch shares the head's lane, and a close-framed head body ends at EOF and spends that lane,
+	 * so the pipelined journal response never parses behind it. One re-issue on a fresh lane recovers it; a status
+	 * verdict (a rejected secret, a missing document) is the server's answer and never retries.
+	 */
+	private static CompletableFuture<DocumentFetch> fetchPipelinedJournal(PackTransport transport, ClientStorage storage, String journalExpected) {
+		return fetchJournal(transport, storage, journalExpected).exceptionallyCompose(error -> {
+			Throwable cause = Throwables.unwrap(error);
+			if (!(cause instanceof IOException) || cause instanceof UnauthorizedException || cause instanceof MissingObjectException) return CompletableFuture.failedFuture(error);
+			LOGGER.warn("The pipelined journal fetch lost its lane; fetching the journal again on a fresh one", cause);
+			return fetchJournal(transport, storage, journalExpected);
+		});
 	}
 
 	private static void deleteJournalTemp(ClientStorage storage) {

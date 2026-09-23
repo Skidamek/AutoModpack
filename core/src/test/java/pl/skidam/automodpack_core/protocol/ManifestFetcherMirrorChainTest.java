@@ -73,6 +73,34 @@ class ManifestFetcherMirrorChainTest {
 		assertEquals(new String(headBytes, StandardCharsets.UTF_8), Files.readString(storage.historyHeadFile(MODPACK_ID), StandardCharsets.UTF_8));
 	}
 
+	@Test
+	void aVouchedRecheckSurvivesACloseFramedHost() throws Exception {
+		server = new ConditionalFetchTest.ContractServer();
+		GroupManifest manifest = TestPacks.manifest("close framed recheck", "config/example.txt", "chain-content");
+		GenerationJsons.HeadDocumentFields head = TestPacks.head(manifest);
+		byte[] headBytes = ConfigTools.GSON.toJson(head).getBytes(StandardCharsets.UTF_8);
+		server.store().put("head", headBytes);
+		server.store().put("journal", journalBytes(head.contentToken, manifest));
+
+		ClientStorage storage = storage();
+		var first = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
+		assertTrue(first.successful(), () -> "first fetch failed: " + first.failure());
+		assertTrue(Files.exists(storage.historyHeadFile(MODPACK_ID)), "the first fetch must install the vouching head mirror");
+		// The install the first sync drives: the active generation now points at the fetched head's token, so the
+		// re-check's mirror vouches and the journal fetch pipelines behind the head.
+		storage.writeActiveState(MODPACK_ID, head.contentToken, head.ownershipLedger);
+
+		// The re-check vouches and pipelines the journal behind the head; the host close-frames every document, so the
+		// head's body ends at EOF and spends the lane - the pipelined journal response never parses. One fresh-lane
+		// retry must recover the re-check instead of failing the whole manifest fetch forever.
+		server.cooperate.set(false);
+		server.closeFramedDocuments.set(true);
+		var second = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
+		assertTrue(second.successful(), () -> "vouched re-check failed: " + second.failure());
+		assertEquals(head.contentToken, second.content().contentToken);
+		assertEquals(new String(headBytes, StandardCharsets.UTF_8), Files.readString(storage.historyHeadFile(MODPACK_ID), StandardCharsets.UTF_8));
+	}
+
 	private byte[] journalBytes(String headToken, GroupManifest manifest) throws IOException {
 		Path file = Files.createTempFile(temporaryDirectory, "journal-", ".jsonl");
 		Journal journal = Journal.open(file);

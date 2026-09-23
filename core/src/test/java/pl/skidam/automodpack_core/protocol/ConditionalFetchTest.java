@@ -500,6 +500,7 @@ class ConditionalFetchTest {
 		final AtomicBoolean cooperate = new AtomicBoolean(true);
 		final AtomicBoolean ignoreRanges = new AtomicBoolean(false);
 		final AtomicBoolean closeFramedObjects = new AtomicBoolean(false);
+		final AtomicBoolean closeFramedDocuments = new AtomicBoolean(false);
 		final AtomicBoolean requireAuth = new AtomicBoolean(false);
 		final AtomicBoolean lieAboutResumeStart = new AtomicBoolean(false);
 		final AtomicBoolean compressDocuments = new AtomicBoolean(false);
@@ -641,6 +642,15 @@ class ConditionalFetchTest {
 				byte[] content = key == null ? null : store.get(key);
 				if (content == null) {
 					respond(out, "404 Not Found", new byte[0]);
+					return;
+				}
+				// The barebones static host class without a Content-Length on documents: the body ends only with the
+				// connection, conditionals included.
+				if (closeFramedDocuments.get() && !request.path.startsWith("/objects/")) {
+					out.write("HTTP/1.1 200 OK\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+					out.write(content);
+					out.flush();
+					socket.close();
 					return;
 				}
 				if (!request.path.startsWith("/objects/") && request.ifNoneMatch != null && cooperate.get()
