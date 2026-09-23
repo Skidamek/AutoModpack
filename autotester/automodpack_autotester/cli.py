@@ -113,7 +113,7 @@ def _server_cache_guard(target, variants, settings):
             print(f"[wait] {target.id}: server cache is in use by another run; waiting", flush=True)
 
 
-def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, settings, resource_scope, netem=None, loss=""):
+def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, settings, resource_scope, netem=None, loss="", server_netem=None):
     lock = _server_cache_guard(target, variants, settings)
     try:
         case_results = [
@@ -127,6 +127,7 @@ def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, 
                 resource_scope=resource_scope,
                 netem=netem,
                 loss=loss,
+                server_netem=server_netem,
             )
             for variant in variants
         ]
@@ -248,6 +249,9 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument("--loss", type=parse_loss, metavar="1%%",
                        help="Drop this percentage of the server's outgoing segments with a netem loss qdisc "
                             "(bridge networking only) - the download's data direction")
+    run_p.add_argument("--server-netem", type=parse_netem, metavar="delay=300ms,rate=5mbit",
+                       help="Shape the SERVER container's eth0 with a tc netem qdisc (bridge networking only): "
+                            "delay/rate on the download's data direction; shares the one root qdisc with --loss")
     run_p.add_argument("--docker-uid", type=int)
     run_p.add_argument("--docker-gid", type=int)
     run_p.add_argument("--artifact-dir", type=Path)
@@ -411,6 +415,7 @@ def main(argv: list[str] | None = None) -> int:
                     resource_scope=resource_scope,
                     netem=args.netem,
                     loss=args.loss,
+                    server_netem=args.server_netem,
                 ): t
                 for t in selected
             }

@@ -226,6 +226,22 @@ def _apply_loss(ctx: Context) -> None:
     logger.info("Applied loss qdisc to %s eth0: %s", ctx.srv_name, ctx.loss)
 
 
+def _apply_server_netem(ctx: Context) -> None:
+    """Shapes the SERVER's eth0 with the --server-netem qdisc: the server's egress is the
+    download's data direction, so delay/rate belong here, not on the client's egress where
+    only the tiny request heads travel. Shares the one root qdisc slot with --loss, which
+    the runner rejects combining. Same teardown story as every netem knob: ephemeral container."""
+    if not ctx.server_netem:
+        return
+    _disable_iface_offloads(ctx.srv_name)
+    _disable_peer_offloads_of(ctx.srv_name)
+    result = _container(ctx.srv_name).exec_run(["tc", "qdisc", "add", "dev", "eth0", "root", "netem", *ctx.server_netem], user="root")
+    output = _exec_output(result)
+    if result.exit_code != 0:
+        raise RuntimeError(f"server container could not apply the netem qdisc ({result.exit_code}): {output}")
+    logger.info("Applied server netem qdisc to %s eth0: %s", ctx.srv_name, " ".join(ctx.server_netem))
+
+
 def _apply_netem(ctx: Context) -> None:
     """Shape the running client container's eth0 with the --netem qdisc.
 
@@ -285,6 +301,7 @@ def _launch_client(ctx: Context):
     _assert_running(ctx.cli_name)
     _apply_netem(ctx)
     _apply_loss(ctx)
+    _apply_server_netem(ctx)
 
 
 def _stage_client_runtime_mods(ctx: Context) -> None:

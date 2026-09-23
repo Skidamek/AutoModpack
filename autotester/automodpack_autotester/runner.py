@@ -102,6 +102,7 @@ def run_case(
     resource_scope: str,
     netem: list[str] | None = None,
     loss: str = "",
+    server_netem: list[str] | None = None,
 ) -> dict:
     started = time.monotonic()
     scenario_id = scenario.get("id", "?")
@@ -113,6 +114,10 @@ def run_case(
         raise ValueError("--netem requires bridge networking: on host networking the client shares the host's eth0")
     if loss and net_mode == "host":
         raise ValueError("--loss requires bridge networking: on host networking the server shares the host's eth0")
+    if server_netem and net_mode == "host":
+        raise ValueError("--server-netem requires bridge networking: on host networking the server shares the host's eth0")
+    if server_netem and loss:
+        raise ValueError("--server-netem and --loss both want the server's one root qdisc; pass the loss percentage via --loss and the delay/rate via --server-netem, not both")
     mode = scenario_mode(scenario)
     case_dir = out_dir / f"{target.id}-{int(time.time())}-{secrets.token_hex(3)}"
     server_dir = case_dir / "server"
@@ -180,6 +185,7 @@ def run_case(
             resource_scope=resource_scope,
             netem=list(netem or []),
             loss=loss,
+            server_netem=list(server_netem or []),
             vars={
                 **dict(scenario.get("vars", {}) or {}),
                 "server_endpoint_port": int((scenario.get("connectionPath") or {}).get("endpointPort", 25565)),

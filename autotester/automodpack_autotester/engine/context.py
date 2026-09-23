@@ -42,6 +42,10 @@ class Context:
     # the SERVER container's eth0: the server's egress is the download's data direction,
     # where segment loss actually stalls transfers.
     loss: str = ''
+    # --server-netem tc netem argv tokens (empty when the knob is off), applied as one
+    # netem qdisc to the SERVER container's eth0 - delay/rate on the download's data
+    # direction. Shares the one root qdisc with --loss; the runner rejects combining them.
+    server_netem: list[str] = field(default_factory=list)
     vars: dict = field(default_factory=dict)
     bridge: BridgeClient | None = None
     # Injected by the runner so the engine stays decoupled from Docker.
