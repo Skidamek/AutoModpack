@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.protocol;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.protocol.NetUtils.closeQuietly;
 import static pl.skidam.automodpack_core.protocol.NetUtils.getFingerprint;
 
 import java.io.IOException;
@@ -177,12 +178,5 @@ public final class CandidateTrustValidation {
 	private static CompletableFuture<Void> reject(Candidate candidate, Throwable error) {
 		closeQuietly(candidate.socket());
 		return CompletableFuture.failedFuture(error);
-	}
-
-	static void closeQuietly(AutoCloseable closeable) {
-		try {
-			closeable.close();
-		} catch (Exception ignored) {
-		}
 	}
 }

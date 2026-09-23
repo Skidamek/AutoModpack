@@ -696,7 +696,7 @@ public class DownloadClient implements PackTransport {
 			lanes.clear();
 			slotWaiters.clear();
 		}
-		connections.forEach(DownloadClient::closeQuietly);
+		connections.forEach(NetUtils::closeQuietly);
 		// Queued waiters never reach a lane and later submits are refused outright by the aborted gate, so no pump
 		// reopens connections: a cancelled run sends no requests.
 		IOException aborted = new IOException("Download aborted");
@@ -707,10 +707,6 @@ public class DownloadClient implements PackTransport {
 	@Override
 	public String windowSummary() {
 		return takesSubmitted.get() + " takes (" + takeRetries.get() + " retried), " + ByteFormat.formatSize(bytesDownloaded.get()) + " over " + LANES + " lanes";
-	}
-
-	static void closeQuietly(AutoCloseable closeable) {
-		CandidateTrustValidation.closeQuietly(closeable);
 	}
 
 	@Override
@@ -728,6 +724,6 @@ public class DownloadClient implements PackTransport {
 
 		IOException closedError = new IOException("Download client is closed");
 		waiters.forEach(waiter -> waiter.future().completeExceptionally(closedError));
-		connections.forEach(DownloadClient::closeQuietly);
+		connections.forEach(NetUtils::closeQuietly);
 	}
 }

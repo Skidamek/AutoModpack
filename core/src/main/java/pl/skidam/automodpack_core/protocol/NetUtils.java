@@ -221,6 +221,15 @@ public class NetUtils {
 		Files.writeString(path, keyPem, StandardCharsets.UTF_8);
 	}
 
+	/** Closes and swallows the failure: teardown paths never have a better story than the error they are already telling. */
+	public static void closeQuietly(AutoCloseable closeable) {
+		if (closeable == null) return;
+		try {
+			closeable.close();
+		} catch (Exception ignored) {
+		}
+	}
+
 	private static String formatBase64(byte[] derEncodedBytes) {
 		Base64.Encoder encoder = Base64.getMimeEncoder(64, new byte[]{'\n'});
 		return encoder.encodeToString(derEncodedBytes) + "\n";
