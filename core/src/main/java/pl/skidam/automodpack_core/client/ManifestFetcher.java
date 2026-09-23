@@ -12,6 +12,7 @@ import java.security.cert.X509Certificate;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
@@ -63,15 +64,16 @@ public final class ManifestFetcher {
 				return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, Throwables.unwrap(e));
 			}
 		}
-		AtomicReference<PackTransport> openedTransport = new AtomicReference<>();
+		TransportAbandonment abandonment = new TransportAbandonment();
 		try {
-			// Non-interactive fetch: the protocol's per-stage timeouts sum to at most 5 * NETWORK_TIMEOUT, so anything past 6 gave up somewhere.
-			return requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser, selectedModpackId, openedTransport)
+			// Non-interactive fetch: the budget is a best-effort surrender, not a bound - DNS resolution is unbounded and
+			// document bodies carry no stall fuse, so the chain can settle long after the budget is gone. The surrender
+			// is honest because of the abandonment: any chain completion that lands after it closes the transport, so
+			// neither a wedged lookup nor a late success leaks one.
+			return requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser, selectedModpackId, abandonment)
 					.get(NetUtils.NETWORK_TIMEOUT.multipliedBy(6).toSeconds(), TimeUnit.SECONDS);
 		} catch (TimeoutException e) {
-			// The wedged chain still holds an open transport nobody will ever consume; the reference is the only handle on its lanes.
-			PackTransport orphan = openedTransport.get();
-			if (orphan != null) orphan.close();
+			abandonment.abandon();
 			return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, Throwables.unwrap(e));
 		} catch (Exception e) {
 			return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, Throwables.unwrap(e));
@@ -82,19 +84,19 @@ public final class ManifestFetcher {
 
 	public static CompletableFuture<ManifestFetchResult> requestServerModpackContentAsync(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
 			boolean allowAskingUser, String selectedModpackId) {
-		return requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser, selectedModpackId, null);
+		return requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser, selectedModpackId, new TransportAbandonment());
 	}
 
 	private static CompletableFuture<ManifestFetchResult> requestServerModpackContentAsync(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
-			boolean allowAskingUser, String selectedModpackId, AtomicReference<PackTransport> openedTransport) {
+			boolean allowAskingUser, String selectedModpackId, TransportAbandonment abandonment) {
 		ManifestFetchState connectionFailedState = ManifestFetchState.CONNECTION_FAILED;
 		if (!connectionInfo.isComplete()) {
 			return CompletableFuture.completedFuture(new ManifestFetchResult(connectionFailedState, null, null, new IllegalArgumentException("Connection origin or endpoint is missing")));
 		}
 
-		return createTransport(connectionInfo, secret == null ? null : secret.secret(), manualValidationCallbackAsync(connectionInfo, allowAskingUser))
+		CompletableFuture<ManifestFetchResult> fetch = createTransport(connectionInfo, secret == null ? null : secret.secret(), manualValidationCallbackAsync(connectionInfo, allowAskingUser))
 				.thenCompose(transport -> {
-					if (openedTransport != null) openedTransport.set(transport);
+					abandonment.opened.set(transport);
 					return fetchModpackContentAsync(storage, transport, ModpackId.isValid(selectedModpackId) ? selectedModpackId : null).handle((fetched, error) -> {
 						if (error != null || fetched == null) {
 							transport.close();
@@ -108,6 +110,34 @@ public final class ManifestFetcher {
 					Throwable cause = Throwables.unwrap(error);
 					return new ManifestFetchResult(connectionFailedState, null, null, cause);
 				});
+		// The last word on abandonment: a completion that lands after the surrender (an unbounded DNS lookup, a body
+		// that outlived the budget) closes the transport nobody consumed, instead of leaking it.
+		return fetch.whenComplete((result, error) -> abandonment.closeIfAbandoned());
+	}
+
+	/**
+	 * The non-interactive fetch's surrender handle: the opened transport reference plus the flag saying the budget gave
+	 * up. On timeout the caller abandons, which closes whatever the reference holds; any chain completion after that
+	 * closes the transport too, covering both a late client creation and a late successful result.
+	 */
+	private static final class TransportAbandonment {
+		private final AtomicReference<PackTransport> opened = new AtomicReference<>();
+		private final AtomicBoolean abandoned = new AtomicBoolean();
+
+		void abandon() {
+			abandoned.set(true);
+			closeOpened();
+		}
+
+		/** The chain's last word: closes the transport when the surrender landed first; a normal completion was consumed by the caller. */
+		void closeIfAbandoned() {
+			if (abandoned.get()) closeOpened();
+		}
+
+		private void closeOpened() {
+			PackTransport transport = opened.get();
+			if (transport != null) transport.close();
+		}
 	}
 
 	/**
