@@ -16,23 +16,25 @@ import java.util.TreeSet;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 
 /**
  * Loader-agnostic nested-conflict detection. Loader resolution keeps exactly one candidate per mod id, preferring
  * roots over nested jars, so a pack-nested jar only reaches the game when it becomes part of a physical root copy:
  * it is copied out when it wins an id the pack does not ship as a root mod and some standard root nests that id at
- * a strictly older version. An emitted winner also drags the pool's providers of its declared dependencies: each
- * dependency id nothing already provides is resolved against the pack roots and nested jars, the provider is
- * emitted with the same colliders, and its own dependencies are resolved after it - the copy lives inside the
- * generated bundle, which only carries the selected jars, so a provider left unselected would boot the game with a
- * missing dependency. The same mechanics serve the reverse direction: a surviving standard root whose hard
- * dependency id is provided only by the pack gets the provider copied out too - a nested jar, or the pack root
- * itself, which is the pack's authoritative mod and beats a nested provider of the same id. A pack root whose
- * logical path is a force-copy service path is treated as will-be-provided instead: the loader forces that root
- * into the mods directory anyway. Every emitted jar is reported at the path where the extractor materialized it
- * (the pack root's own inspection copy for a root provider), so the caller can hash and store the bytes. Pure:
- * everything here works on inspected trees, never on the filesystem.
+ * a strictly older version. An emitted winner also drags the pool's providers of the dependencies of everything it
+ * ships: each dependency id nothing already provides is resolved against the pack roots and nested jars, the
+ * provider is emitted with the same colliders, and its own dependencies - including those of its whole nest tree,
+ * which rides along inside the same bundle entry and is resolved by the loader at boot - are resolved after it, so
+ * a provider left unselected would boot the game with a missing dependency. The same mechanics serve the reverse
+ * direction: a surviving standard root whose hard dependency id is provided only by the pack gets the provider
+ * copied out too - a nested jar, or the pack root itself, which is the pack's authoritative mod and beats a nested
+ * provider of the same id. A pack root whose logical path is a force-copy service path is treated as will-be-provided
+ * instead: the loader forces that root into the mods directory anyway. Every emitted jar reports the bundle entry
+ * name it lands under - the pack root's logical path followed by its entry chain, unique per jar by construction -
+ * plus a source that lazily opens its bytes from the pack root's own jar, so the caller can hash and store them.
+ * Pure: everything here works on inspected trees, never on the filesystem.
  */
 public final class NestedConflicts {
 
@@ -46,8 +48,11 @@ public final class NestedConflicts {
 		}
 	}
 
-	/** One pack-nested jar to copy into the standard mods directory, with the standard roots whose survival requires it. */
-	public record Candidate(FileInspection.Mod mod, List<Collider> colliders) {
+	/**
+	 * One pack-nested jar to copy into the generated bundle: its inspected mod, the bundle entry name it lands
+	 * under, the lazily opened source of its bytes, and the standard roots whose survival requires it.
+	 */
+	public record Candidate(FileInspection.Mod mod, String entryName, GeneratedBundle.Source source, List<Collider> colliders) {
 		public Candidate {
 			colliders = List.copyOf(colliders);
 		}
@@ -56,36 +61,50 @@ public final class NestedConflicts {
 	/** A standard root jar: its game-directory logical path plus its inspected tree of nested mods. */
 	public record StandardRoot(String logicalPath, FileInspection.Mod mod) {}
 
-	/** One materialized pack root jar: the game-directory logical path it ships at, its inspected tree, and the directory where its nested jars were extracted. */
-	public record PackRoot(String logicalPath, FileInspection.Mod tree, Path extractionBase) {}
+	/** One materialized pack root jar: the game-directory logical path it ships at plus its inspected tree rooted at its readable jar. */
+	public record PackRoot(String logicalPath, FileInspection.Mod tree) {}
 
 	/**
-	 * One node of a pack jar's nesting tree: the inspected jar, where the extractor materialized it, its
-	 * position between the pack root and the jars nested inside it, and for a pack root the logical path it
-	 * ships at ({@code null} for nested jars).
+	 * One node of a pack jar's nesting tree: the inspected jar, its raw entry chain from the root jar (one zip
+	 * entry path per nesting level, empty for the root itself), and the bundle entry name it would land under.
 	 */
 	private static final class Node {
 		final FileInspection.Mod mod;
-		final Path extractedPath;
 		final Node parent;
-		final String logicalPath;
+		final List<String> chain;
+		final String entryName;
 		final List<Node> children = new ArrayList<>();
 
-		Node(FileInspection.Mod mod, Path extractedPath, Node parent, String logicalPath) {
+		Node(FileInspection.Mod mod, Node parent, String logicalPath) {
 			this.mod = mod;
-			this.extractedPath = extractedPath;
 			this.parent = parent;
-			this.logicalPath = logicalPath;
+			this.chain = parent == null ? List.of() : levels(mod.path());
+			this.entryName = chain.isEmpty() ? logicalPath : logicalPath + "/" + LogicalPath.normalize(String.join("/", chain));
+		}
+
+		/** Splits a nested mod's virtual chain into one raw zip entry path per nesting level: every level ends at a jar. */
+		private static List<String> levels(Path virtualPath) {
+			List<String> levels = new ArrayList<>();
+			StringBuilder current = new StringBuilder();
+			for (Path component : virtualPath) {
+				if (current.length() > 0) current.append('/');
+				current.append(component);
+				if (JarUtils.hasJarExtension(String.valueOf(component))) {
+					levels.add(current.toString());
+					current.setLength(0);
+				}
+			}
+			return levels;
 		}
 	}
 
 	/**
 	 * The copies the pack needs. Per nested id one winning jar (highest version, ties broken by the smaller
-	 * materialized path); each winner with a colliding standard root is emitted - unless another emitted jar
+	 * entry name); each winner with a colliding standard root is emitted - unless another emitted jar
 	 * already claims one of its ids, which would put two jars declaring that id into one bundle - and every emitted
-	 * jar drags the pool's provider of each unprovided declared dependency, recursively, with the emitter's
-	 * colliders. A jar sharing an id with an emitted jar or a pack root is never dragged or re-emitted: the
-	 * loader's solver selects one whole candidate jar per id and discards the loser completely, so a jar that
+	 * jar drags the pool's provider of each unprovided declared dependency of everything it ships, recursively, with
+	 * the emitter's colliders. A jar sharing an id with an emitted jar or a pack root is never dragged or re-emitted:
+	 * the loader's solver selects one whole candidate jar per id and discards the loser completely, so a jar that
 	 * loses a shared id takes its every other id out of the bundle with it. Afterwards, a standard root whose hard dependency id
 	 * nothing in the standard mods directory provides gets the best provider from the pack copied out - a pack root
 	 * preferred over a nested jar - colliding with the dependent roots so the copy lives and dies with their
@@ -104,10 +123,7 @@ public final class NestedConflicts {
 		List<Node> roots = new ArrayList<>();
 		for (PackRoot packRoot : packRoots) {
 			if (packRoot.tree().path() == null) continue;
-			for (String id : packRoot.tree().IDs())
-				if (GeneratedBundle.MOD_ID.equalsIgnoreCase(id))
-					throw new IllegalArgumentException("Pack root " + packRoot.tree().path().getFileName() + " claims the reserved generated-bundle id " + GeneratedBundle.MOD_ID);
-			roots.add(buildNode(packRoot.tree(), packRoot.extractionBase(), null, packRoot.logicalPath(), packRoot.extractionBase()));
+			roots.add(buildNode(packRoot.tree(), null, packRoot.logicalPath()));
 		}
 		List<Node> nested = new ArrayList<>();
 		for (Node root : roots) collectNested(root, nested);
@@ -124,7 +140,7 @@ public final class NestedConflicts {
 				winnerById.merge(id.toLowerCase(Locale.ROOT), node, (current, challenger) -> winsJar(challenger, current) ? challenger : current);
 		}
 		List<Node> winners = new ArrayList<>(new LinkedHashSet<>(winnerById.values()));
-		winners.sort(Comparator.comparing(node -> node.extractedPath.toString()));
+		winners.sort(Comparator.comparing(node -> node.entryName));
 		for (Node winner : winners) {
 			FileInspection.Mod winnerMod = winner.mod;
 			List<Collider> colliders = new ArrayList<>();
@@ -136,18 +152,20 @@ public final class NestedConflicts {
 			emission.dragDependencies(winner, colliders);
 		}
 		emission.emitDependencyDrivenCopies(standardRoots);
-		emission.candidates.sort(Comparator.comparing(candidate -> candidate.mod().path().toString()));
+		emission.candidates.sort(Comparator.comparing(candidate -> candidate.entryName()));
 		return List.copyOf(emission.candidates);
 	}
 
-	private static Node buildNode(FileInspection.Mod mod, Path extractedPath, Node parent, String logicalPath, Path extractionBase) {
-		Node node = new Node(mod, extractedPath, parent, logicalPath);
+	private static Node buildNode(FileInspection.Mod mod, Node parent, String logicalPath) {
+		Node node = new Node(mod, parent, logicalPath);
+		for (String id : mod.IDs())
+			if (GeneratedBundle.MOD_ID.equalsIgnoreCase(id))
+				throw new IllegalArgumentException((parent == null ? "Pack root " : "Nested jar ") + node.entryName + " claims the reserved generated-bundle id " + GeneratedBundle.MOD_ID);
 		List<FileInspection.Mod> nested = new ArrayList<>(mod.nestedMods());
-		nested.sort(Comparator.comparing(child -> child.path() == null ? "" : child.path().toString()));
+		nested.sort(Comparator.comparing(child -> child.path() == null ? "" : LogicalPath.normalize(child.path().toString())));
 		for (FileInspection.Mod child : nested) {
 			if (child.path() == null) continue;
-			// The extractor flattens every depth under the root's own prefix, so a jar materializes at the root base plus its entry path.
-			node.children.add(buildNode(child, extractedPath(extractionBase, child.path()), node, null, extractionBase));
+			node.children.add(buildNode(child, node, logicalPath));
 		}
 		return node;
 	}
@@ -155,15 +173,6 @@ public final class NestedConflicts {
 	private static void collectNested(Node node, List<Node> into) {
 		into.addAll(node.children);
 		for (Node child : node.children) collectNested(child, into);
-	}
-
-	/**
-	 * Where the extractor materialized a nested jar: its parent's path followed by the entry path inside the parent.
-	 * The entry goes through the canonical normalizer - on Windows its root separator would make {@link Path#resolve}
-	 * drop the parent entirely.
-	 */
-	private static Path extractedPath(Path parentPath, Path entryPath) {
-		return parentPath.resolve(LogicalPath.normalize(entryPath.toString()));
 	}
 
 	/**
@@ -199,7 +208,7 @@ public final class NestedConflicts {
 		/** Records {@code node} as an emitted candidate carrying {@code colliders} and takes its ids. */
 		private void emit(Node node, List<Collider> colliders) {
 			FileInspection.Mod mod = node.mod;
-			candidates.add(new Candidate(mod.at(sourcePath(node)), colliders));
+			candidates.add(new Candidate(mod, node.entryName, source(node), colliders));
 			for (String id : mod.IDs()) {
 				String normalized = id.toLowerCase(Locale.ROOT);
 				claimed.add(normalized);
@@ -209,20 +218,39 @@ public final class NestedConflicts {
 		}
 
 		/**
-		 * Drags the transitive closure of {@code node}'s declared dependencies: per unprovided id the best provider
-		 * from the pool is emitted with {@code colliders} and resolved recursively. Nothing outside the generated
+		 * Drags the transitive closure of the dependencies of everything {@code node} ships: per unprovided id of
+		 * {@code node} or any jar nested inside it the best provider from the pool is emitted with {@code colliders}
+		 * and resolved recursively. The nests ride along inside the emitted jar's bundle entry and the loader
+		 * resolves them at boot, so their dependencies are the copy's to provide. Nothing outside the generated
 		 * bundle provides a covered pack id, so the pack root shipping it is dragged itself.
 		 */
 		private void dragDependencies(Node node, List<Collider> colliders) {
-			Set<String> dependencyIds = new TreeSet<>();
-			for (String dependency : node.mod.deps()) dependencyIds.add(dependency.toLowerCase(Locale.ROOT));
-			for (String dependencyId : dependencyIds) {
-				if (provided(dependencyId)) continue;
-				Node provider = provider(dependencyId);
-				if (provider == null) continue;
-				emit(provider, colliders);
-				dragDependencies(provider, colliders);
+			for (Node member : subtree(node)) {
+				Set<String> dependencyIds = new TreeSet<>();
+				for (String dependency : member.mod.deps()) dependencyIds.add(dependency.toLowerCase(Locale.ROOT));
+				for (String dependencyId : dependencyIds) {
+					if (provided(dependencyId)) continue;
+					Node provider = provider(dependencyId);
+					if (provider == null) continue;
+					emit(provider, colliders);
+					dragDependencies(provider, colliders);
+				}
 			}
+		}
+
+		private static List<Node> subtree(Node node) {
+			List<Node> members = new ArrayList<>();
+			members.add(node);
+			for (Node child : node.children) members.addAll(subtree(child));
+			return members;
+		}
+
+		/** Where an emitted jar's bytes come from: the pack root's own jar, or a chain of entries into it. */
+		private static GeneratedBundle.Source source(Node node) {
+			Node root = node;
+			while (root.parent != null) root = root.parent;
+			Path rootJar = root.mod.path();
+			return node.chain.isEmpty() ? GeneratedBundle.source(rootJar) : () -> JarUtils.openNestedJar(rootJar, node.chain);
 		}
 
 		/**
@@ -284,7 +312,7 @@ public final class NestedConflicts {
 				List<Collider> colliders = new ArrayList<>(candidate.colliders());
 				Collider collider = new Collider(root.logicalPath(), root.mod().hash());
 				if (colliders.stream().noneMatch(existing -> existing.logicalPath().equals(collider.logicalPath()))) colliders.add(collider);
-				candidates.set(index, new Candidate(candidate.mod(), colliders));
+				candidates.set(index, new Candidate(candidate.mod(), candidate.entryName(), candidate.source(), colliders));
 				return;
 			}
 		}
@@ -308,17 +336,12 @@ public final class NestedConflicts {
 	private static Set<String> providedByForceCopy(List<Node> packRootNodes, Set<String> forceCopyPaths) {
 		Set<String> provided = new HashSet<>();
 		for (Node packRoot : packRootNodes) {
-			if (packRoot.logicalPath == null || !forceCopyPaths.contains(packRoot.logicalPath.toLowerCase(Locale.ROOT))) continue;
+			if (!forceCopyPaths.contains(packRoot.entryName.toLowerCase(Locale.ROOT))) continue;
 			FileInspection.Mod mod = packRoot.mod;
 			for (String id : mod.IDs()) provided.add(id.toLowerCase(Locale.ROOT));
 			collectIds(mod, provided);
 		}
 		return provided;
-	}
-
-	/** Where a provider's bytes live: a pack root's own materialized inspection jar, or a nested jar's extracted file. */
-	private static Path sourcePath(Node provider) {
-		return provider.parent == null ? provider.mod.path() : provider.extractedPath;
 	}
 
 	private static boolean provides(FileInspection.Mod mod, String dependencyId) {
@@ -370,10 +393,10 @@ public final class NestedConflicts {
 		return false;
 	}
 
-	/** Winner order between two jars competing for one id: higher version wins, a lexicographically smaller jar path breaks ties. */
+	/** Winner order between two jars competing for one id: higher version wins, a lexicographically smaller entry name breaks ties. */
 	private static boolean winsJar(Node challenger, Node current) {
 		int comparison = SemanticVersion.compareVersionStrings(challenger.mod.version(), current.mod.version());
 		if (comparison != 0) return comparison > 0;
-		return challenger.extractedPath.toString().compareTo(current.extractedPath.toString()) < 0;
+		return challenger.entryName.compareTo(current.entryName) < 0;
 	}
 }

@@ -27,7 +27,7 @@ class NestedConflictsTest {
 		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(standard), Set.of());
 
 		assertEquals(1, candidates.size());
-		assertEquals(Path.of("nested/pack.jar/META-INF/jars/api.jar"), candidates.get(0).mod().path());
+		assertEquals("mods/pack.jar/META-INF/jars/api.jar", candidates.get(0).entryName());
 		assertEquals(List.of(new Collider("mods/local.jar", ROOT_HASH)), candidates.get(0).colliders());
 	}
 
@@ -53,7 +53,7 @@ class NestedConflictsTest {
 		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(standard), Set.of());
 
 		assertEquals(1, candidates.size());
-		assertEquals(Path.of("nested/pack.jar/META-INF/jars/b.jar"), candidates.get(0).mod().path());
+		assertEquals("mods/pack.jar/META-INF/jars/b.jar", candidates.get(0).entryName());
 	}
 
 	@Test
@@ -106,8 +106,8 @@ class NestedConflictsTest {
 
 		// The sibling is a per-id winner itself, but with no colliders it is not emitted - it must still be draggable.
 		assertEquals(2, candidates.size());
-		assertEquals(Path.of("nested/pack.jar/META-INF/jars/sib.jar"), candidates.get(0).mod().path());
-		assertEquals(Path.of("nested/pack.jar/META-INF/jars/w.jar"), candidates.get(1).mod().path());
+		assertEquals("mods/pack.jar/META-INF/jars/sib.jar", candidates.get(0).entryName());
+		assertEquals("mods/pack.jar/META-INF/jars/w.jar", candidates.get(1).entryName());
 		assertEquals(candidates.get(1).colliders(), candidates.get(0).colliders());
 	}
 
@@ -124,7 +124,7 @@ class NestedConflictsTest {
 
 		// The winner and the emitted x-winner are copied; both dependency providers are excluded: old-x.jar
 		// because the emitted winner already claims x, px.jar because a pack root mod claims px.
-		assertEquals(List.of("nested/pack.jar/META-INF/jars/e.jar", "nested/pack.jar/META-INF/jars/w.jar"), paths(candidates));
+		assertEquals(List.of("mods/pack.jar/META-INF/jars/e.jar", "mods/pack.jar/META-INF/jars/w.jar"), entryNames(candidates));
 	}
 
 	@Test
@@ -138,7 +138,7 @@ class NestedConflictsTest {
 
 		// Both jars win an id and both collide with the root, but emitting both would put two jars declaring x into one bundle: b loses its shared id to a and stays out.
 		assertEquals(1, candidates.size());
-		assertEquals(Path.of("nested/pack.jar/META-INF/jars/a.jar"), candidates.get(0).mod().path());
+		assertEquals("mods/pack.jar/META-INF/jars/a.jar", candidates.get(0).entryName());
 	}
 
 	@Test
@@ -150,7 +150,7 @@ class NestedConflictsTest {
 		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot("mods/a.jar", rootA), packRoot("mods/b.jar", rootB)), List.of(dependent), Set.of());
 
 		// The dependent's provider is pack root a itself; a needs b, and b is another pack root - it is dragged with the same colliders.
-		assertEquals(List.of("a.jar", "b.jar"), paths(candidates));
+		assertEquals(List.of("mods/a.jar", "mods/b.jar"), entryNames(candidates));
 		assertEquals(List.of(new Collider("mods/one.jar", ROOT_HASH)), candidates.get(0).colliders());
 		assertEquals(candidates.get(0).colliders(), candidates.get(1).colliders());
 	}
@@ -166,7 +166,7 @@ class NestedConflictsTest {
 		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot("mods/a.jar", rootA), packRoot("mods/b.jar", rootB)), List.of(dependent), Set.of());
 
 		// The provider is resolved against the whole pool, so e.jar under pack root b serves p.jar's dependency across roots.
-		assertEquals(List.of("nested/a.jar/META-INF/jars/p.jar", "nested/b.jar/META-INF/jars/e.jar"), paths(candidates));
+		assertEquals(List.of("mods/a.jar/META-INF/jars/p.jar", "mods/b.jar/META-INF/jars/e.jar"), entryNames(candidates));
 		assertEquals(List.of(new Collider("mods/one.jar", ROOT_HASH)), candidates.get(0).colliders());
 		assertEquals(candidates.get(0).colliders(), candidates.get(1).colliders());
 	}
@@ -182,7 +182,7 @@ class NestedConflictsTest {
 		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(beaten, provider), Set.of());
 
 		// The winner is copied, but its dependency is already served by a standard root - bundling sib.jar would duplicate it.
-		assertEquals(List.of("nested/pack.jar/META-INF/jars/w.jar"), paths(candidates));
+		assertEquals(List.of("mods/pack.jar/META-INF/jars/w.jar"), entryNames(candidates));
 	}
 
 	@Test
@@ -195,7 +195,7 @@ class NestedConflictsTest {
 
 		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(standard), Set.of());
 
-		assertEquals(List.of("nested/pack.jar/META-INF/jars/d1.jar", "nested/pack.jar/META-INF/jars/d2.jar", "nested/pack.jar/META-INF/jars/w.jar"), paths(candidates));
+		assertEquals(List.of("mods/pack.jar/META-INF/jars/d1.jar", "mods/pack.jar/META-INF/jars/d2.jar", "mods/pack.jar/META-INF/jars/w.jar"), entryNames(candidates));
 		assertEquals(1, candidates.stream().map(Candidate::colliders).collect(Collectors.toSet()).size());
 	}
 
@@ -209,7 +209,7 @@ class NestedConflictsTest {
 		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependentOne, dependentTwo), Set.of());
 
 		assertEquals(1, candidates.size());
-		assertEquals(Path.of("nested/pack.jar/META-INF/jars/p.jar"), candidates.get(0).mod().path());
+		assertEquals("mods/pack.jar/META-INF/jars/p.jar", candidates.get(0).entryName());
 		assertEquals(List.of(new Collider("mods/one.jar", ROOT_HASH), new Collider("mods/two.jar", ROOT_HASH)), candidates.get(0).colliders());
 	}
 
@@ -238,7 +238,7 @@ class NestedConflictsTest {
 		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(beaten, dependent), Set.of());
 
 		// The winner's drag already provides d as a root; the dependent's unmet pass must not emit a second copy.
-		assertEquals(List.of("nested/pack.jar/META-INF/jars/d.jar", "nested/pack.jar/META-INF/jars/w.jar"), paths(candidates));
+		assertEquals(List.of("mods/pack.jar/META-INF/jars/d.jar", "mods/pack.jar/META-INF/jars/w.jar"), entryNames(candidates));
 	}
 
 	@Test
@@ -252,7 +252,7 @@ class NestedConflictsTest {
 		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(beaten, dependent), Set.of());
 
 		// The drag's copy survives while either reason survives: the beaten root that forced the winner, or the dependent.
-		Candidate drag = candidates.stream().filter(candidate -> candidate.mod().path().toString().endsWith("d.jar")).findFirst().orElseThrow();
+		Candidate drag = candidates.stream().filter(candidate -> candidate.entryName().endsWith("d.jar")).findFirst().orElseThrow();
 		assertEquals(List.of(new Collider("mods/old.jar", ROOT_HASH), new Collider("mods/one.jar", ROOT_HASH)), drag.colliders());
 	}
 
@@ -281,6 +281,46 @@ class NestedConflictsTest {
 	}
 
 	@Test
+	void aNestedJarClaimingTheReservedBundleIdIsRejectedToo() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
+				tree("/META-INF/jars/impostor.jar", "1.0.0", Set.of("other", GeneratedBundle.MOD_ID), Set.of()));
+		StandardRoot standard = standard("mods/local.jar", nested(Set.of("other"), "1.0.0"));
+
+		// The impostor would win "other" and land inside the bundle whose own id is the reserved one - the loader
+		// discards such a candidate whole, so the dependency it was bundled for would boot-crash instead.
+		assertThrows(IllegalArgumentException.class, () -> NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(standard), Set.of()));
+	}
+
+	@Test
+	void sameNamedNestsAtDifferentDepthsStayDistinctJars() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
+				tree("/META-INF/jars/lib.jar", "2.0.0", Set.of("p"), Set.of()),
+				tree("/META-INF/jars/b.jar", "1.0.0", Set.of("b"), Set.of(),
+						tree("/META-INF/jars/b.jar/META-INF/jars/lib.jar", "2.0.0", Set.of("q"), Set.of())));
+		StandardRoot beatenOnP = standard("mods/old-p.jar", nested(Set.of("p"), "1.0.0"));
+		StandardRoot beatenOnQ = standard("mods/old-q.jar", nested(Set.of("q"), "1.0.0"));
+
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(beatenOnP, beatenOnQ), Set.of());
+
+		// Two different jars named lib.jar at two nesting depths: entry names carry the chain, so neither clobbers the other.
+		assertEquals(List.of("mods/pack.jar/META-INF/jars/b.jar/META-INF/jars/lib.jar", "mods/pack.jar/META-INF/jars/lib.jar"), entryNames(candidates));
+	}
+
+	@Test
+	void anEmittedJarShipsItsNestsSoTheirDependenciesAreDraggedToo() {
+		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
+				tree("/META-INF/jars/w.jar", "2.0.0", Set.of("a"), Set.of(),
+						tree("/META-INF/jars/inner.jar", "1.0.0", Set.of("inner"), Set.of("lib"))),
+				tree("/META-INF/jars/lib.jar", "1.0.0", Set.of("lib"), Set.of()));
+		StandardRoot standard = standard("mods/local.jar", nested(Set.of("a"), "1.0.0"));
+
+		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(standard), Set.of());
+
+		// The nest rides inside w's bundle entry and the loader resolves it at boot, so lib must ship with it.
+		assertEquals(List.of("mods/pack.jar/META-INF/jars/lib.jar", "mods/pack.jar/META-INF/jars/w.jar"), entryNames(candidates));
+	}
+
+	@Test
 	void aPreviouslyCopiedJarDoesNotProvisionItsOwnDependency() {
 		FileInspection.Mod packRoot = tree("pack.jar", "1.0.0", Set.of("pack"), Set.of(),
 				tree("/META-INF/jars/p.jar", "2.0.0", Set.of("d"), Set.of()));
@@ -302,7 +342,7 @@ class NestedConflictsTest {
 		// A pack-root id no longer suppresses the copy: the pack's authoritative jar is the provider now.
 		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent), Set.of("d"), Set.of(), Set.of());
 
-		assertEquals(List.of("pack.jar"), paths(candidates));
+		assertEquals(List.of("mods/pack.jar"), entryNames(candidates));
 		assertEquals(List.of(new Collider("mods/one.jar", ROOT_HASH)), candidates.get(0).colliders());
 	}
 
@@ -314,7 +354,7 @@ class NestedConflictsTest {
 
 		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent), Set.of("d"), Set.of(), Set.of());
 
-		assertEquals(List.of("pack.jar"), paths(candidates));
+		assertEquals(List.of("mods/pack.jar"), entryNames(candidates));
 	}
 
 	@Test
@@ -353,7 +393,7 @@ class NestedConflictsTest {
 		assertEquals(1, unaware.size());
 		List<Candidate> stable = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent, bundle), Set.of("pack"), Set.of(bundlePath), Set.of());
 		assertEquals(1, stable.size());
-		assertEquals(Path.of("nested/pack.jar/META-INF/jars/p.jar"), stable.get(0).mod().path());
+		assertEquals("mods/pack.jar/META-INF/jars/p.jar", stable.get(0).entryName());
 		assertEquals(List.of(new Collider("mods/one.jar", ROOT_HASH)), stable.get(0).colliders());
 	}
 
@@ -366,12 +406,12 @@ class NestedConflictsTest {
 
 		List<Candidate> candidates = NestedConflicts.detect(List.of(packRoot(packRoot)), List.of(dependent), Set.of());
 
-		assertEquals(List.of("nested/pack.jar/META-INF/jars/d2.jar", "nested/pack.jar/META-INF/jars/p.jar"), paths(candidates));
+		assertEquals(List.of("mods/pack.jar/META-INF/jars/d2.jar", "mods/pack.jar/META-INF/jars/p.jar"), entryNames(candidates));
 		assertEquals(1, candidates.stream().map(Candidate::colliders).collect(Collectors.toSet()).size());
 	}
 
-	private static List<String> paths(List<Candidate> candidates) {
-		return candidates.stream().map(candidate -> candidate.mod().path().toString().replace('\\', '/')).toList();
+	private static List<String> entryNames(List<Candidate> candidates) {
+		return candidates.stream().map(Candidate::entryName).toList();
 	}
 
 	private static NestedConflicts.PackRoot packRoot(FileInspection.Mod tree) {
@@ -379,7 +419,7 @@ class NestedConflictsTest {
 	}
 
 	private static NestedConflicts.PackRoot packRoot(String logicalPath, FileInspection.Mod tree) {
-		return new NestedConflicts.PackRoot(logicalPath, tree, Path.of("nested").resolve(tree.path()));
+		return new NestedConflicts.PackRoot(logicalPath, tree);
 	}
 
 	private static FileInspection.Mod nested(Set<String> ids, String version) {

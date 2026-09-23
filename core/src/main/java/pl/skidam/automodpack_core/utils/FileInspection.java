@@ -183,6 +183,7 @@ public class FileInspection {
 	 * Reads a JAR from an InputStream (recursively) without mounting it as a FileSystem.
 	 */
 	private static Mod readModFromStream(Path virtualPath, InputStream is) {
+
 		// ZipInputStream must NOT close the underlying stream if it's a child stream
 		ZipInputStream zis = new ZipInputStream(is);
 		ZipEntry entry;

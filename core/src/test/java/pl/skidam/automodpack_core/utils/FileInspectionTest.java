@@ -106,6 +106,30 @@ class FileInspectionTest {
 		}
 	}
 
+	@Test
+	void nestedTreesStayReadableAtDepthTwo() throws IOException {
+		Path jar = Files.createTempDirectory("nested-depth-").resolve("rootmod.jar");
+		String json = "{\"id\": \"depthmod\", \"version\": \"1.0.0\"}";
+
+		try {
+			Files.write(jar, jar(Map.of("fabric.mod.json", json.getBytes(StandardCharsets.UTF_8),
+					"META-INF/jars/mid.jar", jar(Map.of("fabric.mod.json", json.getBytes(StandardCharsets.UTF_8),
+							"META-INF/jars/deep.jar", jar(Map.of("fabric.mod.json", json.getBytes(StandardCharsets.UTF_8))))))));
+			FileInspection.Mod mod = inspect(jar);
+			FileInspection.Mod mid = onlyNested(mod);
+
+			// Detection bundles depth-two jars by entry chain, so the inspection tree must reach them with paths intact.
+			assertEquals("depthmod", onlyNested(mid).id());
+		} finally {
+			Files.deleteIfExists(jar);
+		}
+	}
+
+	private static FileInspection.Mod onlyNested(FileInspection.Mod mod) {
+		assertEquals(1, mod.nestedMods().size());
+		return mod.nestedMods().iterator().next();
+	}
+
 	private static FileInspection.Mod inspect(Path jar) throws IOException {
 		Path cacheDirectory = Files.createTempDirectory("file-cache-");
 		try (FileCache cache = FileCache.open(cacheDirectory)) {

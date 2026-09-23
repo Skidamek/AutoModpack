@@ -4,13 +4,9 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystemException;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.security.DigestOutputStream;
 import java.util.*;
 import java.util.HexFormat;
@@ -45,7 +41,6 @@ import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
-import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
@@ -83,7 +78,6 @@ import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
  * </p>
  */
 final class ClientUpdatePlanBuilder {
-	private static final String NESTED_EXTRACTION_ROOT = "nested";
 	private final ClientStorage storage;
 	private final ModpackLoaderService modpackLoader;
 	private final String loaderType;
@@ -495,70 +489,59 @@ final class ClientUpdatePlanBuilder {
 	 * Detects the jars the standard roots need from the pack and bundles them into the one reserved generated
 	 * jar: selection stays per-jar (conflict winners, their dependency drags, dependency-driven providers), but
 	 * the emission is a single deterministic bundle at {@link ModpackPathPolicy#GENERATED_BUNDLE_NAME}, hashed
-	 * and acquired into the object store as one content object. The bundle never provisions its own contents'
-	 * dependencies: when the previous state lists the reserved path it is passed to the detector as a previously
-	 * generated copy.
+	 * and acquired into the object store as one content object. Each candidate streams straight out of its pack
+	 * root's jar by entry chain, and every source is read to the end as a zip first: the loader's boot scan reads
+	 * every entry of a nested jar, so a jar that does not stream clean fails the plan here instead of crashing
+	 * resolution there. The bundle never provisions its own contents' dependencies: when the previous state lists
+	 * the reserved path it is passed to the detector as a previously generated copy.
 	 */
 	private List<UpdatePlanner.NestedCandidate> inspectNestedCopies(ModpackJsons.ModpackContentFields target, FileCache cache,
 			ClientProjectionView.Snapshot projection, List<UpdatePlan.ModInfo> targetMods, List<NestedConflicts.StandardRoot> standardRoots,
 			List<UpdatePlan.NestedCopy> previousCopies, Set<String> forceCopyPaths) throws IOException {
 		if (!modpackLoader.discoversNestedConflicts()) return List.of();
-		Path inspectionDirectory = Files.createTempDirectory(storage.stagingDirectory(), "inspection-");
-		try {
-			List<NestedConflicts.PackRoot> packRoots = new ArrayList<>();
-			for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(LogicalPath.normalize(value.file), value.type)).toList()) {
-				Path source = resolvedObject(item, projection, cache);
-				if (source == null) continue;
-				String logicalPath = LogicalPath.normalize(item.file);
-				Path inspectionPath = inspectionDirectory.resolve(logicalPath).normalize();
-				if (!inspectionPath.startsWith(inspectionDirectory)) throw new IOException("Mod inspection path escaped its temporary directory: " + item.file);
-				materializeInspectionCopy(source, inspectionPath, item.size, item.sha1, cache);
-				// Fresh inspection on purpose: the detector derives every nested jar's materialized path from the
-				// parent chain of entry paths, which the content-keyed mod cache does not preserve.
-				FileInspection.Mod root = FileInspection.getMod(inspectionPath, cache);
-				if (root != null) packRoots.add(new NestedConflicts.PackRoot(logicalPath, root, inspectionDirectory.resolve(NESTED_EXTRACTION_ROOT).resolve(logicalPath)));
-			}
-			extractNestedJars(inspectionDirectory);
-
-			Set<String> packRootIds = new HashSet<>();
-			targetMods.forEach(mod -> packRootIds.addAll(mod.ids()));
-			List<GeneratedBundle.Item> items = new ArrayList<>();
-			Set<String> bundledIds = new LinkedHashSet<>();
-			Set<NestedConflicts.Collider> colliders = new LinkedHashSet<>();
-			Set<String> previouslyCopiedPaths = previousCopies.stream().map(UpdatePlan.NestedCopy::relativePath).collect(Collectors.toSet());
-			for (NestedConflicts.Candidate candidate : NestedConflicts.detect(packRoots, standardRoots, packRootIds, previouslyCopiedPaths, forceCopyPaths)) {
-				Path nestedJar = candidate.mod().path();
-				if (nestedJar == null || !Files.isRegularFile(nestedJar)) continue;
-				items.add(new GeneratedBundle.Item(nestedJar.getFileName().toString(), GeneratedBundle.source(nestedJar)));
-				candidate.mod().IDs().forEach(bundledIds::add);
-				colliders.addAll(candidate.colliders());
-			}
-			if (items.isEmpty()) return List.of();
-			Path staging = Files.createTempFile(storage.stagingDirectory(), "bundle-", ".jar");
-			String hash;
-			long size;
-			try {
-				CountingDigestStream counting = new CountingDigestStream(Files.newOutputStream(staging));
-				try (OutputStream out = counting) {
-					GeneratedBundle.generate(items, out);
-				}
-				hash = HexFormat.of().formatHex(counting.digest());
-				size = counting.size;
-				Path storeFile = storage.objectFile(hash);
-				if (!FileIntegrity.matchesNamed(storeFile, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(staging, storeFile, size, hash, cache);
-			} finally {
-				Files.deleteIfExists(staging);
-			}
-			String relativePath = LogicalPath.normalize(ModpackPathPolicy.MODS_ROOT + "/" + ModpackPathPolicy.GENERATED_BUNDLE_NAME);
-			Path liveBundle = storage.gameDirectory().resolve(relativePath);
-			if (Files.exists(liveBundle, LinkOption.NOFOLLOW_LINKS) && !isGeneratedBundle(liveBundle, relativePath, hash, previousCopies, cache)) {
-				LOGGER.warn("A foreign file occupies the reserved generated-bundle path {}; this plan installs no generated dependency copies", relativePath);
-				return List.of();
-			}
-			return List.of(new UpdatePlanner.NestedCandidate(new UpdatePlan.NestedCopy(relativePath, hash, size, bundledIds), colliders));
-		} finally {
-			FileTrees.delete(inspectionDirectory);
+		List<NestedConflicts.PackRoot> packRoots = new ArrayList<>();
+		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(LogicalPath.normalize(value.file), value.type)).toList()) {
+			Path source = resolvedObject(item, projection, cache);
+			if (source == null) continue;
+			FileInspection.Mod root = FileInspection.getMod(source, cache);
+			if (root != null) packRoots.add(new NestedConflicts.PackRoot(LogicalPath.normalize(item.file), root));
 		}
+
+		Set<String> packRootIds = new HashSet<>();
+		targetMods.forEach(mod -> packRootIds.addAll(mod.ids()));
+		List<GeneratedBundle.Item> items = new ArrayList<>();
+		Set<String> bundledIds = new LinkedHashSet<>();
+		Set<NestedConflicts.Collider> colliders = new LinkedHashSet<>();
+		Set<String> previouslyCopiedPaths = previousCopies.stream().map(UpdatePlan.NestedCopy::relativePath).collect(Collectors.toSet());
+		for (NestedConflicts.Candidate candidate : NestedConflicts.detect(packRoots, standardRoots, packRootIds, previouslyCopiedPaths, forceCopyPaths)) {
+			JarUtils.validateStreamedJar(candidate.source().open());
+			items.add(new GeneratedBundle.Item(candidate.entryName(), candidate.source()));
+			candidate.mod().IDs().forEach(bundledIds::add);
+			colliders.addAll(candidate.colliders());
+		}
+		if (items.isEmpty()) return List.of();
+		Path staging = Files.createTempFile(storage.stagingDirectory(), "bundle-", ".jar");
+		String hash;
+		long size;
+		try {
+			CountingDigestStream counting = new CountingDigestStream(Files.newOutputStream(staging));
+			try (OutputStream out = counting) {
+				GeneratedBundle.generate(items, out);
+			}
+			hash = HexFormat.of().formatHex(counting.digest());
+			size = counting.size;
+			Path storeFile = storage.objectFile(hash);
+			if (!FileIntegrity.matchesNamed(storeFile, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(staging, storeFile, size, hash, cache);
+		} finally {
+			Files.deleteIfExists(staging);
+		}
+		String relativePath = LogicalPath.normalize(ModpackPathPolicy.MODS_ROOT + "/" + ModpackPathPolicy.GENERATED_BUNDLE_NAME);
+		Path liveBundle = storage.gameDirectory().resolve(relativePath);
+		if (Files.exists(liveBundle, LinkOption.NOFOLLOW_LINKS) && !isGeneratedBundle(liveBundle, relativePath, hash, previousCopies, cache)) {
+			LOGGER.warn("A foreign file occupies the reserved generated-bundle path {}; this plan installs no generated dependency copies", relativePath);
+			return List.of();
+		}
+		return List.of(new UpdatePlanner.NestedCandidate(new UpdatePlan.NestedCopy(relativePath, hash, size, bundledIds), colliders));
 	}
 
 	/** Whether the file at the reserved bundle path is ours: the freshly generated bytes or a previous generation's bundle. */
@@ -569,50 +552,6 @@ final class ClientUpdatePlanBuilder {
 		for (UpdatePlan.NestedCopy previous : previousCopies)
 			if (previous.relativePath().equalsIgnoreCase(relativePath) && previous.sha1().equalsIgnoreCase(observed)) return true;
 		return false;
-	}
-
-	/** Extracts every jar nested inside the materialized pack roots, recursively, under nested/, mirroring each jar's entry path so extraction is deterministic. */
-	static void extractNestedJars(Path inspectionDirectory) throws IOException {
-		Path nestedDirectory = inspectionDirectory.resolve(NESTED_EXTRACTION_ROOT);
-		record PendingJar(Path jar, String targetPrefix) {}
-		Deque<PendingJar> pending = new ArrayDeque<>();
-		try (Stream<Path> stream = Files.walk(inspectionDirectory)) {
-			for (Path path : stream.filter(path -> Files.isRegularFile(path) && JarUtils.hasJarExtension(path)).sorted().toList())
-				pending.add(new PendingJar(path, inspectionDirectory.relativize(path).toString()));
-		}
-		while (!pending.isEmpty()) {
-			PendingJar current = pending.pop();
-			List<Path> entries = new ArrayList<>();
-			try (FileSystem fs = FileSystems.newFileSystem(current.jar())) {
-				try (Stream<Path> stream = Files.walk(fs.getPath("/"))) {
-					for (Path entry : stream.filter(JarUtils::isRegularJar).sorted().toList()) entries.add(entry);
-				}
-				for (Path entry : entries) {
-					String flattened = LogicalPath.normalize(fs.getPath("/").relativize(entry).toString());
-					Path target = nestedDirectory.resolve(current.targetPrefix()).resolve(flattened).normalize();
-					if (!target.startsWith(nestedDirectory)) throw new IOException("Nested mod entry escaped the inspection directory: " + entry);
-					Files.createDirectories(target.getParent());
-					Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
-					Files.copy(entry, temporary);
-					Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
-					pending.add(new PendingJar(target, current.targetPrefix()));
-				}
-			} catch (IOException e) {
-				// A jar that cannot open or read as an archive cannot nest anything; inspection tolerance matches FileInspection.
-				LOGGER.debug("Skipping unreadable jar during nested inspection: {}", current.jar(), e);
-			}
-		}
-	}
-
-	private static void materializeInspectionCopy(Path source, Path inspectionPath, long size, String sha1, FileCache cache) throws IOException {
-		Files.createDirectories(inspectionPath.getParent());
-		try {
-			Files.createLink(inspectionPath, source);
-			cache.overwriteCache(inspectionPath, sha1);
-			return;
-		} catch (UnsupportedOperationException | FileSystemException ignored) {
-		}
-		VerifiedFileTransfer.copyAtomic(source, inspectionPath, size, sha1, cache);
 	}
 
 	/** Hashes and counts the bundle bytes while they stream to the staging file, so its identity never needs a second pass. */
