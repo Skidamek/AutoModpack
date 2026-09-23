@@ -9,10 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
-import java.util.HexFormat;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -130,9 +127,7 @@ public final class WaitingMusic {
 		}
 
 		private void completeKind(Kind value) {
-			synchronized (kind) {
-				if (!kind.isDone()) kind.complete(value);
-			}
+			kind.complete(value);
 		}
 
 		private void begin(PackTransport transport) {
@@ -173,7 +168,8 @@ public final class WaitingMusic {
 				};
 				transport.downloadSmallObject(advertisedSha1.getBytes(StandardCharsets.UTF_8), temp, StoragePaths.WAITING_MUSIC_MAX_BYTES, tap).join();
 				// The fetch judges nothing about the content; the advertised hash is checked here before caching.
-				if (!advertisedSha1.equals(sha1(temp))) throw new IOException("The served waiting music does not match the advertised hash");
+				// A read failure hashes to null, which never matches and fails the fetch like any other bad body.
+				if (!advertisedSha1.equals(HashUtils.getHash(temp))) throw new IOException("The served waiting music does not match the advertised hash");
 				publish(cache, temp);
 			} catch (Exception e) {
 				fetchAlive = false;
@@ -241,15 +237,6 @@ public final class WaitingMusic {
 			return HashUtils.getHash(cache).equals(sha1) ? sha1 : null;
 		} catch (IOException e) {
 			return null;
-		}
-	}
-
-	private static String sha1(Path path) throws IOException {
-		try {
-			MessageDigest digest = MessageDigest.getInstance("SHA-1");
-			return HexFormat.of().formatHex(digest.digest(Files.readAllBytes(path)));
-		} catch (NoSuchAlgorithmException e) {
-			throw new IllegalStateException(e);
 		}
 	}
 }
