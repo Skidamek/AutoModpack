@@ -60,7 +60,6 @@ public class NetUtils {
 	// Pre-configuration keepalive cadence: NAT mappings and holepunch relay bindings typically decay after 30-60s of
 	// silence, so a 20s heartbeat sits well inside that band while costing the parked client one tiny ranged GET.
 	public static final Duration PRE_CONFIGURATION_KEEPALIVE_INTERVAL = Duration.ofSeconds(20);
-	public static final Duration HTTP_TIMEOUT = Duration.ofSeconds(5);
 	public static final int NETWORK_TIMEOUT_MILLIS = Math.toIntExact(NETWORK_TIMEOUT.toMillis());
 	public static final int TRANSFER_IDLE_TIMEOUT_MILLIS = Math.toIntExact(TRANSFER_IDLE_TIMEOUT.toMillis());
 

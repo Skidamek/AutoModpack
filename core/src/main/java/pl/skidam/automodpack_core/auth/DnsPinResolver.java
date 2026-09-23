@@ -7,9 +7,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -24,8 +21,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
 
-import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.HttpClientPool;
 
 /**
  * Resolves an admin-published certificate fingerprint from DNS under the
@@ -37,11 +35,9 @@ public final class DnsPinResolver {
 	public static final String RECORD_VERSION = "amp1";
 
 	private static final List<String> DOH_RESOLVERS = List.of("https://cloudflare-dns.com/dns-query", "https://dns.quad9.net/dns-query");
-	private static final Duration TIMEOUT = NetUtils.HTTP_TIMEOUT;
 	private static final Duration MAX_PIN_CACHE_TIME = Duration.ofMinutes(5);
 	private static final Duration MAX_ABSENCE_CACHE_TIME = Duration.ofSeconds(30);
 	private static final int MAX_CACHE_ENTRIES = 128;
-	private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
 	private static final Resolver RESOLVER = new Resolver(DOH_RESOLVERS, DnsPinResolver::queryResolverAsync, System::currentTimeMillis);
 	private static final Base64.Encoder DOH_QUERY_ENCODING = Base64.getUrlEncoder().withoutPadding();
 	private static final int TYPE_SOA = 6, TYPE_TXT = 16, TYPE_OPT = 41;
@@ -217,25 +213,22 @@ public final class DnsPinResolver {
 		return minimum == Long.MAX_VALUE ? 0 : minimum;
 	}
 
+	/** One DoH exchange on the shared outbound pool; the blocking call rides a net thread so the resolver's chain stays async. */
 	private static CompletableFuture<ResolverResult> queryResolverAsync(String resolver, String name) {
-		try {
-			HttpRequest request = HttpRequest.newBuilder().uri(URI.create(resolver + "?dns=" + DOH_QUERY_ENCODING.encodeToString(buildTxtQuery(name)))).header("Accept", "application/dns-message").timeout(TIMEOUT).GET()
-					.build();
-
-			return HTTP_CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray()).thenApply(response -> {
+		return CompletableFuture.supplyAsync(() -> {
+			try {
+				String url = resolver + "?dns=" + DOH_QUERY_ENCODING.encodeToString(buildTxtQuery(name));
+				HttpResponse<byte[]> response = HttpClientPool.request(url, Map.of("Accept", "application/dns-message"), null, false);
 				if (response.statusCode() < 200 || response.statusCode() >= 300) {
 					LOGGER.warn("DNS fingerprint resolver {} returned HTTP {} for {}", resolver, response.statusCode(), name);
 					return new ResolverUnavailable();
 				}
 				return parseDnsResponse(response.body());
-			}).exceptionally(error -> {
-				LOGGER.debug("DNS fingerprint lookup for {} via {} failed", name, resolver, error);
+			} catch (Exception e) {
+				LOGGER.debug("DNS fingerprint lookup for {} via {} failed", name, resolver, e);
 				return new ResolverUnavailable();
-			});
-		} catch (Exception e) {
-			LOGGER.debug("Failed to build DNS fingerprint request for {} via {}", name, resolver, e);
-			return CompletableFuture.completedFuture(new ResolverUnavailable());
-		}
+			}
+		}, DownloadClient.NET_EXECUTOR);
 	}
 
 	/**
