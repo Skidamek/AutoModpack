@@ -61,7 +61,6 @@ public class NetUtils {
 	public static final Duration HTTP_TIMEOUT = Duration.ofSeconds(5);
 	public static final int NETWORK_TIMEOUT_MILLIS = Math.toIntExact(NETWORK_TIMEOUT.toMillis());
 	public static final int TRANSFER_IDLE_TIMEOUT_MILLIS = Math.toIntExact(TRANSFER_IDLE_TIMEOUT.toMillis());
-	public static final int HTTP_TIMEOUT_MILLIS = Math.toIntExact(HTTP_TIMEOUT.toMillis());
 
 	public static final int MAGIC_AMMH = 0x414D4D48;
 	public static final int MAGIC_AMOK = 0x414D4F4B;

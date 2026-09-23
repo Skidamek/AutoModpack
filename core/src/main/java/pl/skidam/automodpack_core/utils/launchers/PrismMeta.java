@@ -21,7 +21,10 @@ public class PrismMeta {
 	/** The full request url is injectable so tests can serve the meta server locally. */
 	static boolean isResolvable(String url) {
 		try {
-			return HttpClientPool.request(url, Map.of(), null, true).statusCode() == 200;
+			int status = HttpClientPool.request(url, Map.of(), null, true).statusCode();
+			if (status == 200) return true;
+			LOGGER.warn("The launcher meta server at {} answered HTTP {}", url, status);
+			return false;
 		} catch (IOException | RuntimeException e) {
 			LOGGER.warn("Could not reach the launcher meta server at: {}", url, e);
 			return false;

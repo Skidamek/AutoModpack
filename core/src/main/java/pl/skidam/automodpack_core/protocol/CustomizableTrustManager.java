@@ -57,7 +57,9 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 
 			String previous = acceptedFingerprint.get();
 			if (previous != null && !previous.equals(fingerprint)) throw new CertificatePinMismatchException(origin, previous, fingerprint);
-			acceptedFingerprint.compareAndSet(null, fingerprint);
+			// Two lanes can pass the guard together; a CAS loser must not walk away accepted while the pin holds the other certificate.
+			if (!acceptedFingerprint.compareAndSet(null, fingerprint) && !fingerprint.equals(acceptedFingerprint.get()))
+				throw new CertificatePinMismatchException(origin, acceptedFingerprint.get(), fingerprint);
 		}
 
 		/** A published DNSSEC fingerprint approved this leaf (typically rotation): the session's pin follows it. */

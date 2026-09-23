@@ -203,6 +203,15 @@ public class ModpackExecutor {
 	}
 
 	public ExportHttpResult exportHttp(Path targetDirectory, boolean includeAll) throws IOException {
+		OperationLease operation = acquire(false);
+		if (operation == null) return new ExportHttpResult.Rejected("Another modpack operation is already in progress");
+		try (operation) {
+			return exportHttpLeased(targetDirectory, includeAll);
+		}
+	}
+
+	/** Requires the caller to hold an operation lease: the journal is appended in place during a publish, so a lease-free export can copy a torn one. */
+	private ExportHttpResult exportHttpLeased(Path targetDirectory, boolean includeAll) throws IOException {
 		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
 		if (serverConfig != null && serverConfig.validateSecrets)
 			return new ExportHttpResult.Rejected("The pack validates download secrets, which a public mirror cannot enforce");
@@ -428,7 +437,7 @@ public class ModpackExecutor {
 		String directory = serverConfig == null || serverConfig.exportHttpDirectory == null ? "" : serverConfig.exportHttpDirectory.trim();
 		if (directory.isEmpty()) return;
 		try {
-			ExportHttpResult result = exportHttp(Path.of(directory), false);
+			ExportHttpResult result = exportHttpLeased(Path.of(directory), false);
 			if (result instanceof ExportHttpResult.Exported exported) LOGGER.info(exported.receipt(directory));
 			else if (result instanceof ExportHttpResult.Rejected refused) LOGGER.warn("Refused to export the HTTP contract tree to {}: {}", directory, refused.detail());
 		} catch (Exception e) {

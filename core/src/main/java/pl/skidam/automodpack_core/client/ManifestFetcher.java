@@ -11,6 +11,8 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 
@@ -52,14 +54,25 @@ public final class ManifestFetcher {
 
 	public static ManifestFetchResult requestServerModpackContent(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean allowAskingUser,
 			String selectedModpackId) {
+		if (allowAskingUser) {
+			try {
+				return requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser, selectedModpackId).get();
+			} catch (Exception e) {
+				return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, Throwables.unwrap(e));
+			}
+		}
+		AtomicReference<PackTransport> openedTransport = new AtomicReference<>();
 		try {
-			CompletableFuture<ManifestFetchResult> future = requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser, selectedModpackId);
-			if (allowAskingUser) return future.get();
 			// Non-interactive fetch: the protocol's per-stage timeouts sum to at most 5 * NETWORK_TIMEOUT, so anything past 6 gave up somewhere.
-			return future.get(NetUtils.NETWORK_TIMEOUT.multipliedBy(6).toSeconds(), TimeUnit.SECONDS);
+			return requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser, selectedModpackId, openedTransport)
+					.get(NetUtils.NETWORK_TIMEOUT.multipliedBy(6).toSeconds(), TimeUnit.SECONDS);
+		} catch (TimeoutException e) {
+			// The wedged chain still holds an open transport nobody will ever consume; the reference is the only handle on its lanes.
+			PackTransport orphan = openedTransport.get();
+			if (orphan != null) orphan.close();
+			return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, Throwables.unwrap(e));
 		} catch (Exception e) {
-			Throwable cause = Throwables.unwrap(e);
-			return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, cause);
+			return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, Throwables.unwrap(e));
 		}
 	}
 
@@ -67,20 +80,28 @@ public final class ManifestFetcher {
 
 	public static CompletableFuture<ManifestFetchResult> requestServerModpackContentAsync(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
 			boolean allowAskingUser, String selectedModpackId) {
+		return requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser, selectedModpackId, null);
+	}
+
+	private static CompletableFuture<ManifestFetchResult> requestServerModpackContentAsync(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
+			boolean allowAskingUser, String selectedModpackId, AtomicReference<PackTransport> openedTransport) {
 		ManifestFetchState connectionFailedState = ManifestFetchState.CONNECTION_FAILED;
 		if (!connectionInfo.isComplete()) {
 			return CompletableFuture.completedFuture(new ManifestFetchResult(connectionFailedState, null, null, new IllegalArgumentException("Connection origin or endpoint is missing")));
 		}
 
 		return createTransport(connectionInfo, secret == null ? null : secret.secret(), manualValidationCallbackAsync(connectionInfo, allowAskingUser))
-				.thenCompose(transport -> fetchModpackContentAsync(storage, transport, ModpackId.isValid(selectedModpackId) ? selectedModpackId : null).handle((fetched, error) -> {
-					if (error != null || fetched == null) {
-						transport.close();
-						Throwable cause = error == null ? new IOException("Server returned no usable modpack content") : Throwables.unwrap(error);
-						return new ManifestFetchResult(ManifestFetchState.OPERATION_FAILED, null, null, cause);
-					}
-					return new ManifestFetchResult(ManifestFetchState.SUCCESS, fetched, transport, null);
-				}))
+				.thenCompose(transport -> {
+					if (openedTransport != null) openedTransport.set(transport);
+					return fetchModpackContentAsync(storage, transport, ModpackId.isValid(selectedModpackId) ? selectedModpackId : null).handle((fetched, error) -> {
+						if (error != null || fetched == null) {
+							transport.close();
+							Throwable cause = error == null ? new IOException("Server returned no usable modpack content") : Throwables.unwrap(error);
+							return new ManifestFetchResult(ManifestFetchState.OPERATION_FAILED, null, null, cause);
+						}
+						return new ManifestFetchResult(ManifestFetchState.SUCCESS, fetched, transport, null);
+					});
+				})
 				.exceptionally(error -> {
 					Throwable cause = Throwables.unwrap(error);
 					return new ManifestFetchResult(connectionFailedState, null, null, cause);

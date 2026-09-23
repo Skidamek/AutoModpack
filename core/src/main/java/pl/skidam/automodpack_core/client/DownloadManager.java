@@ -207,16 +207,14 @@ public class DownloadManager implements DownloadView {
 					future.completeExceptionally(error);
 				}
 			});
-		} catch (RejectedExecutionException error) {
+		} catch (RuntimeException error) {
 			downloadsInProgress.remove(key);
 			failedFiles.incrementAndGet();
 			semaphore.release();
 			future.completeExceptionally(error);
+			// A non-rejected execution is a programming error and still fails loudly after the cleanup.
+			if (!(error instanceof RejectedExecutionException)) throw error;
 			return false;
-		} catch (RuntimeException error) {
-			downloadsInProgress.remove(key);
-			future.completeExceptionally(error);
-			throw error;
 		}
 		return true;
 	}
@@ -642,9 +640,7 @@ public class DownloadManager implements DownloadView {
 
 	@Override
 	public List<String> downloadingFileNames() {
-		synchronized (downloadsInProgress) {
-			return downloadsInProgress.values().stream().map(DownloadData::getFileName).toList();
-		}
+		return downloadsInProgress.values().stream().map(DownloadData::getFileName).toList();
 	}
 
 	public AcquisitionProgress acquisitionProgress() {
