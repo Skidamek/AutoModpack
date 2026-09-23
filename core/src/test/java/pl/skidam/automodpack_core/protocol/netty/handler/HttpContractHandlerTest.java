@@ -584,6 +584,29 @@ class HttpContractHandlerTest {
 		assertFalse(channel.isOpen(), "junk past the held cap must close the connection");
 	}
 
+	/**
+	 * A dropped identity body completes its tracker span exactly like a negotiated one: the span is the one in-flight
+	 * row while the body holds, and the connection's death ends it instead of leaving a phantom row forever.
+	 */
+	@Test
+	void aDroppedIdentityBodyCompletesItsTrackerSpan() throws Exception {
+		byte[] body = new byte[NetUtils.STREAM_WRITE_BYTES * 3];
+		Path object = tempDir.resolve("drop.bin");
+		Files.write(object, body);
+		String hash = HashUtils.sha1(body);
+		NettyServer dropServer = new NettyServer() {
+			@Override
+			public Optional<Path> getPath(String requestKey) {
+				return requestKey.equals(hash) ? Optional.of(object) : Optional.empty();
+			}
+		};
+		HoldableChannel channel = holdableChannel(dropServer, "/objects/" + hash);
+
+		assertEquals(1, dropServer.activityTracker().snapshot(Map.of()).inFlight().size(), "the identity body's span is the one in-flight row");
+		channel.finishAndReleaseAll();
+		assertTrue(dropServer.activityTracker().snapshot(Map.of()).inFlight().isEmpty(), "the dropped identity body must complete its span");
+	}
+
 	/** Counts occurrences of a US-ASCII needle in the raw response bytes. */
 	private static int countOccurrences(byte[] wire, String needle) {
 		int count = 0;

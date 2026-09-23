@@ -362,6 +362,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 	/** The plain body path: objects, ranged responses, and documents for clients that did not offer zstd. */
 	private boolean serveIdentity(ChannelHandlerContext ctx, Path file, long offset, long length, long total, String status, String etag, String contentRange, boolean keepAlive, ActivityTracker.Span span) {
+		inFlightSpan = span;
 		activeStream = new StreamedBody(ctx, file, null, null, offset, length, total, keepAlive, span, status, etag, contentRange);
 		activeStream.openThenStream();
 		return false;
@@ -576,6 +577,8 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 				completed += wireBytes;
 				sent += wireBytes;
 				draining--;
+				// Identity's one progress report, taken where sent is exact; negotiated reports from its read loop instead.
+				if (codec == null) tracker.progress(span, sent);
 				if (done) return;
 				if (!future.isSuccess()) {
 					fail(causeOf(future));
