@@ -32,10 +32,10 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 
 /**
  * One pooled TLS connection speaking minimal HTTP/1.1 against the modpack contract: {@code GET /<document>} and
- * {@code GET /objects/<sha1>}. A bounded window of unsettled request bytes sits in flight, written as the pool hands
- * out slots, and one reader per connection consumes the responses strictly in order; a failure anywhere fails every
- * pending request, because alignment is lost and every request is an idempotent GET whose retry belongs to the
- * download manager. Bodies arrive Content-Length framed, chunked (our server streams negotiated bodies that way), or
+ * {@code GET /objects/<sha1>}. A bounded window of unsettled request bytes sits in flight - booked as the pool hands
+ * out slots, flushed onto the wire by the lane's own writer task - and one reader per connection consumes the
+ * responses strictly in order; a failure anywhere fails every pending request, because alignment is lost and every
+ * request is an idempotent GET whose retry belongs to the download manager. Bodies arrive Content-Length framed, chunked (our server streams negotiated bodies that way), or
  * close framed; content codings decode through the {@link WireCodec} registry. The parser survives foreign static
  * hosts on this fixed response subset and fails loudly on anything else.
  */
@@ -59,15 +59,20 @@ class Connection implements AutoCloseable {
 	private final byte[] requestLinePrefix;
 	private final byte[] requestLineSuffix;
 	private final Runnable onSlotFreed;
-	// Guards the pending queue together with the request-head writes, so queue order always matches socket order. It is
-	// never held across a response read, and each write is one flushed request head - well inside kernel send buffers -
-	// so even a write taken while the pool lock is held cannot block it.
+	// Guards the pending and write queues, so queue order always matches socket order. It is never held across a
+	// response read or a request write: request heads are written by the lane's one writer task outside every lock,
+	// so a peer that stops reading parks at most that one task - never the pool, never another lane - and recovery is
+	// the lane's own 60 s read deadline firing failPending, whose socket close unblocks the parked write.
 	private final Object gate = new Object();
 	private final ArrayDeque<Pending<?>> pending = new ArrayDeque<>();
+	// Heads booked but not yet on the wire, FIFO in pending order; drained by the lane's one writer task outside every lock.
+	private final ArrayDeque<Pending<?>> writeQueue = new ArrayDeque<>();
 	// Bytes of requests written and not yet settled; guarded by gate. The window admits small takes deep and big
 	// takes shallow, so the pipeline is sized in bytes - the wire's own currency - instead of a fixed request count.
 	private long unsettledBytes;
 	private boolean readerRunning;
+	// True while the lane's one writer task is queued or draining; guarded by gate, so a kick never doubles the task.
+	private boolean writerRunning;
 	private volatile boolean unhealthy;
 	private final String traceId = Integer.toHexString(System.identityHashCode(this));
 
@@ -152,7 +157,7 @@ class Connection implements AutoCloseable {
 		return submit(new DocumentRequest("/" + new String(key, StandardCharsets.UTF_8), destination, expectedSha1Hex, chunkCallback, tap));
 	}
 
-	/** Registers one request and writes its head; the pool only hands out room, so an over-submit is a tripwire, not a flow-control path. */
+	/** Registers one request and queues its head for the writer; the pool only hands out room, so an over-submit is a tripwire, not a flow-control path. */
 	private <T> CompletableFuture<T> submit(Pending<T> request) {
 		synchronized (gate) {
 			if (unhealthy) {
@@ -170,30 +175,66 @@ class Connection implements AutoCloseable {
 				request.future.completeExceptionally(new IOException("Connection pipeline exceeded its " + PIPELINE_MAX_REQUESTS + " request bound"));
 				return request.future;
 			}
-			try {
-				writeRequest(request.path, request.headers());
-			} catch (IOException e) {
-				WireTrace.log("SUBMIT_REJECT", "conn", traceId, "task", shortPath(request.originPath), "why", "write:" + e);
-				// Same order as the reader's death path: the lane is dead before the failure is announced, so an inline
-				// re-issue lands on a fresh lane instead of this one, whose write just failed.
-				failPending(e);
-				request.future.completeExceptionally(e);
-				return request.future;
-			}
 			pending.addLast(request);
+			writeQueue.addLast(request);
 			unsettledBytes += request.debit;
+			kickWriter();
 			if (!readerRunning) {
 				readerRunning = true;
 				try {
 					executor.execute(this::readLoop);
 				} catch (RuntimeException rejected) {
-					pending.removeLastOccurrence(request);
+					// The executor is gone: failPending fails every queued future, this one included.
 					failPending(rejected);
-					request.future.completeExceptionally(rejected);
 				}
 			}
 		}
 		return request.future;
+	}
+
+	/** Kicks the lane's one writer task; an executor that refuses the task is a lane death like any other. */
+	private void kickWriter() {
+		if (writerRunning) return;
+		writerRunning = true;
+		try {
+			executor.execute(this::writeLoop);
+		} catch (RuntimeException rejected) {
+			writerRunning = false;
+			failPending(rejected);
+		}
+	}
+
+	/**
+	 * Drains the write queue, one request head per iteration: the head is taken under the gate and written with every
+	 * lock released, so a peer that stops reading parks at most this one task - never the pool, never the reader. The
+	 * write queue's FIFO order matches pending's by construction (every append site holds the gate), so wire order
+	 * stays queue order.
+	 */
+	private void writeLoop() {
+		while (true) {
+			Pending<?> request;
+			synchronized (gate) {
+				request = writeQueue.pollFirst();
+				if (request == null) {
+					writerRunning = false;
+					return;
+				}
+			}
+			try {
+				writeRequest(request.path, request.headers());
+			} catch (Throwable failure) {
+				synchronized (gate) {
+					writerRunning = false;
+				}
+				// A lane that already died (a reader death, a close, another writer exit) had its queue cleared and its
+				// futures failed by that death's failPending - nothing left to announce. Otherwise this write's failure
+				// is the lane death, and the same dead-before-announce ordering as the reader's path applies: the lane
+				// is dead before any failure is announced, so an inline re-issue lands on a fresh lane instead of this
+				// one, whose write just failed.
+				if (!unhealthy) failPending(failure);
+				return;
+			}
+		}
 	}
 
 	private void writeRequest(String path, String extraHeaders) throws IOException {
@@ -237,7 +278,7 @@ class Connection implements AutoCloseable {
 				synchronized (gate) {
 					// The debit releases before the pool's callback runs, so the waiter the freed room admits sees the
 					// released bytes in this same call stack - a settle never idles a lane that still has work.
-					// A concurrent submit whose write just failed can empty the queue between the peek above and this
+					// A lane death (a failed writer, a close) can empty the queue between the peek above and this
 					// settle: its failPending already zeroed the books, freed the slot, and killed the lane, so the
 					// reader exits with it instead of settling a request that is no longer queued.
 					Pending<?> completed = pending.pollFirst();
@@ -273,15 +314,17 @@ class Connection implements AutoCloseable {
 	}
 
 	/**
-	 * A redirect re-issue is appended at the back: its bytes are written after every request submitted in the meantime,
-	 * so the responses keep arriving in queue order and the reader stays aligned by construction.
+	 * A redirect re-issue is appended at the back and queued for the writer: its head is written after every request
+	 * submitted in the meantime, so the responses keep arriving in queue order and the reader stays aligned by
+	 * construction.
 	 */
-	private void reissue(Pending<?> request, String target) throws IOException {
+	private void reissue(Pending<?> request, String target) {
 		synchronized (gate) {
 			pending.pollFirst();
 			request.path = target;
-			writeRequest(target, request.headers());
 			pending.addLast(request);
+			writeQueue.addLast(request);
+			kickWriter();
 		}
 	}
 
@@ -292,8 +335,10 @@ class Connection implements AutoCloseable {
 		synchronized (gate) {
 			failed = new ArrayList<>(pending);
 			pending.clear();
-			// The books zero before any failure is announced: a dependent re-issuing inline must see the window empty,
-			// never half-charged by requests that no longer exist (same ordering as the lane-death fix).
+			// The write queue clears with pending - an unwritten head is the same request whose debit the zeroing
+			// releases - and the books zero before any failure is announced, so a dependent re-issuing inline sees
+			// the window empty, never half-charged by requests that no longer exist.
+			writeQueue.clear();
 			unsettledBytes = 0;
 		}
 		WireTrace.log("FAIL_PENDING", "conn", traceId, "count", failed.size(), "cause", String.valueOf(cause));

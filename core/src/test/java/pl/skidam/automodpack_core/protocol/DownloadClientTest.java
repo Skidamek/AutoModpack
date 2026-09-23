@@ -29,6 +29,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -36,7 +37,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.IntConsumer;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -301,6 +304,85 @@ class DownloadClientTest {
 		}
 	}
 
+	/**
+	 * The lane-wedge recovery pin. A peer that stays connected but stops reading may only park its own lane's writer
+	 * task: the server fully serves the first connection it accepts and never reads any later one, with a listen-side
+	 * receive buffer set before bind so the wedge's kernel window is as small as the stack allows. The wedged lanes
+	 * carry document takes, whose heads are as big as their keys: documents debit one 4 MiB chunk each, so a lane's
+	 * window holds exactly sixteen, and sixteen 256 KB-key heads are 4 MB of queued heads per wedge - past the ~1.8 MB
+	 * this class of kernel absorbs for a non-reading loopback peer (the client send buffer autotunes past whatever the
+	 * window admits), so the unfixed inline head flush inside the pool lock parks the whole client and the preemptive
+	 * timeout fails the pin instead of hanging CI. While the wedges hold, exactly the served lane's window completes -
+	 * proof the pool lock stayed free - and killing the wedges fails their unwritten takes; documents have no retry
+	 * ladder, so the pin re-issues each failed fetch once and requires every body to land byte-exact on a fresh lane.
+	 */
+	@Test
+	void aWedgedPeerParksOnlyItsOwnLaneAndItsTakesRecoverOntoFreshLanes(@TempDir Path directory) throws Exception {
+		KeyPair keyPair = NetUtils.generateKeyPair();
+		X509Certificate certificate = NetUtils.selfSign(keyPair);
+		String fingerprint = NetUtils.getFingerprint(certificate);
+		int requestsPerLane = (int) (NetUtils.PIPELINE_WINDOW_BYTES / NetUtils.WIRE_CHUNK_BYTES);
+		int documents = DownloadClient.LANES * requestsPerLane;
+		int keyBytes = 256 * 1024;
+
+		assertTimeoutPreemptively(Duration.ofSeconds(240), () -> {
+			try (WedgeServer server = new WedgeServer(keyPair, certificate)) {
+				StringBuilder key = new StringBuilder(keyBytes);
+				for (int i = 0; i < keyBytes - 8; i++) key.append((char) ('a' + (i % 26)));
+				String keyBase = key.toString();
+				List<String> keys = new ArrayList<>();
+				List<byte[]> bodies = new ArrayList<>();
+				for (int i = 0; i < documents; i++) {
+					byte[] body = ("document-" + i).getBytes(StandardCharsets.UTF_8);
+					String documentKey = keyBase + String.format(Locale.ROOT, "%08x", i);
+					server.store().put(documentKey, body);
+					keys.add(documentKey);
+					bodies.add(body);
+				}
+
+				ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+						new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
+				List<CompletableFuture<DocumentFetch>> downloads = new ArrayList<>();
+				try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
+					// Nothing answers until every submit is booked: the served lane takes the first sixteen fetches and
+					// each later lane takes sixteen more, every one of those lanes a wedge the server never reads.
+					for (int i = 0; i < documents; i++)
+						downloads.add(client.downloadDocument(keys.get(i).getBytes(StandardCharsets.UTF_8), directory.resolve("document-" + i), null, (IntConsumer) null));
+
+					server.awaitAccepted(DownloadClient.LANES);
+					server.awaitReadRequests(requestsPerLane);
+					assertEquals(DownloadClient.LANES, server.acceptedConnections(), "one lane opens per sixteen unsettled documents, up to the pool cap");
+
+					// The served lane's window settles while every wedge holds: the parked writes never touched the pool lock.
+					server.openResponses();
+					long deadline = System.currentTimeMillis() + 60_000;
+					while (settled(downloads) < requestsPerLane && System.currentTimeMillis() < deadline) Thread.sleep(20);
+					assertEquals(requestsPerLane, settled(downloads), "exactly the served lane's window completes while the wedges hold");
+
+					// Killing the wedges fails their unwritten takes; documents have no retry ladder, so the pin waits
+					// for the deaths to surface, re-issues each failed fetch once - onto fresh lanes the server now
+					// serves - and requires every fetch to complete.
+					server.killWedges();
+					long drained = System.currentTimeMillis() + 30_000;
+					while (downloads.stream().anyMatch(future -> !future.isDone()) && System.currentTimeMillis() < drained) Thread.sleep(20);
+					for (int i = 0; i < documents; i++) {
+						if (downloads.get(i).isCompletedExceptionally()) {
+							final int index = i;
+							downloads.set(i, client.downloadDocument(keys.get(index).getBytes(StandardCharsets.UTF_8), directory.resolve("document-" + index), null, (IntConsumer) null));
+						}
+					}
+					CompletableFuture.allOf(downloads.toArray(CompletableFuture[]::new)).get(120, TimeUnit.SECONDS);
+				}
+				for (int i = 0; i < documents; i++) assertArrayEquals(bodies.get(i), Files.readAllBytes(directory.resolve("document-" + i)));
+			}
+		});
+	}
+
+	/** Futures that completed with a value, never with a failure - a settled wedge would break the exact-window split. */
+	private static long settled(List<? extends CompletableFuture<?>> futures) {
+		return futures.stream().filter(future -> future.isDone() && !future.isCompletedExceptionally()).count();
+	}
+
 	private static SSLContext serverContext(KeyPair keyPair, X509Certificate certificate) throws Exception {
 		char[] password = "test-password".toCharArray();
 		KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
@@ -451,6 +533,159 @@ class DownloadClientTest {
 			server.close();
 			responsePermits.release(64);
 			for (SSLSocket socket : sockets) socket.close();
+			executor.shutdownNow();
+		}
+	}
+
+	/**
+	 * A two-faced contract server for the wedge pin: the first accepted connection is served fully (every stored
+	 * document answered 200 with its body, responses held until released so the pool settles nothing early), and every
+	 * later connection is accepted and handshaken but never read, so the client's writer task parks on it. The listen
+	 * socket's receive buffer is set before bind and inherited by accepted sockets, keeping the wedge's advertised
+	 * window at the stack's floor - the park itself is guaranteed by the queued head volume outrunning what any kernel
+	 * absorbs for a non-reading peer, not by kernel default sizes.
+	 */
+	private static final class WedgeServer implements AutoCloseable {
+		private final ServerSocket server;
+		private final SSLContext context;
+		private final ExecutorService executor = Executors.newCachedThreadPool();
+		private final ConcurrentHashMap<String, byte[]> store = new ConcurrentHashMap<>();
+		private final List<SSLSocket> wedged = new ArrayList<>();
+		private final AtomicInteger acceptedConnections = new AtomicInteger();
+		private final AtomicInteger readRequests = new AtomicInteger();
+		private final Semaphore responsePermits = new Semaphore(0);
+		private final AtomicBoolean holdingResponses = new AtomicBoolean(true);
+		private final AtomicBoolean wedging = new AtomicBoolean(true);
+		private volatile boolean closed;
+
+		WedgeServer(KeyPair keyPair, X509Certificate certificate) throws Exception {
+			context = serverContext(keyPair, certificate);
+			server = new ServerSocket();
+			// Must precede bind: accepted sockets inherit it, which is what makes the wedge's write park deterministic.
+			server.setReceiveBufferSize(32 * 1024);
+			server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 64);
+			executor.execute(this::acceptConnections);
+		}
+
+		int port() {
+			return server.getLocalPort();
+		}
+
+		int acceptedConnections() {
+			return acceptedConnections.get();
+		}
+
+		int readRequests() {
+			return readRequests.get();
+		}
+
+		ConcurrentHashMap<String, byte[]> store() {
+			return store;
+		}
+
+		void awaitAccepted(int count) throws InterruptedException {
+			long deadline = System.currentTimeMillis() + AWAIT_SECONDS * 1000L;
+			while (acceptedConnections.get() < count && System.currentTimeMillis() < deadline) Thread.sleep(10);
+			assertTrue(acceptedConnections.get() >= count, "expected " + count + " accepted connections, saw " + acceptedConnections.get());
+		}
+
+		void awaitReadRequests(int count) throws InterruptedException {
+			long deadline = System.currentTimeMillis() + AWAIT_SECONDS * 1000L;
+			while (readRequests.get() < count && System.currentTimeMillis() < deadline) Thread.sleep(10);
+			assertTrue(readRequests.get() >= count, "expected " + count + " read requests, saw " + readRequests.get());
+		}
+
+		/** Releases the held responses; every later connection is answered immediately. */
+		void openResponses() {
+			holdingResponses.set(false);
+			responsePermits.release(NetUtils.PIPELINE_MAX_REQUESTS);
+		}
+
+		/** Stops wedging new connections, then closes every wedged one: their parked writers die and failPending frees the takes. */
+		void killWedges() {
+			wedging.set(false);
+			synchronized (wedged) {
+				for (SSLSocket socket : wedged) {
+					try {
+						socket.close();
+					} catch (IOException ignored) {
+					}
+				}
+			}
+		}
+
+		private void acceptConnections() {
+			while (!closed) {
+				try {
+					SSLSocket socket = MagicTls.accept(server, context);
+					System.out.println("[diag] accepted conn #" + (acceptedConnections.get() + 1) + " wedging=" + wedging.get());
+					if (wedging.get() && acceptedConnections.incrementAndGet() > 1) {
+						// Accepted and handshaken, never read: the wedge, kept open until killWedges.
+						synchronized (wedged) {
+							wedged.add(socket);
+						}
+						continue;
+					}
+					executor.execute(() -> serve(socket));
+				} catch (IOException e) {
+					if (!closed) return;
+				}
+			}
+		}
+
+		private void serve(SSLSocket socket) {
+			// The read loop never waits on a response (a responder thread holds it instead), so pipelined requests are all read the moment they arrive.
+			ExecutorService responder = Executors.newSingleThreadExecutor();
+			try {
+				BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
+				BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream());
+				while (!closed && !socket.isClosed()) {
+					HttpRequest request;
+					try {
+						request = readRequest(in);
+					} catch (EOFException ended) {
+						return;
+					}
+					if (request == null) return;
+					int read = readRequests.incrementAndGet();
+					if (read > NetUtils.PIPELINE_MAX_REQUESTS) System.out.println("[diag] conn-read #" + read + ": " + request.path());
+					responder.execute(() -> {
+						try {
+							if (holdingResponses.get()) responsePermits.acquire();
+							answer(out, request);
+						} catch (InterruptedException e) {
+							Thread.currentThread().interrupt();
+						} catch (IOException ignored) {
+						}
+					});
+				}
+			} catch (IOException ignored) {
+			} finally {
+				responder.shutdownNow();
+				try {
+					socket.close();
+				} catch (IOException ignored) {
+				}
+			}
+		}
+
+		private void answer(BufferedOutputStream out, HttpRequest request) throws IOException {
+			byte[] content = request.path().length() > 1 ? store.get(request.path().substring(1)) : null;
+			if (content == null) {
+				respond(out, "404 Not Found", new byte[0]);
+				return;
+			}
+			respond(out, "200 OK", content);
+		}
+
+		@Override
+		public void close() throws Exception {
+			closed = true;
+			server.close();
+			responsePermits.release(NetUtils.PIPELINE_MAX_REQUESTS);
+			synchronized (wedged) {
+				for (SSLSocket socket : wedged) socket.close();
+			}
 			executor.shutdownNow();
 		}
 	}
