@@ -73,6 +73,9 @@ def valid_mod_jar_bytes(fixture: dict, minecraft_version: str = DEFAULT_MINECRAF
     nested = fixture.get("nested") or []
     if not isinstance(nested, list):
         raise ValueError("mod fixture nested children must be a list of fixture mappings")
+    for child in nested:
+        if not isinstance(child, dict):
+            raise ValueError("nested mod fixture children must be mappings")
     fabric = {
         "schemaVersion": 1,
         "id": mod_id,
@@ -81,6 +84,9 @@ def valid_mod_jar_bytes(fixture: dict, minecraft_version: str = DEFAULT_MINECRAF
         "environment": "*",
         "depends": depends,
     }
+    # fabric-loader resolves only declared nests, so every child must appear in the jars array to load at all.
+    if nested:
+        fabric["jars"] = [{"file": f"META-INF/jars/{_nested_jar_name(child)}"} for child in nested]
     pack = pack_metadata_for(minecraft_version)
     def loader_metadata(loader: str) -> bytes:
         return f'''modLoader = "{loader}"
@@ -101,8 +107,6 @@ description = "Harmless metadata-only release-gate fixture"
         "pack.mcmeta": (json.dumps(pack, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8"),
     }
     for child in nested:
-        if not isinstance(child, dict):
-            raise ValueError("nested mod fixture children must be mappings")
         entries[f"META-INF/jars/{_nested_jar_name(child)}"] = valid_mod_jar_bytes(child, minecraft_version)
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED) as archive:
@@ -146,6 +150,9 @@ def assert_valid_mod_fixture(payload: bytes, fixture: dict, minecraft_version: s
                              if name.startswith("META-INF/jars/") and name.endswith(".jar"))
     if actual_children != sorted(name for name, _ in expected_children):
         raise AssertionError(f"fixture nested jars differ: expected {sorted(name for name, _ in expected_children)}, got {actual_children}")
+    expected_jars = [{"file": f"META-INF/jars/{name}"} for name, _ in expected_children]
+    if fabric.get("jars", []) != expected_jars:
+        raise AssertionError(f"fixture Fabric jars declaration differs: expected {expected_jars}, got {fabric.get('jars')}")
     if pack != pack_metadata_for(minecraft_version):
         raise AssertionError(f"fixture pack metadata does not match Minecraft {minecraft_version}")
     for metadata in (forge, neoforge):

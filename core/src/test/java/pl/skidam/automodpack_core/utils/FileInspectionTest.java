@@ -109,17 +109,36 @@ class FileInspectionTest {
 	@Test
 	void nestedTreesStayReadableAtDepthTwo() throws IOException {
 		Path jar = Files.createTempDirectory("nested-depth-").resolve("rootmod.jar");
-		String json = "{\"id\": \"depthmod\", \"version\": \"1.0.0\"}";
+		String deepJson = "{\"id\": \"depthmod\", \"version\": \"1.0.0\"}";
+		String midJson = "{\"id\": \"depthmod\", \"version\": \"1.0.0\", \"jars\": [{\"file\": \"META-INF/jars/deep.jar\"}]}";
+		String rootJson = "{\"id\": \"depthmod\", \"version\": \"1.0.0\", \"jars\": [{\"file\": \"META-INF/jars/mid.jar\"}]}";
 
 		try {
-			Files.write(jar, jar(Map.of("fabric.mod.json", json.getBytes(StandardCharsets.UTF_8),
-					"META-INF/jars/mid.jar", jar(Map.of("fabric.mod.json", json.getBytes(StandardCharsets.UTF_8),
-							"META-INF/jars/deep.jar", jar(Map.of("fabric.mod.json", json.getBytes(StandardCharsets.UTF_8))))))));
+			Files.write(jar, jar(Map.of("fabric.mod.json", rootJson.getBytes(StandardCharsets.UTF_8),
+					"META-INF/jars/mid.jar", jar(Map.of("fabric.mod.json", midJson.getBytes(StandardCharsets.UTF_8),
+							"META-INF/jars/deep.jar", jar(Map.of("fabric.mod.json", deepJson.getBytes(StandardCharsets.UTF_8))))))));
 			FileInspection.Mod mod = inspect(jar);
 			FileInspection.Mod mid = onlyNested(mod);
 
 			// Detection bundles depth-two jars by entry chain, so the inspection tree must reach them with paths intact.
 			assertEquals("depthmod", onlyNested(mid).id());
+		} finally {
+			Files.deleteIfExists(jar);
+		}
+	}
+
+	@Test
+	void undeclaredJarEntriesAreNotModNests() throws IOException {
+		Path jar = Files.createTempDirectory("undeclared-nest-").resolve("rootmod.jar");
+		String rootJson = "{\"id\": \"rootmod\", \"version\": \"1.0.0\"}";
+		String stowawayJson = "{\"id\": \"stowaway\", \"version\": \"1.0.0\"}";
+
+		try {
+			Files.write(jar, jar(Map.of("fabric.mod.json", rootJson.getBytes(StandardCharsets.UTF_8),
+					"META-INF/jars/stowaway.jar", jar(Map.of("fabric.mod.json", stowawayJson.getBytes(StandardCharsets.UTF_8))))));
+			FileInspection.Mod mod = inspect(jar);
+
+			assertEquals(Set.of(), mod.nestedMods());
 		} finally {
 			Files.deleteIfExists(jar);
 		}
