@@ -17,6 +17,7 @@ import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.protocol.LocalFileWriter;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.protocol.StaleRangeException;
 import pl.skidam.automodpack_core.protocol.WireCodec;
 import pl.skidam.automodpack_core.utils.DownloadSource;
@@ -78,7 +79,7 @@ public class HttpFileDownloader {
 		}
 		long writeOffset = offset;
 		if (statusCode == 206) {
-			writeOffset = requireResumeStart(response, offset);
+			writeOffset = PartialResume.requireResumeStart(response.headers().firstValue("Content-Range").orElse(null), offset);
 		} else if (statusCode != 200) {
 			try (InputStream ignored = response.body()) {
 				throw new HttpStatusException(statusCode);
@@ -106,24 +107,6 @@ public class HttpFileDownloader {
 				if (progressAction != null) progressAction.accept(bytesRead);
 			}
 		}
-	}
-
-	/** A 206 must answer the exact take we asked for: its Content-Range start is the offset, anything else means the partial is stale. */
-	private static long requireResumeStart(HttpResponse<InputStream> response, long offset) throws IOException {
-		String contentRange = response.headers().firstValue("Content-Range").orElse(null);
-		if (contentRange == null) throw new StaleRangeException();
-		String spec = contentRange.trim();
-		if (!spec.startsWith("bytes ")) throw new IOException("Unparseable Content-Range: " + contentRange);
-		int dash = spec.indexOf('-');
-		if (dash < 0) throw new IOException("Unparseable Content-Range: " + contentRange);
-		long start;
-		try {
-			start = Long.parseLong(spec.substring("bytes ".length(), dash).trim());
-		} catch (NumberFormatException e) {
-			throw new IOException("Unparseable Content-Range: " + contentRange);
-		}
-		if (start != offset) throw new StaleRangeException();
-		return start;
 	}
 
 	private HttpResponse<InputStream> send(DownloadSource source, URI uri, boolean authenticate, long offset, HttpClient client, Path target)

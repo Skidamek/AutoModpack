@@ -320,7 +320,7 @@ class Connection implements AutoCloseable {
 				// A 206 may only be appended behind the stored prefix when the server actually resumed at the requested offset; anything else fails fast instead of splicing together bytes that promotion would only
 				// reject after the fact. An encoded body is framed chunked and has no length by design.
 				if (head.contentLength() == null && !head.chunked()) throw new IOException("HTTP 206 without Content-Length");
-				requireResumeStart(head, offset);
+				PartialResume.requireResumeStart(head.contentRange(), offset);
 				if (consumeBody(head, destination, offset, chunks, null, tap, false, limitBytes)) {
 					future.completeExceptionally(new IOException("Object exceeds the " + limitBytes + " byte limit for " + originPath));
 					return;
@@ -361,7 +361,7 @@ class Connection implements AutoCloseable {
 				if (head.contentRange() == null && expectedSize >= 0 && head.contentLength() != null && head.contentLength() != expectedSize)
 					throw new IOException("Served object length " + head.contentLength() + " does not match the expected object size " + expectedSize + " for " + originPath);
 				boolean resumed = offset > 0 && head.contentRange() != null;
-				if (resumed) requireResumeStart(head, offset);
+				if (resumed) PartialResume.requireResumeStart(head.contentRange(), offset);
 				if (consumeBody(head, destination, resumed ? offset : 0, chunks, null, tap, false, limitBytes)) {
 					future.completeExceptionally(new IOException("Object exceeds the " + limitBytes + " byte limit for " + originPath));
 					return;
@@ -445,22 +445,6 @@ class Connection implements AutoCloseable {
 			case 416 -> ranged ? new StaleRangeException() : new IOException("HTTP 416 without a sent Range");
 			default -> new IOException("HTTP " + head.status());
 		};
-	}
-
-	private void requireResumeStart(ResponseHead head, long offset) throws IOException {
-		String contentRange = head.contentRange();
-		if (contentRange == null) throw new StaleRangeException();
-		String spec = contentRange.trim();
-		if (!spec.startsWith("bytes ")) throw new IOException("Unparseable Content-Range: " + contentRange);
-		int dash = spec.indexOf('-');
-		if (dash < 0) throw new IOException("Unparseable Content-Range: " + contentRange);
-		long start;
-		try {
-			start = Long.parseLong(spec.substring("bytes ".length(), dash).trim());
-		} catch (NumberFormatException e) {
-			throw new IOException("Unparseable Content-Range: " + contentRange);
-		}
-		if (start != offset) throw new StaleRangeException();
 	}
 
 	private ResponseHead parseResponseHead() throws IOException {
