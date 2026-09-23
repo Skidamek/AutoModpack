@@ -58,6 +58,26 @@ By default the export also resolves each object against Modrinth and CurseForge 
 
 The exported tree is public to whoever the static host serves, and everything in it is published under your license responsibility. Pruned objects are fetched by clients directly from the platforms' own CDNs, not from your mirror, but a file a platform later deletes has no fallback on a pruned mirror.
 
+## S3-compatible buckets
+
+The export tree is a valid bucket layout — `head`, `journal`, and `objects/<sha1>` are exactly S3 keys — so any S3-compatible store (AWS S3, Cloudflare R2, Backblaze B2, MinIO, Wasabi) serves the pack directly. The recipe, with the [MinIO client](https://min.io/docs/minio/linux/reference/minio-mc.html) standing in for `aws s3 sync` or `rclone`:
+
+```bash
+export-http dir writes the tree (the head lands last: it is the tree's commit pointer)
+mc alias set local https://<bucket-endpoint> --insecure   # omit --insecure for a trusted certificate
+mc mb --ignore-existing local/<bucket>
+mc mirror --overwrite <export-directory> local/<bucket>
+mc anonymous set download local/<bucket>                  # clients fetch anonymously, no signatures
+```
+
+Advertise the bucket's **virtual-hosted** endpoint (for AWS: `https://<bucket>.s3.<region>.amazonaws.com`) in `advertisedEndpointHost`/`advertisedEndpointPort` with `connectionMode: HTTP`. The path-style form answers a redirect to a different host, which clients reject on a pinned connection. Three properties are worth knowing:
+
+- **Conditionals work.** The export's `head` is the tree's commit pointer and lands after every object, so a sync tool can never publish the new head beside the old journal. Clients cache the bucket's own ETag per document and replay it as a second validator (`If-None-Match: "<installed-sha1>", "<cached-etag>"`), so an unchanged sync is answered `304` for both documents without a body — two requests, one round trip.
+- **Ranges work**, so big objects still download as parallel ranged takes that resume at the byte; no degradation is needed.
+- **Buckets are plain HTTP semantics with no compression**: objects are served identity-encoded (up to ~14% more bytes than the embedded listener's per-request zstd), and a rate-capped bucket answers `503`/`429` with `Retry-After`, which clients wait out and retry.
+
+The bucket is as public as the static mirror: `validateSecrets` must stay off (the export refuses otherwise), and your license governs the bytes. For the trust prompt, a bare provider endpoint (an `amazonaws.com` name) cannot carry your DNSSEC fingerprint record, so players confirm the certificate once; fronting the bucket with a CDN on your own DNSSEC domain lets the existing record absorb the provider's certificate rotations with a record update.
+
 ## Bandwidth
 
 `bandwidthLimit` caps upload speed per client in MiB/s; `0` disables the cap. Much of the typical download never touches your server in the first place, because clients fetch files from Modrinth and CurseForge where possible, as described in [client updates](client-updates#where-files-come-from).
