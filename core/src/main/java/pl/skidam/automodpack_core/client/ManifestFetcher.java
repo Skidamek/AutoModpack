@@ -242,7 +242,16 @@ public final class ManifestFetcher {
 			if (journalFetched != null) journalFetched.whenComplete((ignored, error) -> deleteJournalTemp(storage));
 			return CompletableFuture.completedFuture(null);
 		}
-		return syncJournalMirror(storage, transport, content, journalExpected, journalFetched).thenApply(journalRefetched -> content);
+		CompletableFuture<Boolean> journalSync = syncJournalMirror(storage, transport, content, journalExpected, journalFetched);
+		if (!fetch.unchanged()) return journalSync.thenApply(journalRefetched -> content);
+		// The validator matched, so the head mirror - and the journal that vouched for it - already hold what the
+		// server serves: a journal fetch that keeps failing even after its fresh-lane re-issue must not discard a
+		// good head. The callers still verify the local projection against the content, which is what repairs a
+		// corrupted or removed mirror.
+		return journalSync.handle((journalRefetched, journalError) -> {
+			if (journalError != null) LOGGER.warn("The journal fetch for modpack {} kept failing; keeping the current head mirror without its journal sync", selectedModpackId, Throwables.unwrap(journalError));
+			return content;
+		});
 	}
 
 	/**
