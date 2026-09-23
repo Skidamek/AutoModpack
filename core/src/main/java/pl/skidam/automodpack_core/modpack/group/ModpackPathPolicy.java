@@ -12,6 +12,8 @@ public final class ModpackPathPolicy {
 	public static final String SHADERPACKS_ROOT = "shaderpacks";
 	public static final String RESOURCEPACKS_ROOT = "resourcepacks";
 	public static final String MINECRAFT_OPTIONS_FILE = "options.txt";
+	/** The reserved file name the client's generated dependency bundle lands at, always directly under {@link #MODS_ROOT}. */
+	public static final String GENERATED_BUNDLE_NAME = "automodpack-generated.jar";
 	private static final String MODS_PREFIX = MODS_ROOT + "/";
 
 	/** Roots owned by the player or by AutoModpack itself; a server manifest cannot claim them. */
@@ -23,6 +25,16 @@ public final class ModpackPathPolicy {
 
 	public static boolean isReservedPath(String logicalPath) {
 		return RESERVED_ROOTS.contains(firstComponent(logicalPath).toLowerCase(Locale.ROOT));
+	}
+
+	/** Whether {@code logicalPath} is the client's generated dependency bundle, the one file name a modpack manifest can never claim. */
+	public static boolean isGeneratedBundlePath(String logicalPath) {
+		return logicalPath.equalsIgnoreCase(generatedBundlePath());
+	}
+
+	/** The game-directory path the client's generated dependency bundle lives at. */
+	public static String generatedBundlePath() {
+		return LogicalPath.normalize(MODS_PREFIX + GENERATED_BUNDLE_NAME);
 	}
 
 	public static String typeForPath(String logicalPath) {
@@ -43,6 +55,7 @@ public final class ModpackPathPolicy {
 			return false;
 		}
 		if (isReservedPath(normalized)) return false;
+		if (isGeneratedBundlePath(normalized)) return false;
 		if (normalized.equalsIgnoreCase(MODPACK_CONTENT_FILE.toString())) return false;
 		if (normalized.equalsIgnoreCase(BOOTSTRAP_FILE.getFileName().toString())) return false;
 		if (isInvalidLiveRoot(normalized)) return false;

@@ -1,93 +1,160 @@
 package pl.skidam.automodpack_core.utils;
 
-import java.util.Locale;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * A Record for Semantic Versioning.
- * - Parses standard SemVer (1.0.0-beta.1)
- * - Parses non-standard (1.0.0-beta1)
- * - Correctly weights Release > RC > Beta > Alpha
+ * A mod version split into numeric and alphabetical runs, ordered the way mod loaders order them: numbers
+ * numerically with missing components as zero, alphabetical runs case-insensitively, a known pre-release
+ * label (dev, snapshot, a/alpha, b/beta, pre/preview, rc) below the plain release, and any other trailing
+ * runs above it - deliberate, because a suffixed variant ({@code 1.0.0-FABRIC}) usually denotes a newer
+ * build of the same release, while the ladder carries the labels whose ecosystem meaning is strictly
+ * older-than-release. Numeric first runs rank above the release too, and cannot be demoted the way semver
+ * demotes {@code 1.0.0-1}: parsing loses the separator, so {@code 1.0.0-1} and {@code 1.0.0.1} are the same
+ * version here, and a four-component version ({@code 14.23.5.2859}) must outrank its three-component base.
+ * Build metadata (+...) never affects ordering.
  */
-public record SemanticVersion(int major, int minor, int patch, String label, int preVersion) implements Comparable<SemanticVersion> {
+public record SemanticVersion(long major, long minor, long patch, List<Part> tail) implements Comparable<SemanticVersion> {
 
 	// Regex for basic X.Y.Z(-PRERELEASE)?
 	private static final Pattern VERSION_PATTERN = Pattern.compile("^(\\d+)\\.(\\d+)\\.(\\d+)(?:-(.+))?$");
 
-	// Regex to split "beta.1", "beta1", "alpha-5", "rc2"
-	private static final Pattern PRE_SPLIT_PATTERN = Pattern.compile("^([a-zA-Z]+)(?:[.\\-]?)(\\d+)?$");
+	private static final Map<String, Integer> PRE_RELEASE_RUNGS = Map.of("dev", 1, "snapshot", 2, "a", 3, "alpha", 3, "b", 4, "beta", 4, "pre", 5, "preview", 5, "rc", 6);
+	private static final int RELEASE_RUNG = 7;
 
-	public static SemanticVersion parse(String versionString) {
-		if (versionString == null || versionString.isBlank()) throw new IllegalArgumentException("Version cannot be empty");
-
-		Matcher matcher = VERSION_PATTERN.matcher(versionString);
-		if (!matcher.matches()) throw new IllegalArgumentException("Invalid version format: " + versionString);
-
-		int major = Integer.parseInt(matcher.group(1));
-		int minor = Integer.parseInt(matcher.group(2));
-		int patch = Integer.parseInt(matcher.group(3));
-		String rawPre = matcher.group(4);
-
-		if (rawPre == null) {
-			// No label = Stable Release (e.g. 1.0.0)
-			// We use MAX_VALUE to ensure Stable > any Prerelease
-			return new SemanticVersion(major, minor, patch, "release", Integer.MAX_VALUE);
+	/** One maximal run of the version: a number or a case-folded alphabetical run; exactly one of the two is present. */
+	public record Part(long number, String alpha) {
+		public static Part numeric(long number) {
+			return new Part(number, null);
 		}
 
-		// Parse Prerelease (e.g., "beta1", "beta.1", "rc-2")
-		Matcher preMatcher = PRE_SPLIT_PATTERN.matcher(rawPre);
-		String label = rawPre;
-		int preVer = 1; // Default to 1 if no number (e.g. "beta")
-
-		if (preMatcher.find()) {
-			label = preMatcher.group(1).toLowerCase(Locale.ROOT);
-			String numPart = preMatcher.group(2);
-			if (numPart != null) preVer = Integer.parseInt(numPart);
+		public static Part alphabetical(String alpha) {
+			return new Part(0, alpha);
 		}
 
-		return new SemanticVersion(major, minor, patch, label, preVer);
+		public boolean numeric() {
+			return alpha == null;
+		}
 	}
 
-	public boolean isStable() {
-		return "release".equals(label);
+	public SemanticVersion {
+		tail = List.copyOf(tail);
+	}
+
+	/** Parses the standard space (X.Y.Z with an optional -label); anything else is rejected. */
+	public static SemanticVersion parse(String versionString) {
+		if (versionString == null || versionString.isBlank()) throw new IllegalArgumentException("Version cannot be empty");
+		Matcher matcher = VERSION_PATTERN.matcher(versionString.trim());
+		if (!matcher.matches()) throw new IllegalArgumentException("Invalid version format: " + versionString);
+		return parseOrNull(versionString);
 	}
 
 	/**
-	 * Determines priority of labels.
-	 * Higher number = "More Stable/Newer"
+	 * Parses any non-blank string: a leading v/V before a digit is dropped, build metadata (+...) is stripped from
+	 * ordering, and the remainder splits into numeric and alphabetical runs; null only for null or blank input.
 	 */
-	private int getLabelWeight() {
-		return switch (label) {
-			case "release" -> 100;
-			case "rc", "pre" -> 50; // Release Candidate / Pre-release
-			case "beta" -> 30;
-			case "alpha" -> 10;
-			case "snapshot" -> 5;
-			default -> 0; // Unknown labels are lowest priority
-		};
+	public static SemanticVersion parseOrNull(String versionString) {
+		if (versionString == null || versionString.isBlank()) return null;
+		String version = versionString.trim();
+		if (version.length() > 1 && (version.charAt(0) == 'v' || version.charAt(0) == 'V') && Character.isDigit(version.charAt(1))) version = version.substring(1);
+		int metadata = version.indexOf('+');
+		if (metadata >= 0) version = version.substring(0, metadata);
+		List<Part> parts = runs(version);
+		long[] core = new long[3];
+		int taken = 0;
+		List<Part> tail = new ArrayList<>();
+		for (Part part : parts) {
+			if (taken < 3 && part.numeric()) core[taken++] = part.number();
+			else tail.add(part);
+		}
+		return new SemanticVersion(core[0], core[1], core[2], tail);
+	}
+
+	/** Splits into maximal numeric and alphabetical runs; every other character separates runs. */
+	private static List<Part> runs(String version) {
+		List<Part> parts = new ArrayList<>();
+		Long number = null;
+		StringBuilder alpha = null;
+		for (int index = 0; index <= version.length(); index++) {
+			boolean digit = index < version.length() && Character.isDigit(version.charAt(index));
+			boolean letter = index < version.length() && Character.isLetter(version.charAt(index));
+			if (digit) {
+				if (alpha != null) {
+					parts.add(Part.alphabetical(alpha.toString()));
+					alpha = null;
+				}
+				number = (number == null ? 0 : number) * 10 + (version.charAt(index) - '0');
+				// Once the accumulation overflows it stays negative until it is flushed, so clamping here keeps every longer run at the ceiling instead of letting it wrap back into range.
+				if (number < 0) number = Long.MAX_VALUE;
+			} else if (letter) {
+				if (number != null) {
+					parts.add(Part.numeric(number));
+					number = null;
+				}
+				if (alpha == null) alpha = new StringBuilder();
+				alpha.append(Character.toLowerCase(version.charAt(index)));
+			} else {
+				if (number != null) {
+					parts.add(Part.numeric(number));
+					number = null;
+				}
+				if (alpha != null) {
+					parts.add(Part.alphabetical(alpha.toString()));
+					alpha = null;
+				}
+			}
+		}
+		return parts;
+	}
+
+	/** Whether the version carries no known pre-release label; final/release spell it explicitly. */
+	public boolean isStable() {
+		return rung() == RELEASE_RUNG;
+	}
+
+	/**
+	 * Deterministic total winner order over raw version strings: parsed versions compare through
+	 * {@link #compareTo}, unparseable (blank) ones only ever tie with themselves and compare as raw strings.
+	 * Callers break remaining ties by path.
+	 */
+	public static int compareVersionStrings(String left, String right) {
+		SemanticVersion parsedLeft = parseOrNull(left);
+		SemanticVersion parsedRight = parseOrNull(right);
+		if (parsedLeft != null && parsedRight != null) return parsedLeft.compareTo(parsedRight);
+		if (parsedLeft != null) return 1;
+		if (parsedRight != null) return -1;
+		return String.valueOf(left).compareTo(String.valueOf(right));
+	}
+
+	private int rung() {
+		if (tail.isEmpty()) return RELEASE_RUNG;
+		Part first = tail.get(0);
+		return first.numeric() ? RELEASE_RUNG : PRE_RELEASE_RUNGS.getOrDefault(first.alpha(), RELEASE_RUNG);
 	}
 
 	@Override
-	public int compareTo(SemanticVersion o) {
-		if (this.major != o.major) return Integer.compare(this.major, o.major);
-		if (this.minor != o.minor) return Integer.compare(this.minor, o.minor);
-		if (this.patch != o.patch) return Integer.compare(this.patch, o.patch);
-
-		// Version numbers are identical, check label weight (Stable > Beta)
-		int thisWeight = this.getLabelWeight();
-		int otherWeight = o.getLabelWeight();
-
-		if (thisWeight != otherWeight) return Integer.compare(thisWeight, otherWeight);
-
-		// Labels are same type (e.g. both beta), check the pre-version number (beta.2 > beta.1)
-		return Integer.compare(this.preVersion, o.preVersion);
+	public int compareTo(SemanticVersion other) {
+		if (major != other.major) return Long.compare(major, other.major);
+		if (minor != other.minor) return Long.compare(minor, other.minor);
+		if (patch != other.patch) return Long.compare(patch, other.patch);
+		int rung = rung(), otherRung = other.rung();
+		if (rung != otherRung) return Integer.compare(rung, otherRung);
+		for (int index = 0; index < Math.min(tail.size(), other.tail.size()); index++) {
+			Part left = tail.get(index), right = other.tail.get(index);
+			if (left.numeric() != right.numeric()) return left.numeric() ? 1 : -1;
+			int comparison = left.numeric() ? Long.compare(left.number(), right.number()) : left.alpha().compareTo(right.alpha());
+			if (comparison != 0) return comparison;
+		}
+		return Integer.compare(tail.size(), other.tail.size());
 	}
 
 	@Override
 	public String toString() {
-		if (isStable()) return String.format(Locale.ROOT, "%d.%d.%d", major, minor, patch);
-		// Standardize output to always use dot separator (beta.1)
-		return String.format(Locale.ROOT, "%d.%d.%d-%s.%d", major, minor, patch, label, preVersion);
+		StringBuilder builder = new StringBuilder().append(major).append('.').append(minor).append('.').append(patch);
+		for (Part part : tail) builder.append('.').append(part.numeric() ? part.number() : part.alpha());
+		return builder.toString();
 	}
 }

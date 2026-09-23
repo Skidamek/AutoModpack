@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -44,7 +45,11 @@ public class FileInspection {
 		}
 	}
 
-	private record ModMetadata(String modId, String version, Set<String> provides, Set<String> deps, LoaderManagerService.EnvironmentType environment) {}
+	private record ModMetadata(String modId, String version, Set<String> provides, Set<String> deps, LoaderManagerService.EnvironmentType environment, Set<String> declaredJars) {
+		ModMetadata {
+			declaredJars = declaredJars == null ? Set.of() : Set.copyOf(declaredJars);
+		}
+	}
 
 	public static Mod getMod(Path file, FileCache cache) {
 		if (isJarInvalid(file)) return null;
@@ -62,7 +67,7 @@ public class FileInspection {
 				Set<String> ids = new HashSet<>(meta.provides());
 				ids.add(meta.modId());
 
-				Set<Mod> nestedMods = scanForNestedMods(fs);
+				Set<Mod> nestedMods = scanForNestedMods(fs, meta.declaredJars());
 				Set<String> services = Set.copyOf(getServices(fs, LoaderServicePaths.ALL_SERVICES));
 
 				if (meta.version() != null) return new Mod(ids, hash, meta.version(), file, meta.deps(), nestedMods, meta.modId(), services);
@@ -159,18 +164,19 @@ public class FileInspection {
 		return null;
 	}
 
-	/** Scans all nested JAR entries; {@code ModFileCache} caches the resulting inspection by content hash. */
-	private static Set<Mod> scanForNestedMods(FileSystem parentFs) {
+	/** Scans the declared nested JAR entries; {@code ModFileCache} caches the resulting inspection by content hash. */
+	private static Set<Mod> scanForNestedMods(FileSystem parentFs, Set<String> declaredJars) {
 		Set<Mod> nestedMods = new HashSet<>();
 		try (Stream<Path> walk = Files.walk(parentFs.getPath("/"))) {
 			for (Path path : walk.toList()) {
-				if (JarUtils.isRegularJar(path) && !path.equals(parentFs.getPath("/"))) {
-					try (InputStream is = Files.newInputStream(path)) {
-						Mod nested = readModFromStream(path, is);
-						if (nested != null) nestedMods.add(nested);
-					} catch (IOException e) {
-						LOGGER.debug("Skipping unreadable nested jar: {}", path);
-					}
+				// Walk entries are absolute while declared paths are entry names, so both sides compare by the exact zip entry name the loader looks up.
+				String entryName = path.toString();
+				if (!JarUtils.isRegularJar(path) || !declaredJars.contains(entryName.startsWith("/") ? entryName.substring(1) : entryName)) continue;
+				try (InputStream is = Files.newInputStream(path)) {
+					Mod nested = readModFromStream(path, is);
+					if (nested != null) nestedMods.add(nested);
+				} catch (IOException e) {
+					LOGGER.debug("Skipping unreadable nested jar: {}", path);
 				}
 			}
 		} catch (IOException e) {
@@ -183,11 +189,12 @@ public class FileInspection {
 	 * Reads a JAR from an InputStream (recursively) without mounting it as a FileSystem.
 	 */
 	private static Mod readModFromStream(Path virtualPath, InputStream is) {
+
 		// ZipInputStream must NOT close the underlying stream if it's a child stream
 		ZipInputStream zis = new ZipInputStream(is);
 		ZipEntry entry;
 		ModMetadata metadata = null;
-		Set<Mod> nestedChildren = new HashSet<>();
+		Map<String, Mod> nestedChildren = new HashMap<>();
 
 		try {
 			while ((entry = zis.getNextEntry()) != null) {
@@ -200,7 +207,7 @@ public class FileInspection {
 						public void close() {}
 					}, StandardCharsets.UTF_8));
 
-					if (name.endsWith(".toml")) metadata = parseTomlMetadata(reader);
+					if (name.endsWith(".toml")) metadata = parseTomlMetadata(reader, name.endsWith("neoforge.mods.toml"));
 					else metadata = parseJsonMetadata(reader);
 				} else if (JarUtils.hasJarExtension(name)) {
 					// Wrap ZIS to protect current stream position
@@ -208,7 +215,7 @@ public class FileInspection {
 						@Override
 						public void close() {}
 					});
-					if (child != null) nestedChildren.add(child);
+					if (child != null) nestedChildren.put(name, child);
 				}
 			}
 		} catch (IOException e) {
@@ -218,8 +225,10 @@ public class FileInspection {
 		if (metadata != null && metadata.modId() != null) {
 			Set<String> ids = new HashSet<>(metadata.provides());
 			ids.add(metadata.modId());
+			Set<String> declaredJars = metadata.declaredJars();
+			Set<Mod> nestedMods = nestedChildren.entrySet().stream().filter(child -> declaredJars.contains(child.getKey())).map(Map.Entry::getValue).collect(Collectors.toSet());
 			// Investigate if we need hash or not
-			return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedChildren, metadata.modId(), Set.of());
+			return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedMods, metadata.modId(), Set.of());
 		}
 		return null;
 	}
@@ -230,7 +239,7 @@ public class FileInspection {
 
 		try (BufferedReader reader = Files.newBufferedReader(metaPath)) {
 			if (metaPath.toString().endsWith(".toml")) {
-				return parseTomlMetadata(reader);
+				return parseTomlMetadata(reader, metaPath.getFileName().toString().equals("neoforge.mods.toml"));
 			} else {
 				return parseJsonMetadata(reader);
 			}
@@ -240,7 +249,7 @@ public class FileInspection {
 		return null;
 	}
 
-	private static ModMetadata parseTomlMetadata(BufferedReader reader) {
+	private static ModMetadata parseTomlMetadata(BufferedReader reader, boolean neoforgeSemantics) {
 		try {
 			Map<String, Object> result = MiniToml.parse(reader);
 			List<Map<String, Object>> mods = MiniToml.getTables(result, "mods");
@@ -270,6 +279,16 @@ public class FileInspection {
 						String depId = MiniToml.getString(depTable, "modId");
 						if (depId == null) continue;
 
+						// NeoForge 20.5+ reads neoforge.mods.toml, gates on type alone and never reads mandatory; legacy
+						// Forge reads META-INF/mods.toml and gates on mandatory (absent means true). Type wins when both
+						// exist. The metadata file names the semantics, so a jar parses the same on every loader - a
+						// fabric client planning a neoforge pack included.
+						boolean required;
+						if (depTable.get("type") instanceof String typeName) required = "required".equalsIgnoreCase(typeName);
+						else if (neoforgeSemantics) required = true;
+						else required = !(depTable.get("mandatory") instanceof Boolean flag && !flag);
+						if (!required) continue;
+
 						deps.add(depId);
 
 						// Determine Environment based on Minecraft/Forge side requirement
@@ -281,7 +300,7 @@ public class FileInspection {
 					}
 				}
 			}
-			return new ModMetadata(modId, version, provides, deps, env);
+			return new ModMetadata(modId, version, provides, deps, env, Set.of());
 		} catch (Exception e) {
 			LOGGER.error("TOML Parse Error: {}", e.getMessage());
 			return null;
@@ -322,7 +341,16 @@ public class FileInspection {
 				else if ("server".equalsIgnoreCase(envStr)) env = LoaderManagerService.EnvironmentType.SERVER;
 			}
 
-			return new ModMetadata(modId, version, provides, deps, env);
+			Set<String> declaredJars = new HashSet<>();
+			if (json.has("jars") && json.get("jars").isJsonArray()) {
+				for (JsonElement element : json.get("jars").getAsJsonArray()) {
+					if (!element.isJsonObject()) continue;
+					JsonElement file = element.getAsJsonObject().get("file");
+					if (file != null && file.isJsonPrimitive() && !file.getAsString().isBlank()) declaredJars.add(file.getAsString());
+				}
+			}
+
+			return new ModMetadata(modId, version, provides, deps, env, declaredJars);
 		} catch (Exception e) {
 			LOGGER.error("JSON Parse Error: {}", e.getMessage());
 			return null;

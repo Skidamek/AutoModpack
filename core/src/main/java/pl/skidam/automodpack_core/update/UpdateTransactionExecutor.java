@@ -22,7 +22,6 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
@@ -223,6 +222,10 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private Execution executePersisted(UpdateTransaction transaction) throws IOException {
+		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
+			// The copies' ownership record is rewritten before every apply run, recovery replays included, so a crash
+			// mid-apply never leaves installed copies unowned; a doc of a run that never applied is inert until it does.
+			GeneratedCopyState.fromCopies(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken(), transaction.selectionDigest(), transaction.plan().generatedCopies()).write(context.storage());
 		if (transaction.phase == UpdateTransaction.Phase.COMMITTED) return finalizeCommitted(transaction);
 		AtomicReference<Operation> current = new AtomicReference<>();
 		Path blockedPath = null;
@@ -350,9 +353,7 @@ public final class UpdateTransactionExecutor {
 		if (context.beforeManifestAction() != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
 			context.beforeManifestAction().run(transaction, resolved.flatTarget());
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
-			PackTarget generation = transaction.packTarget();
-			GeneratedCopyState.fromCopies(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken(), transaction.selectionDigest(), transaction.plan().generatedCopies()).write(context.storage());
-			context.storage().writeActiveState(transaction.plan().modpackId(), generation.contentToken(), resolved.document().ownershipLedger().toFields());
+			context.storage().writeActiveState(transaction.plan().modpackId(), transaction.packTarget().contentToken(), resolved.document().ownershipLedger().toFields());
 		} else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
 			FileTrees.delete(context.storage().generatedCopiesGenerationDirectory(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken()));
 			context.storage().clearActiveState();

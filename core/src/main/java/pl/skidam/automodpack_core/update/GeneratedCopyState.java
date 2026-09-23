@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -89,7 +88,7 @@ public record GeneratedCopyState(String modpackId, String contentToken, String s
 	}
 
 	public List<UpdatePlan.NestedCopy> nestedCopies() {
-		return entries.stream().map(entry -> new UpdatePlan.NestedCopy(entry.logicalPath(), entry.sha1(), entry.size(), Set.of())).toList();
+		return entries.stream().map(entry -> new UpdatePlan.NestedCopy(entry.logicalPath(), entry.sha1(), entry.size())).toList();
 	}
 
 	public record Entry(String logicalPath, String sha1, long size) {

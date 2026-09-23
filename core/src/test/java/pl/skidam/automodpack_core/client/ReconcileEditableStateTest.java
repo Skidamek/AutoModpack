@@ -28,7 +28,6 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -86,11 +85,6 @@ class ReconcileEditableStateTest {
 		return new ClientUpdatePlanBuilder(storage, new ModpackLoaderService() {
 			@Override
 			public void loadModpack(ModpackLoadRequest request) {}
-
-			@Override
-			public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileCache cache) {
-				return List.of();
-			}
 		}, "fabric");
 	}
 

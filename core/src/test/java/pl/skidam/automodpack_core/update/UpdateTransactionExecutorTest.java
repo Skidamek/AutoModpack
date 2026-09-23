@@ -77,7 +77,7 @@ class UpdateTransactionExecutorTest {
 		String rootHash = store(storage, rootBytes);
 		String nestedHash = store(storage, nestedBytes);
 		SelectedModpackTarget target = target(storage, "mods/root.jar", "mod", false, rootHash, rootBytes.length);
-		UpdatePlan.NestedCopy generated = new UpdatePlan.NestedCopy("mods/nested.jar", nestedHash, nestedBytes.length, Set.of("nested"));
+		UpdatePlan.NestedCopy generated = new UpdatePlan.NestedCopy("mods/nested.jar", nestedHash, nestedBytes.length);
 		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(
 				new Operation(Root.PROJECTION, "mods/root.jar", OperationType.INSTALL_OBJECT, rootHash, rootBytes.length, null),
 				new Operation(Root.GAME_DIR, "mods/nested.jar", OperationType.INSTALL_OBJECT, nestedHash, nestedBytes.length, null)),
@@ -91,6 +91,32 @@ class UpdateTransactionExecutorTest {
 				UpdateTransaction.digest(target.selection().intent()));
 		assertEquals(List.of(new GeneratedCopyState.Entry("mods/nested.jar", nestedHash, nestedBytes.length)), state.entries());
 		assertTrue(FileIntegrity.matches(storage.modsDirectory().resolve("nested.jar"), nestedBytes.length, nestedHash));
+	}
+
+	@Test
+	void persistsGeneratedCopyOwnershipBeforeTheFirstLiveMutation() throws Exception {
+		ClientStorage storage = storage();
+		byte[] rootBytes = "root-object".getBytes(StandardCharsets.UTF_8);
+		byte[] nestedBytes = "nested-object".getBytes(StandardCharsets.UTF_8);
+		String rootHash = store(storage, rootBytes);
+		String nestedHash = store(storage, nestedBytes);
+		SelectedModpackTarget target = target(storage, "mods/root.jar", "mod", false, rootHash, rootBytes.length);
+		UpdatePlan.NestedCopy generated = new UpdatePlan.NestedCopy("mods/nested.jar", nestedHash, nestedBytes.length);
+		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(
+				new Operation(Root.PROJECTION, "mods/root.jar", OperationType.INSTALL_OBJECT, rootHash, rootBytes.length, null),
+				new Operation(Root.GAME_DIR, "mods/nested.jar", OperationType.INSTALL_OBJECT, nestedHash, nestedBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/root.jar", true, rootHash, rootBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "mods/nested.jar", true, nestedHash, nestedBytes.length)),
+				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.FIXED_NESTED_MODS), List.of(), List.of(), List.of(), List.of(generated), ChangeSet.empty());
+		Files.createDirectories(storage.modsDirectory().resolve("nested.jar"));
+
+		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
+
+		assertTrue(execution.replanRequired());
+		GeneratedCopyState state = GeneratedCopyState.read(storage, target.manifest().modpackId(), target.packTarget().contentToken(),
+				UpdateTransaction.digest(target.selection().intent()));
+		assertEquals(List.of(new GeneratedCopyState.Entry("mods/nested.jar", nestedHash, nestedBytes.length)), state.entries());
+		assertTrue(Files.isDirectory(storage.modsDirectory().resolve("nested.jar")), "The live mutation must not have run");
 	}
 
 	@Test
@@ -444,8 +470,8 @@ class UpdateTransactionExecutorTest {
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/local-sodium.jar"),
 				new UpdatePlan.FileState(localHash, localBytes.length, true));
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Set.of(),
-				List.of(new UpdatePlan.ModInfo("mods/server-sodium.jar", serverHash, serverBytes.length, Set.of("sodium"), Set.of())),
-				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, Set.of("sodium"), Set.of())), List.of(), List.of(), null,
+				List.of(new UpdatePlan.ModInfo("mods/server-sodium.jar", serverHash, serverBytes.length, "1.0.0", Set.of("sodium"), Set.of())),
+				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, "1.0.0", Set.of("sodium"), Set.of())), List.of(), List.of(), null,
 				clientConfig(target.manifest().modpackId())));
 		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
 

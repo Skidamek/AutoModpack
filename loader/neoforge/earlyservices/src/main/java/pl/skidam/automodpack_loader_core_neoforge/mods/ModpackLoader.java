@@ -11,7 +11,6 @@ import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public class ModpackLoader implements ModpackLoaderService {
 	public static final List<Path> modsToLoad = new ArrayList<>();
@@ -32,10 +31,5 @@ public class ModpackLoader implements ModpackLoaderService {
 		} catch (Exception e) {
 			LOGGER.error("Error while loading modpack", e);
 		}
-	}
-
-	@Override
-	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileCache cache) {
-		return new ArrayList<>();
 	}
 }

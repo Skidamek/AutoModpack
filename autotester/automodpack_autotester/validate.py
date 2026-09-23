@@ -376,6 +376,16 @@ def _check_mod_fixture(value, problems, where):
     for field in ("modId", "version", "marker"):
         if not isinstance(value.get(field), str) or not value[field].strip():
             problems.append(f"{where}.{field}: expected a non-empty string")
+    depends = value.get("depends")
+    if depends is not None and (not isinstance(depends, list) or any(not isinstance(entry, str) or not entry.strip() for entry in depends)):
+        problems.append(f"{where}.depends: expected a list of non-empty mod-id strings")
+    nested = value.get("nested")
+    if nested is not None:
+        if not isinstance(nested, list):
+            problems.append(f"{where}.nested: expected a list of fixture mappings")
+        else:
+            for index, child in enumerate(nested):
+                _check_mod_fixture(child, problems, f"{where}.nested[{index}]")
 
 
 def _check_publish_generation(step, problems, where):

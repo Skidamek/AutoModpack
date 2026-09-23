@@ -1,0 +1,156 @@
+id: dependency-driven-copy
+description: |
+  Issue #276 as users actually hit it: the pack is installed FIRST and the user
+  mod is added AFTER, so the dependency must be fixed by a real update. The pack
+  ships nesteddep_pack, which nests nesteddep_lib (jar-in-jar) and nothing else
+  provides it. Phase 1 installs that pack (generation 0) and boots it cleanly.
+  The user then drops nesteddep_user, which hard-depends on nesteddep_lib, into
+  standard mods/. On Fabric the pack loads through AutoModpack's second discovery
+  pass, so the native pass that resolves the user mod cannot see the nesting and
+  a plain relaunch would boot-crash. Instead the server publishes generation 1
+  (same nested pack mod, refreshed config), and the sync's plan phase must detect
+  the unmet dependency and pack the nested library out into the standard mods
+  directory inside the single generated dependency bundle (mods/automodpack-generated.jar),
+  so the next launch resolves everything natively and the player reaches the game
+  with the user mod loaded.
+
+renderClient: true
+
+targets:
+  - 1.21.11-fabric
+  - 1.20.1-fabric
+
+flow:
+  # Phase 1: install and boot generation 0, before any user mod exists.
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - use: restart_client
+  - use: rejoin
+  # The user adds their mod to standard mods/ while the installed pack is live.
+  # Seeding here (never before the first install) keeps the jar out of the
+  # first-install local-mods flow that would otherwise remove it.
+  - do: seed_mod_fixture
+    name: the user adds their dependent mod after the install
+    path: mods/nesteddep-user-1.0.0.jar
+    fixture: { modId: nesteddep_user, version: "1.0.0", marker: nesteddep-user, depends: ["nesteddep_lib"] }
+  # Phase 2: a real server update forces a fresh plan over the seeded jar.
+  - do: publish_server_generation
+    name: publish generation 1 with the same nested pack mod and a refreshed config
+    generation: 1
+  - do: disconnect
+    name: leave the game for the published update
+  - do: connect
+    name: connect to the published generation
+  # A plan that (re)serves pack mod files keeps the unverified-risk consent, so
+  # this review is the PackConfirmScreen variant with a locked Update button.
+  - do: wait_for
+    name: show the generation update review
+    timeout: 90s
+    until:
+      all:
+        - screen: [UpdatePreviewScreen, PackConfirmScreen]
+        - element: { text: Update }
+  - do: wait_for
+    name: wait for the unverified ack checkbox after the lock
+    timeout: 20s
+    until: { element: { key: automodpack.confirm.ack, enabled: true } }
+    when: { element: { key: automodpack.confirm.ack } }
+  - do: click
+    name: acknowledge the unverified server mod before update
+    select: { key: automodpack.confirm.ack }
+    when: { element: { key: automodpack.confirm.ack } }
+  - do: wait_for
+    name: wait for update to unlock
+    timeout: 20s
+    until: { element: { text: Update, enabled: true } }
+  - do: click
+    name: accept the published generation
+    select: { text: Update }
+  - do: wait_file_content
+    name: wait for the refreshed generation file
+    path: "${active_dir}/config/amp-autotest-story.txt"
+    content: "gen1\n"
+    timeout: 300s
+  - do: wait_generation
+    name: wait for the committed update generation
+    patchNotes: "Update 2: refreshed story config, same nested dependency pack."
+    timeout: 300s
+  - do: wait_for
+    name: wait for the sync to land the generated dependency bundle beside the user mod
+    timeout: 120s
+    until:
+      only_files:
+        dir: mods
+        patterns: ["automodpack.jar", "nesteddep-user*.jar", "automodpack-generated.jar"]
+  - use: restart_client
+  # The post-update boot is the contract: fabric-loader must resolve the user mod
+  # and the library nested inside the generated bundle natively. Wait for the
+  # resolved-mod dump rather than the in-game bridge: the launch apply can ask for
+  # one more restart after resolution when it re-judges the generated copy's
+  # ownership; a missing library would crash resolution instead and trip the
+  # dependency-error matcher below.
+  - do: launch_client
+    name: relaunch the updated client with the bundled library and the user mod
+  - do: wait_for
+    name: wait for the post-update resolved-mod dump
+    timeout: 120s
+    until:
+      log:
+        container: client
+        matches_all:
+          - 'Loading \d+ mods'
+          - 'nesteddep_user'
+          - 'nesteddep_lib'
+  - do: assert
+    name: the user mod and the bundled library both load natively and no dependency error appears
+    that:
+      all:
+        - log:
+            container: client
+            matches_all:
+              # fabric-loader logs every resolved mod's id in its "Loading N mods" dump;
+              # an unresolvable mandatory dependency crashes resolution before that dump.
+              - 'nesteddep_user'
+              - 'nesteddep_lib'
+        - log:
+            container: client
+            not_matches:
+              - 'Missing or unsupported mandatory dependencies'
+  - do: quit
+    name: quit the client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  generations:
+    - patchNotes: "Initial release: the nested dependency pack."
+      files:
+        - path: mods/nesteddep_pack-1.0.0.jar
+          fixture:
+            modId: nesteddep_pack
+            version: "1.0.0"
+            marker: nesteddep-pack
+            nested:
+              - modId: nesteddep_lib
+                version: "1.0.0"
+                marker: nesteddep-lib
+        - { path: config/amp-autotest-story.txt, content: "gen0\n" }
+    - patchNotes: "Update 2: refreshed story config, same nested dependency pack."
+      files:
+        - path: mods/nesteddep_pack-1.0.0.jar
+          fixture:
+            modId: nesteddep_pack
+            version: "1.0.0"
+            marker: nesteddep-pack
+            nested:
+              - modId: nesteddep_lib
+                version: "1.0.0"
+                marker: nesteddep-lib
+        - { path: config/amp-autotest-story.txt, content: "gen1\n" }

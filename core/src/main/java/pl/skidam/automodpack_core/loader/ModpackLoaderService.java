@@ -1,16 +1,9 @@
 package pl.skidam.automodpack_core.loader;
 
-import java.nio.file.Path;
-import java.util.List;
 import java.util.Set;
-
-import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public interface ModpackLoaderService {
 	void loadModpack(ModpackLoadRequest request);
-
-	List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileCache cache); // Returns mod conflicts found in the active projection.
 
 	/**
 	 * Service files (paths under {@code META-INF/services/}) this loader generation cannot host in

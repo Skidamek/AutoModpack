@@ -10,7 +10,6 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.function.BooleanSupplier;
 
 import org.junit.jupiter.api.AfterEach;
@@ -34,8 +33,6 @@ import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.screen.ScreenService;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * Drives the review state machine through the same payload/actions surface a screen uses, on the engine's own review
@@ -211,11 +208,6 @@ class ReviewSessionTest {
 			Constants.MODPACK_LOADER = new ModpackLoaderService() {
 				@Override
 				public void loadModpack(ModpackLoadRequest request) {}
-
-				@Override
-				public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileCache cache) {
-					return List.of();
-				}
 			};
 			Constants.LOADER = "fabric";
 		}
