@@ -12,6 +12,7 @@ connectionPaths:
   bindPort: -1
   endpointPort: 8443
   advertisedEndpointHost: automodpack-static-host
+  deferFirstSyncToLogin: true
 flow:
 - do: launch_server
   name: start the advertising server

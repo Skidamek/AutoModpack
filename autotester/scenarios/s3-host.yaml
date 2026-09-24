@@ -15,6 +15,7 @@ connectionPaths:
   bindPort: -1
   endpointPort: 9000
   advertisedEndpointHost: pack.s3
+  deferFirstSyncToLogin: true
 flow:
 - do: launch_server
   name: start the advertising server

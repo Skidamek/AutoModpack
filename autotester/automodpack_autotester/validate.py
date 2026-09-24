@@ -144,6 +144,8 @@ def _check_connection_paths(paths, problems):
             value = path.get(field)
             if not isinstance(value, int) or isinstance(value, bool) or value < -1 or value > 65535 or value == 0:
                 problems.append(f"{where}.{field}: expected an integer port or -1, got {value!r}")
+        if not isinstance(path.get("deferFirstSyncToLogin", False), bool):
+            problems.append(f"{where}.deferFirstSyncToLogin: expected a boolean, got {path.get('deferFirstSyncToLogin')!r}")
         if mode == "HTTP" and path.get("bindPort", -1) == -1 and not str(path.get("advertisedEndpointHost", "")).strip():
             problems.append(f"{where}.bindPort: {mode} needs the dedicated listener or an advertisedEndpointHost served externally")
 

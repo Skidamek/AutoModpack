@@ -99,16 +99,16 @@ def _prepare_client_files(ctx: Context) -> None:
     _stage_client_runtime_mods(ctx)
     _seed_client_options(game_dir)
     _ensure_client_data_root(game_dir)
-    _defer_http_first_sync_to_login(ctx, game_dir)
+    _defer_first_sync_to_login(ctx, game_dir)
     _bridge_state(ctx).unlink(missing_ok=True)
 
 
-def _defer_http_first_sync_to_login(ctx: Context, game_dir: Path) -> None:
+def _defer_first_sync_to_login(ctx: Context, game_dir: Path) -> None:
     # A secretless bootstrap over a public HTTP pack legitimately preloads the whole catalogue (no auth exists to
     # bypass), which would consume the first-connection review every later flow step pivots on. Deferring the first
     # sync to the login keeps one shared flow: every mode shows its first review there, over its own transport.
-    mode = str((ctx.scenario.get("connectionPath") or {}).get("mode", "")).upper()
-    if mode != "HTTP":
+    # The policy is per-connection-path scenario data (deferFirstSyncToLogin), so the YAML shows who defers.
+    if not (ctx.scenario.get("connectionPath") or {}).get("deferFirstSyncToLogin", False):
         return
     config_path = game_dir / "automodpack" / "client-config.json"
     # Later launches must keep whatever the bootstrap import and the install commit persisted there - rewriting the

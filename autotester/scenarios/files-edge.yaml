@@ -10,6 +10,7 @@ connectionPaths:
   - mode: HTTP
     bindPort: 25567
     endpointPort: 25567
+    deferFirstSyncToLogin: true
 
 flow:
   - use: boot
