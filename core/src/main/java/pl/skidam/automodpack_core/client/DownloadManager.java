@@ -96,7 +96,10 @@ public class DownloadManager implements DownloadView {
 		this.totalBytesToDownload.set(bytesToDownload);
 		this.speedometer.setExpectedBytes(bytesToDownload);
 		this.dataLayout = Objects.requireNonNull(dataLayout, "dataLayout");
-		this.downloadExecutor = Executors.newFixedThreadPool(PLATFORM_WORKERS,
+		// The dispatch discipline caps platform-routed tasks at PLATFORM_WORKERS, so the pool itself stays unbounded:
+		// a host-routed task holds its thread only until the take is submitted, and a platform download parked on a
+		// slow body can never starve a host dispatch of its thread.
+		this.downloadExecutor = Executors.newCachedThreadPool(
 				new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
 		this.metadataFetcher = new FetchManager(List.of(), Objects.requireNonNull(platformCache, "platformCache"));
 	}
@@ -140,41 +143,43 @@ public class DownloadManager implements DownloadView {
 		}
 	}
 
-	/** Picks and submits one task; false means the queue is empty of dispatchable work or the budget is full and the next settle re-runs the dispatch. */
+	/** Picks and submits one task; false means nothing dispatchable is queued and the next settle re-runs the dispatch. */
 	private boolean dispatchOne() {
-		// SCHEDULING: the queue is already in dispatch order (largest first, ties in enqueue order); among the first
-		// dispatchable task's candidate domains chooseDomain picks the one whose measured speed makes
-		// backlog-plus-this-file finish soonest. Domains a task already burned its attempts on are withheld
+		// SCHEDULING: the queue stays in dispatch order (largest first, ties in enqueue order) and one scan dispatches the
+		// first task that can run now, leaving the rest queued in order for the next settle. A host-servable task always
+		// can run - its takes queue on the transport's lanes and occupy no worker - while a platform-routed task needs a
+		// free worker. Among the candidate domains that can run now, chooseDomain picks the one whose measured speed
+		// makes backlog-plus-this-file finish soonest. Domains a task already burned its attempts on are withheld
 		// (candidateDomains); dead links are handled at attempt time.
 		Map<String, Long> inFlightBacklog = new HashMap<>();
 		for (DownloadData data : downloadsInProgress.values()) inFlightBacklog.merge(data.activeDomain, Math.max(0, data.remainingBytes.get()), Long::sum);
 
-		List<QueuedDownload> aside = new ArrayList<>();
+		boolean workerFree = platformTasksInFlight() < PLATFORM_WORKERS;
+		List<QueuedDownload> waiting = new ArrayList<>();
 		QueuedDownload chosen = null;
 		String chosenDomain = null;
 		for (QueuedDownload candidate; (candidate = dispatchOrder.poll()) != null;) {
-			String domain = scheduler.chooseDomain(new DownloadScheduler.QueuedFile<>(candidate.key, candidate.fileSize, candidateDomains(candidate)), inFlightBacklog);
-			if (domain == null) {
-				aside.add(candidate);
+			List<String> domains = candidateDomains(candidate);
+			boolean hostCandidate = domains.contains(INTERNAL_CLIENT_SOURCE);
+			boolean hostRoute = transport != null && hostCandidate;
+			boolean platformRoute = workerFree && domains.stream().anyMatch(domain -> !domain.equals(INTERNAL_CLIENT_SOURCE));
+			if (!hostRoute && !platformRoute) {
+				waiting.add(candidate);
 				continue;
 			}
+			// Only routes that can run now are offered: a full worker budget pins the choice onto the host wire, and the
+			// scheduler's backlog heuristic weighs the rest.
+			List<String> offerable = hostRoute && platformRoute ? domains : hostRoute ? List.of(INTERNAL_CLIENT_SOURCE) : domains;
 			chosen = candidate;
-			chosenDomain = domain;
+			chosenDomain = scheduler.chooseDomain(new DownloadScheduler.QueuedFile<>(candidate.key, candidate.fileSize, offerable), inFlightBacklog);
 			break;
 		}
-		dispatchOrder.addAll(aside);
+		dispatchOrder.addAll(waiting);
 		if (chosen == null) return false;
 
 		QueuedDownload task = chosen;
 		FileInspection.HashPathPair key = chosen.key;
 		String activeDomain = chosenDomain;
-
-		boolean hostServed = activeDomain.equals(INTERNAL_CLIENT_SOURCE) && transport != null;
-		// Host transfers occupy no worker, so only the platform budget gates a dispatch; their takes queue on the transport's lanes.
-		if (!hostServed && platformTasksInFlight() >= PLATFORM_WORKERS) {
-			requeue(key, task);
-			return false;
-		}
 
 		// The dispatch is committed: the task leaves both queue structures, so a later requeue re-enters exactly once.
 		queuedDownloads.remove(key);
@@ -185,7 +190,7 @@ public class DownloadManager implements DownloadView {
 		DownloadData data = new DownloadData(future, task.file, activeDomain, task.fileSize);
 		data.key = key;
 		data.task = task;
-		data.hostServed = hostServed;
+		data.route = activeDomain.equals(INTERNAL_CLIENT_SOURCE) ? Route.HOST : Route.PLATFORM;
 		downloadsInProgress.put(key, data);
 		if (cancelled || downloadExecutor.isShutdown()) {
 			downloadsInProgress.remove(key);
@@ -222,10 +227,13 @@ public class DownloadManager implements DownloadView {
 		downloadNext();
 	}
 
-	/** Platform tasks occupy a worker for their whole blocking attempt; host tasks do not. */
+	/** Tasks currently routed to a platform source occupy a worker for their whole attempt; host-routed tasks do not. */
 	private long platformTasksInFlight() {
-		return downloadsInProgress.values().stream().filter(data -> !data.hostServed).count();
+		return downloadsInProgress.values().stream().filter(data -> data.route == Route.PLATFORM).count();
 	}
+
+	/** Where a dispatched attempt takes its bytes: a platform source picked at dispatch, or the host wire the burned-budget fallback re-routes to mid-attempt. */
+	enum Route { PLATFORM, HOST }
 
 	// Files with no platform sources can still come from the attached host client; that is labelled as its own domain so the scheduler can weigh it like any other source.
 	// Domains this task already burned its attempts on are withheld, so a retry dispatches to a different source instead of re-picking the same one.
@@ -296,15 +304,16 @@ public class DownloadManager implements DownloadView {
 				return;
 			}
 			refreshDeadLinkSources(hashPathPair.hash(), task);
-			DownloadSource source = data.hostServed ? null : platformSourceForDomain(task, data.activeDomain);
-			if (data.hostServed || source == null) {
-				if (source == null && !data.hostServed) { // burned platform budget falls through to the host wire
+			DownloadSource source = data.route == Route.HOST ? null : platformSourceForDomain(task, data.activeDomain);
+			if (data.route == Route.HOST || source == null) {
+				if (source == null && data.route == Route.PLATFORM) { // burned platform budget falls through to the host wire
 					if (transport == null) {
 						task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 						cleanupAndFinalize(hashPathPair, task, storeFile, false, false);
 						return;
 					}
-					data.hostServed = true;
+					// The flip is the accounting: the task stops occupying a platform worker the moment its bytes move to the host wire.
+					data.route = Route.HOST;
 				}
 				downloadFromHost(hashPathPair, task, data, partial);
 			} else {
@@ -680,8 +689,8 @@ public class DownloadManager implements DownloadView {
 		public final AtomicLong remainingBytes;
 		public FileInspection.HashPathPair key;
 		public QueuedDownload task;
-		/** True when this task's transfer belongs to the attached host transport; platform tasks occupy a worker, host tasks do not. */
-		public boolean hostServed;
+		/** The route this attempt currently takes: PLATFORM occupies a worker, HOST queues on the transport's lanes; the burned-budget fallback flips it mid-attempt. */
+		public Route route;
 
 		DownloadData(CompletableFuture<Void> f, Path p, String d, long s) {
 			future = f;

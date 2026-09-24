@@ -75,6 +75,7 @@ class DownloadManagerPlatformTest {
 		CONTENTS.put("validates-ünïcode.jar", deterministic("unicode", 4096));
 		CONTENTS.put("resume.bin", deterministic("resume", 1_048_576));
 		CONTENTS.put("held.bin", deterministic("held", 8192));
+		CONTENTS.put("blocked-head.bin", deterministic("blocked-head", 16_384));
 		// Without an executor every exchange would run on one dispatcher thread, and a held exchange would starve the rest.
 		server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 		server.setExecutor(Executors.newCachedThreadPool(r -> {
@@ -247,6 +248,50 @@ class DownloadManagerPlatformTest {
 		cache.close();
 		assertArrayEquals(smallContent, Files.readAllBytes(layout.objectFile(HashUtils.getHash(writeExpected("order-small.bin", smallContent)))));
 		assertArrayEquals(largeContent, Files.readAllBytes(layout.objectFile(HashUtils.getHash(writeExpected("order-large.bin", largeContent)))));
+	}
+
+	/**
+	 * The pinned dispatch property: a platform-blocked head must not stall host-servable files behind it. Every worker
+	 * slot parks at its latch, the largest queued file is platform-routed, and a smaller file with no platform sources
+	 * enqueues behind it - the host fetch must land while the head still waits. Under the after-the-choice budget gate
+	 * this dispatch never happened: the whole pump stopped at the blocked head.
+	 */
+	@Test
+	void aHostServableFileDispatchesWhileThePlatformBlockedHeadWaits() throws Exception {
+		layout = new DataRootResolver.Layout(tempDir.resolve("data"));
+		PlatformCache cache = PlatformCache.open(tempDir.resolve("platform-cache"));
+		byte[] headContent = CONTENTS.get("blocked-head.bin");
+		byte[] hostContent = CONTENTS.get("one-byte.txt");
+		List<String> holderNames = List.of("chunk-under.bin", "chunk-exact.bin", "chunk-over.bin", "held.bin", "resume.bin");
+		long totalBytes = holderNames.size() * (long) CONTENTS.get("held.bin").length + headContent.length + hostContent.length;
+		DownloadManager manager = new DownloadManager(totalBytes, layout, cache);
+		FakeTransport transport = new FakeTransport(hostContent);
+		manager.attachTransport(transport);
+		for (String holder : holderNames) HELD_LATCHES.put(holder, new CountDownLatch(1));
+		HELD_LATCHES.put("blocked-head.bin", new CountDownLatch(1));
+		int arrivalsBefore = HELD_REQUESTS.size(); // earlier tests' arrivals share the static record; only fresh ones count
+		for (String holder : holderNames) enqueuePlatformDownload(manager, holder, CONTENTS.get(holder), "/held/" + holder);
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (HELD_REQUESTS.size() < arrivalsBefore + DownloadManager.PLATFORM_WORKERS && System.nanoTime() < deadline) Thread.sleep(10);
+		assertEquals(arrivalsBefore + DownloadManager.PLATFORM_WORKERS, HELD_REQUESTS.size(), "every worker slot must be parked before the pair enqueues: " + HELD_REQUESTS);
+		enqueuePlatformDownload(manager, "blocked-head.bin", headContent, "/held/blocked-head.bin");
+		String hostSha1 = HashUtils.getHash(writeExpected("host-served.bin", hostContent));
+		Path hostDestination = tempDir.resolve("active").resolve("host-served.bin");
+		manager.download(hostDestination, hostSha1, null, "mods", List.of(), hostContent.length, () -> {}, category -> {});
+		awaitHostFetch(transport, hostSha1);
+		assertFalse(HELD_REQUESTS.contains("blocked-head.bin"), "the platform head must still be parked; the host file cannot have freed a worker: " + HELD_REQUESTS);
+		HELD_LATCHES.values().forEach(CountDownLatch::countDown);
+		manager.joinAll();
+		manager.finish();
+		cache.close();
+		assertArrayEquals(hostContent, Files.readAllBytes(layout.objectFile(hostSha1)));
+	}
+
+	/** Fails fast once the transport records the host fetch: the dispatch the pin demands happened. */
+	private static void awaitHostFetch(FakeTransport transport, String sha1) throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (transport.fetches.isEmpty() && System.nanoTime() < deadline) Thread.sleep(10);
+		assertEquals(List.of(sha1), transport.fetches, "the host-servable file must dispatch while the platform-blocked head waits");
 	}
 
 	/** Queues one file whose only source is a /held path, so the attempt parks at that path's latch. */
