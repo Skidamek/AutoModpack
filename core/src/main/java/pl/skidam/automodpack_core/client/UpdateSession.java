@@ -222,11 +222,14 @@ final class UpdateSession implements UpdateAttempt {
 		} catch (IOException e) {
 			LOGGER.warn("Modpack update committed, but stale overlay tombstones could not be cleaned", e);
 		}
+		// The transaction is committed and its journal retired, so these are bookkeeping tails like the overlay
+		// cleanup above: a failure must warn, not invert a durable commit into a reported failure - that would
+		// skip the restart ask for a generation that did land and show a failure screen over applied bytes.
 		if (connectionInfo != null && connectionInfo.isComplete()) {
 			try {
 				ConnectionStore.saveConnection(storage, target.manifest().modpackId(), connectionInfo);
 			} catch (IOException e) {
-				throw new IOException("Modpack generation committed but connection state could not be saved", e);
+				LOGGER.warn("Modpack generation committed, but the connection record could not be saved; the next sync rewrites it", e);
 			}
 		}
 		// One of the two attach exits: an explicitly requested sync ends attached at its commit.
@@ -235,7 +238,7 @@ final class UpdateSession implements UpdateAttempt {
 				storage.setDetached(target.manifest().modpackId(), false);
 				LOGGER.info("Modpack {} is attached again: the applied sync ends detachment", target.manifest().modpackId());
 			} catch (IOException e) {
-				throw new IOException("Modpack generation committed but detachment could not be cleared", e);
+				LOGGER.warn("Modpack generation committed, but detachment could not be cleared; the pack still reads as detached until the next sync", e);
 			}
 		}
 		return RestartDecision.applyResult(plan);
