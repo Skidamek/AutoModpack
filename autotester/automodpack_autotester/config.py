@@ -182,20 +182,22 @@ def scenario_matches_target(scenario: dict, target: "Target") -> bool:
     return _ok("targets", target.id) and _ok("minecraft", target.minecraft)
 
 
+def _fill_unit(name: str, size_bytes: int) -> str:
+    """The one fill shape both the streamed writer and the in-memory builder spell: ``name:size_bytes\n`` repeated."""
+    return f"{name.encode('ascii', 'backslashreplace').decode('ascii')}:{size_bytes}\n"
+
+
 def generated_content(path: str, size_bytes: int) -> str:
     """Deterministic ASCII fill of exactly ``size_bytes`` bytes for a hosted fixture file."""
     if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or size_bytes < 0:
         raise ValueError(f"sizeBytes must be a non-negative integer, got {size_bytes!r}")
-    unit = f"{path.encode('ascii', 'backslashreplace').decode('ascii')}:{size_bytes}\n"
+    unit = _fill_unit(path, size_bytes)
     return (unit * (size_bytes // len(unit) + 1))[:size_bytes]
 
 
 def write_generated(path: Path, name: str, size_bytes: int) -> None:
     """Streams ``generated_content`` to disk in chunks: gigabyte fixtures never sit in RAM."""
-    unit = f"{name.encode('ascii', 'backslashreplace').decode('ascii')}:{size_bytes}\n"
-    if not unit:
-        Path(path).write_bytes(b"")
-        return
+    unit = _fill_unit(name, size_bytes)
     with open(path, "wb") as handle:
         written = 0
         while written < size_bytes:
@@ -203,12 +205,6 @@ def write_generated(path: Path, name: str, size_bytes: int) -> None:
             chunk = chunk[: size_bytes - written]
             handle.write(chunk.encode("utf-8"))
             written += len(chunk)
-
-
-def _hosted_content(item: dict) -> str:
-    if "sizeBytes" not in item:
-        return str(item.get("content", ""))
-    return generated_content(str(item["path"]), item["sizeBytes"])
 
 
 @dataclass(frozen=True)

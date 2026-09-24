@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 from automodpack_autotester import cli, client_steps, runner, server_steps, staging_steps
-from automodpack_autotester.config import generated_content, load_macros
+from automodpack_autotester.config import generated_content, load_macros, write_generated
 from automodpack_autotester.engine.steps_io import wait_file, wait_file_content, wait_generation
 from automodpack_autotester.engine.util import ClientExited
 
@@ -762,6 +762,13 @@ def test_generated_content_is_deterministic_and_byte_exact():
     assert generated_content("config/a.bin", 0) == ""
     with pytest.raises(ValueError):
         generated_content("config/a.bin", -1)
+
+
+def test_write_generated_round_trips_generated_content(tmp_path):
+    for name, size in [("config/a.bin", 0), ("config/a.bin", 10), ("config/edge/chunk-under.bin", 7920), ("config/tiny/tiny-001.bin", 16384), ("config/big.bin", 1 << 20)]:
+        streamed = tmp_path / f"streamed-{size}"
+        write_generated(streamed, name, size)
+        assert streamed.read_bytes() == generated_content(name, size).encode("utf-8"), (name, size)
 
 
 # ── verb discovery ──────────────────────────────────────────────────────────

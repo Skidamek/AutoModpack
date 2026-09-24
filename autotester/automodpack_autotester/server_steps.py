@@ -108,8 +108,7 @@ def _write_server_generation(ctx: Context, index: int) -> None:
             size_bytes = item["sizeBytes"]
             if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or size_bytes < 0:
                 raise ValueError(f"server generation sizeBytes for {rel} must be a non-negative integer")
-            generated_name = str(rel).encode("ascii", "backslashreplace").decode("ascii")
-            write_generated(f, f"{generated_name}:{size_bytes}", size_bytes)
+            write_generated(f, str(rel), size_bytes)
         else:
             f.write_text(str(item.get("content", "")), encoding="utf-8")
     music = generation.get("waitingMusic")
