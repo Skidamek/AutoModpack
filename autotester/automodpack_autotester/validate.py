@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .config import scenario_matches_target
+from .config import expand_generated, scenario_matches_target
 from .engine import conditions
 from .engine.registry import get as get_verb
 from .engine.util import parse_duration
@@ -82,6 +82,16 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
             problems.append(f"serverFiles.files[{index}]: expected a mapping with a non-empty path")
         elif "sizeBytes" in item and (not isinstance(item["sizeBytes"], int) or isinstance(item["sizeBytes"], bool) or item["sizeBytes"] < 0):
             problems.append(f"serverFiles.files[{index}].sizeBytes: expected a non-negative integer")
+    server_files_section = scenario.get("serverFiles", {}) or {}
+    try:
+        expanded = expand_generated(server_files_section.get("generated"))
+    except ValueError as problem:
+        problems.append(str(problem))
+    else:
+        literal_paths = {str(item.get("path")) for item in server_files_section.get("files", []) or [] if isinstance(item, dict)}
+        duplicated = sorted({str(file.path) for file in expanded} & literal_paths)
+        if duplicated:
+            problems.append(f"serverFiles.generated: declarations re-spell literal paths: {duplicated[:3]}")
 
     mode = str(scenario.get("mode", "full")).lower()
     if mode not in _VALID_MODES:

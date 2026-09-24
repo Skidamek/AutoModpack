@@ -235,6 +235,41 @@ def parse_server_files(scenario: dict) -> ServerFiles:
             Path(str(f["path"])),
             content=None if "sizeBytes" in f else str(f.get("content", "")),
             size_bytes=f["sizeBytes"] if "sizeBytes" in f else None,
-        ) for f in sf.get("files", [])],
+        ) for f in (sf.get("files") or [])] + expand_generated(sf.get("generated")),
         expected_mods=[str(m) for m in sf.get("expectedMods", [])],
     )
+
+
+def expand_generated(declarations) -> list[HostedFile]:
+    """Expands ``generated`` declarations into their hosted files: ``pattern`` numbered ``{n}`` from ``first``,
+    each file a constant ``sizeBytes`` or the arithmetic ``sizeFrom + sizeStep * k`` wrapped at ``sizeModulus``
+    when given - the wrap is how an edge run spells one repeating ladder of near-chunk sizes."""
+    expanded = []
+    for index, declaration in enumerate(declarations or []):
+        where = f"serverFiles.generated[{index}]"
+        if not isinstance(declaration, dict):
+            raise ValueError(f"{where}: expected a mapping")
+        try:
+            pattern, count = str(declaration["pattern"]), declaration["count"]
+        except KeyError as missing:
+            raise ValueError(f"{where}: missing {missing.args[0]}") from None
+        if "{n" not in pattern:
+            raise ValueError(f"{where}.pattern: expected a numbering field like {{n}}, got {pattern!r}")
+        first = declaration.get("first", 1)
+        if not isinstance(first, int) or isinstance(first, bool) or first < 0:
+            raise ValueError(f"{where}.first: expected a non-negative integer, got {first!r}")
+        if not isinstance(count, int) or isinstance(count, bool) or count <= 0:
+            raise ValueError(f"{where}.count: expected a positive integer, got {count!r}")
+        size_bytes, size_from = declaration.get("sizeBytes"), declaration.get("sizeFrom")
+        if (size_bytes is None) == (size_from is None):
+            raise ValueError(f"{where}: exactly one of sizeBytes or sizeFrom is required")
+        size_step, modulus = declaration.get("sizeStep", 0), declaration.get("sizeModulus")
+        for field, value in (("sizeBytes", size_bytes), ("sizeFrom", size_from), ("sizeStep", size_step), ("sizeModulus", modulus)):
+            if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value < 0):
+                raise ValueError(f"{where}.{field}: expected a non-negative integer, got {value!r}")
+        for k in range(count):
+            size = size_bytes if size_bytes is not None else size_from + size_step * k
+            if modulus:
+                size %= modulus
+            expanded.append(HostedFile(Path(pattern.format(n=first + k)), content=None, size_bytes=size))
+    return expanded
