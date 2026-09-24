@@ -774,7 +774,10 @@ class ConditionalFetchTest {
 				}
 				// The barebones static host class: every object request is answered 200 with the full body, no Content-Range, Range ignored.
 				if (request.path.startsWith("/objects/") && ignoreRanges.get()) {
-					respond(out, "200 OK", content);
+					// With chunkedObjects set the host also answers chunked: the CDN shape that ignores Range and
+					// negotiates an encoding, so a bounded take sees an unjudgeable chunked 200.
+					if (chunkedObjects.get()) respondChunked(out, "200 OK", content, 0);
+					else respond(out, "200 OK", content);
 					return;
 				}
 				// The barebones static host class without a Content-Length: the body ends only with the connection.

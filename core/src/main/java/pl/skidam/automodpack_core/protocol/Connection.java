@@ -448,10 +448,11 @@ class Connection implements AutoCloseable {
 					return;
 				}
 				if (take.endInclusive() >= 0) {
-					// A chunked 200 on a bounded take is unjudgeable without decode-counting the body, so it still fails loudly;
-					// a close-framed one spends the lane no matter what, so it is not drained first: the verdict marks the host
-					// range-ignoring and the manager's requeue redownloads the object in one open-ended take.
-					if (head.chunked()) throw new IOException("Server ignored the Range end for " + originPath);
+					// No declared length: the body cannot be judged against the slice, and draining an unbounded body
+					// to keep the lane would read the whole object just to discard it. Both framings spend the lane
+					// and still answer the capability verdict - the manager's requeue redownloads the object in one
+					// open-ended take - instead of a generic retryable error that grinds the take budget against a
+					// permanent host condition.
 					unhealthy = true;
 					throw new RangeIgnoredException(originPath);
 				}

@@ -234,6 +234,30 @@ class DownloadObjectTest {
 		}
 	}
 
+	/** A chunked 200 on a bounded take is the same range-ignoring verdict as the close-framed one - the CDN shape that ignores Range and answers chunked - not a generic retryable error that grinds the take budget. */
+	@Test
+	void aChunked200OnABoundedTakeThrowsRangeIgnoredAndDegradesTheHost(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			byte[] object = new byte[256 * 1024];
+			new SecureRandom().nextBytes(object);
+			String sha1 = HashUtils.sha1(object);
+			server.store().put(sha1, object);
+			server.ignoreRanges.set(true);
+			server.chunkedObjects.set(true);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("object");
+				var thrown = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertInstanceOf(RangeIgnoredException.class, rootCause(thrown));
+				assertTrue(client.rangeIgnoredHost, "the chunked verdict degrades the whole client");
+				assertFalse(Files.exists(destination), "the body was never consumed into the destination");
+
+				// The manager requeues the task; under the flag it skips tiling and rides one open-ended take.
+				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertArrayEquals(object, Files.readAllBytes(destination));
+			}
+		}
+	}
+
 	/** A full-object take whose declared length differs from the expected object size is the length-mismatch verdict: it fails before a body byte is consumed into the destination. */
 	@Test
 	void aWrongDeclaredLengthOnAFullObjectTakeFailsBeforeConsuming(@TempDir Path directory) throws Exception {
