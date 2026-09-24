@@ -789,4 +789,40 @@ class HttpContractHandlerTest {
 	}
 
 	private record Fixture(String objectHash, String objectContent, Path headPath, Path journalPath) {}
+
+	/**
+	 * The 400 rules as a table: every field rule an RFC 9112 server rejects with a 400, the honest heads it parses,
+	 * and the verdicts the parser reads off them.
+	 */
+	@Test
+	void theRequestHeadParseRejectsTheFieldRulesAndKeepsTheHonestHeads() {
+		HttpContractHandler.RequestHead full = parse("GET /head HTTP/1.1\r\nhost: h\r\nif-none-match: \"a\"\r\nrange: bytes=1-2\r\nauthorization: Bearer s\r\naccept-encoding: zstd\r\n");
+		assertEquals("GET", full.method());
+		assertEquals("/head", full.target());
+		assertTrue(full.http11() && full.keepAlive(), "keep-alive defaults on for HTTP/1.1");
+		assertEquals("\"a\"", full.ifNoneMatch());
+		assertEquals("bytes=1-2", full.range());
+		assertEquals("Bearer s", full.authorization());
+		assertEquals("zstd", full.acceptEncoding());
+
+		HttpContractHandler.RequestHead http10 = parse("GET /head HTTP/1.0\r\n");
+		assertFalse(http10.http11(), "HTTP/1.0 predates the Host requirement");
+		assertFalse(http10.keepAlive(), "keep-alive defaults off for HTTP/1.0");
+
+		HttpContractHandler.RequestHead closed = parse("GET /head HTTP/1.1\r\nHost: h\r\nConnection: close\r\n");
+		assertTrue(closed.http11() && !closed.keepAlive(), "the close token turns keep-alive off");
+
+		String[] rejected = {
+				"GET /head HTTP/1.1\r\nHost: h\r\n continued\r\n", // obs-fold continuation
+				"GET /head HTTP/1.1\r\nHost : h\r\n", // whitespace between field name and colon
+				"GET /head HTTP/1.1\r\nHost: a\r\nHost: b\r\n", // a second Host header
+				"GET /head HTTP/1.1\r\n", // HTTP/1.1 without a Host
+		};
+		for (String request : rejected) assertNull(parse(request), request);
+	}
+
+	private static HttpContractHandler.RequestHead parse(String request) {
+		String[] lines = request.split("\r\n", -1);
+		return HttpContractHandler.parseHead(lines, lines[0].split(" "));
+	}
 }

@@ -38,7 +38,7 @@ import io.netty.util.concurrent.Future;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
+import pl.skidam.automodpack_core.protocol.ContractRoutes;
 import pl.skidam.automodpack_core.protocol.WireCodec;
 import pl.skidam.automodpack_core.protocol.netty.ActivityTracker;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
@@ -238,10 +238,80 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		String[] lines = request.split("\r\n", -1);
 		String[] requestLine = lines[0].split(" ");
+		// A malformed request line never earns a response: the block is not HTTP, so the connection just closes.
 		if (requestLine.length != 3 || (!requestLine[2].equals("HTTP/1.1") && !requestLine[2].equals("HTTP/1.0"))) return rejectGarbage(ctx, span);
+		RequestHead head = parseHead(lines, requestLine);
+		if (head == null) return finishBodyless(ctx, span, STATUS_400, 0, null, null, false);
 
-		String method = requestLine[0];
-		String target = requestLine[1];
+		if (serverConfig.validateSecrets && !authorized(ctx, head.authorization(), span)) return false;
+
+		if (!head.method().equals("GET")) return finishBodyless(ctx, span, STATUS_405, 0, null, null, head.keepAlive());
+
+		// The contract paths carry no encoding, so a percent-encoded target cannot name a route.
+		if (head.target().indexOf('%') >= 0) return finishBodyless(ctx, span, STATUS_400, 0, null, null, false);
+
+		String key = ContractRoutes.key(head.target());
+		span.routeKey = key;
+		Optional<Path> path = key == null ? Optional.<Path>empty() : server.getPath(key);
+		if (path.isEmpty()) return finishBodyless(ctx, span, STATUS_404, 0, null, null, head.keepAlive());
+
+		Path file = path.get();
+		long total;
+		try {
+			total = Files.size(file);
+		} catch (IOException e) {
+			return finishBodyless(ctx, span, STATUS_404, 0, null, null, head.keepAlive());
+		}
+
+		// Objects already are their hash. A document's validator etag comes from the server's memo, keeping the SHA-1
+		// of a possibly large journal off the event loop for every conditional fetch; a plain GET carries no ETag.
+		boolean document = ContractRoutes.isDocument(key);
+		String etag = document ? null : key;
+		if (head.ifNoneMatch() != null) {
+			etag = document ? server.documentEtag(file) : key;
+			if (etag == null) return finishBodyless(ctx, span, STATUS_404, 0, null, null, head.keepAlive());
+		}
+
+		if (head.ifNoneMatch() != null && ifNoneMatchMatches(head.ifNoneMatch(), etag)) {
+			// The 304 head states the length a 200 would have sent (RFC 9110); nothing is served, so the books stay at zero.
+			tracker.complete(span, 304, 0);
+			responsesServed++;
+			return respondOrClose(ctx, STATUS_304, total, etag, null, head.keepAlive());
+		}
+
+		ByteRange byteRange = head.range() == null ? null : parseRange(head.range(), total);
+		if (byteRange != null && !byteRange.satisfiable) {
+			return finishBodyless(ctx, span, STATUS_416, 0, etag, "bytes */" + total, head.keepAlive());
+		}
+
+		long offset = byteRange == null ? 0 : byteRange.start;
+		long length = byteRange == null ? total : byteRange.endInclusive - byteRange.start + 1;
+		String status = byteRange == null ? STATUS_200 : STATUS_206;
+		String contentRange = byteRange == null ? null : "bytes " + byteRange.start + "-" + byteRange.endInclusive + "/" + total;
+
+		if (length == 0) return finishBodyless(ctx, span, status, 0, etag, contentRange, head.keepAlive());
+
+		// Plain negotiation: a codec was offered and known, so the body - whole or ranged - goes out encoded; no header,
+		// an unknown or q-zeroed offer, or HTTP/1.0 (which has no Transfer-Encoding) means identity. The resume contract
+		// lives in Content-Range and is untouched by the coding. Encoding stays on for objects by measurement, not by
+		// faith: zstd -3 over 183 real mod/loader jars (188 MiB) gives 1.16x (gzip 1.13x), worth ~14% of the served
+		// bytes on the home uplinks and relays this server targets, while compression CPU (~500 MB/s) sits three orders
+		// of magnitude past any drain rate it can ever wait on.
+		if (head.http11() && head.acceptEncoding() != null && WireCodec.negotiate(head.acceptEncoding()) != null) {
+			return serveNegotiated(ctx, file, offset, length, total, status, etag, contentRange, head.keepAlive(), span, head.acceptEncoding());
+		}
+		return serveIdentity(ctx, file, offset, length, total, status, etag, contentRange, head.keepAlive(), span);
+	}
+
+	/** One parsed request head: the request line plus the handful of fields the contract acts on. */
+	record RequestHead(String method, String target, boolean http11, boolean keepAlive, String ifNoneMatch, String range, String authorization, String acceptEncoding) {}
+
+	/**
+	 * Parses the buffered fields around an already-judged request line. Null means RFC 9112 rejects the block and the
+	 * connection answers 400: an obs-fold continuation, whitespace between a field name and its colon, a second Host
+	 * header, or an HTTP/1.1 request without a Host.
+	 */
+	static RequestHead parseHead(String[] lines, String[] requestLine) {
 		boolean http11 = requestLine[2].equals("HTTP/1.1");
 		boolean keepAlive = http11;
 		boolean hostSeen = false;
@@ -252,12 +322,12 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		for (int i = 1; i < lines.length; i++) {
 			String line = lines[i];
 			char first = line.isEmpty() ? 0 : line.charAt(0);
-			if (first == ' ' || first == '\t') return finishBodyless(ctx, span, STATUS_400, 0, null, null, false); // obs-fold continuation
+			if (first == ' ' || first == '\t') return null; // obs-fold continuation
 			int colon = line.indexOf(':');
 			if (colon <= 0) continue;
 			String name = line.substring(0, colon);
 			char nameEnd = name.charAt(name.length() - 1);
-			if (nameEnd == ' ' || nameEnd == '\t') return finishBodyless(ctx, span, STATUS_400, 0, null, null, false); // whitespace between field name and colon
+			if (nameEnd == ' ' || nameEnd == '\t') return null; // whitespace between field name and colon
 			name = name.toLowerCase(Locale.ROOT);
 			String value = line.substring(colon + 1).trim();
 			if (name.equals("if-none-match")) ifNoneMatch = value;
@@ -266,7 +336,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			else if (name.equals("accept-encoding")) acceptEncoding = value;
 			else if (name.equals("host")) {
 				// RFC 9112 3.2: a server must reject a request carrying more than one Host header.
-				if (hostSeen) return finishBodyless(ctx, span, STATUS_400, 0, null, null, false);
+				if (hostSeen) return null;
 				hostSeen = true;
 			} else if (name.equals("connection")) {
 				for (String token : value.toLowerCase(Locale.ROOT).split(",")) {
@@ -278,66 +348,8 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		}
 
 		// RFC 9112: an HTTP/1.1 request without a Host header is invalid; HTTP/1.0 predates the requirement.
-		if (http11 && !hostSeen) return finishBodyless(ctx, span, STATUS_400, 0, null, null, false);
-
-		if (serverConfig.validateSecrets && !authorized(ctx, authorization, span)) return false;
-
-		if (!method.equals("GET")) return finishBodyless(ctx, span, STATUS_405, 0, null, null, keepAlive);
-
-		// The contract paths carry no encoding, so a percent-encoded target cannot name a route.
-		if (target.indexOf('%') >= 0) return finishBodyless(ctx, span, STATUS_400, 0, null, null, false);
-
-		String key = routeKey(target);
-		span.routeKey = key;
-		Optional<Path> path = key == null ? Optional.<Path>empty() : server.getPath(key);
-		if (path.isEmpty()) return finishBodyless(ctx, span, STATUS_404, 0, null, null, keepAlive);
-
-		Path file = path.get();
-		long total;
-		try {
-			total = Files.size(file);
-		} catch (IOException e) {
-			return finishBodyless(ctx, span, STATUS_404, 0, null, null, keepAlive);
-		}
-
-		// Objects already are their hash. A document's validator etag comes from the server's memo, keeping the SHA-1
-		// of a possibly large journal off the event loop for every conditional fetch; a plain GET carries no ETag.
-		boolean document = key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY);
-		String etag = document ? null : key;
-		if (ifNoneMatch != null) {
-			etag = document ? server.documentEtag(file) : key;
-			if (etag == null) return finishBodyless(ctx, span, STATUS_404, 0, null, null, keepAlive);
-		}
-
-		if (ifNoneMatch != null && ifNoneMatchMatches(ifNoneMatch, etag)) {
-			// The 304 head states the length a 200 would have sent (RFC 9110); nothing is served, so the books stay at zero.
-			tracker.complete(span, 304, 0);
-			responsesServed++;
-			return respondOrClose(ctx, STATUS_304, total, etag, null, keepAlive);
-		}
-
-		ByteRange byteRange = range == null ? null : parseRange(range, total);
-		if (byteRange != null && !byteRange.satisfiable) {
-			return finishBodyless(ctx, span, STATUS_416, 0, etag, "bytes */" + total, keepAlive);
-		}
-
-		long offset = byteRange == null ? 0 : byteRange.start;
-		long length = byteRange == null ? total : byteRange.endInclusive - byteRange.start + 1;
-		String status = byteRange == null ? STATUS_200 : STATUS_206;
-		String contentRange = byteRange == null ? null : "bytes " + byteRange.start + "-" + byteRange.endInclusive + "/" + total;
-
-		if (length == 0) return finishBodyless(ctx, span, status, 0, etag, contentRange, keepAlive);
-
-		// Plain negotiation: a codec was offered and known, so the body - whole or ranged - goes out encoded; no header,
-		// an unknown or q-zeroed offer, or HTTP/1.0 (which has no Transfer-Encoding) means identity. The resume contract
-		// lives in Content-Range and is untouched by the coding. Encoding stays on for objects by measurement, not by
-		// faith: zstd -3 over 183 real mod/loader jars (188 MiB) gives 1.16x (gzip 1.13x), worth ~14% of the served
-		// bytes on the home uplinks and relays this server targets, while compression CPU (~500 MB/s) sits three orders
-		// of magnitude past any drain rate it can ever wait on.
-		if (http11 && acceptEncoding != null && WireCodec.negotiate(acceptEncoding) != null) {
-			return serveNegotiated(ctx, file, offset, length, total, status, etag, contentRange, keepAlive, span, acceptEncoding);
-		}
-		return serveIdentity(ctx, file, offset, length, total, status, etag, contentRange, keepAlive, span);
+		if (http11 && !hostSeen) return null;
+		return new RequestHead(requestLine[0], requestLine[1], http11, keepAlive, ifNoneMatch, range, authorization, acceptEncoding);
 	}
 
 	/** Ends a bodyless response: the tracker entry closes with the status before the head goes out. */
@@ -764,17 +776,6 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		GenerationSwapped(String message) {
 			super(message);
 		}
-	}
-
-	/** The route table is the URL contract: the two document names and the content-addressed objects. */
-	private static String routeKey(String target) {
-		if (target.equals("/" + GenerationHosting.HEAD_DOCUMENT_KEY)) return GenerationHosting.HEAD_DOCUMENT_KEY;
-		if (target.equals("/" + GenerationHosting.JOURNAL_KEY)) return GenerationHosting.JOURNAL_KEY;
-		if (target.startsWith("/objects/")) {
-			String sha1 = target.substring("/objects/".length());
-			return HashUtils.isSha1(sha1) ? HashUtils.normalizeSha1(sha1) : null;
-		}
-		return null;
 	}
 
 	private static int headerEnd(ByteBuf buffer) {
