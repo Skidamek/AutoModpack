@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.cert.X509Certificate;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -31,7 +30,6 @@ import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import io.netty.util.AttributeKey;
 
-import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
@@ -41,7 +39,6 @@ import pl.skidam.automodpack_core.protocol.netty.handler.HttpContractHandler;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProxyProtocolHandler;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.ModpackContentTools;
 
 public class NettyServer {
 
@@ -89,37 +86,16 @@ public class NettyServer {
 
 	public void replacePaths(GenerationHosting hosting) {
 		this.paths = hosting.asMap();
-		documentEtags.clear();
-		warmDocumentEtags();
+		documentEtags.replace(getPath(GenerationHosting.HEAD_DOCUMENT_KEY), getPath(GenerationHosting.JOURNAL_KEY));
 	}
 
-	// The head/journal etags: hashed once per file version and shared by every conditional fetch, instead of hashing a
-	// possibly large document on the event loop once per client sync. Cleared and rewarmed when the hosting swap replaces the files.
-	private final Map<Path, EtagMemo> documentEtags = new ConcurrentHashMap<>();
-
-	/** Hashes the reserved documents on the calling thread so no conditional fetch ever hashes on the event loop: a publish just hashed the whole generation, so one more journal SHA-1 here is milliseconds. */
-	private void warmDocumentEtags() {
-		getPath(GenerationHosting.HEAD_DOCUMENT_KEY).ifPresent(this::documentEtag);
-		getPath(GenerationHosting.JOURNAL_KEY).ifPresent(this::documentEtag);
-	}
+	// The etag memos live in DocumentEtags; the hosting swap is their invalidation point, and start() warms them too.
+	private final DocumentEtags documentEtags = new DocumentEtags();
 
 	/** The served document's sha1 for conditional fetches; null when it cannot be read, mirroring {@code HashUtils.getHash}. */
 	public String documentEtag(Path file) {
-		try {
-			long size = Files.size(file);
-			long mtimeMillis = Files.getLastModifiedTime(file).toMillis();
-			EtagMemo memo = documentEtags.get(file);
-			if (memo != null && memo.size() == size && memo.mtimeMillis() == mtimeMillis) return memo.sha1();
-			String sha1 = HashUtils.getHash(file);
-			if (sha1 == null) return null;
-			if (Files.size(file) == size && Files.getLastModifiedTime(file).toMillis() == mtimeMillis) documentEtags.put(file, new EtagMemo(size, mtimeMillis, sha1));
-			return sha1;
-		} catch (IOException e) {
-			return null;
-		}
+		return documentEtags.etag(file);
 	}
-
-	private record EtagMemo(long size, long mtimeMillis, String sha1) {}
 
 	public Optional<Path> getPath(String requestKey) {
 		if (requestKey == null) return Optional.empty();
@@ -140,15 +116,13 @@ public class NettyServer {
 		return activityTracker;
 	}
 
+	// The activity command's read model resolves hashes against the hosting map and feeds the shaper's throughput.
+	private final ActivityView activityView = new ActivityView(activityTracker, this::getPath,
+			() -> trafficShaper == null ? -1 : trafficShaper.handler().trafficCounter().lastWriteThroughput());
+
 	/** The activity command's read model, with object hashes resolved against the current generation's pack paths. */
 	public ActivityTracker.Snapshot activitySnapshot() {
-		Map<String, String> names = new HashMap<>();
-		getPath(GenerationHosting.HEAD_DOCUMENT_KEY).ifPresent(head -> {
-			GenerationJsons.HeadDocumentFields document = ModpackContentTools.readHeadDocument(head);
-			if (document != null) document.policy.categories.forEach((category, groups) -> groups.forEach((group, fields) -> fields.files.forEach((path, file) -> names.put(file.sha1, path))));
-		});
-		if (trafficShaper != null) activityTracker.writeThroughput(trafficShaper.handler().trafficCounter().lastWriteThroughput());
-		return activityTracker.snapshot(names);
+		return activityView.snapshot();
 	}
 
 	public synchronized Optional<ChannelFuture> start() {
@@ -167,7 +141,7 @@ public class NettyServer {
 			return Optional.empty();
 		}
 		// The first client after a restart must not pay the document hashes on the event loop either.
-		warmDocumentEtags();
+		documentEtags.replace(getPath(GenerationHosting.HEAD_DOCUMENT_KEY), getPath(GenerationHosting.JOURNAL_KEY));
 
 		ModpackConnectionMode connectionMode = serverConfig.connectionMode;
 		if (serverConfig.disableInternalTLS)
