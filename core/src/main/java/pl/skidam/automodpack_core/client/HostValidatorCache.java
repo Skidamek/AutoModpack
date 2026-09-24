@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.google.gson.reflect.TypeToken;
 
@@ -38,9 +39,18 @@ public final class HostValidatorCache {
 		this.entries = entries;
 	}
 
-	/** Loads the persisted entries; a missing or corrupt file costs only the optimization. */
+	// One cache instance per process and storage directory: two concurrent fetches share it instead of doing
+	// whole-file read-modify-write that drops each other's entries. Keyed by file, so tests on their own
+	// temp storages never see each other's entries.
+	private static final Map<Path, HostValidatorCache> instances = new ConcurrentHashMap<>();
+
+	/** The process-lifetime cache for this storage; a missing or corrupt file costs only the optimization. */
 	public static HostValidatorCache load(ClientStorage storage) {
 		Path file = storage.clientDirectory().resolve(FILE_NAME);
+		return instances.computeIfAbsent(file, HostValidatorCache::loadFromDisk);
+	}
+
+	private static HostValidatorCache loadFromDisk(Path file) {
 		Map<String, String> entries = new LinkedHashMap<>();
 		if (Files.isRegularFile(file)) {
 			try {
