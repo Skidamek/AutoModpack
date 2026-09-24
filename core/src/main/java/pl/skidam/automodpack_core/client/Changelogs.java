@@ -49,13 +49,6 @@ public class Changelogs {
 		return changeSet;
 	}
 
-	public void clear() {
-		latestPatchNotes = "";
-		journal = List.of();
-		restartReasons = List.of();
-		changeSet = ChangeSet.empty();
-	}
-
 	public void replaceWith(UpdatePreview preview) {
 		Objects.requireNonNull(preview, "preview");
 		latestPatchNotes = preview.latestPatchNotes();

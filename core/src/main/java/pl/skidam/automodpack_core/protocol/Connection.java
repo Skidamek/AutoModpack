@@ -163,12 +163,7 @@ class Connection implements AutoCloseable {
 		}
 	}
 
-	/** Document request (reserved keys) under the conditional, null for unconditional: a matching validator answers 304, and the 200 body hash is the ground truth. */
-	public CompletableFuture<DocumentFetch> sendDownloadDocument(byte[] key, Path destination, DocumentConditional conditional, IntConsumer chunkCallback) {
-		return submit(new DocumentRequest("/" + new String(key, StandardCharsets.UTF_8), destination, conditional, chunkCallback, null));
-	}
-
-	/** The same request with a tap: served body bytes reach the tap (decode-while-downloading) and the destination alike. */
+	/** Document request (reserved keys) under the conditional, null for unconditional: a matching validator answers 304, and the 200 body hash is the ground truth. A tap, when given, receives the served body bytes (decode-while-downloading) alongside the destination. */
 	public CompletableFuture<DocumentFetch> sendDownloadDocument(byte[] key, Path destination, DocumentConditional conditional, IntConsumer chunkCallback, OutputStream tap) {
 		return submit(new DocumentRequest("/" + new String(key, StandardCharsets.UTF_8), destination, conditional, chunkCallback, tap));
 	}

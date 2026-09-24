@@ -115,7 +115,6 @@ public final class UpdateTransactionValidator {
 		Set<FileKey> operationKeys = new HashSet<>();
 		Set<Path> operationTargets = new HashSet<>();
 		for (Operation operation : transaction.plan().operations()) {
-			validatePurposeOperation(operation);
 			String relative = normalizeOperationPath(operation.relativePath());
 			FileKey key = new FileKey(operation.root(), relative);
 			if (!operationKeys.add(key)) throw new IOException("Duplicate transaction operation target");
@@ -270,11 +269,6 @@ public final class UpdateTransactionValidator {
 		ClientConfigJsons.ClientConfigFieldsV3 config = transaction.plan().plannedClientConfig();
 		if (config == null || transaction.plan().modpackId().equals(config.selectedModpackId))
 			throw new IOException("Removal client config still selects the removed modpack");
-	}
-
-	private static void validatePurposeOperation(Operation operation) throws IOException {
-		if (operation.root() != Root.PROJECTION && operation.root() != Root.OVERLAY && operation.root() != Root.GAME_DIR)
-			throw new IOException("Modpack operations are restricted to projection, overlays, and managed live files");
 	}
 
 	private void validateManifest(ModpackJsons.ModpackContentFields manifest, String modpackId) throws IOException {

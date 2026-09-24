@@ -26,14 +26,6 @@ public class LauncherVersionSwapper {
 		return true;
 	}
 
-	public static boolean requiresLoaderVersionSwap(String serverLoaderType, String serverLoaderVersion) {
-		return requiresLoaderVersionSwap(serverLoaderType, serverLoaderVersion, clientConfig.syncLoaderVersion, LOADER);
-	}
-
-	public static boolean swapLoaderVersion(String serverLoaderType, String serverLoaderVersion) throws IOException {
-		return swapLoaderVersion(serverLoaderType, serverLoaderVersion, clientConfig.syncLoaderVersion, LOADER);
-	}
-
 	/** The explicit form for callers whose client session state does not live in the boot constants, e.g. the helper process. */
 	public static boolean swapLoaderVersion(String serverLoaderType, String serverLoaderVersion, boolean syncLoaderVersion, String clientLoader) throws IOException {
 		if (!syncLoaderVersion || serverLoaderType == null || serverLoaderVersion == null || serverLoaderVersion.isBlank()

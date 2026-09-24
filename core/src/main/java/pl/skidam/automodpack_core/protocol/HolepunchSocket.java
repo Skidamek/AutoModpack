@@ -102,21 +102,6 @@ public class HolepunchSocket extends Socket {
 		return output;
 	}
 
-	void writeBuffer(ByteBuf buffer) throws IOException {
-		int readerIndex = buffer.readerIndex();
-		int readableBytes = buffer.readableBytes();
-		if (readableBytes == 0) return;
-		if (buffer.nioBufferCount() == 1) {
-			writeConnection(buffer.nioBuffer(readerIndex, readableBytes));
-		} else if (buffer.nioBufferCount() > 1) {
-			for (ByteBuffer nioBuffer : buffer.nioBuffers(readerIndex, readableBytes)) writeConnection(nioBuffer);
-		} else {
-			byte[] bytes = new byte[readableBytes];
-			buffer.getBytes(readerIndex, bytes);
-			writeConnection(ByteBuffer.wrap(bytes));
-		}
-	}
-
 	@Override
 	public synchronized void setSoTimeout(int timeout) throws SocketException {
 		if (timeout < 0) throw new IllegalArgumentException("timeout cannot be negative");
