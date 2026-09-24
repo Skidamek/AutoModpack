@@ -4,9 +4,9 @@ AutoModpack delivers executable files to players. Mods can read files and run co
 
 ## How clients verify a server
 
-The server's identity is the Minecraft hostname the player typed, for example `play.example.com`. SRV records, server transfers, and the advertised modpack endpoint only route the TCP connection; they never change the identity a certificate is checked against.
+The server's identity is the Minecraft hostname the player typed, for example `play.example.com`. SRV records, server transfers, and the advertised modpack endpoint only route the TCP connection. The pin and the AMP1 record are always anchored to the Minecraft address the player typed, and a CA check runs against the name of the endpoint that actually serves the download.
 
-The endpoint's name arrives over the Minecraft login, and that channel is not always trustworthy: on an offline-mode server, or on the network between player and server, an interceptor can advertise their own endpoint with a certificate a public authority signed for their own hostname. For that reason a CA signature alone is not trust here. Trust comes from one of two out-of-band anchors: a DNSSEC-signed DNS record the operator publishes, or a pin the player confirmed once.
+The download endpoint is advertised over the Minecraft login, a channel that authenticates the player to the server but never the server to the player: on an offline-mode server, or on the network between player and server, an interceptor can advertise their own endpoint, and a public authority can sign a certificate for that endpoint's name. The name a CA signature vouches for is therefore chosen by whoever advertises the endpoint, so a CA signature alone is not trust here. Trust comes from one of two out-of-band anchors: a DNSSEC-signed DNS record the operator publishes, or a pin the player confirmed once.
 
 | Method | Best for | Client stores | Certificate rotation |
 | --- | --- | --- | --- |
@@ -16,8 +16,8 @@ The endpoint's name arrives over the Minecraft login, and that channel is not al
 
 The client verifies in this order:
 
-1. A saved pin is mandatory. The presented certificate must match it exactly, on every connection; a mismatch always fails, and there is no bypass for a pinned origin.
-2. Without a pin, the DNSSEC AMP1 record for the Minecraft hostname is looked up on every connection, for self-signed and CA-signed certificates alike. A matching record trusts the certificate silently; a contradicting or malformed record fails; the verdict is never stored.
+1. A saved pin is mandatory. The presented certificate must match it exactly, on every connection; a mismatch fails on the spot, and the mismatch screen offers the player no bypass. The one recovery runs before that screen: an AMP1 record that names the new certificate re-pins the origin on its own.
+2. Whenever the presented certificate does not match the saved pin, on first contacts and pinned origins alike, the DNSSEC AMP1 record for the Minecraft hostname is looked up, for self-signed and CA-signed certificates alike. A matching record trusts the certificate silently; a contradicting or malformed record fails; the verdict is never stored.
 3. With no record, the first connection asks the player to verify the fingerprint or take the explicit risk path. Either decision saves a pin, and rule 1 covers every connection after that.
 
 A renewal, a move to a new host, or a new proxy front changes the certificate the same way an impostor does. Record deployments recover by updating the record; everyone else re-verifies once per rotation.
@@ -40,7 +40,7 @@ Read the documentation of any tool before running its commands. Use `fullchain.p
 
 ### DNSSEC AMP1
 
-If you control a DNSSEC-signed domain, publish the certificate's fingerprint in DNS. Clients look the fingerprint up on every connection, for self-signed and CA-signed certificates alike: the first connection is trusted silently, no prompts, nothing is stored, and a rotated certificate that matches the refreshed record is followed automatically. This is the rotation story for tunnel fronts whose certificate you do not control.
+If you control a DNSSEC-signed domain, publish the certificate's fingerprint in DNS. Clients look the fingerprint up on every first contact and whenever a presented certificate does not match the saved pin, for self-signed and CA-signed certificates alike: the first connection is trusted silently, no prompts, nothing is stored, and a rotated certificate that matches the refreshed record is followed automatically. Answers are cached for a few seconds, so a rotation is followed on the next connection after the cache passes. This is the rotation story for tunnel fronts whose certificate you do not control.
 
 Run:
 
@@ -62,7 +62,7 @@ openssl s_client -connect <tunnel-host>:443 -servername <tunnel-host> 2>/dev/nul
 
 A front-end that rotates its certificates (managed tunnels do) needs the record updated with each rotation; until then, connections fail closed.
 
-Clients resolve the record over DNS-over-HTTPS through Cloudflare and Quad9. The certificate is accepted only when both resolvers confirm DNSSEC validation, agree on the record, and the fingerprint matches a currently valid certificate. A mismatch or a malformed record fails. A missing or unreachable record falls back to the manual prompt.
+Clients resolve the record over DNS-over-HTTPS through Cloudflare and Quad9. The certificate is accepted only when both resolvers confirm DNSSEC validation, agree on the record, and the fingerprint matches a currently valid certificate. A mismatch or a malformed record fails. A missing or unreachable record falls back to the manual prompt on a first contact, and fails closed on a pinned origin whose certificate changed.
 
 When the certificate changes, update the `fp` value and wait out DNS caching before deploying it.
 
@@ -80,7 +80,7 @@ The pinned form appends the fingerprint to a normal address:
 play.example.com:25565#amp1=<certificate-sha256>
 ```
 
-A client that imports this address saves the fingerprint as a pin for the origin and the plain address in its server list, so removing AutoModpack leaves a working vanilla entry. The pin is exact: the presented leaf certificate must match, even when another certificate would pass CA or DNSSEC verification, and a mismatch has no bypass. Rotating the certificate means distributing a new pinned address.
+A client that imports this address saves the fingerprint as a pin for the origin and the plain address in its server list, so removing AutoModpack leaves a working vanilla entry. The pin is exact: the presented leaf certificate must match, even when another certificate would pass CA verification. The one override is a published AMP1 record that names the presented certificate; the session pin follows it. Without a record, rotating the certificate means distributing a new pinned address.
 
 The pin protects only as far as the channel you distribute it through. Metadata from other mods can coexist as further `#key=value` segments in any order; AutoModpack removes only its own `amp1` segment:
 
