@@ -15,11 +15,11 @@ import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.platforms.FetchManager;
+import pl.skidam.automodpack_core.platforms.PlatformCache;
 import pl.skidam.automodpack_core.screen.SourceCounts;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.utils.DownloadSource;
-import pl.skidam.automodpack_core.utils.FetchManager;
-import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
 /** Owns the Modrinth/CurseForge source lookup of one updater session and every provenance reference resolved from it. */
 final class SourceCatalogue {

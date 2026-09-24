@@ -13,7 +13,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
-import pl.skidam.automodpack_core.utils.cache.PlatformCache;
+import pl.skidam.automodpack_core.platforms.PlatformCache;
 
 /**
  * Resolves Modrinth and CurseForge project pages for file digests from the shared platform cache.

@@ -13,6 +13,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
+import pl.skidam.automodpack_core.loader.FileInspection;
+import pl.skidam.automodpack_core.platforms.FetchManager;
+import pl.skidam.automodpack_core.platforms.PlatformCache;
 import pl.skidam.automodpack_core.protocol.LocalStorageException;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.protocol.PartialResume;
@@ -24,12 +27,9 @@ import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.DownloadScheduler;
 import pl.skidam.automodpack_core.utils.DownloadSource;
-import pl.skidam.automodpack_core.utils.FetchManager;
-import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.Throwables;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
-import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
 public class DownloadManager implements DownloadView {
 

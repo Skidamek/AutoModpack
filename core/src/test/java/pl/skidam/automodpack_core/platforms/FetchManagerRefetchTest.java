@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.utils;
+package pl.skidam.automodpack_core.platforms;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -20,10 +20,8 @@ import org.junit.jupiter.api.io.TempDir;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
-import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.CurseForgeAPI.TrustedEndpoint;
-import pl.skidam.automodpack_core.platforms.ModrinthAPI;
-import pl.skidam.automodpack_core.utils.cache.PlatformCache;
+import pl.skidam.automodpack_core.utils.DownloadSource;
 
 /**
  * The batched dead-link refetch asks both platforms in parallel and merges: one API failing outright must leave the

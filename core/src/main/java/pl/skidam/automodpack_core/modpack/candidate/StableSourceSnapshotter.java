@@ -7,19 +7,19 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.Objects;
 
+import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
-import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.OsPaths;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
-import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 public final class StableSourceSnapshotter {
 	private final CopyOperation copyOperation;

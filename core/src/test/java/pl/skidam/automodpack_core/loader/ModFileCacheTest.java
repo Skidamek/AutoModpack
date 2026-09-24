@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.utils.cache;
+package pl.skidam.automodpack_core.loader;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -13,7 +13,7 @@ import java.util.jar.JarOutputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 class ModFileCacheTest {
 	@TempDir

@@ -10,6 +10,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
+import pl.skidam.automodpack_core.loader.FileInspection;
+import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
@@ -17,10 +19,8 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.OfflineRepair;
-import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
-import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 /** Loader-aware entry point for the strictly offline active-pack repair workflow. */
 public final class ClientOfflineRepair {

@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.utils.cache;
+package pl.skidam.automodpack_core.loader;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
@@ -9,9 +9,11 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
+import pl.skidam.automodpack_core.utils.cache.LooseRecordCache;
+import pl.skidam.automodpack_core.utils.cache.SharedCacheRegistry;
 
 /** A shared content-keyed mod inspection cache backed by immutable loose records. */
 public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {

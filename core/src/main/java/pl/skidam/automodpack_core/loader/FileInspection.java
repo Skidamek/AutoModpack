@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.utils;
+package pl.skidam.automodpack_core.loader;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
@@ -17,8 +17,9 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import pl.skidam.automodpack_core.Constants;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.loader.LoaderServicePaths;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.JarUtils;
+import pl.skidam.automodpack_core.utils.MiniToml;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public class FileInspection {

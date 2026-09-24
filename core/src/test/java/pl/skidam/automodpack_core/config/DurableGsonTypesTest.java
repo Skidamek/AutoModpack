@@ -16,9 +16,9 @@ import org.junit.jupiter.api.Test;
 
 import pl.skidam.automodpack_core.auth.IssuedSecret;
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.platforms.PlatformCache;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
-import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
 /**
  * Minecraft 1.18 ships Gson 2.8.9, which cannot deserialize records. Every type ConfigTools (or a packet) fromJson's

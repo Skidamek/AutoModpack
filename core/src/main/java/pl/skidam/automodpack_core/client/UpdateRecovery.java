@@ -8,9 +8,9 @@ import java.nio.file.Path;
 
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.UpdateLoopDetector;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
-import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
 
 /**
  * The blocked-transaction recovery policy, shared by the game process, the helper process, and boot: how long the

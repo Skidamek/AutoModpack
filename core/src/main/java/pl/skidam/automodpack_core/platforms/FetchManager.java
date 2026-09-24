@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.utils;
+package pl.skidam.automodpack_core.platforms;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
@@ -11,10 +11,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
-import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
-import pl.skidam.automodpack_core.utils.cache.PlatformCache;
+import pl.skidam.automodpack_core.utils.DownloadSource;
 
 public class FetchManager {
 

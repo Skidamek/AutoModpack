@@ -16,7 +16,7 @@ import org.junit.jupiter.api.io.TempDir;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
-import pl.skidam.automodpack_core.utils.cache.PlatformCache;
+import pl.skidam.automodpack_core.platforms.PlatformCache;
 
 class PlatformReferencesTest {
 	private static final String SHA1 = "1111111111111111111111111111111111111111";

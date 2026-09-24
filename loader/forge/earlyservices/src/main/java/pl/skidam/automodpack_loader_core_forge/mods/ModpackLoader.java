@@ -8,10 +8,10 @@ import java.util.List;
 import java.util.Set;
 
 import pl.skidam.automodpack_core.loader.ConnectorFallback;
+import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
-import pl.skidam.automodpack_core.utils.FileInspection;
 
 public class ModpackLoader implements ModpackLoaderService {
 	public static final List<Path> modsToLoad = new ArrayList<>();

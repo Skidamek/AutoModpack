@@ -10,6 +10,7 @@ import pl.skidam.automodpack_core.client.BootRecovery;
 import pl.skidam.automodpack_core.client.ClientLaunch;
 import pl.skidam.automodpack_core.client.SelfUpdater;
 import pl.skidam.automodpack_core.config.ConfigUtils;
+import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.storage.DataRootResolver;

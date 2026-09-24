@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.function.Function;
 
 /** Owns path-normalized, reference-counted cache instances within one process. */
-final class SharedCacheRegistry<T> {
+public final class SharedCacheRegistry<T> {
 	private final Map<Path, Entry<T>> entries = new HashMap<>();
 
 	public synchronized T acquire(Path path, Function<Path, T> factory) throws IOException {

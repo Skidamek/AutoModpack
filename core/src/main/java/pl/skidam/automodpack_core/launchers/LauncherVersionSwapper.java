@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.utils.launchers;
+package pl.skidam.automodpack_core.launchers;
 
 import static pl.skidam.automodpack_core.Constants.*;
 

@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.utils;
+package pl.skidam.automodpack_core.update;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 

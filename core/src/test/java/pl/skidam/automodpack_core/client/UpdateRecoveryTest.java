@@ -10,7 +10,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
+import pl.skidam.automodpack_core.update.UpdateLoopDetector;
 
 /** Pins the recovery policy's numbers: the helper's sleep budget receipt and the two-restarts-then-revert guard wiring. */
 class UpdateRecoveryTest {

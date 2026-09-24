@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.utils;
+package pl.skidam.automodpack_core.loader;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -14,6 +14,7 @@ import java.util.zip.ZipOutputStream;
 
 import org.junit.jupiter.api.Test;
 
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 class FileInspectionTest {

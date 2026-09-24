@@ -13,7 +13,6 @@ import pl.skidam.automodpack_core.loader.NestedConflicts.Candidate;
 import pl.skidam.automodpack_core.loader.NestedConflicts.Collider;
 import pl.skidam.automodpack_core.loader.NestedConflicts.StandardRoot;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
-import pl.skidam.automodpack_core.utils.FileInspection;
 
 class NestedConflictsTest {
 	private static final String ROOT_HASH = "1111111111111111111111111111111111111111";

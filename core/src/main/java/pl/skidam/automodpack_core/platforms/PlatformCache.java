@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.utils.cache;
+package pl.skidam.automodpack_core.platforms;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
@@ -10,8 +10,8 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
-import pl.skidam.automodpack_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.utils.cache.LooseRecordCache;
+import pl.skidam.automodpack_core.utils.cache.SharedCacheRegistry;
 
 /** A shared sha1-keyed cache of resolved Modrinth and CurseForge lookups backed by immutable loose records. */
 public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {

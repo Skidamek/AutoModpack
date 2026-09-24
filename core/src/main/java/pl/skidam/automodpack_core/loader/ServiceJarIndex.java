@@ -13,8 +13,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import pl.skidam.automodpack_core.utils.FileInspection;
-
 /**
  * Per-jar early-service facts, derived once per jar from a single zip mount and cached for the JVM's
  * life (jar content is immutable for the run) - shared by every loader generation's {@code

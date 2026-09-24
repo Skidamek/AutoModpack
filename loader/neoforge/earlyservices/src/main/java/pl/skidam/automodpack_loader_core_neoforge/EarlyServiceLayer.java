@@ -15,9 +15,9 @@ import net.neoforged.neoforgespi.ILaunchContext;
 import net.neoforged.neoforgespi.locating.IDiscoveryPipeline;
 import net.neoforged.neoforgespi.locating.IModFile;
 
+import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.loader.ServiceJarIndex;
-import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_loader_core_neoforge_shared.EarlyServiceReplay;
 
 /**

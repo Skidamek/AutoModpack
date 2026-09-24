@@ -6,7 +6,7 @@ import java.util.stream.Stream;
 
 /**
  * Every {@code META-INF/services/...} path AutoModpack recognizes, declared exactly once. Forge
- * and NeoForge's {@code EarlyServiceLayer}s and {@link pl.skidam.automodpack_core.utils.FileInspection}
+ * and NeoForge's {@code EarlyServiceLayer}s and {@link pl.skidam.automodpack_core.loader.FileInspection}
  * compose their own working sets from these constants instead of repeating the literal strings.
  */
 public final class LoaderServicePaths {

@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.utils;
+package pl.skidam.automodpack_core.update;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
@@ -10,7 +10,6 @@ import java.util.function.LongSupplier;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.storage.GameDirectory;
-import pl.skidam.automodpack_core.update.ClientStorage;
 
 /** Counts repeated same-fingerprint events; after {@code maxAllowedRestarts} matches, further events are suppressed. */
 public final class UpdateLoopDetector {

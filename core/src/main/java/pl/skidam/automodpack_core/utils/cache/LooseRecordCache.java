@@ -16,7 +16,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
  * Subclasses own the domain record and decide through {@link #validate(Object, String)} whether a
  * record genuinely belongs to a key.
  */
-abstract class LooseRecordCache<T> implements AutoCloseable {
+public abstract class LooseRecordCache<T> implements AutoCloseable {
 	protected static final String RECORD_SUFFIX = ".json";
 	protected final Path recordsDirectory;
 	private final String description;
@@ -24,7 +24,7 @@ abstract class LooseRecordCache<T> implements AutoCloseable {
 	protected final Map<String, T> hotRecords = new ConcurrentHashMap<>();
 	private final Object[] locks = new Object[64];
 
-	LooseRecordCache(Path recordsDirectory, String description) {
+	public LooseRecordCache(Path recordsDirectory, String description) {
 		this.recordsDirectory = recordsDirectory;
 		this.description = description;
 		for (int i = 0; i < locks.length; i++) locks[i] = new Object();
