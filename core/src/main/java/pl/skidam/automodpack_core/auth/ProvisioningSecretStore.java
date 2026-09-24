@@ -15,13 +15,24 @@ import pl.skidam.automodpack_core.utils.DurableFiles;
 public final class ProvisioningSecretStore {
 	private static String cached;
 	private static boolean loaded;
+	private static boolean fileBacked;
 
 	private ProvisioningSecretStore() {}
 
+	/**
+	 * The secret, or null when none is provisioned. A disk-backed secret re-checks the file's presence on every
+	 * validation miss (one stat, no read), so deleting the credential file revokes the capability in the running
+	 * process within the positive-validation cache window instead of at the next restart; {@code ensure()} still
+	 * regenerates on the next start either way. An in-process seed no file backs (the test seam) is answered from
+	 * memory.
+	 */
 	public static synchronized String get() {
 		if (!loaded) {
 			cached = readFile();
 			loaded = true;
+			fileBacked = cached != null;
+		} else if (fileBacked && !Files.exists(PROVISIONING_SECRET_FILE, LinkOption.NOFOLLOW_LINKS)) {
+			return null;
 		}
 		return cached;
 	}
@@ -32,17 +43,20 @@ public final class ProvisioningSecretStore {
 		cached = Secrets.generateSecret().secret();
 		loaded = true;
 		writeFile(cached);
+		fileBacked = true;
 		return cached;
 	}
 
 	static synchronized void load(String secret) {
 		cached = secret == null ? null : Secrets.normalizeProvisioningSecret(secret);
 		loaded = true;
+		fileBacked = false;
 	}
 
 	static synchronized void reset() {
 		cached = null;
 		loaded = false;
+		fileBacked = false;
 	}
 
 	private static String readFile() {
