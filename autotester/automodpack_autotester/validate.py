@@ -19,7 +19,8 @@ _REGEX_FIELDS = ("matches", "matches_all", "matches_any", "not_matches")
 _COUNT_FIELDS = ("count", "min_count", "max_count")
 _REMOTE_MOD_FIELDS = {"url", "sha512", "name"}
 _SHA512 = re.compile(r"[0-9a-fA-F]{128}")
-_PRESERVATION_REASONS = {"SERVER_REMOVAL", "MODPACK_REMOVAL", "MODPACK_DEACTIVATION", "LOCAL_CONFLICT", "PLAYER_CONSENT", "STRICT_REPAIR", "EDITABLE_RESET", "LOCAL_DRIFT"}
+# The verbs whose implementation actually reads skip_if; anywhere else the key is authoring drift.
+_SKIP_IF_VERBS = {"click", "screenshot", "wait_for"}
 _RELEASE_GATE_CAPABILITIES = frozenset({
     "bootstrap",
     "groups",
@@ -205,13 +206,15 @@ def _walk(steps, macros, problems, stack, scoped_targets):
             verb = step.get("do")
             if get_verb(verb) is None:
                 problems.append(f"unknown verb: {verb!r}")
+            if "skip_if" in step and verb not in _SKIP_IF_VERBS:
+                problems.append(f"{label}: skip_if is only supported on {sorted(_SKIP_IF_VERBS)}, not {verb!r} - the engine would silently ignore it")
             if verb == "stage_modpack":
                 _check_stage_modpack(step, problems, scoped_targets, label)
             elif verb == "publish_server_generation":
                 _check_publish_generation(step, problems, label)
             elif verb == "assert_generation":
                 _check_generation_assertion(step, problems, label)
-            elif verb in ("assert_file_content", "wait_file_content", "write_file", "mutate_client_file", "mutate_active_object", "assert_client_object", "assert_client_file", "mutate_timeline_object", "seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_timeline_file"):
+            elif verb in ("assert_file_content", "wait_file_content", "write_file", "mutate_client_file", "mutate_active_object", "assert_client_object", "mutate_timeline_object", "seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_timeline_file"):
                 if not isinstance(step.get("path"), str) or not step["path"].strip():
                     problems.append(f"{label}.path: expected a non-empty relative path")
                 if verb in ("wait_file_content", "write_file") and not isinstance(step.get("content"), str):
@@ -224,15 +227,7 @@ def _walk(steps, macros, problems, stack, scoped_targets):
                     problems.append(f"{label}.fixture: .jar paths require a valid mod fixture mapping")
                 if verb == "seed_mod_fixture" and step.get("fixture") is None:
                     problems.append(f"{label}.fixture: this verb requires a valid mod fixture mapping")
-                if verb in ("assert_preservation_claim", "mutate_preservation_object") and (not isinstance(step.get("packId"), str) or not step["packId"].strip()):
-                    problems.append(f"{label}.packId: expected a non-empty pack ID")
-                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "content" in step and not isinstance(step["content"], str):
-                    problems.append(f"{label}.content: expected a string")
-                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "originalPath" in step and (not isinstance(step["originalPath"], str) or not step["originalPath"].strip()):
-                    problems.append(f"{label}.originalPath: expected a non-empty relative path")
-                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "reason" in step and step["reason"] not in _PRESERVATION_REASONS:
-                    problems.append(f"{label}.reason: unknown preservation reason {step['reason']!r}")
-                if verb in ("mutate_client_file", "mutate_active_object", "mutate_preservation_object") and step.get("action") not in ("corrupt", "delete"):
+                if verb in ("mutate_client_file", "mutate_active_object") and step.get("action") not in ("corrupt", "delete"):
                     problems.append(f"{label}.action: expected 'corrupt' or 'delete'")
                 for field in ("present", "valid", "objectValid"):
                     if field in step and not isinstance(step[field], bool):

@@ -541,13 +541,6 @@ def _v_assert_preload_acquired(ctx: Context, _step):
     ctx.vars["preloaded_object_count"] = len(expected)
 
 
-@verb("assert_client_file")
-def _v_assert_client_file(ctx: Context, step):
-    """Assert a live game-dir file matches its active generation manifest entry (sha1 and size)."""
-    logical_path, expected_hash, expected_size = _active_file(ctx, step["path"])
-    _assert_one_client_file(ctx, logical_path, expected_hash, expected_size)
-
-
 @verb("assert_client_files")
 def _v_assert_client_files(ctx: Context, step):
     """Assert every active-generation file matching ``pattern`` (all of them by default, minus ``exclude`` globs)

@@ -1,4 +1,4 @@
-"""Filesystem verbs: wait_file, wait_files, verify_files, verify_mods.
+"""Filesystem verbs: wait_file, verify_files.
 
 Log-based waits are expressed with ``wait_for`` + a ``log`` condition, so no
 dedicated verb is needed for them.
@@ -144,34 +144,12 @@ def wait_file_content(ctx, step):
     await_condition(_matches, timeout, step.get("poll"), f"file {template} did not contain the expected content")
 
 
-@verb("wait_files")
-def wait_files(ctx, step):
-    root = ctx.game_dir / ctx.resolve(str(step.get("root", "")))
-    rels = [ctx.resolve(str(p)) for p in step.get("paths", [])]
-    _await_exist(ctx, root, rels, step, f"files did not all appear under {root}", 120)
-
-
 @verb("verify_files")
 def verify_files(ctx, step):
     """Wait until every file declared in the scenario's ``serverFiles`` is present."""
     root = ctx.game_dir / ctx.resolve(str(step.get("root", "${active_dir}")))
     rels = [str(hosted.path) for hosted in ctx.scenario_files]
     _await_exist(ctx, root, rels, step, f"modpack files missing under {root}", 120)
-
-
-@verb("verify_mods")
-def verify_mods(ctx, step):
-    if not ctx.expected_mods:
-        return
-    mod_dir = ctx.game_dir / ctx.resolve(str(step.get("root", "${active_dir}/mods")))
-    timeout = parse_duration(step.get("timeout"), default=120)
-
-    def _all():
-        mods = {p.name for p in mod_dir.glob("*.jar")} if mod_dir.exists() else set()
-        ok = all(any(fnmatch(m, pat) for m in mods) for pat in ctx.expected_mods)
-        return _while_client_running(ctx, True if ok else None)
-
-    await_condition(_all, timeout, step.get("poll"), "expected mods missing")
 
 
 def _mirror_entry(ctx, modpack_id, content_token):

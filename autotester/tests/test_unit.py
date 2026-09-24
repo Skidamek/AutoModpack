@@ -693,12 +693,6 @@ def test_fetch_serializes_concurrent_downloads(tmp_path, monkeypatch):
     assert calls == [("https://cdn/fixture.jar", 12)]
 
 
-# ── assert_preservation_claim awaits durable vault state ───────────────────
-# Vault mutations run on the client's background executor, so a one-shot read right
-# after a UI wait can observe the pre-mutation file (1.21.1-fabric MAGIC, run
-# 33695849021). The verb awaits the expectation instead of snapshotting it once.
-
-
 def test_server_cache_volume_scopes_per_checkout():
     from automodpack_autotester.config import checkout_tag, server_cache_volume
 

@@ -182,7 +182,6 @@ def run_case(
             modpack_name=sf.modpack_name,
             marker_rel=sf.marker,
             scenario_files=sf.files,
-            expected_mods=sf.expected_mods,
             server_host=server_host,
             static_name=static_name,
             static_host_image=str(settings.get("images", {}).get("staticHost", "automodpack-autotest-static-host:local")),

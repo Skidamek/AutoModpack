@@ -30,7 +30,6 @@ class Context:
     modpack_name: str
     marker_rel: Path
     scenario_files: list  # list[HostedFile]
-    expected_mods: list
     # The barebones static HTTPS host container (static-host scenarios); removed
     # with the case whether or not the flow ever started it.
     static_name: str = ""

@@ -223,7 +223,6 @@ class ServerFiles:
     modpack_name: str
     marker: Path
     files: list[HostedFile] = field(default_factory=list)
-    expected_mods: list[str] = field(default_factory=list)
 
 
 def parse_server_files(scenario: dict) -> ServerFiles:
@@ -236,7 +235,6 @@ def parse_server_files(scenario: dict) -> ServerFiles:
             content=None if "sizeBytes" in f else str(f.get("content", "")),
             size_bytes=f["sizeBytes"] if "sizeBytes" in f else None,
         ) for f in (sf.get("files") or [])] + expand_generated(sf.get("generated")),
-        expected_mods=[str(m) for m in sf.get("expectedMods", [])],
     )
 
 
