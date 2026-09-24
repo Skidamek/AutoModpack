@@ -158,6 +158,27 @@ class TlsSessionResumptionTest {
 		}
 	}
 
+	/** A pinned origin whose leaf changed fails with the pin mismatch before any record lookup, CA step, or prompt: nothing recovers a pin. */
+	@Test
+	void aPinnedOriginFailsItsChangedLeafWithoutAnyRecovery() throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			String decoy = "5f1b1c268e8e4a1ea2a6d0e0cb4d2c9f0f0c0b3d5a7e9c1f3b5d7e9c1f3b5d7e";
+			var sessionTrust = new CustomizableTrustManager.SessionTrust("127.0.0.1", decoy);
+			var manager = new CustomizableTrustManager(sessionTrust, null);
+			SSLContext context = CandidateTrustValidation.newSslContext(manager);
+
+			try (SSLSocket socket = handshake(server, context)) {
+				CompletableFuture<Void> judged = CandidateTrustValidation.validate(new CandidateTrustValidation.Candidate(socket, manager, sessionTrust, "127.0.0.1", "127.0.0.1",
+						certificate -> {
+							throw new AssertionError("a pinned mismatch must never reach the player");
+						}, () -> true, hostHeader(server), null), NO_HEARTBEATS);
+				var failure = assertThrows(ExecutionException.class, judged::get, "the changed leaf fails the pinned origin");
+				assertTrue(failure.getCause() instanceof CertificatePinMismatchException, "the failure is the pin mismatch, not a prompt: " + failure.getCause());
+				assertNull(manager.getDeferredCertificate(socket), "the deferral is spent by the verdict");
+			}
+		}
+	}
+
 	/** Runs the ladder over one candidate socket and fails the test if the decision does not land. */
 	private static void validate(CandidateTrustValidation.Candidate candidate) throws Exception {
 		CandidateTrustValidation.validate(candidate, NO_HEARTBEATS).get(AWAIT_SECONDS, TimeUnit.SECONDS);

@@ -689,16 +689,18 @@ class HttpContractHandlerTest {
 		byte[] body = new byte[NetUtils.WIRE_CHUNK_BYTES * 2 + 1024];
 		Path object = tempDir.resolve("stall.bin");
 		Files.write(object, body);
-		ExecutorService readers = Executors.newFixedThreadPool(2);
+			ExecutorService readers = Executors.newFixedThreadPool(2);
 		class SlowChannel extends EmbeddedChannel {
-			volatile boolean writable = true;
 			SlowChannel(ChannelHandler handler) {
 				super(handler);
 			}
 
 			@Override
 			public boolean isWritable() {
-				return writable;
+				// The peer drains the head and the first chunk and then stops: the flip happens inside the
+				// channel's own single-threaded write path (chunk one's completion callback reads this), so
+				// the stall begins deterministically after chunk one no matter how the reader threads land.
+				return outboundMessages().size() < 2;
 			}
 		}
 		// One-second fuse ticks against a three-second window: the channel stops being writable after the first
@@ -715,7 +717,6 @@ class HttpContractHandlerTest {
 		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
 		while (channel.outboundMessages().size() < 2 && System.nanoTime() < deadline) channel.runPendingTasks();
 		assertTrue(channel.outboundMessages().size() >= 2, "the head and the first chunk must stream before the stall");
-		channel.writable = false; // the peer stops draining here: no buffer ever completes writing again
 		long realDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
 		while (channel.isActive() && System.nanoTime() < realDeadline) {
 			channel.runScheduledPendingTasks();
