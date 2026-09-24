@@ -198,10 +198,31 @@ public class ModpackExecutor {
 	}
 
 	public ExportHttpResult exportHttp(Path targetDirectory, boolean includeAll) throws IOException {
+		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
+		if (serverConfig != null && serverConfig.validateSecrets)
+			return new ExportHttpResult.Rejected("The pack validates download secrets, which a public mirror cannot enforce");
+		Path target = (targetDirectory.isAbsolute() ? targetDirectory : serverRoot.resolve(targetDirectory)).normalize();
+		boolean exportEverything = includeAll || serverConfig != null && serverConfig.exportHttpIncludeAll;
+		// The platform round-trip hashes every object and can spend seconds on the network, so the manual export
+		// resolves it off the lease: holding the publication lease that long would reject concurrent publishes for
+		// no correctness gain. Each attempt re-verifies under the lease that the resolved snapshot is still the live
+		// generation - a publish that slipped in costs a re-resolve - and a second lost race falls back to the
+		// fully-leased export, which cannot lose.
+		for (int attempt = 0; attempt < 2; attempt++) {
+			GenerationHosting hosting = generationStore.hosting();
+			Map<String, Long> platformServed = resolvePlatformServed(hosting, exportEverything);
+			OperationLease operation = acquire(false);
+			if (operation == null) return new ExportHttpResult.Rejected("Another modpack operation is already in progress");
+			try (operation) {
+				if (generationStore.hosting().asMap().equals(hosting.asMap()))
+					return exportCopied(target, exportEverything, hosting, platformServed);
+			}
+		}
 		OperationLease operation = acquire(false);
 		if (operation == null) return new ExportHttpResult.Rejected("Another modpack operation is already in progress");
 		try (operation) {
-			return exportHttpLeased(targetDirectory, includeAll);
+			GenerationHosting hosting = generationStore.hosting();
+			return exportCopied(target, exportEverything, hosting, resolvePlatformServed(hosting, exportEverything));
 		}
 	}
 
@@ -212,25 +233,38 @@ public class ModpackExecutor {
 			return new ExportHttpResult.Rejected("The pack validates download secrets, which a public mirror cannot enforce");
 		Path target = (targetDirectory.isAbsolute() ? targetDirectory : serverRoot.resolve(targetDirectory)).normalize();
 		boolean exportEverything = includeAll || serverConfig != null && serverConfig.exportHttpIncludeAll;
+		// The auto-export runs inside the publication lease, where nothing can slip in mid-export: the resolve may
+		// simply run where it is, and the copy sees one consistent generation.
 		GenerationHosting hosting = generationStore.hosting();
+		return exportCopied(target, exportEverything, hosting, resolvePlatformServed(hosting, exportEverything));
+	}
+
+	/**
+	 * The platform's served sizes for the snapshot's objects, asked with {@code exportEverything} as the off switch;
+	 * a failed round-trip exports every object.
+	 */
+	private Map<String, Long> resolvePlatformServed(GenerationHosting hosting, boolean exportEverything) throws IOException {
 		Map<String, Path> objects = new TreeMap<>();
 		for (String key : hosting.asMap().keySet()) {
 			if (isReservedDocument(key)) continue;
 			if (!HashUtils.isSha1(key)) throw new IOException("Unexpected hosting key in the generation store: " + key);
 			objects.put(HashUtils.normalizeSha1(key), hosting.get(key));
 		}
-		Map<String, Long> platformServed = Map.of();
-		if (!exportEverything && !objects.isEmpty()) {
-			List<PlatformSourceLookup.Query> queries = new ArrayList<>();
-			for (Map.Entry<String, Path> object : objects.entrySet())
-				queries.add(new PlatformSourceLookup.Query(object.getKey(), Files.size(object.getValue()), object.getValue()));
-			try {
-				Map<String, Long> resolved = platformSourceLookup.platformSizes(queries);
-				if (resolved != null) platformServed = resolved;
-			} catch (RuntimeException e) {
-				LOGGER.warn("Platform source resolution failed; exporting every object", e);
-			}
+		if (exportEverything || objects.isEmpty()) return Map.of();
+		List<PlatformSourceLookup.Query> queries = new ArrayList<>();
+		for (Map.Entry<String, Path> object : objects.entrySet())
+			queries.add(new PlatformSourceLookup.Query(object.getKey(), Files.size(object.getValue()), object.getValue()));
+		try {
+			Map<String, Long> resolved = platformSourceLookup.platformSizes(queries);
+			return resolved != null ? resolved : Map.of();
+		} catch (RuntimeException e) {
+			LOGGER.warn("Platform source resolution failed; exporting every object", e);
+			return Map.of();
 		}
+	}
+
+	/** Copies the snapshot's tree into the target: objects first, then journal, then the head - the commit pointer lands last. */
+	private ExportHttpResult exportCopied(Path target, boolean exportEverything, GenerationHosting hosting, Map<String, Long> platformServed) throws IOException {
 		int written = 0, omitted = 0, unresolvable = 0;
 		for (Map.Entry<String, Path> entry : hosting.asMap().entrySet()) {
 			String key = entry.getKey();
