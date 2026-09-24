@@ -614,9 +614,12 @@ public final class UpdateTransactionExecutor {
 	static boolean isLockFailure(IOException exception, boolean windows) {
 		Throwable current = exception;
 		while (current != null) {
-			// Windows reports an open handle that denies delete sharing as AccessDeniedException, without a lock-specific
-			// reason. On other kernels the same exception is a plain permission problem - a permanent failure, not an
-			// update that should defer forever with a locked-file story - so only the explicit lock-worded messages count.
+			// The JDK's Windows provider maps both ERROR_SHARING_VIOLATION (an open handle denies the delete -
+			// the game itself, an antivirus scan) and ERROR_ACCESS_DENIED (ACLs, read-only) to
+			// AccessDeniedException, with no lock-specific reason in the exception. Classifying every instance
+			// as a lock is the conservative reading: the accepted cost is a permanent permission failure that
+			// defers with a locked-file story, because the alternative misclassifies a genuine in-use file as
+			// a terminal error. Other kernels name the sharing conflict in the message - only those count.
 			if (windows && current instanceof AccessDeniedException) return true;
 			if (current instanceof FileSystemException fileSystemException) {
 				String detail = (Objects.toString(fileSystemException.getReason(), "") + " " + Objects.toString(fileSystemException.getMessage(), "")).toLowerCase(Locale.ROOT);
