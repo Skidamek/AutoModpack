@@ -12,7 +12,7 @@ from .mod_fixtures import write_valid_mod_fixture
 from .supervisor import resource_labels
 from .client_steps import cas_object
 from .config import server_cache_volume, write_generated
-from .docker_harness import SHAPED_TCP_SYSCTLS, _container, _container_logs, _ensure_volume, _exec_output, _remove_volume, _run_container, _uid, _gid, _wait_for_log
+from .docker_harness import shaped_tcp_sysctls, _container, _container_logs, _ensure_volume, _exec_output, _remove_volume, _run_container, _uid, _gid, _wait_for_log
 from .engine import Context
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
@@ -195,10 +195,9 @@ def _launch_server(ctx: Context):
         tag = str(settings.get("images", {}).get("serverTagTemplate", "java{java}")).format(java=target.java)
         img = f"{img}:{tag}"
     # NET_ADMIN is only needed so the --loss / --server-netem qdiscs can be applied from inside; never granted otherwise.
-    shaped = bool(ctx.netem or ctx.loss or ctx.server_netem)
     _run_container(name=ctx.srv_name, image=img, network=ctx.net_name, env=env, mounts=mounts, labels=resource_labels(ctx.resource_scope),
                    cap_add=["NET_ADMIN"] if ctx.loss or ctx.server_netem else None,
-                   sysctls=SHAPED_TCP_SYSCTLS if shaped else None)
+                   sysctls=shaped_tcp_sysctls(ctx.netem, ctx.server_netem))
 
 
 @verb("launch_server")

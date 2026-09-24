@@ -18,7 +18,7 @@ from .bridge import BridgeClient
 from .config import CLIENT_GENERATION_STATE_PATHS, Target
 from .mods import resolve_mod
 from .supervisor import resource_labels
-from .docker_harness import SHAPED_TCP_SYSCTLS, _assert_running, _container, _container_logs, _docker, _exec_output, _exit_code, _inspect_container, _jitter_sleep, _remove_container, _run_container, _uid, _gid, _wait_exited
+from .docker_harness import shaped_tcp_sysctls, _assert_running, _assert_running, _container, _container_logs, _docker, _exec_output, _exit_code, _inspect_container, _jitter_sleep, _remove_container, _run_container, _uid, _gid, _wait_exited
 from .engine import Context
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
@@ -143,7 +143,7 @@ def _start_client_container(ctx: Context, name: str, *, prepare_only: bool = Fal
         name=name,
         image=ctx.client_image,
         network=ctx.net_name,
-        sysctls=SHAPED_TCP_SYSCTLS if (ctx.netem or ctx.loss or ctx.server_netem) else None,
+        sysctls=shaped_tcp_sysctls(ctx.netem, ctx.server_netem),
         env={
             "AM_AUTOTEST_BRIDGE_TOKEN": ctx.token,
             "AM_AUTOTEST_GAME_DIR": "/work/game",

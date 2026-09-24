@@ -69,6 +69,20 @@ SHAPED_TCP_SYSCTLS = {
 }
 
 
+def shaped_tcp_sysctls(netem, server_netem):
+    """The buffer ceilings for this run, or None when they would only hurt.
+
+    A pure delay shape needs room for one bandwidth-delay product in flight, and the kernel's
+    4 MiB autotuning ceiling caps the window below it. Behind a rate cap the pipe is bounded by
+    the rate anyway, and the big buffers just hold a standing queue the tail of the transfer
+    must drain, so they stay off there.
+    """
+    tokens = list(netem or []) + list(server_netem or [])
+    if "delay" not in tokens or "rate" in tokens:
+        return None
+    return dict(SHAPED_TCP_SYSCTLS)
+
+
 def _run_container(name, image, network, env, mounts, command=None, user=None, entrypoint=None, labels=None, cap_add=None, aliases=None, sysctls=None):
     volumes = {}
     for host, container_path, readonly in mounts:
