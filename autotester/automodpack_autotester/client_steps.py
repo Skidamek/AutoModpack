@@ -18,7 +18,7 @@ from .bridge import BridgeClient
 from .config import CLIENT_GENERATION_STATE_PATHS, Target
 from .mods import resolve_mod
 from .supervisor import resource_labels
-from .docker_harness import _assert_running, _container, _container_logs, _docker, _exec_output, _exit_code, _inspect_container, _jitter_sleep, _remove_container, _run_container, _uid, _gid, _wait_exited
+from .docker_harness import SHAPED_TCP_SYSCTLS, _assert_running, _container, _container_logs, _docker, _exec_output, _exit_code, _inspect_container, _jitter_sleep, _remove_container, _run_container, _uid, _gid, _wait_exited
 from .engine import Context
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
@@ -143,6 +143,7 @@ def _start_client_container(ctx: Context, name: str, *, prepare_only: bool = Fal
         name=name,
         image=ctx.client_image,
         network=ctx.net_name,
+        sysctls=SHAPED_TCP_SYSCTLS if (ctx.netem or ctx.loss or ctx.server_netem) else None,
         env={
             "AM_AUTOTEST_BRIDGE_TOKEN": ctx.token,
             "AM_AUTOTEST_GAME_DIR": "/work/game",
@@ -250,12 +251,16 @@ def _shape_egress(container_name: str, qdisc: list[str], label: str) -> None:
     TSO/GSO let the stack emit super-packets the qdisc counts as one, inflating any rate
     limit several-fold. Offloads must go off on BOTH ends of the veth pair: the container
     side so the qdisc sees segmented packets, the host peer so segmenting survives the hop.
+    The qdisc's limit is raised from netem's 1000-packet default (~1.5 MB): a pure delay
+    shape at loopback fill rates holds several bandwidth-delay products in the queue, and
+    the default tail-drops them, so TCP spends the run recovering from self-inflicted
+    losses instead of filling the window the shape exists to exercise.
     No teardown counterpart exists on purpose: the container is ephemeral and is removed
     with the case, and every (re)launch re-applies the qdisc on the fresh container.
     """
     _disable_iface_offloads(container_name)
     _disable_peer_offloads_of(container_name)
-    result = _container(container_name).exec_run(["tc", "qdisc", "add", "dev", "eth0", "root", "netem", *qdisc], user="root")
+    result = _container(container_name).exec_run(["tc", "qdisc", "add", "dev", "eth0", "root", "netem", "limit", "50000", *qdisc], user="root")
     output = _exec_output(result)
     if result.exit_code != 0:
         raise RuntimeError(f"{container_name} container could not apply the {label} qdisc ({result.exit_code}): {output}")

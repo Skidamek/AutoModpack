@@ -59,7 +59,17 @@ def _remove_volume(name):
         pass
 
 
-def _run_container(name, image, network, env, mounts, command=None, user=None, entrypoint=None, labels=None, cap_add=None, aliases=None):
+# Autotuned TCP buffers otherwise cap one connection near the kernel's 4 MiB tcp_wmem maximum, so a
+# delay-shaped run measures the kernel default instead of the pipeline window it exists to measure.
+# These keys are network-namespace scoped: Docker accepts them at container creation only, and a later
+# sysctl write from inside the container is refused as read-only.
+SHAPED_TCP_SYSCTLS = {
+    "net.ipv4.tcp_wmem": "4096 65536 33554432",
+    "net.ipv4.tcp_rmem": "4096 131072 33554432",
+}
+
+
+def _run_container(name, image, network, env, mounts, command=None, user=None, entrypoint=None, labels=None, cap_add=None, aliases=None, sysctls=None):
     volumes = {}
     for host, container_path, readonly in mounts:
         volumes[str(host)] = {"bind": container_path, "mode": "ro" if readonly else "rw"}
@@ -69,6 +79,8 @@ def _run_container(name, image, network, env, mounts, command=None, user=None, e
     )
     if cap_add:
         kwargs["cap_add"] = list(cap_add)
+    if sysctls:
+        kwargs["sysctls"] = dict(sysctls)
     # "host" is a network *mode*, not a user-defined network: server and client
     # share the host's network namespace (so the client reaches the server on
     # localhost). This is the only topology a --network-host-only sandbox allows.
