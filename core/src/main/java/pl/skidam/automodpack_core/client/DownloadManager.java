@@ -233,7 +233,9 @@ public class DownloadManager implements DownloadView {
 	}
 
 	/** Where a dispatched attempt takes its bytes: a platform source picked at dispatch, or the host wire the burned-budget fallback re-routes to mid-attempt. */
-	enum Route { PLATFORM, HOST }
+	enum Route {
+		PLATFORM, HOST
+	}
 
 	// Files with no platform sources can still come from the attached host client; that is labelled as its own domain so the scheduler can weigh it like any other source.
 	// Domains this task already burned its attempts on are withheld, so a retry dispatches to a different source instead of re-picking the same one.

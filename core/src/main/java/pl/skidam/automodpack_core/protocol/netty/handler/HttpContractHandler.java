@@ -42,7 +42,6 @@ import pl.skidam.automodpack_core.protocol.ContractRoutes;
 import pl.skidam.automodpack_core.protocol.WireCodec;
 import pl.skidam.automodpack_core.protocol.netty.ActivityTracker;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
-import pl.skidam.automodpack_core.utils.HashUtils;
 
 /**
  * Serves the URL contract (GET /head, GET /journal, GET /objects/<sha1>) over an already-TLS-terminated pipeline with

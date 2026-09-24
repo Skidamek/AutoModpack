@@ -18,7 +18,10 @@ public final class DocumentEtags {
 
 	private final Map<Path, Memo> memos = new ConcurrentHashMap<>();
 
-	/** Forgets every memo and hashes the two reserved documents on the calling thread, so no conditional fetch ever hashes on the event loop: a publish just hashed the whole generation, so one more journal SHA-1 here is milliseconds. */
+	/**
+	 * Forgets every memo and hashes the two reserved documents on the calling thread, so no conditional fetch ever hashes on the event loop: a publish just hashed the whole generation, so one more journal SHA-1 here is
+	 * milliseconds.
+	 */
 	public void replace(Optional<Path> head, Optional<Path> journal) {
 		memos.clear();
 		head.ifPresent(this::etag);
