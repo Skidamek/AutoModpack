@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.protocol;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
@@ -18,9 +19,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
@@ -37,6 +41,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+
+import javax.security.auth.x500.X500Principal;
+
+import org.bouncycastle.asn1.x509.BasicConstraints;
+import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.GeneralName;
+import org.bouncycastle.asn1.x509.GeneralNames;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntConsumer;
@@ -111,13 +125,13 @@ class DownloadClientTest {
 	}
 
 	@Test
-	void pinsPassOrDeferAndOnlyTheLadderRecovers() throws Exception {
+	void pinsPassDeferAndNothingRecovers() throws Exception {
 		X509Certificate accepted = NetUtils.selfSign(NetUtils.generateKeyPair());
 		X509Certificate changed = NetUtils.selfSign(NetUtils.generateKeyPair());
 		String fingerprint = NetUtils.getFingerprint(accepted);
 
 		// The exact pin passes the leaf straight through; a changed leaf defers quietly - the handshake never
-		// hard-fails, the ladder recovers it through a published fingerprint or ends in a pin mismatch.
+		// hard-fails, and the ladder fails it outright: a pin is a pin, and no record, CA, or prompt recovers it.
 		// The bare checkServerTrusted(chain, authType) variant keys its deferral on null.
 		var configuredTrust = new CustomizableTrustManager.SessionTrust("origin.example:25565", fingerprint);
 		var configuredManager = new CustomizableTrustManager(configuredTrust, null);
@@ -138,11 +152,78 @@ class DownloadClientTest {
 		assertSame(changed, sessionManager.getDeferredCertificate(null));
 		assertThrows(CertificatePinMismatchException.class, () -> sessionTrust.accept(changed));
 
-		// A published fingerprint recovers a rotated leaf: the session's pin follows it.
-		configuredTrust.recover(changed);
-		var recoveredManager = new CustomizableTrustManager(configuredTrust, null);
-		assertDoesNotThrow(() -> recoveredManager.checkServerTrusted(new X509Certificate[]{changed}, "RSA"));
-		assertNull(recoveredManager.getDeferredCertificate(null));
+		// Nothing recovers the changed leaf at the trust-manager level: it stays deferred for the ladder, which
+		// fails a pinned origin before any record lookup. The pin leaves only when the player revokes it.
+		assertSame(changed, configuredManager.getDeferredCertificate(null));
+	}
+
+	@Test
+	void theOriginCaStepAsksTheTypedNameOfTheLeaf() throws Exception {
+		KeyPair caKeys = NetUtils.generateKeyPair();
+		X500Principal caName = new X500Principal("CN=Origin CA");
+		X509Certificate ca = mint(caName, caKeys.getPublic(), caName, caKeys.getPrivate(), true, List.of());
+
+		KeyPair leafKeys = NetUtils.generateKeyPair();
+		X500Principal leafName = new X500Principal("CN=pack.example.com");
+		X509Certificate covering = mint(leafName, leafKeys.getPublic(), caName, caKeys.getPrivate(), false,
+				List.<Object[]>of(new Object[]{GeneralName.dNSName, "pack.example.com"}));
+		X509Certificate wildcard = mint(leafName, leafKeys.getPublic(), caName, caKeys.getPrivate(), false,
+				List.<Object[]>of(new Object[]{GeneralName.dNSName, "*.example.com"}));
+		X509Certificate elsewhere = mint(leafName, leafKeys.getPublic(), caName, caKeys.getPrivate(), false,
+				List.<Object[]>of(new Object[]{GeneralName.dNSName, "other.example.com"}));
+		X509Certificate addressed = mint(leafName, leafKeys.getPublic(), caName, caKeys.getPrivate(), false,
+				List.<Object[]>of(new Object[]{GeneralName.iPAddress, "127.0.0.1"}));
+
+		assertTrue(CandidateTrustValidation.chainCoversOrigin(covering, "pack.example.com"), "the exact origin name covers");
+		assertTrue(CandidateTrustValidation.chainCoversOrigin(wildcard, "a.example.com"), "a leftmost wildcard covers one label");
+		assertFalse(CandidateTrustValidation.chainCoversOrigin(wildcard, "a.b.example.com"), "a wildcard never covers two labels");
+		assertFalse(CandidateTrustValidation.chainCoversOrigin(wildcard, "example.com"), "a wildcard never covers the bare domain");
+		assertFalse(CandidateTrustValidation.chainCoversOrigin(elsewhere, "pack.example.com"), "another name does not cover");
+		assertTrue(CandidateTrustValidation.chainCoversOrigin(addressed, "127.0.0.1"), "an IP origin matches its iPAddress entry");
+		assertFalse(CandidateTrustValidation.chainCoversOrigin(addressed, "127.0.0.2"), "another address does not cover");
+	}
+
+	@Test
+	void aCaChainDefersCleanlyAndASelfSignedOneCarriesItsFailure() throws Exception {
+		KeyPair caKeys = NetUtils.generateKeyPair();
+		X500Principal caName = new X500Principal("CN=Origin CA");
+		X509Certificate ca = mint(caName, caKeys.getPublic(), caName, caKeys.getPrivate(), true, List.of());
+		KeyPair leafKeys = NetUtils.generateKeyPair();
+		X509Certificate leaf = mint(new X500Principal("CN=pack.example.com"), leafKeys.getPublic(), caName, caKeys.getPrivate(), false,
+				List.<Object[]>of(new Object[]{GeneralName.dNSName, "pack.example.com"}));
+
+		KeyStore store = KeyStore.getInstance(KeyStore.getDefaultType());
+		store.load(null, null);
+		store.setCertificateEntry("origin-ca", ca);
+		var trust = new CustomizableTrustManager.SessionTrust("origin.example:25565", null);
+		var manager = new CustomizableTrustManager(trust, null, store);
+
+		// The CA-signed chain defers with no failure: exactly the gate the origin-anchored CA step requires.
+		manager.checkServerTrusted(new X509Certificate[]{leaf, ca}, "RSA");
+		assertNull(manager.getDeferredFailure(null));
+		assertSame(leaf, manager.getDeferredCertificate(null));
+
+		// A self-signed leaf defers with its failure, so it never reaches the CA step of the ladder.
+		X509Certificate selfSigned = NetUtils.selfSign(NetUtils.generateKeyPair());
+		manager.checkServerTrusted(new X509Certificate[]{selfSigned}, "RSA");
+		assertNotNull(manager.getDeferredFailure(null));
+	}
+
+	/** A minimal WebPKI stand-in: a self-styled CA, or a leaf it signs, with dNSName and iPAddress SAN entries. */
+	private static X509Certificate mint(X500Principal subject, PublicKey publicKey, X500Principal issuer, PrivateKey issuerKey, boolean certificateAuthority,
+			List<Object[]> sans) throws Exception {
+		Date from = new Date();
+		JcaX509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(issuer, new BigInteger(159, new SecureRandom()),
+				from, new Date(from.getTime() + 3600_000), subject, publicKey);
+		if (certificateAuthority) builder.addExtension(Extension.basicConstraints, true, new BasicConstraints(true));
+		if (!sans.isEmpty()) {
+			GeneralName[] names = sans.stream().map(entry -> new GeneralName((Integer) entry[0], (String) entry[1])).toArray(GeneralName[]::new);
+			builder.addExtension(Extension.subjectAlternativeName, false, new GeneralNames(names));
+		}
+		ContentSigner signer = new JcaContentSignerBuilder("SHA256withRSA").build(issuerKey);
+		try (InputStream input = new ByteArrayInputStream(builder.build(signer).getEncoded())) {
+			return (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(input);
+		}
 	}
 
 	@Test

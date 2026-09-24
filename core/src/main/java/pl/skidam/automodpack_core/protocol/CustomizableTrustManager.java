@@ -40,7 +40,7 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 			return expected.equals(getFingerprint(chain[0]));
 		}
 
-		/** Whether a pin was configured for this origin; a pinned session whose leaf changed has no bypass, only recovery channels. */
+		/** Whether a pin was configured for this origin; a pinned session whose leaf changed has no bypass and no recovery: the player revokes the pin by hand or imports a new pinned join address. */
 		boolean hasConfiguredPin() {
 			return configuredFingerprint != null;
 		}
@@ -62,13 +62,6 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 				throw new CertificatePinMismatchException(origin, acceptedFingerprint.get(), fingerprint);
 		}
 
-		/** A published DNSSEC fingerprint approved this leaf (typically rotation): the session's pin follows it. */
-		void recover(X509Certificate certificate) throws CertificateException {
-			String fingerprint = getFingerprint(certificate);
-			configuredFingerprint = fingerprint;
-			acceptedFingerprint.set(fingerprint);
-		}
-
 		private String expectedFingerprint() {
 			return configuredFingerprint != null ? configuredFingerprint : acceptedFingerprint.get();
 		}
@@ -85,17 +78,22 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 	private final Map<Object, Deferred> deferred = new HashMap<>();
 
 	public CustomizableTrustManager(SessionTrust sessionTrust, Consumer<X509Certificate[]> onValidating) throws KeyStoreException {
-		this.defaultTrustManager = createTrustManager();
+		this(sessionTrust, onValidating, null);
+	}
+
+	/** The production CA set is the JDK's; tests inject a keystore whose CA the deferral gate can judge as trusted. */
+	CustomizableTrustManager(SessionTrust sessionTrust, Consumer<X509Certificate[]> onValidating, KeyStore trustStore) throws KeyStoreException {
+		this.defaultTrustManager = createTrustManager(trustStore);
 		this.sessionTrust = sessionTrust;
 		this.onValidating = onValidating;
 	}
 
 	private record Deferred(X509Certificate certificate, CertificateException failure) {}
 
-	private static X509ExtendedTrustManager createTrustManager() throws KeyStoreException {
+	private static X509ExtendedTrustManager createTrustManager(KeyStore trustStore) throws KeyStoreException {
 		try {
 			TrustManagerFactory factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-			factory.init((KeyStore) null);
+			factory.init(trustStore);
 			for (TrustManager manager : factory.getTrustManagers()) {
 				if (manager instanceof X509ExtendedTrustManager extended) return extended;
 			}
@@ -155,8 +153,9 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 			}
 			return;
 		}
-		// No pin matched this leaf: a first contact (whatever the CA said) or a changed certificate. The ladder
-		// decides - a published DNSSEC fingerprint speaks for the endpoint, and a first contact is the player's.
+		// No pin matched this leaf: a first contact or a changed certificate. The ladder decides - a published
+		// DNSSEC fingerprint or a CA chain covering the typed origin speaks for it, and whatever remains is
+		// the player's; a pinned origin never reaches the ladder and its mismatch is final.
 		synchronized (this) {
 			deferred.put(peer, new Deferred(chain[0], null));
 		}

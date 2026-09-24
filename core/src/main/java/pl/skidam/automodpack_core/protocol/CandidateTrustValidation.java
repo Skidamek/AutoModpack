@@ -10,9 +10,13 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.CertificateEncodingException;
+import java.security.cert.CertificateParsingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
+import java.util.Collection;
+import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -33,11 +37,12 @@ import pl.skidam.automodpack_core.utils.Throwables;
 
 /**
  * The one certificate-trust plumbing and ladder every client transport runs over a freshly handshaked candidate
- * socket: a deferred certificate - any first contact, and any leaf that differs from the session's pin - is accepted
- * on a published DNSSEC fingerprint match or the player's explicit decision, heartbeated while the human decides. A
- * pinned session whose leaf changed recovers only through that published fingerprint; without one the mismatch is
- * final. On acceptance the session trust pins the certificate, so every later handshake on the same SSLContext passes
- * without asking again.
+ * socket. The ladder reads, in order: a saved pin is law - the presented leaf must match it exactly, and a changed
+ * leaf fails outright with no recovery short of the player revoking the pin or importing a new pinned join address;
+ * a published DNSSEC fingerprint for the typed hostname accepts the leaf and is never stored; a CA chain that also
+ * covers the typed hostname accepts the leaf and is never stored; and whatever remains is the player's explicit
+ * decision, heartbeated while the human decides. On acceptance the session trust pins the certificate, so every
+ * later handshake on the same SSLContext passes without asking again.
  */
 public final class CandidateTrustValidation {
 
@@ -101,14 +106,27 @@ public final class CandidateTrustValidation {
 		});
 	}
 
-	/** The DNSSEC ladder and the manual-trust fallback over one deferred certificate. */
+	/**
+	 * The trust ladder over one deferred certificate, in order: a pinned origin whose leaf changed fails outright -
+	 * a pin is a pin, and no record, CA, or prompt recovers it; a published DNSSEC fingerprint is the operator's
+	 * explicit statement and is law when present; a CA chain that covers the typed hostname is the WebPKI's vouch
+	 * for the address the player typed; and whatever remains is the player's decision.
+	 */
 	private static CompletableFuture<Void> judge(Candidate candidate, X509Certificate certificate, Duration preConfigurationKeepaliveInterval) {
+		if (candidate.sessionTrust().hasConfiguredPin()) {
+			// The leaf already differed from the pin when the handshake deferred it: the mismatch is final.
+			try {
+				return reject(candidate, candidate.sessionTrust().mismatch(certificate));
+			} catch (CertificateEncodingException e) {
+				return reject(candidate, new IOException("Cannot fingerprint the deferred certificate", e));
+			}
+		}
 		return DnsPinResolver.resolvePinAsync(candidate.originHost()).thenCompose(result -> {
 			if (result instanceof DnsPinResolver.Authoritative authoritative) {
 				try {
 					String fingerprint = getFingerprint(certificate);
 					if (!authoritative.fingerprint().equals(fingerprint)) return reject(candidate, candidate.sessionTrust().mismatch(certificate));
-					candidate.sessionTrust().recover(certificate);
+					candidate.sessionTrust().accept(certificate);
 					LOGGER.info("Trusting the certificate from {} because it matches the published DNSSEC fingerprint for {}", candidate.endpointHost(), candidate.originHost());
 					return CompletableFuture.completedFuture(null);
 				} catch (CertificateException e) {
@@ -118,17 +136,53 @@ public final class CandidateTrustValidation {
 			if (result instanceof DnsPinResolver.Misconfigured misconfigured) {
 				return reject(candidate, new IOException("Invalid DNSSEC AutoModpack fingerprint for " + candidate.originHost() + ": " + misconfigured.reason()));
 			}
-			// No published fingerprint: a pinned session whose leaf changed has no recovery channel, and a first
-			// contact is the player's decision - both end here.
-			if (candidate.sessionTrust().hasConfiguredPin()) {
+			// No published fingerprint. A CA chain that passed the JDK's validation for the endpoint also covers
+			// the typed origin: the deferral carries no failure exactly when the CAs vouched for this chain, and
+			// the origin name in its SANs anchors that vouch to the address the player typed. Self-signed leaves
+			// deferred with a failure never take this step.
+			if (candidate.trustManager().getDeferredFailure(candidate.socket()) == null && chainCoversOrigin(certificate, candidate.originHost())) {
 				try {
-					return reject(candidate, candidate.sessionTrust().mismatch(certificate));
-				} catch (CertificateEncodingException e) {
-					return reject(candidate, new IOException("Cannot fingerprint the deferred certificate", e));
+					candidate.sessionTrust().accept(certificate);
+					LOGGER.info("Trusting the certificate from {} because its CA chain covers the origin {}", candidate.endpointHost(), candidate.originHost());
+					return CompletableFuture.completedFuture(null);
+				} catch (CertificateException e) {
+					return reject(candidate, new IOException("Cannot fingerprint the CA-signed certificate", e));
 				}
 			}
+			// A first contact is the player's decision.
 			return requestManualTrust(candidate, certificate, preConfigurationKeepaliveInterval);
 		});
+	}
+
+	/**
+	 * Whether the leaf names the typed origin host among its SAN entries: an exact dNSName, a leftmost wildcard
+	 * covering exactly one label, or the literal address for an IP origin. The chain itself was already validated
+	 * by the JDK check the deferral captured; this is the second, origin-anchored name the ladder asks of it.
+	 */
+	static boolean chainCoversOrigin(X509Certificate certificate, String originHost) {
+		Collection<List<?>> entries;
+		try {
+			entries = certificate == null ? null : certificate.getSubjectAlternativeNames();
+		} catch (CertificateParsingException e) {
+			return false;
+		}
+		if (entries == null) return false;
+		for (List<?> entry : entries) {
+			if (entry == null || entry.size() < 2 || !(entry.get(0) instanceof Integer nameType)) continue;
+			Object value = entry.get(1);
+			if (nameType == 2 && value instanceof String name && nameCoversOrigin(name, originHost)) return true;
+			if (nameType == 7 && value instanceof String address && address.equalsIgnoreCase(originHost)) return true;
+		}
+		return false;
+	}
+
+	/** RFC 6125 identity matching: the whole name, or a wildcard in its leftmost label covering exactly one label. */
+	private static boolean nameCoversOrigin(String name, String originHost) {
+		String san = name.toLowerCase(Locale.ROOT);
+		String origin = originHost.toLowerCase(Locale.ROOT);
+		if (!san.startsWith("*.")) return san.equals(origin);
+		String remainder = san.substring(1); // ".example.com"
+		return origin.endsWith(remainder) && origin.indexOf('.') == origin.length() - remainder.length() && origin.length() > remainder.length();
 	}
 
 	private static CompletableFuture<Void> requestManualTrust(Candidate candidate, X509Certificate certificate, Duration preConfigurationKeepaliveInterval) {
