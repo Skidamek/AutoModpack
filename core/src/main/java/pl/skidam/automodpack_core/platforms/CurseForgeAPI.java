@@ -144,7 +144,8 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		}
 
 		if (!found) {
-			LOGGER.error("CurseForgeAPI Can't find file with SHA1 hash: {}", sha1);
+			// The file's own sha1 is only assigned on the found path, so the receipt names what was asked for instead.
+			LOGGER.error("CurseForgeAPI response file carries none of the requested SHA1 hashes: {}", hashes.keySet());
 			return null;
 		}
 

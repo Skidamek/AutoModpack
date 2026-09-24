@@ -90,6 +90,9 @@ public class DownloadClient implements PackTransport {
 	private final AtomicLong takesSubmitted = new AtomicLong();
 	private final AtomicLong takeRetries = new AtomicLong();
 	private final AtomicLong bytesDownloaded = new AtomicLong();
+	// The receipt's lane count reports the run's real parallelism - the high-water mark of simultaneously open
+	// lanes - not the pool's constant, so a run that only ever opened one lane does not receipt five.
+	private final AtomicInteger lanesHighWater = new AtomicInteger();
 	private final Object poolLock = new Object();
 	// The lanes, in creation order: worker i submits to lane i when it has room, so the scheduler's largest-first
 	// dispatch puts concurrent big files on distinct lanes while small files fill each lane's window. Small requests
@@ -143,6 +146,7 @@ public class DownloadClient implements PackTransport {
 			return client.openConnectionAsync().thenApply(connection -> {
 				synchronized (client.poolLock) {
 					client.lanes.add(connection);
+					client.lanesHighWater.accumulateAndGet(client.lanes.size(), Math::max);
 				}
 				return client;
 			}).whenComplete((ignored, error) -> {
@@ -355,6 +359,7 @@ public class DownloadClient implements PackTransport {
 						waiter.future().completeExceptionally(Throwables.unwrap(error));
 					} else {
 						lanes.add(connection);
+						lanesHighWater.accumulateAndGet(lanes.size(), Math::max);
 						WireTrace.log("LANE_OPEN", "lanes", lanes.size(), "conn", connection.traceId());
 						waiter.dispatch(connection);
 					}
@@ -759,10 +764,11 @@ public class DownloadClient implements PackTransport {
 		waiters.forEach(waiter -> waiter.future().completeExceptionally(aborted));
 	}
 
-	/** The one-line receipt a run summary carries: takes sent, retries and bytes arrived, over the pool's lanes. */
+	/** The one-line receipt a run summary carries: takes sent, retries and bytes arrived, over the lanes the run actually opened. */
 	@Override
 	public String windowSummary() {
-		return takesSubmitted.get() + " takes (" + takeRetries.get() + " retried), " + ByteFormat.formatSize(bytesDownloaded.get()) + " over " + LANES + " lanes";
+		int lanes = lanesHighWater.get();
+		return takesSubmitted.get() + " takes (" + takeRetries.get() + " retried), " + ByteFormat.formatSize(bytesDownloaded.get()) + " over " + lanes + (lanes == 1 ? " lane" : " lanes");
 	}
 
 	@Override

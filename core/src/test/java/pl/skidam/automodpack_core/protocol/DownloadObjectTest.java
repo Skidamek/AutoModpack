@@ -165,7 +165,7 @@ class DownloadObjectTest {
 				assertTrue(server.requests.size() > 3, "the dropped take must have been retried, requests: " + server.requests.size());
 				// The drop closes the whole lane, so every take pipelined behind it retries together; the exact count is
 				// the scheduler's business. The receipt must count them honestly: at least one retry, every take booked.
-				assertTrue(client.windowSummary().matches("\\d+ takes \\([1-9]\\d* retried\\), [\\d.]+ \\S+ over 5 lanes"), "the honest receipt counts the lane's retried takes: " + client.windowSummary());
+				assertTrue(client.windowSummary().matches("\\d+ takes \\([1-9]\\d* retried\\), [\\d.]+ \\S+ over \\d+ lanes?"), "the honest receipt counts the lane's retried takes: " + client.windowSummary());
 			}
 		}
 	}
