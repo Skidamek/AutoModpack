@@ -280,6 +280,35 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void orphanedPublicationDirectoriesAreSweptSoTheNextUpdateAppliesItsLiveOperations() throws Exception {
+		ClientStorage storage = storage();
+		Files.createDirectories(storage.incomingDirectory().resolve("mods"));
+		Files.writeString(storage.incomingDirectory().resolve("mods/stale.jar"), "stale", StandardCharsets.UTF_8);
+		Files.createDirectories(storage.backupDirectory());
+		Files.writeString(storage.backupDirectory().resolve("old.jar"), "old", StandardCharsets.UTF_8);
+
+		// Boot recovery with no usable journal sweeps them: left in place, the directories read as a publication
+		// already started and the next update's live operations are silently skipped over a successful verdict.
+		UpdateTransactionExecutor.sweepUnpinnedPublicationDirectories(storage);
+		assertFalse(Files.exists(storage.incomingDirectory()));
+		assertFalse(Files.exists(storage.backupDirectory()));
+
+		byte[] bytes = "live-object".getBytes(StandardCharsets.UTF_8);
+		String hash = store(storage, bytes);
+		SelectedModpackTarget target = target(storage, "config/applied.json", "config", false, hash, bytes.length);
+		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "config/applied.json", OperationType.INSTALL_OBJECT, hash, bytes.length, null),
+				new Operation(Root.GAME_DIR, "config/applied.json", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "config/applied.json", true, hash, bytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/applied.json", true, hash, bytes.length)));
+
+		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
+
+		assertTrue(execution.success());
+		assertArrayEquals(bytes, Files.readAllBytes(storage.gameDirectory().resolve("config/applied.json")));
+	}
+
+	@Test
 	void gameDirectoryDriftRequestsAReplanWithoutOverwritingTheNewBytes() throws Exception {
 		ClientStorage storage = storage();
 		byte[] expectedBytes = "expected-game-file".getBytes(StandardCharsets.UTF_8);

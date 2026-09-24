@@ -138,7 +138,10 @@ public final class UpdateTransactionExecutor {
 		ClientStorage storage = context.storage();
 		if (Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("An offline repair must finish before an update can start");
 		UpdateTransaction pending = UpdateTransaction.read(storage.transactionFile());
-		if (pending == null) return;
+		if (pending == null) {
+			sweepUnpinnedPublicationDirectories(storage);
+			return;
+		}
 		if (pending.phase == UpdateTransaction.Phase.COMMITTED) {
 			// A crash can land after the COMMITTED marker but before its state-history checkpoint; replaying the tail here
 			// records the entry (idempotent by transaction id) before the record that produced it retires.
@@ -539,6 +542,20 @@ public final class UpdateTransactionExecutor {
 	private void cleanupTransactionDirectories(UpdateTransaction transaction) throws IOException {
 		FileTrees.delete(context.storage().incomingDirectory());
 		FileTrees.delete(context.storage().backupDirectory());
+	}
+
+	/**
+	 * With no usable pending transaction the publication directories are provably unpinned - no journal owns their
+	 * bytes - so leftovers of a crash whose journal was lost or set aside are swept here. Left alone they read as a
+	 * publication already started ({@code ClientProjectionView.publicationStarted}), which would make the next
+	 * update silently skip every live operation and its final-state verification while its commit reports success.
+	 */
+	public static void sweepUnpinnedPublicationDirectories(ClientStorage storage) throws IOException {
+		ClientStorageMutation.run(storage, () -> {
+			FileTrees.delete(storage.incomingDirectory());
+			FileTrees.delete(storage.backupDirectory());
+			return null;
+		});
 	}
 
 	/** Verifies every planned capture against the live file and acquires its bytes into the object store; the entry's captures then pin them. */
