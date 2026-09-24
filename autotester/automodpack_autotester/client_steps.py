@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import fnmatch
 import re
 import shutil
 import subprocess
@@ -21,7 +22,7 @@ from .docker_harness import _assert_running, _container, _container_logs, _docke
 from .engine import Context
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
-from .engine.steps_io import _active_file
+from .engine.steps_io import _active_file, _read_active_generation
 
 
 logger = logging.getLogger(__name__)
@@ -539,6 +540,42 @@ def _v_assert_preload_acquired(ctx: Context, _step):
 def _v_assert_client_file(ctx: Context, step):
     """Assert a live game-dir file matches its active generation manifest entry (sha1 and size)."""
     logical_path, expected_hash, expected_size = _active_file(ctx, step["path"])
+    _assert_one_client_file(ctx, logical_path, expected_hash, expected_size)
+
+
+@verb("assert_client_files")
+def _v_assert_client_files(ctx: Context, step):
+    """Assert every active-generation file matching ``pattern`` (all of them by default, minus ``exclude`` globs)
+    matches its manifest entry. Every file gets its own hard-gated receipt: the failure names each mismatching
+    file individually, never a summary, so one run reports everything that moved."""
+    pattern = step.get("pattern")
+    exclude = [str(glob) for glob in step.get("exclude", []) or []]
+    _state, manifest = _read_active_generation(ctx)
+    paths = set()
+    for category in ((manifest.get("policy", {}) or {}).get("categories", {}) or {}).values():
+        if not isinstance(category, dict):
+            continue
+        for group in category.values():
+            if isinstance(group, dict):
+                paths.update((group.get("files", {}) or {}).keys())
+    selected = sorted(p for p in paths
+                      if (pattern is None or fnmatch.fnmatch(p, str(pattern)))
+                      and not any(fnmatch.fnmatch(p, glob) for glob in exclude))
+    if not selected:
+        raise AssertionError("assert_client_files matched no active-generation file")
+    receipts = []
+    for logical_path in selected:
+        _, expected_hash, expected_size = _active_file(ctx, logical_path)
+        try:
+            _assert_one_client_file(ctx, logical_path, expected_hash, expected_size)
+        except AssertionError as receipt:
+            receipts.append(str(receipt))
+    if receipts:
+        raise AssertionError(f"{len(receipts)} of {len(selected)} managed client files do not match the active generation:\n" + "\n".join(receipts))
+    logger.info("Verified %d managed client files against the active generation", len(selected))
+
+
+def _assert_one_client_file(ctx: Context, logical_path: str, expected_hash: str, expected_size: int) -> None:
     path = ctx.game_dir / logical_path
     try:
         payload = path.read_bytes()
