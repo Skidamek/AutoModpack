@@ -113,7 +113,7 @@ public final class GenerationStore {
 		try {
 			JournalEntry head = journal.head();
 			Current rebuilt = new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), loadPolicy(head.policySha1()), replayLedger(head.seq()),
-					journal.treeAt(head.seq()));
+					journal.treeAt(head.seq()), publishWaitingMusicObject());
 			writeProjection(rebuilt);
 			return rebuilt;
 		} catch (Journal.UnusableContentException e) {
@@ -155,7 +155,8 @@ public final class GenerationStore {
 		}
 		ContentTree tree = ContentTree.fromManifest(manifest);
 		if (!tree.token().equals(head.contentToken())) return null;
-		return new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), manifest, OwnershipLedger.fromFields(fields.ownershipLedger), tree);
+		return new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), manifest, OwnershipLedger.fromFields(fields.ownershipLedger), tree,
+				fields.waitingMusicSha1 == null ? "" : fields.waitingMusicSha1);
 	}
 
 	/**
@@ -188,13 +189,17 @@ public final class GenerationStore {
 		if (current != null && current.contentToken().equals(token) && current.policySha1().equals(policySha1)) {
 			// The track's only head record is the projection, so a track-only republish still rewrites it; the journal
 			// stays untouched, exactly as a no-change publish demands.
-			if (waitingMusicSource != null) writeProjection(current);
+			if (waitingMusicSource != null) {
+				Current withTrack = current.withWaitingMusic(publishWaitingMusicObject());
+				writeProjection(withTrack);
+				this.current = withTrack;
+			}
 			return new Publication(journal.head(), manifest, ledger, hosting());
 		}
 
 		JournalEntry entry = new JournalEntry(current == null ? 1 : current.seq() + 1, token, policySha1, Instant.now(), notes, JournalEntry.NO_RESTORE, changes);
 		journal.append(entry);
-		Current updated = new Current(entry.seq(), token, policySha1, entry.createdAt(), manifest, ledger, tree);
+		Current updated = new Current(entry.seq(), token, policySha1, entry.createdAt(), manifest, ledger, tree, publishWaitingMusicObject());
 		this.current = updated;
 		writeProjection(updated);
 		return new Publication(entry, manifest, ledger, hosting());
@@ -214,7 +219,7 @@ public final class GenerationStore {
 		JournalEntry entry = new JournalEntry(current.seq() + 1, target.contentToken(), target.policySha1(), Instant.now(), notes, targetSeq, changes);
 		journal.append(entry);
 
-		Current updated = new Current(entry.seq(), target.contentToken(), target.policySha1(), entry.createdAt(), manifest, ledger, targetTree);
+		Current updated = new Current(entry.seq(), target.contentToken(), target.policySha1(), entry.createdAt(), manifest, ledger, targetTree, publishWaitingMusicObject());
 		this.current = updated;
 		writeProjection(updated);
 		return new Publication(entry, manifest, ledger, hosting());
@@ -230,21 +235,11 @@ public final class GenerationStore {
 
 	/**
 	 * The hosting map: the head document under the reserved head key, the journal file under the reserved journal
-	 * key, and exactly the objects the head generation serves. Everything else stays on disk until an explicit collect.
+	 * key, exactly the objects the head generation serves, and the waiting track when the head advertises one that
+	 * is still stored. Everything else stays on disk until an explicit collect.
 	 */
 	public GenerationHosting hosting() throws IOException {
-		return withWaitingMusicObject(hosting(loadCurrent().orElseThrow(() -> new IOException("No modpack generation is published"))));
-	}
-
-	/** Binds the projection's waiting track as an ordinary content-addressed object; the head is the single source of its hash. */
-	private GenerationHosting withWaitingMusicObject(GenerationHosting hosting) throws IOException {
-		GenerationJsons.HeadDocumentFields fields = ConfigTools.readState(projectionFile, GenerationJsons.HeadDocumentFields.class, "Server generation projection", read -> read).orElse(null);
-		if (fields == null || !HashUtils.isSha1(fields.waitingMusicSha1)) return hosting;
-		Path object = DataRootResolver.objectFile(objectsDirectory, HashUtils.normalizeSha1(fields.waitingMusicSha1));
-		if (!Files.isRegularFile(object)) return hosting;
-		Map<String, Path> paths = new TreeMap<>(hosting.asMap());
-		paths.put(HashUtils.normalizeSha1(fields.waitingMusicSha1), object);
-		return new GenerationHosting(paths);
+		return hosting(loadCurrent().orElseThrow(() -> new IOException("No modpack generation is published")));
 	}
 
 	private GenerationHosting hosting(Current current) {
@@ -253,6 +248,13 @@ public final class GenerationStore {
 		paths.put(GenerationHosting.JOURNAL_KEY, journalFile);
 		paths.put(current.policySha1(), DataRootResolver.objectFile(objectsDirectory, current.policySha1()));
 		for (ContentTree.ContentFile file : current.tree().files().values()) paths.put(file.sha1(), DataRootResolver.objectFile(objectsDirectory, file.sha1()));
+		// The waiting track is an object like any other, and the head is the single source of its hash; a track a
+		// collect has already removed stops being hosted, exactly as an absent advertisement would.
+		if (HashUtils.isSha1(current.waitingMusicSha1())) {
+			String sha1 = HashUtils.normalizeSha1(current.waitingMusicSha1());
+			Path object = DataRootResolver.objectFile(objectsDirectory, sha1);
+			if (Files.isRegularFile(object)) paths.put(sha1, object);
+		}
 		return new GenerationHosting(paths);
 	}
 
@@ -338,7 +340,7 @@ public final class GenerationStore {
 		head.policySha1 = current.policySha1();
 		head.createdAt = current.createdAt().toString();
 		head.journalHead = current.seq();
-		head.waitingMusicSha1 = publishWaitingMusicObject();
+		head.waitingMusicSha1 = current.waitingMusicSha1();
 		head.ownershipLedger = current.ledger().toFields();
 		head.policy = current.manifest().toFields();
 		ConfigTools.writeAtomic(projectionFile, head);
@@ -375,7 +377,14 @@ public final class GenerationStore {
 		return changes;
 	}
 
-	public record Current(long seq, String contentToken, String policySha1, Instant createdAt, GroupManifest manifest, OwnershipLedger ledger, ContentTree tree) {}
+	public record Current(long seq, String contentToken, String policySha1, Instant createdAt, GroupManifest manifest, OwnershipLedger ledger, ContentTree tree,
+			String waitingMusicSha1) {
+
+		/** The same generation hosting a freshly published (or withdrawn) waiting track; the journal never records the track, so this never moves the head. */
+		Current withWaitingMusic(String sha1) {
+			return waitingMusicSha1.equals(sha1) ? this : new Current(seq, contentToken, policySha1, createdAt, manifest, ledger, tree, sha1);
+		}
+	}
 
 	public record Publication(JournalEntry entry, GroupManifest manifest, OwnershipLedger ledger, GenerationHosting hostingPaths) {}
 }
