@@ -18,7 +18,7 @@ from .bridge import BridgeClient
 from .config import CLIENT_GENERATION_STATE_PATHS, Target
 from .mods import resolve_mod
 from .supervisor import resource_labels
-from .docker_harness import shaped_tcp_sysctls, _assert_running, _assert_running, _container, _container_logs, _docker, _exec_output, _exit_code, _inspect_container, _jitter_sleep, _remove_container, _run_container, _uid, _gid, _wait_exited
+from .docker_harness import shaped_tcp_sysctls, _assert_running, _container, _container_logs, _docker, _exec_output, _exit_code, _inspect_container, _jitter_sleep, _remove_container, _run_container, _uid, _gid, _wait_exited
 from .engine import Context
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration

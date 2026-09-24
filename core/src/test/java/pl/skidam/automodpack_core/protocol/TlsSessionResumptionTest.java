@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,6 +19,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
@@ -108,6 +110,55 @@ class TlsSessionResumptionTest {
 		}
 	}
 
+	/**
+	 * A lane that arrives without its own deferral - in production, a resumed session, whose handshake never
+	 * enters the trust manager - is judged by the pin and the session's accepted leaf alone: while the first
+	 * contact is still parked in the player's decision, such a lane fails closed and never reaches the player.
+	 */
+	@Test
+	void aLaneWithoutADeferralFailsClosedWhileTheFirstContactIsStillBeingJudged() throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			var sessionTrust = new CustomizableTrustManager.SessionTrust("127.0.0.1", null);
+			var manager = new CustomizableTrustManager(sessionTrust, null);
+			SSLContext context = CandidateTrustValidation.newSslContext(manager);
+
+			try (SSLSocket socketA = handshake(server, context)) {
+				assertNotNull(manager.getDeferredCertificate(socketA), "lane one deferred");
+
+				List<X509Certificate> prompted = new CopyOnWriteArrayList<>();
+				CompletableFuture<Boolean> decisionA = new CompletableFuture<>();
+				CompletableFuture<Void> judgedA = CandidateTrustValidation.validate(new CandidateTrustValidation.Candidate(socketA, manager, sessionTrust, "127.0.0.1", "127.0.0.1",
+						certificate -> {
+							prompted.add(certificate);
+							return decisionA;
+						}, () -> true, hostHeader(server), null), NO_HEARTBEATS);
+				assertEquals(1, prompted.size(), "the first contact reaches the player");
+
+				// The second lane presents the same not-yet-accepted certificate with no deferral of its own - the
+				// shape a resumed session arrives in. It fails closed and never reaches the player, whatever the
+				// first lane's decision turns out to be.
+				var shadowManager = new CustomizableTrustManager(sessionTrust, null);
+				SSLContext shadowContext = CandidateTrustValidation.newSslContext(shadowManager);
+				try (SSLSocket socketB = handshake(server, shadowContext)) {
+					assertNotNull(shadowManager.getDeferredCertificate(socketB), "the shadow manager caught lane two's deferral");
+					assertNull(manager.getDeferredCertificate(socketB), "to the client's manager, lane two arrives with no deferral: the resumed session's shape");
+					CompletableFuture<Void> judgedB = CandidateTrustValidation.validate(new CandidateTrustValidation.Candidate(socketB, manager, sessionTrust, "127.0.0.1", "127.0.0.1",
+							certificate -> {
+								prompted.add(certificate);
+								return CompletableFuture.completedFuture(true);
+							}, () -> true, hostHeader(server), null), NO_HEARTBEATS);
+					var failureB = assertThrows(ExecutionException.class, judgedB::get, "the deferral-less lane fails closed while the first contact is unjudged");
+					assertFalse(failureB.getCause() instanceof AssertionError, "the deferral-less lane must never reach the player");
+					assertEquals(1, prompted.size(), "only the fresh handshake's certificate reaches the player");
+				}
+
+				decisionA.complete(false);
+				var failureA = assertThrows(ExecutionException.class, judgedA::get, "the ladder surfaces the player's rejection");
+				assertTrue(failureA.getCause() instanceof IOException, "the rejection reads as a connection failure");
+			}
+		}
+	}
+
 	/** Runs the ladder over one candidate socket and fails the test if the decision does not land. */
 	private static void validate(CandidateTrustValidation.Candidate candidate) throws Exception {
 		CandidateTrustValidation.validate(candidate, NO_HEARTBEATS).get(AWAIT_SECONDS, TimeUnit.SECONDS);
@@ -133,4 +184,5 @@ class TlsSessionResumptionTest {
 		tls.setSoTimeout(0);
 		return tls;
 	}
+
 }

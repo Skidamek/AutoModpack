@@ -129,9 +129,9 @@ public class DownloadManager implements DownloadView {
 	private boolean pumping;
 
 	private synchronized void downloadNext() {
-		// Drain, don't dribble: every settle and every finalize pumps the dispatch until the worker budget is full or
-		// the queue is empty - host transfers occupy no worker, so they all dispatch at once and their takes queue on
-		// the transport's lanes.
+		// Drain, don't dribble: every settle and every finalize pumps the dispatch until nothing dispatchable is
+		// left - host transfers occupy no worker, so they all dispatch at once and their takes queue on the
+		// transport's lanes.
 		if (pumping) return;
 		pumping = true;
 		try {

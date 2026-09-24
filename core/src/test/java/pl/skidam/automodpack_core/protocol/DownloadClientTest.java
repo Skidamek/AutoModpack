@@ -136,7 +136,8 @@ class DownloadClientTest {
 		var configuredTrust = new CustomizableTrustManager.SessionTrust("origin.example:25565", fingerprint);
 		var configuredManager = new CustomizableTrustManager(configuredTrust, null);
 		assertDoesNotThrow(() -> configuredManager.checkServerTrusted(new X509Certificate[]{accepted}, "RSA"));
-		assertNull(configuredManager.getDeferredCertificate(null));
+		assertNull(configuredManager.getDeferredFailure(null));
+		assertTrue(configuredManager.isPinMatched(null), "the pin match is marked, so the ladder accepts it without judging");
 		assertDoesNotThrow(() -> configuredManager.checkServerTrusted(new X509Certificate[]{changed}, "RSA"));
 		assertSame(changed, configuredManager.getDeferredCertificate(null));
 		CertificatePinMismatchException mismatch = configuredTrust.mismatch(changed);
@@ -174,13 +175,13 @@ class DownloadClientTest {
 		X509Certificate addressed = mint(leafName, leafKeys.getPublic(), caName, caKeys.getPrivate(), false,
 				List.<Object[]>of(new Object[]{GeneralName.iPAddress, "127.0.0.1"}));
 
-		assertTrue(CandidateTrustValidation.chainCoversOrigin(covering, "pack.example.com"), "the exact origin name covers");
-		assertTrue(CandidateTrustValidation.chainCoversOrigin(wildcard, "a.example.com"), "a leftmost wildcard covers one label");
-		assertFalse(CandidateTrustValidation.chainCoversOrigin(wildcard, "a.b.example.com"), "a wildcard never covers two labels");
-		assertFalse(CandidateTrustValidation.chainCoversOrigin(wildcard, "example.com"), "a wildcard never covers the bare domain");
-		assertFalse(CandidateTrustValidation.chainCoversOrigin(elsewhere, "pack.example.com"), "another name does not cover");
-		assertTrue(CandidateTrustValidation.chainCoversOrigin(addressed, "127.0.0.1"), "an IP origin matches its iPAddress entry");
-		assertFalse(CandidateTrustValidation.chainCoversOrigin(addressed, "127.0.0.2"), "another address does not cover");
+		assertTrue(CandidateTrustValidation.leafCoversOrigin(covering, "pack.example.com"), "the exact origin name covers");
+		assertTrue(CandidateTrustValidation.leafCoversOrigin(wildcard, "a.example.com"), "a leftmost wildcard covers one label");
+		assertFalse(CandidateTrustValidation.leafCoversOrigin(wildcard, "a.b.example.com"), "a wildcard never covers two labels");
+		assertFalse(CandidateTrustValidation.leafCoversOrigin(wildcard, "example.com"), "a wildcard never covers the bare domain");
+		assertFalse(CandidateTrustValidation.leafCoversOrigin(elsewhere, "pack.example.com"), "another name does not cover");
+		assertTrue(CandidateTrustValidation.leafCoversOrigin(addressed, "127.0.0.1"), "an IP origin matches its iPAddress entry");
+		assertFalse(CandidateTrustValidation.leafCoversOrigin(addressed, "127.0.0.2"), "another address does not cover");
 	}
 
 	@Test

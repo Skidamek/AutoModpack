@@ -9,6 +9,7 @@ import java.net.Socket;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.CertificateException;
@@ -68,9 +69,9 @@ public final class CandidateTrustValidation {
 	}
 
 	/** The one TLS shape both transports speak: TLSv1.3, the AEAD cipher list, and endpoint identification over the pinned session. */
-	public static SSLSocket wrapWithTls(Socket plainSocket, SSLContext context, String originHost, int endpointPort) throws IOException {
+	public static SSLSocket wrapWithTls(Socket plainSocket, SSLContext context, String endpointHost, int endpointPort) throws IOException {
 		SSLSocketFactory factory = context.getSocketFactory();
-		SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, originHost, endpointPort, true);
+		SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, endpointHost, endpointPort, true);
 		sslSocket.setEnabledProtocols(new String[]{"TLSv1.3"});
 		sslSocket.setEnabledCipherSuites(new String[]{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"});
 
@@ -89,8 +90,34 @@ public final class CandidateTrustValidation {
 
 	/** Runs the ladder over the candidate; completion means the certificate is pinned into the session trust, and any failure closes the probe socket. */
 	public static CompletableFuture<Void> validate(Candidate candidate, Duration preConfigurationKeepaliveInterval) {
-		X509Certificate certificate = candidate.trustManager().getDeferredCertificate(candidate.socket());
-		if (certificate == null) return CompletableFuture.completedFuture(null);
+		CustomizableTrustManager trustManager = candidate.trustManager();
+		CustomizableTrustManager.SessionTrust sessionTrust = candidate.sessionTrust();
+
+		// A resumed handshake never enters the trust manager, so it has no deferral: its certificate comes from the
+		// cached session, and it may only be the pin or the leaf the session already accepted. Anything else is a
+		// session the ladder condemned (or has not accepted yet); it is invalidated and dropped, never laundered.
+		if (trustManager.getDeferredCertificate(candidate.socket()) == null) {
+			X509Certificate[] resumed = resumedChain(candidate);
+			boolean acceptable = false;
+			if (resumed != null) {
+				try {
+					acceptable = sessionTrust.pinMatches(resumed) || sessionTrust.acceptedMatches(resumed);
+				} catch (CertificateEncodingException e) {
+					acceptable = false;
+				}
+			}
+			if (!acceptable) {
+				candidate.socket().getSession().invalidate();
+				closeQuietly(candidate.socket());
+				return CompletableFuture.failedFuture(new IOException("Resumed a TLS session the trust ladder did not accept"));
+			}
+			return CompletableFuture.completedFuture(null);
+		}
+
+		// A pin-matched handshake is done: the pin is law and nothing else runs.
+		if (trustManager.isPinMatched(candidate.socket())) return CompletableFuture.completedFuture(null);
+
+		X509Certificate certificate = trustManager.getDeferredCertificate(candidate.socket());
 
 		CompletableFuture<Void> validation;
 		try {
@@ -140,7 +167,7 @@ public final class CandidateTrustValidation {
 			// the typed origin: the deferral carries no failure exactly when the CAs vouched for this chain, and
 			// the origin name in its SANs anchors that vouch to the address the player typed. Self-signed leaves
 			// deferred with a failure never take this step.
-			if (candidate.trustManager().getDeferredFailure(candidate.socket()) == null && chainCoversOrigin(certificate, candidate.originHost())) {
+			if (candidate.trustManager().getDeferredFailure(candidate.socket()) == null && leafCoversOrigin(certificate, candidate.originHost())) {
 				try {
 					candidate.sessionTrust().accept(certificate);
 					LOGGER.info("Trusting the certificate from {} because its CA chain covers the origin {}", candidate.endpointHost(), candidate.originHost());
@@ -159,7 +186,7 @@ public final class CandidateTrustValidation {
 	 * covering exactly one label, or the literal address for an IP origin. The chain itself was already validated
 	 * by the JDK check the deferral captured; this is the second, origin-anchored name the ladder asks of it.
 	 */
-	static boolean chainCoversOrigin(X509Certificate certificate, String originHost) {
+	static boolean leafCoversOrigin(X509Certificate certificate, String originHost) {
 		Collection<List<?>> entries;
 		try {
 			entries = certificate == null ? null : certificate.getSubjectAlternativeNames();
@@ -216,6 +243,7 @@ public final class CandidateTrustValidation {
 				throw new CompletionException(new IOException("Certificate trust decision failed", cause));
 			}
 			if (!trusted) {
+				candidate.socket().getSession().invalidate();
 				closeQuietly(candidate.socket());
 				throw new CompletionException(new IOException("User rejected certificate"));
 			}
@@ -229,7 +257,20 @@ public final class CandidateTrustValidation {
 		});
 	}
 
+	/** The peer certificates a resumed session carries; null when the JDK has none to show. */
+	private static X509Certificate[] resumedChain(Candidate candidate) {
+		try {
+			Certificate[] peers = candidate.socket().getSession().getPeerCertificates();
+			return peers instanceof X509Certificate[] certificates ? certificates : null;
+		} catch (Throwable e) {
+			return null;
+		}
+	}
+
 	private static CompletableFuture<Void> reject(Candidate candidate, Throwable error) {
+		// The condemned handshake's session dies with the verdict: a cached session must never outlive its
+		// rejection, or a later lane could resume past the ladder.
+		candidate.socket().getSession().invalidate();
 		closeQuietly(candidate.socket());
 		return CompletableFuture.failedFuture(error);
 	}

@@ -62,6 +62,12 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 				throw new CertificatePinMismatchException(origin, acceptedFingerprint.get(), fingerprint);
 		}
 
+		/** True when this exact leaf is the one the session already accepted, by record, CA chain, or the player - the only certificate a resumed handshake may present. */
+		boolean acceptedMatches(X509Certificate[] chain) throws CertificateEncodingException {
+			String accepted = acceptedFingerprint.get();
+			return accepted != null && chain != null && chain.length > 0 && accepted.equals(getFingerprint(chain[0]));
+		}
+
 		private String expectedFingerprint() {
 			return configuredFingerprint != null ? configuredFingerprint : acceptedFingerprint.get();
 		}
@@ -88,7 +94,7 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 		this.onValidating = onValidating;
 	}
 
-	private record Deferred(X509Certificate certificate, CertificateException failure) {}
+	private record Deferred(X509Certificate certificate, CertificateException failure, boolean pinMatched) {}
 
 	private static X509ExtendedTrustManager createTrustManager(KeyStore trustStore) throws KeyStoreException {
 		try {
@@ -106,6 +112,12 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 	public synchronized X509Certificate getDeferredCertificate(Socket socket) {
 		Deferred entry = deferred.get(socket);
 		return entry == null ? null : entry.certificate();
+	}
+
+	/** True when this socket's handshake matched the session pin outright: the ladder accepts it without judging. */
+	public synchronized boolean isPinMatched(Socket socket) {
+		Deferred entry = deferred.get(socket);
+		return entry != null && entry.pinMatched();
 	}
 
 	public synchronized CertificateException getDeferredFailure(Socket socket) {
@@ -141,15 +153,24 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 	private void validateServer(Object peer, X509Certificate[] chain, TrustCheck defaultCheck) throws CertificateException {
 		if (onValidating != null) onValidating.accept(chain);
 		if (chain == null || chain.length == 0) throw new CertificateException("Server did not present a certificate");
-		if (sessionTrust.pinMatches(chain)) return;
+		if (sessionTrust.pinMatches(chain)) {
+			// The pin is law and nothing else runs; the recorded marker is what lets the ladder accept this socket
+			// without judging, while a resumed handshake - which never enters here - has no marker and is judged
+			// against the pin and the session's accepted leaf alone.
+			synchronized (this) {
+				deferred.put(peer, new Deferred(chain[0], null, true));
+			}
+			return;
+		}
 
 		try {
 			defaultCheck.check();
 		} catch (CertificateException e) {
-			// A chain the CAs reject is only deferrable when it is genuinely self-signed; anything else is broken.
-			if (!isSelfSigned(chain[0])) throw e;
+			// A chain the CAs reject defers with its failure and the ladder decides: the failure tells the
+			// origin-CA step that the WebPKI said nothing here, a matching DNSSEC record still speaks for the
+			// leaf, and a pinned origin's changed leaf surfaces as the pin mismatch instead of a raw TLS error.
 			synchronized (this) {
-				deferred.put(peer, new Deferred(chain[0], e));
+				deferred.put(peer, new Deferred(chain[0], e, false));
 			}
 			return;
 		}
@@ -157,7 +178,7 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 		// DNSSEC fingerprint or a CA chain covering the typed origin speaks for it, and whatever remains is
 		// the player's; a pinned origin never reaches the ladder and its mismatch is final.
 		synchronized (this) {
-			deferred.put(peer, new Deferred(chain[0], null));
+			deferred.put(peer, new Deferred(chain[0], null, false));
 		}
 	}
 

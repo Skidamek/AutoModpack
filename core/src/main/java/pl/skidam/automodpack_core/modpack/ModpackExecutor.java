@@ -283,9 +283,8 @@ public class ModpackExecutor {
 				destination = target.resolve("objects").resolve(sha1);
 			}
 			Files.createDirectories(destination.getParent());
-			// Objects are immutable and named by their hash, so an already-present file of any size is the same bytes
-			// and the copy is skipped. Documents are the opposite: fixed-shape bodies whose bytes change while their
-			// size stays, and they are the one file whose freshness the mirror exists to serve - always re-exported.
+			// Objects are immutable and named by their hash, so an already-present file of any size is the same
+			// bytes and the copy is skipped.
 			if (Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) && Files.size(destination) == Files.size(entry.getValue())) {
 				written++;
 				continue;
@@ -293,9 +292,11 @@ public class ModpackExecutor {
 			copyAtomically(entry.getValue(), destination);
 			written++;
 		}
-		// Documents land after every object, journal before head: a bucket synced with aws s3 sync or rclone serves
-		// its keys in write order, so a client can never see the new head beside the old journal - the head is the
-		// commit pointer of the whole tree and lands last.
+		// Documents land after every object, journal before head. They are the opposite of objects: fixed-shape
+		// bodies whose bytes change while their size stays, the one file whose freshness the mirror exists to
+		// serve, so they are re-exported unconditionally - and a bucket synced with aws s3 sync or rclone serves
+		// its keys in write order, so a client can never see the new head beside the old journal - the head is
+		// the commit pointer of the whole tree and lands last.
 		for (String key : new String[]{GenerationHosting.JOURNAL_KEY, GenerationHosting.HEAD_DOCUMENT_KEY}) {
 			Path source = hosting.get(key);
 			if (source == null) continue;
