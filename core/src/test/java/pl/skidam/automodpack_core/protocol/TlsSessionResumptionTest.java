@@ -21,6 +21,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.function.IntConsumer;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
@@ -175,6 +176,29 @@ class TlsSessionResumptionTest {
 				var failure = assertThrows(ExecutionException.class, judged::get, "the changed leaf fails the pinned origin");
 				assertTrue(failure.getCause() instanceof CertificatePinMismatchException, "the failure is the pin mismatch, not a prompt: " + failure.getCause());
 				assertNull(manager.getDeferredCertificate(socket), "the deferral is spent by the verdict");
+			}
+		}
+	}
+
+	/** A chunked /head heartbeat must drain its frame so the first real request is not parsed against leftover chunk bytes. */
+	@Test
+	void aChunkedHeadKeepaliveLeavesTheSocketAlignedForTheFirstFetch(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			server.chunkedDocuments.set(true);
+			byte[] head = "keepalive-head-document".getBytes(StandardCharsets.UTF_8);
+			server.store().put("head", head);
+			CompletableFuture<Boolean> trust = new CompletableFuture<>();
+			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null, null);
+			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, "test-secret", ignored -> trust, Duration.ofMillis(50));
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(AWAIT_SECONDS);
+			while (!server.requests.contains("/head") && System.nanoTime() < deadline) Thread.sleep(10);
+			assertTrue(server.requests.contains("/head"), "the parked heartbeat must have asked for /head before trust completed");
+			trust.complete(true);
+			try (DownloadClient client = clientFuture.get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
+				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+				assertEquals(directory.resolve("head"), fetch.path());
+				assertArrayEquals(head, Files.readAllBytes(fetch.path()));
 			}
 		}
 	}

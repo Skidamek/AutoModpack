@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -17,11 +18,12 @@ import javax.net.ssl.SSLSocket;
 
 /**
  * One parked candidate's heartbeat while the human decides on certificate trust: every interval it writes a plain
- * {@code GET /head} - the head document is small JSON, and the response is consumed by its Content-Length whatever
- * the status, so a ranged byte saves nothing worth the special case - and idle NAT mappings and relay bindings never
- * decay under the parked connection. It self-retires on the trust decision, a dead socket, or a closed client; the
- * write gate makes retirement wait for an in-flight heartbeat, including its consumed response, so the connection is
- * always byte-aligned when the trust decision hands it over.
+ * {@code GET /head} - the head document is small JSON, and the response is consumed by its framing (Content-Length,
+ * chunked, or close) whatever the status, so a ranged byte saves nothing worth the special case - and idle NAT mappings
+ * and relay bindings never decay under the parked connection. It self-retires on the trust decision, a dead socket, or
+ * a closed client; the write gate makes retirement wait for an in-flight heartbeat, including its consumed response, so
+ * the connection is always byte-aligned when the trust decision hands it over. A failed beat closes the socket so a
+ * half-read response cannot be handed to {@link Connection}.
  */
 final class PreConfigurationKeepalive {
 
@@ -67,6 +69,7 @@ final class PreConfigurationKeepalive {
 			discardResponse();
 			return true;
 		} catch (IOException died) {
+			NetUtils.closeQuietly(socket);
 			return false;
 		} finally {
 			if (previousTimeout >= 0) {
@@ -79,21 +82,80 @@ final class PreConfigurationKeepalive {
 	}
 
 	private void discardResponse() throws IOException {
-		String lengthValue = HttpHead.read(in).headerValue("content-length");
-		if (lengthValue == null) throw new IOException("Keepalive response without a Content-Length");
-		long contentLength;
-		try {
-			contentLength = Long.parseLong(lengthValue);
-		} catch (NumberFormatException e) {
-			throw new IOException("Unparseable keepalive response: " + lengthValue);
+		HttpHead head = HttpHead.read(in);
+		if (head.status() == 204 || head.status() == 304) return;
+		if (chunked(head.headerValue("transfer-encoding"))) {
+			drainChunked();
+			return;
 		}
-		for (long remaining = contentLength; remaining > 0;) {
+		String lengthValue = head.headerValue("content-length");
+		if (lengthValue != null) {
+			drainLength(parseContentLength(lengthValue));
+			return;
+		}
+		// Close-framed: the body ends at EOF and spends the parked socket. Drain it so nothing is left for Connection
+		// to parse as the first response, then close so the handoff cannot reuse a spent lane.
+		drainToEof();
+		NetUtils.closeQuietly(socket);
+	}
+
+	private static boolean chunked(String transferEncoding) throws IOException {
+		if (transferEncoding == null) return false;
+		boolean chunked = false;
+		for (String token : transferEncoding.split(",")) {
+			String coding = token.trim().toLowerCase(Locale.ROOT);
+			if (coding.isEmpty() || coding.equals("identity")) continue;
+			if (!coding.equals("chunked")) throw new IOException("Unsupported keepalive Transfer-Encoding: " + transferEncoding);
+			chunked = true;
+		}
+		return chunked;
+	}
+
+	private static long parseContentLength(String value) throws IOException {
+		try {
+			long length = Long.parseLong(value);
+			if (length < 0) throw new NumberFormatException();
+			return length;
+		} catch (NumberFormatException e) {
+			throw new IOException("Unparseable keepalive Content-Length: " + value);
+		}
+	}
+
+	private void drainLength(long remaining) throws IOException {
+		while (remaining > 0) {
 			long skipped = in.skip(remaining);
 			if (skipped <= 0) {
 				if (in.read() < 0) throw new IOException("Keepalive response ended before its Content-Length");
 				skipped = 1;
 			}
 			remaining -= skipped;
+		}
+	}
+
+	private void drainChunked() throws IOException {
+		while (true) {
+			String line = HttpHead.readLine(in);
+			String hex = line.indexOf(';') >= 0 ? line.substring(0, line.indexOf(';')).trim() : line.trim();
+			long size;
+			try {
+				size = Long.parseLong(hex, 16);
+				if (size < 0) throw new NumberFormatException();
+			} catch (NumberFormatException e) {
+				throw new IOException("Unparseable keepalive chunk size: " + line);
+			}
+			if (size == 0) {
+				while (!HttpHead.readLine(in).isEmpty()) {
+				}
+				return;
+			}
+			drainLength(size);
+			if (in.read() != '\r' || in.read() != '\n') throw new IOException("Keepalive chunked body is missing a chunk terminator");
+		}
+	}
+
+	private void drainToEof() throws IOException {
+		byte[] buffer = new byte[8192];
+		while (in.read(buffer) >= 0) {
 		}
 	}
 
