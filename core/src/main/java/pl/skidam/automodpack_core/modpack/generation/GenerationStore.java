@@ -12,10 +12,8 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.TreeMap;
 import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -243,19 +241,8 @@ public final class GenerationStore {
 	}
 
 	private GenerationHosting hosting(Current current) {
-		Map<String, Path> paths = new TreeMap<>();
-		paths.put(GenerationHosting.HEAD_DOCUMENT_KEY, projectionFile);
-		paths.put(GenerationHosting.JOURNAL_KEY, journalFile);
-		paths.put(current.policySha1(), DataRootResolver.objectFile(objectsDirectory, current.policySha1()));
-		for (ContentTree.ContentFile file : current.tree().files().values()) paths.put(file.sha1(), DataRootResolver.objectFile(objectsDirectory, file.sha1()));
-		// The waiting track is an object like any other, and the head is the single source of its hash; a track a
-		// collect has already removed stops being hosted, exactly as an absent advertisement would.
-		if (HashUtils.isSha1(current.waitingMusicSha1())) {
-			String sha1 = HashUtils.normalizeSha1(current.waitingMusicSha1());
-			Path object = DataRootResolver.objectFile(objectsDirectory, sha1);
-			if (Files.isRegularFile(object)) paths.put(sha1, object);
-		}
-		return new GenerationHosting(paths);
+		return GenerationHosting.of(projectionFile, journalFile, current.policySha1(), current.tree(), current.waitingMusicSha1(),
+				sha1 -> DataRootResolver.objectFile(objectsDirectory, sha1));
 	}
 
 	/**

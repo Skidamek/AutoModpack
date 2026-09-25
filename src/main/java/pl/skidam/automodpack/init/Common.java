@@ -33,6 +33,12 @@ public class Common {
 
 	private static void prepareServerRuntime() {
 		if (serverRuntimePrepared) return;
+		prepareRuntime();
+		runGeneration();
+	}
+
+	private static void prepareRuntime() {
+		if (serverRuntimePrepared) return;
 		if (serverConfig == null) serverConfig = ConfigUtils.loadOrCreateServerConfig();
 
 		ProvisioningSecretStore.ensure();
@@ -40,8 +46,6 @@ public class Common {
 		hostServer = new NettyServer();
 		modpackExecutor = new ModpackExecutor();
 		serverRuntimePrepared = true;
-
-		runGeneration();
 	}
 
 	private static void runGeneration() {
@@ -83,14 +87,15 @@ public class Common {
 	 * A client host is a courtesy, not the world's purpose: a failure costs the hosting for this session and is
 	 * announced to the player, never the world start. When the client runs a downloaded pack, that pack is hosted
 	 * byte-exactly from the client's own store; without one the game directory generates a pack like a server's.
+	 * Once the runtime is built, its failure costs only serving: commands and the joiner handshake keep a stable
+	 * target, and the next world start retries.
 	 */
 	private static synchronized void prepareClientHostBestEffort() {
 		try {
-			prepareClientHostRuntime();
+			prepareRuntime();
+			if (!adoptActivePack()) runGeneration();
 			hostServer.start();
 		} catch (Exception e) {
-			// The runtime stays constructed: commands and the joiner handshake keep a stable target, only serving is
-			// down. The next world start retries through the same path.
 			try {
 				if (hostServer != null) hostServer.stop();
 			} catch (Exception stopFailure) {
@@ -102,24 +107,13 @@ public class Common {
 		}
 	}
 
-	private static void prepareClientHostRuntime() throws IOException {
-		if (serverRuntimePrepared) return;
-		if (serverConfig == null) serverConfig = ConfigUtils.loadOrCreateServerConfig();
-
-		ProvisioningSecretStore.ensure();
-
-		hostServer = new NettyServer();
-		modpackExecutor = new ModpackExecutor();
-		serverRuntimePrepared = true;
-
+	private static boolean adoptActivePack() throws IOException {
 		ClientStorage storage = ClientStorage.open(GameDirectory.current());
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		if (generations.activeDocument().isPresent()) {
-			hostServer.replacePaths(generations.hosting());
-			LOGGER.info("Hosting this client's active modpack to joining players");
-			return;
-		}
-		runGeneration();
+		if (!generations.hasActivePack()) return false;
+		hostServer.replacePaths(generations.hosting());
+		LOGGER.info("Hosting this client's active modpack to joining players");
+		return true;
 	}
 
 	public static synchronized void beforeShutdownServer() {

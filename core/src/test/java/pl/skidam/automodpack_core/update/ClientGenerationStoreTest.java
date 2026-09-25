@@ -474,6 +474,19 @@ class ClientGenerationStoreTest {
 	}
 
 	@Test
+	void hostingFailsLoudlyWhenAContentObjectIsMissing() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "projection-object");
+		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
+		TestPacks.stageGeneration(storage, document);
+		writeHead(storage, FIRST_PACK, document);
+		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields());
+		Files.delete(storage.objectFile(hash));
+
+		assertThrows(IOException.class, () -> new ClientGenerationStore(storage).hosting());
+	}
+
+	@Test
 	void hostingWithoutAnActivePackFails() throws Exception {
 		ClientStorage storage = storage();
 		assertThrows(IOException.class, () -> new ClientGenerationStore(storage).hosting());

@@ -9,11 +9,9 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 
@@ -93,6 +91,12 @@ public final class ClientGenerationStore {
 		return state == null ? Optional.empty() : Optional.of(document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger)));
 	}
 
+	/** Whether an active pack pointer exists; {@link #hosting()} resolves the rest. */
+	public boolean hasActivePack() throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+		return state != null && state.modpackId != null && !state.modpackId.isBlank();
+	}
+
 	/**
 	 * The active pack's full hosting surface: the mirrored head and journal plus every object the policy references, so
 	 * joining players get byte-exactly what this client runs. Every mapped file must exist; a missing object means the
@@ -108,20 +112,13 @@ public final class ClientGenerationStore {
 		GenerationJsons.HeadDocumentFields headFields = ConfigTools.read(head, GenerationJsons.HeadDocumentFields.class)
 				.orElseThrow(() -> new IOException("The active modpack's head document is empty: " + head));
 		GroupManifest manifest = policyDocument(headFields.policySha1);
-		Map<String, Path> paths = new TreeMap<>();
-		paths.put(GenerationHosting.HEAD_DOCUMENT_KEY, head);
-		paths.put(GenerationHosting.JOURNAL_KEY, journal);
-		paths.put(headFields.policySha1, storage.objectFile(headFields.policySha1));
-		for (var file : ContentTree.fromManifest(manifest).files().values()) paths.put(file.sha1(), storage.objectFile(file.sha1()));
-		if (HashUtils.isSha1(headFields.waitingMusicSha1)) {
-			String sha1 = HashUtils.normalizeSha1(headFields.waitingMusicSha1);
-			Path object = storage.objectFile(sha1);
-			if (Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)) paths.put(sha1, object);
-		}
-		for (Path path : paths.values()) {
+		if (!state.modpackId.equals(manifest.modpackId()))
+			throw new IOException("The active modpack's head names a different pack: " + manifest.modpackId());
+		GenerationHosting hosting = GenerationHosting.of(head, journal, headFields.policySha1, ContentTree.fromManifest(manifest), headFields.waitingMusicSha1, storage::objectFile);
+		for (Path path : hosting.asMap().values()) {
 			if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("The active modpack is missing a hosted object: " + path);
 		}
-		return new GenerationHosting(paths);
+		return hosting;
 	}
 
 	/** Reconstructs the active target from the active document and the persisted selection intent, without server access. */
