@@ -87,6 +87,14 @@ class DownloadClientTest {
 		assertEquals(0, DownloadClient.ObjectTransfer.retryDelayMillis(new IOException("a lane death retries at once")));
 	}
 
+	/** A wire failure halves the in-flight bound down to one take per lane; the retry path has to call this, the settle path never sees a retried take. */
+	@Test
+	void outstandingCapHalvesOnWireFailureDownToOneTakePerLane() {
+		assertEquals(40, DownloadClient.ObjectTransfer.reduceOutstandingCap(80));
+		assertEquals(DownloadClient.LANES, DownloadClient.ObjectTransfer.reduceOutstandingCap(DownloadClient.LANES));
+		assertEquals(DownloadClient.LANES, DownloadClient.ObjectTransfer.reduceOutstandingCap(DownloadClient.LANES + 1));
+	}
+
 	@Test
 	void localDestinationOpenFailureHasTypedStorageBoundary(@TempDir Path directory) throws Exception {
 		Path destination = Files.createDirectory(directory.resolve("destination"));

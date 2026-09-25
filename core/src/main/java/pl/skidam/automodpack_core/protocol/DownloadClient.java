@@ -590,11 +590,25 @@ public class DownloadClient implements PackTransport {
 			return Math.max(TRANSFER_WRITE_STALL_TIMEOUT.toNanos(), sliceBytes * 1_000_000_000L / TAKE_RATE_FLOOR_BYTES_PER_SECOND);
 		}
 
+		/** Halves the in-flight bound on a wire failure, never below one take per lane. */
+		static int reduceOutstandingCap(int outstandingCap) {
+			return Math.max(MIN_OUTSTANDING_TAKES, outstandingCap / 2);
+		}
+
 		private void onTakeSettled(Take take, AtomicLong takeBytes, Throwable takeError) {
 			if (takeError instanceof RangeIgnoredException) markRangeIgnoredHost();
 			boolean retried = takeError != null && take.attempt() < MAX_TAKE_ATTEMPTS && retryWorth(takeError);
 			if (retried) {
 				takeRetries.incrementAndGet();
+				synchronized (lock) {
+					// The retried range is still the same unsettled unit of work, but the wire already proved the
+					// current bound was buying re-downloads. Shrink it before the retry is issued.
+					if (outstandingCap > MIN_OUTSTANDING_TAKES) {
+						outstandingCap = reduceOutstandingCap(outstandingCap);
+						WireTrace.log("TAKE_WINDOW_DOWN", "object", objectName(), "cap", outstandingCap);
+					}
+					cleanSettles = 0;
+				}
 				// The barrier stays charged: the retried range is the same one unsettled unit of work. A throttled
 				// answer waits out its window on the retry clock instead of an immediate re-issue - the wait never
 				// parks a lane's reader, and an abort while waiting settles the take as cancelled, not restarted.
@@ -626,15 +640,7 @@ public class DownloadClient implements PackTransport {
 			boolean done;
 			Throwable failure;
 			synchronized (lock) {
-				if (retried) {
-					// The wire failed this take: halve the in-flight bound and forget the clean streak. Lost or
-					// reset bytes mean the unsettled queue was buying re-downloads, not progress.
-					if (outstandingCap > MIN_OUTSTANDING_TAKES) {
-						outstandingCap = Math.max(MIN_OUTSTANDING_TAKES, outstandingCap / 2);
-						WireTrace.log("TAKE_WINDOW_DOWN", "object", objectName(), "cap", outstandingCap);
-					}
-					cleanSettles = 0;
-				} else if (takeError == null && ++cleanSettles >= Math.max(MIN_OUTSTANDING_TAKES, outstandingCap)) {
+				if (takeError == null && ++cleanSettles >= Math.max(MIN_OUTSTANDING_TAKES, outstandingCap)) {
 					cleanSettles = 0;
 					if (outstandingCap < MAX_OUTSTANDING_TAKES) {
 						outstandingCap = Math.min(MAX_OUTSTANDING_TAKES, outstandingCap * 2);
