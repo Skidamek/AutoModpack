@@ -16,6 +16,7 @@ import pl.skidam.automodpack_core.auth.ProvisioningSecretStore;
 import pl.skidam.automodpack_core.auth.ServerAddressPin;
 import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.modpack.GroupInspector;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
@@ -141,13 +142,20 @@ public class Commands {
 										)
 								)
 						)
-						.then(literal("config")
-								.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-								.then(literal("reload")
-										.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-										.executes(Commands::reload)
-								)
-						)
+					.then(literal("config")
+							.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+							.then(literal("reload")
+									.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+									.executes(Commands::reload)
+							)
+					)
+					.then(literal("groups")
+							.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+							.executes(Commands::modpackGroups)
+							.then(argument("group-id", StringArgumentType.word())
+									.executes(Commands::modpackGroupDetail)
+							)
+					)
 		);
 
 		dispatcher.register(
@@ -497,6 +505,7 @@ public class Commands {
 		send(context, "/automodpack generate history/storage [collect confirm]/export-http [--all] <dir>", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack host start/stop/restart/activity/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
+		send(context, "/automodpack groups [group-id]", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
 	}
 
@@ -683,7 +692,38 @@ public class Commands {
 		}
 	}
 
-		private static int generationStorage(CommandContext<CommandSourceStack> context) {
+	private static int modpackGroups(CommandContext<CommandSourceStack> context) {
+		Util.backgroundExecutor().execute(() -> {
+			try {
+				Optional<PackDocument> published = modpackExecutor.currentDocument();
+				for (String line : GroupInspector.overview(serverConfig.modpack, published.map(PackDocument::manifest).orElse(null)))
+					send(context, line, ChatFormatting.WHITE, false);
+			} catch (IOException e) {
+				send(context, "Failed to read the published modpack: " + e.getMessage(), ChatFormatting.RED, true);
+			}
+		});
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int modpackGroupDetail(CommandContext<CommandSourceStack> context) {
+		String groupId = StringArgumentType.getString(context, "group-id");
+		Util.backgroundExecutor().execute(() -> {
+			try {
+				Optional<PackDocument> published = modpackExecutor.currentDocument();
+				Optional<List<String>> lines = GroupInspector.detail(serverConfig.modpack, groupId, published.map(PackDocument::manifest).orElse(null));
+				if (lines.isEmpty()) {
+					send(context, "Unknown group id: " + groupId + ". Run /automodpack groups for the list.", ChatFormatting.RED, false);
+					return;
+				}
+				for (String line : lines.get()) send(context, line, ChatFormatting.WHITE, false);
+			} catch (IOException e) {
+				send(context, "Failed to read the published modpack: " + e.getMessage(), ChatFormatting.RED, true);
+			}
+		});
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int generationStorage(CommandContext<CommandSourceStack> context) {
 			try {
 				GenerationStore.StorageReport report = modpackExecutor.storageReport();
 				send(context, "Modpack storage", ChatFormatting.GREEN, false);
