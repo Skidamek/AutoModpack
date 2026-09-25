@@ -140,6 +140,7 @@
   "automodpack.validation.title": "Weryfikacja certyfikatu",
   "automodpack.validation.fingerprint.label": "Odcisk cyfrowy serwera (skrócony):",
   "automodpack.validation.fingerprint.field": "Pełny odcisk cyfrowy",
+  "automodpack.validation.confirm.text": "Wklej pełny odcisk cyfrowy od operatora serwera. AutoModpack porówna go z odciskiem cyfrowym serwera:",
   "automodpack.validation.verify": "Zweryfikuj",
   "automodpack.validation.failed": "Odciski cyfrowe nie pasują. Atakujący może używać fałszywej tożsamości serwera.",
   "automodpack.validation.skip.title": "Ryzyko bezpieczeństwa",

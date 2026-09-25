@@ -70,8 +70,6 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.identity.paste"), wrapWidth));
 		prose.add(blankLine());
 		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.identity.notPack"), wrapWidth));
-		prose.add(blankLine());
-		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.identity.publiclyTrusted"), wrapWidth, ChatFormatting.GRAY));
 		// The fingerprint pins with the field it feeds: paste instruction, caption, value, then the field and its method hint.
 		List<MutableComponent> stack = new ArrayList<>(wrapParagraph(this.font, VersionedText.str("automodpack.validation.confirm.text"), wrapWidth, ChatFormatting.GRAY));
 		stack.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.fingerprint.label"), wrapWidth, ChatFormatting.GRAY));

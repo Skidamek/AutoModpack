@@ -60,8 +60,6 @@ public class SkipVerificationScreen extends VersionedScreen {
 		prose.add(blankLine());
 		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.skip.warning2"), wrapWidth, ChatFormatting.RED));
 		prose.add(blankLine());
-		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.identity.publiclyTrusted"), wrapWidth, ChatFormatting.GRAY));
-		prose.add(blankLine());
 		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.skip.instruction"), wrapWidth));
 		// The typed phrase pins with the field that must receive it: confirm label, phrase, field, countdown hint.
 		List<MutableComponent> stack = new ArrayList<>(wrapParagraph(this.font, VersionedText.str("automodpack.validation.skip.confirm.text"), wrapWidth, ChatFormatting.GRAY));
