@@ -2,7 +2,6 @@ package pl.skidam.automodpack_core.auth;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 

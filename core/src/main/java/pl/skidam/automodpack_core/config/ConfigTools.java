@@ -325,7 +325,10 @@ public final class ConfigTools {
 		return narrowed;
 	}
 
-	/** What the stream reader ({@code JsonReader#nextLong}) yields for a literal read as a {@code long}: whole literals keep full precision, anything else must narrow to long without loss. The exact decimal path matters at the boundary: {@code (long)} would saturate 2^63 to Long.MAX_VALUE and then compare equal to its own double. */
+	/**
+	 * What the stream reader ({@code JsonReader#nextLong}) yields for a literal read as a {@code long}: whole literals keep full precision, anything else must narrow to long without loss. The exact decimal path matters
+	 * at the boundary: {@code (long)} would saturate 2^63 to Long.MAX_VALUE and then compare equal to its own double.
+	 */
 	private static long streamLong(String literal) {
 		try {
 			return Long.parseLong(literal);

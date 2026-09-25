@@ -20,8 +20,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ssl.SSLKeyException;
 
-import io.netty.buffer.ByteBuf;
-
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchFailure;
 import pl.skidam.mcholepunch.HolepunchHandler;
