@@ -7,7 +7,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.EnumSet;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 
 import com.google.gson.JsonElement;
@@ -15,15 +14,12 @@ import com.google.gson.JsonObject;
 
 import pl.skidam.automodpack_core.launchers.LauncherVersionSwapper.Axis;
 import pl.skidam.automodpack_core.storage.GameDirectory;
-import pl.skidam.automodpack_core.utils.HttpClientPool;
 
 // Pandora launcher: the instance's info_v1.json is the full version record (crates/schema/src/instance.rs in Pandora's sources).
 final class PandoraMeta implements LauncherAdapter {
 
 	/** Canonical serde forms are lowercase (loader.rs rename_all); the capitalized names remain read aliases. */
 	private static final Set<String> SWITCHABLE_LOADERS = Set.of("fabric", "forge", "neoforge");
-	private static final Map<String, String> MAVEN_URLS = Map.of("forge", "https://maven.minecraftforge.net/net/minecraftforge/forge/",
-			"neoforge", "https://maven.neoforged.net/releases/net/neoforged/neoforge/");
 
 	private final Path infoJsonPath;
 
@@ -53,18 +49,6 @@ final class PandoraMeta implements LauncherAdapter {
 		} else if (!pandoraLoaderVersion(targetLoader, targetLoaderVersion, targetMcVersion).equals(stringOrNull(json, "preferred_loader_version"))) {
 			axes.add(Axis.LOADER_VERSION);
 		}
-		return axes;
-	}
-
-	@Override
-	public EnumSet<Axis> validate(EnumSet<Axis> axes, String targetLoader, String targetLoaderVersion, String targetMcVersion) throws IOException {
-		String mavenUrl = MAVEN_URLS.get(targetLoader);
-		if (mavenUrl == null) return axes;
-		boolean loaderAxisNeeded = axes.contains(Axis.LOADER_TYPE) || axes.contains(Axis.LOADER_VERSION);
-		if (!loaderAxisNeeded) return axes;
-		String mavenVersion = pandoraLoaderVersion(targetLoader, targetLoaderVersion, targetMcVersion);
-		int code = probe(mavenUrl + mavenVersion + "/");
-		if (code != 200) throw new IOException("The " + targetLoader + " maven does not list " + mavenVersion + ", so this version switch cannot be applied");
 		return axes;
 	}
 
@@ -128,14 +112,5 @@ final class PandoraMeta implements LauncherAdapter {
 	private static String stringOrNull(JsonObject json, String member) {
 		JsonElement element = json.get(member);
 		return element == null || element.isJsonNull() ? null : element.getAsString();
-	}
-
-	private static int probe(String url) {
-		try {
-			return HttpClientPool.request(url, Map.of(), null, true).statusCode();
-		} catch (IOException e) {
-			LOGGER.warn("Could not reach the launcher maven at: {}", url, e);
-			return -1;
-		}
 	}
 }

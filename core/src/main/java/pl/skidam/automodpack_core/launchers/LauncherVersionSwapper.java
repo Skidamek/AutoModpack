@@ -134,13 +134,6 @@ public class LauncherVersionSwapper {
 			LOGGER.warn("Skipping launcher {} switch; meta.prismlauncher.org does not know {} {}", axis, uid, version);
 			iterator.remove();
 		}
-		try {
-			axes = adapter.validate(axes, serverLoader, serverLoaderVersion, serverMcVersion);
-		} catch (IOException e) {
-			axes.remove(Axis.LOADER_TYPE);
-			axes.remove(Axis.LOADER_VERSION);
-			LOGGER.warn("Skipping launcher loader switch: {}", e.getMessage());
-		}
 		if (axes.isEmpty()) return SwitchPlan.none();
 		return SwitchPlan.of(axes);
 	}

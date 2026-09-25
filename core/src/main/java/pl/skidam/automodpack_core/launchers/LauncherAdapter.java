@@ -20,16 +20,6 @@ public interface LauncherAdapter {
 	EnumSet<LauncherVersionSwapper.Axis> requiredAxes(String targetLoader, String targetLoaderVersion, String targetMcVersion) throws IOException;
 
 	/**
-	 * Checks the plan against whatever the launcher resolves remotely, returning the axes it can honor. Drops an
-	 * axis it can safely skip; throws when a required axis cannot be satisfied so the switch refuses before any
-	 * pack content is staged.
-	 */
-	default EnumSet<LauncherVersionSwapper.Axis> validate(EnumSet<LauncherVersionSwapper.Axis> axes, String targetLoader, String targetLoaderVersion,
-			String targetMcVersion) throws IOException {
-		return axes;
-	}
-
-	/**
 	 * Writes the axes and re-reads the launcher's records: returns only once the metadata converged to the target,
 	 * otherwise throws. The target loader is one of fabric/forge/neoforge; the version strings are the mod's own
 	 * unprefixed loader version and Minecraft version.
