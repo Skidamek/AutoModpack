@@ -257,8 +257,10 @@ final class UpdateSession implements UpdateAttempt {
 	private void recordChangelogs(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
 		UpdatePreview applied = previewFor(prepared, InstalledTokenRule.ACTIVE_BOOKMARK);
 		changelogs.replaceWith(applied.withReferences(sourceCatalogue.resolveMainPageReferences(prepared)));
-		ModpackJsons.ModpackContentFields pack = target.flatTarget();
-		changelogs.setRequiredLauncherVersions(pack.mcVersion, pack.loader, pack.loaderVersion);
+		if (prepared.plan().restartReasons().contains(UpdatePlan.RestartReason.MANUAL_VERSION_SWITCH)) {
+			ModpackJsons.ModpackContentFields pack = target.flatTarget();
+			changelogs.setRequiredLauncherVersions(pack.mcVersion, pack.loader, pack.loaderVersion);
+		}
 		LOGGER.info("Prepared update changes: {} changed, {} removed", changelogs.changedFiles().size(), changelogs.removedFiles().size());
 	}
 

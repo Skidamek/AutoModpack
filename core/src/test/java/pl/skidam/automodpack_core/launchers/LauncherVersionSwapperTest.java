@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.launchers;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -79,6 +80,26 @@ class LauncherVersionSwapperTest {
 		MultiMCMeta meta = new MultiMCMeta(mmcPack);
 		meta.apply(EnumSet.allOf(Axis.class), "fabric", "0.16.14", "1.21.1");
 		assertEquals(EnumSet.noneOf(Axis.class), meta.requiredAxes("fabric", "0.16.14", "1.21.1"));
+	}
+
+	@Test
+	void multiMcUnreadableMetadataThrowsInsteadOfLookingConverged() throws IOException {
+		Path mmcPack = dir.resolve("mmc-pack.json");
+		write(mmcPack, "{");
+		assertThrows(IOException.class, () -> new MultiMCMeta(mmcPack).requiredAxes("fabric", "0.16.14", "1.21.1"));
+	}
+
+	@Test
+	void multiMcReplaceLoaderDoesNotDuplicateExistingUid() throws IOException {
+		Path mmcPack = dir.resolve("mmc-pack.json");
+		write(mmcPack,
+				"{\"formatVersion\":1,\"components\":[{\"uid\":\"net.minecraft\",\"version\":\"1.20.1\"},{\"uid\":\"net.fabricmc.fabric-loader\",\"version\":\"0.16.14\"},{\"uid\":\"net.minecraftforge\",\"version\":\"47.4.0\"}]}");
+		new MultiMCMeta(mmcPack).apply(EnumSet.of(Axis.LOADER_TYPE), "fabric", "0.17.0", "1.20.1");
+		JsonObject persisted = JsonParser.parseString(Files.readString(mmcPack)).getAsJsonObject();
+		long fabricCount = persisted.getAsJsonArray("components").asList().stream().map(element -> element.getAsJsonObject())
+				.filter(component -> "net.fabricmc.fabric-loader".equals(component.get("uid").getAsString())).count();
+		assertEquals(1, fabricCount);
+		assertEquals(EnumSet.noneOf(Axis.class), new MultiMCMeta(mmcPack).requiredAxes("fabric", "0.17.0", "1.20.1"));
 	}
 
 	@Test

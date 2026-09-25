@@ -22,4 +22,4 @@ AutoModpack applies that metadata on Prism, MultiMC forks, and Pandora. A pack s
 
 Before changing anything, AutoModpack asks the Prism meta server whether it knows the target versions. If it does not, the versions are left alone. Server owners can stop publishing version metadata with `advertiseVersionsToSync: false`, and players can refuse the sync per instance with `syncLoaderVersion: false` in the [client config](../configuration/client-config).
 
-On every other launcher, a pack that needs different versions is not applied at launch. After you join in-game, the pack files still sync, and the restart screen names the Minecraft version and loader to set in the launcher before the next start.
+On every other launcher, a pack that needs different versions is not applied at launch. The log names the skip. If you can still complete login on this Minecraft version and loader, joining in-game syncs the pack files and the restart screen names the Minecraft version and loader to set before the next start. A loader the server does not accept never starts that sync.

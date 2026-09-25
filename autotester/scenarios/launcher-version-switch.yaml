@@ -30,13 +30,29 @@ flow:
         - log:
             container: client
             matches: 'MultiMC/Prism: switched launcher metadata to'
+            count: 1
+        - log:
+            file: "../launcher-meta/mmc-pack.json"
+            matches_all:
+              - '"uid":"net.minecraft"'
+              - '"version":"${target.minecraft}"'
+            not_matches: '"uid":"net.minecraftforge","version":"47.4.0"'
   - use: restart_client
   - use: rejoin
   - do: assert
-    name: verify the second boot needed no further switch (rejoin only lands in-game when the metadata converged)
+    name: verify the second boot needed no further switch and the rewritten metadata survived
     that:
       all:
-        - file: "../launcher-meta/mmc-pack.json"
+        - log:
+            container: client
+            matches: 'MultiMC/Prism: switched launcher metadata to'
+            count: 1
+        - log:
+            file: "../launcher-meta/mmc-pack.json"
+            matches_all:
+              - '"uid":"net.minecraft"'
+              - '"version":"${target.minecraft}"'
+            not_matches: '"uid":"net.minecraftforge","version":"47.4.0"'
   - do: quit
     name: quit the client
 

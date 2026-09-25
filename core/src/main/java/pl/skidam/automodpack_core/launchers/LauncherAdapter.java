@@ -13,8 +13,11 @@ public interface LauncherAdapter {
 	/** Whether the game directory sits inside this launcher's instance layout. */
 	boolean detected();
 
-	/** The version axes this launcher's metadata still needs to switch to run the target pack, read from its own records. */
-	EnumSet<LauncherVersionSwapper.Axis> requiredAxes(String targetLoader, String targetLoaderVersion, String targetMcVersion);
+	/**
+	 * The version axes this launcher's metadata still needs to switch to run the target pack, read from its own records. Throws when the instance file is present but unreadable, so the switch refuses instead of looking
+	 * already matched.
+	 */
+	EnumSet<LauncherVersionSwapper.Axis> requiredAxes(String targetLoader, String targetLoaderVersion, String targetMcVersion) throws IOException;
 
 	/**
 	 * Checks the plan against whatever the launcher resolves remotely, returning the axes it can honor. Drops an

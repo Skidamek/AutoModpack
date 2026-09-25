@@ -156,10 +156,14 @@ def _start_client_container(ctx: Context, name: str, *, prepare_only: bool = Fal
             "JAVA_TOOL_OPTIONS": "-Xmx2G",
         },
         mounts=[
-            (_launcher_meta_dir(ctx), "/work", False),
             (ctx.game_dir, "/work/game", False),
             (hmc_cache_root, "/work/hmc-cache", False),
             (shared_versions, "/work/hmc-shared-versions", False),
+            *[
+                (path, f"/work/{path.name}", False)
+                for path in _launcher_meta_dir(ctx).iterdir()
+                if path.is_file()
+            ],
         ],
         command=[
             "/opt/automodpack/run-headlessmc-client",
@@ -370,11 +374,9 @@ def _client_preparation_name(ctx: Context) -> str:
 
 
 def _launcher_meta_dir(ctx: Context) -> Path:
-    """Host dir mounted over the client container's /work (the game directory's
-    parent, where the launcher metadata writers probe). Scenario plants
-    mmc-pack.json here and the mod's switch rewrites it in place, so the
-    switched state survives relaunches without any seeding step. The game,
-    cache, and shared-versions mounts nest on top of it."""
+    """Host dir of instance-parent files (mmc-pack.json) bind-mounted one file
+    at a time onto /work/<name>, which is the game directory's parent inside
+    the client. Plant writes here; the switch rewrites the same host file."""
     directory = ctx.game_dir.parent / "launcher-meta"
     directory.mkdir(parents=True, exist_ok=True)
     return directory

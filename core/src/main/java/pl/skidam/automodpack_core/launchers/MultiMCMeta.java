@@ -41,14 +41,11 @@ final class MultiMCMeta implements LauncherAdapter {
 	}
 
 	@Override
-	public EnumSet<Axis> requiredAxes(String targetLoader, String targetLoaderVersion, String targetMcVersion) {
-		JsonObject json = LauncherVersionSwapper.readJson(mmcPackPath);
-		if (!isSupported(json)) {
-			LOGGER.warn("Ignoring unsupported MultiMC/Prism launcher metadata at: {}", mmcPackPath);
-			return EnumSet.noneOf(Axis.class);
-		}
+	public EnumSet<Axis> requiredAxes(String targetLoader, String targetLoaderVersion, String targetMcVersion) throws IOException {
+		JsonObject json = LauncherVersionSwapper.readJsonStrict(mmcPackPath);
+		if (!isSupported(json)) throw new IOException("Unsupported MultiMC/Prism launcher metadata at: " + mmcPackPath);
 		String targetUid = componentUid(targetLoader);
-		if (targetUid == null) return EnumSet.noneOf(Axis.class);
+		if (targetUid == null) throw new IOException("Unsupported modloader for MultiMC/Prism metadata: " + targetLoader);
 		EnumSet<Axis> axes = EnumSet.noneOf(Axis.class);
 		String mcVersion = componentVersion(json, MC_UID);
 		if (mcVersion != null && !mcVersion.equals(targetMcVersion)) axes.add(Axis.GAME_VERSION);
@@ -137,20 +134,26 @@ final class MultiMCMeta implements LauncherAdapter {
 	private static boolean replaceLoaderComponent(JsonObject json, String targetUid, String targetLoaderVersion) {
 		if (targetUid.equals(loaderUid(json)) && !needsVersionUpdate(json, targetUid, targetLoaderVersion)) return false;
 		JsonArray components = json.getAsJsonArray("components");
-		boolean changed = false;
+		boolean haveTarget = false;
 		for (int i = components.size() - 1; i >= 0; i--) {
 			JsonObject component = components.get(i).getAsJsonObject();
 			if (!component.has("uid")) continue;
 			String uid = component.get("uid").getAsString();
-			if (LOADER_UID_MAP.containsValue(uid) && !uid.equals(targetUid)) {
-				components.remove(i);
-				changed = true;
+			if (!LOADER_UID_MAP.containsValue(uid)) continue;
+			if (uid.equals(targetUid)) {
+				haveTarget = true;
+				component.addProperty("version", targetLoaderVersion);
+				if (component.has("cachedVersion")) component.addProperty("cachedVersion", targetLoaderVersion);
+				continue;
 			}
+			components.remove(i);
 		}
-		JsonObject loader = new JsonObject();
-		loader.addProperty("uid", targetUid);
-		loader.addProperty("version", targetLoaderVersion);
-		components.add(loader);
+		if (!haveTarget) {
+			JsonObject loader = new JsonObject();
+			loader.addProperty("uid", targetUid);
+			loader.addProperty("version", targetLoaderVersion);
+			components.add(loader);
+		}
 		return true;
 	}
 
@@ -165,8 +168,12 @@ final class MultiMCMeta implements LauncherAdapter {
 	}
 
 	private static boolean isSupported(JsonObject json) {
-		return json != null && json.has("formatVersion") && json.get("formatVersion").getAsInt() == 1 && json.has("components")
-				&& json.get("components").isJsonArray();
+		if (json == null || !json.has("formatVersion") || !json.has("components") || !json.get("components").isJsonArray()) return false;
+		try {
+			return json.get("formatVersion").getAsInt() == 1;
+		} catch (RuntimeException e) {
+			return false;
+		}
 	}
 
 	/**
@@ -183,7 +190,7 @@ final class MultiMCMeta implements LauncherAdapter {
 		long snapshot = lastModifiedOrZero(mmcPackPath);
 		while (System.currentTimeMillis() < deadline) {
 			if (lastModifiedOrZero(mmcPackPath) != snapshot) {
-				waitUntilMtimeStable(mmcPackPath);
+				waitUntilMtimeStable(mmcPackPath, deadline);
 				return;
 			}
 			try {
@@ -203,10 +210,10 @@ final class MultiMCMeta implements LauncherAdapter {
 		}
 	}
 
-	/** Insurance for forks that dirty twice during the online resolve: the flush is done once the mtime holds still. */
-	private static void waitUntilMtimeStable(Path path) throws IOException {
+	/** Insurance for forks that dirty twice during the online resolve: the flush is done once the mtime holds still, or once the write window closes. */
+	private static void waitUntilMtimeStable(Path path, long deadline) throws IOException {
 		long last = lastModifiedOrZero(path);
-		while (true) {
+		while (System.currentTimeMillis() < deadline) {
 			try {
 				Thread.sleep(1000);
 			} catch (InterruptedException e) {

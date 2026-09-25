@@ -97,13 +97,18 @@ public class LauncherVersionSwapper {
 			if (axes.isEmpty()) return SwitchPlan.none();
 			return SwitchPlan.manual(axes);
 		}
-		EnumSet<Axis> axes = adapter.requiredAxes(serverLoader, serverLoaderVersion, serverMcVersion);
+		if (serverLoader == null || !SWITCHABLE_LOADERS.contains(serverLoader.toLowerCase(Locale.ROOT)))
+			return SwitchPlan.refused(EnumSet.noneOf(Axis.class), "This pack uses the unsupported modloader '" + serverLoader + "'");
+		EnumSet<Axis> axes;
+		try {
+			axes = adapter.requiredAxes(serverLoader, serverLoaderVersion, serverMcVersion);
+		} catch (IOException e) {
+			return SwitchPlan.refused(EnumSet.noneOf(Axis.class), e.getMessage());
+		}
 		if (axes.isEmpty()) return SwitchPlan.none();
 		if (!syncVersions) return SwitchPlan.refused(axes, "Version syncing is disabled in the AutoModpack settings, and this pack needs the game version switched to run");
 		if (serverLoaderVersion == null || serverLoaderVersion.isBlank())
 			return SwitchPlan.refused(axes, "The server does not advertise the pack's version metadata, and this pack needs the game version switched to run");
-		if (serverLoader == null || !SWITCHABLE_LOADERS.contains(serverLoader.toLowerCase(Locale.ROOT)))
-			return SwitchPlan.refused(axes, "This pack uses the unsupported modloader '" + serverLoader + "'");
 		// Every written version is gated on the Prism meta server, whatever the launcher: it lags a little behind
 		// releases, which is the point. A version missing there is too new or does not exist, and a server
 		// advertising one must not stage pack content into a launcher that cannot resolve it.

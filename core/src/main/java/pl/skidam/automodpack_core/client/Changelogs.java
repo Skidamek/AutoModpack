@@ -80,6 +80,12 @@ public class Changelogs {
 		this.restartReasons = List.copyOf(Objects.requireNonNull(restartReasons, "restart reasons"));
 	}
 
+	/** Args for one restart-reason lang key, empty when the key has no placeholders. */
+	public List<String> restartReasonArgs(String reason) {
+		if (!"MANUAL_VERSION_SWITCH".equals(reason) || requiredMcVersion.isBlank() || requiredLoader.isBlank()) return List.of();
+		return List.of(requiredMcVersion, requiredLoader);
+	}
+
 	/** The pack versions a manual switch must name on the restart screen. */
 	public void setRequiredLauncherVersions(String mcVersion, String loader, String loaderVersion) {
 		requiredMcVersion = mcVersion == null ? "" : mcVersion;
@@ -88,14 +94,6 @@ public class Changelogs {
 			return;
 		}
 		requiredLoader = loaderVersion == null || loaderVersion.isBlank() ? loader : loader + " " + loaderVersion;
-	}
-
-	public String requiredMcVersion() {
-		return requiredMcVersion;
-	}
-
-	public String requiredLoader() {
-		return requiredLoader;
 	}
 
 	private static List<String> references(ChangeSet.Change change) {

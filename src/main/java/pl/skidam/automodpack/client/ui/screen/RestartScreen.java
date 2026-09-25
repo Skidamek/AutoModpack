@@ -93,9 +93,9 @@ public class RestartScreen extends VersionedScreen {
 	}
 
 	private String restartReasonText(String reason) {
-		if ("MANUAL_VERSION_SWITCH".equals(reason) && !changelogs.requiredMcVersion().isBlank() && !changelogs.requiredLoader().isBlank())
-			return VersionedText.str("automodpack.restart.reason." + reason, changelogs.requiredMcVersion(), changelogs.requiredLoader());
-		return VersionedText.str("automodpack.restart.reason." + reason);
+		List<String> args = changelogs.restartReasonArgs(reason);
+		if (args.isEmpty()) return VersionedText.str("automodpack.restart.reason." + reason);
+		return VersionedText.str("automodpack.restart.reason." + reason, args.toArray());
 	}
 
 	/** Kept files from this update live on the instance timeline. */

@@ -41,12 +41,9 @@ final class PandoraMeta implements LauncherAdapter {
 	}
 
 	@Override
-	public EnumSet<Axis> requiredAxes(String targetLoader, String targetLoaderVersion, String targetMcVersion) {
-		JsonObject json = LauncherVersionSwapper.readJson(infoJsonPath);
-		if (json == null) {
-			LOGGER.warn("Ignoring unsupported Pandora launcher metadata at: {}", infoJsonPath);
-			return EnumSet.noneOf(Axis.class);
-		}
+	public EnumSet<Axis> requiredAxes(String targetLoader, String targetLoaderVersion, String targetMcVersion) throws IOException {
+		JsonObject json = LauncherVersionSwapper.readJsonStrict(infoJsonPath);
+		if (json == null) throw new IOException("Unreadable Pandora launcher metadata at: " + infoJsonPath);
 		EnumSet<Axis> axes = EnumSet.noneOf(Axis.class);
 		String mcVersion = stringOrNull(json, "minecraft_version");
 		if (mcVersion != null && !mcVersion.equals(targetMcVersion)) axes.add(Axis.GAME_VERSION);
