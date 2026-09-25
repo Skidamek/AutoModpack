@@ -133,15 +133,25 @@ class Connection implements AutoCloseable {
 	 * and a differing length on a full-object take is the length-mismatch verdict. {@code debit} is the bytes the take
 	 * holds against the pipeline window until it settles, computed once here so every submit site is self-describing.
 	 */
-	record ObjectTake(Path destination, IntConsumer chunks, long offset, long endInclusive, OutputStream tap, boolean offerEncoding, long limitBytes, long expectedSize, long debit) {
+	record ObjectTake(Path destination, IntConsumer chunks, long offset, long endInclusive, OutputStream tap, boolean offerEncoding, long limitBytes, long expectedSize, long debit, long writeAt) {
 		/** A ranged take appending behind a stored partial; encoding is offered so the body can ride compressed. */
 		static ObjectTake rangedSlice(Path destination, IntConsumer chunks, long offset, long endInclusive, long expectedSize) {
-			return new ObjectTake(destination, chunks, offset, endInclusive, null, true, -1L, expectedSize, debit(offset, endInclusive));
+			return rangedSlice(destination, chunks, offset, endInclusive, expectedSize, offset);
+		}
+
+		/** {@code writeAt} is the byte position in {@code destination}; {@code offset} is the object's Range start. */
+		static ObjectTake rangedSlice(Path destination, IntConsumer chunks, long offset, long endInclusive, long expectedSize, long writeAt) {
+			return new ObjectTake(destination, chunks, offset, endInclusive, null, true, -1L, expectedSize, debit(offset, endInclusive), writeAt);
+		}
+
+		/** One open-ended body whose bytes are cut into tiles by {@code tap}; {@code destination} is unused. */
+		static ObjectTake openEnded(OutputStream tap, IntConsumer chunks, long offset, long expectedSize) {
+			return new ObjectTake(null, chunks, offset, -1L, tap, true, -1L, expectedSize, WIRE_CHUNK_BYTES, 0);
 		}
 
 		/** A whole-object take from zero, identity only, abandoned past {@code limitBytes}; the tap sees the bytes as they decode. */
 		static ObjectTake wholeObject(Path destination, OutputStream tap, long limitBytes) {
-			return new ObjectTake(destination, null, 0L, -1L, tap, false, limitBytes, -1L, WIRE_CHUNK_BYTES);
+			return new ObjectTake(destination, null, 0L, -1L, tap, false, limitBytes, -1L, WIRE_CHUNK_BYTES, 0);
 		}
 
 		/**
@@ -415,7 +425,7 @@ class Connection implements AutoCloseable {
 				// reject after the fact. An encoded body is framed chunked and has no length by design.
 				if (head.contentLength() == null && !head.chunked()) throw new IOException("HTTP 206 without Content-Length");
 				PartialResume.requireResumeStart(head.contentRange(), take.offset());
-				if (consumeAndComplete(head, take.offset())) return;
+				if (consumeAndComplete(head, take.writeAt())) return;
 				future.complete(destination);
 				return;
 			}
@@ -433,7 +443,7 @@ class Connection implements AutoCloseable {
 						future.completeExceptionally(new RangeIgnoredException(originPath));
 						return;
 					}
-					if (consumeAndComplete(head, take.offset())) return;
+					if (consumeAndComplete(head, take.writeAt())) return;
 					future.complete(destination);
 					return;
 				}
@@ -446,11 +456,14 @@ class Connection implements AutoCloseable {
 					throw new RangeIgnoredException(originPath);
 				}
 				// On a full-object take a 200 without a Content-Range whose declared length differs from the expected size is the wrong object: the length comparison is the verdict, no hash needed after a full download.
-				if (head.contentRange() == null && take.expectedSize() >= 0 && head.contentLength() != null && head.contentLength() != take.expectedSize())
-					throw new IOException("Served object length " + head.contentLength() + " does not match the expected object size " + take.expectedSize() + " for " + originPath);
+				if (head.contentRange() == null && take.expectedSize() >= 0 && head.contentLength() != null && head.contentLength() != take.expectedSize()) {
+					discardBody(head);
+					future.completeExceptionally(new IOException("Served object length " + head.contentLength() + " does not match the expected object size " + take.expectedSize() + " for " + originPath));
+					return;
+				}
 				boolean resumed = take.offset() > 0 && head.contentRange() != null;
 				if (resumed) PartialResume.requireResumeStart(head.contentRange(), take.offset());
-				if (consumeAndComplete(head, resumed ? take.offset() : 0)) return;
+				if (consumeAndComplete(head, take.writeAt())) return;
 				future.complete(destination);
 				return;
 			}

@@ -21,6 +21,7 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
+import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.ExpectedSizes;
 import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
@@ -142,11 +143,12 @@ public final class ClientObjectStore {
 
 	/** The receipt returned by one explicitly requested collection pass. */
 	public record CollectionResult(StorageReport before, StorageReport after, long deletedObjectCount,
-			long deletedObjectBytes) {
+			long deletedObjectBytes, long deletedStagingCount, long deletedStagingBytes) {
 		public CollectionResult {
 			before = Objects.requireNonNull(before, "before receipt");
 			after = Objects.requireNonNull(after, "after receipt");
-			if (deletedObjectCount < 0 || deletedObjectBytes < 0) throw new IllegalArgumentException("Deleted object values cannot be negative");
+			if (deletedObjectCount < 0 || deletedObjectBytes < 0 || deletedStagingCount < 0 || deletedStagingBytes < 0)
+				throw new IllegalArgumentException("Deleted object values cannot be negative");
 			if (after.objectCount() > before.objectCount() || after.objectBytes() > before.objectBytes()) throw new IllegalArgumentException("Collection increased the measured object store");
 		}
 	}
@@ -225,8 +227,9 @@ public final class ClientObjectStore {
 		return SharedObjectOwnership.withGlobalReferences(storage.dataLocation(), "client", references.hashes(), globallyReferenced -> {
 			StorageReport before = measure(storage, references, true);
 			ObjectStoreMaintenance.DeletionReceipt deletion = ObjectStoreMaintenance.deleteUnreachable(storage.objectsDirectory(), globallyReferenced);
+			ObjectStoreMaintenance.DeletionReceipt staging = PartialResume.wipeSliceDirectories(storage.stagingDirectory());
 			StorageReport after = measure(storage, references, true);
-			return new CollectionResult(before, after, deletion.deletedCount(), deletion.deletedBytes());
+			return new CollectionResult(before, after, deletion.deletedCount(), deletion.deletedBytes(), staging.deletedCount(), staging.deletedBytes());
 		});
 	}
 

@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.Constants.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -23,6 +24,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.PackTransport;
+import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
@@ -39,6 +41,7 @@ import pl.skidam.automodpack_core.update.RestartPolicy;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.PlatformCache;
@@ -552,6 +555,21 @@ public class ModpackUpdater implements AutoCloseable {
 		});
 	}
 
+	/** Drops slice directories whose sha1 is not in the selected target; acquired objects already deleted theirs on promote. */
+	private void reconcileStaging() {
+		try {
+			Set<String> needed = new HashSet<>();
+			if (selectedTarget != null && selectedTarget.flatTarget().list != null) {
+				for (var item : selectedTarget.flatTarget().list) {
+					if (item.sha1 != null && !item.sha1.isBlank()) needed.add(HashUtils.normalizeSha1(item.sha1));
+				}
+			}
+			PartialResume.keepOnly(storage.stagingDirectory(), needed);
+		} catch (IOException e) {
+			LOGGER.warn("Could not drop unneeded download slices after the update", e);
+		}
+	}
+
 	void requireLiveConnection() throws IOException {
 		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IOException("Modpack connection is unavailable");
 		objectAcquisition.requireTransferSession();
@@ -566,6 +584,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private ApplyStatus runReviewedFlow(ApplyFlow flow, FlowBody body) {
 		try {
 			body.run();
+			reconcileStaging();
 			return ApplyStatus.APPLIED;
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("{} transaction {} is waiting for the detached helper to release {}", flow.name(), e.getTransactionId(), e.getBlockedPath());

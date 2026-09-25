@@ -9,12 +9,12 @@ import java.util.function.IntConsumer;
  * The client transfer seam: one open transfer session to the pack's host, whatever serves it. The client never
  * distinguishes hostings, so every transport answers the same requests - whole objects by sha1, documents by reserved
  * key with conditionals, and the identity fetch for the waiting track. Each transport owns its transfer tiling: resume,
- * chunk tiling and idle-lane stealing live behind {@link #downloadObject}, and on success the destination holds the
- * FULL object bytes while promotion judges the assembled whole.
+ * chunk tiling and idle-lane stealing live behind {@link #downloadObject}. {@code destination} is the slice
+ * directory; on success every tile is present and promotion concatenates and hashes.
  */
 public interface PackTransport extends AutoCloseable {
 
-	/** One complete object transfer: on success the destination holds the FULL object bytes; the transport owns resume, chunking and stealing. */
+	/** One object transfer into the slice directory {@code destination}; on success every tile is present. */
 	CompletableFuture<Path> downloadObject(byte[] sha1Hex, Path destination, long fileSize, IntConsumer progress);
 
 	/** The waiting-track fetch: single identity GET (no negotiation, no resume), aborted past maxBytes. */

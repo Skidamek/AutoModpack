@@ -305,6 +305,11 @@ public class DownloadManager implements DownloadView {
 				cleanupAndFinalize(hashPathPair, task, storeFile, false, false);
 				return;
 			}
+			long already = PartialResume.presentBytes(partial, task.fileSize);
+			if (already > 0) {
+				totalBytesDownloaded.addAndGet(already);
+				data.remainingBytes.addAndGet(-already);
+			}
 			refreshDeadLinkSources(hashPathPair.hash(), task);
 			DownloadSource source = data.route == Route.HOST ? null : platformSourceForDomain(task, data.activeDomain);
 			if (data.route == Route.HOST || source == null) {
@@ -337,13 +342,12 @@ public class DownloadManager implements DownloadView {
 		}
 	}
 
-	/** Creates the task's one partial temp; null with the failure recorded means the attempt cannot start. */
+	/** Creates the task's slice directory {@code staging/<sha1>/}; null with the failure recorded means the attempt cannot start. */
 	private Path preparePartial(FileInspection.HashPathPair hashPathPair, QueuedDownload task) {
 		try {
 			if (task.partialFile == null) {
-				Path stagingDirectory = dataLayout.stagingDirectory();
-				Files.createDirectories(stagingDirectory);
-				task.partialFile = Files.createTempFile(stagingDirectory, "." + hashPathPair.hash() + ".", ".tmp");
+				task.partialFile = PartialResume.directory(dataLayout.stagingDirectory(), hashPathPair.hash());
+				Files.createDirectories(task.partialFile);
 			}
 			activeTemporaryFiles.put(hashPathPair, task.partialFile);
 			return task.partialFile;
@@ -355,8 +359,9 @@ public class DownloadManager implements DownloadView {
 	}
 
 	/** The blocking platform path: one HTTP download from the picked source, resuming behind the stored partial. The host transport is not involved. */
-	private boolean attemptPlatformDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, DownloadSource source, Path partial) throws InterruptedException {
-		long offset = PartialResume.offset(partial, task.fileSize);
+	private boolean attemptPlatformDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, DownloadSource source, Path partial) throws InterruptedException, IOException {
+		long offset = PartialResume.nextByte(partial, task.fileSize);
+		if (offset >= task.fileSize) return true;
 		long attemptStart = System.nanoTime();
 		AtomicLong attemptBytes = new AtomicLong(0);
 		// One hook for everything the written bytes mean: global progress, display speed, this attempt's sample and the in-flight backlog left for the scheduler.
@@ -366,7 +371,7 @@ public class DownloadManager implements DownloadView {
 			data.remainingBytes.addAndGet(-bytes);
 		};
 		try {
-			httpDownloader.download(source, partial, offset, progressAction);
+			httpDownloader.download(source, partial, task.fileSize, offset, progressAction);
 		} catch (LocalStorageException e) {
 			task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
 			LOGGER.warn("Failed to write temporary CAS object {}", hashPathPair.hash(), e);
@@ -430,7 +435,6 @@ public class DownloadManager implements DownloadView {
 			error = Throwables.unwrap(error);
 			if (cancelled || error instanceof InterruptedException) {
 				task.lastFailureCategory = FailureCategory.CANCELLED;
-				deletePartial(task); // the writers died with the aborted lanes; the partial is a hole-riddled relic
 			} else if (error instanceof StaleRangeException) {
 				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 				deletePartial(task);
@@ -440,7 +444,6 @@ public class DownloadManager implements DownloadView {
 			} else {
 				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 				LOGGER.warn("Remote source failed for CAS object {}", hashPathPair.hash(), error);
-				if (task.partialFile != null && !Files.exists(task.partialFile)) task.partialFile = null; // the transport deleted a hole-riddled partial; the next attempt starts from a fresh temp
 			}
 			cleanupAndFinalize(hashPathPair, task, dataLayout.objectFile(hashPathPair.hash()), false, false);
 			return;
@@ -454,10 +457,13 @@ public class DownloadManager implements DownloadView {
 		}
 	}
 
-	/** Hashes the assembled partial into the CAS store; false with the failure recorded means the download is retried. */
+	/** Concatenates finished slices and hashes them into the CAS store; false with the failure recorded means the download is retried. */
 	private boolean promoteHostFile(FileInspection.HashPathPair hashPathPair, QueuedDownload task, Path partial, FileCache cache) {
+		Path assembled = null;
 		try {
-			VerifiedFileTransfer.promoteAtomic(partial, dataLayout.objectFile(hashPathPair.hash()), task.fileSize, hashPathPair.hash(), cache);
+			assembled = Files.createTempFile(dataLayout.stagingDirectory(), "." + hashPathPair.hash() + ".", ".obj");
+			PartialResume.assemble(partial, assembled, task.fileSize);
+			VerifiedFileTransfer.promoteAtomic(assembled, dataLayout.objectFile(hashPathPair.hash()), task.fileSize, hashPathPair.hash(), cache);
 		} catch (VerifiedFileTransfer.VerificationMismatchException e) {
 			task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 			LOGGER.warn("Size or hash mismatch for downloaded file {}", task.file.getFileName());
@@ -468,19 +474,21 @@ public class DownloadManager implements DownloadView {
 			LOGGER.warn("Failed to persist verified CAS object {}", hashPathPair.hash(), e);
 			deletePartial(task);
 			return false;
+		} finally {
+			if (assembled != null) try {
+				Files.deleteIfExists(assembled);
+			} catch (IOException ignored) {
+			}
 		}
-		task.partialFile = null;
+		deletePartial(task);
 		task.lastFailureCategory = null;
 		return true;
 	}
 
-	/** Deletes the task's partial temp and forgets it; the next attempt, if any, starts from zero. */
+	/** Deletes the task's slice directory; the next attempt, if any, starts from zero. */
 	private static void deletePartial(QueuedDownload task) {
 		if (task.partialFile == null) return;
-		try {
-			Files.deleteIfExists(task.partialFile);
-		} catch (IOException ignored) {
-		}
+		PartialResume.delete(task.partialFile);
 		task.partialFile = null;
 	}
 
@@ -614,6 +622,7 @@ public class DownloadManager implements DownloadView {
 		// a file a writer still holds.
 		activeTemporaryFiles.forEach((key, path) -> {
 			if (downloadsInProgress.containsKey(key)) return;
+			if (Files.isDirectory(path)) return; // slice directories survive cancel so the next click resumes
 			try {
 				Files.deleteIfExists(path);
 			} catch (IOException ignored) {

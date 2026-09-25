@@ -168,6 +168,7 @@
   "automodpack.storage.running": "Cleanup is active. You can leave this screen. The operation will continue safely.",
   "automodpack.storage.complete": "Cleanup complete",
   "automodpack.storage.objects": "Stored file data",
+  "automodpack.storage.staging": "Incomplete downloads removed: %s (%s)",
   "automodpack.wait": "Please wait...",
   "automodpack.skip": "Skip",
   "automodpack.learnmore": "Learn more",

@@ -21,7 +21,6 @@ import java.util.function.IntConsumer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import pl.skidam.automodpack_core.protocol.LocalFileWriter;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.protocol.StaleRangeException;
@@ -55,8 +54,10 @@ public class HttpFileDownloader {
 	 * Downloads a file from a URL to a target path using HTTP/2 if available.
 	 * Blocks the calling thread (designed for use in Worker Threads).
 	 *
+	 * @param fileSize
+	 *            Advertised object size; tiles fill {@code target} as {@code staging/<sha1>/}.
 	 * @param offset
-	 *            The resume point: bytes before it already sit in the target and are not fetched again.
+	 *            The first missing object byte; bytes before it already sit in finished tiles.
 	 * @param progressAction
 	 *            A callback to report bytes read (for bandwidth tracking).
 	 * @throws IOException
@@ -66,7 +67,7 @@ public class HttpFileDownloader {
 	 * @throws InterruptedException
 	 *             If the download is cancelled.
 	 */
-	public void download(DownloadSource source, Path target, long offset, IntConsumer progressAction) throws IOException, InterruptedException {
+	public void download(DownloadSource source, Path target, long fileSize, long offset, IntConsumer progressAction) throws IOException, InterruptedException {
 		URI uri;
 		try {
 			uri = URI.create(source.url());
@@ -95,6 +96,7 @@ public class HttpFileDownloader {
 		int statusCode = response.statusCode();
 		if (statusCode == 416) {
 			try (InputStream ignored = response.body()) {
+				PartialResume.delete(target);
 				throw new StaleRangeException();
 			}
 		}
@@ -106,8 +108,8 @@ public class HttpFileDownloader {
 				throw new HttpStatusException(statusCode);
 			}
 		} else if (offset > 0) {
-			// A 200 to a Range request means "full representation": truncate and pull the whole body from zero, in place - the barebones-CDN case, not an error.
 			LOGGER.info("Server ignored the Range header for {}; pulling the whole object from zero", target.getFileName());
+			PartialResume.delete(target);
 			writeOffset = 0;
 		}
 
@@ -117,7 +119,7 @@ public class HttpFileDownloader {
 
 		try (InputStream rawIn = response.body();
 				InputStream in = codec == null ? rawIn : codec.unwrap(rawIn);
-				OutputStream out = writeOffset > 0 ? LocalFileWriter.openAt(target, writeOffset) : LocalFileWriter.open(target)) {
+				OutputStream out = PartialResume.writer(target, fileSize, writeOffset)) {
 
 			AtomicLong lastProgressNanos = new AtomicLong(System.nanoTime());
 			ScheduledFuture<?> stallFuse = armBodyStallFuse(rawIn, lastProgressNanos, target.getFileName());

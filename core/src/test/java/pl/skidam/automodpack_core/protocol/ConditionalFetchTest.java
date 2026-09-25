@@ -265,7 +265,7 @@ class ConditionalFetchTest {
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("object");
 				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
-				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertArrayEquals(object, assembledBytes(destination, object.length));
 				assertFalse(server.lastResponseZstd.get(), "objects stay identity so Range and resume stay trivial");
 			}
 		}
@@ -295,16 +295,19 @@ class ConditionalFetchTest {
 			server.store.put(sha1, object);
 
 			Path partial = directory.resolve("partial");
-			Files.write(partial, Arrays.copyOf(object, 100_000));
+			Files.createDirectories(partial);
+			Files.write(PartialResume.sliceFile(partial, 0), Arrays.copyOf(object, 100_000));
 
 			try (DownloadClient client = client(server, "test-secret")) {
 				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), partial, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 			}
-			assertArrayEquals(object, Files.readAllBytes(partial));
-			assertTrue(FileIntegrity.matches(partial, object.length, sha1));
+			Path assembled = directory.resolve("assembled.bin");
+			PartialResume.assemble(partial, assembled, object.length);
+			assertArrayEquals(object, Files.readAllBytes(assembled));
+			assertTrue(FileIntegrity.matches(assembled, object.length, sha1));
 
 			Path storeFile = directory.resolve("object.bin");
-			VerifiedFileTransfer.promoteAtomic(partial, storeFile, object.length, sha1);
+			VerifiedFileTransfer.promoteAtomic(assembled, storeFile, object.length, sha1);
 			assertTrue(Files.exists(storeFile));
 		}
 	}
@@ -345,14 +348,15 @@ class ConditionalFetchTest {
 			server.store.put(sha1, object);
 
 			Path destination = directory.resolve("partial");
-			Files.write(destination, new byte[32]);
+			Files.createDirectories(destination);
+			Files.write(PartialResume.sliceFile(destination, 0), new byte[32]);
 
 			try (DownloadClient client = client(server, "test-secret")) {
 				var future = client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, 64, null);
 				assertThrows(ExecutionException.class, () -> future.get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertInstanceOf(StaleRangeException.class, rootCause(future));
 			}
-			assertEquals(32, Files.size(destination), "a failure with only an append-at-end write keeps the valid resume prefix");
+			assertEquals(32, Files.size(PartialResume.sliceFile(destination, 0)), "a failure with only an append-at-end write keeps the valid resume prefix");
 		}
 	}
 
@@ -364,7 +368,8 @@ class ConditionalFetchTest {
 			String sha1 = HashUtils.sha1(object);
 			server.store.put(sha1, object);
 			Path partial = directory.resolve("partial");
-			Files.write(partial, Arrays.copyOf(object, 100_000));
+			Files.createDirectories(partial);
+			Files.write(PartialResume.sliceFile(partial, 0), Arrays.copyOf(object, 100_000));
 			server.lieAboutResumeStart.set(true);
 
 			try (DownloadClient client = client(server, "test-secret")) {
@@ -465,6 +470,16 @@ class ConditionalFetchTest {
 		}
 	}
 
+	private static byte[] assembledBytes(Path directory, long size) throws Exception {
+		Path assembled = Files.createTempFile(directory.getParent(), "assembled-", ".bin");
+		try {
+			PartialResume.assemble(directory, assembled, size);
+			return Files.readAllBytes(assembled);
+		} finally {
+			Files.deleteIfExists(assembled);
+		}
+	}
+
 	private static Throwable rootCause(CompletableFuture<?> future) {
 		try {
 			future.get(AWAIT_SECONDS, TimeUnit.SECONDS);
@@ -542,8 +557,8 @@ class ConditionalFetchTest {
 						server.store().get(hashes.get(0)).length, null);
 				var neighbor = client.downloadObject(hashes.get(1).getBytes(StandardCharsets.UTF_8), directory.resolve("neighbor"),
 						server.store().get(hashes.get(1)).length, null);
-				assertArrayEquals(server.store().get(hashes.get(0)), Files.readAllBytes(first.get(AWAIT_SECONDS, TimeUnit.SECONDS)));
-				assertArrayEquals(server.store().get(hashes.get(1)), Files.readAllBytes(neighbor.get(AWAIT_SECONDS, TimeUnit.SECONDS)));
+				assertArrayEquals(server.store().get(hashes.get(0)), assembledBytes(first.get(AWAIT_SECONDS, TimeUnit.SECONDS), server.store().get(hashes.get(0)).length));
+				assertArrayEquals(server.store().get(hashes.get(1)), assembledBytes(neighbor.get(AWAIT_SECONDS, TimeUnit.SECONDS), server.store().get(hashes.get(1)).length));
 			}
 			assertEquals(1, server.connections.get(), "the throttled take must wait and retry on the same lane, not open a fresh one");
 		}

@@ -33,9 +33,9 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import pl.skidam.automodpack_core.protocol.DocumentFetch;
-import pl.skidam.automodpack_core.protocol.LocalFileWriter;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.PackTransport;
+import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -414,19 +414,14 @@ class DownloadManagerPlatformTest {
 				return CompletableFuture.failedFuture(new IOException("no host wire in this test"));
 			}
 			try {
-				long offset = Files.exists(destination) ? Files.size(destination) : 0; // the contract: resume behind the stored prefix
+				Files.createDirectories(destination);
+				long offset = PartialResume.nextByte(destination, fileSize);
 				resumeOffsets.add(offset);
 				if (offset >= servedBytes.length) return CompletableFuture.completedFuture(destination);
-				byte[] suffix = new byte[servedBytes.length - (int) offset];
-				System.arraycopy(servedBytes, (int) offset, suffix, 0, suffix.length);
-				if (offset > 0) {
-					try (OutputStream out = LocalFileWriter.openAt(destination, offset)) {
-						out.write(suffix);
-					}
-				} else {
-					Files.write(destination, suffix);
+				try (OutputStream out = PartialResume.writer(destination, fileSize, offset)) {
+					out.write(servedBytes, (int) offset, servedBytes.length - (int) offset);
 				}
-				progress.accept(suffix.length);
+				progress.accept(servedBytes.length - (int) offset);
 				return CompletableFuture.completedFuture(destination);
 			} catch (IOException e) {
 				failures.incrementAndGet();

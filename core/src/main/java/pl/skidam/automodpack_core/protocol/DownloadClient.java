@@ -414,38 +414,25 @@ public class DownloadClient implements PackTransport {
 	}
 
 	/**
-	 * One complete object transfer: on success the destination holds the FULL object bytes. Resume validation and the
-	 * zero-size shortcut run on the calling thread exactly as the old manager's dispatch did.
+	 * One complete object transfer: {@code destination} is the slice directory {@code staging/<sha1>/}. On success
+	 * every tile is present; the caller concatenates and hashes. Resume is the directory listing.
 	 */
 	@Override
 	public CompletableFuture<Path> downloadObject(byte[] sha1Hex, Path destination, long fileSize, IntConsumer progress) {
 		try {
-			if (fileSize == 0) {
-				// Zero-size objects never reach the wire: materialize the empty object and let the caller's promotion judge it.
-				if (Files.exists(destination) && Files.size(destination) > 0) Files.delete(destination);
-				if (!Files.exists(destination)) Files.createFile(destination);
-				return CompletableFuture.completedFuture(destination);
-			}
-			long offset = resumeOffset(destination, fileSize);
-			if (offset >= fileSize) {
-				// A complete-sized destination skips the network; the caller's promotion judges it for free.
-				return CompletableFuture.completedFuture(destination);
-			}
-			return new ObjectTransfer(sha1Hex, destination, fileSize, offset, progress).start();
+			Files.createDirectories(destination);
+			if (fileSize == 0 || PartialResume.complete(destination, fileSize)) return CompletableFuture.completedFuture(destination);
+			return new ObjectTransfer(sha1Hex, destination, fileSize, progress).start();
 		} catch (IOException e) {
 			return CompletableFuture.failedFuture(e);
 		}
 	}
 
-	/** The byte offset the transfer resumes from: the destination's size while it is a valid prefix, else a fresh start. */
-	private static long resumeOffset(Path destination, long fileSize) {
-		return PartialResume.offset(destination, fileSize);
-	}
-
 	/**
-	 * One transfer's tiling and completion barrier. The first take covers the streamer's head chunk; every further
-	 * take claims the uncovered tail. A failed take retries its own range in place a bounded number of times before
-	 * failing the transfer. All bookkeeping runs inside the transfer lock, one thread at a time.
+	 * One transfer's tiling and completion barrier. Remaining work is the slice directory's missing ranges; the first
+	 * take is the lowest gap, further takes steal from the highest. A failed take retries its own range in place a
+	 * bounded number of times before failing the transfer. All bookkeeping runs inside the transfer lock, one thread
+	 * at a time.
 	 */
 	final class ObjectTransfer {
 		// Survives two consecutive lane deaths (each retry picks a fresh lane via laneCounter); a third failure means the server, not a lane, is gone.
@@ -462,51 +449,45 @@ public class DownloadClient implements PackTransport {
 		private static final int MIN_OUTSTANDING_TAKES = LANES;
 
 		private final byte[] sha1Hex;
-		private final Path destination;
+		private final Path directory;
 		private final long fileSize;
-		// The resume point: the streamer owns [offset, floor) and the tail takes claim everything behind it.
-		private final long offset;
 		private final IntConsumer progress;
 		private final CompletableFuture<Path> future = new CompletableFuture<>();
 		private final Object lock = new Object();
-		// Per-transfer round-robin lane hint: takes spread over the lanes the way the pool spreads workers, and pick()
-		// still falls back to any lane with room for the take's debit. The simplest correct hint.
 		private final AtomicInteger laneCounter = new AtomicInteger();
-		// The cursor is the transfer's one uncovered-tail pointer: the streamer owns [offset, floor) and every take
-		// claims exactly [stealFrom, old cursor - 1], so the final take may be short - a whole-chunk walk past a
-		// non-chunk-multiple size would orphan bytes no request ever covers and the barrier would never fire.
-		private long cursor;
+		private final ArrayDeque<long[]> remaining;
 		private int pendingItems;
-		// First error wins: recorded once, no further takes are issued, in-flight ones settle, the transfer fails.
 		private Throwable error;
-		// A positioned tail take wrote bytes: the partial is hole-riddled and its size no longer reads as a resume prefix.
-		private boolean positionedWrites;
-		// A range-ignoring host serves every bounded take as a full 200, so tiling would only re-detect the same verdict
-		// per slice: one open-ended take covers the object, and the cursor stays at the resume offset so no tail is claimed.
 		private final boolean openEnded;
-		// The epoch this transfer submitted under: abortTransfers advances it, and a stale take must not retry onto the live pool.
 		private final int epoch;
 
-		ObjectTransfer(byte[] sha1Hex, Path destination, long fileSize, long offset, IntConsumer progress) {
+		ObjectTransfer(byte[] sha1Hex, Path directory, long fileSize, IntConsumer progress) throws IOException {
 			this.sha1Hex = sha1Hex;
-			this.destination = destination;
+			this.directory = directory;
 			this.fileSize = fileSize;
-			this.offset = offset;
 			this.progress = progress;
 			this.openEnded = rangeIgnoredHost;
-			this.cursor = openEnded ? offset : fileSize;
 			this.epoch = transferEpoch;
+			this.remaining = new ArrayDeque<>(PartialResume.remaining(directory, fileSize));
 		}
 
 		CompletableFuture<Path> start() {
+			if (remaining.isEmpty()) {
+				future.complete(directory);
+				return future;
+			}
 			synchronized (lock) {
 				pendingItems = 1;
 			}
-			long headEnd = openEnded ? -1 : Math.min(offset + (long) WIRE_CHUNK_BYTES, fileSize) - 1;
+			if (openEnded) {
+				submitOpenEnded(remaining.peekFirst()[0]);
+				return future;
+			}
+			long[] head = remaining.pollFirst();
 			int lane = Math.floorMod(laneCounter.getAndIncrement(), LANES);
-			LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", lane, offset, headEnd, objectName());
-			submitTake(new Take(offset, headEnd, lane, 1, 0), new AtomicLong());
-			if (!openEnded) pump();
+			LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", lane, head[0], head[1], objectName());
+			submitTake(new Take(head[0], head[1], lane, 1, 0), new AtomicLong());
+			pump();
 			return future;
 		}
 
@@ -522,24 +503,14 @@ public class DownloadClient implements PackTransport {
 			while (true) {
 				Take take;
 				synchronized (lock) {
-					if (error != null || pendingItems >= outstandingCap || cursor <= floor()) return;
-					take = claimLocked();
+					if (error != null || pendingItems >= outstandingCap || remaining.isEmpty()) return;
+					long[] range = remaining.pollLast();
+					pendingItems++;
+					take = new Take(range[0], range[1], Math.floorMod(laneCounter.getAndIncrement(), LANES), 1, 0);
 				}
 				LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", take.lane(), take.start(), take.end(), objectName());
 				submitTake(take, new AtomicLong());
 			}
-		}
-
-		private long floor() {
-			return offset + (long) WIRE_CHUNK_BYTES;
-		}
-
-		private Take claimLocked() {
-			long takeEnd = cursor - 1;
-			long stealFrom = Math.max(floor(), cursor - (long) WIRE_CHUNK_BYTES);
-			cursor = stealFrom;
-			pendingItems++;
-			return new Take(stealFrom, takeEnd, Math.floorMod(laneCounter.getAndIncrement(), LANES), 1, 0);
 		}
 
 		private void submitTake(Take take, AtomicLong takeBytes) {
@@ -571,11 +542,13 @@ public class DownloadClient implements PackTransport {
 			};
 			CompletableFuture<Path> future;
 			try {
-				// A stale range already surfaces as StaleRangeException from the response parse; no mapping happens here.
+				long sliceStart = PartialResume.sliceStart(take.start());
+				Path slice = PartialResume.sliceFile(directory, sliceStart);
+				long writeAt = take.start() - sliceStart;
 				long debit = ObjectTake.debit(take.start(), take.end());
 				future = withSlot(take.lane(), debit, connection -> {
 					lane.set(connection);
-					return connection.sendDownloadFile(sha1Hex, ObjectTake.rangedSlice(destination, chunkCallback, take.start(), take.end(), fileSize));
+					return connection.sendDownloadFile(sha1Hex, ObjectTake.rangedSlice(slice, chunkCallback, take.start(), take.end(), fileSize, writeAt));
 				}, epoch);
 			} catch (Throwable submitFailure) {
 				// The submit never produced a request: the settle path retries or books it like any other failure.
@@ -622,8 +595,21 @@ public class DownloadClient implements PackTransport {
 				// parks a lane's reader, and an abort while waiting settles the take as cancelled, not restarted.
 				long delayMillis = retryDelayMillis(takeError);
 				Runnable retry = () -> {
-					if (epoch != transferEpoch) onTakeSettled(take, takeBytes, new IOException("Download aborted"));
-					else submitTake(new Take(take.start(), take.end(), Math.floorMod(laneCounter.getAndIncrement(), LANES), take.attempt() + 1, takeBytes.get()), takeBytes);
+					if (epoch != transferEpoch) {
+						onTakeSettled(take, takeBytes, new IOException("Download aborted"));
+						return;
+					}
+					try {
+						if (take.end() < 0) {
+							submitOpenEnded(PartialResume.nextByte(directory, fileSize));
+							return;
+						}
+						Take next = retryTake(take, takeBytes.get());
+						if (next.start() > next.end()) onTakeSettled(take, takeBytes, null);
+						else submitTake(next, takeBytes);
+					} catch (IOException e) {
+						onTakeSettled(take, takeBytes, e);
+					}
 				};
 				if (delayMillis > 0) RETRY_SCHEDULER.schedule(retry, delayMillis, TimeUnit.MILLISECONDS);
 				else retry.run();
@@ -651,12 +637,44 @@ public class DownloadClient implements PackTransport {
 					}
 				}
 				if (takeError != null && error == null) error = Throwables.unwrap(takeError);
-				if (take.start() != offset && takeBytes.get() > 0) positionedWrites = true;
-				done = --pendingItems == 0 && (error != null || cursor <= floor());
+				done = --pendingItems == 0 && (error != null || remaining.isEmpty() || openEnded);
 				failure = error;
 			}
 			if (done) finish(failure);
 			else pump();
+		}
+
+		private Take retryTake(Take take, long progressBase) throws IOException {
+			long sliceStart = PartialResume.sliceStart(take.start());
+			long expected = PartialResume.sliceLength(sliceStart, fileSize);
+			long present = PartialResume.presentLength(PartialResume.sliceFile(directory, sliceStart), expected);
+			if (present >= expected) return new Take(take.end() + 1, take.end(), take.lane(), take.attempt() + 1, progressBase);
+			return new Take(sliceStart + present, sliceStart + expected - 1, Math.floorMod(laneCounter.getAndIncrement(), LANES), take.attempt() + 1, progressBase);
+		}
+
+		private void submitOpenEnded(long start) {
+			takesSubmitted.incrementAndGet();
+			OutputStream writer;
+			try {
+				writer = PartialResume.writer(directory, fileSize, start);
+			} catch (IOException e) {
+				onTakeSettled(new Take(start, -1, 0, 1, 0), new AtomicLong(), e);
+				return;
+			}
+			AtomicLong takeBytes = new AtomicLong();
+			IntConsumer chunkCallback = bytes -> {
+				takeBytes.addAndGet(bytes);
+				if (progress != null) progress.accept(bytes);
+			};
+			Take take = new Take(start, -1, 0, 1, 0);
+			withSlot(0, WIRE_CHUNK_BYTES, connection -> connection.sendDownloadFile(sha1Hex, ObjectTake.openEnded(writer, chunkCallback, start, fileSize)), epoch)
+					.whenComplete((path, takeError) -> {
+						try {
+							writer.close();
+						} catch (IOException ignored) {
+						}
+						onTakeSettled(take, takeBytes, takeError);
+					});
 		}
 
 		/** Marks the whole client degraded once, with the one loud line naming the host every lane of this client terminates on. */
@@ -670,8 +688,10 @@ public class DownloadClient implements PackTransport {
 
 		/** Pack-hygiene verdicts are final for the range; anything else (a lost lane, a timeout) is worth another attempt. */
 		private static boolean permanentFailure(Throwable error) {
-			return error instanceof MissingObjectException || error instanceof UnauthorizedException || error instanceof StaleRangeException || error instanceof LocalStorageException
-					|| error instanceof RangeIgnoredException;
+			if (error instanceof MissingObjectException || error instanceof UnauthorizedException || error instanceof StaleRangeException || error instanceof LocalStorageException
+					|| error instanceof RangeIgnoredException)
+				return true;
+			return error instanceof IOException && error.getMessage() != null && error.getMessage().contains("does not match the expected object size");
 		}
 
 		private boolean retryWorth(Throwable error) {
@@ -680,20 +700,16 @@ public class DownloadClient implements PackTransport {
 
 		private void finish(Throwable failure) {
 			if (failure != null) {
-				if (positionedWrites) {
-					// The positioned writes left holes behind the streamed prefix: the partial is worthless for resume.
-					PartialResume.deleteQuietly(destination);
-				}
 				WireTrace.log("DONE", "object", objectName(), "status", "fail:" + Throwables.detail(failure));
 				future.completeExceptionally(failure);
 				return;
 			}
 			WireTrace.log("DONE", "object", objectName(), "status", "promote");
-			future.complete(destination);
+			future.complete(directory);
 		}
 
 		private String objectName() {
-			return destination.getFileName().toString();
+			return directory.getFileName().toString();
 		}
 
 		private record Take(long start, long end, int lane, int attempt, long progressBase) {}

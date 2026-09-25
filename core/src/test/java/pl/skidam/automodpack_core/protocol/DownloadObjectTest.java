@@ -43,7 +43,7 @@ class DownloadObjectTest {
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("object");
 				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
-				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertArrayEquals(object, assembledBytes(destination, object.length));
 				assertTrue(client.windowSummary().contains("3 takes (0 retried)"), "the honest receipt counts the three takes: " + client.windowSummary());
 			}
 			long next = 0;
@@ -64,9 +64,10 @@ class DownloadObjectTest {
 			server.store().put(sha1, object);
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("object");
-				Files.write(destination, Arrays.copyOf(object, 100_000));
+				Files.createDirectories(destination);
+				Files.write(PartialResume.sliceFile(destination, 0), Arrays.copyOf(object, 100_000));
 				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
-				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertArrayEquals(object, assembledBytes(destination, object.length));
 				assertEquals(1, server.ranges.size());
 				assertEquals(100_000, server.ranges.get(0)[0], "the resumed transfer requests exactly behind the stored prefix");
 
@@ -125,9 +126,8 @@ class DownloadObjectTest {
 				assertThrows(ExecutionException.class, () -> cancelled.get(5, TimeUnit.SECONDS), "an aborted transfer must fail, never hang");
 
 				server.setResponseDelayMillis(0);
-				Path destination = directory.resolve("object");
-				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
-				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertEquals(cancelledDestination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), cancelledDestination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertArrayEquals(object, assembledBytes(cancelledDestination, object.length));
 			}
 		}
 	}
@@ -161,7 +161,7 @@ class DownloadObjectTest {
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("object");
 				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
-				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertArrayEquals(object, assembledBytes(destination, object.length));
 				assertTrue(server.requests.size() > 3, "the dropped take must have been retried, requests: " + server.requests.size());
 				// The drop closes the whole lane, so every take pipelined behind it retries together; the exact count is
 				// the scheduler's business. The receipt must count them honestly: at least one retry, every take booked.
@@ -184,11 +184,10 @@ class DownloadObjectTest {
 				var thrown = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertInstanceOf(RangeIgnoredException.class, rootCause(thrown));
 				assertTrue(client.rangeIgnoredHost, "the capability flag is set for the whole client");
-				assertFalse(Files.exists(destination), "nothing was written before the verdict");
 
 				// The manager requeues the task; under the flag it skips tiling and rides one open-ended take.
 				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
-				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertArrayEquals(object, assembledBytes(destination, object.length));
 			}
 			assertTrue(server.ranges.isEmpty(), "every take was answered by the barebones head rules, never a 206");
 		}
@@ -205,7 +204,7 @@ class DownloadObjectTest {
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("object");
 				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
-				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertArrayEquals(object, assembledBytes(destination, object.length));
 				assertFalse(client.rangeIgnoredHost, "an honest-length 200 is not a range-ignoring verdict");
 			}
 			assertEquals(1, server.requests.size(), "the whole file rode one take, no tiling");
@@ -227,11 +226,10 @@ class DownloadObjectTest {
 				var thrown = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertInstanceOf(RangeIgnoredException.class, rootCause(thrown));
 				assertTrue(client.rangeIgnoredHost, "the close-framed verdict degrades the whole client");
-				assertFalse(Files.exists(destination), "the body was never consumed into the destination");
 
 				// The manager requeues the task; under the flag it skips tiling and rides one open-ended take.
 				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
-				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertArrayEquals(object, assembledBytes(destination, object.length));
 			}
 		}
 	}
@@ -253,7 +251,17 @@ class DownloadObjectTest {
 				var second = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, 100, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertTrue(rootCause(second).getMessage().contains("does not match the expected object size"), String.valueOf(rootCause(second)));
 			}
-			assertFalse(Files.exists(directory.resolve("object")), "the body was never consumed into the destination");
+			assertTrue(PartialResume.remaining(directory.resolve("object"), 100).stream().anyMatch(range -> range[0] == 0), "the body was never consumed into a finished slice");
+		}
+	}
+
+	private static byte[] assembledBytes(Path directory, long size) throws Exception {
+		Path assembled = Files.createTempFile(directory.getParent(), "assembled-", ".bin");
+		try {
+			PartialResume.assemble(directory, assembled, size);
+			return Files.readAllBytes(assembled);
+		} finally {
+			Files.deleteIfExists(assembled);
 		}
 	}
 
