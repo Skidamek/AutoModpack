@@ -55,11 +55,12 @@ public final class StoragePaths {
 	/** The dedicated server's extracted nested impl jars, mounted by loaders that cannot open nested zips in place. */
 	public static final Path SERVER_IMPL_CACHE_DIR = SERVER_DIR.resolve("impl-cache");
 
+	/** Every credential a server host holds: the certificate pair, the download secrets document, and the bootstrap secret. The folder is safe to share between server processes; its code paths assume it might be. */
 	public static final Path CREDENTIALS_DIR = AUTOMODPACK_DIR.resolve("credentials");
 	public static final Path SERVER_CERT_FILE = CREDENTIALS_DIR.resolve("certificate.crt");
 	public static final Path SERVER_PRIVATE_KEY_FILE = CREDENTIALS_DIR.resolve("private-key.pem");
 	public static final Path PROVISIONING_SECRET_FILE = CREDENTIALS_DIR.resolve("provisioning-secret");
-	public static final Path SERVER_SECRETS_FILE = SERVER_DIR.resolve("secrets.json");
+	public static final Path SERVER_SECRETS_FILE = CREDENTIALS_DIR.resolve("secrets.json");
 
 	public static final Path HOST_MODPACK_DIR = AUTOMODPACK_DIR.resolve("host-modpack");
 	public static final Path HOST_CONTENT_MODPACK_DIR = HOST_MODPACK_DIR.resolve("main");

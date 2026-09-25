@@ -3,12 +3,15 @@ package pl.skidam.automodpack_core.protocol.netty;
 import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.security.GeneralSecurityException;
 import java.security.KeyPair;
+import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
@@ -37,6 +40,7 @@ import pl.skidam.automodpack_core.protocol.netty.handler.AmmhGateHandler;
 import pl.skidam.automodpack_core.protocol.netty.handler.HttpContractHandler;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProxyProtocolHandler;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
+import pl.skidam.automodpack_core.utils.FileLocks;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 public class NettyServer {
@@ -244,20 +248,52 @@ public class NettyServer {
 			return;
 		}
 
-		if (!Files.exists(SERVER_CERT_FILE) || !Files.exists(SERVER_PRIVATE_KEY_FILE)) {
-			KeyPair keyPair = NetUtils.generateKeyPair();
-			X509Certificate cert = NetUtils.selfSign(keyPair);
-			NetUtils.saveCertificate(cert, SERVER_CERT_FILE);
-			NetUtils.savePrivateKey(keyPair.getPrivate(), SERVER_PRIVATE_KEY_FILE);
-		}
+		Path certFile = SERVER_CERT_FILE;
+		Path privateKeyFile = SERVER_PRIVATE_KEY_FILE;
+		ensureTlsMaterial(certFile, privateKeyFile);
 
-		X509Certificate cert = NetUtils.loadCertificate(SERVER_CERT_FILE);
+		X509Certificate cert = NetUtils.loadCertificate(certFile);
 		if (cert == null) throw new IllegalStateException("Server certificate couldn't be loaded");
 
-		sslCtx = SslContextBuilder.forServer(SERVER_CERT_FILE.toFile(), SERVER_PRIVATE_KEY_FILE.toFile()).sslProvider(SslProvider.JDK).protocols("TLSv1.3")
+		sslCtx = SslContextBuilder.forServer(certFile.toFile(), privateKeyFile.toFile()).sslProvider(SslProvider.JDK).protocols("TLSv1.3")
 				.ciphers(Arrays.asList("TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256")).sessionTimeout(1800).build();
 		certificateFingerprint = NetUtils.getFingerprint(cert);
 		if (certificateFingerprint != null) LOGGER.warn("Certificate fingerprint: {}", certificateFingerprint);
+	}
+
+	/**
+	 * The credentials folder may be shared by several server processes, so the pair is generated once under one lock and never regenerated over an existing pair - a new certificate would invalidate every client's pin.
+	 */
+	private void ensureTlsMaterial(Path certFile, Path privateKeyFile) throws IOException {
+		FileLocks.withLock(certFile.resolveSibling("tls.lock"), () -> {
+			boolean certExists = Files.exists(certFile);
+			boolean keyExists = Files.exists(privateKeyFile);
+			if (certExists != keyExists)
+				throw new IllegalStateException(
+						"The TLS material is inconsistent: exactly one of " + certFile + " and " + privateKeyFile + " exists; make the pair whole or remove both files manually");
+			if (!certExists) {
+				try {
+					KeyPair keyPair = NetUtils.generateKeyPair();
+					NetUtils.saveCertificate(NetUtils.selfSign(keyPair), certFile);
+					NetUtils.savePrivateKey(keyPair.getPrivate(), privateKeyFile);
+				} catch (IOException e) {
+					throw e;
+				} catch (Exception e) {
+					throw new IOException("Failed to generate the TLS pair", e);
+				}
+				return null;
+			}
+			try {
+				X509Certificate cert = NetUtils.loadCertificate(certFile);
+				PrivateKey key = NetUtils.loadPrivateKey(privateKeyFile);
+				if (cert == null || key == null) throw new GeneralSecurityException("the certificate or the private key is unreadable");
+				NetUtils.validateKeyMatchesCertificate(key, cert);
+			} catch (Exception e) {
+				throw new IllegalStateException(
+						"The TLS pair is corrupt (" + certFile + ", " + privateKeyFile + "); fix or remove both files manually - regenerating it would invalidate every client's certificate pin", e);
+			}
+			return null;
+		});
 	}
 
 	public boolean isSharedMagicEnabled() {

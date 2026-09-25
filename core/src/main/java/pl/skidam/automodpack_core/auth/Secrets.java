@@ -89,19 +89,13 @@ public class Secrets {
 			return true;
 		}
 
-		var playerSecretPair = SecretsStore.getHostSecret(secretStr);
-		if (playerSecretPair == null) {
+		IssuedSecret issued = SecretsStore.getHostSecret(secretStr);
+		if (issued == null) {
 			LOGGER.warn("Rejecting an unknown secret from {}", address);
 			return false;
 		}
 
-		IssuedSecret issued = playerSecretPair.getValue();
-		if (issued == null || issued.name() == null || issued.name().isBlank() || issued.timestamp() == null) {
-			LOGGER.warn("Rejecting a secret from {} that is not bound to a player identity (stale entry from an older AutoModpack version)", address);
-			return false;
-		}
-
-		if (!GAME_CALL.isPlayerAuthorized(address, playerSecretPair.getKey(), issued.name())) { // check if the player the secret was issued to is still authorized
+		if (!GAME_CALL.isPlayerAuthorized(address, issued.playerId(), issued.name())) { // check if the player the secret was issued to is still authorized
 			LOGGER.warn("Rejecting a secret from {}: {} is no longer authorized - make sure they are whitelisted", address, issued.name());
 			return false;
 		}
