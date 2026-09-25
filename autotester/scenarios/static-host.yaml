@@ -54,7 +54,7 @@ flow:
   until:
     log:
       container: client
-      matches: 'Retrying download: wide\.bin'
+      matches: 'wide\.bin transfer summary: \d+ takes \([1-9][0-9]* retried\)'
 - do: wait_for
   name: opportunistic receipt of per-response lane death on the HTTP/1.0 host
   timeout: 10s
