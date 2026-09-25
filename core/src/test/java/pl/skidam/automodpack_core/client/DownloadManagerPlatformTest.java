@@ -350,7 +350,7 @@ class DownloadManagerPlatformTest {
 		assertArrayEquals(expected, Files.readAllBytes(stored));
 		assertEquals(2, RESUME_REQUESTS.size());
 		assertNull(RESUME_REQUESTS.get(0).range(), "the first attempt has no partial, so no Range header");
-		assertEquals("bytes=" + expected.length * 8 / 10 + "-", RESUME_REQUESTS.get(1).range(), "the retry must resume exactly behind the stored prefix");
+		assertResumesBehindThePartial(RESUME_REQUESTS.get(1).range(), expected.length * 8 / 10);
 		for (ServedRequest served : RESUME_REQUESTS) assertEquals(NetUtils.USER_AGENT, served.userAgent(), "downloads carry the User-Agent too");
 	}
 
@@ -370,7 +370,7 @@ class DownloadManagerPlatformTest {
 		Path stored = downloadViaPlatform("range-ignored.bin", "resume.bin", "/resume-lab/range-ignored", new FakeTransport(null));
 		assertArrayEquals(expected, Files.readAllBytes(stored));
 		assertEquals(2, RESUME_REQUESTS.size());
-		assertEquals("bytes=" + expected.length * 4 / 10 + "-", RESUME_REQUESTS.get(1).range(), "the retry does send the Range header");
+		assertResumesBehindThePartial(RESUME_REQUESTS.get(1).range(), expected.length * 4 / 10);
 	}
 
 	/** A 416 verdict deletes the partial: the host fallback receives a clean, empty temp instead of the stale prefix. */
@@ -382,8 +382,15 @@ class DownloadManagerPlatformTest {
 		Path stored = downloadViaPlatform("stale.bin", "resume.bin", "/resume-lab/stale", transport);
 		assertArrayEquals(expected, Files.readAllBytes(stored));
 		assertEquals(2, RESUME_REQUESTS.size());
-		assertEquals("bytes=" + expected.length * 4 / 10 + "-", RESUME_REQUESTS.get(1).range());
+		assertResumesBehindThePartial(RESUME_REQUESTS.get(1).range(), expected.length * 4 / 10);
 		assertEquals(List.of(0L), transport.resumeOffsets, "the 416 must have deleted the stale partial: the host wire resumes from zero");
+	}
+
+	/** How much of the flushed prefix survives the abrupt close is up to the transport, so the retry's resume offset only has to sit inside it. */
+	private static void assertResumesBehindThePartial(String range, long prefixBytes) {
+		assertTrue(range != null && range.matches("bytes=\\d+-"), "the retry sends a Range header behind its stored partial: " + range);
+		long offset = Long.parseLong(range.substring("bytes=".length(), range.length() - 1));
+		assertTrue(offset > 0 && offset <= prefixBytes, "the resume offset (" + range + ") stays inside the sent prefix of " + prefixBytes + " bytes");
 	}
 
 	/** The expected bytes on disk, so the store's sha1 promotion judges real content. */

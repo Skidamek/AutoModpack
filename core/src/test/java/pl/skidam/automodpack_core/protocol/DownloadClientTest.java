@@ -327,9 +327,12 @@ class DownloadClientTest {
 				assertThrows(Exception.class, () -> first.get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertEquals(connectionsAtAbort, server.acceptedConnections(), "aborting a run must not open a replacement lane for it");
 
-				server.allowResponses(1);
-				assertEquals(directory.resolve("second"),
-						client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("second"), -1L, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				CompletableFuture<Path> second = client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("second"), -1L, null);
+				// The aborted lane's parked responder races the fresh lane for the same permits: waiting for the second
+				// request and then permitting both keeps a dead lane from starving the live one.
+				server.awaitRequests(2);
+				server.allowResponses(2);
+				assertEquals(directory.resolve("second"), second.get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertTrue(server.acceptedConnections() > connectionsAtAbort, "a later download on the same client must open a fresh lane");
 			}
 		}
