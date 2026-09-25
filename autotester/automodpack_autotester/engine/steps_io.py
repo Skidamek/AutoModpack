@@ -322,7 +322,7 @@ def assert_bootstrap_import(ctx, _step):
         client_config_path = ctx.game_dir / "automodpack" / "client.conf"
         if not client_config_path.exists():
             client_config_path = ctx.game_dir / "automodpack" / "client-config.json"
-        client_config = (json.loads if client_config_path.suffix == ".json" else reconf_min.read_reconf)(client_config_path)
+        client_config = reconf_min.read_config(client_config_path)
         known_hosts = json.loads((ctx.game_dir / "automodpack" / "client" / "data" / "known-hosts.json").read_text(encoding="utf-8"))
         connection = json.loads((ctx.game_dir / "automodpack" / "client" / "data" / "packs" / expected["modpackId"] / "connection.json").read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:

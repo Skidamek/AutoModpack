@@ -2,6 +2,14 @@
 `key: value` members, `#` comments, nested braced blocks, inline arrays,
 quoted strings and bare scalars. Sufficient for config assertions; not a parser."""
 
+import json
+
+def read_config(path):
+    """Reads one config in either format: the released .json or canonical reconf."""
+    if path.suffix == ".json":
+        return json.loads(path.read_text(encoding="utf-8"))
+    return read_reconf(path)
+
 def _strip_comment(line):
     out = []
     in_quotes = False
