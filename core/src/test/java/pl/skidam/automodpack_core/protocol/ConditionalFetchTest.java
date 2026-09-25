@@ -703,6 +703,14 @@ class ConditionalFetchTest {
 					if (request.ifNoneMatch != null) ifNoneMatchLog.add(request.ifNoneMatch);
 					CountDownLatch pipeline = expectedPipeline;
 					if (pipeline != null) pipeline.countDown();
+					// Close-framed answers spend the socket. Write and close on this thread so SSLSocket.close()
+					// never races the next-request read; that race drops close_notify on Windows and the client's
+					// requeue hangs waiting for EOF.
+					boolean closeFramed = request.path.startsWith("/objects/") ? closeFramedObjects.get() : closeFramedDocuments.get();
+					if (closeFramed) {
+						answer(socket, out, request, pipeline, answering);
+						return;
+					}
 					responder.execute(() -> answer(socket, out, request, pipeline, answering));
 				}
 			} catch (Exception ignored) {
@@ -749,7 +757,7 @@ class ConditionalFetchTest {
 				// The barebones static host class without a Content-Length on documents: the body ends only with the
 				// connection, conditionals included.
 				if (closeFramedDocuments.get() && !request.path.startsWith("/objects/")) {
-					out.write("HTTP/1.1 200 OK\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+					out.write("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.UTF_8));
 					out.write(content);
 					out.flush();
 					socket.close();
@@ -782,7 +790,7 @@ class ConditionalFetchTest {
 				}
 				// The barebones static host class without a Content-Length: the body ends only with the connection.
 				if (request.path.startsWith("/objects/") && closeFramedObjects.get()) {
-					out.write("HTTP/1.1 200 OK\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+					out.write("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.UTF_8));
 					out.write(content);
 					out.flush();
 					socket.close();
