@@ -8,11 +8,13 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntConsumer;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -21,10 +23,11 @@ import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.MissingObjectException;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.storage.StoragePaths;
+import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
-/** The custom track's lifecycle: the advertised hash is the cache key, so a hit never asks, a change streams, absence withdraws. */
+/** The custom track's lifecycle: the advertised hash is the CAS key, so a hit never asks, a change streams, absence is bundled. */
 class WaitingMusicTest {
 	private static final byte[] TRACK = "waiting-music-bytes".getBytes(StandardCharsets.UTF_8);
 	private static final byte[] NEW_TRACK = "waiting-music-bytes-v2".getBytes(StandardCharsets.UTF_8);
@@ -34,23 +37,27 @@ class WaitingMusicTest {
 	@TempDir
 	Path tempDir;
 
-	private ClientStorage storage() throws IOException {
-		return ClientStorage.open(tempDir.resolve("game"));
+	@AfterEach
+	void tearDown() {
+		WaitingMusic.endRun();
 	}
 
-	private Path sidecar(ClientStorage storage) {
-		return storage.clientDirectory().resolve(StoragePaths.WAITING_MUSIC_FILE + ".sha1");
+	private ClientStorage storage() throws Exception {
+		return TestDataRoot.open(tempDir.resolve("game-" + UUID.randomUUID()), tempDir.resolve("data-" + UUID.randomUUID()));
 	}
 
-	private void awaitCache(ClientStorage storage, boolean present) throws InterruptedException {
-		// The sidecar is written after the cache move: awaiting it means the track is fully published.
+	private Path object(ClientStorage storage, String sha1) {
+		return storage.objectFile(sha1);
+	}
+
+	private void awaitObject(ClientStorage storage, String sha1, boolean present) throws InterruptedException {
 		long deadline = System.currentTimeMillis() + 5000;
-		boolean sidecar = Files.exists(sidecar(storage));
-		while (sidecar != present && System.currentTimeMillis() < deadline) {
+		boolean exists = Files.exists(object(storage, sha1));
+		while (exists != present && System.currentTimeMillis() < deadline) {
 			Thread.sleep(20);
-			sidecar = Files.exists(sidecar(storage));
+			exists = Files.exists(object(storage, sha1));
 		}
-		assertEquals(present, sidecar);
+		assertEquals(present, exists);
 	}
 
 	@Test
@@ -61,28 +68,27 @@ class WaitingMusicTest {
 		assertEquals(WaitingMusic.Kind.STREAM, session.kind());
 		assertArrayEquals(TRACK, session.audio().readAllBytes());
 		transport.awaitDone();
-		awaitCache(storage, true);
-		assertEquals(WaitingMusic.cacheFile(storage), session.loopFile(), "a finished stream loops the cached track");
+		awaitObject(storage, TRACK_SHA1, true);
+		assertEquals(object(storage, TRACK_SHA1), session.loopFile(), "a finished stream loops the stored object");
 		assertEquals(StoragePaths.WAITING_MUSIC_MAX_BYTES, transport.lastLimit, "the fetch carries the waiting-track guardrail");
 		WaitingMusic.endRun();
 
-		// Second contact: the advertised hash IS the cache key, so the cached track plays and no request is made at all.
 		FakeTransport quiet = new FakeTransport(TRACK);
 		WaitingMusic.Session again = WaitingMusic.start(quiet, storage, TRACK_SHA1);
 		assertEquals(WaitingMusic.Kind.LOOP, again.kind());
-		assertEquals(WaitingMusic.cacheFile(storage), again.loopFile());
+		assertEquals(object(storage, TRACK_SHA1), again.loopFile());
 		quiet.awaitIdle();
 		assertEquals(0, quiet.fetches.get(), "a hash hit must not touch the wire");
 		WaitingMusic.endRun();
 	}
 
 	@Test
-	void noAdvertisedTrackWithdrawsTheCacheSoTheBundledTrackPlays() throws Exception {
+	void noAdvertisedTrackPlaysBundledAndLeavesStoredObjectsAlone() throws Exception {
 		ClientStorage storage = storage();
 		FakeTransport transport = new FakeTransport(TRACK);
 		WaitingMusic.start(transport, storage, TRACK_SHA1);
 		transport.awaitDone();
-		awaitCache(storage, true);
+		awaitObject(storage, TRACK_SHA1, true);
 		WaitingMusic.endRun();
 
 		FakeTransport withdrawn = new FakeTransport(TRACK);
@@ -90,16 +96,16 @@ class WaitingMusicTest {
 		assertEquals(WaitingMusic.Kind.BUNDLED, session.kind());
 		withdrawn.awaitIdle();
 		assertEquals(0, withdrawn.fetches.get());
-		awaitCache(storage, false);
+		awaitObject(storage, TRACK_SHA1, true);
 	}
 
 	@Test
-	void aChangedTrackStreamsInsteadOfPlayingTheStaleCache() throws Exception {
+	void aChangedTrackStreamsInsteadOfPlayingTheStaleObject() throws Exception {
 		ClientStorage storage = storage();
 		FakeTransport transport = new FakeTransport(TRACK);
 		WaitingMusic.start(transport, storage, TRACK_SHA1);
 		transport.awaitDone();
-		awaitCache(storage, true);
+		awaitObject(storage, TRACK_SHA1, true);
 		WaitingMusic.endRun();
 
 		FakeTransport changed = new FakeTransport(NEW_TRACK);
@@ -107,38 +113,51 @@ class WaitingMusicTest {
 		assertEquals(WaitingMusic.Kind.STREAM, session.kind());
 		assertArrayEquals(NEW_TRACK, session.audio().readAllBytes());
 		changed.awaitDone();
-		awaitCache(storage, true);
-		assertEquals(NEW_TRACK_SHA1, Files.readString(sidecar(storage)).trim());
+		awaitObject(storage, NEW_TRACK_SHA1, true);
+		assertTrue(Files.exists(object(storage, TRACK_SHA1)), "the previous pack's object stays in CAS");
 		WaitingMusic.endRun();
 	}
 
 	@Test
-	void aMissingObjectFailsToBundledAndWithdrawsTheStaleCache() throws Exception {
+	void aMissingObjectFailsToBundledAndLeavesOtherObjects() throws Exception {
 		ClientStorage storage = storage();
 		FakeTransport transport = new FakeTransport(TRACK);
 		WaitingMusic.start(transport, storage, TRACK_SHA1);
 		transport.awaitDone();
-		awaitCache(storage, true);
+		awaitObject(storage, TRACK_SHA1, true);
 		WaitingMusic.endRun();
 
 		FakeTransport missing = new FakeTransport(NEW_TRACK);
 		missing.serverHasTrack = false;
 		WaitingMusic.Session session = WaitingMusic.start(missing, storage, NEW_TRACK_SHA1);
-		awaitCache(storage, false);
 		missing.awaitDone();
 		assertEquals(WaitingMusic.Kind.BUNDLED, session.kind());
+		awaitObject(storage, TRACK_SHA1, true);
+		awaitObject(storage, NEW_TRACK_SHA1, false);
 		WaitingMusic.endRun();
 	}
 
 	@Test
-	void aBodyThatBreaksItsHashIsNotCached() throws Exception {
+	void aBodyThatBreaksItsHashIsNotStored() throws Exception {
 		ClientStorage storage = storage();
 		FakeTransport transport = new FakeTransport(TRACK);
 		transport.corrupt = true;
 		WaitingMusic.Session session = WaitingMusic.start(transport, storage, TRACK_SHA1);
 		transport.awaitDone();
 		assertNull(session.loopFile(), "a broken body never becomes the loop file");
-		awaitCache(storage, false);
+		awaitObject(storage, TRACK_SHA1, false);
+		WaitingMusic.endRun();
+	}
+
+	@Test
+	void aSecondStartWithTheSameHashDoesNotFetchAgain() throws Exception {
+		ClientStorage storage = storage();
+		FakeTransport transport = new FakeTransport(TRACK);
+		WaitingMusic.Session first = WaitingMusic.start(transport, storage, TRACK_SHA1);
+		WaitingMusic.Session second = WaitingMusic.start(transport, storage, TRACK_SHA1);
+		assertSame(first, second);
+		assertEquals(WaitingMusic.Kind.STREAM, first.kind());
+		transport.awaitDone();
 		WaitingMusic.endRun();
 	}
 

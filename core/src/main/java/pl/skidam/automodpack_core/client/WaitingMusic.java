@@ -8,30 +8,37 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.MissingObjectException;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.storage.StoragePaths;
+import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.ByteFormat;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.Throwables;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * The server's custom waiting track, published in the head document as the sha1 of the convention file
- * {@code automodpack/host-modpack/waiting-music.ogg} and served like any object at {@code objects/<sha1>}. The
- * session starts eagerly at download begin and resolves to one of three plays: the cached track at once when its
- * hash is the advertised one (no request at all), a live stream of the object fetch when the cache is stale
- * (decoded as they arrive, cached for every later sync), or the bundled track when the head advertises none, the
- * object is missing, or the fetch fails. The bundled track never plays while a fetch is still in flight, and a
- * stream that fails mid-play ends in silence rather than in an interrupting switch.
+ * {@code automodpack/host-modpack/waiting-music.ogg} and stored like any object at {@code objects/<sha1>}. The
+ * session starts as soon as the host session exists and resolves to one of three plays: the CAS object at once when
+ * its hash is the advertised one (no request at all), a live stream of the object fetch when the store is missing it
+ * (decoded as they arrive, promoted for every later sync), or the bundled track when the head advertises none, the
+ * object is missing, the fetch fails before playable audio, or the body is over the guardrail. The bundled track never
+ * plays while a fetch is still in flight, and a stream that fails mid-play ends in silence rather than in an
+ * interrupting switch.
  */
 public final class WaitingMusic {
 
@@ -47,9 +54,12 @@ public final class WaitingMusic {
 		current = null;
 	}
 
-	/** Starts the run's session: the cached track plays at once, a fresh track streams in, absence resolves to bundled. */
+	/** Starts the run's session: a CAS hit plays at once, a fresh track streams in, absence resolves to bundled. */
 	public static Session start(PackTransport transport, ClientStorage storage, String advertisedSha1) {
-		Session session = new Session(storage, advertisedSha1 == null ? "" : advertisedSha1.trim().toLowerCase(Locale.ROOT));
+		String sha1 = advertisedSha1 == null ? "" : advertisedSha1.trim().toLowerCase(Locale.ROOT);
+		Session existing = current;
+		if (existing != null && existing.advertisedSha1.equals(sha1)) return existing;
+		Session session = new Session(storage, sha1);
 		current = session;
 		session.begin(transport);
 		return session;
@@ -75,11 +85,15 @@ public final class WaitingMusic {
 		}
 
 		/** Blocks until the play decision exists: LOOP plays {@code loopFile()} (null = bundled asset), STREAM plays {@code audio()}. */
-		public Kind kind() {
-			try {
-				return kind.get(30, TimeUnit.SECONDS);
-			} catch (Exception e) {
-				return Kind.BUNDLED;
+		public Kind kind() throws InterruptedException {
+			while (true) {
+				try {
+					return kind.get(100, TimeUnit.MILLISECONDS);
+				} catch (TimeoutException e) {
+					// The fetch is still in flight; bundled must not win this wait.
+				} catch (ExecutionException e) {
+					return Kind.BUNDLED;
+				}
 			}
 		}
 
@@ -131,27 +145,33 @@ public final class WaitingMusic {
 		}
 
 		private void begin(PackTransport transport) {
-			Path cache = cacheFile(storage);
 			if (!HashUtils.isSha1(advertisedSha1)) {
-				// The head advertises no track: bundled plays and any withdrawn cache goes with it.
 				completeKind(Kind.BUNDLED);
-				forget(cache);
 				return;
 			}
-			if (advertisedSha1.equals(cachedSha1(storage))) {
-				// The cached track is this sync's music, and its hash is the cache key: nothing to request at all.
-				loopFile = cache;
-				kind.complete(Kind.LOOP);
-				return;
+			Path object = storage.objectFile(advertisedSha1);
+			try {
+				if (Files.isRegularFile(object) && FileIntegrity.matches(object, Files.size(object), advertisedSha1)) {
+					loopFile = object;
+					completeKind(Kind.LOOP);
+					return;
+				}
+			} catch (IOException e) {
+				LOGGER.warn("Could not read the cached waiting music object; fetching it again", e);
 			}
-			CompletableFuture.runAsync(() -> fetch(transport, cache), DownloadClient.NET_EXECUTOR);
+			try {
+				ClientObjectStore.publishOwnership(storage, Set.of(advertisedSha1));
+			} catch (IOException e) {
+				LOGGER.warn("Could not pin the waiting music object during fetch", e);
+			}
+			CompletableFuture.runAsync(() -> fetch(transport, object), DownloadClient.NET_EXECUTOR);
 		}
 
-		/** The object fetch streams the advertised track; a verified body is cached for every later sync. */
-		private void fetch(PackTransport transport, Path cache) {
+		/** The object fetch streams the advertised track; a verified body is promoted into CAS for every later sync. */
+		private void fetch(PackTransport transport, Path object) {
 			Path temp = null;
 			try {
-				temp = Files.createTempFile(cache.getParent(), ".waiting-music.", ".ogg");
+				temp = Files.createTempFile(storage.stagingDirectory(), ".waiting-music.", ".ogg");
 				OutputStream tap = new OutputStream() {
 					@Override
 					public void write(byte[] buffer, int offset, int length) {
@@ -167,22 +187,19 @@ public final class WaitingMusic {
 					}
 				};
 				transport.downloadSmallObject(advertisedSha1.getBytes(StandardCharsets.UTF_8), temp, StoragePaths.WAITING_MUSIC_MAX_BYTES, tap).join();
-				// The fetch judges nothing about the content; the advertised hash is checked here before caching.
-				// A read failure hashes to null, which never matches and fails the fetch like any other bad body.
+				if (Files.size(temp) > StoragePaths.WAITING_MUSIC_MAX_BYTES) throw new IOException("The served waiting music exceeds the " + StoragePaths.WAITING_MUSIC_MAX_BYTES + " byte guardrail");
 				if (!advertisedSha1.equals(HashUtils.getHash(temp))) throw new IOException("The served waiting music does not match the advertised hash");
-				publish(cache, temp);
+				publish(object, temp);
 			} catch (Exception e) {
 				fetchAlive = false;
 				Throwable cause = Throwables.unwrap(e);
 				if (cause instanceof MissingObjectException) {
-					// The host withdrew the track: whatever streamed finishes, the bundled track follows it.
 					completeKind(Kind.BUNDLED);
-					forget(cache);
 					deleteQuietly(temp);
 					return;
 				}
 				fetchError = cause instanceof IOException io ? io : new IOException(cause);
-				completeKind(Kind.BUNDLED); // a failure before the first byte: bundled plays
+				completeKind(Kind.BUNDLED);
 				LOGGER.warn("The custom waiting music fetch failed", e);
 				deleteQuietly(temp);
 			} finally {
@@ -190,25 +207,14 @@ public final class WaitingMusic {
 			}
 		}
 
-		/** Admits the verified track to the cache; the head guardrail already rejected oversized tracks before a body byte arrived. */
-		private void publish(Path cache, Path temp) throws IOException {
-			if (Files.size(temp) > StoragePaths.WAITING_MUSIC_MAX_BYTES) {
-				LOGGER.warn("The server's custom waiting music exceeds {} bytes despite the response head; it played but will not be cached", StoragePaths.WAITING_MUSIC_MAX_BYTES);
-				Files.deleteIfExists(temp);
-				return;
+		private void publish(Path object, Path temp) throws IOException {
+			Path parent = object.getParent();
+			if (parent != null) Files.createDirectories(parent);
+			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+				VerifiedFileTransfer.promoteAtomic(temp, object, Files.size(temp), advertisedSha1, cache);
 			}
-			Files.move(temp, cache, StandardCopyOption.REPLACE_EXISTING);
-			Files.writeString(hashFile(storage), advertisedSha1, StandardCharsets.UTF_8);
-			loopFile = cache; // a finished stream loops the cached track instead of ending in silence
-			LOGGER.info("Cached the server's custom waiting music ({})", ByteFormat.formatSize(Files.size(cache)));
-		}
-
-		private void forget(Path cache) {
-			try {
-				Files.deleteIfExists(cache);
-				Files.deleteIfExists(hashFile(storage));
-			} catch (IOException ignored) {
-			}
+			loopFile = object;
+			LOGGER.info("Stored the server's custom waiting music ({})", ByteFormat.formatSize(Files.size(object)));
 		}
 
 		private void deleteQuietly(Path path) {
@@ -216,27 +222,6 @@ public final class WaitingMusic {
 				Files.deleteIfExists(path);
 			} catch (IOException ignored) {
 			}
-		}
-	}
-
-	public static Path cacheFile(ClientStorage storage) {
-		return storage.clientDirectory().resolve(StoragePaths.WAITING_MUSIC_FILE);
-	}
-
-	private static Path hashFile(ClientStorage storage) {
-		return storage.clientDirectory().resolve(StoragePaths.WAITING_MUSIC_FILE + ".sha1");
-	}
-
-	/** The cached track's sha1, or null when nothing (valid) is cached; equal to the advertised hash means the cache plays. */
-	public static String cachedSha1(ClientStorage storage) {
-		Path cache = cacheFile(storage);
-		Path hash = hashFile(storage);
-		try {
-			if (!Files.isRegularFile(cache) || !Files.isRegularFile(hash)) return null;
-			String sha1 = Files.readString(hash, StandardCharsets.UTF_8).trim();
-			return HashUtils.getHash(cache).equals(sha1) ? sha1 : null;
-		} catch (IOException e) {
-			return null;
 		}
 	}
 }

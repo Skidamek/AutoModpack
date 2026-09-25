@@ -19,6 +19,7 @@ import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.protocol.PartialResume;
@@ -316,7 +317,18 @@ public final class ClientObjectStore {
 		collectStateJournal(storage, retained);
 		collectTransaction(storage, retained);
 		collectRepair(storage, retained);
+		collectWaitingMusic(storage, retained);
 		validateActiveProjection(storage);
+	}
+
+	/** Each pack's current head may advertise a waiting track; the hash is the only record, so the object stays pinned. */
+	private static void collectWaitingMusic(ClientStorage storage, ExpectedSizes retained) throws IOException {
+		HeadMirror heads = new HeadMirror(storage);
+		for (String modpackId : new ClientGenerationStore(storage).mirroredPackIds()) {
+			GenerationJsons.HeadDocumentFields head = heads.read(modpackId);
+			if (head == null || !HashUtils.isSha1(head.waitingMusicSha1)) continue;
+			retained.optional(head.waitingMusicSha1, -1, "waiting music");
+		}
 	}
 
 	/** Every instance-tree file hash is a required pin, so cleanup cannot strand a snapshot. Forget-prefix is the only unpin. */

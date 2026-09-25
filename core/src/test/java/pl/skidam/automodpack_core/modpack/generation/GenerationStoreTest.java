@@ -147,6 +147,23 @@ class GenerationStoreTest {
 	}
 
 	@Test
+	void collectKeepsTheAdvertisedWaitingTrack() throws Exception {
+		Path objects = tempDir.resolve("objects");
+		Path track = tempDir.resolve("waiting-music.ogg");
+		Files.write(track, "track-bytes".getBytes(StandardCharsets.UTF_8));
+		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects, track);
+		store.publish(candidate("one", "content-one"), "First");
+		Files.createDirectories(objects.resolve("ff"));
+		Path orphan = objects.resolve("ff").resolve(sha1("orphan").substring(2));
+		Files.write(orphan, "orphan".getBytes(StandardCharsets.UTF_8));
+
+		store.collectUnreachable();
+
+		assertTrue(Files.exists(DataRootResolver.objectFile(objects, sha1("track-bytes"))));
+		assertFalse(Files.exists(orphan));
+	}
+
+	@Test
 	void policyOnlyRepublishLandsInTheJournalAndSurvivesAStoreReload() throws Exception {
 		Path state = tempDir.resolve("state");
 		Path objects = tempDir.resolve("objects");

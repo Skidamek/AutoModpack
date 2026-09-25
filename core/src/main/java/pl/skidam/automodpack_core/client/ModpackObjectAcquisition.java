@@ -105,7 +105,8 @@ final class ModpackObjectAcquisition {
 
 		requireTransferSession();
 		long start = System.currentTimeMillis();
-		long totalBytes = missing.stream().mapToLong(item -> item.size).sum();
+		long totalBytes = ModpackUtils.remainingUncachedBytes(missing, storage);
+		if (playerFacing) WaitingMusic.start(transport, storage, waitingMusicSha1);
 		FetchManager fetchManager = sourceCatalogue.sourceFetch(missing);
 		try {
 			if (!downloadModpack(missing, start, totalBytes, fetchManager, playerFacing))
@@ -145,10 +146,7 @@ final class ModpackObjectAcquisition {
 		}
 
 		downloadManager = new DownloadManager(totalBytes, storage.dataLocation().layout(), platformCache);
-		if (playerFacing) {
-			ScreenManager.download(downloadManager, modpackName.get(), onPlayerCancel);
-			WaitingMusic.start(transport, storage, waitingMusicSha1);
-		}
+		if (playerFacing) ScreenManager.download(downloadManager, modpackName.get(), onPlayerCancel);
 		downloadManager.attachTransport(transport);
 		for (var serverItem : files) {
 			Path downloadFile = storage.activePath(serverItem.file);

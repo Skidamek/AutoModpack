@@ -269,7 +269,10 @@ public final class GenerationStore {
 		Current current = loadCurrent().orElse(null);
 		TreeSet<String> reachable = new TreeSet<>();
 		for (JournalEntry entry : journal.entries()) reachable.add(entry.policySha1());
-		if (current != null) for (ContentTree.ContentFile file : current.tree().files().values()) reachable.add(file.sha1());
+		if (current != null) {
+			for (ContentTree.ContentFile file : current.tree().files().values()) reachable.add(file.sha1());
+			if (HashUtils.isSha1(current.waitingMusicSha1())) reachable.add(HashUtils.normalizeSha1(current.waitingMusicSha1()));
+		}
 		return SharedObjectOwnership.withGlobalReferences(dataLocation, "server", reachable, globallyReferenced -> {
 			List<Path> objects = ObjectStoreMaintenance.objectFiles(objectsDirectory);
 			long beforeBytes = 0;
