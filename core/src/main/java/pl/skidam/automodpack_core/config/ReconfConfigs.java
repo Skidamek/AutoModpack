@@ -25,17 +25,17 @@ import com.google.gson.JsonPrimitive;
 
 import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.OsPaths;
-import pl.skidam.hconf.Comments;
-import pl.skidam.hconf.ConfigPath;
-import pl.skidam.hconf.Document;
-import pl.skidam.hconf.Hconf;
-import pl.skidam.hconf.ParseError;
-import pl.skidam.hconf.ParseResult;
-import pl.skidam.hconf.Value;
+import pl.skidam.reconf.Comments;
+import pl.skidam.reconf.ConfigPath;
+import pl.skidam.reconf.Document;
+import pl.skidam.reconf.ParseError;
+import pl.skidam.reconf.ParseResult;
+import pl.skidam.reconf.Reconf;
+import pl.skidam.reconf.Value;
 
 /**
- * The hconf-backed store for the human-editable configs (server and client config; the embedding contract of
- * HCONF-SPEC §13). Reads accept both the historical Gson-written JSON files and hand-edited hconf - claim 1 makes
+ * The reconf-backed store for the human-editable configs (server and client config; the embedding contract of
+ * RECONF-SPEC §13). Reads accept both the historical Gson-written JSON files and hand-edited reconf - claim 1 makes
  * them one format family. Saves never rewrite the file wholesale: the current document is reconciled with the
  * model, so user comments, blank lines, layout and line endings survive every programmatic change by construction.
  * Machine-owned state documents stay on {@link ConfigTools} Gson serialization.
@@ -45,8 +45,8 @@ import pl.skidam.hconf.Value;
  * {@code ensure} (with that comment) when an existing file lacks it - the release-to-release convergence of the
  * spec's embedding contract. Unannotated fields are reconcile-only and never re-materialize.
  */
-public final class HconfConfigs {
-	private HconfConfigs() {}
+public final class ReconfConfigs {
+	private ReconfConfigs() {}
 
 	/** Marks a config field as documented: the comment is emitted on fresh generation and ensured into old files. */
 	@Retention(RetentionPolicy.RUNTIME)
@@ -57,7 +57,7 @@ public final class HconfConfigs {
 
 	private static final String BANNER = "AutoModpack configuration - your edits and comments survive updates. Docs: https://moddedmc.wiki/en/project/automodpack/docs Discord: https://discord.gg/hS6aMyeA9P";
 
-	/** Reads one human config; empty when neither it nor its pre-hconf {@code .json} predecessor exists, {@link ConfigTools.ConfigParseException} with position when it is corrupt. */
+	/** Reads one human config; empty when neither it nor its pre-reconf {@code .json} predecessor exists, {@link ConfigTools.ConfigParseException} with position when it is corrupt. */
 	public static <T> Optional<T> read(Path path, Class<T> type) {
 		Path effective = Files.isRegularFile(path) ? path : legacyPath(path);
 		if (!Files.isRegularFile(effective)) return Optional.empty();
@@ -99,7 +99,7 @@ public final class HconfConfigs {
 			// format migration (one-time, released json -> conf): the model was read through the legacy
 			// fallback, so generating fresh carries every current value into the documented canonical
 			// file; the old file goes away only after the new one is written
-			ParseResult legacyResult = Hconf.parse(legacyBytes);
+			ParseResult legacyResult = Reconf.parse(legacyBytes);
 			if (!legacyResult.isOk()) {
 				ParseError error = legacyResult.error();
 				throw new ConfigTools.ConfigParseException("Cannot migrate " + legacy.getFileName() + ": the file is corrupt at line " + error.line() + ":"
@@ -107,7 +107,7 @@ public final class HconfConfigs {
 			}
 			document = freshDocument(model, type);
 		} else {
-			ParseResult result = Hconf.parse(bytes);
+			ParseResult result = Reconf.parse(bytes);
 			if (!result.isOk()) {
 				ParseError error = result.error();
 				throw new ConfigTools.ConfigParseException("Cannot save " + path.getFileName() + ": the file is corrupt at line " + error.line() + ":"
@@ -131,7 +131,7 @@ public final class HconfConfigs {
 	 * and letting it stand would resurrect it on the next read. The model carries the user's own elements untouched;
 	 * only the program's deletions are applied.
 	 */
-	// the hconf path type cannot take the short name here: java.nio.file.Path owns it in this class
+	// the reconf path type cannot take the short name here: java.nio.file.Path owns it in this class
 	private static void setArrays(Document document, Value model, Value current, ConfigPath path) {
 		if (model instanceof Value.Arr arr) {
 			if (current instanceof Value.Arr) document.set(path, arr);
@@ -158,7 +158,7 @@ public final class HconfConfigs {
 		return path.resolveSibling((dot > 0 ? name.substring(0, dot) : name) + ".json");
 	}
 
-	/** Generates one fresh document: canonical hconf with the banner and the {@link Comment} declarations. */
+	/** Generates one fresh document: canonical reconf with the banner and the {@link Comment} declarations. */
 	private static <T> Document freshDocument(T model, Class<T> type) {
 		Value.Obj root = modelTree(model);
 		Map<String, String> byKey = new LinkedHashMap<>();
@@ -166,7 +166,7 @@ public final class HconfConfigs {
 			Comment comment = field.getAnnotation(Comment.class);
 			if (comment != null) byKey.put(field.getName(), comment.value());
 		}
-		return Hconf.parse(Hconf.canonical(root, Comments.of(BANNER, byKey))).document();
+		return Reconf.parse(Reconf.canonical(root, Comments.of(BANNER, byKey))).document();
 	}
 
 	/** Ensures every {@link Comment} field declared in {@code type} exists in the document, materializing with the declared default and comment. */
@@ -192,16 +192,16 @@ public final class HconfConfigs {
 		}
 	}
 
-	/** The model as an hconf object tree, via Gson's tree (declaration order preserved, transient fields skipped). */
+	/** The model as an reconf object tree, via Gson's tree (declaration order preserved, transient fields skipped). */
 	private static <T> Value.Obj modelTree(T model) {
 		JsonElement tree = ConfigTools.GSON.toJsonTree(model);
 		if (!(tree instanceof JsonObject object)) throw new ConfigTools.ConfigException("Config model must serialize to an object");
 		return (Value.Obj) toJsonValue(object);
 	}
 
-	/** The hconf document as Gson-model JSON: the string path of {@link ConfigTools} (strict stream reader) does the binding. */
+	/** The reconf document as Gson-model JSON: the string path of {@link ConfigTools} (strict stream reader) does the binding. */
 	private static String parseJson(Path path, byte[] bytes) {
-		ParseResult result = Hconf.parse(bytes);
+		ParseResult result = Reconf.parse(bytes);
 		if (!result.isOk()) {
 			ParseError error = result.error();
 			throw new ConfigTools.ConfigParseException("Invalid configuration " + path.getFileName() + " at line " + error.line() + ":" + error.column() + " ("
@@ -211,7 +211,7 @@ public final class HconfConfigs {
 		return ConfigTools.GSON.toJson(toJsonObject((Value.Obj) tree));
 	}
 
-	// The bridge (HCONF-SPEC §13): hconf tree <-> Gson tree. Numbers travel as their exact literal text in both directions.
+	// The bridge (RECONF-SPEC §13): reconf tree <-> Gson tree. Numbers travel as their exact literal text in both directions.
 
 	static JsonElement toJsonObject(Value.Obj obj) {
 		JsonObject out = new JsonObject();

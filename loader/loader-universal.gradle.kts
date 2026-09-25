@@ -43,7 +43,7 @@ repositories {
 val bouncyCastleVersion = versionProperty("versionBouncyCastle")
 val nettyVersion = versionProperty("versionNetty")
 val mcholepunchVersion = versionProperty("versionMcholepunch")
-val hconfVersion = versionProperty("versionHconf")
+val reconfVersion = versionProperty("versionReconf")
 val aircompressorVersion = versionProperty("versionAircompressor")
 
 dependencies {
@@ -60,9 +60,9 @@ dependencies {
 	implementation(":mcholepunch-core:$mcholepunchVersion")
 	implementation(":mcholepunch-server-netty:$mcholepunchVersion")
 
-	// hconf — the config format/edit layer for the human-editable configs (core's compile dep,
+	// reconf — the config format/edit layer for the human-editable configs (core's compile dep,
 	// shadowed into the loader the same way as the mcholepunch jars).
-	implementation(":hconf:$hconfVersion")
+	implementation(":reconf:$reconfVersion")
 }
 
 configurations {

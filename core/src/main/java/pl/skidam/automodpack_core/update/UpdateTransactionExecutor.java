@@ -21,8 +21,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.HconfConfigs;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
@@ -354,7 +354,7 @@ public final class UpdateTransactionExecutor {
 		SelectedModpackTarget resolved = validator.resolvedTarget(transaction, validator.targetDocument(transaction));
 		if (transaction.plan().plannedClientConfig() != null && !preserveNewerSelection)
 			try {
-				HconfConfigs.save(context.storage().clientConfigFile(), transaction.plan().plannedClientConfig(), ClientConfigJsons.ClientConfigFieldsV3.class,
+				ReconfConfigs.save(context.storage().clientConfigFile(), transaction.plan().plannedClientConfig(), ClientConfigJsons.ClientConfigFieldsV3.class,
 						ClientConfigJsons.ClientConfigFieldsV3::new);
 			} catch (IOException e) {
 				throw new ConfigTools.ConfigException("Failed to save client configuration", e);

@@ -16,8 +16,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ServerConfigJsons.ServerConfigFieldsV3;
 
-/** The hconf-backed human-config store: claim-1 reads, reconcile saves, comment convergence, loud corruption. */
-class HconfConfigsTest {
+/** The reconf-backed human-config store: claim-1 reads, reconcile saves, comment convergence, loud corruption. */
+class ReconfConfigsTest {
 
 	@TempDir
 	Path dir;
@@ -32,7 +32,7 @@ class HconfConfigsTest {
 
 	@Test
 	void freshGenerationIsCanonicalWithCommentsAndBareGlobs() throws IOException {
-		ServerConfigFieldsV3 config = HconfConfigs.readOrCreate(serverConfig(), ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		ServerConfigFieldsV3 config = ReconfConfigs.readOrCreate(serverConfig(), ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertTrue(text.startsWith("# "), text);
 		assertTrue(text.contains("# serve the modpack to clients from this server\nmodpackHost: true"), text);
@@ -57,7 +57,7 @@ class HconfConfigsTest {
 				  "secretLifetime": 336
 				}""";
 		Files.write(legacyServerConfig(), legacy.getBytes(StandardCharsets.UTF_8));
-		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
 		assertEquals(2, config.DO_NOT_CHANGE_IT);
 		assertEquals(25590, config.bindPort);
 		assertEquals("", config.modpack.name);
@@ -65,10 +65,10 @@ class HconfConfigsTest {
 
 	@Test
 	void saveKeepsBytesWhenModelMatches() throws IOException {
-		HconfConfigs.readOrCreate(serverConfig(), ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		ReconfConfigs.readOrCreate(serverConfig(), ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		byte[] before = Files.readAllBytes(serverConfig());
-		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
-		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		ReconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		byte[] after = Files.readAllBytes(serverConfig());
 		// accepted-loaders seeding changes the model on first load; use the re-read model so nothing differs
 		assertEquals(new String(before, StandardCharsets.UTF_8), new String(after, StandardCharsets.UTF_8));
@@ -78,12 +78,12 @@ class HconfConfigsTest {
 	void saveSplicesOnlyTheChangedValueAndKeepsCommentsAndCrlf() throws IOException {
 		String userFile = "# my server config\r\nmodpackHost: true # keep this note\r\nbindPort: 25565\r\n";
 		Files.write(serverConfig(), userFile.getBytes(StandardCharsets.UTF_8));
-		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
 		assertTrue(config.modpackHost);
 		assertTrue(Files.readString(serverConfig(), StandardCharsets.UTF_8).contains("modpackHost: true # keep this note"));
 		assertEquals(25565, config.bindPort);
 		config.bindPort = 25566;
-		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		ReconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertTrue(text.contains("# my server config\r\n"), "banner comment lost:\n" + text);
 		assertTrue(text.contains("modpackHost: true # keep this note\r\n"), "trailing comment lost:\n" + text);
@@ -96,9 +96,9 @@ class HconfConfigsTest {
 		// an old file from before accept-proxy-protocol existed
 		String oldFile = "modpackHost: false\r\nbindPort: 25565\r\n";
 		Files.write(serverConfig(), oldFile.getBytes(StandardCharsets.UTF_8));
-		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
 		assertFalse(config.acceptProxyProtocol);
-		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		ReconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertTrue(text.contains("# honor HAProxy PROXY protocol headers; enable only behind a trusted proxy\r\nacceptProxyProtocol: false"), text);
 		assertTrue(text.contains("modpackHost: false"), "existing value disturbed:\n" + text);
@@ -106,11 +106,11 @@ class HconfConfigsTest {
 
 	@Test
 	void saveIsIdempotent() throws IOException {
-		ServerConfigFieldsV3 config = HconfConfigs.readOrCreate(serverConfig(), ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		ServerConfigFieldsV3 config = ReconfConfigs.readOrCreate(serverConfig(), ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		config.bindPort = 25577;
-		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		ReconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		byte[] once = Files.readAllBytes(serverConfig());
-		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		ReconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		byte[] twice = Files.readAllBytes(serverConfig());
 		assertEquals(new String(once, StandardCharsets.UTF_8), new String(twice, StandardCharsets.UTF_8));
 	}
@@ -120,10 +120,10 @@ class HconfConfigsTest {
 		// two members glued on one line: adjacent values, positioned at the second key
 		String corrupt = "modpackName: x  bindPort: 1\n";
 		Files.write(serverConfig(), corrupt.getBytes(StandardCharsets.UTF_8));
-		ConfigTools.ConfigParseException readError = assertThrows(ConfigTools.ConfigParseException.class, () -> HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class));
+		ConfigTools.ConfigParseException readError = assertThrows(ConfigTools.ConfigParseException.class, () -> ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class));
 		assertTrue(readError.getMessage().contains("line 1:17"), readError.getMessage());
 		ConfigTools.ConfigParseException saveError = assertThrows(ConfigTools.ConfigParseException.class,
-				() -> HconfConfigs.save(serverConfig(), new ServerConfigFieldsV3(), ServerConfigFieldsV3.class, ServerConfigFieldsV3::new));
+				() -> ReconfConfigs.save(serverConfig(), new ServerConfigFieldsV3(), ServerConfigFieldsV3.class, ServerConfigFieldsV3::new));
 		assertTrue(saveError.getMessage().contains("corrupt"), saveError.getMessage());
 	}
 
@@ -131,8 +131,8 @@ class HconfConfigsTest {
 	void unknownKeysWarnButSurviveSaves() throws IOException {
 		String withUnknown = "modpackName: X\nsomeFutureOption: true\n";
 		Files.write(serverConfig(), withUnknown.getBytes(StandardCharsets.UTF_8));
-		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
-		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		ReconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertTrue(text.contains("someFutureOption: true"), "stale key not left alone:\n" + text);
 	}
@@ -153,23 +153,23 @@ class HconfConfigsTest {
 				}
 				""";
 		Files.writeString(serverConfig(), userFile, StandardCharsets.UTF_8);
-		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
 		config.modpack.categories.get("General").get("main").syncedFiles = Set.of("mods/*.jar");
-		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		ReconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertTrue(text.contains("mods/*.jar"), "kept rule lost:\n" + text);
 		assertFalse(text.contains("kubejs"), "removed rule resurrected:\n" + text);
 		assertEquals(Set.of("mods/*.jar"),
-				HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow().modpack.categories.get("General").get("main").syncedFiles);
+				ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow().modpack.categories.get("General").get("main").syncedFiles);
 	}
 
 	@Test
-	void legacyJsonMigratesToHconfOnFirstSave() throws IOException {
+	void legacyJsonMigratesToReconfOnFirstSave() throws IOException {
 		String legacy = "modpackHost: false\nbindPort: 25590\n";
 		Files.write(legacyServerConfig(), legacy.getBytes(StandardCharsets.UTF_8));
-		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
 		assertFalse(config.modpackHost);
-		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		ReconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		assertFalse(Files.exists(legacyServerConfig()), "legacy .json not removed after migration");
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertTrue(text.startsWith("# "), "migrated file lacks the banner:\n" + text);
@@ -182,9 +182,9 @@ class HconfConfigsTest {
 	void tombstonedFieldStaysOut() throws IOException {
 		String disabled = "# honor HAProxy PROXY protocol headers; enable only behind a trusted proxy\n# acceptProxyProtocol: true\nmodpackName: X\n";
 		Files.write(serverConfig(), disabled.getBytes(StandardCharsets.UTF_8));
-		ServerConfigFieldsV3 config = HconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
 		assertFalse(config.acceptProxyProtocol);
-		HconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		ReconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertFalse(text.contains("\nacceptProxyProtocol:"), "ensure re-materialized a user-disabled key:\n" + text);
 		assertTrue(text.contains("# acceptProxyProtocol: true"), "tombstone disturbed:\n" + text);

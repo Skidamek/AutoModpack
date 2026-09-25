@@ -20,8 +20,8 @@ import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.HconfConfigs;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
@@ -65,7 +65,7 @@ class UpdateTransactionExecutorTest {
 		assertEquals(target.packTarget().contentToken(), activeState.contentToken);
 		assertEquals(target.document().ownershipLedger(), OwnershipLedger.fromFields(activeState.ownershipLedger));
 		assertEquals(target.selection().intent(), new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).orElseThrow());
-		assertEquals(target.manifest().modpackId(), HconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
+		assertEquals(target.manifest().modpackId(), ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
 		assertFalse(Files.exists(storage.automodpackDirectory().resolve("modpacks")));
 		assertFalse(Files.exists(storage.transactionFile()));
 	}
@@ -396,16 +396,16 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.PROJECTION, "mods/config-drift.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/config-drift.jar", true, hash, bytes.length)));
 		ClientConfigJsons.ClientConfigFieldsV3 expected = new ClientConfigJsons.ClientConfigFieldsV3();
-		HconfConfigs.save(storage.clientConfigFile(), expected, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		ReconfConfigs.save(storage.clientConfigFile(), expected, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()), expected);
 		ClientConfigJsons.ClientConfigFieldsV3 newer = new ClientConfigJsons.ClientConfigFieldsV3(expected);
 		newer.playMusic = false;
-		HconfConfigs.save(storage.clientConfigFile(), newer, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		ReconfConfigs.save(storage.clientConfigFile(), newer, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 
 		UpdateTransactionExecutor.Execution execution = executor(storage).commit(transaction);
 
 		assertTrue(execution.replanRequired());
-		assertFalse(HconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().playMusic);
+		assertFalse(ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().playMusic);
 		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, persistedTransaction(storage).resultStatus);
 	}
 
@@ -479,7 +479,7 @@ class UpdateTransactionExecutorTest {
 		ClientConfigJsons.ClientConfigFieldsV3 current = new ClientConfigJsons.ClientConfigFieldsV3();
 		transaction.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(current);
 		current.playMusic = false;
-		HconfConfigs.save(storage.clientConfigFile(), current, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		ReconfConfigs.save(storage.clientConfigFile(), current, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
 
 		assertEquals(target.manifest().modpackId(), ClientProjectionView.open(storage).logicalConfig(current).selectedModpackId);
@@ -815,7 +815,7 @@ class UpdateTransactionExecutorTest {
 	}
 
 	private static UpdateTransactionExecutor.Execution commit(ClientStorage storage, UpdatePlan plan, SelectedModpackTarget target) throws IOException {
-		ClientConfigJsons.ClientConfigFieldsV3 expected = HconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+		ClientConfigJsons.ClientConfigFieldsV3 expected = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		return executor(storage).commit(plan, target, storage.overlayDigest(target.manifest().modpackId()), expected);
 	}
@@ -911,7 +911,7 @@ class UpdateTransactionExecutorTest {
 	}
 
 	private static UpdateTransaction createTransaction(ClientStorage storage, UpdatePlan plan, SelectedModpackTarget target) throws IOException {
-		ClientConfigJsons.ClientConfigFieldsV3 expected = HconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+		ClientConfigJsons.ClientConfigFieldsV3 expected = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		return UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()), expected);
 	}

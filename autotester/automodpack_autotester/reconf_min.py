@@ -1,4 +1,4 @@
-"""Minimal reader for canonical hconf files (the subset automodpack writes):
+"""Minimal reader for canonical reconf files (the subset automodpack writes):
 `key: value` members, `#` comments, nested braced blocks, inline arrays,
 quoted strings and bare scalars. Sufficient for config assertions; not a parser."""
 
@@ -91,8 +91,8 @@ def _value(text):
         return [_scalar(item) for item in _split_inline(text[1:-1])]
     return _scalar(text)
 
-def read_hconf(path):
-    """Reads one canonical hconf file into nested dicts/lists of scalars."""
+def read_reconf(path):
+    """Reads one canonical reconf file into nested dicts/lists of scalars."""
     members = {}
     stack = [members]
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -105,7 +105,7 @@ def read_hconf(path):
             continue
         key, separator, value = line.partition(":")
         if not separator:
-            raise ValueError(f"malformed hconf member: {raw!r}")
+            raise ValueError(f"malformed reconf member: {raw!r}")
         key = _scalar(key.strip())
         value = value.strip()
         if value == "{":

@@ -48,7 +48,7 @@ public final class BootstrapInstaller {
 				seeded.approveOrigin(originKey);
 				ConnectionStore.saveConnection(storage, bootstrap.modpackId(), seeded);
 				clientConfig = clientConfig.withSelectedModpackId(bootstrap.modpackId());
-				HconfConfigs.save(storage.clientConfigFile(), clientConfig, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+				ReconfConfigs.save(storage.clientConfigFile(), clientConfig, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 			}
 			if (bootstrap.hasSecret()) {
 				if (!bootstrap.installsModpack()) throw new ConfigTools.ConfigException("Bootstrap secret requires an installable modpack");

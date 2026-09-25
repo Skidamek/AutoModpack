@@ -9,23 +9,23 @@ import pl.skidam.automodpack_core.loader.PinnedMods;
 public class ClientConfigJsons {
 
 	public static class ClientConfigFieldsV3 {
-		@HconfConfigs.Comment("file version - do not change")
+		@ReconfConfigs.Comment("file version - do not change")
 		public int DO_NOT_CHANGE_IT = 3;
-		@HconfConfigs.Comment("id of the installed modpack this instance follows; automodpack manages this")
+		@ReconfConfigs.Comment("id of the installed modpack this instance follows; automodpack manages this")
 		public String selectedModpackId = "";
-		@HconfConfigs.Comment("fetch and apply the pack during launch, before the game loads")
+		@ReconfConfigs.Comment("fetch and apply the pack during launch, before the game loads")
 		public boolean updateSelectedModpackOnLaunch = true;
-		@HconfConfigs.Comment("let the mod update itself")
+		@ReconfConfigs.Comment("let the mod update itself")
 		public boolean selfUpdater = false;
-		@HconfConfigs.Comment("match the automodpack version the server runs, via modrinth")
+		@ReconfConfigs.Comment("match the automodpack version the server runs, via modrinth")
 		public boolean syncAutoModpackVersion = true;
-		@HconfConfigs.Comment("let the server switch this instance's loader version")
+		@ReconfConfigs.Comment("let the server switch this instance's loader version")
 		public boolean syncLoaderVersion = true;
-		@HconfConfigs.Comment("play music while a download runs")
+		@ReconfConfigs.Comment("play music while a download runs")
 		public boolean playMusic = true;
-		@HconfConfigs.Comment("show the modpack settings button")
+		@ReconfConfigs.Comment("show the modpack settings button")
 		public boolean showModpackSettingsButton = true;
-		@HconfConfigs.Comment("mod ids that keep loading from this instance's own mods folder")
+		@ReconfConfigs.Comment("mod ids that keep loading from this instance's own mods folder")
 		public List<String> pinnedModIds = new ArrayList<>();
 
 		public ClientConfigFieldsV3() {}

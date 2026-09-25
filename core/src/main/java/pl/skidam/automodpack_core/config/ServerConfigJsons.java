@@ -22,56 +22,56 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 public class ServerConfigJsons {
 
 	public static class ServerConfigFieldsV3 {
-		@HconfConfigs.Comment("file version - do not change")
+		@ReconfConfigs.Comment("file version - do not change")
 		public int DO_NOT_CHANGE_IT = 3;
-		@HconfConfigs.Comment("serve the modpack to clients from this server")
+		@ReconfConfigs.Comment("serve the modpack to clients from this server")
 		public boolean modpackHost = true;
-		@HconfConfigs.Comment("scan and regenerate the modpack on every server start")
+		@ReconfConfigs.Comment("scan and regenerate the modpack on every server start")
 		public boolean generateModpackOnStart = true;
 		// Category name -> group id -> declaration. The group id is referenced by requires/breaksWith and by the client's saved selection; the category name is the player-facing section label.
-		@HconfConfigs.Comment("what clients receive. name is the pack's display name; host-modpack/<group>/ ships in full, syncedFiles pulls from the server root, excludedFiles keeps files off clients (put server-only mods there)")
+		@ReconfConfigs.Comment("what clients receive. name is the pack's display name; host-modpack/<group>/ ships in full, syncedFiles pulls from the server root, excludedFiles keeps files off clients (put server-only mods there)")
 		public ModpackFields modpack = ModpackFields.withMainGroup();
-		@HconfConfigs.Comment("leave mods marked as server-side out of the synced modpack")
+		@ReconfConfigs.Comment("leave mods marked as server-side out of the synced modpack")
 		public boolean autoExcludeServerSideMods = true;
-		@HconfConfigs.Comment("require clients to install the modpack")
+		@ReconfConfigs.Comment("require clients to install the modpack")
 		public boolean requireModpack = true;
-		@HconfConfigs.Comment("show a message to players joining without the mod")
+		@ReconfConfigs.Comment("show a message to players joining without the mod")
 		public boolean nagUnModdedClients = true;
-		@HconfConfigs.Comment("message shown to unmodded players")
+		@ReconfConfigs.Comment("message shown to unmodded players")
 		public String nagMessage = "Install the AutoModpack mod to get this server's modpack!";
-		@HconfConfigs.Comment("text of the clickable nag message")
+		@ReconfConfigs.Comment("text of the clickable nag message")
 		public String nagClickableMessage = "Click here to get the AutoModpack!";
-		@HconfConfigs.Comment("link the nag message opens")
+		@ReconfConfigs.Comment("link the nag message opens")
 		public String nagClickableLink = "https://modrinth.com/project/automodpack";
-		@HconfConfigs.Comment("address the modpack host binds to; empty = all interfaces")
+		@ReconfConfigs.Comment("address the modpack host binds to; empty = all interfaces")
 		public String bindAddress = "";
-		@HconfConfigs.Comment("port the modpack host binds to; -1 = same as the server port")
+		@ReconfConfigs.Comment("port the modpack host binds to; -1 = same as the server port")
 		public int bindPort = -1;
-		@HconfConfigs.Comment("host advertised to clients; empty = automatic")
+		@ReconfConfigs.Comment("host advertised to clients; empty = automatic")
 		public String advertisedEndpointHost = "";
-		@HconfConfigs.Comment("port advertised to clients; -1 = same as the bind port")
+		@ReconfConfigs.Comment("port advertised to clients; -1 = same as the bind port")
 		public int advertisedEndpointPort = -1;
-		@HconfConfigs.Comment("disable the built-in TLS listener")
+		@ReconfConfigs.Comment("disable the built-in TLS listener")
 		public boolean disableInternalTLS = false;
-		@HconfConfigs.Comment("honor HAProxy PROXY protocol headers; enable only behind a trusted proxy")
+		@ReconfConfigs.Comment("honor HAProxy PROXY protocol headers; enable only behind a trusted proxy")
 		public boolean acceptProxyProtocol = false;
-		@HconfConfigs.Comment("HOLEPUNCH, MAGIC or HTTP; HOLEPUNCH carries the pack through the Minecraft server port")
+		@ReconfConfigs.Comment("HOLEPUNCH, MAGIC or HTTP; HOLEPUNCH carries the pack through the Minecraft server port")
 		public ModpackConnectionMode connectionMode = ModpackConnectionMode.HOLEPUNCH;
-		@HconfConfigs.Comment("per-client transfer cap in MiB/s; 0 = unlimited")
+		@ReconfConfigs.Comment("per-client transfer cap in MiB/s; 0 = unlimited")
 		public int bandwidthLimit = 0;
-		@HconfConfigs.Comment("require clients to hold a server-issued secret")
+		@ReconfConfigs.Comment("require clients to hold a server-issued secret")
 		public boolean validateSecrets = true;
-		@HconfConfigs.Comment("secret lifetime in hours; 336 = 14 days")
+		@ReconfConfigs.Comment("secret lifetime in hours; 336 = 14 days")
 		public long secretLifetime = 336;
-		@HconfConfigs.Comment("export the URL-contract tree (head, journal, objects/) to this directory after every publish for any static HTTPS host; empty = off")
+		@ReconfConfigs.Comment("export the URL-contract tree (head, journal, objects/) to this directory after every publish for any static HTTPS host; empty = off")
 		public String exportHttpDirectory = "";
-		@HconfConfigs.Comment("include every object in the HTTP export even when Modrinth or CurseForge serves it; keeps the host as a backstop for link rot")
+		@ReconfConfigs.Comment("include every object in the HTTP export even when Modrinth or CurseForge serves it; keeps the host as a backstop for link rot")
 		public boolean exportHttpIncludeAll = false;
-		@HconfConfigs.Comment("let the mod update itself")
+		@ReconfConfigs.Comment("let the mod update itself")
 		public boolean selfUpdater = false;
-		@HconfConfigs.Comment("loaders a client may run the modpack with; seeded once, then yours to edit")
+		@ReconfConfigs.Comment("loaders a client may run the modpack with; seeded once, then yours to edit")
 		public Set<String> acceptedLoaders = new HashSet<>();
-		@HconfConfigs.Comment("publish the pack's loader and Minecraft versions so clients match them; off = files-only pack")
+		@ReconfConfigs.Comment("publish the pack's loader and Minecraft versions so clients match them; off = files-only pack")
 		public boolean advertiseVersionsToSync = true;
 	}
 
