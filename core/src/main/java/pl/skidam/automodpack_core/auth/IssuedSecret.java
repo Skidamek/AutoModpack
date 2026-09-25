@@ -1,19 +1,19 @@
 package pl.skidam.automodpack_core.auth;
 
-/** A host secret bound to the player name it was issued to, so every later check authorizes the exact identity the login presented instead of re-deriving one. */
+/** A host secret bound to the player identity it was issued to, so every later check authorizes the exact identity the login presented instead of re-deriving one. */
 public class IssuedSecret { // a class, not a record - the gson shipped in 1.18 mc cannot read records
-	private String secret;
+	private String playerId;
 	private Long timestamp;
 	private String name;
 
-	public IssuedSecret(Secrets.Secret secret, String name) {
-		this.secret = secret.secret();
-		this.timestamp = secret.timestamp();
+	public IssuedSecret(String playerId, long timestamp, String name) {
+		this.playerId = playerId;
+		this.timestamp = timestamp;
 		this.name = name;
 	}
 
-	public String secret() {
-		return secret;
+	public String playerId() {
+		return playerId;
 	}
 
 	public Long timestamp() {
@@ -26,6 +26,6 @@ public class IssuedSecret { // a class, not a record - the gson shipped in 1.18 
 
 	@Override
 	public String toString() {
-		return "IssuedSecret{name='" + name + "', timestamp=" + timestamp + '}';
+		return "IssuedSecret{playerId='" + playerId + "', name='" + name + "', timestamp=" + timestamp + '}';
 	}
 }

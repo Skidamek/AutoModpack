@@ -22,6 +22,7 @@ The one-shot client drop-in is `~/automodpack/automodpack-bootstrap.json`. Put a
 | `credentials/certificate.crt` | TLS certificate chain |
 | `credentials/private-key.pem` | TLS private key, PKCS#8 PEM |
 | `credentials/provisioning-secret` | Bootstrap provisioning secret; keep this folder out of support dumps |
+| `credentials/secrets.json` | Per-player download secrets; several server processes may share the folder |
 
 `recovered/` holds copies you save from the instance timeline. Pack source files belong in `host-modpack/`, not here.
 
@@ -36,7 +37,6 @@ Edit these by hand only when support asks you to; AutoModpack owns their content
 | `journal.jsonl` | The append-only history of published generations |
 | `current-projection.json` | The materialized view of the current generation |
 | `staging/` | In-flight publishes |
-| `secrets.json` | Per-player download secrets |
 | `data/` | The server's own content store (dedicated servers always keep it here) |
 
 ### Client runtime: `~/automodpack/client/`

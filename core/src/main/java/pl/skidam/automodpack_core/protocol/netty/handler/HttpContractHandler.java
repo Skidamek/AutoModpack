@@ -727,7 +727,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			return false;
 		}
 		var issued = SecretsStore.getHostSecret(secret);
-		span.actor = issued == null ? null : issued.getValue().name();
+		span.actor = issued == null ? null : issued.name();
 		return true;
 	}
 

@@ -14,12 +14,14 @@ import java.security.*;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Locale;
 
 import javax.security.auth.x500.X500Principal;
@@ -231,6 +233,41 @@ public class NetUtils {
 			closeable.close();
 		} catch (Exception ignored) {
 		}
+	}
+
+	/** Reads the PKCS#8 PEM {@link #savePrivateKey} writes; null when the file is missing, a GeneralSecurityException when it is present but unreadable as any supported key type. */
+	public static PrivateKey loadPrivateKey(Path path) throws Exception {
+		if (!Files.exists(path)) return null;
+		String pem = Files.readString(path, StandardCharsets.UTF_8);
+		String base64 = pem.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "").replaceAll("\s", "");
+		byte[] der = Base64.getMimeDecoder().decode(base64);
+		for (String algorithm : List.of("RSA", "EC", "Ed25519", "DSA")) {
+			try {
+				return KeyFactory.getInstance(algorithm).generatePrivate(new PKCS8EncodedKeySpec(der));
+			} catch (InvalidKeySpecException notThisKeyType) {
+			}
+		}
+		throw new GeneralSecurityException("Unsupported private key format in " + path);
+	}
+
+	/** Proves the key pairs with the certificate by signing a fresh random challenge and verifying it with the certificate's public key. */
+	public static void validateKeyMatchesCertificate(PrivateKey privateKey, X509Certificate certificate) throws GeneralSecurityException {
+		String algorithm = switch (privateKey.getAlgorithm()) {
+			case "RSA" -> "SHA256withRSA";
+			case "EC", "ECDSA" -> "SHA256withECDSA";
+			case "Ed25519" -> "Ed25519";
+			case "DSA" -> "SHA256withDSA";
+			default -> throw new GeneralSecurityException("Unsupported private key algorithm: " + privateKey.getAlgorithm());
+		};
+		byte[] challenge = new byte[64];
+		new SecureRandom().nextBytes(challenge);
+		Signature signature = Signature.getInstance(algorithm);
+		signature.initSign(privateKey);
+		signature.update(challenge);
+		Signature verification = Signature.getInstance(algorithm);
+		verification.initVerify(certificate.getPublicKey());
+		verification.update(challenge);
+		if (!verification.verify(signature.sign())) throw new GeneralSecurityException("The private key does not match the certificate " + certificate.getSubjectX500Principal());
 	}
 
 	private static String formatBase64(byte[] derEncodedBytes) {

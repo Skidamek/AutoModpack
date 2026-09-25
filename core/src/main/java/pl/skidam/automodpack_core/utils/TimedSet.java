@@ -27,6 +27,10 @@ public class TimedSet<T> {
 		return e != null && e.expiryTime() > System.currentTimeMillis();
 	}
 
+	public void remove(T value) {
+		map.remove(value);
+	}
+
 	private void cleanup() {
 		long now = System.currentTimeMillis();
 		map.entrySet().removeIf(e -> e.getValue().expiryTime() <= now);

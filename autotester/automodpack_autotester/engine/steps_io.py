@@ -350,7 +350,7 @@ def assert_authenticated_secret(ctx, _step):
     client_secret = (connection.get("secrets", {}) or {}).get(origin)
     if not isinstance(client_secret, dict):
         raise AssertionError("authenticated login did not persist a client secret for the bootstrap origin")
-    server_secrets_path = ctx.server_dir / "automodpack" / "server" / "secrets.json"
+    server_secrets_path = ctx.server_dir / "automodpack" / "credentials" / "secrets.json"
     try:
         server_secrets = json.loads(server_secrets_path.read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
@@ -360,10 +360,12 @@ def assert_authenticated_secret(ctx, _step):
     anonymous = base64.urlsafe_b64encode(bytes(32)).decode("ascii").rstrip("=")
     if not isinstance(value, str) or not value or value == anonymous or not isinstance(timestamp, (int, float)) or timestamp <= 0:
         raise AssertionError("persisted client secret is missing, anonymous, or has no valid timestamp")
-    matching_server_secrets = [entry for entry in (server_secrets.get("secrets", {}) or {}).values() if isinstance(entry, dict) and entry.get("secret") == value]
-    if not matching_server_secrets:
-        raise AssertionError("server did not persist the secret issued during authenticated login")
-    if not any(isinstance(entry.get("name"), str) and entry.get("name") for entry in matching_server_secrets):
+    if value in json.dumps(server_secrets):
+        raise AssertionError("server persisted the raw download secret instead of its SHA-256 key")
+    issued = (server_secrets.get("secrets", {}) or {}).get(hashlib.sha256(value.encode("utf-8")).hexdigest())
+    if not isinstance(issued, dict):
+        raise AssertionError("server did not persist the issued secret under its SHA-256 key")
+    if not (isinstance(issued.get("name"), str) and issued.get("name")):
         raise AssertionError("server persisted the secret without the player name it was issued to")
 
 

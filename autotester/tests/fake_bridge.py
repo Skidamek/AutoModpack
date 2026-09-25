@@ -775,9 +775,10 @@ class FakeBridge:
             connection.setdefault("secrets", {})[self.ctx.vars["bootstrap_origin"]] = {"secret": secret, "timestamp": 1}
             connection_path.parent.mkdir(parents=True, exist_ok=True)
             connection_path.write_text(json.dumps(connection), encoding="utf-8")
-            server_secrets = self.ctx.server_dir / "automodpack" / "server" / "secrets.json"
+            server_secrets = self.ctx.server_dir / "automodpack" / "credentials" / "secrets.json"
             server_secrets.parent.mkdir(parents=True, exist_ok=True)
-            server_secrets.write_text(json.dumps({"secrets": {"fake-player": {"secret": secret, "timestamp": 1, "name": "fake-player"}}}), encoding="utf-8")
+            secret_key = hashlib.sha256(secret.encode("utf-8")).hexdigest()
+            server_secrets.write_text(json.dumps({"secrets": {secret_key: {"playerId": "fake-player", "timestamp": 1, "name": "fake-player"}}}), encoding="utf-8")
         self.synced = True
         if self.selected_pack == "A":
             self.pack_removed = False
