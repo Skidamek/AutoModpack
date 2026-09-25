@@ -9,9 +9,11 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 
@@ -21,6 +23,7 @@ import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.ContentTree;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
@@ -88,6 +91,37 @@ public final class ClientGenerationStore {
 	public Optional<PackDocument> activeDocument() throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		return state == null ? Optional.empty() : Optional.of(document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger)));
+	}
+
+	/**
+	 * The active pack's full hosting surface: the mirrored head and journal plus every object the policy references, so
+	 * joining players get byte-exactly what this client runs. Every mapped file must exist; a missing object means the
+	 * host cannot keep its promise and fails loudly instead of starving a download halfway.
+	 */
+	public GenerationHosting hosting() throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+		if (state == null || state.modpackId == null || state.modpackId.isBlank()) throw new IOException("No active modpack is selected");
+		Path head = storage.historyHeadFile(state.modpackId);
+		Path journal = storage.historyJournalFile(state.modpackId);
+		if (!Files.isRegularFile(head, LinkOption.NOFOLLOW_LINKS) || !Files.isRegularFile(journal, LinkOption.NOFOLLOW_LINKS))
+			throw new IOException("The active modpack's mirror is incomplete: " + state.modpackId);
+		GenerationJsons.HeadDocumentFields headFields = ConfigTools.read(head, GenerationJsons.HeadDocumentFields.class)
+				.orElseThrow(() -> new IOException("The active modpack's head document is empty: " + head));
+		GroupManifest manifest = policyDocument(headFields.policySha1);
+		Map<String, Path> paths = new TreeMap<>();
+		paths.put(GenerationHosting.HEAD_DOCUMENT_KEY, head);
+		paths.put(GenerationHosting.JOURNAL_KEY, journal);
+		paths.put(headFields.policySha1, storage.objectFile(headFields.policySha1));
+		for (var file : ContentTree.fromManifest(manifest).files().values()) paths.put(file.sha1(), storage.objectFile(file.sha1()));
+		if (HashUtils.isSha1(headFields.waitingMusicSha1)) {
+			String sha1 = HashUtils.normalizeSha1(headFields.waitingMusicSha1);
+			Path object = storage.objectFile(sha1);
+			if (Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)) paths.put(sha1, object);
+		}
+		for (Path path : paths.values()) {
+			if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("The active modpack is missing a hosted object: " + path);
+		}
+		return new GenerationHosting(paths);
 	}
 
 	/** Reconstructs the active target from the active document and the persisted selection intent, without server access. */
