@@ -83,7 +83,7 @@ public final class DnsPinResolver {
 
 	private record ResolverTxt(String value, long ttlSeconds) {}
 
-	private record CombinedResult(LookupResult result, long ttlSeconds) {}
+	record CombinedResult(LookupResult result, long ttlSeconds) {}
 
 	private record CacheEntry(LookupResult result, long expiresAtMillis) {}
 
@@ -182,7 +182,7 @@ public final class DnsPinResolver {
 		}
 	}
 
-	private static CombinedResult combineResolverResults(String host, List<ResolverResult> results) {
+	static CombinedResult combineResolverResults(String host, List<ResolverResult> results) {
 		// The record is the operator's explicit statement, so the combination fails closed: a resolver that saw a
 		// malformed record, or two that disagree on the fingerprint, is a contradiction no available answer can
 		// paper over. Only a chorus of unavailable resolvers reads as no policy at all.

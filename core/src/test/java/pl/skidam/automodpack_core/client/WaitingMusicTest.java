@@ -8,6 +8,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -42,6 +43,13 @@ class WaitingMusicTest {
 		WaitingMusic.Session session = WaitingMusic.current();
 		if (session != null) session.awaitFetch();
 		WaitingMusic.endRun();
+		// The CAS marks promoted objects read-only, and Windows refuses to delete read-only files: the attribute
+		// comes off here, deepest first, so JUnit's TempDir cleanup can remove the data root.
+		if (tempDir != null && Files.isDirectory(tempDir)) {
+			try (var paths = Files.walk(tempDir)) {
+				paths.sorted(Comparator.reverseOrder()).forEach(path -> path.toFile().setWritable(true));
+			}
+		}
 	}
 
 	private ClientStorage storage() throws Exception {

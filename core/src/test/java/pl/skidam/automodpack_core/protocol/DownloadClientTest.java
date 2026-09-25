@@ -174,6 +174,10 @@ class DownloadClientTest {
 				List.<Object[]>of(new Object[]{GeneralName.dNSName, "other.example.com"}));
 		X509Certificate addressed = mint(leafName, leafKeys.getPublic(), caName, caKeys.getPrivate(), false,
 				List.<Object[]>of(new Object[]{GeneralName.iPAddress, "127.0.0.1"}));
+		X509Certificate loopback6 = mint(leafName, leafKeys.getPublic(), caName, caKeys.getPrivate(), false,
+				List.<Object[]>of(new Object[]{GeneralName.iPAddress, "0:0:0:0:0:0:0:1"}));
+		X509Certificate site6 = mint(leafName, leafKeys.getPublic(), caName, caKeys.getPrivate(), false,
+				List.<Object[]>of(new Object[]{GeneralName.iPAddress, "2001:db8:0:0:0:0:0:1"}));
 
 		assertTrue(CandidateTrustValidation.leafCoversOrigin(covering, "pack.example.com"), "the exact origin name covers");
 		assertTrue(CandidateTrustValidation.leafCoversOrigin(wildcard, "a.example.com"), "a leftmost wildcard covers one label");
@@ -182,6 +186,12 @@ class DownloadClientTest {
 		assertFalse(CandidateTrustValidation.leafCoversOrigin(elsewhere, "pack.example.com"), "another name does not cover");
 		assertTrue(CandidateTrustValidation.leafCoversOrigin(addressed, "127.0.0.1"), "an IP origin matches its iPAddress entry");
 		assertFalse(CandidateTrustValidation.leafCoversOrigin(addressed, "127.0.0.2"), "another address does not cover");
+		assertTrue(CandidateTrustValidation.leafCoversOrigin(loopback6, "::1"), "a typed IPv6 short form matches the SAN's uncompressed form");
+		assertFalse(CandidateTrustValidation.leafCoversOrigin(loopback6, "::2"), "another IPv6 address does not cover");
+		assertTrue(CandidateTrustValidation.leafCoversOrigin(site6, "2001:db8::1"), "a compressed IPv6 origin matches the SAN's uncompressed form");
+		assertFalse(CandidateTrustValidation.leafCoversOrigin(site6, "2001:db8::2"), "another IPv6 prefix does not cover");
+		assertFalse(CandidateTrustValidation.leafCoversOrigin(addressed, "localhost"), "a hostname origin never matches an iPAddress entry");
+		assertFalse(CandidateTrustValidation.leafCoversOrigin(addressed, "cafe"), "a hex-only hostname never parses as an address");
 	}
 
 	@Test

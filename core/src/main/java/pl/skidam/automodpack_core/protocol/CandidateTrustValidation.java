@@ -5,7 +5,9 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.closeQuietly;
 import static pl.skidam.automodpack_core.protocol.NetUtils.getFingerprint;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -15,6 +17,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
@@ -198,9 +201,44 @@ public final class CandidateTrustValidation {
 			if (entry == null || entry.size() < 2 || !(entry.get(0) instanceof Integer nameType)) continue;
 			Object value = entry.get(1);
 			if (nameType == 2 && value instanceof String name && nameCoversOrigin(name, originHost)) return true;
-			if (nameType == 7 && value instanceof String address && address.equalsIgnoreCase(originHost)) return true;
+			if (nameType == 7 && value instanceof String address && addressCoversOrigin(address, originHost)) return true;
 		}
 		return false;
+	}
+
+	/**
+	 * IP origins match their iPAddress entry as an address, not as text: a typed IPv6 short form such as
+	 * 2001:db8::1 never textually equals the uncompressed form a SAN carries. The parse only ever sees
+	 * IP literals, never a hostname, so no DNS lookup rides along.
+	 */
+	private static boolean addressCoversOrigin(String address, String originHost) {
+		if (address.equalsIgnoreCase(originHost)) return true;
+		if (!looksLikeIpLiteral(originHost)) return false;
+		byte[] origin = parseAddress(originHost);
+		if (origin == null) return false;
+		byte[] san = parseAddress(address);
+		return san != null && Arrays.equals(san, origin);
+	}
+
+	/** Whether the host holds only characters an IP literal can: hex digits, dots, and colons, with a dot or colon present. */
+	private static boolean looksLikeIpLiteral(String host) {
+		if (host.isEmpty()) return false;
+		boolean separator = false;
+		for (int i = 0; i < host.length(); i++) {
+			char c = host.charAt(i);
+			boolean hexOrSeparator = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || c == ':' || c == '.';
+			if (!hexOrSeparator) return false;
+			separator |= c == ':' || c == '.';
+		}
+		return separator; // every IPv4 literal has a dot and every IPv6 literal a colon, so hex hostnames never parse here
+	}
+
+	private static byte[] parseAddress(String host) {
+		try {
+			return InetAddress.getByName(host).getAddress();
+		} catch (UnknownHostException e) {
+			return null; // only reachable for malformed literals; a hostname never gets this far
+		}
 	}
 
 	/** RFC 6125 identity matching: the whole name, or a wildcard in its leftmost label covering exactly one label. */

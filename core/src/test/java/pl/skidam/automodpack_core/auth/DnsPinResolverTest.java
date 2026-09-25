@@ -141,6 +141,62 @@ class DnsPinResolverTest {
 	}
 
 	@Test
+	void aMisconfiguredResolverPoisonsTheCombination() {
+		var poisoned = DnsPinResolver.combineResolverResults("play.example.com",
+				List.of(new DnsPinResolver.ResolverMisconfigured("unknown amp1 field: host"), new DnsPinResolver.ResolverPin(FP_A, 300)));
+
+		assertEquals("unknown amp1 field: host", assertInstanceOf(DnsPinResolver.Misconfigured.class, poisoned.result()).reason());
+	}
+
+	@Test
+	void disagreeingPinsPoisonTheCombination() {
+		var disagreeing = DnsPinResolver.combineResolverResults("play.example.com",
+				List.of(new DnsPinResolver.ResolverPin(FP_A, 300), new DnsPinResolver.ResolverPin(FP_B, 300)));
+
+		assertEquals("resolvers disagree on the fingerprint", assertInstanceOf(DnsPinResolver.Misconfigured.class, disagreeing.result()).reason());
+	}
+
+	@Test
+	void agreeingPinsAreAuthoritativeEvenBesideAbsence() {
+		var unanimous = DnsPinResolver.combineResolverResults("play.example.com",
+				List.of(new DnsPinResolver.ResolverPin(FP_A, 300), new DnsPinResolver.ResolverPin(FP_A, 600)));
+		var pinnedBesideAbsence = DnsPinResolver.combineResolverResults("play.example.com",
+				List.of(new DnsPinResolver.ResolverPin(FP_A, 300), new DnsPinResolver.ResolverAbsent(120)));
+
+		assertEquals(FP_A, assertInstanceOf(DnsPinResolver.Authoritative.class, unanimous.result()).fingerprint());
+		assertEquals(300, unanimous.ttlSeconds());
+		assertEquals(FP_A, assertInstanceOf(DnsPinResolver.Authoritative.class, pinnedBesideAbsence.result()).fingerprint());
+	}
+
+	@Test
+	void unanimousAbsenceReadsAsNoPolicy() {
+		var absent = DnsPinResolver.combineResolverResults("play.example.com",
+				List.of(new DnsPinResolver.ResolverAbsent(120), new DnsPinResolver.ResolverAbsent(60)));
+
+		assertEquals(DnsPinResolver.NoPolicyReason.ABSENT, assertInstanceOf(DnsPinResolver.NoPolicy.class, absent.result()).reason());
+		assertEquals(60, absent.ttlSeconds());
+	}
+
+	@Test
+	void aPinBesideMisconfigurationFailsClosed() {
+		var poisoned = DnsPinResolver.combineResolverResults("play.example.com",
+				List.of(new DnsPinResolver.ResolverPin(FP_A, 300), new DnsPinResolver.ResolverMisconfigured("unsupported amp1 version")));
+
+		assertInstanceOf(DnsPinResolver.Misconfigured.class, poisoned.result());
+	}
+
+	@Test
+	void mixedUnavailableReadsAsUnavailableAndNeverAsAbsence() {
+		var unavailable = DnsPinResolver.combineResolverResults("play.example.com",
+				List.of(new DnsPinResolver.ResolverUnavailable(), new DnsPinResolver.ResolverAbsent(120)));
+		var allUnavailable = DnsPinResolver.combineResolverResults("play.example.com",
+				List.of(new DnsPinResolver.ResolverUnavailable(), new DnsPinResolver.ResolverUnavailable()));
+
+		assertEquals(DnsPinResolver.NoPolicyReason.UNAVAILABLE, assertInstanceOf(DnsPinResolver.NoPolicy.class, unavailable.result()).reason());
+		assertEquals(DnsPinResolver.NoPolicyReason.UNAVAILABLE, assertInstanceOf(DnsPinResolver.NoPolicy.class, allUnavailable.result()).reason());
+	}
+
+	@Test
 	void rejectsIpIdentityWhenFormatting() {
 		assertThrows(IllegalArgumentException.class, () -> DnsPinResolver.formatRecord("192.0.2.1", FP_A));
 	}
