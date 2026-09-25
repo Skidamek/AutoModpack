@@ -88,11 +88,14 @@ public final class WaitingMusic {
 		public Kind kind() throws InterruptedException {
 			while (true) {
 				try {
-					return kind.get(100, TimeUnit.MILLISECONDS);
+					Kind decided = kind.get(100, TimeUnit.MILLISECONDS);
+					// A finished fetch promotes the object; later plays must loop that file. STREAM is one-shot:
+					// the ogg bytes are already consumed and JOrbis cannot reopen them from the middle or from EOF.
+					return loopFile != null ? Kind.LOOP : decided;
 				} catch (TimeoutException e) {
 					// The fetch is still in flight; bundled must not win this wait.
 				} catch (ExecutionException e) {
-					return Kind.BUNDLED;
+					return loopFile != null ? Kind.LOOP : Kind.BUNDLED;
 				}
 			}
 		}

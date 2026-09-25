@@ -94,6 +94,8 @@ public class AudioManager {
 		private volatile boolean stopped = false;
 		private volatile Thread thread;
 		private AudioFormat format;
+		/** Decoded PCM still waiting to be copied into an AL buffer; JOrbis may return more than one WRITE_CHUNK. */
+		private ByteBuffer decodedRemainder;
 
 		void stop() {
 			stopped = true;
@@ -140,14 +142,15 @@ public class AudioManager {
 					playLive(stream, preroll);
 				} catch (Exception e) {
 					if (stopped) return;
-					if (playedCustom) {
+					custom = session.loopFile();
+					if (playedCustom && custom == null) {
 						Constants.LOGGER.error("The server's custom waiting music stream failed after playback started", e);
 						return;
 					}
-					Constants.LOGGER.error("The server's custom waiting music stream failed; falling back to the bundled track", e);
+					Constants.LOGGER.error("The server's custom waiting music stream failed; falling back to the stored track or the bundled track", e);
 				}
 				if (stopped) return;
-				custom = session.loopFile();
+				if (custom == null) custom = session.loopFile();
 				if (custom == null && playedCustom) return;
 			}
 			byte[] pcm = decode(custom);
@@ -235,13 +238,22 @@ public class AudioManager {
 			output.stopSource();
 		}
 
-		/** Reads one decoded chunk straight into an AL buffer; false means the stream ended. */
+		/** Reads decoded PCM into one AL buffer; JOrbis packets can exceed WRITE_CHUNK, so leftovers wait for the next fill. False means the stream ended. */
 		private boolean fillLive(int format, int buffer, ByteBuffer staging, AudioStream stream) throws IOException {
-			ByteBuffer chunk = stream.read(WRITE_CHUNK);
-			if (chunk == null || !chunk.hasRemaining()) return false;
-			byte[] bytes = new byte[chunk.remaining()];
-			chunk.get(bytes);
-			staging.clear().put(bytes).flip();
+			staging.clear();
+			while (staging.hasRemaining()) {
+				if (decodedRemainder == null || !decodedRemainder.hasRemaining()) {
+					decodedRemainder = stream.read(WRITE_CHUNK);
+					if (decodedRemainder == null || !decodedRemainder.hasRemaining()) break;
+				}
+				int copy = Math.min(staging.remaining(), decodedRemainder.remaining());
+				int limit = decodedRemainder.limit();
+				decodedRemainder.limit(decodedRemainder.position() + copy);
+				staging.put(decodedRemainder);
+				decodedRemainder.limit(limit);
+			}
+			if (staging.position() == 0) return false;
+			staging.flip();
 			AL10.alBufferData(buffer, format, staging, (int) this.format.getSampleRate());
 			return true;
 		}

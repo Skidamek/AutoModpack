@@ -70,6 +70,7 @@ class WaitingMusicTest {
 		transport.awaitDone();
 		awaitObject(storage, TRACK_SHA1, true);
 		assertEquals(object(storage, TRACK_SHA1), session.loopFile(), "a finished stream loops the stored object");
+		assertEquals(WaitingMusic.Kind.LOOP, session.kind(), "once the object is stored the same session must loop it, not reopen the consumed stream");
 		assertEquals(StoragePaths.WAITING_MUSIC_MAX_BYTES, transport.lastLimit, "the fetch carries the waiting-track guardrail");
 		WaitingMusic.endRun();
 
