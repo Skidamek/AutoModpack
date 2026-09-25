@@ -48,6 +48,35 @@ class LauncherVersionSwapperTest {
 	}
 
 	@Test
+	void prismUnknownMinecraftVersionRefusesThePack() throws IOException {
+		Path mmcPack = dir.resolve("mmc-pack.json");
+		write(mmcPack, mmcPack("1.20.1", "net.minecraftforge", "47.4.0"));
+		LauncherVersionSwapper.SwitchPlan plan = LauncherVersionSwapper.planSwitch("fabric", "0.16.14", "1.21.1", true, "forge", "1.20.1", new MultiMCMeta(mmcPack),
+				(uid, version) -> !"net.minecraft".equals(uid));
+		assertTrue(plan.refused());
+	}
+
+	@Test
+	void prismUnknownLoaderStillAppliesThePackWithoutWritingLoaderMetadata() throws IOException {
+		Path mmcPack = dir.resolve("mmc-pack.json");
+		write(mmcPack, mmcPack("1.21.1", "net.minecraftforge", "47.4.0"));
+		LauncherVersionSwapper.SwitchPlan plan = LauncherVersionSwapper.planSwitch("fabric", "0.16.14", "1.21.1", true, "forge", "1.21.1", new MultiMCMeta(mmcPack),
+				(uid, version) -> "net.minecraft".equals(uid));
+		assertFalse(plan.refused());
+		assertFalse(plan.required());
+	}
+
+	@Test
+	void prismUnknownLoaderKeepsAKnownMinecraftSwitch() throws IOException {
+		Path mmcPack = dir.resolve("mmc-pack.json");
+		write(mmcPack, mmcPack("1.20.1", "net.minecraftforge", "47.4.0"));
+		LauncherVersionSwapper.SwitchPlan plan = LauncherVersionSwapper.planSwitch("fabric", "0.16.14", "1.21.1", true, "forge", "1.20.1", new MultiMCMeta(mmcPack),
+				(uid, version) -> "net.minecraft".equals(uid));
+		assertFalse(plan.refused());
+		assertEquals(Set.of(Axis.GAME_VERSION), plan.axes());
+	}
+
+	@Test
 	void noAdapterIgnoresLoaderVersionBump() {
 		// Launchers without metadata manage their own loader; a same-type version bump stays their business.
 		LauncherVersionSwapper.SwitchPlan plan = LauncherVersionSwapper.planSwitch("fabric", "0.17.0", "1.20.1", true, "fabric", "1.20.1");

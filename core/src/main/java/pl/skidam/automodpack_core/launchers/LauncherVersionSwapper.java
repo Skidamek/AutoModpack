@@ -7,10 +7,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.EnumSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiPredicate;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -88,7 +90,11 @@ public class LauncherVersionSwapper {
 	 */
 	public static SwitchPlan planSwitch(String serverLoader, String serverLoaderVersion, String serverMcVersion, boolean syncVersions, String clientLoader,
 			String clientMcVersion) {
-		LauncherAdapter adapter = detect();
+		return planSwitch(serverLoader, serverLoaderVersion, serverMcVersion, syncVersions, clientLoader, clientMcVersion, detect(), PrismMeta::isVersionResolvable);
+	}
+
+	static SwitchPlan planSwitch(String serverLoader, String serverLoaderVersion, String serverMcVersion, boolean syncVersions, String clientLoader,
+			String clientMcVersion, LauncherAdapter adapter, BiPredicate<String, String> versionKnown) {
 		if (adapter == null) {
 			// Launchers without metadata manage their own loader, so a bare loader-version bump is theirs to handle
 			// (the established behavior). A version/loader-type change cannot be applied here either, but the pack
@@ -106,23 +112,34 @@ public class LauncherVersionSwapper {
 			return SwitchPlan.refused(EnumSet.noneOf(Axis.class), e.getMessage());
 		}
 		if (axes.isEmpty()) return SwitchPlan.none();
-		if (!syncVersions) return SwitchPlan.refused(axes, "Version syncing is disabled in the AutoModpack settings, and this pack needs the game version switched to run");
-		if (serverLoaderVersion == null || serverLoaderVersion.isBlank())
-			return SwitchPlan.refused(axes, "The server does not advertise the pack's version metadata, and this pack needs the game version switched to run");
-		// Every written version is gated on the Prism meta server, whatever the launcher: it lags a little behind
-		// releases, which is the point. A version missing there is too new or does not exist, and a server
-		// advertising one must not stage pack content into a launcher that cannot resolve it.
+		if (!syncVersions) {
+			if (axes.contains(Axis.GAME_VERSION))
+				return SwitchPlan.refused(axes, "Version syncing is disabled in the AutoModpack settings, and this pack needs the game version switched to run");
+			return SwitchPlan.none();
+		}
+		if (serverLoaderVersion == null || serverLoaderVersion.isBlank()) {
+			axes.remove(Axis.LOADER_TYPE);
+			axes.remove(Axis.LOADER_VERSION);
+			if (axes.isEmpty()) return SwitchPlan.none();
+		}
 		String loaderUid = LOADER_UIDS.get(serverLoader.toLowerCase(Locale.ROOT));
-		for (Axis axis : axes) {
+		Iterator<Axis> iterator = axes.iterator();
+		while (iterator.hasNext()) {
+			Axis axis = iterator.next();
 			String uid = axis == Axis.GAME_VERSION ? MC_UID : loaderUid;
 			String version = axis == Axis.GAME_VERSION ? serverMcVersion : serverLoaderVersion;
-			if (!PrismMeta.isVersionResolvable(uid, version))
-				return SwitchPlan.refused(axes, "meta.prismlauncher.org does not know " + uid + " " + version + ", so this switch refuses rather than write a version that may not exist");
+			if (versionKnown.test(uid, version)) continue;
+			if (axis == Axis.GAME_VERSION)
+				return SwitchPlan.refused(axes, "meta.prismlauncher.org does not know " + uid + " " + version + ", so this switch refuses rather than write a Minecraft version that may not exist");
+			LOGGER.warn("Skipping launcher {} switch; meta.prismlauncher.org does not know {} {}", axis, uid, version);
+			iterator.remove();
 		}
 		try {
 			axes = adapter.validate(axes, serverLoader, serverLoaderVersion, serverMcVersion);
 		} catch (IOException e) {
-			return SwitchPlan.refused(axes, e.getMessage());
+			axes.remove(Axis.LOADER_TYPE);
+			axes.remove(Axis.LOADER_VERSION);
+			LOGGER.warn("Skipping launcher loader switch: {}", e.getMessage());
 		}
 		if (axes.isEmpty()) return SwitchPlan.none();
 		return SwitchPlan.of(axes);
