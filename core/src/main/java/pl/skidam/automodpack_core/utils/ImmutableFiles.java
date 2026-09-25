@@ -112,15 +112,13 @@ public final class ImmutableFiles {
 		return blocksWrites(normalized);
 	}
 
-	/** Deletes an immutable name, clearing the DOS read-only bit only when Windows requires it. */
+	/** Deletes an immutable name, dropping the read-only policy only when the filesystem refuses the delete. */
 	public static boolean deleteIfExists(Path file) throws IOException {
 		try {
 			return Files.deleteIfExists(file);
 		} catch (AccessDeniedException denied) {
-			DosFileAttributeView dos = Files.getFileAttributeView(file, DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
-			if (dos == null || !Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return false;
-			if (!dos.readAttributes().isReadOnly()) throw denied;
-			dos.setReadOnly(false);
+			if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return false;
+			unprotect(file);
 			return Files.deleteIfExists(file);
 		}
 	}

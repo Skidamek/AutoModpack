@@ -8,7 +8,6 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -17,6 +16,7 @@ import java.util.function.IntConsumer;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.CleanupMode;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.protocol.DocumentFetch;
@@ -35,7 +35,10 @@ class WaitingMusicTest {
 	private static final String TRACK_SHA1 = HashUtils.sha1(TRACK);
 	private static final String NEW_TRACK_SHA1 = HashUtils.sha1(NEW_TRACK);
 
-	@TempDir
+	// The run writes and immediately deletes CAS objects, cache records, and staging temps; Windows runners
+	// hold such newborn files open (Defender, the indexer) and JUnit's cleanup then fails the test on a file
+	// nobody needs. The runner is ephemeral, so the residue is left behind on purpose.
+	@TempDir(cleanup = CleanupMode.NEVER)
 	Path tempDir;
 
 	@AfterEach
@@ -43,13 +46,6 @@ class WaitingMusicTest {
 		WaitingMusic.Session session = WaitingMusic.current();
 		if (session != null) session.awaitFetch();
 		WaitingMusic.endRun();
-		// The CAS marks promoted objects read-only, and Windows refuses to delete read-only files: the attribute
-		// comes off here, deepest first, so JUnit's TempDir cleanup can remove the data root.
-		if (tempDir != null && Files.isDirectory(tempDir)) {
-			try (var paths = Files.walk(tempDir)) {
-				paths.sorted(Comparator.reverseOrder()).forEach(path -> path.toFile().setWritable(true));
-			}
-		}
 	}
 
 	private ClientStorage storage() throws Exception {
