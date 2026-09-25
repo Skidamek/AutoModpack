@@ -103,6 +103,35 @@ class DownloadObjectTest {
 		}
 	}
 
+	/**
+	 * The review flow keeps one client across cancel-and-retry: abort must fail the in-flight transfer without
+	 * poisoning the next downloadObject on the same client.
+	 */
+	@Test
+	void abortThenANewDownloadOnTheSameClientSucceeds(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			byte[] object = new byte[256 * 1024];
+			new SecureRandom().nextBytes(object);
+			String sha1 = HashUtils.sha1(object);
+			server.store().put(sha1, object);
+			server.setResponseDelayMillis(30_000);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path cancelledDestination = directory.resolve("cancelled");
+				CompletableFuture<Path> cancelled = client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), cancelledDestination, object.length, null);
+				long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+				while (server.requests.isEmpty() && System.nanoTime() < deadline) Thread.sleep(10);
+				assertFalse(server.requests.isEmpty(), "the cancelled transfer must have reached the wire");
+				client.abortTransfers();
+				assertThrows(ExecutionException.class, () -> cancelled.get(5, TimeUnit.SECONDS), "an aborted transfer must fail, never hang");
+
+				server.setResponseDelayMillis(0);
+				Path destination = directory.resolve("object");
+				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertArrayEquals(object, Files.readAllBytes(destination));
+			}
+		}
+	}
+
 	/** A 404 is a pack-hygiene verdict, not congestion: the failing range is never retried. */
 	@Test
 	void aMissingObjectFailsTheTransferWithoutRetryingARange(@TempDir Path directory) throws Exception {

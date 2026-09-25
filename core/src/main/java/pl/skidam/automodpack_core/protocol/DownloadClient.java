@@ -82,10 +82,10 @@ public class DownloadClient implements PackTransport {
 	// task on this client then takes the object open-ended instead of tiling. One client is one endpoint - all lanes
 	// terminate on the same peer and redirects drop authority - so the capability verdict is per client, not per file.
 	volatile boolean rangeIgnoredHost;
-	// Set by abortTransfers before its lanes close: a take failing on the closed lanes must not retry onto the pool
-	// it was aborted against. The client is never reused for transfers after an abort (every run gets a fresh client
-	// from ManifestFetcher), so one flag covers every transfer.
-	private volatile boolean aborted;
+	// abortTransfers() advances this before it closes lanes. A take carries the epoch it submitted under; a settle on a
+	// stale epoch is "Download aborted" and never retried onto the live pool. A later downloadObject submits under the
+	// new epoch and may reopen lanes - the review flow keeps this client across cancel-and-retry.
+	private volatile int transferEpoch;
 	// The run's honest totals: takes sent (retries included), takes that were retries, and bytes that arrived.
 	private final AtomicLong takesSubmitted = new AtomicLong();
 	private final AtomicLong takeRetries = new AtomicLong();
@@ -309,13 +309,17 @@ public class DownloadClient implements PackTransport {
 
 	/** Queues a submit carrying {@code debit} window bytes on a lane with room; a new lane opens when all of them are full, past which the waiter waits. */
 	private <T> CompletableFuture<T> withSlot(int lane, long debit, Function<Connection, CompletableFuture<T>> operation) {
+		return withSlot(lane, debit, operation, transferEpoch);
+	}
+
+	private <T> CompletableFuture<T> withSlot(int lane, long debit, Function<Connection, CompletableFuture<T>> operation, int epoch) {
 		CompletableFuture<T> future = new CompletableFuture<>();
 		synchronized (poolLock) {
-			if (closed || aborted) {
+			if (closed || epoch != transferEpoch) {
 				future.completeExceptionally(deadClientError());
 				return future;
 			}
-			slotWaiters.add(new SlotWaiter<>(lane, debit, operation, future));
+			slotWaiters.add(new SlotWaiter<>(lane, debit, operation, future, epoch));
 			pumpPool();
 		}
 		return future;
@@ -325,17 +329,25 @@ public class DownloadClient implements PackTransport {
 		reapLanes();
 		while (!slotWaiters.isEmpty()) {
 			SlotWaiter<?> waiter = slotWaiters.peek();
+			if (waiter.epoch() != transferEpoch) {
+				slotWaiters.remove().future().completeExceptionally(deadClientError());
+				continue;
+			}
 			Connection connection = pick(waiter.lane(), waiter.debit());
 			if (connection == null) break;
 			slotWaiters.remove().dispatch(connection);
 		}
-		while (!closed && !aborted && !slotWaiters.isEmpty() && lanes.size() + openingConnections < LANES) {
+		while (!closed && !slotWaiters.isEmpty() && lanes.size() + openingConnections < LANES) {
 			SlotWaiter<?> waiter = slotWaiters.remove();
+			if (waiter.epoch() != transferEpoch) {
+				waiter.future().completeExceptionally(deadClientError());
+				continue;
+			}
 			openingConnections++;
 			openConnectionAsync().whenComplete((connection, error) -> {
 				synchronized (poolLock) {
 					openingConnections--;
-					if (closed || aborted) {
+					if (closed || waiter.epoch() != transferEpoch) {
 						if (connection != null) closeQuietly(connection);
 						waiter.future().completeExceptionally(deadClientError());
 					} else if (error != null) {
@@ -386,7 +398,7 @@ public class DownloadClient implements PackTransport {
 		}
 	}
 
-	private record SlotWaiter<T>(int lane, long debit, Function<Connection, CompletableFuture<T>> operation, CompletableFuture<T> future) {
+	private record SlotWaiter<T>(int lane, long debit, Function<Connection, CompletableFuture<T>> operation, CompletableFuture<T> future, int epoch) {
 		void dispatch(Connection connection) {
 			CompletableFuture<T> result;
 			try {
@@ -472,6 +484,8 @@ public class DownloadClient implements PackTransport {
 		// A range-ignoring host serves every bounded take as a full 200, so tiling would only re-detect the same verdict
 		// per slice: one open-ended take covers the object, and the cursor stays at the resume offset so no tail is claimed.
 		private final boolean openEnded;
+		// The epoch this transfer submitted under: abortTransfers advances it, and a stale take must not retry onto the live pool.
+		private final int epoch;
 
 		ObjectTransfer(byte[] sha1Hex, Path destination, long fileSize, long offset, IntConsumer progress) {
 			this.sha1Hex = sha1Hex;
@@ -481,6 +495,7 @@ public class DownloadClient implements PackTransport {
 			this.progress = progress;
 			this.openEnded = rangeIgnoredHost;
 			this.cursor = openEnded ? offset : fileSize;
+			this.epoch = transferEpoch;
 		}
 
 		CompletableFuture<Path> start() {
@@ -561,7 +576,7 @@ public class DownloadClient implements PackTransport {
 				future = withSlot(take.lane(), debit, connection -> {
 					lane.set(connection);
 					return connection.sendDownloadFile(sha1Hex, ObjectTake.rangedSlice(destination, chunkCallback, take.start(), take.end(), fileSize));
-				});
+				}, epoch);
 			} catch (Throwable submitFailure) {
 				// The submit never produced a request: the settle path retries or books it like any other failure.
 				WireTrace.log("TAKE_FAIL", "object", objectName(), "item", take.start() + "-" + take.end(), "error", submitFailure);
@@ -607,7 +622,7 @@ public class DownloadClient implements PackTransport {
 				// parks a lane's reader, and an abort while waiting settles the take as cancelled, not restarted.
 				long delayMillis = retryDelayMillis(takeError);
 				Runnable retry = () -> {
-					if (aborted) onTakeSettled(take, takeBytes, new IOException("Download aborted"));
+					if (epoch != transferEpoch) onTakeSettled(take, takeBytes, new IOException("Download aborted"));
 					else submitTake(new Take(take.start(), take.end(), Math.floorMod(laneCounter.getAndIncrement(), LANES), take.attempt() + 1, takeBytes.get()), takeBytes);
 				};
 				if (delayMillis > 0) RETRY_SCHEDULER.schedule(retry, delayMillis, TimeUnit.MILLISECONDS);
@@ -660,7 +675,7 @@ public class DownloadClient implements PackTransport {
 		}
 
 		private boolean retryWorth(Throwable error) {
-			return !permanentFailure(error) && !aborted;
+			return !permanentFailure(error) && epoch == transferEpoch;
 		}
 
 		private void finish(Throwable failure) {
@@ -702,29 +717,28 @@ public class DownloadClient implements PackTransport {
 		return withSlot(0, WIRE_CHUNK_BYTES, connection -> connection.sendDownloadDocument(key, destination, conditional, null, tap));
 	}
 
-	/** The error a submit is refused with once the client is closed or aborted; aborted names the abort, every other death reads as closed. */
+	/** The error a submit is refused with once the client is closed or its submit's epoch is stale; a stale epoch names the abort, every other death reads as closed. */
 	private IOException deadClientError() {
-		return new IOException(aborted ? "Download aborted" : "Download client is closed");
+		return new IOException(closed ? "Download client is closed" : "Download aborted");
 	}
 
 	/** Drops every pooled and in-flight transfer connection so a cancelled run cannot poison the next one. */
 	@Override
 	public void abortTransfers() {
-		// Flagged before the lanes close: a take that fails on the close must already see the client as aborted, or
+		// Epoch advances before the lanes close: a take that fails on the close must already see a stale epoch, or
 		// its retry slips past this method onto the freshly reopened pool and completes a transfer nobody wants.
-		aborted = true;
 		List<Connection> connections;
 		List<SlotWaiter<?>> waiters;
 		synchronized (poolLock) {
 			if (closed) return;
+			transferEpoch++;
 			connections = new ArrayList<>(lanes);
 			waiters = new ArrayList<>(slotWaiters);
 			lanes.clear();
 			slotWaiters.clear();
 		}
 		connections.forEach(NetUtils::closeQuietly);
-		// Queued waiters never reach a lane and later submits are refused outright by the aborted gate, so no pump
-		// reopens connections: a cancelled run sends no requests.
+		// Queued waiters never reach a lane. Later submits carry the new epoch and may reopen lanes for the next run.
 		IOException aborted = new IOException("Download aborted");
 		waiters.forEach(waiter -> waiter.future().completeExceptionally(aborted));
 	}
