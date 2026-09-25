@@ -56,6 +56,10 @@ abstract class OneJarAuditTask : DefaultTask() {
         var musicSize: Long? = null
 
         JarFile(jarFile).use { jar ->
+            val missingLicenses = LICENSE_ENTRIES.filter { jar.getEntry(it) == null }
+            if (missingLicenses.isNotEmpty()) {
+                throw GradleException("${jarFile.name} is missing license entries: ${missingLicenses.joinToString()}")
+            }
             val manifestEntry = jar.getEntry(ImplManifestFormat.MANIFEST_ENTRY)
                 ?: throw GradleException("${ImplManifestFormat.MANIFEST_ENTRY} is missing from ${jarFile.name}")
             if (manifestEntry.method != ZipEntry.STORED) throw GradleException("${ImplManifestFormat.MANIFEST_ENTRY} must be STORE, not method ${manifestEntry.method}")
@@ -119,5 +123,15 @@ abstract class OneJarAuditTask : DefaultTask() {
     private companion object {
         const val JARJAR_PREFIX = "META-INF/jarjar/"
         const val WAITING_MUSIC_PATH = "assets/automodpack/sounds/music/waiting.ogg"
+
+        /** Every work bundled into the jar (ours and the relocated ones) ships its license text; the shadow excludes strip dependency META-INF/LICENSE* noise, so a drift here fails the audit instead of distributing an unlicensed bundle. */
+        val LICENSE_ENTRIES =
+            listOf(
+                "META-INF/licenses/automodpack/LICENSE.txt",
+                "META-INF/licenses/aircompressor/LICENSE.txt",
+                "META-INF/licenses/aircompressor/NOTICE.txt",
+                "META-INF/licenses/bouncycastle/LICENSE.txt",
+                "META-INF/licenses/netty/LICENSE.txt",
+            )
     }
 }

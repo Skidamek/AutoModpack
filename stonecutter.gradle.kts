@@ -285,7 +285,7 @@ val oneJarTask =
 val auditOneJarTask =
 	tasks.register<OneJarAuditTask>("auditOneJar") {
 		group = "verification"
-		description = "Audits the packed one jar: size budget, manifest ids, protocol table, STORE entries, assets, no nested jarjar."
+		description = "Audits the packed one jar: size budget, manifest ids, protocol table, STORE entries, assets, license entries, no nested jarjar."
 		oneJar.set(oneJarTask.flatMap { it.oneJar })
 		expectedIds.set(selectedTargets.sorted())
 		expectedProtocols.set(oneJarTask.flatMap { it.protocols })
