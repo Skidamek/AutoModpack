@@ -17,6 +17,8 @@ public class Changelogs {
 	private String latestPatchNotes = "";
 	private List<JournalEntry> journal = List.of();
 	private List<String> restartReasons = List.of();
+	private String requiredMcVersion = "";
+	private String requiredLoader = "";
 	private ChangeSet changeSet = ChangeSet.empty();
 
 	/** Changed files derived on demand from the canonical change set. */
@@ -54,6 +56,7 @@ public class Changelogs {
 		latestPatchNotes = preview.latestPatchNotes();
 		journal = preview.journal();
 		changeSet = preview.changeSet();
+		setRestartReasons(preview.restartReasons().stream().map(Enum::name).toList());
 	}
 
 	public String latestPatchNotes() {
@@ -75,6 +78,22 @@ public class Changelogs {
 
 	public void setRestartReasons(List<String> restartReasons) {
 		this.restartReasons = List.copyOf(Objects.requireNonNull(restartReasons, "restart reasons"));
+	}
+
+	/** Args for one restart-reason lang key, empty when the key has no placeholders. */
+	public List<String> restartReasonArgs(String reason) {
+		if (!"MANUAL_VERSION_SWITCH".equals(reason) || requiredMcVersion.isBlank() || requiredLoader.isBlank()) return List.of();
+		return List.of(requiredMcVersion, requiredLoader);
+	}
+
+	/** The pack versions a manual switch must name on the restart screen. */
+	public void setRequiredLauncherVersions(String mcVersion, String loader, String loaderVersion) {
+		requiredMcVersion = mcVersion == null ? "" : mcVersion;
+		if (loader == null || loader.isBlank()) {
+			requiredLoader = "";
+			return;
+		}
+		requiredLoader = loaderVersion == null || loaderVersion.isBlank() ? loader : loader + " " + loaderVersion;
 	}
 
 	private static List<String> references(ChangeSet.Change change) {

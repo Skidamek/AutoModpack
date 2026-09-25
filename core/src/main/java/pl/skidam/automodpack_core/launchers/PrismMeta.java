@@ -7,15 +7,15 @@ import java.util.Map;
 
 import pl.skidam.automodpack_core.utils.HttpClientPool;
 
-// Prism and MultiMC forks resolve loader components from this meta server; a synced version missing here stalls or breaks the next launch.
+// Prism and MultiMC forks resolve components from this meta server; a switched version missing here stalls or breaks the next launch.
 public class PrismMeta {
 
 	private static final String META_URL = "https://meta.prismlauncher.org/v1/";
 
-	public static boolean isVersionResolvable(String loaderType, String loaderVersion) {
-		String uid = MultiMCMeta.componentUid(loaderType);
-		if (uid == null || loaderVersion == null || loaderVersion.isBlank()) return false;
-		return isResolvable(META_URL + uid + "/" + loaderVersion + ".json");
+	/** Whether the meta server serves the component version. False also on network failure: fail closed rather than write an unresolvable version. */
+	public static boolean isVersionResolvable(String componentUid, String version) {
+		if (componentUid == null || version == null || version.isBlank()) return false;
+		return isResolvable(META_URL + componentUid + "/" + version + ".json");
 	}
 
 	/** The full request url is injectable so tests can serve the meta server locally. */

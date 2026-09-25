@@ -19,7 +19,7 @@
 | `autoExcludeUnnecessaryFiles` | `true` | Skips empty, hidden, `.tmp`, `.disabled`, and `.bak` files at scan time. The `automodpack/` namespace and Windows-reserved device names are always excluded and cannot be turned off. |
 | `requireModpack` | `true` | When true, players without AutoModpack are kicked and modded clients sync the pack before joining. When false, the pack is optional: players without the mod join vanilla, and modded clients are asked whether to sync before they join. |
 | `acceptedLoaders` | current loader | Modloaders allowed to connect, for example Fabric, Forge, NeoForge. The set is seeded with this server's loader on first load only; after that it is yours to edit, and removing the current loader keeps it removed. Most mods are loader-specific, so change it with care. |
-| `syncLoaderVersion` | `true` | Publishes a loader version to clients. When false, clients keep the loader version their launcher installed. See [launcher compatibility](../compatibility/launchers#loader-version-sync) for which launchers apply it. |
+| `advertiseVersionsToSync` | `true` | Advertises the pack's version metadata (modloader, loader version, Minecraft version) to clients. When false, clients treat the pack as files-only and never switch their launcher instance's versions. See [launcher compatibility](../compatibility/launchers#version-sync-and-switching) for which launchers apply it. |
 | `selfUpdater` | `false` | Updates AutoModpack itself from Modrinth when a new version is published. |
 
 ## Groups

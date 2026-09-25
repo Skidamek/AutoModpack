@@ -42,6 +42,9 @@ final class RestartDecision {
 			case REMOVED_DUPLICATE_MODS -> "duplicate standard-directory mods were removed";
 			case REMOVED_STANDARD_MODS -> "modpack-owned mods were removed from the standard mods directory";
 			case CHANGED_LOADER_VERSION -> "launcher loader-version metadata changed";
+			case CHANGED_LOADER_TYPE -> "launcher modloader metadata changed";
+			case CHANGED_GAME_VERSION -> "launcher Minecraft-version metadata changed";
+			case MANUAL_VERSION_SWITCH -> "the pack needs a different Minecraft version or modloader than this instance runs - change them in your launcher before the next start";
 			case CHANGED_GROUP_SELECTION -> "the selected modpack groups changed";
 			case SELECTED_MODPACK -> "the selected stable modpack changed";
 		};

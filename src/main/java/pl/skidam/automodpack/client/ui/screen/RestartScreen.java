@@ -76,7 +76,7 @@ public class RestartScreen extends VersionedScreen {
 				lines.add(blankLine());
 				lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.restart.reasonsTitle"), wrapWidth, ChatFormatting.YELLOW));
 				for (String reason : reasons)
-					lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.restart.reason." + reason), wrapWidth, ChatFormatting.GRAY));
+					lines.addAll(wrapParagraph(this.font, restartReasonText(reason), wrapWidth, ChatFormatting.GRAY));
 			}
 			if (summary.preservedFiles() > 0) {
 				lines.add(blankLine());
@@ -90,6 +90,12 @@ public class RestartScreen extends VersionedScreen {
 			}
 		}
 		return lines;
+	}
+
+	private String restartReasonText(String reason) {
+		List<String> args = changelogs.restartReasonArgs(reason);
+		if (args.isEmpty()) return VersionedText.str("automodpack.restart.reason." + reason);
+		return VersionedText.str("automodpack.restart.reason." + reason, args.toArray());
 	}
 
 	/** Kept files from this update live on the instance timeline. */

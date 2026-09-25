@@ -40,7 +40,8 @@ public class ServerConfigJsons {
 		public boolean selfUpdater = false;
 		/** Loaders a client may run the modpack with; seeded with this server's loader on first load only, never re-added after the admin edits the set. */
 		public Set<String> acceptedLoaders = new HashSet<>();
-		public boolean syncLoaderVersion = true;
+		/** Advertise this pack's version metadata (modloader, loader version, Minecraft version) so clients switch their launcher instance to match; when false, clients treat the pack as files-only. */
+		public boolean advertiseVersionsToSync = true;
 	}
 
 	/**

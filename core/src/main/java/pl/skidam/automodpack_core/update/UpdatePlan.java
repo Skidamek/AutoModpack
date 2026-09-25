@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -121,6 +122,12 @@ public final class UpdatePlan {
 				consequences.withEffects(List.of(ChangeSet.Effect.restart(reason.name()))));
 	}
 
+	public UpdatePlan withRestartReasons(Collection<RestartReason> reasons) {
+		UpdatePlan plan = this;
+		for (RestartReason reason : reasons) plan = plan.withRestartReason(reason);
+		return plan;
+	}
+
 	private static <T> Set<T> stableSet(Set<T> values) {
 		if (values == null || values.isEmpty()) return Set.of();
 		return Collections.unmodifiableSet(new LinkedHashSet<>(values));
@@ -150,6 +157,9 @@ public final class UpdatePlan {
 		REMOVED_DUPLICATE_MODS(true),
 		REMOVED_STANDARD_MODS(true),
 		CHANGED_LOADER_VERSION(true),
+		CHANGED_LOADER_TYPE(true),
+		CHANGED_GAME_VERSION(true),
+		MANUAL_VERSION_SWITCH(true),
 		CHANGED_GROUP_SELECTION(false),
 		SELECTED_MODPACK(false);
 
