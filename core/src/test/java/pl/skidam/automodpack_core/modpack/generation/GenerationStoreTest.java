@@ -25,6 +25,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 
 class GenerationStoreTest {
 	@TempDir
@@ -117,6 +118,49 @@ class GenerationStoreTest {
 		// Same bytes, different group policy: the content token must not move.
 		ModpackCandidate renamed = candidate("renamed", "content-one");
 		assertEquals(before, ContentTree.tokenOf(renamed.manifest()));
+	}
+
+	@Test
+	void waitingTrackPublishesThroughTheObjectStoreAndAChangedFileLandsAtTheNextPublish() throws Exception {
+		Path objects = tempDir.resolve("objects");
+		Path track = tempDir.resolve("waiting-music.ogg");
+		Files.write(track, "track-bytes".getBytes(StandardCharsets.UTF_8));
+		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects, track);
+		store.publish(candidate("one", "content-one"), "First");
+
+		Path object = DataRootResolver.objectFile(objects, sha1("track-bytes"));
+		assertEquals("track-bytes", Files.readString(object, StandardCharsets.UTF_8));
+		assertTrue(store.hosting().asMap().containsKey(sha1("track-bytes")));
+
+		// A corrupted store object is never a fact to cache: republishing the same track judges the
+		// object against its hash and replaces it instead of advertising bytes the server can never serve.
+		ImmutableFiles.unprotect(object);
+		Files.write(object, "truncated".getBytes(StandardCharsets.UTF_8));
+		store.publish(candidate("two", "content-two"), "Second");
+		assertEquals("track-bytes", Files.readString(object, StandardCharsets.UTF_8));
+
+		// A changed track file lands under its own hash at the next publish.
+		Files.write(track, "new-track-bytes".getBytes(StandardCharsets.UTF_8));
+		store.publish(candidate("three", "content-three"), "Third");
+		assertEquals("new-track-bytes", Files.readString(DataRootResolver.objectFile(objects, sha1("new-track-bytes")), StandardCharsets.UTF_8));
+		assertTrue(store.hosting().asMap().containsKey(sha1("new-track-bytes")));
+	}
+
+	@Test
+	void collectKeepsTheAdvertisedWaitingTrack() throws Exception {
+		Path objects = tempDir.resolve("objects");
+		Path track = tempDir.resolve("waiting-music.ogg");
+		Files.write(track, "track-bytes".getBytes(StandardCharsets.UTF_8));
+		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects, track);
+		store.publish(candidate("one", "content-one"), "First");
+		Files.createDirectories(objects.resolve("ff"));
+		Path orphan = objects.resolve("ff").resolve(sha1("orphan").substring(2));
+		Files.write(orphan, "orphan".getBytes(StandardCharsets.UTF_8));
+
+		store.collectUnreachable();
+
+		assertTrue(Files.exists(DataRootResolver.objectFile(objects, sha1("track-bytes"))));
+		assertFalse(Files.exists(orphan));
 	}
 
 	@Test

@@ -62,7 +62,7 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 		} catch (IndexOutOfBoundsException e) {
 			LOGGER.warn("Can't find mod for your client, tried link " + requestUrl);
 		} catch (Exception e) {
-			e.printStackTrace();
+			LOGGER.error("Failed to fetch data from Modrinth API", e);
 		}
 
 		return modrinthAPIList;
@@ -104,7 +104,7 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 				}
 			}
 		} catch (Exception e) {
-			e.printStackTrace();
+			LOGGER.error("Failed to fetch data from Modrinth API", e);
 		}
 
 		return null;
@@ -113,13 +113,21 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 
 	// https://docs.modrinth.com/#tag/version-files/operation/versionsFromHashes
 	public static List<ModrinthAPI> getModsInfosFromListOfSHA1(List<String> listOfSha1) {
+		return getModsInfosFromListOfSHA1(BASE_URL + "/version_files", listOfSha1);
+	}
+
+	/** The request url is injectable so tests can serve the endpoint locally. */
+	public static List<ModrinthAPI> getModsInfosFromListOfSHA1(String requestUrl, List<String> listOfSha1) {
 		if (listOfSha1 == null || listOfSha1.isEmpty()) return null;
 
-		String requestUrl = BASE_URL + "/version_files";
 		List<ModrinthAPI> modrinthAPIList = new LinkedList<>();
 
 		try {
 			JsonObject JSONObjects = Json.fromModrinthUrl(requestUrl, listOfSha1);
+			if (JSONObjects == null) {
+				LOGGER.warn("Modrinth returned no version files for {} hashes at {}", listOfSha1.size(), requestUrl);
+				return modrinthAPIList;
+			}
 			Set<String> wantedSha1s = Set.copyOf(listOfSha1);
 			for (String key : JSONObjects.keySet()) {
 				JsonObject JSONObject = JSONObjects.getAsJsonObject(key);
@@ -178,6 +186,12 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 		if (projectIds == null || projectIds.isEmpty()) return Map.of();
 		String requestUrl = BASE_URL + "/projects?ids=" + projectIds.stream().map(id -> "\"" + id + "\"").collect(Collectors.joining(",", "[", "]"));
 		requestUrl = requestUrl.replaceAll("\"", "%22"); // so important!
+		return getProjectSlugs(requestUrl, projectIds);
+	}
+
+	/** The request url is injectable so tests can serve the endpoint locally. */
+	public static Map<String, String> getProjectSlugs(String requestUrl, Collection<String> projectIds) {
+		if (projectIds == null || projectIds.isEmpty()) return Map.of();
 
 		Map<String, String> slugs = new LinkedHashMap<>();
 		try {

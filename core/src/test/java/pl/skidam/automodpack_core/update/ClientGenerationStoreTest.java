@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.update;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -23,6 +24,8 @@ import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.modpack.generation.Journal;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
@@ -133,6 +136,59 @@ class ClientGenerationStoreTest {
 		assertEquals(first.ownershipLedger(), rollback.ownershipLedger(), "the replay of a fully witnessed history is the generation's own ledger");
 		assertEquals(second.contentToken(), active.contentToken());
 		assertEquals(second.ownershipLedger(), active.ownershipLedger(), "the active generation keeps its exact ledger");
+	}
+
+	@Test
+	void aPolicyOnlyRepublishResolvesTheGenerationToTheWitnessedPolicy() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "shared-object");
+		long size = Files.size(storage.objectFile(hash));
+		PackDocument first = document(FIRST_PACK, hash, size, Instant.parse("2026-01-01T00:00:00Z"));
+		PackDocument second = republished(FIRST_PACK, hash, size, Instant.parse("2026-01-02T00:00:00Z"));
+		assertEquals(first.contentToken(), second.contentToken(), "the scenario: a policy-only publish keeps the content token");
+		assertNotEquals(first.policySha1(), second.policySha1());
+		// The client witnessed only the second head, so only the second policy document is in the CAS; the first one never existed locally.
+		ClientObjectStore.storeObject(storage, second.policySha1(), ConfigTools.GSON.toJson(second.manifest().toFields()).getBytes(StandardCharsets.UTF_8));
+		appendEntry(storage, first);
+		appendEntry(storage, second);
+
+		storage.writeActiveState(FIRST_PACK, second.contentToken(), second.ownershipLedger().toFields());
+		new ClientSelectionStore(storage.selectionFile()).compareAndSet(FIRST_PACK, null, new SelectionIntent(Set.of("main")));
+		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX).orElseThrow();
+
+		assertEquals(second.policySha1(), target.document().policySha1());
+		assertEquals(second.createdAt(), target.document().createdAt());
+	}
+
+	@Test
+	void anUnwitnessedSameTokenGenerationFailsNamingTheServedPolicy() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "shared-object");
+		long size = Files.size(storage.objectFile(hash));
+		PackDocument first = document(FIRST_PACK, hash, size, Instant.parse("2026-01-01T00:00:00Z"));
+		PackDocument second = republished(FIRST_PACK, hash, size, Instant.parse("2026-01-02T00:00:00Z"));
+		appendEntry(storage, first);
+		appendEntry(storage, second);
+
+		storage.writeActiveState(FIRST_PACK, second.contentToken(), second.ownershipLedger().toFields());
+		new ClientSelectionStore(storage.selectionFile()).compareAndSet(FIRST_PACK, null, new SelectionIntent(Set.of("main")));
+
+		IOException missing = assertThrows(IOException.class, () -> new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX));
+		assertTrue(missing.getMessage().contains(HashUtils.normalizeSha1(second.policySha1())), missing.getMessage());
+	}
+
+	private static PackDocument republished(String modpackId, String hash, long size, Instant createdAt) {
+		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
+		GroupManifest.Group group = new GroupManifest.Group("", "", "General", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
+				new TreeMap<>(Map.of("mods/test.jar", file)));
+		GroupManifest manifest = new GroupManifest(modpackId, "Test republished", "", "", "", "", new TreeMap<>(Map.of("main", group)));
+		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, null);
+	}
+
+	private static void appendEntry(ClientStorage storage, PackDocument document) throws IOException {
+		Journal journal = Journal.open(storage.historyJournalFile(document.manifest().modpackId()));
+		journal.append(new JournalEntry(journal.isEmpty() ? 1 : journal.head().seq() + 1, document.contentToken(), document.policySha1(), document.createdAt(), "",
+				JournalEntry.NO_RESTORE, List.of()));
 	}
 
 	@Test

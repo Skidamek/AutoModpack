@@ -32,7 +32,6 @@ public class DownloadScreen extends VersionedScreen {
 	private final Runnable onCancel;
 
 	private final long startedAtNanos = System.nanoTime();
-	private long ticks = 0;
 	private boolean musicStarted = false;
 	private AbstractWidget cancelButton;
 	private Button muteMusicButton;
@@ -188,14 +187,8 @@ public class DownloadScreen extends VersionedScreen {
 	}
 
 	private void checkAndStartMusic() {
-		if (ticks++ <= 30) {
-			muteMusicButton.active = false;
-			playMusicButton.active = false;
-			return;
-		}
 		muteMusicButton.active = true;
 		playMusicButton.active = true;
-
 		if (musicStarted) return;
 		if (clientConfig.playMusic) AudioManager.playMusic();
 		musicStarted = true;

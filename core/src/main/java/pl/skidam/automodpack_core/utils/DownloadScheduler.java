@@ -1,14 +1,14 @@
 package pl.skidam.automodpack_core.utils;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Pure download scheduling logic, no IO and no threads: given the queued files with known sizes, their candidate source
- * domains and the in-flight backlog per source, picks which file to download next and from which source. Owns one speed
- * estimate (bytes per second) per source, updated from real transfer samples via {@link #report}.
+ * Pure download scheduling logic, no IO and no threads: owns the source-domain choice for a queued file and one speed
+ * estimate (bytes per second) per source, updated from real transfer samples via {@link #report}. The caller owns the
+ * dispatch order of queued files (largest first); this class only weighs the candidate sources of whatever file it is
+ * handed.
  */
 public class DownloadScheduler {
 
@@ -26,39 +26,29 @@ public class DownloadScheduler {
 	/** A file waiting to be downloaded: opaque identity, its known size and the source domains it can come from, in the caller's preference order. */
 	public record QueuedFile<T>(T identity, long sizeBytes, List<String> sourceDomains) {}
 
-	/** The chosen file and the source domain to fetch it from. */
-	public record Pick<T>(T identity, String sourceDomain) {}
-
 	/**
-	 * Picks the next file to download and the source to fetch it from. Files compete largest first (longest processing
-	 * time first; ties keep the caller's list order) and the first one holding any candidate domain wins, so a file whose
-	 * candidates the caller excluded all falls behind still-downloadable files instead of idling a slot. Among the
-	 * winner's domains the one minimizing {@code (inFlightBytesRemaining(source) + sizeBytes) / speed(source)} is chosen:
-	 * a fast source attracts work until its backlog catches up, and with equal speeds and sizes this degenerates to round
-	 * robin over the caller's order. Returns null when no queued file has a candidate domain.
+	 * Chooses the source domain to fetch this file from: the one minimizing {@code (inFlightBytesRemaining(source) +
+	 * sizeBytes) / speed(source)} - a fast source attracts work until its backlog catches up, and with equal speeds and
+	 * sizes this degenerates to round robin over the caller's preference order. Returns null when the file has no
+	 * candidate domain.
 	 */
-	public synchronized <T> Pick<T> pick(List<QueuedFile<T>> queue, Map<String, Long> inFlightBytesRemaining) {
-		List<QueuedFile<T>> byLargest = new ArrayList<>(queue);
-		byLargest.sort((first, second) -> Long.compare(second.sizeBytes(), first.sizeBytes()));
-		for (QueuedFile<T> file : byLargest) {
-			String bestDomain = null;
-			double bestSeconds = Double.MAX_VALUE;
-			for (String domain : file.sourceDomains()) {
-				double seconds = (inFlightBytesRemaining.getOrDefault(domain, 0L) + file.sizeBytes()) / speedOf(domain);
-				if (seconds < bestSeconds) {
-					bestSeconds = seconds;
-					bestDomain = domain;
-				}
+	public synchronized <T> String chooseDomain(QueuedFile<T> file, Map<String, Long> inFlightBytesRemaining) {
+		String bestDomain = null;
+		double bestSeconds = Double.MAX_VALUE;
+		for (String domain : file.sourceDomains()) {
+			double seconds = (inFlightBytesRemaining.getOrDefault(domain, 0L) + file.sizeBytes()) / speedOf(domain);
+			if (seconds < bestSeconds) {
+				bestSeconds = seconds;
+				bestDomain = domain;
 			}
-			if (bestDomain != null) return new Pick<>(file.identity(), bestDomain);
 		}
-		return null;
+		return bestDomain;
 	}
 
 	/**
 	 * Feeds one finished transfer (or a failed attempt that still received bytes) so the source's speed estimate
 	 * converges on reality. Samples with no bytes or no duration carry no bandwidth information and are ignored, which
-	 * also keeps the divisor in {@link #pick} away from zero and infinity.
+	 * also keeps the divisor in {@link #chooseDomain} away from zero and infinity.
 	 */
 	public synchronized void report(String source, long bytesReceived, long durationNanos) {
 		if (source == null || bytesReceived <= 0 || durationNanos <= 0) return;

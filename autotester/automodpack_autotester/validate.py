@@ -5,21 +5,22 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .config import scenario_matches_target
+from .config import expand_generated, scenario_matches_target
 from .engine import conditions
 from .engine.registry import get as get_verb
 from .engine.util import parse_duration
 
 _VALID_MODES = {"full", "client-only"}
 _VALID_NETWORKS = {"bridge", "host"}
-CONNECTION_MODES = {"DIRECT", "MAGIC", "HOLEPUNCH"}
+CONNECTION_MODES = {"MAGIC", "HOLEPUNCH", "HTTP"}
 _COND_FIELDS = ("when", "until", "that")
 _DURATION_FIELDS = ("timeout", "poll", "duration")
 _REGEX_FIELDS = ("matches", "matches_all", "matches_any", "not_matches")
 _COUNT_FIELDS = ("count", "min_count", "max_count")
 _REMOTE_MOD_FIELDS = {"url", "sha512", "name"}
 _SHA512 = re.compile(r"[0-9a-fA-F]{128}")
-_PRESERVATION_REASONS = {"SERVER_REMOVAL", "MODPACK_REMOVAL", "MODPACK_DEACTIVATION", "LOCAL_CONFLICT", "PLAYER_CONSENT", "STRICT_REPAIR", "EDITABLE_RESET", "LOCAL_DRIFT"}
+# The verbs whose implementation actually reads skip_if; anywhere else the key is authoring drift.
+_SKIP_IF_VERBS = {"click", "screenshot", "wait_for"}
 _RELEASE_GATE_CAPABILITIES = frozenset({
     "bootstrap",
     "groups",
@@ -77,6 +78,21 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
         else:
             for index, generation in enumerate(generations):
                 _check_generation_files(generation, problems, f"serverFiles.generations[{index}]")
+    for index, item in enumerate((scenario.get("serverFiles", {}) or {}).get("files", []) or []):
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not item["path"].strip():
+            problems.append(f"serverFiles.files[{index}]: expected a mapping with a non-empty path")
+        elif "sizeBytes" in item and (not isinstance(item["sizeBytes"], int) or isinstance(item["sizeBytes"], bool) or item["sizeBytes"] < 0):
+            problems.append(f"serverFiles.files[{index}].sizeBytes: expected a non-negative integer")
+    server_files_section = scenario.get("serverFiles", {}) or {}
+    try:
+        expanded = expand_generated(server_files_section.get("generated"))
+    except ValueError as problem:
+        problems.append(str(problem))
+    else:
+        literal_paths = {str(item.get("path")) for item in server_files_section.get("files", []) or [] if isinstance(item, dict)}
+        duplicated = sorted({str(file.path) for file in expanded} & literal_paths)
+        if duplicated:
+            problems.append(f"serverFiles.generated: declarations re-spell literal paths: {duplicated[:3]}")
 
     mode = str(scenario.get("mode", "full")).lower()
     if mode not in _VALID_MODES:
@@ -139,8 +155,10 @@ def _check_connection_paths(paths, problems):
             value = path.get(field)
             if not isinstance(value, int) or isinstance(value, bool) or value < -1 or value > 65535 or value == 0:
                 problems.append(f"{where}.{field}: expected an integer port or -1, got {value!r}")
-        if mode == "DIRECT" and path.get("bindPort", -1) == -1:
-            problems.append(f"{where}.bindPort: DIRECT needs a built-in listener for an end-to-end case")
+        if not isinstance(path.get("deferFirstSyncToLogin", False), bool):
+            problems.append(f"{where}.deferFirstSyncToLogin: expected a boolean, got {path.get('deferFirstSyncToLogin')!r}")
+        if mode == "HTTP" and path.get("bindPort", -1) == -1 and not str(path.get("advertisedEndpointHost", "")).strip():
+            problems.append(f"{where}.bindPort: {mode} needs the dedicated listener or an advertisedEndpointHost served externally")
 
 
 def _target_pattern_matches(pattern: str, target_id: str) -> bool:
@@ -188,6 +206,8 @@ def _walk(steps, macros, problems, stack, scoped_targets):
             verb = step.get("do")
             if get_verb(verb) is None:
                 problems.append(f"unknown verb: {verb!r}")
+            if "skip_if" in step and verb not in _SKIP_IF_VERBS:
+                problems.append(f"{label}: skip_if is only supported on {sorted(_SKIP_IF_VERBS)}, not {verb!r} - the engine would silently ignore it")
             if verb == "stage_modpack":
                 _check_stage_modpack(step, problems, scoped_targets, label)
             elif verb == "publish_server_generation":
@@ -207,15 +227,7 @@ def _walk(steps, macros, problems, stack, scoped_targets):
                     problems.append(f"{label}.fixture: .jar paths require a valid mod fixture mapping")
                 if verb == "seed_mod_fixture" and step.get("fixture") is None:
                     problems.append(f"{label}.fixture: this verb requires a valid mod fixture mapping")
-                if verb in ("assert_preservation_claim", "mutate_preservation_object") and (not isinstance(step.get("packId"), str) or not step["packId"].strip()):
-                    problems.append(f"{label}.packId: expected a non-empty pack ID")
-                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "content" in step and not isinstance(step["content"], str):
-                    problems.append(f"{label}.content: expected a string")
-                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "originalPath" in step and (not isinstance(step["originalPath"], str) or not step["originalPath"].strip()):
-                    problems.append(f"{label}.originalPath: expected a non-empty relative path")
-                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "reason" in step and step["reason"] not in _PRESERVATION_REASONS:
-                    problems.append(f"{label}.reason: unknown preservation reason {step['reason']!r}")
-                if verb in ("mutate_client_file", "mutate_active_object", "mutate_preservation_object") and step.get("action") not in ("corrupt", "delete"):
+                if verb in ("mutate_client_file", "mutate_active_object") and step.get("action") not in ("corrupt", "delete"):
                     problems.append(f"{label}.action: expected 'corrupt' or 'delete'")
                 for field in ("present", "valid", "objectValid"):
                     if field in step and not isinstance(step[field], bool):

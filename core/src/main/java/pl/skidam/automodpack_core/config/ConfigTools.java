@@ -7,6 +7,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -324,15 +325,19 @@ public final class ConfigTools {
 		return narrowed;
 	}
 
-	/** What the stream reader ({@code JsonReader#nextLong}) yields for a literal read as a {@code long}: whole literals keep full precision, anything else must narrow to long without loss. */
+	/**
+	 * What the stream reader ({@code JsonReader#nextLong}) yields for a literal read as a {@code long}: whole literals keep full precision, anything else must narrow to long without loss. The exact decimal path matters
+	 * at the boundary: {@code (long)} would saturate 2^63 to Long.MAX_VALUE and then compare equal to its own double.
+	 */
 	private static long streamLong(String literal) {
 		try {
 			return Long.parseLong(literal);
 		} catch (NumberFormatException notAWholeLiteral) {
-			double value = Double.parseDouble(literal);
-			long narrowed = (long) value;
-			if (narrowed != value) throw new NumberFormatException("Expected a long but was " + literal);
-			return narrowed;
+			try {
+				return new BigDecimal(literal).longValueExact();
+			} catch (NumberFormatException | ArithmeticException lostOrFractional) {
+				throw new NumberFormatException("Expected a long but was " + literal);
+			}
 		}
 	}
 

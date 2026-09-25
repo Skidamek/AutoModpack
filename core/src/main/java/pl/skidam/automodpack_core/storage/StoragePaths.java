@@ -63,6 +63,10 @@ public final class StoragePaths {
 
 	public static final Path HOST_MODPACK_DIR = AUTOMODPACK_DIR.resolve("host-modpack");
 	public static final Path HOST_CONTENT_MODPACK_DIR = HOST_MODPACK_DIR.resolve("main");
+	/** The convention file the server may drop here to publish a custom waiting track; its hash rides in the head document. */
+	public static final String WAITING_MUSIC_FILE = "waiting-music.ogg";
+	/** The waiting track guardrail: past 5 MiB the server refuses to publish and the client aborts at the response head. Roomy enough for any real song; only broken things touch it. */
+	public static final long WAITING_MUSIC_MAX_BYTES = 5 * 1024 * 1024;
 	public static final Path MODPACK_CONTENT_FILE = Path.of("automodpack-content.json");
 	public static final Path PATCH_NOTES_FILE = Path.of("patch-notes.md");
 	public static final Path SERVER_CONFIG_FILE = AUTOMODPACK_DIR.resolve("server-config.json");

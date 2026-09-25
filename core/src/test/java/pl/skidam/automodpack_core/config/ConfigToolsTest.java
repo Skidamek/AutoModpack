@@ -107,7 +107,7 @@ class ConfigToolsTest {
 		connectionInfo.endpoint = AddressHelpers.parseEndpoint("downloads.example.com:24444");
 		assertFalse(connectionInfo.isComplete());
 
-		connectionInfo.connectionMode = ModpackConnectionMode.DIRECT;
+		connectionInfo.connectionMode = ModpackConnectionMode.HTTP;
 		assertTrue(connectionInfo.isComplete());
 	}
 

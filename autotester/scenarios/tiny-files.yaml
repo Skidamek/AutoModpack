@@ -1,0 +1,78 @@
+id: tiny-files
+description: 'Pipeline-depth benchmark: host a ~800-file pack of 16 KiB deterministic files (~12.5 MiB) so the download is one small take per file, and time the client''s first full download. Timings are
+  read from the client log; the flow itself only requires the pack to land.'
+renderClient: true
+connectionPaths:
+- mode: HTTP
+  bindPort: 25567
+  endpointPort: 25567
+  deferFirstSyncToLogin: true
+flow:
+- use: boot
+- use: accept_certificate
+- do: wait_for
+  name: wait for the first-connection prompt
+  timeout: 90s
+  until:
+    screen: PackConfirmScreen
+- do: wait_for
+  name: wait for the unverified ack checkbox after the lock
+  timeout: 20s
+  until:
+    element:
+      key: automodpack.confirm.ack
+      enabled: true
+  when:
+    element:
+      key: automodpack.confirm.ack
+- do: click
+  name: acknowledge unverified risk
+  select:
+    key: automodpack.confirm.ack
+  when:
+    element:
+      key: automodpack.confirm.ack
+- do: wait_for
+  name: wait for download to unlock
+  timeout: 20s
+  until:
+    element:
+      key: automodpack.firstConnect.download
+      enabled: true
+- do: click
+  name: accept first connection
+  select:
+    key: automodpack.firstConnect.download
+- do: wait_for
+  name: catch the download screen while the pack transfers
+  timeout: 120s
+  until:
+    any:
+    - screen: DownloadScreen
+    - screen: RestartScreen
+  skip_if:
+    screen_not:
+    - PackConfirmScreen
+    - DownloadScreen
+    - RestartScreen
+- do: wait_file
+  name: wait for the modpack marker file
+  path: ${active_dir}/${marker}
+  timeout: 24m
+- do: quit
+  name: quit the client
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: 'false'
+    modrinth:
+      projects:
+      - ferrite-core?
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  generated:
+  - pattern: config/tiny/tiny-{n:03d}.bin
+    count: 800
+    sizeBytes: 16384

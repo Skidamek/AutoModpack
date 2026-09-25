@@ -1,0 +1,143 @@
+id: files-edge
+description: |
+  Host a modpack whose file universe hits the transfer edges: empty and one-byte
+  files, both sides of the 4 MiB contract chunk boundary, a multi-chunk 40 MiB
+  file, one CAS object served under two paths, a unicode file name, deep
+  nesting, an editable file, and an unowned local mod. Joins over the HTTP
+  connection path and verifies every byte landed exactly as hosted.
+renderClient: true
+connectionPaths:
+  - mode: HTTP
+    bindPort: 25567
+    endpointPort: 25567
+    deferFirstSyncToLogin: true
+
+flow:
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - use: restart_client
+  - use: rejoin
+  - do: wait_generation
+    name: wait for the edge-case generation to commit
+    timeout: 900s
+  - do: verify_files
+    name: wait for every edge-case file to reach the active projection
+    timeout: 900s
+  - do: seed_unowned_local_file
+    name: seed an unowned local mod the sync must never touch
+    path: mods/local-unowned.jar
+    fixture: { modId: amp_local_unowned, version: "9.9.9-local", marker: local-universe }
+  - do: assert_mod_fixture
+    name: verify the unowned local mod survived the sync untouched
+    path: mods/local-unowned.jar
+    fixture: { modId: amp_local_unowned, version: "9.9.9-local", marker: local-universe }
+
+  # Tiny files: exact bytes.
+  - do: assert_file_content
+    name: verify the zero-byte file landed empty
+    path: config/edge/empty.bin
+    content: ""
+  - do: assert_file_content
+    name: verify the one-byte file landed with its single byte
+    path: config/edge/one-byte.txt
+    content: "x"
+
+  # Chunk boundaries: live bytes must equal the sha1 and size the server published.
+  - do: assert_client_files
+    name: verify every managed client file against the active generation
+
+  # Identical content under two paths: one CAS object, two manifest entries.
+  - do: assert_file_content
+    name: verify the first duplicate-content path
+    path: config/edge/duplicate-a.txt
+    content: "same-bytes\n"
+  - do: assert_file_content
+    name: verify the second duplicate-content path carries the identical bytes
+    path: config/edge/duplicate-b.txt
+    content: "same-bytes\n"
+
+  - do: assert_file_content
+    name: verify the unicode-named file
+    path: config/edge/validates-ünïcode.jar
+    content: "unicode-name\n"
+  - do: assert_file_content
+    name: verify the file nested three directories deep
+    path: config/edge/deep/one/two/three/nested.txt
+    content: "three-directories-deep\n"
+  - do: assert_file_content
+    name: verify name with spaces.txt
+    path: "config/edge/name with spaces.txt"
+    content: "spaces-in-name"
+  - do: assert_file_content
+    name: verify plus+plus.txt
+    path: "config/edge/plus+plus.txt"
+    content: "plus-in-name"
+
+  - do: write_file
+    name: make a local edit to the editable file
+    path: config/edge/editable.txt
+    content: "edge-local-edit\n"
+  - do: assert_file_content
+    name: verify the editable local edit is live
+    path: config/edge/editable.txt
+    content: "edge-local-edit\n"
+  - do: assert_file_content
+    name: verify the projection still holds the server default for the editable file
+    path: "${active_dir}/config/edge/editable.txt"
+    content: "editable-default\n"
+  - do: quit
+    name: quit the client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+    automodpack:
+      config:
+        # Replaces the permissive /config/** default: only this one file tolerates local edits.
+        allowEditsInFiles: ["/config/edge/editable.txt"]
+        # The bundled waiting track, re-hosted as the server's custom one so the client exercises GET /music.
+        waitingMusicFile: automodpack/waiting-music.ogg
+
+serverFiles:
+  modpackName: files-edge
+  # The mod's own bundled track, re-hosted as the server's custom one, so the client exercises GET /music end to end.
+  waitingMusic: client-jar
+  marker: config/amp-autotest-marker.json
+  files:
+    - { path: config/edge/empty.bin, content: "" }
+    - { path: config/edge/one-byte.txt, content: "x" }
+    - { path: config/edge/chunk-under.bin, sizeBytes: 4194303 }
+    - { path: config/edge/chunk-exact.bin, sizeBytes: 4194304 }
+    - { path: config/edge/chunk-over.bin, sizeBytes: 4194305 }
+    - { path: config/edge/multi-chunk.bin, sizeBytes: 41943040 }
+    - { path: config/edge/duplicate-a.txt, content: "same-bytes\n" }
+    - { path: config/edge/duplicate-b.txt, content: "same-bytes\n" }
+    - { path: config/edge/validates-ünïcode.jar, content: "unicode-name\n" }
+    - { path: config/edge/deep/one/two/three/nested.txt, content: "three-directories-deep\n" }
+    - { path: config/edge/editable.txt, content: "editable-default\n" }
+    - { path: config/edge/large/large-200mib.bin, sizeBytes: 209715200 }
+    - { path: config/edge/large/large-512mib.bin, sizeBytes: 536870912 }
+    - { path: config/edge/large/large-1gib.bin, sizeBytes: 1073741824 }
+    - { path: config/edge/mid-1mib.bin, sizeBytes: 1048576 }
+    - { path: config/edge/mid-2point5mib.bin, sizeBytes: 2621440 }
+    - { path: config/edge/mid-8mib.bin, sizeBytes: 8388608 }
+    - { path: config/edge/mid-10mib.bin, sizeBytes: 10485760 }
+    - { path: "config/edge/name with spaces.txt", content: "spaces-in-name" }
+    - { path: "config/edge/plus+plus.txt", content: "plus-in-name" }
+  generated:
+  - pattern: config/edge/swarm/file-{n:03d}.bin
+    count: 400
+    sizeFrom: 7920
+    sizeStep: 7919
+    sizeModulus: 262144
+  - pattern: config/edge/swarm/file-{n:02d}.bin
+    count: 24
+    sizeFrom: 2711
+    sizeStep: 2711
+  - pattern: config/edge/mid/worker-{n:02d}.bin
+    count: 16
+    sizeFrom: 19922944
+    sizeStep: 3145728

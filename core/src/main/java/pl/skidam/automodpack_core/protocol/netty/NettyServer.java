@@ -11,7 +11,6 @@ import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.cert.X509Certificate;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -26,6 +25,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
+import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import io.netty.util.AttributeKey;
 
@@ -33,43 +33,24 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
-import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
-import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
-import pl.skidam.automodpack_core.protocol.compression.CompressionType;
-import pl.skidam.automodpack_core.protocol.netty.handler.ConnectionLifetimeHandler;
-import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
+import pl.skidam.automodpack_core.protocol.netty.handler.AmmhGateHandler;
+import pl.skidam.automodpack_core.protocol.netty.handler.HttpContractHandler;
+import pl.skidam.automodpack_core.protocol.netty.handler.ProxyProtocolHandler;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 public class NettyServer {
 
 	public static final AttributeKey<SocketAddress> REAL_REMOTE_ADDR = AttributeKey.valueOf("REAL_REMOTE_ADDR");
-	public static final AttributeKey<CompressionCodec> COMPRESSION_CODEC = AttributeKey.valueOf("COMPRESSION_CODEC");
-	public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
-	public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
-	private final Map<Channel, String> connections = new ConcurrentHashMap<>();
 	private volatile TrafficShaper trafficShaper;
 	private volatile Map<String, Path> paths = Map.of();
 	private MultithreadEventLoopGroup eventLoopGroup;
-	private ExecutorService senderExecutor;
+	private ExecutorService diskReads;
 	private ChannelFuture serverChannel;
 	private volatile boolean sharedMagicEnabled;
 	private volatile boolean holepunchActive;
 	private String certificateFingerprint;
 	private SslContext sslCtx;
-
-	// The map is already a concurrent one and every access is a single atomic operation, so no external
-	// lock adds anything - readers get the live map and see per-entry updates immediately.
-
-	public static void setCompression(Channel channel, CompressionType type) {
-		channel.attr(COMPRESSION_CODEC).set(CompressionFactory.createCodec(type));
-	}
-
-	public static CompressionCodec compressionCodec(Channel channel) {
-		CompressionCodec codec = channel.attr(COMPRESSION_CODEC).get();
-		if (codec == null) throw new IllegalStateException("Compression codec has not been configured");
-		return codec;
-	}
 
 	public GlobalTrafficShapingHandler trafficHandler() {
 		TrafficShaper shaper = trafficShaper;
@@ -94,18 +75,6 @@ public class NettyServer {
 		}
 	}
 
-	public void addConnection(Channel channel, String secret) {
-		connections.put(channel, secret);
-	}
-
-	public void removeConnection(Channel channel) {
-		connections.remove(channel);
-	}
-
-	public Map<Channel, String> getConnections() {
-		return connections;
-	}
-
 	public String getCertificateFingerprint() {
 		return certificateFingerprint;
 	}
@@ -116,11 +85,21 @@ public class NettyServer {
 
 	public void replacePaths(GenerationHosting hosting) {
 		this.paths = hosting.asMap();
+		documentEtags.replace(getPath(GenerationHosting.HEAD_DOCUMENT_KEY), getPath(GenerationHosting.JOURNAL_KEY));
+	}
+
+	// The etag memos live in DocumentEtags; the hosting swap is their invalidation point, and start() warms them too.
+	private final DocumentEtags documentEtags = new DocumentEtags();
+
+	/** The served document's sha1 for conditional fetches; null when it cannot be read, mirroring {@code HashUtils.getHash}. */
+	public String documentEtag(Path file) {
+		return documentEtags.etag(file);
 	}
 
 	public Optional<Path> getPath(String requestKey) {
 		if (requestKey == null) return Optional.empty();
-		if (requestKey.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || requestKey.equals(GenerationHosting.JOURNAL_KEY)) return regularPath(paths.get(requestKey));
+		if (requestKey.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || requestKey.equals(GenerationHosting.JOURNAL_KEY))
+			return regularPath(paths.get(requestKey));
 		if (!HashUtils.isSha1(requestKey)) return Optional.empty();
 
 		return regularPath(paths.get(HashUtils.normalizeSha1(requestKey)));
@@ -128,6 +107,21 @@ public class NettyServer {
 
 	private static Optional<Path> regularPath(Path path) {
 		return path != null && !Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) ? Optional.of(path) : Optional.empty();
+	}
+
+	private final ActivityTracker activityTracker = new ActivityTracker();
+
+	public ActivityTracker activityTracker() {
+		return activityTracker;
+	}
+
+	// The activity command's read model resolves hashes against the hosting map and feeds the shaper's throughput.
+	private final ActivityView activityView = new ActivityView(activityTracker, this::getPath,
+			() -> trafficShaper == null ? -1 : trafficShaper.handler().trafficCounter().lastWriteThroughput());
+
+	/** The activity command's read model, with object hashes resolved against the current generation's pack paths. */
+	public ActivityTracker.Snapshot activitySnapshot() {
+		return activityView.snapshot();
 	}
 
 	public synchronized Optional<ChannelFuture> start() {
@@ -141,23 +135,19 @@ public class NettyServer {
 			return Optional.empty();
 		}
 
-		if (getPath("").isEmpty()) {
+		if (getPath(GenerationHosting.HEAD_DOCUMENT_KEY).isEmpty()) {
 			LOGGER.warn("No current generation record is prepared. Can't start modpack hosting.");
 			return Optional.empty();
 		}
+		// The first client after a restart must not pay the document hashes on the event loop either.
+		documentEtags.replace(getPath(GenerationHosting.HEAD_DOCUMENT_KEY), getPath(GenerationHosting.JOURNAL_KEY));
 
 		ModpackConnectionMode connectionMode = serverConfig.connectionMode;
-		if (connectionMode == ModpackConnectionMode.DIRECT && serverConfig.bindPort == -1) {
-			LOGGER.info("DIRECT is advertised without a built-in listener; expecting the endpoint to be handled externally");
-			return Optional.empty();
-		}
+		if (serverConfig.disableInternalTLS)
+			LOGGER.info("Internal TLS termination is disabled; the listener serves plaintext and expects TLS to be terminated in front of it");
 
 		try {
-			senderExecutor = Executors.newCachedThreadPool(r -> {
-				Thread t = new Thread(r, "automodpack-sender");
-				t.setDaemon(true);
-				return t;
-			});
+			startReaders();
 
 			prepareTls();
 
@@ -172,6 +162,13 @@ public class NettyServer {
 				LOGGER.info("Hosting modpack through magic packet routing on the Minecraft port");
 				startSharedTraffic();
 				sharedMagicEnabled = true;
+				return Optional.empty();
+			}
+
+			if (serverConfig.bindPort == -1) {
+				LOGGER.info("{} is advertised without a built-in listener; expecting the endpoint to be served externally", connectionMode);
+				diskReads.shutdownNow();
+				diskReads = null;
 				return Optional.empty();
 			}
 
@@ -210,13 +207,32 @@ public class NettyServer {
 				.childHandler(new ChannelInitializer<SocketChannel>() {
 					@Override
 					protected void initChannel(SocketChannel ch) {
-						// Nothing vanilla owns this socket, so the connection lifetime timer must exist from
-						// the first accepted byte: a connection that never sends its magic cannot pin the listener.
-						ch.pipeline().addLast(MOD_ID + "-connection-lifetime", new ConnectionLifetimeHandler());
-						ch.pipeline().addLast(MOD_ID, new ProtocolServerHandler(NettyServer.this, connectionMode, false, serverConfig.acceptProxyProtocol));
+						// A PROXY header claims a source address that feeds secret validation, so only a listener whose
+						// operator opted in (a trusted proxy is in front) may consume one.
+						if (serverConfig.acceptProxyProtocol) ch.pipeline().addLast("proxy-protocol", new ProxyProtocolHandler());
+						// The contract listener is public, so fully silent connections are reaped: the all-idle bound sits
+						// far past any client's keep-alive reuse window, and a streamed body completes a write well
+						// inside it at the receipted drain floor, so the reap never interrupts a live transfer.
+						ch.pipeline().addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, NetUtils.HTTP_IDLE_REAP_SECONDS));
+						ch.pipeline().addLast("traffic-shaper", NettyServer.this.trafficHandler());
+						if (connectionMode == ModpackConnectionMode.MAGIC) {
+							ch.pipeline().addLast(MOD_ID + "-magic-gate", new AmmhGateHandler(NettyServer.this, false));
+							return;
+						}
+						installContractHandlers(ch.pipeline());
 					}
 				}).group(eventLoopGroup).localAddress(bindAddress).bind().syncUninterruptibly();
 		return Optional.of(serverChannel);
+	}
+
+	/** TLS (when internal termination is on) and the URL contract, appended after whatever wire-side stack is present. */
+	public void installContractHandlers(ChannelPipeline pipeline) {
+		// Streaming responses queue whole chunks ahead of the peer's drain; the watermark bounds that queue and keeps compression overlapped with the wire.
+		// It sits here so every hosting shape - dedicated, shared magic, and holepunch - streams under the same receipts.
+		pipeline.channel().config().setWriteBufferWaterMark(new WriteBufferWaterMark(NetUtils.WRITE_BUFFER_LOW_WATER, NetUtils.WRITE_BUFFER_HIGH_WATER));
+		if (sslCtx != null) pipeline.addLast("tls", sslCtx.newHandler(pipeline.channel().alloc()));
+		else LOGGER.debug("TLS termination handled externally: {}", pipeline.channel().remoteAddress());
+		pipeline.addLast(MOD_ID, new HttpContractHandler(this, diskReads));
 	}
 
 	private void prepareTls() throws Exception {
@@ -276,8 +292,8 @@ public class NettyServer {
 			eventLoopGroup = null;
 		}
 
-		if (senderExecutor != null) senderExecutor.shutdownNow();
-		senderExecutor = null;
+		if (diskReads != null) diskReads.shutdownNow();
+		diskReads = null;
 
 		sslCtx = null;
 		certificateFingerprint = null;
@@ -288,12 +304,21 @@ public class NettyServer {
 		return sharedMagicEnabled || holepunchActive || serverChannel != null && serverChannel.channel().isOpen();
 	}
 
-	public SslContext getSslCtx() {
-		return sslCtx;
+	/** The pool body-streaming workers run on: one worker per in-flight response, each holding one FileChannel and one reusable chunk buffer off the event loop. */
+	public ExecutorService diskReads() {
+		return diskReads;
 	}
 
-	/** The pool file-send workers run on: one worker per in-flight transfer, each holding one FileChannel and one reusable chunk buffer off the event loop. */
-	public ExecutorService senderExecutor() {
-		return senderExecutor;
+	/** Starts the file-reader pool; every hosting shape streams bodies, so this must run before any listener or swap goes live. */
+	public void startReaders() {
+		// Reads are the only blocking work left in streaming: the event loop writes whenever the channel is writable,
+		// and each response keeps at most two 4 MiB chunks in flight. Four sequential readers saturate any disk, so the
+		// count is a constant that never grows with the client count - the old thread-per-response pool grew one parked
+		// thread per connection for a whole drain.
+		diskReads = Executors.newFixedThreadPool(4, r -> {
+			Thread t = new Thread(r, "automodpack-disk-reader");
+			t.setDaemon(true);
+			return t;
+		});
 	}
 }

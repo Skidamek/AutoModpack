@@ -59,7 +59,7 @@ public record SemanticVersion(long major, long minor, long patch, List<Part> tai
 	public static SemanticVersion parseOrNull(String versionString) {
 		if (versionString == null || versionString.isBlank()) return null;
 		String version = versionString.trim();
-		if (version.length() > 1 && (version.charAt(0) == 'v' || version.charAt(0) == 'V') && Character.isDigit(version.charAt(1))) version = version.substring(1);
+		if (version.length() > 1 && (version.charAt(0) == 'v' || version.charAt(0) == 'V') && isAsciiDigit(version.charAt(1))) version = version.substring(1);
 		int metadata = version.indexOf('+');
 		if (metadata >= 0) version = version.substring(0, metadata);
 		List<Part> parts = runs(version);
@@ -79,7 +79,8 @@ public record SemanticVersion(long major, long minor, long patch, List<Part> tai
 		Long number = null;
 		StringBuilder alpha = null;
 		for (int index = 0; index <= version.length(); index++) {
-			boolean digit = index < version.length() && Character.isDigit(version.charAt(index));
+			// ASCII only: Character.isDigit also answers Unicode decimal digits, whose subtraction from '0' would silently produce a garbage numeric run.
+			boolean digit = index < version.length() && isAsciiDigit(version.charAt(index));
 			boolean letter = index < version.length() && Character.isLetter(version.charAt(index));
 			if (digit) {
 				if (alpha != null) {
@@ -129,6 +130,17 @@ public record SemanticVersion(long major, long minor, long patch, List<Part> tai
 		return String.valueOf(left).compareTo(String.valueOf(right));
 	}
 
+	/**
+	 * The one winner-election every duplicate resolution shares - the nested-jar scanner and the update planner's
+	 * duplicate disposition alike: the higher version wins, and an equal version breaks the tie on the
+	 * lexicographically smaller name, so the same candidates elect the same jar wherever they meet.
+	 */
+	public static boolean wins(String challengerVersion, String challengerName, String incumbentVersion, String incumbentName) {
+		int comparison = compareVersionStrings(challengerVersion, incumbentVersion);
+		if (comparison != 0) return comparison > 0;
+		return challengerName.compareTo(incumbentName) < 0;
+	}
+
 	private int rung() {
 		if (tail.isEmpty()) return RELEASE_RUNG;
 		Part first = tail.get(0);
@@ -156,5 +168,9 @@ public record SemanticVersion(long major, long minor, long patch, List<Part> tai
 		StringBuilder builder = new StringBuilder().append(major).append('.').append(minor).append('.').append(patch);
 		for (Part part : tail) builder.append('.').append(part.numeric() ? part.number() : part.alpha());
 		return builder.toString();
+	}
+
+	private static boolean isAsciiDigit(char value) {
+		return value >= '0' && value <= '9';
 	}
 }

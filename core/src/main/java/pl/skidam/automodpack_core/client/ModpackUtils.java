@@ -13,6 +13,7 @@ import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
@@ -118,7 +119,7 @@ public class ModpackUtils {
 						ClientObjectStore.CorruptObjectPolicy.EVICT_AND_REPORT);
 				switch (acquisition.outcome()) {
 					case PRESENT -> LOGGER.debug("Verified file already exists in store: {}", entry.file);
-					case COPIED -> LOGGER.info("Copying existing file from CWD to store: {}", entry.file);
+					case COPIED -> LOGGER.debug("Copying existing file from CWD to store: {}", entry.file);
 					case EVICTION_FAILED -> LOGGER.error("Failed to evict corrupt store object {}", entry.sha1, acquisition.evictionFailure());
 					case MISSING_SOURCE -> {
 					}
@@ -141,6 +142,13 @@ public class ModpackUtils {
 			uncachedFiles.add(entry);
 		}
 		return uncachedFiles;
+	}
+
+	/** Remaining wire bytes of objects the store still misses, counting finished staging slices as already fetched. */
+	public static long remainingUncachedBytes(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uncached, ClientStorage storage) throws IOException {
+		long bytes = 0;
+		for (var item : uncached) bytes += PartialResume.remainingBytes(storage.stagingDirectory(), item.sha1, item.size);
+		return bytes;
 	}
 
 	public static ClientConfigJsons.ClientConfigFieldsV3 planModpackSelection(String modpackId, ConnectionJsons.ConnectionInfo connectionInfo,

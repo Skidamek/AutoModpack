@@ -59,7 +59,31 @@ def _remove_volume(name):
         pass
 
 
-def _run_container(name, image, network, env, mounts, command=None, user=None, entrypoint=None, labels=None):
+# Autotuned TCP buffers otherwise cap one connection near the kernel's 4 MiB tcp_wmem maximum, so a
+# delay-shaped run measures the kernel default instead of the pipeline window it exists to measure.
+# These keys are network-namespace scoped: Docker accepts them at container creation only, and a later
+# sysctl write from inside the container is refused as read-only.
+SHAPED_TCP_SYSCTLS = {
+    "net.ipv4.tcp_wmem": "4096 65536 33554432",
+    "net.ipv4.tcp_rmem": "4096 131072 33554432",
+}
+
+
+def shaped_tcp_sysctls(netem, server_netem):
+    """The buffer ceilings for this run, or None when they would only hurt.
+
+    A pure delay shape needs room for one bandwidth-delay product in flight, and the kernel's
+    4 MiB autotuning ceiling caps the window below it. Behind a rate cap the pipe is bounded by
+    the rate anyway, and the big buffers just hold a standing queue the tail of the transfer
+    must drain, so they stay off there.
+    """
+    tokens = list(netem or []) + list(server_netem or [])
+    if "delay" not in tokens or "rate" in tokens:
+        return None
+    return dict(SHAPED_TCP_SYSCTLS)
+
+
+def _run_container(name, image, network, env, mounts, command=None, user=None, entrypoint=None, labels=None, cap_add=None, aliases=None, sysctls=None):
     volumes = {}
     for host, container_path, readonly in mounts:
         volumes[str(host)] = {"bind": container_path, "mode": "ro" if readonly else "rw"}
@@ -67,6 +91,10 @@ def _run_container(name, image, network, env, mounts, command=None, user=None, e
         image=image, detach=True, name=name,
         environment=dict(env), volumes=volumes, command=command, user=user, labels=labels or {},
     )
+    if cap_add:
+        kwargs["cap_add"] = list(cap_add)
+    if sysctls:
+        kwargs["sysctls"] = dict(sysctls)
     # "host" is a network *mode*, not a user-defined network: server and client
     # share the host's network namespace (so the client reaches the server on
     # localhost). This is the only topology a --network-host-only sandbox allows.
@@ -74,6 +102,12 @@ def _run_container(name, image, network, env, mounts, command=None, user=None, e
         kwargs["network_mode"] = "host"
     else:
         kwargs["network"] = network
+        if aliases:
+            # A stable DNS name alongside the random container name, so scenarios can
+            # advertise an endpoint whose hostname does not change per case.
+            kwargs["networking_config"] = {
+                network: docker_py.types.EndpointConfig(_docker.api._version, aliases=list(aliases)),
+            }
     if entrypoint is not None:
         kwargs["entrypoint"] = entrypoint
     return _docker.containers.run(**kwargs)

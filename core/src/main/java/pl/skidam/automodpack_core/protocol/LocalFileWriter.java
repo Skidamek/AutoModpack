@@ -1,6 +1,8 @@
 package pl.skidam.automodpack_core.protocol;
 
 import java.io.*;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
 import java.nio.file.*;
 
 public final class LocalFileWriter {
@@ -14,6 +16,19 @@ public final class LocalFileWriter {
 					Files.newOutputStream(destination, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)));
 		} catch (IOException e) {
 			throw new LocalStorageException("Failed to open local destination " + destination, e);
+		}
+	}
+
+	/** Opens the destination for a ranged body: bytes land at their absolute offsets, concurrent writers included. */
+	public static OutputStream openAt(Path destination, long offset) throws LocalStorageException {
+		try {
+			Path parent = destination.getParent();
+			if (parent != null) Files.createDirectories(parent);
+			FileChannel channel = FileChannel.open(destination, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+			channel.position(offset);
+			return new LocalOutputStream(Channels.newOutputStream(channel));
+		} catch (IOException e) {
+			throw new LocalStorageException("Failed to open local destination at " + offset + ": " + destination, e);
 		}
 	}
 

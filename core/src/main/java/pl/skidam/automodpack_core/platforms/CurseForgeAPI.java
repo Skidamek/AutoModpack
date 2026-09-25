@@ -2,10 +2,11 @@ package pl.skidam.automodpack_core.platforms;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
@@ -19,8 +20,9 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.utils.HttpClientPool;
 
+@SuppressWarnings("deprecation")
 public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, String fileSize, String releaseType, String murmurHash,
 		String sha1Hash, int modId, String projectPageUrl) {
 
@@ -29,23 +31,39 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 	public static final String CDN_HOST = "edge.forgecdn.net";
 	public static final String BASE_URL = "https://" + API_HOST + "/v1";
 
+	/** The one endpoint the API key is provisioned for; the key never travels anywhere else. */
+	public record TrustedEndpoint(String scheme, String host, int port) {
+		public static final TrustedEndpoint PRODUCTION = new TrustedEndpoint("https", API_HOST, 443);
+
+		public void refuseForeign(String requestUrl) throws IOException {
+			URL url = new URL(requestUrl);
+			if (!scheme.equalsIgnoreCase(url.getProtocol()) || !host.equalsIgnoreCase(url.getHost()) || url.getUserInfo() != null
+					|| (url.getPort() != -1 && url.getPort() != port))
+				throw new IOException("Refusing to send the CurseForge API key to an untrusted endpoint");
+		}
+	}
+
 	// key - sha1, value - murmur
 	// https://docs.curseforge.com/?java#get-fingerprints-matches
 	public static List<CurseForgeAPI> getModInfosFromFingerPrints(Map<String, String> hashes) {
+		return getModInfosFromFingerPrints(BASE_URL, TrustedEndpoint.PRODUCTION, hashes);
+	}
+
+	/** The request base url and the endpoint the key is provisioned for travel together, so the pin always holds; tests point both at a local server. */
+	public static List<CurseForgeAPI> getModInfosFromFingerPrints(String baseUrl, TrustedEndpoint endpoint, Map<String, String> hashes) {
 		if (hashes == null || hashes.isEmpty()) return null;
 
-		String requestUrl = BASE_URL + "/fingerprints";
 		List<CurseForgeAPI> curseForgeAPIList = new LinkedList<>();
 
 		try {
-			JsonArray exactMatches = fromCurseForgeUrl(requestUrl, hashes.values().stream().toList()).get("data").getAsJsonObject().get("exactMatches")
-					.getAsJsonArray();
+			JsonArray exactMatches = fromCurseForgeUrl(baseUrl + "/fingerprints", endpoint, murmurRequest(hashes.values().stream().toList())).get("data")
+					.getAsJsonObject().get("exactMatches").getAsJsonArray();
 			for (JsonElement match : exactMatches) {
 				JsonObject JSONObject = match.getAsJsonObject();
 				CurseForgeAPI curseForgeAPI = parseJsonObject(JSONObject, hashes);
 				if (curseForgeAPI != null) curseForgeAPIList.add(curseForgeAPI);
 			}
-			Map<Integer, String> listedPages = getListedProjectPages(curseForgeAPIList);
+			Map<Integer, String> listedPages = getListedProjectPages(curseForgeAPIList, baseUrl, endpoint);
 			if (listedPages != null) {
 				List<CurseForgeAPI> listed = new LinkedList<>();
 				for (CurseForgeAPI info : curseForgeAPIList) {
@@ -126,7 +144,8 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		}
 
 		if (!found) {
-			LOGGER.error("CurseForgeAPI Can't find file with SHA1 hash: {}", sha1);
+			// The file's own sha1 is only assigned on the found path, so the receipt names what was asked for instead.
+			LOGGER.error("CurseForgeAPI response file carries none of the requested SHA1 hashes: {}", hashes.keySet());
 			return null;
 		}
 
@@ -143,12 +162,12 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 	}
 
 	/** Listed projects keyed by mod id; the page url may be null. Null means the bulk lookup failed and fingerprint hits should be kept. */
-	private static Map<Integer, String> getListedProjectPages(List<CurseForgeAPI> infos) throws IOException {
+	private static Map<Integer, String> getListedProjectPages(List<CurseForgeAPI> infos, String baseUrl, TrustedEndpoint endpoint) throws IOException {
 		List<Integer> modIds = infos.stream().map(CurseForgeAPI::modId).filter(id -> id > 0).distinct().toList();
 		if (modIds.isEmpty()) return new HashMap<>();
 		JsonObject request = new JsonObject();
 		request.add("modIds", new Gson().toJsonTree(modIds));
-		JsonObject response = fromCurseForgeUrl(BASE_URL + "/mods", request);
+		JsonObject response = fromCurseForgeUrl(baseUrl + "/mods", endpoint, request);
 		if (response == null || !response.has("data") || !response.get("data").isJsonArray()) return null;
 		Map<Integer, String> listed = new HashMap<>();
 		for (JsonElement element : response.getAsJsonArray("data")) {
@@ -169,44 +188,32 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		return new CurseForgeAPI(requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmurHash, sha1Hash, modId, url);
 	}
 
-	private static JsonObject fromCurseForgeUrl(String requestUrl, List<String> murmurHashes) throws IOException {
-		if (murmurHashes == null || murmurHashes.isEmpty()) return null;
+	private static JsonObject murmurRequest(List<String> murmurHashes) {
 		JsonObject request = new JsonObject();
 		request.add("fingerprints", new Gson().toJsonTree(murmurHashes));
-		return fromCurseForgeUrl(requestUrl, request);
+		return request;
 	}
 
-	private static JsonObject fromCurseForgeUrl(String requestUrl, JsonObject requestBody) throws IOException {
+	private static JsonObject fromCurseForgeUrl(String requestUrl, TrustedEndpoint endpoint, JsonObject requestBody) throws IOException {
 		if (requestBody == null) return null;
-		URL url = new URL(requestUrl);
-		if (!"https".equalsIgnoreCase(url.getProtocol()) || !API_HOST.equalsIgnoreCase(url.getHost()) || url.getUserInfo() != null
-				|| (url.getPort() != -1 && url.getPort() != 443))
-			throw new IOException("Refusing to send the CurseForge API key to an untrusted endpoint");
-		HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-		connection.setInstanceFollowRedirects(false);
-		connection.setRequestProperty("User-Agent", NetUtils.USER_AGENT);
-		connection.setRequestProperty("Content-Type", "application/json");
-		connection.setRequestProperty("Accept", "application/json");
-		connection.setRequestProperty("x-api-key", summonKey());
-		connection.setConnectTimeout(NetUtils.HTTP_TIMEOUT_MILLIS);
-		connection.setReadTimeout(NetUtils.HTTP_TIMEOUT_MILLIS);
-		connection.setRequestMethod("POST");
-		connection.setDoOutput(true);
-		connection.getOutputStream().write(requestBody.toString().getBytes(StandardCharsets.UTF_8));
-		connection.connect();
-		JsonElement element = null;
-		int code = connection.getResponseCode();
-		if (code == HttpURLConnection.HTTP_OK) {
-			try (InputStreamReader reader = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
-				element = new JsonParser().parse(reader);
-			}
-		} else if (code == HttpURLConnection.HTTP_UNAUTHORIZED) {
-			LOGGER.error("CurseForge API authorization failed with HTTP 401");
-		} else {
-			LOGGER.warn("{} responded {} code", url, code);
+		endpoint.refuseForeign(requestUrl);
+		Map<String, String> headers = Map.of("Content-Type", "application/json", "Accept", "application/json", "x-api-key", summonKey());
+		byte[] body = requestBody.toString().getBytes(StandardCharsets.UTF_8);
+		// The key must never see a redirect target, so this request never follows one.
+		HttpResponse<byte[]> response = HttpClientPool.request(requestUrl, headers, body, false);
+		int code = response.statusCode();
+		if (code == 200) {
+			return parseObject(response.body());
 		}
-		connection.disconnect();
-		if (element != null && !element.isJsonArray()) return element.getAsJsonObject();
+		if (code == 401) LOGGER.error("CurseForge API authorization failed with HTTP 401");
+		else LOGGER.warn("{} responded {} code", requestUrl, code);
+		return null;
+	}
+
+	/** The body parsed as a JSON object; an array body is not an answer. */
+	private static JsonObject parseObject(byte[] body) {
+		JsonElement element = new JsonParser().parse(new InputStreamReader(new ByteArrayInputStream(body), StandardCharsets.UTF_8)); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
+		if (!element.isJsonArray()) return element.getAsJsonObject();
 		return null;
 	}
 

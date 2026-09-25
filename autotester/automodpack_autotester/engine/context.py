@@ -29,12 +29,31 @@ class Context:
     artifact: Path
     modpack_name: str
     marker_rel: Path
-    scenario_files: list  # list[(Path, str)]
-    expected_mods: list
+    scenario_files: list  # list[HostedFile]
+    # The barebones static HTTPS host container (static-host scenarios); removed
+    # with the case whether or not the flow ever started it.
+    static_name: str = ""
+    static_host_image: str = ""
+    # The S3-compatible host (MinIO) and its one-shot upload client (s3-host
+    # scenarios); removed with the case like the static host.
+    s3_name: str = ""
+    minio_image: str = ""
+    minio_client_image: str = ""
     # Address the client uses to reach the server. On bridge networking this is
     # the server container name; on host networking it's localhost.
     server_host: str | None = None
     resource_scope: str = ""
+    # --netem tc netem argv tokens (empty when the knob is off), applied to the
+    # client container's eth0 after launch.
+    netem: list[str] = field(default_factory=list)
+    # --loss percentage (empty when the knob is off), applied as a netem loss qdisc to
+    # the SERVER container's eth0: the server's egress is the download's data direction,
+    # where segment loss actually stalls transfers.
+    loss: str = ''
+    # --server-netem tc netem argv tokens (empty when the knob is off), applied as one
+    # netem qdisc to the SERVER container's eth0 - delay/rate on the download's data
+    # direction. Shares the one root qdisc with --loss; the runner rejects combining them.
+    server_netem: list[str] = field(default_factory=list)
     vars: dict = field(default_factory=dict)
     bridge: BridgeClient | None = None
     # Injected by the runner so the engine stays decoupled from Docker.

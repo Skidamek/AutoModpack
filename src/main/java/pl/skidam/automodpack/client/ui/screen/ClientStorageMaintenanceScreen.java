@@ -68,6 +68,8 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 			lines.add(blankLine());
 			lines.addAll(wrapParagraph(this.font, statLine("automodpack.storage.objects", collectionResult.before().objectCount(), collectionResult.after().objectCount(),
 					UiFormat.formatSize(collectionResult.before().objectBytes()), UiFormat.formatSize(collectionResult.after().objectBytes())), wrapWidth));
+			lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.staging", collectionResult.deletedStagingCount(),
+					UiFormat.formatSize(collectionResult.deletedStagingBytes())), wrapWidth));
 		} else if (verificationReport != null) {
 			lines.add(blankLine());
 			lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.verificationReceipt", verificationReport.validReferencedObjectCount(), verificationReport.referencedObjectCount(),

@@ -104,10 +104,20 @@ final class PackConfirmCopy {
 		return VersionedText.str("automodpack.confirm.unverifiedCount", unverified, jars);
 	}
 
-	/** The per-source breakdown line; empty when the target has no jars, so the stat hides instead of reading zeros. */
+	/**
+	 * Platform match split for the confirm stats. Empty when neither platform matched, so the line hides instead of
+	 * reading zeros. A zero on one platform is omitted; unverified jars have their own red count below this.
+	 */
 	static String sourceCounts(SourceCounts counts) {
-		if (counts == null || (counts.modrinth() == 0 && counts.curseforge() == 0 && counts.serverOnly() == 0)) return "";
-		return VersionedText.str("automodpack.confirm.sourceCounts", counts.modrinth(), counts.curseforge(), counts.serverOnly());
+		if (counts == null) return "";
+		boolean modrinth = counts.modrinth() > 0;
+		boolean curseforge = counts.curseforge() > 0;
+		if (!modrinth && !curseforge) return "";
+		if (modrinth && curseforge)
+			return VersionedText.str("automodpack.confirm.matchedModrinth", counts.modrinth()) + "  |  "
+					+ VersionedText.str("automodpack.confirm.matchedCurseforgeJoined", counts.curseforge());
+		if (modrinth) return VersionedText.str("automodpack.confirm.matchedModrinth", counts.modrinth());
+		return VersionedText.str("automodpack.confirm.matchedCurseforge", counts.curseforge());
 	}
 
 	static int selectedJarCount(SelectedModpackTarget target) {

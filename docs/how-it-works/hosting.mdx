@@ -8,29 +8,33 @@ Players need a route from their game to your modpack files. AutoModpack ships a 
 | --- | --- | --- |
 | `HOLEPUNCH` | Serves the pack over your Minecraft server port. | `bindPort` is ignored; HOLEPUNCH always uses your Minecraft server port. |
 | `MAGIC` | Serves the pack over your Minecraft server port. | Serves the pack on `bindPort`. |
-| `HTTP` | Opens no listener. The mode is advertise-only: the URL contract below must be served by something else over HTTPS. | Serves the pack as an ordinary HTTPS server on `bindPort`. |
+| `HTTP` | Opens no port; the pack endpoint must be handled by something else, for example a static HTTPS host of an exported contract tree. | Serves the pack on `bindPort` as plain HTTPS file semantics. |
 
 `HOLEPUNCH` is the default and needs no open port beyond Minecraft's. The client sends a Minecraft Login Start whose UUID carries a marker, and the server claims that connection for AutoModpack before vanilla builds a login listener. Unmarked logins reach Minecraft unchanged. On Forge and NeoForge the holepunch handshake carries the same `\0FML3\0` hostname extra a normal modded client sends, so packed servers do not reject the connection as vanilla before the marker is read.
 
 `MAGIC` marks its connections with the bytes `AMMH` followed by an `AMOK` confirmation before any TLS. On the shared Minecraft port, traffic without the marker passes through to Minecraft untouched. On a dedicated listener, non-magic traffic is rejected.
 
+The opening differs per mode, but the wire is the same everywhere: after the opening, every mode serves the same HTTP contract — ordinary GET requests, `Authorization: Bearer` credentials when the pack validates secrets, keep-alive connections, and per-request negotiated compression.
+
 The advertised mode is strict: the client uses the one mode the server advertises and does not fall back to another after a failure.
 
-## One HTTP contract for every mode
+## The HTTP contract
 
-After the opening, every mode speaks the same wire: plain HTTP over TLS. The client fetches `GET /head` (the current pack state), `GET /journal` (the publish history), and `GET /objects/<sha1>` (file bytes), so a v5 endpoint can be served by anything that can serve files over HTTPS. When `validateSecrets` is on, requests carry the login-issued secret as an `Authorization: Bearer` header, and the server answers 401 without it.
+`HTTP` serves the pack as plain HTTPS file semantics. The whole wire is three GET routes: `/head` (the current generation's head document), `/journal` (the generation's object journal), and `/objects/<sha1>` (one content-addressed pack file — the optional waiting track is one of these too, referenced by its hash from the head document). Responses use the ordinary HTTP answers: `ETag`/`If-None-Match` with `304 Not Modified` (quoted, opaque validators, compared per RFC 7232), so an unchanged generation costs one header round trip, and a single `Range` with `206 Partial Content`, so a download resumes at the byte it stopped at — the resume start is validated against `Content-Range`, never assumed.
 
-Transfers are ordinary HTTP: a partially downloaded file resumes with range requests, an unchanged check short-circuits with 304, and documents are compressed with zstd or gzip. Errors come back as real status codes.
+Compression is plain HTTP negotiation, per request, with no heuristics: a request carrying `Accept-Encoding` gets its body encoded with the first offered codec the server knows (the client offers zstd, then gzip) and streamed as chunked frames; a request without the header gets identity with an exact `Content-Length`. Ranges negotiate like everything else — the slice is selected in file bytes, encoded on the wire, and `Content-Range` keeps describing file offsets, so resume and parallel takes are unaffected. The waiting track is the one requester that asks for identity: it is stored content that is already compressed. Nothing is ever buffered whole.
 
-## Serving the pack from a static HTTPS host
+When `validateSecrets` is on, every request carries the login-issued secret as an `Authorization: Bearer` header, so `secretLifetime` and revocation apply per request: a revoked secret dies at the next request, not at the next connection. The certificate verification ladder is the same as in every other mode.
 
-`/automodpack generate export-http [--all] <directory>` writes `head`, `journal`, and `objects/<sha1>` as byte-identical files for nginx, S3, or any dumb file host. Files that Modrinth or CurseForge still serve themselves are pruned so the mirror carries no duplicate payload. `--all` keeps everything as a backstop for platform link rot. Setting `exportHttpDirectory` in the server config repeats the export after every publish, and `exportHttpIncludeAll` is the config form of `--all`. The export never deletes anything from the target directory, and it refuses while `validateSecrets` is on, because a static host cannot check download secrets. Nothing in the exported tree is access-controlled, so licensing and security of the published copy are yours.
+The optional waiting track is an object like any other: drop an `.ogg` at `automodpack/host-modpack/waiting-music.ogg`, and the next publish stores it in the object store and writes its sha1 into the head document. Clients fetch `objects/<sha1>` only when they do not already hold those bytes, so a track that did not change costs nothing on any host — no conditional negotiation needed. The track is waiting music: files past 5 MiB are refused at publish and aborted at the response head, and a generation that publishes without the file serves the bundled track. Licensing is the operator's responsibility.
 
-Pair the export with `connectionMode: HTTP` and `bindPort: -1`: the game server then only advertises the endpoint, and the static host serves the contract.
+Three hosting shapes serve byte-identical bytes; a client cannot tell them apart.
 
-## Custom waiting track
+- **The embedded listener** on `bindPort`, with the built-in certificate. `disableInternalTLS` hands termination to whatever sits in front: the listener serves plaintext on the internal hop while the front-end holds the certificate.
+- **An external front-end.** For a Cloudflare quick tunnel: run `cloudflared tunnel --url http://127.0.0.1:<bindPort>`, set `connectionMode` to `HTTP`, `disableInternalTLS` to `true` (the origin hop is plain HTTP), and advertise the tunnel host with `advertisedEndpointHost` plus `advertisedEndpointPort: 443`. The client's SNI follows the endpoint host, so the tunnel's public certificate is what clients see, and their first connection verifies it before anything downloads. To make that verification silent — and to survive the tunnel's certificate rotations — publish the front-end's fingerprint as an [AMP1 record](../security#dnssec-amp1) when you have a DNSSEC domain; without one, share the fingerprint out of band or hand out a [pinned join address](../security#pinned-join-addresses). A plain reverse proxy works the same way, with `acceptProxyProtocol` so the real client address survives the hop.
+- **A static host of an exported tree**, described under [HTTP contract export](#http-contract-export): any web server that can serve files over HTTPS can serve the contract.
 
-A server that places a `music.ogg` file in `automodpack/host-modpack/` has it streamed to clients as `GET /music`: players hear your track while a download runs instead of the bundled one. The client caches the track for later syncs and falls back to the bundled track when there is none. Licensing of the track you serve is your responsibility.
+The client runs the same download engine on every mode: five connections, each pipelining within a 64 MiB unsettled-bytes window of at most 2048 requests, each file taken in exact 4 MiB ranges with up to one connection pool's depth of ranges in flight, and idle connections stealing the tails of large files. Zero-byte files are created locally and never requested, and a framed `404` fails only the request that got it, so the pipeline keeps flowing.
 
 ## TLS
 
@@ -44,7 +48,35 @@ PROXY protocol headers are honored on dedicated `MAGIC` and `HTTP` listeners whi
 
 ## Reverse proxies and external endpoints
 
-Setting `modpackHost` to `false` turns off every built-in listener and holepunch handler. Clients still receive connection information, which can point at a proxy or a separate host. AutoModpack cannot validate that routing from the Minecraft server process, so the endpoint must speak the advertised mode exactly. Known-good proxy setups, including the Velocity plugin and Gate Lite, are described on the [proxies page](../compatibility/proxies).
+Setting `modpackHost` to `false` turns off every built-in listener and holepunch handler. Clients still receive connection information, which can point at a proxy or a separate host. AutoModpack cannot validate that routing from the Minecraft server process, so the endpoint must speak the advertised mode exactly. For `HTTP` this is a supported advertise-only shape: the game server only advertises, and the URL contract is served externally. Known-good proxy setups, including the Velocity plugin and Gate Lite, are described on the [proxies page](../compatibility/proxies).
+
+## HTTP contract export
+
+The whole URL contract is three GET routes — `/head`, `/journal`, and `/objects/<sha1>` — so any static HTTPS host can serve it. `/automodpack generate export-http <directory>` writes the tree as byte-for-byte copies of the hosted files: point nginx, S3, or any dumb file host at the directory and clients cannot tell it apart from the embedded listener. The export works in every connection mode and needs no listener, and nothing already in the directory is ever deleted, so stale objects from old generations are yours to collect. Setting `exportHttpDirectory` in the [server config](../configuration/server-config#network-and-hosting) does the same export automatically after every publish. The export refuses to run while `validateSecrets` is on: a public mirror cannot check the per-request bearer secrets, so a validated pack has no public shape.
+
+By default the export also resolves each object against Modrinth and CurseForge and leaves out the files those platforms still serve themselves — clients download those from the platforms' own CDNs, exactly as they do for the built-in host. A hit only counts when the platform reports the same file size as the hosted object, and anything unresolvable, including API failures, stays in the tree. The command reports the outcome as `Exported N files to <dir> (M objects omitted: served by Modrinth/CurseForge; K unresolvable → included)`; the automatic export after a publish logs the same line. Set `exportHttpIncludeAll` or pass `--all` to the export command to keep every object in the tree, restoring your host as the backstop for platform link rot.
+
+The exported tree is public to whoever the static host serves, and everything in it is published under your license responsibility. Pruned objects are fetched by clients directly from the platforms' own CDNs, not from your mirror, but a file a platform later deletes has no fallback on a pruned mirror.
+
+## S3-compatible buckets
+
+The export tree is a valid bucket layout — `head`, `journal`, and `objects/<sha1>` are exactly S3 keys — so any S3-compatible store (AWS S3, Cloudflare R2, Backblaze B2, MinIO, Wasabi) serves the pack directly. The recipe, with the [MinIO client](https://min.io/docs/minio/linux/reference/minio-mc.html) standing in for `aws s3 sync` or `rclone`:
+
+```bash
+export-http dir writes the tree (the head lands last: it is the tree's commit pointer)
+mc alias set local https://<bucket-endpoint> --insecure   # omit --insecure for a trusted certificate
+mc mb --ignore-existing local/<bucket>
+mc mirror --overwrite <export-directory> local/<bucket>
+mc anonymous set download local/<bucket>                  # clients fetch anonymously, no signatures
+```
+
+Advertise the bucket's **virtual-hosted** endpoint (for AWS: `https://<bucket>.s3.<region>.amazonaws.com`) in `advertisedEndpointHost`/`advertisedEndpointPort` with `connectionMode: HTTP`. The path-style form answers a redirect to a different host, which clients reject on a pinned connection. Three properties are worth knowing:
+
+- **Conditionals work.** The export's `head` is the tree's commit pointer and lands after every object, so a sync tool can never publish the new head beside the old journal. Clients cache the bucket's own ETag per document and replay it as a second validator (`If-None-Match: "<installed-sha1>", "<cached-etag>"`), so an unchanged sync is answered `304` for both documents without a body — two requests, one round trip.
+- **Ranges work**, so big objects still download as parallel ranged takes that resume at the byte; no degradation is needed.
+- **Buckets are plain HTTP semantics with no compression**: objects are served identity-encoded (up to ~14% more bytes than the embedded listener's per-request zstd), and a rate-capped bucket answers `503`/`429` with `Retry-After`, which clients wait out and retry.
+
+The bucket is as public as the static mirror: `validateSecrets` must stay off (the export refuses otherwise), and your license governs the bytes. For the trust prompt, a bare provider endpoint (an `amazonaws.com` name) cannot carry your DNSSEC fingerprint record, so players confirm the certificate once; fronting the bucket with a CDN on your own DNSSEC domain lets the existing record absorb the provider's certificate rotations with a record update.
 
 ## Bandwidth
 

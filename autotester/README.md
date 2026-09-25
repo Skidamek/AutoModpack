@@ -210,9 +210,8 @@ aborts on a malformed scenario.
 | `wait_for` | Poll `until:` (a condition) until it holds or `timeout:` elapses. |
 | `assert` | Fail immediately unless `that:` (a condition) holds. |
 | `sleep` | Wait `duration:` (e.g. `2s`). |
-| `wait_file` / `wait_files` | Wait for file(s) under the client game dir. |
+| `wait_file` | Wait for a file under the client game dir. |
 | `verify_files` | Wait until every `serverFiles.files` entry exists in the synced modpack. |
-| `verify_mods` | Wait until every `serverFiles.expectedMods` glob is present. |
 | `launch_server` / `wait_server` | Start the server / wait for `Done (`. |
 | `launch_client` / `wait_bridge` | Start a client / wait for its bridge. |
 | `stage_modpack` | Pre-stage a modpack into the client game dir for offline/client-only runs (see below). |

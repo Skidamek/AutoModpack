@@ -294,7 +294,14 @@ def _v_stage_modpack(ctx: Context, step):
 
     declared_files = step.get("files")
     if declared_files is None:
-        declared_files = [{"path": str(rel), "content": content} for rel, content in ctx.scenario_files]
+        declared_files = []
+        for hosted in ctx.scenario_files:
+            item = {"path": str(hosted.path)}
+            if hosted.size_bytes is not None:
+                item["sizeBytes"] = hosted.size_bytes
+            else:
+                item["content"] = hosted.content
+            declared_files.append(item)
     editable_paths = {
         Path(str(item["path"])).as_posix()
         for item in declared_files
@@ -398,7 +405,7 @@ def _v_stage_modpack(ctx: Context, step):
                     "connection": {
                         "origin": addr,
                         "endpoint": addr,
-                        "connectionMode": "DIRECT",
+                        "connectionMode": "HTTP",
                     },
                     "secrets": {},
                 },

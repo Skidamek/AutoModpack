@@ -22,7 +22,7 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -39,26 +39,29 @@ final class ModpackObjectAcquisition {
 	private final SourceCatalogue sourceCatalogue;
 	private final ClientUpdatePlanBuilder planBuilder;
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
-	private final DownloadClient downloadClient;
+	private final PackTransport transport;
 	private final AtomicBoolean playerCancelled;
 	private final Supplier<String> modpackName;
 	private final Runnable onPlayerCancel;
+	private final String waitingMusicSha1;
 	private final Set<String> reservedObjectHashes = new TreeSet<>();
 	private final Map<ModpackJsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new ConcurrentHashMap<>();
 	private final Map<ModpackJsons.ModpackContentFields.ModpackContentItem, DownloadManager.FailureCategory> failedDownloadCategories = new ConcurrentHashMap<>();
 	private DownloadManager downloadManager;
 
 	ModpackObjectAcquisition(ClientStorage storage, PlatformCache platformCache, SourceCatalogue sourceCatalogue, ClientUpdatePlanBuilder planBuilder,
-			ConnectionJsons.ConnectionInfo connectionInfo, DownloadClient downloadClient, AtomicBoolean playerCancelled, Supplier<String> modpackName, Runnable onPlayerCancel) {
+			ConnectionJsons.ConnectionInfo connectionInfo, PackTransport transport, AtomicBoolean playerCancelled, Supplier<String> modpackName, Runnable onPlayerCancel,
+			String waitingMusicSha1) {
 		this.storage = storage;
 		this.platformCache = platformCache;
 		this.sourceCatalogue = sourceCatalogue;
 		this.planBuilder = planBuilder;
 		this.connectionInfo = connectionInfo;
-		this.downloadClient = downloadClient;
+		this.transport = transport;
 		this.playerCancelled = playerCancelled;
 		this.modpackName = modpackName;
 		this.onPlayerCancel = onPlayerCancel;
+		this.waitingMusicSha1 = waitingMusicSha1;
 	}
 
 	void interrupt() {
@@ -83,7 +86,7 @@ final class ModpackObjectAcquisition {
 
 	/** The download queue needs a complete connection and its client; entry points that can run without a live handshake trip this. */
 	void requireTransferSession() throws IOException {
-		if (connectionInfo == null || !connectionInfo.isComplete() || downloadClient == null) throw new IOException("Modpack transfer session is unavailable");
+		if (connectionInfo == null || !connectionInfo.isComplete() || transport == null) throw new IOException("Modpack transfer session is unavailable");
 	}
 
 	int acquireTargetObjects(ModpackJsons.ModpackContentFields target, FileCache cache, boolean playerFacing) throws Exception {
@@ -102,7 +105,8 @@ final class ModpackObjectAcquisition {
 
 		requireTransferSession();
 		long start = System.currentTimeMillis();
-		long totalBytes = missing.stream().mapToLong(item -> item.size).sum();
+		long totalBytes = ModpackUtils.remainingUncachedBytes(missing, storage);
+		if (playerFacing) WaitingMusic.start(transport, storage, waitingMusicSha1);
 		FetchManager fetchManager = sourceCatalogue.sourceFetch(missing);
 		try {
 			if (!downloadModpack(missing, start, totalBytes, fetchManager, playerFacing))
@@ -135,7 +139,7 @@ final class ModpackObjectAcquisition {
 		}
 
 		LOGGER.info("In queue left {} files to download ({})", files.size(), ByteFormat.formatSize(totalBytes));
-		if (downloadClient == null) return false;
+		if (transport == null) return false;
 		if (fetchManager != null) {
 			if (fetchManager.isComplete()) LOGGER.info("Third-party sources ready ({} of {} files matched)", fetchManager.resolvedFiles(), fetchManager.totalFiles());
 			else LOGGER.info("Downloading from the AutoModpack host without waiting for CurseForge/Modrinth lookup");
@@ -143,7 +147,7 @@ final class ModpackObjectAcquisition {
 
 		downloadManager = new DownloadManager(totalBytes, storage.dataLocation().layout(), platformCache);
 		if (playerFacing) ScreenManager.download(downloadManager, modpackName.get(), onPlayerCancel);
-		downloadManager.attachDownloadClient(downloadClient);
+		downloadManager.attachTransport(transport);
 		for (var serverItem : files) {
 			Path downloadFile = storage.activePath(serverItem.file);
 			List<DownloadSource> sources = fetchManager == null ? List.of() : fetchManager.sourcesFor(serverItem.sha1);

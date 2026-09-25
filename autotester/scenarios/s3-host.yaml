@@ -1,0 +1,77 @@
+id: s3-host
+description: |
+  Serve the exported contract tree (head/journal/objects) from an
+  S3-compatible bucket - MinIO behind self-signed TLS with a public-download
+  bucket: HTTP/1.1, native Range, MD5 ETags the client has never seen. The MC
+  server runs AutoModpack for the login advertisement only (HTTP mode,
+  bindPort -1, endpoint advertised at the bucket), so the client must complete
+  a full first sync against the exact tree an operator would upload with
+  aws s3 sync or rclone. MinIO serves virtual-host style when the Host header
+  names the bucket, so the container alias doubles as the bucket name and the
+  client's fixed routes land inside the bucket untouched.
+renderClient: true
+connectionPaths:
+- mode: HTTP
+  bindPort: -1
+  endpointPort: 9000
+  advertisedEndpointHost: pack.s3
+  deferFirstSyncToLogin: true
+flow:
+- do: launch_server
+  name: start the advertising server
+- do: prepare_client
+  name: prepare the client profile while the server starts
+- do: wait_server
+  name: wait for the server to finish loading
+- do: wait_for
+  name: wait for the export receipt in the server log
+  timeout: 120s
+  until:
+    log:
+      container: server
+      matches: 'Exported \d+ files to'
+- do: start_s3_host
+  name: publish the exported tree into the bucket
+  dir: automodpack/export-http
+- do: launch_client
+  name: start the client
+- do: wait_bridge
+  name: wait for the client test bridge
+- do: connect
+  name: log in so the handshake advertises the bucket endpoint
+- use: accept_certificate
+- use: download_modpack
+- do: verify_files
+  name: verify every hosted file landed
+- do: wait_for
+  name: prove the bucket honored the contract ranges - the sync is final, so the open-ended-take degrade must never have been announced
+  timeout: 30s
+  until:
+    log:
+      container: client
+      not_matches: 'ignores HTTP Range requests; every object on this client now downloads in one open-ended take'
+- do: quit
+  name: quit the client
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: 'false'
+    automodpack:
+      config:
+        # The export refuses to mirror a pack whose downloads validate secrets.
+        validateSecrets: false
+        exportHttpDirectory: automodpack/export-http
+        exportHttpIncludeAll: true
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  files:
+  - path: config/static/tiny-one.txt
+    content: "static host one\n"
+  - path: config/static/tiny-two.txt
+    content: "static host two\n"
+  - path: config/static/mid.bin
+    sizeBytes: 2097152
+  - path: config/static/wide.bin
+    sizeBytes: 6291456

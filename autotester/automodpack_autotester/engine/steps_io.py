@@ -1,4 +1,4 @@
-"""Filesystem verbs: wait_file, wait_files, verify_files, verify_mods.
+"""Filesystem verbs: wait_file, verify_files.
 
 Log-based waits are expressed with ``wait_for`` + a ``log`` condition, so no
 dedicated verb is needed for them.
@@ -144,34 +144,12 @@ def wait_file_content(ctx, step):
     await_condition(_matches, timeout, step.get("poll"), f"file {template} did not contain the expected content")
 
 
-@verb("wait_files")
-def wait_files(ctx, step):
-    root = ctx.game_dir / ctx.resolve(str(step.get("root", "")))
-    rels = [ctx.resolve(str(p)) for p in step.get("paths", [])]
-    _await_exist(ctx, root, rels, step, f"files did not all appear under {root}", 120)
-
-
 @verb("verify_files")
 def verify_files(ctx, step):
     """Wait until every file declared in the scenario's ``serverFiles`` is present."""
     root = ctx.game_dir / ctx.resolve(str(step.get("root", "${active_dir}")))
-    rels = [str(rel) for rel, _ in ctx.scenario_files]
+    rels = [str(hosted.path) for hosted in ctx.scenario_files]
     _await_exist(ctx, root, rels, step, f"modpack files missing under {root}", 120)
-
-
-@verb("verify_mods")
-def verify_mods(ctx, step):
-    if not ctx.expected_mods:
-        return
-    mod_dir = ctx.game_dir / ctx.resolve(str(step.get("root", "${active_dir}/mods")))
-    timeout = parse_duration(step.get("timeout"), default=120)
-
-    def _all():
-        mods = {p.name for p in mod_dir.glob("*.jar")} if mod_dir.exists() else set()
-        ok = all(any(fnmatch(m, pat) for m in mods) for pat in ctx.expected_mods)
-        return _while_client_running(ctx, True if ok else None)
-
-    await_condition(_all, timeout, step.get("poll"), "expected mods missing")
 
 
 def _mirror_entry(ctx, modpack_id, content_token):
@@ -359,21 +337,24 @@ def assert_bootstrap_import(ctx, _step):
 
 @verb("assert_authenticated_secret")
 def assert_authenticated_secret(ctx, _step):
-    """Assert that authenticated login persisted the same non-anonymous secret on both sides."""
+    """Assert the login persisted the secret it issued, in every connection mode; only login-less preload shapes store absence."""
     modpack_id = str(ctx.vars.get("bootstrap_modpack_id", ""))
     origin = str(ctx.vars.get("bootstrap_origin", ""))
     if not modpack_id or not origin:
         raise AssertionError("bootstrap identity was not captured before authenticated secret assertion")
     connection_path = ctx.game_dir / "automodpack" / "client" / "data" / "packs" / modpack_id / "connection.json"
-    server_secrets_path = ctx.server_dir / "automodpack" / "server" / "secrets.json"
     try:
         connection = json.loads(connection_path.read_text(encoding="utf-8"))
-        server_secrets = json.loads(server_secrets_path.read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"authenticated secret state is not readable: {error}") from error
     client_secret = (connection.get("secrets", {}) or {}).get(origin)
     if not isinstance(client_secret, dict):
         raise AssertionError("authenticated login did not persist a client secret for the bootstrap origin")
+    server_secrets_path = ctx.server_dir / "automodpack" / "server" / "secrets.json"
+    try:
+        server_secrets = json.loads(server_secrets_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AssertionError(f"authenticated secret state is not readable: {error}") from error
     value = client_secret.get("secret")
     timestamp = client_secret.get("timestamp")
     anonymous = base64.urlsafe_b64encode(bytes(32)).decode("ascii").rstrip("=")
@@ -384,7 +365,6 @@ def assert_authenticated_secret(ctx, _step):
         raise AssertionError("server did not persist the secret issued during authenticated login")
     if not any(isinstance(entry.get("name"), str) and entry.get("name") for entry in matching_server_secrets):
         raise AssertionError("server persisted the secret without the player name it was issued to")
-    ctx.vars["authenticated_secret_persisted"] = True
 
 
 @verb("seed_unowned_local_file")
@@ -478,16 +458,16 @@ def assert_timeline_file(ctx, step):
     if fixture is None and content is None:
         return
 
-        if content is not None and payload.read_bytes() != content:
-            raise AssertionError(f"tracked timeline bytes for {logical_path!r} do not match the expected content")
-        if isinstance(fixture, dict):
-            try:
-                assert_valid_mod_fixture(payload.read_bytes(), fixture, ctx.target.minecraft)
-            except AssertionError as error:
-                raise AssertionError(
-                    f"tracked timeline bytes for {logical_path!r} are not the requested fixture: {error}; "
-                    f"tracked versions: {[{'sha1': str(e.get('sha1'))[:8], 'size': e.get('size')} for e in tracked]}"
-                ) from error
+    if content is not None and payload.read_bytes() != content:
+        raise AssertionError(f"tracked timeline bytes for {logical_path!r} do not match the expected content")
+    if isinstance(fixture, dict):
+        try:
+            assert_valid_mod_fixture(payload.read_bytes(), fixture, ctx.target.minecraft)
+        except AssertionError as error:
+            raise AssertionError(
+                f"tracked timeline bytes for {logical_path!r} are not the requested fixture: {error}; "
+                f"tracked versions: {[{'sha1': str(e.get('sha1'))[:8], 'size': e.get('size')} for e in tracked]}"
+            ) from error
 
 
 @verb("assert_generation")

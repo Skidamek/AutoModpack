@@ -238,9 +238,7 @@ def _assert_preload_acquired(ctx, step):
 _BUILTIN_VERBS = {
     "wait_file": steps_io.wait_file,
     "wait_file_content": steps_io.wait_file_content,
-    "wait_files": steps_io.wait_files,
     "verify_files": steps_io.verify_files,
-    "verify_mods": steps_io.verify_mods,
     "wait_generation": steps_io.wait_generation,
     "assert_file_content": steps_io.assert_file_content,
     "write_file": steps_io.write_file,
@@ -321,7 +319,6 @@ def _ctx_for(make_ctx, scenario: dict):
         modpack_name=sf.modpack_name,
         marker_rel=sf.marker,
         scenario_files=sf.files,
-        expected_mods=sf.expected_mods,
     )
     ctx.bridge = FakeBridge(ctx)
     ctx.logs_provider = lambda which, tail=None: (
@@ -359,7 +356,8 @@ def test_download_only_flow(make_ctx, flow_verbs):
     assert all(r["ok"] for r in results), [r for r in results if not r["ok"]]
     assert ctx.bridge.fingerprint == "AB:CD:EF:01:23"
     root = ctx.game_dir / ctx.active_projection_dir()
-    for rel, _ in ctx.scenario_files:
+    for hosted in ctx.scenario_files:
+        rel = hosted.path
         assert (root / rel).exists(), f"missing synced file {rel}"
 
 

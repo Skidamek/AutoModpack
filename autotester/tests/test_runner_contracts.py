@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 from automodpack_autotester import cli, client_steps, runner, server_steps, staging_steps
-from automodpack_autotester.config import load_macros
+from automodpack_autotester.config import generated_content, load_macros, write_generated
 from automodpack_autotester.engine.steps_io import wait_file, wait_file_content, wait_generation
 from automodpack_autotester.engine.util import ClientExited
 
@@ -107,9 +107,9 @@ def test_connection_path_matrix_runs_every_path(monkeypatch, tmp_path):
     result = cli._run_target_cases(
         _target(),
         [
-            {"id": "all-direct", "connectionPath": {"mode": "DIRECT"}},
             {"id": "all-magic", "connectionPath": {"mode": "MAGIC"}},
             {"id": "all-holepunch", "connectionPath": {"mode": "HOLEPUNCH"}},
+            {"id": "all-http", "connectionPath": {"mode": "HTTP"}},
         ],
         out_dir=tmp_path,
         artifact_dir=tmp_path,
@@ -118,7 +118,7 @@ def test_connection_path_matrix_runs_every_path(monkeypatch, tmp_path):
         resource_scope="scope",
     )
 
-    assert seen == ["DIRECT", "MAGIC", "HOLEPUNCH"]
+    assert seen == ["MAGIC", "HOLEPUNCH", "HTTP"]
     assert result["ok"] is True
     assert [path["connectionMode"] for path in result["connectionPaths"]] == seen
 
@@ -726,6 +726,49 @@ def test_wait_exit_expect_clean_and_crash(monkeypatch):
     client_steps._v_wait_client_exit(ctx, {"expect": "crash"})
     with pytest.raises(AssertionError):
         client_steps._v_wait_client_exit(ctx, {"expect": "clean"})
+
+
+# ── netem knob and hosted size fixtures ─────────────────────────────────────
+
+
+def test_netem_parser_yields_tc_tokens_and_rejects_everything_else():
+    assert client_steps.parse_netem("delay=300ms,rate=5mbit") == ["delay", "300ms", "rate", "5mbit"]
+    assert client_steps.parse_netem("rate=5kbit") == ["rate", "5kbit"]
+    assert client_steps.parse_netem("delay=1.5s") == ["delay", "1.5s"]
+    for bad in ("", "delay=300", "rate=5mb", "delay=1s,foo=2ms", "delay=1ms,delay=2ms", "=1ms", "delay="):
+        with pytest.raises(ValueError):
+            client_steps.parse_netem(bad)
+
+
+def test_run_case_refuses_netem_on_host_networking(tmp_path):
+    with pytest.raises(ValueError, match="--netem requires bridge networking"):
+        runner.run_case(
+            _target(),
+            {"network": "host", "flow": [{"do": "quit"}]},
+            out_dir=tmp_path,
+            artifact_dir=tmp_path,
+            client_image="img",
+            settings={},
+            resource_scope="scope",
+            netem=["delay", "1ms"],
+        )
+
+
+def test_generated_content_is_deterministic_and_byte_exact():
+    assert generated_content("config/a.bin", 10) == "config/a.b"
+    assert len(generated_content("config/a.bin", 4194305)) == 4194305
+    assert generated_content("config/a.bin", 4194305) == generated_content("config/a.bin", 4194305)
+    assert generated_content("config/a.bin", 12) != generated_content("config/b.bin", 12)
+    assert generated_content("config/a.bin", 0) == ""
+    with pytest.raises(ValueError):
+        generated_content("config/a.bin", -1)
+
+
+def test_write_generated_round_trips_generated_content(tmp_path):
+    for name, size in [("config/a.bin", 0), ("config/a.bin", 10), ("config/edge/chunk-under.bin", 7920), ("config/tiny/tiny-001.bin", 16384), ("config/big.bin", 1 << 20)]:
+        streamed = tmp_path / f"streamed-{size}"
+        write_generated(streamed, name, size)
+        assert streamed.read_bytes() == generated_content(name, size).encode("utf-8"), (name, size)
 
 
 # ── verb discovery ──────────────────────────────────────────────────────────

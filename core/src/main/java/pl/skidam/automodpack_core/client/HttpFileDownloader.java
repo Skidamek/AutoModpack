@@ -9,37 +9,65 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.util.Locale;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.IntConsumer;
-import java.util.zip.GZIPInputStream;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import pl.skidam.automodpack_core.protocol.LocalFileWriter;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.protocol.PartialResume;
+import pl.skidam.automodpack_core.protocol.StaleRangeException;
+import pl.skidam.automodpack_core.protocol.WireCodec;
+import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.DownloadSource;
+import pl.skidam.automodpack_core.utils.HttpClientPool;
 
 public class HttpFileDownloader {
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-	// Shared Clients for HTTP/2 Multiplexing and Connection Pooling
-	private static final HttpClient DIRECT_CLIENT = createClient(HttpClient.Redirect.NEVER);
-	private static final HttpClient REDIRECT_CLIENT = createClient(HttpClient.Redirect.NORMAL);
+	// A download worker reuses one 512 KiB read buffer for every attempt instead of allocating half a MiB per call.
+	private static final ThreadLocal<byte[]> READ_BUFFERS = ThreadLocal.withInitial(() -> new byte[NetUtils.READ_BUFFER_BYTES]);
+
+	// The body-stall tripwire, the same receipt as the wire's TRANSFER_WRITE_STALL_TIMEOUT: a CDN body that delivers
+	// zero bytes for 90 s is gone. A live link resets the window with every read - at the receipted drain floor
+	// (~31 KB/s, the 20-client share of a 5 Mbps uplink) a 512 KiB READ_BUFFER_BYTES read completes every ~17 s, 5x
+	// inside the window - so only a stalled or silently dropped body ever touches it. The request timeout covers the
+	// response head only; tripping closes the body stream under its blocked reader, the read throws, and the platform
+	// retry ladder recovers the attempt from the stored partial.
+	private static final Duration BODY_STALL_TIMEOUT = NetUtils.TRANSFER_WRITE_STALL_TIMEOUT;
+	// The fuse ticks six times inside its window, so a stall trips at most one tick past the 90 s line.
+	private static final long STALL_FUSE_TICK_SECONDS = 15;
+
+	/** The one daemon checker for every in-flight platform body; it lives as long as the JVM, like NET_EXECUTOR. */
+	private static final ScheduledExecutorService BODY_STALL_WATCHDOG = Executors.newSingleThreadScheduledExecutor(
+			new CustomThreadFactoryBuilder().setNameFormat("AutoModpackBodyStallFuse").setDaemon(true).build());
 
 	/**
 	 * Downloads a file from a URL to a target path using HTTP/2 if available.
 	 * Blocks the calling thread (designed for use in Worker Threads).
 	 *
+	 * @param fileSize
+	 *            Advertised object size; tiles fill {@code target} as {@code staging/<sha1>/}.
+	 * @param offset
+	 *            The first missing object byte; bytes before it already sit in finished tiles.
 	 * @param progressAction
 	 *            A callback to report bytes read (for bandwidth tracking).
 	 * @throws IOException
 	 *             If network or IO fails.
+	 * @throws StaleRangeException
+	 *             If the stored partial cannot serve as the resume prefix (the server cannot answer from the offset).
 	 * @throws InterruptedException
 	 *             If the download is cancelled.
 	 */
-	public void download(DownloadSource source, Path target, IntConsumer progressAction) throws IOException, InterruptedException {
+	public void download(DownloadSource source, Path target, long fileSize, long offset, IntConsumer progressAction) throws IOException, InterruptedException {
 		URI uri;
 		try {
 			uri = URI.create(source.url());
@@ -48,7 +76,9 @@ public class HttpFileDownloader {
 		}
 
 		boolean authenticate = isAuthenticatedCurseForgeTarget(source, uri);
-		HttpResponse<InputStream> response = send(source, uri, authenticate, authenticate ? DIRECT_CLIENT : REDIRECT_CLIENT, target);
+		// The key-carrying request must never follow a redirect (DIRECT), so the explicit dance below re-sends it
+		// without the key; every other source follows redirects in the pool like it always has.
+		HttpResponse<InputStream> response = send(source, uri, authenticate, offset, authenticate ? HttpClientPool.direct() : HttpClientPool.redirects(), target);
 
 		if (authenticate && response.statusCode() >= 300 && response.statusCode() < 400) {
 			try (InputStream ignored = response.body()) {
@@ -60,40 +90,77 @@ public class HttpFileDownloader {
 				}
 				if (!"https".equalsIgnoreCase(uri.getScheme())) throw new IOException("Refusing CurseForge HTTPS downgrade redirect");
 			}
-			response = send(source, uri, false, REDIRECT_CLIENT, target);
+			response = send(source, uri, false, offset, HttpClientPool.redirects(), target);
 		}
 
 		int statusCode = response.statusCode();
-		if (statusCode != 200) {
+		if (statusCode == 416) {
+			try (InputStream ignored = response.body()) {
+				PartialResume.delete(target);
+				throw new StaleRangeException();
+			}
+		}
+		long writeOffset = offset;
+		if (statusCode == 206) {
+			writeOffset = PartialResume.requireResumeStart(response.headers().firstValue("Content-Range").orElse(null), offset);
+		} else if (statusCode != 200) {
 			try (InputStream ignored = response.body()) {
 				throw new HttpStatusException(statusCode);
 			}
+		} else if (offset > 0) {
+			LOGGER.debug("Server ignored the Range header for {}; pulling the whole object from zero", target.getFileName());
+			PartialResume.delete(target);
+			writeOffset = 0;
 		}
 
-		boolean isGzip = "gzip".equalsIgnoreCase(response.headers().firstValue("Content-Encoding").orElse(""));
+		String encoding = response.headers().firstValue("Content-Encoding").orElse("").trim().toLowerCase(Locale.ROOT);
+		WireCodec codec = WireCodec.negotiate(encoding);
+		if (codec == null && !encoding.isEmpty()) throw new IOException("Unsupported Content-Encoding: " + encoding);
 
-		try (InputStream rawIn = response.body(); InputStream in = isGzip ? new GZIPInputStream(rawIn) : rawIn; OutputStream out = LocalFileWriter.open(target)) {
-
-			byte[] buffer = new byte[NetUtils.DEFAULT_CHUNK_SIZE];
-			int bytesRead;
-			while ((bytesRead = in.read(buffer)) != -1) {
-				if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
-				out.write(buffer, 0, bytesRead);
-
-				if (progressAction != null) progressAction.accept(bytesRead);
+		try (InputStream rawIn = response.body()) {
+			AtomicLong lastProgressNanos = new AtomicLong(System.nanoTime());
+			ScheduledFuture<?> stallFuse = armBodyStallFuse(rawIn, lastProgressNanos, target.getFileName());
+			try (InputStream in = codec == null ? rawIn : codec.unwrap(rawIn);
+					OutputStream out = PartialResume.writer(target, fileSize, writeOffset)) {
+				byte[] buffer = READ_BUFFERS.get();
+				long written = writeOffset;
+				int bytesRead;
+				while ((bytesRead = in.read(buffer)) != -1) {
+					if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+					out.write(buffer, 0, bytesRead);
+					written += bytesRead;
+					lastProgressNanos.set(System.nanoTime());
+					if (progressAction != null) progressAction.accept(bytesRead);
+				}
+				if (written < fileSize) throw new IOException("Platform body ended at " + written + " of " + fileSize + " bytes for " + target.getFileName());
+			} finally {
+				stallFuse.cancel(false);
 			}
 		}
 	}
 
-	private HttpResponse<InputStream> send(DownloadSource source, URI uri, boolean authenticate, HttpClient client, Path target)
+	/** The per-download body fuse: zero bytes for BODY_STALL_TIMEOUT closes the body stream under its blocked reader. */
+	private static ScheduledFuture<?> armBodyStallFuse(InputStream body, AtomicLong lastProgressNanos, Object fileName) {
+		return BODY_STALL_WATCHDOG.scheduleWithFixedDelay(() -> {
+			if (System.nanoTime() - lastProgressNanos.get() < BODY_STALL_TIMEOUT.toNanos()) return;
+			LOGGER.warn("The platform download body of {} delivered no bytes for {} s; closing it for the retry ladder", fileName, BODY_STALL_TIMEOUT.toSeconds());
+			try {
+				body.close();
+			} catch (IOException ignored) {
+			}
+		}, STALL_FUSE_TICK_SECONDS, STALL_FUSE_TICK_SECONDS, TimeUnit.SECONDS);
+	}
+
+	private HttpResponse<InputStream> send(DownloadSource source, URI uri, boolean authenticate, long offset, HttpClient client, Path target)
 			throws IOException, InterruptedException {
 		HttpRequest.Builder request = HttpRequest.newBuilder().uri(uri).header("User-Agent", NetUtils.USER_AGENT)
-				.header("Accept-Encoding", "gzip").timeout(NetUtils.NETWORK_TIMEOUT).GET();
+				.header("Accept-Encoding", WireCodec.offeredEncodings()).timeout(NetUtils.NETWORK_TIMEOUT).GET();
 		if (authenticate) request.header("x-api-key", summonKey());
+		if (offset > 0) request.header("Range", "bytes=" + offset + "-");
 
 		try {
 			HttpResponse<InputStream> response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
-			LOGGER.info("HTTPS Download {}: Provider={} Host={} Protocol={} Status={}", target.getFileName(), source.provider(), uri.getHost(),
+			LOGGER.debug("HTTPS Download {}: Provider={} Host={} Protocol={} Status={}", target.getFileName(), source.provider(), uri.getHost(),
 					response.version(), response.statusCode());
 			return response;
 		} catch (InterruptedException | IOException e) {
@@ -101,11 +168,6 @@ public class HttpFileDownloader {
 		} catch (Exception e) {
 			throw new IOException("HTTP Client Protocol Error", e);
 		}
-	}
-
-	private static HttpClient createClient(HttpClient.Redirect redirects) {
-		return HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).followRedirects(redirects).connectTimeout(NetUtils.NETWORK_TIMEOUT)
-				.executor(Executors.newCachedThreadPool()).build();
 	}
 
 	private static boolean isAuthenticatedCurseForgeTarget(DownloadSource source, URI uri) {

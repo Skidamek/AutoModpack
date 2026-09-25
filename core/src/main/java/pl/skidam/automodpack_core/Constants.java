@@ -18,7 +18,6 @@ import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 public final class Constants {
 	public static final Logger LOGGER = LogManager.getLogger("AutoModpack");
 	public static final String MOD_ID = "automodpack"; // For real its "automodpack_mod" but we use this for resource locations etc.
-	public static Boolean DEBUG = false;
 	public static Boolean preload;
 	public static long PRELOAD_TIME;
 	public static String MC_VERSION;

@@ -14,7 +14,7 @@ import time
 import zipfile
 from pathlib import Path
 
-from . import client_steps, server_steps, staging_steps  # noqa: F401  -- import for verb registration
+from . import client_steps, server_steps, s3_host, staging_steps, static_host  # noqa: F401  -- import for verb registration
 from .config import Target, load_macros, parse_server_files
 from .docker_harness import _assert_running, _container_logs, _ensure_network, _remove_container, _remove_network
 from .engine import ClientExited, Context, run_flow
@@ -100,11 +100,24 @@ def run_case(
     client_image: str,
     settings: dict,
     resource_scope: str,
+    netem: list[str] | None = None,
+    loss: str = "",
+    server_netem: list[str] | None = None,
 ) -> dict:
     started = time.monotonic()
     scenario_id = scenario.get("id", "?")
     connection_mode = str((scenario.get("connectionPath") or {}).get("mode", "")).upper() or None
     net_mode = transport(scenario, settings)
+    # On host networking the client container shares the host's interfaces, so a
+    # qdisc on its eth0 would shape the host's own traffic instead of the test's.
+    if netem and net_mode == "host":
+        raise ValueError("--netem requires bridge networking: on host networking the client shares the host's eth0")
+    if loss and net_mode == "host":
+        raise ValueError("--loss requires bridge networking: on host networking the server shares the host's eth0")
+    if server_netem and net_mode == "host":
+        raise ValueError("--server-netem requires bridge networking: on host networking the server shares the host's eth0")
+    if server_netem and loss:
+        raise ValueError("--server-netem and --loss both want the server's one root qdisc; pass the loss percentage via --loss and the delay/rate via --server-netem, not both")
     mode = scenario_mode(scenario)
     case_dir = out_dir / f"{target.id}-{int(time.time())}-{secrets.token_hex(3)}"
     server_dir = case_dir / "server"
@@ -116,6 +129,8 @@ def run_case(
     srv_name = f"{resource_prefix}-s-{secrets.token_hex(4)}"[:63]
     cli_name = f"{resource_prefix}-c-{secrets.token_hex(4)}"[:63]
     prep_name = cli_name.replace("-c-", "-p-", 1)
+    static_name = f"{resource_prefix}-h-{secrets.token_hex(4)}"[:63]
+    s3_name = f"{resource_prefix}-o-{secrets.token_hex(4)}"[:63]
     server_host = "127.0.0.1" if net_mode == "host" else srv_name
     token = secrets.token_hex(16)
     case_seconds = float(settings.get("timeouts", {}).get("caseSeconds", 1800))
@@ -129,7 +144,7 @@ def run_case(
             return
         deadline_expired.set()
         logger.error("[%s] case exceeded its %.0fs deadline; removing its Docker resources", target.id, case_seconds)
-        for name in (cli_name, prep_name, srv_name):
+        for name in (cli_name, prep_name, srv_name, static_name, s3_name):
             try:
                 _remove_container(name)
             except Exception:
@@ -167,9 +182,16 @@ def run_case(
             modpack_name=sf.modpack_name,
             marker_rel=sf.marker,
             scenario_files=sf.files,
-            expected_mods=sf.expected_mods,
             server_host=server_host,
+            static_name=static_name,
+            static_host_image=str(settings.get("images", {}).get("staticHost", "automodpack-autotest-static-host:local")),
+            s3_name=s3_name,
+            minio_image=str(settings.get("images", {}).get("minio", "minio/minio:latest")),
+            minio_client_image=str(settings.get("images", {}).get("minioClient", "minio/mc:latest")),
             resource_scope=resource_scope,
+            netem=list(netem or []),
+            loss=loss,
+            server_netem=list(server_netem or []),
             vars={
                 **dict(scenario.get("vars", {}) or {}),
                 "server_endpoint_port": int((scenario.get("connectionPath") or {}).get("endpointPort", 25565)),
@@ -229,7 +251,7 @@ def run_case(
 
     finally:
         case_finished.set()
-        for name in [cli_name, prep_name, srv_name]:
+        for name in [cli_name, prep_name, srv_name, static_name, s3_name]:
             try:
                 logs = _container_logs(name)
                 if logs:

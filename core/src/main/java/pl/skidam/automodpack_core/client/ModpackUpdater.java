@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.Constants.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -22,7 +23,8 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.PackTransport;
+import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
@@ -39,6 +41,7 @@ import pl.skidam.automodpack_core.update.RestartPolicy;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.PlatformCache;
@@ -66,7 +69,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private SelectedModpackTarget selectedTarget;
 	private ModpackJsons.ModpackContentFields serverModpackContent;
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
-	private final DownloadClient downloadClient;
+	private final PackTransport transport;
 	private final AtomicBoolean closed = new AtomicBoolean();
 	private final UpdateLoopDetector updateLoopDetector;
 	private final ClientStorage storage;
@@ -107,11 +110,9 @@ public class ModpackUpdater implements AutoCloseable {
 		return !missingSelectedTargetObjects().isEmpty();
 	}
 
-	/** The selected target's download cost with the local store: the bytes of its objects not already acquired. */
+	/** The selected target's remaining wire cost: missing objects minus finished staging slices. */
 	long uncachedSelectedTargetBytes() throws IOException {
-		long bytes = 0;
-		for (var item : missingSelectedTargetObjects()) bytes += item.size;
-		return bytes;
+		return ModpackUtils.remainingUncachedBytes(missingSelectedTargetObjects(), storage);
 	}
 
 	ConnectionJsons.ConnectionInfo connectionInfo() {
@@ -213,7 +214,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	public ModpackUpdater(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage,
-			DownloadClient downloadClient) {
+			PackTransport transport) {
 		this.selectedTarget = selectedTarget;
 		this.serverModpackContent = selectedTarget == null ? null : selectedTarget.flatTarget();
 		this.connectionInfo = connectionInfo;
@@ -223,10 +224,10 @@ public class ModpackUpdater implements AutoCloseable {
 		this.updateLoopDetector = new UpdateLoopDetector(storage.restartLoopStateFile());
 		this.sourceCatalogue = new SourceCatalogue(() -> selectedTarget, this.platformCache);
 		this.projectionLoader = new ProjectionLoader(this.storage, this::storedTarget);
-		this.downloadClient = downloadClient;
+		this.transport = transport;
 		AtomicBoolean playerCancelled = new AtomicBoolean();
-		this.objectAcquisition = new ModpackObjectAcquisition(this.storage, this.platformCache, this.sourceCatalogue, this.planBuilder, this.connectionInfo, this.downloadClient,
-				playerCancelled, this::getModpackName, this::cancelFromPlayer);
+		this.objectAcquisition = new ModpackObjectAcquisition(this.storage, this.platformCache, this.sourceCatalogue, this.planBuilder, this.connectionInfo, this.transport,
+				playerCancelled, this::getModpackName, this::cancelFromPlayer, selectedTarget == null ? "" : selectedTarget.document().waitingMusicSha1());
 		this.review = new ReviewSession(this, this.storage, this.sourceCatalogue, playerCancelled);
 		this.lifecycle = new LifecycleFlow(this, this.storage, this.planBuilder, this.changelogs);
 	}
@@ -552,6 +553,21 @@ public class ModpackUpdater implements AutoCloseable {
 		});
 	}
 
+	/** Drops slice directories whose sha1 is not in the selected target; acquired objects already deleted theirs on promote. */
+	private void reconcileStaging() {
+		try {
+			Set<String> needed = new HashSet<>();
+			if (selectedTarget != null && selectedTarget.flatTarget().list != null) {
+				for (var item : selectedTarget.flatTarget().list) {
+					if (item.sha1 != null && !item.sha1.isBlank()) needed.add(HashUtils.normalizeSha1(item.sha1));
+				}
+			}
+			PartialResume.keepOnly(storage.stagingDirectory(), needed);
+		} catch (IOException e) {
+			LOGGER.warn("Could not drop unneeded download slices after the update", e);
+		}
+	}
+
 	void requireLiveConnection() throws IOException {
 		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IOException("Modpack connection is unavailable");
 		objectAcquisition.requireTransferSession();
@@ -566,6 +582,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private ApplyStatus runReviewedFlow(ApplyFlow flow, FlowBody body) {
 		try {
 			body.run();
+			reconcileStaging();
 			return ApplyStatus.APPLIED;
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("{} transaction {} is waiting for the detached helper to release {}", flow.name(), e.getTransactionId(), e.getBlockedPath());
@@ -627,7 +644,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (current != null) current.cancel();
 		objectAcquisition.release();
 		if (closed.compareAndSet(false, true)) {
-			if (downloadClient != null) downloadClient.close();
+			if (transport != null) transport.close();
 			platformCache.close();
 		}
 		ScreenManager.restore();

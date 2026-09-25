@@ -7,9 +7,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -24,8 +21,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
 
-import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.HttpClientPool;
 
 /**
  * Resolves an admin-published certificate fingerprint from DNS under the
@@ -37,11 +35,9 @@ public final class DnsPinResolver {
 	public static final String RECORD_VERSION = "amp1";
 
 	private static final List<String> DOH_RESOLVERS = List.of("https://cloudflare-dns.com/dns-query", "https://dns.quad9.net/dns-query");
-	private static final Duration TIMEOUT = NetUtils.HTTP_TIMEOUT;
 	private static final Duration MAX_PIN_CACHE_TIME = Duration.ofMinutes(5);
 	private static final Duration MAX_ABSENCE_CACHE_TIME = Duration.ofSeconds(30);
 	private static final int MAX_CACHE_ENTRIES = 128;
-	private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
 	private static final Resolver RESOLVER = new Resolver(DOH_RESOLVERS, DnsPinResolver::queryResolverAsync, System::currentTimeMillis);
 	private static final Base64.Encoder DOH_QUERY_ENCODING = Base64.getUrlEncoder().withoutPadding();
 	private static final int TYPE_SOA = 6, TYPE_TXT = 16, TYPE_OPT = 41;
@@ -87,7 +83,7 @@ public final class DnsPinResolver {
 
 	private record ResolverTxt(String value, long ttlSeconds) {}
 
-	private record CombinedResult(LookupResult result, long ttlSeconds) {}
+	record CombinedResult(LookupResult result, long ttlSeconds) {}
 
 	private record CacheEntry(LookupResult result, long expiresAtMillis) {}
 
@@ -186,24 +182,26 @@ public final class DnsPinResolver {
 		}
 	}
 
-	private static CombinedResult combineResolverResults(String host, List<ResolverResult> results) {
-		if (results.stream().allMatch(ResolverAbsent.class::isInstance)) {
-			return new CombinedResult(new NoPolicy(NoPolicyReason.ABSENT), minimumTtl(results));
-		}
-
-		if (results.stream().allMatch(ResolverMisconfigured.class::isInstance)) {
-			String reason = ((ResolverMisconfigured) results.get(0)).reason();
+	static CombinedResult combineResolverResults(String host, List<ResolverResult> results) {
+		// The record is the operator's explicit statement, so the combination fails closed: a resolver that saw a
+		// malformed record, or two that disagree on the fingerprint, is a contradiction no available answer can
+		// paper over. Only a chorus of unavailable resolvers reads as no policy at all.
+		if (results.stream().anyMatch(ResolverMisconfigured.class::isInstance)) {
+			String reason = results.stream().filter(ResolverMisconfigured.class::isInstance).map(ResolverMisconfigured.class::cast).map(ResolverMisconfigured::reason).findFirst().orElse("misconfigured");
 			LOGGER.error("DNSSEC AutoModpack fingerprint for {} is invalid: {}", host, reason);
 			return new CombinedResult(new Misconfigured(reason), 0);
 		}
 
-		if (results.stream().allMatch(ResolverPin.class::isInstance)) {
-			String expected = ((ResolverPin) results.get(0)).fingerprint();
-			boolean agrees = results.stream().map(ResolverPin.class::cast).allMatch(result -> result.fingerprint().equals(expected));
-			if (agrees) return new CombinedResult(new Authoritative(expected), minimumTtl(results));
-			LOGGER.warn("DNS resolvers disagree on the AutoModpack fingerprint for {}", host);
+		List<String> pins = results.stream().filter(ResolverPin.class::isInstance).map(ResolverPin.class::cast).map(ResolverPin::fingerprint).distinct().toList();
+		if (pins.size() == 1) return new CombinedResult(new Authoritative(pins.get(0)), minimumTtl(results));
+		if (pins.size() > 1) {
+			LOGGER.error("DNS resolvers disagree on the AutoModpack fingerprint for {}", host);
+			return new CombinedResult(new Misconfigured("resolvers disagree on the fingerprint"), 0);
 		}
 
+		if (results.stream().allMatch(ResolverAbsent.class::isInstance)) {
+			return new CombinedResult(new NoPolicy(NoPolicyReason.ABSENT), minimumTtl(results));
+		}
 		return new CombinedResult(new NoPolicy(NoPolicyReason.UNAVAILABLE), 0);
 	}
 
@@ -217,25 +215,22 @@ public final class DnsPinResolver {
 		return minimum == Long.MAX_VALUE ? 0 : minimum;
 	}
 
+	/** One DoH exchange on the shared outbound pool; the blocking call rides a net thread so the resolver's chain stays async. */
 	private static CompletableFuture<ResolverResult> queryResolverAsync(String resolver, String name) {
-		try {
-			HttpRequest request = HttpRequest.newBuilder().uri(URI.create(resolver + "?dns=" + DOH_QUERY_ENCODING.encodeToString(buildTxtQuery(name)))).header("Accept", "application/dns-message").timeout(TIMEOUT).GET()
-					.build();
-
-			return HTTP_CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray()).thenApply(response -> {
+		return CompletableFuture.supplyAsync(() -> {
+			try {
+				String url = resolver + "?dns=" + DOH_QUERY_ENCODING.encodeToString(buildTxtQuery(name));
+				HttpResponse<byte[]> response = HttpClientPool.request(url, Map.of("Accept", "application/dns-message"), null, false);
 				if (response.statusCode() < 200 || response.statusCode() >= 300) {
 					LOGGER.warn("DNS fingerprint resolver {} returned HTTP {} for {}", resolver, response.statusCode(), name);
 					return new ResolverUnavailable();
 				}
 				return parseDnsResponse(response.body());
-			}).exceptionally(error -> {
-				LOGGER.debug("DNS fingerprint lookup for {} via {} failed", name, resolver, error);
+			} catch (Exception e) {
+				LOGGER.debug("DNS fingerprint lookup for {} via {} failed", name, resolver, e);
 				return new ResolverUnavailable();
-			});
-		} catch (Exception e) {
-			LOGGER.debug("Failed to build DNS fingerprint request for {} via {}", name, resolver, e);
-			return CompletableFuture.completedFuture(new ResolverUnavailable());
-		}
+			}
+		}, DownloadClient.NET_EXECUTOR);
 	}
 
 	/**

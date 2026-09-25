@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.protocol;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.protocol.NetUtils.MAX_CHUNK_SIZE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.NETWORK_TIMEOUT;
 
 import java.io.IOException;
@@ -21,15 +20,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ssl.SSLKeyException;
 
-import io.netty.buffer.ByteBuf;
-
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchFailure;
 import pl.skidam.mcholepunch.HolepunchHandler;
 
 public class HolepunchSocket extends Socket {
-	// Tripwire: one max protocol chunk. File requests never reach this; only a stalled consumer does.
-	static final int MAX_QUEUED_READ_BYTES = MAX_CHUNK_SIZE;
+	// Tripwire sized by the old chunk-size negotiation it outlived: a healthy TLS peer drains continuously, so only a stalled consumer queues this much.
+	static final int MAX_QUEUED_READ_BYTES = 8 * 1024 * 1024;
 	private volatile HolepunchConnection connection;
 	private final HolepunchInputStream in;
 	private volatile HolepunchOutputStream out;
@@ -72,7 +69,7 @@ public class HolepunchSocket extends Socket {
 				boolean localClose = closed;
 				closed = true;
 				in.feedEnd();
-				if (!localClose) LOGGER.info("Holepunch transport closed unexpectedly: [{}] {}", failure.kind(), failure.getMessage());
+				if (!localClose) LOGGER.debug("Holepunch transport closed: [{}] {}", failure.kind(), failure.getMessage());
 			}
 		};
 	}
@@ -101,21 +98,6 @@ public class HolepunchSocket extends Socket {
 		HolepunchOutputStream output = out;
 		if (output == null) throw new IllegalStateException("HolepunchSocket is not connected");
 		return output;
-	}
-
-	void writeBuffer(ByteBuf buffer) throws IOException {
-		int readerIndex = buffer.readerIndex();
-		int readableBytes = buffer.readableBytes();
-		if (readableBytes == 0) return;
-		if (buffer.nioBufferCount() == 1) {
-			writeConnection(buffer.nioBuffer(readerIndex, readableBytes));
-		} else if (buffer.nioBufferCount() > 1) {
-			for (ByteBuffer nioBuffer : buffer.nioBuffers(readerIndex, readableBytes)) writeConnection(nioBuffer);
-		} else {
-			byte[] bytes = new byte[readableBytes];
-			buffer.getBytes(readerIndex, bytes);
-			writeConnection(ByteBuffer.wrap(bytes));
-		}
 	}
 
 	@Override

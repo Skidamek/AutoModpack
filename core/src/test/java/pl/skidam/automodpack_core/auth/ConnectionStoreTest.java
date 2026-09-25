@@ -33,12 +33,12 @@ class ConnectionStoreTest {
 	void approvalsSurviveAReconnectToAnotherServer() throws Exception {
 		ClientStorage storage = TestDataRoot.open(Files.createDirectory(temporaryDirectory.resolve("game")), Files.createDirectory(temporaryDirectory.resolve("data")));
 		ConnectionJsons.ConnectionInfo creative = new ConnectionJsons.ConnectionInfo(AddressHelpers.parseOrigin("creative.example.com"),
-				AddressHelpers.parseEndpoint("downloads.example.com:25564"), ModpackConnectionMode.DIRECT, null, null);
+				AddressHelpers.parseEndpoint("downloads.example.com:25564"), ModpackConnectionMode.HTTP, null, null);
 		creative.approveOrigin(AddressHelpers.formatAddress(creative.origin));
 		ConnectionStore.saveConnection(storage, "pack111", creative);
 
 		ConnectionJsons.ConnectionInfo survival = new ConnectionJsons.ConnectionInfo(AddressHelpers.parseOrigin("survival.example.com"),
-				AddressHelpers.parseEndpoint("downloads2.example.com:25564"), ModpackConnectionMode.DIRECT, null, null);
+				AddressHelpers.parseEndpoint("downloads2.example.com:25564"), ModpackConnectionMode.HTTP, null, null);
 		ConnectionJsons.ConnectionInfo stored = ConnectionStore.getConnection(storage, "pack111");
 		stored.approvedOrigins().forEach(survival::approveOrigin);
 		survival.approveOrigin(AddressHelpers.formatAddress(survival.origin));
@@ -55,7 +55,7 @@ class ConnectionStoreTest {
 		ClientStorage storage = TestDataRoot.open(Files.createDirectory(temporaryDirectory.resolve("game")), Files.createDirectory(temporaryDirectory.resolve("data")));
 		Files.createDirectories(storage.connectionFile("pack111").getParent());
 		Files.writeString(storage.connectionFile("pack111"), """
-				{"connection": {"origin": "creative.example.com", "endpoint": "downloads.example.com:25564", "connectionMode": "DIRECT"}}
+				{"connection": {"origin": "creative.example.com", "endpoint": "downloads.example.com:25564", "connectionMode": "HTTP"}}
 				""");
 
 		ConnectionJsons.ConnectionInfo stored = ConnectionStore.getConnection(storage, "pack111");
@@ -64,12 +64,28 @@ class ConnectionStoreTest {
 	}
 
 	@Test
+	void aPersistedRemovedConnectionModeIsSetAsideAndReadsAsAbsent() throws Exception {
+		ClientStorage storage = TestDataRoot.open(Files.createDirectory(temporaryDirectory.resolve("game")), Files.createDirectory(temporaryDirectory.resolve("data")));
+		Path record = storage.connectionFile("pack111");
+		Files.createDirectories(record.getParent());
+		Files.writeString(record, """
+				{"connection": {"origin": "creative.example.com", "endpoint": "downloads.example.com:25564", "connectionMode": "DIRECT"}}
+				""", StandardCharsets.UTF_8);
+
+		assertNull(ConnectionStore.getConnection(storage, "pack111"));
+		assertFalse(Files.exists(record));
+		try (var evidence = Files.list(record.getParent())) {
+			assertTrue(evidence.anyMatch(file -> file.getFileName().toString().startsWith("connection.json" + ".corrupt-")));
+		}
+	}
+
+	@Test
 	void stalePacksAreTheInstalledOnesThisOriginNoLongerServes() throws Exception {
 		ClientStorage storage = TestDataRoot.open(Files.createDirectory(temporaryDirectory.resolve("game")), Files.createDirectory(temporaryDirectory.resolve("data")));
 		ConnectionJsons.ConnectionInfo shared = new ConnectionJsons.ConnectionInfo(AddressHelpers.parseOrigin("shared.example.com"),
-				AddressHelpers.parseEndpoint("downloads.example.com:25564"), ModpackConnectionMode.DIRECT, null, null);
+				AddressHelpers.parseEndpoint("downloads.example.com:25564"), ModpackConnectionMode.HTTP, null, null);
 		ConnectionJsons.ConnectionInfo elsewhere = new ConnectionJsons.ConnectionInfo(AddressHelpers.parseOrigin("elsewhere.example.com"),
-				AddressHelpers.parseEndpoint("other.example.com:25564"), ModpackConnectionMode.DIRECT, null, null);
+				AddressHelpers.parseEndpoint("other.example.com:25564"), ModpackConnectionMode.HTTP, null, null);
 		ConnectionStore.saveConnection(storage, "abc1234", shared);
 		ConnectionStore.saveConnection(storage, "xyz9876", shared);
 		ConnectionStore.saveConnection(storage, "pqr5432", elsewhere);

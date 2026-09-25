@@ -17,6 +17,7 @@ import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.ContentTree;
@@ -86,7 +87,7 @@ public final class ClientGenerationStore {
 	/** The active pack's document: active-state identity and ledger, its mirror entry, and its policy document from the CAS. */
 	public Optional<PackDocument> activeDocument() throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-		return state == null ? Optional.empty() : Optional.of(document(mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger)));
+		return state == null ? Optional.empty() : Optional.of(document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger)));
 	}
 
 	/** Reconstructs the active target from the active document and the persisted selection intent, without server access. */
@@ -107,7 +108,7 @@ public final class ClientGenerationStore {
 
 	private SelectedModpackTarget resolveActive(ClientStorageJsons.ClientGenerationStateFields state, ClientPlatform platform) throws IOException {
 		Objects.requireNonNull(platform, "platform");
-		PackDocument document = document(mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger));
+		PackDocument document = document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger));
 		Optional<SelectionIntent> stored = new ClientSelectionStore(storage.selectionFile()).get(state.modpackId);
 		return stored.isPresent()
 				? SelectedModpackTarget.prepare(document, null, stored.get(), platform)
@@ -118,7 +119,7 @@ public final class ClientGenerationStore {
 	public PackDocument document(UpdateTransaction transaction) throws IOException {
 		Objects.requireNonNull(transaction, "transaction");
 		if (transaction.ownershipLedger == null) throw new IOException("Pending modpack transaction carries no ownership ledger: " + transaction.transactionId);
-		return document(mirrorEntry(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken()), OwnershipLedger.fromFields(transaction.ownershipLedger));
+		return document(transaction.plan().modpackId(), mirrorEntry(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken()), OwnershipLedger.fromFields(transaction.ownershipLedger));
 	}
 
 	/** The newest mirror generation of one pack; its ledger comes from the active pointer when that is the newest generation. */
@@ -134,8 +135,8 @@ public final class ClientGenerationStore {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state != null && state.modpackId.equals(normalizedModpackId) && state.contentToken.equals(entry.contentToken()))
-			return document(entry, OwnershipLedger.fromFields(state.ownershipLedger));
-		return document(entry, replayedLedger(normalizedModpackId, entry));
+			return document(normalizedModpackId, entry, OwnershipLedger.fromFields(state.ownershipLedger));
+		return document(normalizedModpackId, entry, replayedLedger(normalizedModpackId, entry));
 	}
 
 	/**
@@ -363,9 +364,9 @@ public final class ClientGenerationStore {
 		return state != null && state.modpackId.equals(ModpackId.requireValid(modpackId)) ? state.contentToken : null;
 	}
 
-	private PackDocument document(JournalEntry entry, OwnershipLedger ledger) throws IOException {
+	private PackDocument document(String modpackId, JournalEntry entry, OwnershipLedger ledger) throws IOException {
 		try {
-			return new PackDocument(policyDocument(entry.policySha1()), entry.contentToken(), entry.policySha1(), entry.createdAt(), ledger);
+			return new PackDocument(policyDocument(entry.policySha1()), entry.contentToken(), entry.policySha1(), entry.createdAt(), ledger, advertisedTrack(modpackId, entry));
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
@@ -373,11 +374,32 @@ public final class ClientGenerationStore {
 		}
 	}
 
+	/** The advertised track's hash when the head mirror names this exact generation; the mirror is the only offline record of the track. */
+	private String advertisedTrack(String modpackId, JournalEntry entry) throws IOException {
+		GenerationJsons.HeadDocumentFields head = new HeadMirror(storage).read(modpackId);
+		return head != null && entry.contentToken().equals(head.contentToken) ? head.waitingMusicSha1 : "";
+	}
+
+	/**
+	 * One mirror can carry several generations per content token: a policy-only publish changes the policy document
+	 * while the file tree - and with it the token - stays put. Resolution is newest-first and prefers the newest entry
+	 * whose policy document the client witnessed, because the CAS only ever stores policies of fetched heads and older
+	 * same-token policies may never have existed locally. An entry whose policy object is absent can never silently
+	 * stand in for one that is present; when nothing reconstructs, the newest token match is returned for its
+	 * missing-object error, naming the policy sha1 the server currently serves.
+	 */
 	private JournalEntry mirrorEntry(String modpackId, String contentToken) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		String normalizedToken = HashUtils.normalizeSha1(contentToken);
-		for (JournalEntry entry : new JournalMirror(storage).entries(normalizedModpackId))
-			if (entry.contentToken().equals(normalizedToken)) return entry;
+		JournalEntry newest = null;
+		JournalEntry newestWitnessed = null;
+		for (JournalEntry entry : new JournalMirror(storage).entries(normalizedModpackId)) {
+			if (!entry.contentToken().equals(normalizedToken)) continue;
+			newest = entry;
+			if (Files.exists(storage.objectFile(ClientObjectStore.normalizeHash(entry.policySha1())), LinkOption.NOFOLLOW_LINKS)) newestWitnessed = entry;
+		}
+		if (newestWitnessed != null) return newestWitnessed;
+		if (newest != null) return newest;
 		throw new IOException("The journal mirror has no entry for generation " + normalizedToken + ": " + normalizedModpackId);
 	}
 

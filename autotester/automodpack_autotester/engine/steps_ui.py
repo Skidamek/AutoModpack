@@ -101,6 +101,11 @@ def type_(ctx, step):
 @verb("screenshot")
 def screenshot(ctx, step):
     """Capture the current Minecraft framebuffer into the case artifacts."""
+    skip_if = ctx.resolve(step.get("skip_if") or {})
+    if skip_if and conditions.evaluate(ctx, skip_if):
+        # The declared skip condition already holds (the screen moved past the moment
+        # the shot was for); the step is moot and moves on instead of capturing.
+        return
     ctx.assert_client_running()
     if ctx.bridge is None:
         raise RuntimeError("bridge not ready (run wait_bridge first)")
@@ -120,9 +125,15 @@ def screenshot(ctx, step):
 def wait_for(ctx, step):
     cond = step.get("until") or {}
     timeout = parse_duration(step.get("timeout"), default=60)
+    # A declared skip condition (e.g. the screen already past the transfer this wait
+    # guards) ends the wait immediately, at any poll: a condition that can never come
+    # true because the run is already past it must not burn the whole timeout.
+    skip_if = ctx.resolve(step.get("skip_if") or {})
 
     def _pred():
         if conditions.evaluate(ctx, cond):
+            return True
+        if skip_if and conditions.evaluate(ctx, skip_if):
             return True
         # Not met yet. If the client container has already exited, the condition can never
         # become true - fail fast (raise ClientExited) instead of polling to the timeout.

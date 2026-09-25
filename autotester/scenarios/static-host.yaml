@@ -1,0 +1,109 @@
+id: static-host
+description: |
+  Serve the exported contract tree (head/journal/objects) from a barebones static
+  HTTPS host - python's http.server behind self-signed TLS: HTTP/1.0, no Range, no
+  conditionals, no compression. The MC server runs AutoModpack for the login
+  advertisement only (HTTP mode, bindPort -1, endpoint advertised at the static
+  container), so the client must complete a full first sync against the exact
+  tree an operator would upload.
+renderClient: true
+connectionPaths:
+- mode: HTTP
+  bindPort: -1
+  endpointPort: 8443
+  advertisedEndpointHost: automodpack-static-host
+  deferFirstSyncToLogin: true
+flow:
+- do: launch_server
+  name: start the advertising server
+- do: prepare_client
+  name: prepare the client profile while the server starts
+- do: wait_server
+  name: wait for the server to finish loading
+- do: wait_for
+  name: wait for the export receipt in the server log
+  timeout: 120s
+  until:
+    log:
+      container: server
+      matches: 'Exported \d+ files to'
+- do: start_static_host
+  name: serve the exported tree over barebones HTTPS
+  dir: automodpack/export-http
+  port: 8443
+- do: launch_client
+  name: start the client
+- do: wait_bridge
+  name: wait for the client test bridge
+- do: connect
+  name: log in so the handshake advertises the static endpoint
+- use: accept_certificate
+- use: download_modpack
+- do: verify_files
+  name: verify every hosted file landed
+- do: wait_for
+  name: prove the range-ignoring-host degrade was announced
+  timeout: 30s
+  until:
+    log:
+      container: client
+      matches: 'ignores HTTP Range requests; every object on this client now downloads in one open-ended take'
+- do: wait_for
+  name: prove the refused object was re-issued onto a fresh take
+  timeout: 30s
+  until:
+    log:
+      container: client
+      matches: 'wide\.bin transfer summary: \d+ takes \([1-9][0-9]* retried\)'
+- do: wait_for
+  name: opportunistic receipt of per-response lane death on the HTTP/1.0 host
+  timeout: 10s
+  optional: true
+  until:
+    log:
+      container: client
+      matches: 'The modpack wire lane died'
+      min_count: 1
+- do: quit
+  name: quit the client
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: 'false'
+    automodpack:
+      config:
+        # The export refuses to mirror a pack whose downloads validate secrets.
+        validateSecrets: false
+        exportHttpDirectory: automodpack/export-http
+        exportHttpIncludeAll: true
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  files:
+  - path: config/static/tiny-one.txt
+    content: "static host one\n"
+  - path: config/static/tiny-two.txt
+    content: "static host two\n"
+  - path: config/static/tiny-three.txt
+    content: "static host three\n"
+  - path: config/static/tiny-four.txt
+    content: "static host four\n"
+  - path: config/static/tiny-five.txt
+    content: "static host five\n"
+  - path: config/static/tiny-six.txt
+    content: "static host six\n"
+  - path: config/static/tiny-seven.txt
+    content: "static host seven\n"
+  - path: config/static/tiny-eight.txt
+    content: "static host eight\n"
+  - path: config/static/tiny-nine.txt
+    content: "static host nine\n"
+  - path: config/static/tiny-ten.txt
+    content: "static host ten\n"
+  # Under one 4 MiB wire chunk: one whole-object take, no range verdict.
+  - path: config/static/mid.bin
+    sizeBytes: 2097152
+  # Past one wire chunk: the host's 200-with-full-body forces the open-ended-take degrade.
+  - path: config/static/wide.bin
+    sizeBytes: 6291456

@@ -68,6 +68,7 @@ public final class BootRecovery {
 	private void recoverPendingTransaction() throws IOException {
 		if (!Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) {
 			UpdateRecovery.clearDeferredGuard(storage);
+			UpdateTransactionExecutor.sweepUnpinnedPublicationDirectories(storage);
 			return;
 		}
 
@@ -75,6 +76,7 @@ public final class BootRecovery {
 		UpdateTransaction transaction = UpdateTransaction.read(storage.transactionFile());
 		if (transaction == null) {
 			UpdateRecovery.clearDeferredGuard(storage);
+			UpdateTransactionExecutor.sweepUnpinnedPublicationDirectories(storage);
 			return;
 		}
 

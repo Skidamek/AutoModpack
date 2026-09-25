@@ -39,7 +39,6 @@ def make_ctx(tmp_path):
             modpack_name="amp-autotest",
             marker_rel=Path("config/amp-autotest-marker.json"),
             scenario_files=[],
-            expected_mods=[],
         )
         defaults.update(overrides)
         ctx = Context(**defaults)

@@ -1,6 +1,9 @@
 package pl.skidam.automodpack.client.audio;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
@@ -24,6 +27,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.sounds.SoundSource;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.client.WaitingMusic;
 import pl.skidam.automodpack_core.utils.Assets;
 
 /**
@@ -46,9 +50,12 @@ public class AudioManager {
 	private static final int BUFFER_COUNT = 4;
 	/** How often the feed loop wakes to refill buffers and follow the slider. */
 	private static final long FEED_INTERVAL_MS = 50;
+	/** Decoded PCM that must be in hand before a live custom track starts, so a slow first packet does not crack. */
+	private static final double PREROLL_SECONDS = 2.5;
 
 	private static final Object LOCK = new Object();
 	private static volatile Loop PLAYER;
+
 
 	/** Kept so every loader's init call site stays identical; the loop itself starts lazily in playMusic(). */
 	public AudioManager() {}
@@ -87,11 +94,14 @@ public class AudioManager {
 		private volatile boolean stopped = false;
 		private volatile Thread thread;
 		private AudioFormat format;
+		/** Decoded PCM still waiting to be copied into an AL buffer; JOrbis may return more than one WRITE_CHUNK. */
+		private ByteBuffer decodedRemainder;
 
 		void stop() {
 			stopped = true;
 			Thread thread = this.thread;
 			if (thread != null && thread != Thread.currentThread()) {
+				thread.interrupt();
 				try {
 					thread.join(1000);
 				} catch (InterruptedException e) {
@@ -113,7 +123,37 @@ public class AudioManager {
 		}
 
 		private void playSession() {
-			byte[] pcm = decode();
+			WaitingMusic.Session session = WaitingMusic.current();
+			WaitingMusic.Kind kind;
+			try {
+				kind = session == null ? WaitingMusic.Kind.BUNDLED : session.kind();
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return;
+			}
+			if (stopped) return;
+			Path custom = kind == WaitingMusic.Kind.LOOP ? session.loopFile() : null;
+			boolean playedCustom = false;
+			if (kind == WaitingMusic.Kind.STREAM) {
+				try (AudioStream stream = openStream(session.audio())) {
+					byte[] preroll = readPreroll(stream);
+					if (preroll.length == 0) throw new IOException("The custom waiting music decoded to no audio");
+					playedCustom = true;
+					playLive(stream, preroll);
+				} catch (Exception e) {
+					if (stopped) return;
+					custom = session.loopFile();
+					if (playedCustom && custom == null) {
+						Constants.LOGGER.error("The server's custom waiting music stream failed after playback started", e);
+						return;
+					}
+					Constants.LOGGER.error("The server's custom waiting music stream failed; falling back to the stored track or the bundled track", e);
+				}
+				if (stopped) return;
+				if (custom == null) custom = session.loopFile();
+				if (custom == null && playedCustom) return;
+			}
+			byte[] pcm = decode(custom);
 			if (pcm == null || stopped) return;
 			int format = openAlFormat(this.format);
 			if (format == AL10.AL_NONE) return;
@@ -122,6 +162,100 @@ public class AudioManager {
 			try (output) {
 				streamLoop(pcm, format, output);
 			}
+		}
+
+		/** Decodes until {@link #PREROLL_SECONDS} of PCM exist, or the stream ends (a track shorter than the preroll). */
+		private byte[] readPreroll(AudioStream stream) throws IOException {
+			this.format = stream.getFormat();
+			double bytesPerSecond = format.getSampleRate() * format.getChannels() * (format.getSampleSizeInBits() / 8.0);
+			int needed = (int) Math.ceil(bytesPerSecond * PREROLL_SECONDS);
+			ByteArrayOutputStream pcm = new ByteArrayOutputStream(Math.max(needed, WRITE_CHUNK));
+			while (pcm.size() < needed) {
+				if (stopped) break;
+				ByteBuffer chunk = stream.read(WRITE_CHUNK);
+				if (chunk == null || !chunk.hasRemaining()) break;
+				byte[] bytes = new byte[chunk.remaining()];
+				chunk.get(bytes);
+				pcm.write(bytes);
+			}
+			return pcm.toByteArray();
+		}
+
+		/** Plays a live stream sequentially through the buffer ring: preroll first, then chunks as they arrive, EOF drains then ends. */
+		private void playLive(AudioStream stream, byte[] preroll) throws Exception {
+			int format = openAlFormat(this.format);
+			if (format == AL10.AL_NONE) return;
+			Output output = Output.open();
+			if (output == null) return;
+			try (output) {
+				ByteBuffer staging = ByteBuffer.allocateDirect(WRITE_CHUNK);
+				int[] position = {0};
+				int queued = 0;
+				for (int i = 0; i < output.buffers().length && !stopped; i++) {
+					if (!fillNext(format, output.buffers()[i], staging, preroll, position, stream)) break;
+					output.queue(output.buffers()[i]);
+					queued++;
+				}
+				if (queued == 0) return;
+				output.play();
+				while (!stopped) {
+					int[] processed = output.takeProcessed();
+					for (int buffer : processed) {
+						if (!fillNext(format, buffer, staging, preroll, position, stream)) {
+							drain(output);
+							return;
+						}
+						output.queue(buffer);
+					}
+					if (processed.length > 0 && output.stoppedByStarvation()) output.play();
+					output.applyVolume();
+					sleepWhile();
+				}
+				output.stopSource();
+			}
+		}
+
+		/** Fills one AL buffer from remaining preroll PCM, then from the live stream; false means the stream ended. */
+		private boolean fillNext(int format, int buffer, ByteBuffer staging, byte[] preroll, int[] position, AudioStream stream) throws IOException {
+			if (position[0] < preroll.length) {
+				position[0] = fillOnce(preroll, format, buffer, staging, position[0]);
+				return true;
+			}
+			return fillLive(format, buffer, staging, stream);
+		}
+
+		/** Copies one WRITE_CHUNK of PCM without wrapping; returns the position after this fill. */
+		private int fillOnce(byte[] pcm, int format, int buffer, ByteBuffer staging, int position) {
+			int size = Math.min(WRITE_CHUNK, pcm.length - position);
+			staging.clear().put(pcm, position, size).flip();
+			AL10.alBufferData(buffer, format, staging, (int) this.format.getSampleRate());
+			return position + size;
+		}
+
+		private void drain(Output output) throws InterruptedException {
+			long deadline = System.currentTimeMillis() + 5000;
+			while (System.currentTimeMillis() < deadline && !stopped && output.takeProcessed().length < output.buffers().length) sleepWhile();
+			output.stopSource();
+		}
+
+		/** Reads decoded PCM into one AL buffer; JOrbis packets can exceed WRITE_CHUNK, so leftovers wait for the next fill. False means the stream ended. */
+		private boolean fillLive(int format, int buffer, ByteBuffer staging, AudioStream stream) throws IOException {
+			staging.clear();
+			while (staging.hasRemaining()) {
+				if (decodedRemainder == null || !decodedRemainder.hasRemaining()) {
+					decodedRemainder = stream.read(WRITE_CHUNK);
+					if (decodedRemainder == null || !decodedRemainder.hasRemaining()) break;
+				}
+				int copy = Math.min(staging.remaining(), decodedRemainder.remaining());
+				int limit = decodedRemainder.limit();
+				decodedRemainder.limit(decodedRemainder.position() + copy);
+				staging.put(decodedRemainder);
+				decodedRemainder.limit(limit);
+			}
+			if (staging.position() == 0) return false;
+			staging.flip();
+			AL10.alBufferData(buffer, format, staging, (int) this.format.getSampleRate());
+			return true;
 		}
 
 		/** Feeds the source's buffer ring until stopped: refill processed buffers from the PCM, wrapping at its end; a source that starved to AL_STOPPED just gets replayed. */
@@ -175,9 +309,27 @@ public class AudioManager {
 			return format.getChannels() == 1 ? AL10.AL_FORMAT_MONO16 : AL10.AL_FORMAT_STEREO16;
 		}
 
-		/** Decodes the whole ogg through Minecraft's vorbis decoder; the PCM stays resident so looping never re-decodes. */
-		private byte[] decode() {
-			try (InputStream input = Assets.stream(MUSIC_PATH); AudioStream stream = openStream(input)) {
+		/** Decodes the whole ogg through Minecraft's vorbis decoder; the PCM stays resident so looping never re-decodes. A null path is the bundled asset. */
+		private byte[] decode(Path custom) {
+			if (custom != null) {
+				try (InputStream input = Files.newInputStream(custom)) {
+					byte[] pcm = decodeStream(input, "the server's custom waiting music " + custom);
+					if (pcm != null) return pcm;
+				} catch (Exception e) {
+					Constants.LOGGER.error("Failed to decode the custom waiting music {}; falling back to the bundled track", custom, e);
+				}
+			}
+			try (InputStream input = Assets.stream(MUSIC_PATH)) {
+				return decodeStream(input, MUSIC_PATH);
+			} catch (Exception e) {
+				Constants.LOGGER.error("Failed to decode the bundled waiting music from {}", MUSIC_PATH, e);
+				return null;
+			}
+		}
+
+		/** Decodes one ogg source to resident PCM; null with the failure logged means this source has no usable audio. */
+		private byte[] decodeStream(InputStream input, String description) throws Exception {
+			try (AudioStream stream = openStream(input)) {
 				this.format = stream.getFormat();
 				ByteArrayOutputStream pcm = new ByteArrayOutputStream();
 				ByteBuffer chunk;
@@ -187,13 +339,10 @@ public class AudioManager {
 					pcm.write(bytes);
 				}
 				if (pcm.size() == 0) {
-					Constants.LOGGER.error("The bundled waiting music decoded to no audio from {}", MUSIC_PATH);
+					Constants.LOGGER.error("The waiting music decoded to no audio from {}", description);
 					return null;
 				}
 				return pcm.toByteArray();
-			} catch (Exception e) {
-				Constants.LOGGER.error("Failed to decode the bundled waiting music from {}", MUSIC_PATH, e);
-				return null;
 			}
 		}
 

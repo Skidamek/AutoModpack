@@ -5,8 +5,10 @@ import hashlib
 import json
 import logging
 import os
+import fnmatch
 import re
 import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -16,10 +18,11 @@ from .bridge import BridgeClient
 from .config import CLIENT_GENERATION_STATE_PATHS, Target
 from .mods import resolve_mod
 from .supervisor import resource_labels
-from .docker_harness import _assert_running, _container_logs, _docker, _exit_code, _inspect_container, _jitter_sleep, _remove_container, _run_container, _uid, _gid, _wait_exited
+from .docker_harness import shaped_tcp_sysctls, _assert_running, _container, _container_logs, _docker, _exec_output, _exit_code, _inspect_container, _jitter_sleep, _remove_container, _run_container, _uid, _gid, _wait_exited
 from .engine import Context
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
+from .engine.steps_io import _active_file, _read_active_generation
 
 
 logger = logging.getLogger(__name__)
@@ -97,7 +100,24 @@ def _prepare_client_files(ctx: Context) -> None:
     _stage_client_runtime_mods(ctx)
     _seed_client_options(game_dir)
     _ensure_client_data_root(game_dir)
+    _defer_first_sync_to_login(ctx, game_dir)
     _bridge_state(ctx).unlink(missing_ok=True)
+
+
+def _defer_first_sync_to_login(ctx: Context, game_dir: Path) -> None:
+    # A secretless bootstrap over a public HTTP pack legitimately preloads the whole catalogue (no auth exists to
+    # bypass), which would consume the first-connection review every later flow step pivots on. Deferring the first
+    # sync to the login keeps one shared flow: every mode shows its first review there, over its own transport.
+    # The policy is per-connection-path scenario data (deferFirstSyncToLogin), so the YAML shows who defers.
+    if not (ctx.scenario.get("connectionPath") or {}).get("deferFirstSyncToLogin", False):
+        return
+    config_path = game_dir / "automodpack" / "client-config.json"
+    # Later launches must keep whatever the bootstrap import and the install commit persisted there - rewriting the
+    # stub would drop the selected modpack and turn every following login into a first contact.
+    if config_path.exists():
+        return
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps({"updateSelectedModpackOnLaunch": False}, indent=2) + "\n", encoding="utf-8")
 
 
 def _client_cache_paths(ctx: Context) -> tuple[Path, Path]:
@@ -123,6 +143,7 @@ def _start_client_container(ctx: Context, name: str, *, prepare_only: bool = Fal
         name=name,
         image=ctx.client_image,
         network=ctx.net_name,
+        sysctls=shaped_tcp_sysctls(ctx.netem, ctx.server_netem),
         env={
             "AM_AUTOTEST_BRIDGE_TOKEN": ctx.token,
             "AM_AUTOTEST_GAME_DIR": "/work/game",
@@ -151,7 +172,121 @@ def _start_client_container(ctx: Context, name: str, *, prepare_only: bool = Fal
         user=f"{_uid()}:{_gid()}",
         entrypoint=["/usr/bin/tini", "--"],
         labels=resource_labels(ctx.resource_scope),
+        # NET_ADMIN is only needed so the --netem qdisc can be applied from inside; never granted otherwise.
+        cap_add=["NET_ADMIN"] if ctx.netem else None,
     )
+
+
+_NETEM_VALUE = {
+    "delay": re.compile(r"\d+(?:\.\d+)?(?:ms|s)"),
+    "rate": re.compile(r"\d+(?:\.\d+)?(?:kbit|mbit)"),
+}
+
+
+def parse_netem(spec: str) -> list[str]:
+    """Parse ``delay=300ms,rate=5mbit`` into ``tc qdisc ... netem`` argv tokens.
+
+    Raises ``ValueError`` for anything else, so argparse surfaces it as a CLI error.
+    """
+    tokens = []
+    seen = set()
+    for item in spec.split(","):
+        key, separator, value = item.strip().partition("=")
+        pattern = _NETEM_VALUE.get(key)
+        if not separator or pattern is None or pattern.fullmatch(value) is None:
+            raise ValueError(
+                f"invalid netem setting {item!r} (expected delay=<n>ms|s or rate=<n>kbit|mbit, got keys: {sorted(_NETEM_VALUE)})"
+            )
+        if key in seen:
+            raise ValueError(f"duplicate netem setting {key!r}")
+        seen.add(key)
+        tokens.extend((key, value))
+    if not tokens:
+        raise ValueError("--netem needs at least one delay= or rate= setting")
+    return tokens
+
+
+def parse_loss(spec: str) -> str:
+    """Validates ``--loss 1%``; the value rides into the netem qdisc verbatim."""
+    if re.fullmatch(r"\d+(?:\.\d+)?%", spec) is None:
+        raise ValueError(f"invalid loss setting {spec!r} (expected e.g. 1%)")
+    return spec
+
+
+def _apply_loss(ctx: Context) -> None:
+    """Drops {@code --loss} percent of the SERVER's outgoing segments: the server's egress is the
+    download's data direction, where segment loss actually stalls transfers, and the client keeps its
+    own --netem knob for delay/rate. Same teardown story as --netem: the container is ephemeral."""
+    if not ctx.loss:
+        return
+    _shape_egress(ctx.srv_name, ["loss", ctx.loss], "loss")
+
+
+def _apply_server_netem(ctx: Context) -> None:
+    """Shapes the SERVER's eth0 with the --server-netem qdisc: the server's egress is the
+    download's data direction, so delay/rate belong here, not on the client's egress where
+    only the tiny request heads travel. Shares the one root qdisc slot with --loss, which
+    the runner rejects combining. Same teardown story as every netem knob: ephemeral container."""
+    if not ctx.server_netem:
+        return
+    _shape_egress(ctx.srv_name, ctx.server_netem, "server netem")
+
+
+def _apply_netem(ctx: Context) -> None:
+    """Shape the running client container's eth0 with the --netem qdisc.
+
+    Known limit: delay shapes exactly, but netem's rate can still run several-fold
+    high on a docker bridge even with veth offloads off on both ends - treat the
+    rate as an order-of-magnitude constraint, the delay as the precise knob.
+    """
+    if not ctx.netem:
+        return
+    _shape_egress(ctx.cli_name, ctx.netem, "netem")
+
+
+def _shape_egress(container_name: str, qdisc: list[str], label: str) -> None:
+    """One root netem qdisc on a container's eth0; runs as root because the game user holds no
+    effective capabilities.
+
+    TSO/GSO let the stack emit super-packets the qdisc counts as one, inflating any rate
+    limit several-fold. Offloads must go off on BOTH ends of the veth pair: the container
+    side so the qdisc sees segmented packets, the host peer so segmenting survives the hop.
+    The qdisc's limit is raised from netem's 1000-packet default (~1.5 MB): a pure delay
+    shape at loopback fill rates holds several bandwidth-delay products in the queue, and
+    the default tail-drops them, so TCP spends the run recovering from self-inflicted
+    losses instead of filling the window the shape exists to exercise.
+    No teardown counterpart exists on purpose: the container is ephemeral and is removed
+    with the case, and every (re)launch re-applies the qdisc on the fresh container.
+    """
+    _disable_iface_offloads(container_name)
+    _disable_peer_offloads_of(container_name)
+    result = _container(container_name).exec_run(["tc", "qdisc", "add", "dev", "eth0", "root", "netem", "limit", "50000", *qdisc], user="root")
+    output = _exec_output(result)
+    if result.exit_code != 0:
+        raise RuntimeError(f"{container_name} container could not apply the {label} qdisc ({result.exit_code}): {output}")
+    logger.info("Applied %s qdisc to %s eth0: %s", label, container_name, " ".join(qdisc))
+
+
+def _disable_iface_offloads(container_name: str) -> None:
+    """Turns offloads off on a container's eth0 so the qdisc sees segmented packets; best effort by design."""
+    _container(container_name).exec_run(["ethtool", "-K", "eth0", "tso", "off", "gso", "off", "gro", "off"], user="root")
+
+
+def _disable_peer_offloads_of(container_name: str) -> None:
+    result = _container(container_name).exec_run(["cat", "/sys/class/net/eth0/iflink"], user="root")
+    peer_index = _exec_output(result).strip()
+    if not peer_index.isdigit():
+        logger.warning("Cannot resolve the %s eth0 host peer (iflink %r); the shaped rate may run high", container_name, peer_index)
+        return
+    for device in Path("/sys/class/net").glob("*"):
+        try:
+            if (device / "ifindex").read_text().strip() == peer_index:
+                subprocess.run(["ethtool", "-K", device.name, "tso", "off", "gso", "off", "gro", "off"],
+                               check=False, capture_output=True)
+                return
+        except OSError:
+            continue
+    logger.warning("No host interface carries ifindex %s; the shaped rate may run high", peer_index)
 
 
 def _launch_client(ctx: Context):
@@ -159,6 +294,9 @@ def _launch_client(ctx: Context):
     _start_client_container(ctx, ctx.cli_name)
     _jitter_sleep(1)
     _assert_running(ctx.cli_name)
+    _apply_netem(ctx)
+    _apply_loss(ctx)
+    _apply_server_netem(ctx)
 
 
 def _stage_client_runtime_mods(ctx: Context) -> None:
@@ -403,6 +541,52 @@ def _v_assert_preload_acquired(ctx: Context, _step):
     ctx.vars["preloaded_object_count"] = len(expected)
 
 
+@verb("assert_client_files")
+def _v_assert_client_files(ctx: Context, step):
+    """Assert every active-generation file matching ``pattern`` (all of them by default, minus ``exclude`` globs)
+    matches its manifest entry. Every file gets its own hard-gated receipt: the failure names each mismatching
+    file individually, never a summary, so one run reports everything that moved."""
+    pattern = step.get("pattern")
+    exclude = [str(glob) for glob in step.get("exclude", []) or []]
+    _state, manifest = _read_active_generation(ctx)
+    paths = set()
+    for category in ((manifest.get("policy", {}) or {}).get("categories", {}) or {}).values():
+        if not isinstance(category, dict):
+            continue
+        for group in category.values():
+            if isinstance(group, dict):
+                paths.update((group.get("files", {}) or {}).keys())
+    selected = sorted(p for p in paths
+                      if (pattern is None or fnmatch.fnmatch(p, str(pattern)))
+                      and not any(fnmatch.fnmatch(p, glob) for glob in exclude))
+    if not selected:
+        raise AssertionError("assert_client_files matched no active-generation file")
+    receipts = []
+    for logical_path in selected:
+        _, expected_hash, expected_size = _active_file(ctx, logical_path)
+        try:
+            _assert_one_client_file(ctx, logical_path, expected_hash, expected_size)
+        except AssertionError as receipt:
+            receipts.append(str(receipt))
+    if receipts:
+        raise AssertionError(f"{len(receipts)} of {len(selected)} managed client files do not match the active generation:\n" + "\n".join(receipts))
+    logger.info("Verified %d managed client files against the active generation", len(selected))
+
+
+def _assert_one_client_file(ctx: Context, logical_path: str, expected_hash: str, expected_size: int) -> None:
+    path = ctx.game_dir / logical_path
+    try:
+        payload = path.read_bytes()
+    except OSError as error:
+        raise AssertionError(f"managed client file {path} is not readable: {error}") from error
+    actual_hash, actual_size = hashlib.sha1(payload).hexdigest(), len(payload)
+    if (actual_hash, actual_size) != (expected_hash, expected_size):
+        raise AssertionError(
+            f"managed client file {path} does not match the active generation: "
+            f"expected sha1={expected_hash} size={expected_size}, got sha1={actual_hash} size={actual_size}"
+        )
+
+
 @verb("wait_bridge")
 def _v_wait_bridge(ctx: Context, step):
     if ctx.bridge is None:
@@ -606,7 +790,7 @@ def _v_seed_cas(ctx: Context, _step):
     objects = _ensure_client_data_root(ctx.game_dir) / "objects"
     objects.mkdir(parents=True, exist_ok=True)
     payloads = [json.dumps({"marker": ctx.modpack_name}).encode("utf-8") + b"\n"]
-    payloads.extend(content.encode("utf-8") for _, content in ctx.scenario_files)
+    payloads.extend(hosted.content.encode("utf-8") for hosted in ctx.scenario_files if hosted.content is not None)
     for payload in payloads:
         object_path = cas_object(objects, hashlib.sha1(payload).hexdigest())
         object_path.parent.mkdir(parents=True, exist_ok=True)

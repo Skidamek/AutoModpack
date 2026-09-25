@@ -5,13 +5,14 @@ import hashlib
 import json
 import re
 import shutil
+import zipfile
 from pathlib import Path
 
 from .mod_fixtures import write_valid_mod_fixture
 from .supervisor import resource_labels
 from .client_steps import cas_object
-from .config import server_cache_volume
-from .docker_harness import _container, _container_logs, _ensure_volume, _exec_output, _remove_volume, _run_container, _uid, _gid, _wait_for_log
+from .config import server_cache_volume, write_generated
+from .docker_harness import shaped_tcp_sysctls, _container, _container_logs, _ensure_volume, _exec_output, _remove_volume, _run_container, _uid, _gid, _wait_for_log
 from .engine import Context
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
@@ -49,7 +50,15 @@ def _server_generation(ctx: Context, index: int) -> dict:
     if not generations:
         if index != 0:
             raise ValueError(f"scenario has no server generation {index}")
-        return {"files": [{"path": str(path), "content": content} for path, content in ctx.scenario_files]}
+        files = []
+        for hosted in ctx.scenario_files:
+            item = {"path": str(hosted.path)}
+            if hosted.size_bytes is not None:
+                item["sizeBytes"] = hosted.size_bytes
+            else:
+                item["content"] = hosted.content
+            files.append(item)
+        return {"files": files}
     if not isinstance(generations, list) or index < 0 or index >= len(generations):
         raise ValueError(f"server generation index {index} is outside the declared generations")
     generation = generations[index]
@@ -60,6 +69,9 @@ def _server_generation(ctx: Context, index: int) -> dict:
 
 def _write_server_generation(ctx: Context, index: int) -> None:
     generation = _server_generation(ctx, index)
+    declared_music = (ctx.scenario.get("serverFiles", {}) or {}).get("waitingMusic")
+    if declared_music and "waitingMusic" not in generation:
+        generation = {**generation, "waitingMusic": declared_music}
     srv_dir = ctx.server_dir
     host_root = srv_dir / "automodpack" / "host-modpack"
     if host_root.exists():
@@ -92,8 +104,22 @@ def _write_server_generation(ctx: Context, index: int) -> None:
             if not isinstance(fixture, dict):
                 raise ValueError(f"server generation fixture for {rel} must be a mapping")
             write_valid_mod_fixture(f, fixture, ctx.target.minecraft)
+        elif "sizeBytes" in item:
+            size_bytes = item["sizeBytes"]
+            if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or size_bytes < 0:
+                raise ValueError(f"server generation sizeBytes for {rel} must be a non-negative integer")
+            write_generated(f, str(rel), size_bytes)
         else:
             f.write_text(str(item.get("content", "")), encoding="utf-8")
+    music = generation.get("waitingMusic")
+    if music == "client-jar":
+        # Re-host the mod's own bundled track: no binary lands in the repo, and the
+        # custom track always matches what a client without one would hear by default.
+        with zipfile.ZipFile(ctx.artifact) as jar:
+            name = next(n for n in jar.namelist() if n.endswith("sounds/music/waiting.ogg"))
+            (srv_dir / "automodpack").mkdir(parents=True, exist_ok=True)
+            with jar.open(name) as src, open(srv_dir / "automodpack" / "waiting-music.ogg", "wb") as dst:
+                shutil.copyfileobj(src, dst)
     patch_notes = generation.get("patchNotes", "")
     patch_path = host_root / "patch-notes.md"
     patch_path.parent.mkdir(parents=True, exist_ok=True)
@@ -168,7 +194,10 @@ def _launch_server(ctx: Context):
     if ":" not in img:
         tag = str(settings.get("images", {}).get("serverTagTemplate", "java{java}")).format(java=target.java)
         img = f"{img}:{tag}"
-    _run_container(name=ctx.srv_name, image=img, network=ctx.net_name, env=env, mounts=mounts, labels=resource_labels(ctx.resource_scope))
+    # NET_ADMIN is only needed so the --loss / --server-netem qdiscs can be applied from inside; never granted otherwise.
+    _run_container(name=ctx.srv_name, image=img, network=ctx.net_name, env=env, mounts=mounts, labels=resource_labels(ctx.resource_scope),
+                   cap_add=["NET_ADMIN"] if ctx.loss or ctx.server_netem else None,
+                   sysctls=shaped_tcp_sysctls(ctx.netem, ctx.server_netem))
 
 
 @verb("launch_server")

@@ -20,6 +20,8 @@ import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.generation.Journal;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
@@ -56,6 +58,25 @@ class ClientObjectStoreTest {
 		assertTrue(report.overlayBytes() > 0);
 		assertTrue(report.referencedObjectCoverageRatio().orElseThrow() == 1.0);
 		assertTrue(Files.exists(storage.objectFile(orphan)));
+	}
+
+	@Test
+	void collectionKeepsTheAdvertisedWaitingTrack() throws Exception {
+		ClientStorage storage = storage();
+		String track = store(storage, "waiting-track");
+		String orphan = store(storage, "orphan");
+		GenerationJsons.HeadDocumentFields head = TestPacks.head(TestPacks.manifest("waiting music pin", "config/example.txt", "body"));
+		head.waitingMusicSha1 = track;
+		Files.createDirectories(storage.modsDirectory());
+		Path fetched = Files.writeString(storage.modsDirectory().resolve("fetched-head.json"), ConfigTools.GSON.toJson(head), StandardCharsets.UTF_8);
+		new HeadMirror(storage).replaceFrom(fetched);
+
+		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage, Set.of());
+
+		assertTrue(Files.exists(storage.objectFile(track)));
+		assertFalse(Files.exists(storage.objectFile(orphan)));
+		assertEquals(1, result.deletedObjectCount());
+		assertTrue(ClientObjectStore.referencedHashes(storage).contains(track));
 	}
 
 	@Test

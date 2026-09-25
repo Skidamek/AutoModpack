@@ -14,23 +14,20 @@ import java.util.concurrent.ConcurrentHashMap;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPipeline;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.codec.MessageToMessageEncoder;
 import io.netty.handler.ssl.SslHandler;
+import io.netty.handler.timeout.IdleStateHandler;
 
-import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
-import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
-import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
-import pl.skidam.automodpack_core.protocol.netty.ProtocolPipeline;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.server.netty.HolepunchChannelApplication;
 import pl.skidam.mcholepunch.server.netty.NettyChannelRegistry;
 
 /**
- * Bridges holepunch takeovers into the automodpack protocol: mcholepunch hands the taken-over
- * Minecraft channel over on its own event loop and this bridge installs the same TLS and
- * transfer pipeline the DIRECT listener uses, wrapped in the transport-era camouflage handlers.
+ * Bridges holepunch takeovers into the HTTP contract: mcholepunch hands the taken-over Minecraft channel over on its
+ * own event loop and this bridge installs the TLS and contract stack, wrapped in the transport-era camouflage handlers.
  */
 public final class ServerHolepunchBridge {
 	private static final Set<Channel> channels = ConcurrentHashMap.newKeySet();
@@ -68,9 +65,15 @@ public final class ServerHolepunchBridge {
 		SocketAddress remoteAddress = channel.remoteAddress();
 		channels.add(channel);
 		channel.closeFuture().addListener(future -> channels.remove(channel));
+		ChannelPipeline pipeline = channel.pipeline();
 		// The camouflage pair is wire-side of TLS: inbound records decamouflage before TLS decrypts
 		// them, outbound records camouflage after TLS encrypts them.
-		SslHandler sslHandler = ProtocolPipeline.installServer(channel, server, remoteAddress, new CamouflageEncoder(connection), new CamouflageDecoder(connection));
+		pipeline.addLast("holepunch-camouflage-encoder", new CamouflageEncoder(connection));
+		pipeline.addLast("holepunch-camouflage-decoder", new CamouflageDecoder(connection));
+		pipeline.addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, HTTP_IDLE_REAP_SECONDS));
+		pipeline.addLast("traffic-shaper", server.trafficHandler());
+		server.installContractHandlers(pipeline);
+		SslHandler sslHandler = pipeline.get(SslHandler.class);
 		if (sslHandler != null) {
 			sslHandler.handshakeFuture().addListener(future -> {
 				if (future.isSuccess()) {
@@ -169,14 +172,12 @@ public final class ServerHolepunchBridge {
 		return ByteBuffer.wrap(bytes);
 	}
 
+	/**
+	 * The contract streams 4 MiB body chunks, each leaving the claimed channel as camouflage-framed TLS records; one
+	 * in-flight chunk plus one record's framing expansion is the whole honest outbound bound, so only a peer that
+	 * stopped draining piles up past this watermark.
+	 */
 	private static long maxPendingWriteBytes() {
-		long maxCompressedFrameLength = 0;
-		for (CompressionType type : CompressionType.values()) {
-			if (CompressionFactory.isAvailable(type)) {
-				CompressionCodec codec = CompressionFactory.createCodec(type);
-				maxCompressedFrameLength = Math.max(maxCompressedFrameLength, codec.maxCompressedLength(MAX_CHUNK_SIZE));
-			}
-		}
-		return maxCompressedFrameLength + ProtocolFrameCodec.HEADER_BYTES;
+		return WIRE_CHUNK_BYTES + (long) TlsRecordCamouflage.MAX_RECORD_LENGTH + TlsRecordCamouflage.FRAME_HEADER_LENGTH;
 	}
 }

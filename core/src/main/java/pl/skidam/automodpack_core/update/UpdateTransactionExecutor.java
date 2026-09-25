@@ -138,7 +138,10 @@ public final class UpdateTransactionExecutor {
 		ClientStorage storage = context.storage();
 		if (Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("An offline repair must finish before an update can start");
 		UpdateTransaction pending = UpdateTransaction.read(storage.transactionFile());
-		if (pending == null) return;
+		if (pending == null) {
+			sweepUnpinnedPublicationDirectories(storage);
+			return;
+		}
 		if (pending.phase == UpdateTransaction.Phase.COMMITTED) {
 			// A crash can land after the COMMITTED marker but before its state-history checkpoint; replaying the tail here
 			// records the entry (idempotent by transaction id) before the record that produced it retires.
@@ -541,6 +544,20 @@ public final class UpdateTransactionExecutor {
 		FileTrees.delete(context.storage().backupDirectory());
 	}
 
+	/**
+	 * With no usable pending transaction the publication directories are provably unpinned - no journal owns their
+	 * bytes - so leftovers of a crash whose journal was lost or set aside are swept here. Left alone they read as a
+	 * publication already started ({@code ClientProjectionView.publicationStarted}), which would make the next
+	 * update silently skip every live operation and its final-state verification while its commit reports success.
+	 */
+	public static void sweepUnpinnedPublicationDirectories(ClientStorage storage) throws IOException {
+		ClientStorageMutation.run(storage, () -> {
+			FileTrees.delete(storage.incomingDirectory());
+			FileTrees.delete(storage.backupDirectory());
+			return null;
+		});
+	}
+
 	/** Verifies every planned capture against the live file and acquires its bytes into the object store; the entry's captures then pin them. */
 	private void capturePreStates(UpdateTransaction transaction) throws IOException {
 		if (transaction.plan().baselineCaptures().isEmpty()) return;
@@ -597,9 +614,12 @@ public final class UpdateTransactionExecutor {
 	static boolean isLockFailure(IOException exception, boolean windows) {
 		Throwable current = exception;
 		while (current != null) {
-			// Windows reports an open handle that denies delete sharing as AccessDeniedException, without a lock-specific
-			// reason. On other kernels the same exception is a plain permission problem - a permanent failure, not an
-			// update that should defer forever with a locked-file story - so only the explicit lock-worded messages count.
+			// The JDK's Windows provider maps both ERROR_SHARING_VIOLATION (an open handle denies the delete -
+			// the game itself, an antivirus scan) and ERROR_ACCESS_DENIED (ACLs, read-only) to
+			// AccessDeniedException, with no lock-specific reason in the exception. Classifying every instance
+			// as a lock is the conservative reading: the accepted cost is a permanent permission failure that
+			// defers with a locked-file story, because the alternative misclassifies a genuine in-use file as
+			// a terminal error. Other kernels name the sharing conflict in the message - only those count.
 			if (windows && current instanceof AccessDeniedException) return true;
 			if (current instanceof FileSystemException fileSystemException) {
 				String detail = (Objects.toString(fileSystemException.getReason(), "") + " " + Objects.toString(fileSystemException.getMessage(), "")).toLowerCase(Locale.ROOT);
