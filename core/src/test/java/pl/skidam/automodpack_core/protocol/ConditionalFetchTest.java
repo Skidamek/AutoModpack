@@ -11,6 +11,7 @@ import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -709,6 +710,9 @@ class ConditionalFetchTest {
 					boolean closeFramed = request.path.startsWith("/objects/") ? closeFramedObjects.get() : closeFramedDocuments.get();
 					if (closeFramed) {
 						answer(socket, out, request, pipeline, answering);
+						// A pipelined follow-up may already be in the receive buffer. Closing with unread inbound
+						// bytes is a Windows RST, which aborts the close-framed body the client is still reading.
+						drainPipelinedRequests(socket, in);
 						return;
 					}
 					responder.execute(() -> answer(socket, out, request, pipeline, answering));
@@ -718,6 +722,33 @@ class ConditionalFetchTest {
 				responder.shutdownNow();
 				try {
 					socket.close();
+				} catch (IOException ignored) {
+				}
+			}
+		}
+
+		/** Consumes a follow-up request that arrived before this close-framed answer, so close() is a FIN rather than a Windows RST. */
+		private void drainPipelinedRequests(SSLSocket socket, BufferedInputStream in) {
+			int previous = 0;
+			try {
+				previous = socket.getSoTimeout();
+				socket.setSoTimeout(2000);
+				while (true) {
+					Request extra;
+					try {
+						extra = parseRequest(readHead(in));
+					} catch (EOFException | SocketTimeoutException ended) {
+						return;
+					}
+					if (extra == null) return;
+					requests.add(extra.path);
+					if (extra.acceptEncoding != null) sawAcceptEncoding.set(true);
+					if (extra.ifNoneMatch != null) ifNoneMatchLog.add(extra.ifNoneMatch);
+				}
+			} catch (IOException ignored) {
+			} finally {
+				try {
+					socket.setSoTimeout(previous);
 				} catch (IOException ignored) {
 				}
 			}
@@ -760,7 +791,6 @@ class ConditionalFetchTest {
 					out.write("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.UTF_8));
 					out.write(content);
 					out.flush();
-					socket.close();
 					return;
 				}
 				if (!request.path.startsWith("/objects/") && foreignEtags.get()) {
@@ -793,7 +823,6 @@ class ConditionalFetchTest {
 					out.write("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.UTF_8));
 					out.write(content);
 					out.flush();
-					socket.close();
 					return;
 				}
 				long[] range = parseRange(request.range, content.length);

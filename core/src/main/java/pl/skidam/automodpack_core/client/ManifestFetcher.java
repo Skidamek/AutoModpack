@@ -186,11 +186,19 @@ public final class ManifestFetcher {
 		// wants - the same request the sequential chain would have issued after parsing. The head leads the wire: it is
 		// the gate whose answer decides everything else, and on a close-framed host its body ends the lane only after
 		// both requests are in flight.
-		CompletableFuture<DocumentFetch> headFetched = transport.downloadDocument(GenerationHosting.HEAD_DOCUMENT_KEY.getBytes(StandardCharsets.UTF_8), storage.modpackContentTempFile(), headConditional,
-				(IntConsumer) null);
+		CompletableFuture<DocumentFetch> headFetched = fetchHead(transport, storage, headConditional);
 		CompletableFuture<DocumentFetch> journalFetched = headExpected == null ? null : fetchPipelinedJournal(transport, storage, journalConditional);
 		return headFetched
 				.thenComposeAsync(fetch -> applyFetchedHead(storage, connectionInfo, transport, selectedModpackId, headExpected, journalExpected, journalFetched, fetch, validators), DownloadClient.NET_EXECUTOR)
+				.exceptionallyCompose(error -> {
+					if (!retryableLaneLoss(error)) return CompletableFuture.failedFuture(error);
+					LOGGER.debug("The head fetch lost its lane; fetching head and journal sequentially on a fresh one", error);
+					return fetchHead(transport, storage, headConditional)
+							.thenComposeAsync(
+									fetch -> applyFetchedHead(storage, connectionInfo, transport, selectedModpackId, headExpected, journalExpected, fetchJournal(transport, storage, journalConditional), fetch,
+											validators),
+									DownloadClient.NET_EXECUTOR);
+				})
 				.whenComplete((ignored, error) -> {
 					try {
 						Files.deleteIfExists(storage.modpackContentTempFile());
@@ -198,6 +206,16 @@ public final class ManifestFetcher {
 						LOGGER.warn("Failed to remove temporary modpack content", e);
 					}
 				});
+	}
+
+	private static CompletableFuture<DocumentFetch> fetchHead(PackTransport transport, ClientStorage storage, DocumentConditional headConditional) {
+		return transport.downloadDocument(GenerationHosting.HEAD_DOCUMENT_KEY.getBytes(StandardCharsets.UTF_8), storage.modpackContentTempFile(), headConditional, (IntConsumer) null);
+	}
+
+	private static boolean retryableLaneLoss(Throwable error) {
+		Throwable cause = Throwables.unwrap(error);
+		if (!(cause instanceof IOException)) return false;
+		return !(cause instanceof UnauthorizedException) && !(cause instanceof MissingObjectException);
 	}
 
 	/** One full journal fetch into the temp file; callers delete the temp only after their last consumer of the fetch has run. */
@@ -213,7 +231,7 @@ public final class ManifestFetcher {
 	private static CompletableFuture<DocumentFetch> fetchPipelinedJournal(PackTransport transport, ClientStorage storage, DocumentConditional journalConditional) {
 		return fetchJournal(transport, storage, journalConditional).exceptionallyCompose(error -> {
 			Throwable cause = Throwables.unwrap(error);
-			if (!(cause instanceof IOException) || cause instanceof UnauthorizedException || cause instanceof MissingObjectException) return CompletableFuture.failedFuture(error);
+			if (!retryableLaneLoss(error)) return CompletableFuture.failedFuture(error);
 			LOGGER.debug("The pipelined journal fetch lost its lane; fetching the journal again on a fresh one", cause);
 			return fetchJournal(transport, storage, journalConditional);
 		});

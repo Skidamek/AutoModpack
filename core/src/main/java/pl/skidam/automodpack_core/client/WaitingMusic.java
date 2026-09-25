@@ -74,6 +74,7 @@ public final class WaitingMusic {
 		private final String advertisedSha1;
 		private final LinkedBlockingQueue<byte[]> chunks = new LinkedBlockingQueue<>();
 		private final CompletableFuture<Kind> kind = new CompletableFuture<>();
+		private final CompletableFuture<Void> fetchFinished = new CompletableFuture<>();
 		private volatile boolean fetchAlive = true;
 		private volatile IOException fetchError;
 		private volatile byte[] residual;
@@ -143,6 +144,16 @@ public final class WaitingMusic {
 			return loopFile;
 		}
 
+		/** Blocks until the object fetch (or the cache-hit / bundled decision) has released every file it opened. */
+		void awaitFetch() throws InterruptedException {
+			try {
+				fetchFinished.get(20, TimeUnit.SECONDS);
+			} catch (TimeoutException e) {
+				throw new IllegalStateException("waiting music fetch did not finish", e);
+			} catch (ExecutionException ignored) {
+			}
+		}
+
 		private void completeKind(Kind value) {
 			kind.complete(value);
 		}
@@ -150,6 +161,7 @@ public final class WaitingMusic {
 		private void begin(PackTransport transport) {
 			if (!HashUtils.isSha1(advertisedSha1)) {
 				completeKind(Kind.BUNDLED);
+				fetchFinished.complete(null);
 				return;
 			}
 			Path object = storage.objectFile(advertisedSha1);
@@ -157,6 +169,7 @@ public final class WaitingMusic {
 				if (Files.isRegularFile(object) && FileIntegrity.matches(object, Files.size(object), advertisedSha1)) {
 					loopFile = object;
 					completeKind(Kind.LOOP);
+					fetchFinished.complete(null);
 					return;
 				}
 			} catch (IOException e) {
@@ -207,6 +220,7 @@ public final class WaitingMusic {
 				deleteQuietly(temp);
 			} finally {
 				fetchAlive = false;
+				fetchFinished.complete(null);
 			}
 		}
 

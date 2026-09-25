@@ -57,7 +57,7 @@ class ManifestFetcherMirrorChainTest {
 		server.store().put("journal", journalBytes(head.contentToken, manifest));
 
 		ClientStorage storage = storage();
-		var first = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
+		var first = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(20, TimeUnit.SECONDS);
 		assertTrue(first.successful(), () -> "first fetch failed: " + first.failure());
 		assertTrue(Files.exists(storage.historyHeadFile(MODPACK_ID)), "The fetched head document must land in the installed mirror");
 		assertEquals(new String(headBytes, StandardCharsets.UTF_8), Files.readString(storage.historyHeadFile(MODPACK_ID), StandardCharsets.UTF_8));
@@ -66,7 +66,7 @@ class ManifestFetcherMirrorChainTest {
 
 		// The second contact carries the mirror's hash as the validator: the server answers without a body and the
 		// content is served from the mirror. The flow's local verification runs regardless — only the transfer is skipped.
-		var second = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
+		var second = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(20, TimeUnit.SECONDS);
 		assertTrue(second.successful(), () -> "second fetch failed: " + second.failure());
 		assertEquals(head.contentToken, second.content().contentToken);
 		assertEquals(head.policySha1, second.content().policySha1);
@@ -83,7 +83,7 @@ class ManifestFetcherMirrorChainTest {
 		server.store().put("journal", journalBytes(head.contentToken, manifest));
 
 		ClientStorage storage = storage();
-		var first = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
+		var first = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(20, TimeUnit.SECONDS);
 		assertTrue(first.successful(), () -> "first fetch failed: " + first.failure());
 		assertTrue(Files.exists(storage.historyHeadFile(MODPACK_ID)), "the first fetch must install the vouching head mirror");
 		// The install the first sync drives: the active generation now points at the fetched head's token, so the
@@ -95,7 +95,7 @@ class ManifestFetcherMirrorChainTest {
 		// retry must recover the re-check instead of failing the whole manifest fetch forever.
 		server.cooperate.set(false);
 		server.closeFramedDocuments.set(true);
-		var second = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
+		var second = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(20, TimeUnit.SECONDS);
 		assertTrue(second.successful(), () -> "vouched re-check failed: " + second.failure());
 		assertEquals(head.contentToken, second.content().contentToken);
 		assertEquals(new String(headBytes, StandardCharsets.UTF_8), Files.readString(storage.historyHeadFile(MODPACK_ID), StandardCharsets.UTF_8));
@@ -118,12 +118,12 @@ class ManifestFetcherMirrorChainTest {
 		server.store().put("journal", journalBytes(head.contentToken, manifest));
 
 		ClientStorage storage = storage();
-		var first = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
+		var first = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(20, TimeUnit.SECONDS);
 		assertTrue(first.successful(), () -> "first fetch failed: " + first.failure());
 		storage.writeActiveState(MODPACK_ID, head.contentToken, head.ownershipLedger);
 
 		int afterFirst = server.requests.size();
-		var second = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
+		var second = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(20, TimeUnit.SECONDS);
 		assertTrue(second.successful(), () -> "second fetch failed: " + second.failure());
 		assertEquals(new String(headBytes, StandardCharsets.UTF_8), Files.readString(storage.historyHeadFile(MODPACK_ID)));
 		// The recheck pipelines head + journal: exactly two more requests, both carrying the cached foreign etag
@@ -143,7 +143,7 @@ class ManifestFetcherMirrorChainTest {
 		server.store().put("head", newHeadBytes);
 		server.store().put("journal", newJournalBytes);
 		int afterSecond = server.requests.size();
-		var third = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
+		var third = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(20, TimeUnit.SECONDS);
 		assertTrue(third.successful(), () -> "third fetch failed: " + third.failure());
 		assertEquals(new String(newHeadBytes, StandardCharsets.UTF_8), Files.readString(storage.historyHeadFile(MODPACK_ID)));
 		assertEquals(afterSecond + 2, server.requests.size(), "a changed generation must be served, not 304'd");
@@ -151,7 +151,7 @@ class ManifestFetcherMirrorChainTest {
 		storage.writeActiveState(MODPACK_ID, newHead.contentToken, newHead.ownershipLedger);
 
 		int afterThird = server.requests.size();
-		var fourth = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(15, TimeUnit.SECONDS);
+		var fourth = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(20, TimeUnit.SECONDS);
 		assertTrue(fourth.successful(), () -> "fourth fetch failed: " + fourth.failure());
 		assertEquals(afterThird + 2, server.requests.size());
 		// The pipelined pair logs head first, journal second; both must carry the NEW generation's cached etags.

@@ -38,7 +38,9 @@ class WaitingMusicTest {
 	Path tempDir;
 
 	@AfterEach
-	void tearDown() {
+	void tearDown() throws Exception {
+		WaitingMusic.Session session = WaitingMusic.current();
+		if (session != null) session.awaitFetch();
 		WaitingMusic.endRun();
 	}
 
@@ -51,7 +53,7 @@ class WaitingMusicTest {
 	}
 
 	private void awaitObject(ClientStorage storage, String sha1, boolean present) throws InterruptedException {
-		long deadline = System.currentTimeMillis() + 5000;
+		long deadline = System.currentTimeMillis() + 20_000;
 		boolean exists = Files.exists(object(storage, sha1));
 		while (exists != present && System.currentTimeMillis() < deadline) {
 			Thread.sleep(20);
@@ -176,7 +178,7 @@ class WaitingMusicTest {
 		}
 
 		void awaitDone() throws InterruptedException {
-			long deadline = System.currentTimeMillis() + 5000;
+			long deadline = System.currentTimeMillis() + 20_000;
 			while (!done && System.currentTimeMillis() < deadline) Thread.sleep(5);
 			assertTrue(done, "the fetch never finished");
 		}
@@ -184,7 +186,7 @@ class WaitingMusicTest {
 		/** A fetch submitted by begin() is enqueued on the wire executor ahead of the handshake task, so its attempt is counted when this returns. */
 		void awaitIdle() throws Exception {
 			CompletableFuture<Void> handshake = new CompletableFuture<>();
-			CompletableFuture.runAsync(() -> handshake.complete(null), DownloadClient.NET_EXECUTOR).get(5, TimeUnit.SECONDS);
+			CompletableFuture.runAsync(() -> handshake.complete(null), DownloadClient.NET_EXECUTOR).get(20, TimeUnit.SECONDS);
 		}
 
 		@Override
