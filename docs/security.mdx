@@ -10,22 +10,22 @@ The download endpoint is advertised over the Minecraft login, a channel that aut
 
 | Method | Best for | Client stores | Certificate rotation |
 | --- | --- | --- | --- |
-| DNSSEC AMP1 | Servers with a DNSSEC-enabled domain; recommended default | Nothing; the record is checked on every connection | Update the DNS record; clients follow on their next connect |
+| DNSSEC AMP1 | Servers with a DNSSEC-enabled domain; recommended default | Nothing; the record is checked whenever no CA chain covers the address | Update the DNS record; clients follow on their next connect |
 | Pinned join address | Communities that can share one address | A pin for the address | Distribute a new pinned address |
 | Manual verification | Tunnels and setups with none of the above | A pin for the address, after the player accepts once | The pin holds until a player removes it, or the operator hands out a new pinned address |
 
 The client verifies in this order:
 
-1. A saved pin is law. The presented certificate must match it exactly, on every connection. A changed certificate fails on the spot, and nothing recovers a pin: not a record, not a CA chain, not a prompt. The player removes the pin by hand, or the operator hands out a new pinned join address.
-2. With no pin, the DNSSEC AMP1 record for the Minecraft hostname is looked up. A matching record trusts the certificate silently; a contradicting or malformed record fails; the verdict is never stored, so record deployments follow rotation on their own.
-3. With no record, a CA-signed certificate whose chain validates for the endpoint's name and also covers the typed hostname trusts silently. This is the direct-deployment case, where origin and endpoint share a name and one ordinary certificate covers both.
-4. With no pin, no record, and no covering CA chain, the first connection asks the player to verify the fingerprint or take the explicit risk path. Either decision saves a pin, and rule 1 covers every connection after that.
+1. A saved pin is law. The presented certificate must match it exactly, on every connection. A changed certificate fails on the spot, and nothing recovers a pin: not a CA chain, not a record, not a prompt. The player removes the pin by hand, or the operator hands out a new pinned join address.
+2. With no pin, a CA-signed certificate whose chain validates for the endpoint's name and also covers the typed hostname trusts silently, with no record lookup at all. This is the direct-deployment case, where origin and endpoint share a name and one ordinary certificate covers both.
+3. With no pin and no covering CA chain, the DNSSEC AMP1 record for the Minecraft hostname is looked up. A matching record trusts the certificate silently; a contradicting or malformed record fails; the verdict is never stored, so record deployments follow rotation on their own.
+4. With no pin, no covering CA chain, and no record, the first connection asks the player to verify the fingerprint or take the explicit risk path. Either decision saves a pin, and rule 1 covers every connection after that.
 
 A renewal, a move to a new host, or a new proxy front changes the certificate the same way an impostor does. Record deployments recover by updating the record, because a record verdict is never stored as a pin. Everyone else holds pins, and each rotation is re-verified by the player's hand, exactly as an impostor would have to be.
 
 ### CA-signed certificates
 
-Two shapes exist. On a direct deployment, origin and endpoint share a name, and a certificate a public authority signed for that name covers the typed hostname: the first connection trusts silently, because the CA's vouch is anchored to the address the player typed. On a tunnel or reverse-proxy front, the certificate names the front and not the typed hostname, so the CA vouches for a name the server chose; only a published record or the player's confirmation can trust such a first contact. With an AMP1 record published, every front verifies silently on every connection regardless.
+Two shapes exist. On a direct deployment, origin and endpoint share a name, and a certificate a public authority signed for that name covers the typed hostname: the first connection trusts silently, because the CA's vouch is anchored to the address the player typed. On a tunnel or reverse-proxy front, the certificate names the front and not the typed hostname, so the CA vouches for a name the server chose; only a published record or the player's confirmation can trust such a first contact. For fronts a CA does not cover, a published AMP1 record verifies them silently on every connection.
 
 Put the full chain in `automodpack/credentials/certificate.crt` and the private key in `automodpack/credentials/private-key.pem` in [PKCS#8 PEM format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html). Without these files, AutoModpack generates a self-signed certificate on first start.
 
@@ -41,7 +41,7 @@ Read the documentation of any tool before running its commands. Use `fullchain.p
 
 ### DNSSEC AMP1
 
-If you control a DNSSEC-signed domain, publish the certificate's fingerprint in DNS. Clients look the fingerprint up on every first contact, for self-signed and CA-signed certificates alike: the first connection is trusted silently, no prompts, nothing is stored, and a rotated certificate that matches the refreshed record is followed automatically. Answers are cached for a few seconds, so a rotation is followed on the next connection after the cache passes. A player who once verified by hand holds a pin instead, and a pin never consults the record. This is the rotation story for tunnel fronts whose certificate you do not control.
+If you control a DNSSEC-signed domain, publish the certificate's fingerprint in DNS. Clients look the fingerprint up on every first contact that no CA chain has already vouched for: self-signed servers, and tunnel fronts whose certificate names the front instead of your address. The first connection is trusted silently, no prompts, nothing is stored, and a rotated certificate that matches the refreshed record is followed automatically. Answers are cached for a few seconds, so a rotation is followed on the next connection after the cache passes. A player who once verified by hand holds a pin instead, and a pin never consults the record. This is the rotation story for tunnel fronts whose certificate you do not control.
 
 Run:
 
@@ -63,7 +63,7 @@ openssl s_client -connect <tunnel-host>:443 -servername <tunnel-host> 2>/dev/nul
 
 A front-end that rotates its certificates (managed tunnels do) needs the record updated with each rotation; until then, connections fail closed.
 
-Clients resolve the record over DNS-over-HTTPS through Cloudflare and Quad9. The certificate is accepted only when both resolvers confirm DNSSEC validation, agree on the record, and the fingerprint matches a currently valid certificate. A mismatch or a malformed record fails. A missing or unreachable record falls through to the CA check and then the manual prompt on a first contact. A pinned origin never consults the record: its pin is law.
+Clients resolve the record over DNS-over-HTTPS through Cloudflare and Quad9. The certificate is accepted only when both resolvers confirm DNSSEC validation, agree on the record, and the fingerprint matches a currently valid certificate. A mismatch or a malformed record fails. A missing or unreachable record falls through to the manual prompt on a first contact; the CA check has already had its say by the time the record is consulted. A pinned origin never consults the record: its pin is law.
 
 When the certificate changes, update the `fp` value and wait out DNS caching before deploying it.
 
@@ -92,7 +92,7 @@ play.example.com:25565#othermod1=<value>#amp1=<fingerprint>
 
 ### Manual verification
 
-When no record applies and no CA chain covers the typed hostname, the first connection shows the fingerprint the endpoint presents. Players compare it against a fingerprint you share out of band — the screen has a field to paste it into — then accept. Skipping is possible and is marked as the risky choice; an accepted or skipped decision is saved as a pin for that `host:port` and enforced from then on.
+When no CA chain covers the typed hostname and no record applies, the first connection shows the fingerprint the endpoint presents. Players compare it against a fingerprint you share out of band — the screen has a field to paste it into — then accept. Skipping is possible and is marked as the risky choice; an accepted or skipped decision is saved as a pin for that `host:port` and enforced from then on.
 
 Print the current fingerprint with:
 

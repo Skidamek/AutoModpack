@@ -43,10 +43,11 @@ import pl.skidam.automodpack_core.utils.Throwables;
  * The one certificate-trust plumbing and ladder every client transport runs over a freshly handshaked candidate
  * socket. The ladder reads, in order: a saved pin is law - the presented leaf must match it exactly, and a changed
  * leaf fails outright with no recovery short of the player revoking the pin or importing a new pinned join address;
- * a published DNSSEC fingerprint for the typed hostname accepts the leaf and is never stored; a CA chain that also
- * covers the typed hostname accepts the leaf and is never stored; and whatever remains is the player's explicit
- * decision, heartbeated while the human decides. On acceptance the session trust pins the certificate, so every
- * later handshake on the same SSLContext passes without asking again.
+ * a CA chain that covers the typed hostname accepts the leaf and is never stored, ending the ladder before any DNS
+ * is spent; a published DNSSEC fingerprint for the typed hostname decides every leaf the CAs did not cover, and is
+ * never stored; and whatever remains is the player's explicit decision, heartbeated while the human decides. On
+ * acceptance the session trust pins the certificate, so every later handshake on the same SSLContext passes without
+ * asking again.
  */
 public final class CandidateTrustValidation {
 
@@ -138,9 +139,10 @@ public final class CandidateTrustValidation {
 
 	/**
 	 * The trust ladder over one deferred certificate, in order: a pinned origin whose leaf changed fails outright -
-	 * a pin is a pin, and no record, CA, or prompt recovers it; a published DNSSEC fingerprint is the operator's
-	 * explicit statement and is law when present; a CA chain that covers the typed hostname is the WebPKI's vouch
-	 * for the address the player typed; and whatever remains is the player's decision.
+	 * a pin is a pin, and no CA, record, or prompt recovers it; a CA chain that covers the typed hostname is the
+	 * WebPKI's vouch for the address the player typed, and it ends the ladder before any DNS is spent; a published
+	 * DNSSEC fingerprint decides whatever the CAs did not vouch for, the operator's explicit statement about a leaf
+	 * no authority covered; and whatever remains is the player's decision.
 	 */
 	private static CompletableFuture<Void> judge(Candidate candidate, X509Certificate certificate, Duration preConfigurationKeepaliveInterval) {
 		if (candidate.sessionTrust().hasConfiguredPin()) {
@@ -149,6 +151,19 @@ public final class CandidateTrustValidation {
 				return reject(candidate, candidate.sessionTrust().mismatch(certificate));
 			} catch (CertificateEncodingException e) {
 				return reject(candidate, new IOException("Cannot fingerprint the deferred certificate", e));
+			}
+		}
+		// A CA chain that passed the JDK's validation for the endpoint also covers the typed origin: the deferral
+		// carries no failure exactly when the CAs vouched for this chain, and the origin name in its SANs anchors
+		// that vouch to the address the player typed. Self-signed leaves deferred with a failure never take this
+		// step, and a CA-vouched first contact costs no DNS round trip.
+		if (candidate.trustManager().getDeferredFailure(candidate.socket()) == null && leafCoversOrigin(certificate, candidate.originHost())) {
+			try {
+				candidate.sessionTrust().accept(certificate);
+				LOGGER.info("Trusting the certificate from {} because its CA chain covers the origin {}", candidate.endpointHost(), candidate.originHost());
+				return CompletableFuture.completedFuture(null);
+			} catch (CertificateException e) {
+				return reject(candidate, new IOException("Cannot fingerprint the CA-signed certificate", e));
 			}
 		}
 		return DnsPinResolver.resolvePinAsync(candidate.originHost()).thenCompose(result -> {
@@ -166,20 +181,7 @@ public final class CandidateTrustValidation {
 			if (result instanceof DnsPinResolver.Misconfigured misconfigured) {
 				return reject(candidate, new IOException("Invalid DNSSEC AutoModpack fingerprint for " + candidate.originHost() + ": " + misconfigured.reason()));
 			}
-			// No published fingerprint. A CA chain that passed the JDK's validation for the endpoint also covers
-			// the typed origin: the deferral carries no failure exactly when the CAs vouched for this chain, and
-			// the origin name in its SANs anchors that vouch to the address the player typed. Self-signed leaves
-			// deferred with a failure never take this step.
-			if (candidate.trustManager().getDeferredFailure(candidate.socket()) == null && leafCoversOrigin(certificate, candidate.originHost())) {
-				try {
-					candidate.sessionTrust().accept(certificate);
-					LOGGER.info("Trusting the certificate from {} because its CA chain covers the origin {}", candidate.endpointHost(), candidate.originHost());
-					return CompletableFuture.completedFuture(null);
-				} catch (CertificateException e) {
-					return reject(candidate, new IOException("Cannot fingerprint the CA-signed certificate", e));
-				}
-			}
-			// A first contact is the player's decision.
+			// No CA vouch and no published fingerprint: a first contact is the player's decision.
 			return requestManualTrust(candidate, certificate, preConfigurationKeepaliveInterval);
 		});
 	}
