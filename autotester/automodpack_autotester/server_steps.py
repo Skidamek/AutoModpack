@@ -458,7 +458,7 @@ def _v_seed_bootstrap(ctx: Context, step):
     if not fingerprint:
         raise RuntimeError("seed_bootstrap requires read_server_fingerprint first")
     projection_path = ctx.server_dir / "automodpack" / "server" / "current-projection.json"
-    config_path = ctx.server_dir / "automodpack" / "server-config.hconf"
+    config_path = ctx.server_dir / "automodpack" / "server.conf"
     if not config_path.exists():
         config_path = ctx.server_dir / "automodpack" / "server-config.json"
     try:

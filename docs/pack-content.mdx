@@ -13,7 +13,7 @@ A server with this layout:
 
 ```
 ├── automodpack
-│   ├── server-config.hconf
+│   ├── server.conf
 │   └── host-modpack
 │       └── main
 │           ├── config
@@ -43,7 +43,7 @@ A server with this layout:
     └── sodium-fabric.jar
 ```
 
-and this group declared in `server-config.hconf` (the config is hconf, and plain JSON like this parses as-is):
+and this group declared in `server.conf` (the config is plain text, and plain JSON like this parses as-is):
 
 ```json
 "modpack": {

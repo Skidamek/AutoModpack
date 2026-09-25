@@ -319,7 +319,7 @@ def assert_bootstrap_import(ctx, _step):
     if bootstrap_path.exists():
         raise AssertionError(f"Preload did not delete imported bootstrap file: {bootstrap_path}")
     try:
-        client_config_path = ctx.game_dir / "automodpack" / "client-config.hconf"
+        client_config_path = ctx.game_dir / "automodpack" / "client.conf"
         if not client_config_path.exists():
             client_config_path = ctx.game_dir / "automodpack" / "client-config.json"
         client_config = (json.loads if client_config_path.suffix == ".json" else hconf_min.read_hconf)(client_config_path)

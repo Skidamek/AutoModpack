@@ -7,7 +7,7 @@ AutoModpack keeps every player's game in sync with the server's modpack. Install
 1. Download AutoModpack from [Modrinth](https://modrinth.com/mod/automodpack) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack). The release ships one jar that works on every supported Minecraft version and loader.
 2. Put the jar in the `mods` folder of the server, and in the `mods` folder of every client.
 3. Back up anything valuable in the client instance first. A mod that manages files deserves a backup.
-4. Start the server once. AutoModpack creates `automodpack/server-config.hconf` and publishes the first generation of the pack.
+4. Start the server once. AutoModpack creates `automodpack/server.conf` and publishes the first generation of the pack.
 
 By default the pack contains every jar in the server's `mods` folder plus `kubejs/**` and `emotes/*`. The files `options.txt` and `config/**` are marked editable, so players can change them locally. To keep a server mod off clients, or to add client-only mods, see [which files reach clients](pack-content#which-files-reach-clients). [Building the modpack](pack-content) explains how all of that is decided.
 

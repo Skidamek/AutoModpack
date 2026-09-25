@@ -568,7 +568,9 @@ class FakeBridge:
             shutil.rmtree(active)
         client = self.ctx.game_dir / "automodpack" / "client"
         (client / "active-state.json").unlink(missing_ok=True)
-        client_config = self.ctx.game_dir / "automodpack" / "client-config.json"
+        client_config = self.ctx.game_dir / "automodpack" / "client.conf"
+        if not client_config.is_file():
+            client_config = self.ctx.game_dir / "automodpack" / "client-config.json"
         try:
             config = json.loads(client_config.read_text(encoding="utf-8")) if client_config.is_file() else {}
         except (OSError, TypeError, ValueError, json.JSONDecodeError):

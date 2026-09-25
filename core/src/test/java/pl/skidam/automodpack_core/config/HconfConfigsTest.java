@@ -23,7 +23,7 @@ class HconfConfigsTest {
 	Path dir;
 
 	private Path serverConfig() {
-		return dir.resolve("server-config.hconf");
+		return dir.resolve("server.conf");
 	}
 
 	private Path legacyServerConfig() {

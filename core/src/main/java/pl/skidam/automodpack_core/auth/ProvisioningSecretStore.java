@@ -11,7 +11,7 @@ import java.nio.file.Path;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 
-/** Operator provisioning secret. Lives in credentials/, not server-config.json. */
+/** Operator provisioning secret. Lives in credentials/, not server.conf. */
 public final class ProvisioningSecretStore {
 	private static String cached;
 	private static boolean loaded;

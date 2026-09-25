@@ -96,7 +96,7 @@ public final class HconfConfigs {
 		if (bytes == null) {
 			document = freshDocument(model, type);
 		} else if (legacyBytes != null) {
-			// format migration (one-time, json -> hconf): the model was read through the legacy
+			// format migration (one-time, released json -> conf): the model was read through the legacy
 			// fallback, so generating fresh carries every current value into the documented canonical
 			// file; the old file goes away only after the new one is written
 			ParseResult legacyResult = Hconf.parse(legacyBytes);
@@ -145,9 +145,15 @@ public final class HconfConfigs {
 		}
 	}
 
-	/** The pre-hconf {@code .json} name of a config file; the read fallback and the save migration source. */
+	/** The released pre-conf {@code .json} name of a config file (the basenames diverged when {@code -config} was dropped); the read fallback and the save migration source. */
 	private static Path legacyPath(Path path) {
 		String name = path.getFileName().toString();
+		String legacyName = switch (name) {
+			case "server.conf" -> "server-config.json";
+			case "client.conf" -> "client-config.json";
+			default -> null;
+		};
+		if (legacyName != null) return path.resolveSibling(legacyName);
 		int dot = name.lastIndexOf('.');
 		return path.resolveSibling((dot > 0 ? name.substring(0, dot) : name) + ".json");
 	}
