@@ -98,6 +98,12 @@ public final class PartialResume {
 		return bytes;
 	}
 
+	/** Bytes still to fetch for this object: the advertised size minus finished staging slices. */
+	public static long remainingBytes(Path stagingRoot, String sha1, long fileSize) throws IOException {
+		if (fileSize <= 0) return 0;
+		return Math.max(0, fileSize - presentBytes(directory(stagingRoot, sha1), fileSize));
+	}
+
 	public static boolean complete(Path directory, long fileSize) throws IOException {
 		return remaining(directory, fileSize).isEmpty();
 	}

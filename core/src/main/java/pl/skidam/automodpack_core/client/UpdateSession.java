@@ -185,8 +185,12 @@ final class UpdateSession implements UpdateAttempt {
 
 	private UpdatePreview previewFor(ClientUpdatePlanBuilder.PreparedPlan prepared, InstalledTokenRule tokenRule) throws IOException {
 		List<JournalEntry> journal = new JournalMirror(storage).entries(target.manifest().modpackId());
+		long remaining;
+		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
+			remaining = ModpackUtils.remainingUncachedBytes(objectAcquisition.missingTargetObjects(target.flatTarget(), cache), storage);
+		}
 		return UpdatePreview.forUpdate(prepared.plan(), target.selection(), journal, tokenRule.installedToken(storage, target.manifest().modpackId()))
-				.withFeatureManifest(target.manifest());
+				.withFeatureManifest(target.manifest()).withRemainingWireBytes(remaining);
 	}
 
 	/**

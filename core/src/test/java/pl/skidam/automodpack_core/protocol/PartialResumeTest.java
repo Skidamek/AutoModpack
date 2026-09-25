@@ -32,6 +32,8 @@ class PartialResumeTest {
 		assertEquals(NetUtils.WIRE_CHUNK_BYTES * 2L, remaining.get(1)[0]);
 		assertEquals(size - 1, remaining.get(1)[1]);
 		assertEquals(NetUtils.WIRE_CHUNK_BYTES + 50L, PartialResume.presentBytes(dir, size));
+		assertEquals(size - (NetUtils.WIRE_CHUNK_BYTES + 50L), PartialResume.remainingBytes(directory, sha1, size));
+		assertEquals(size, PartialResume.remainingBytes(directory, HashUtils.sha1("absent"), size));
 	}
 
 	@Test

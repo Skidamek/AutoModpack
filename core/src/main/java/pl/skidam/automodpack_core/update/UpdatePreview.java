@@ -27,9 +27,10 @@ public final class UpdatePreview {
 	private final List<JournalEntry> journal;
 	private final Mode mode;
 	private final Map<String, String> featureNames;
+	private final Long remainingWireBytes;
 
 	private UpdatePreview(UpdatePlan decision, GroupConsequences groupConsequences, String patchNotes,
-			List<JournalEntry> journal, Mode mode, ChangeSet changeSet, Map<String, String> featureNames) {
+			List<JournalEntry> journal, Mode mode, ChangeSet changeSet, Map<String, String> featureNames, Long remainingWireBytes) {
 		this.decision = Objects.requireNonNull(decision, "reconciliation decision");
 		this.changeSet = Objects.requireNonNull(changeSet, "reconciliation consequences");
 		this.groupConsequences = Objects.requireNonNull(groupConsequences, "group consequences");
@@ -37,6 +38,7 @@ public final class UpdatePreview {
 		this.journal = List.copyOf(Objects.requireNonNull(journal, "journal"));
 		this.mode = Objects.requireNonNull(mode, "mode");
 		this.featureNames = Map.copyOf(new TreeMap<>(featureNames == null ? Map.of() : featureNames));
+		this.remainingWireBytes = remainingWireBytes;
 	}
 
 	public static UpdatePreview create(UpdatePlan decision, ResolvedSelection selection, Mode mode, String patchNotes,
@@ -45,7 +47,7 @@ public final class UpdatePreview {
 		GroupConsequences consequences = selection == null
 				? new GroupConsequences(Set.of(), Set.of(), Set.of())
 				: new GroupConsequences(selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedGroups(), selection.groupResolutions());
-		return new UpdatePreview(decision, consequences, patchNotes, journal, mode, decision.consequences(), Map.of());
+		return new UpdatePreview(decision, consequences, patchNotes, journal, mode, decision.consequences(), Map.of(), null);
 	}
 
 	public static UpdatePreview create(UpdatePlan decision, ResolvedSelection selection, Mode mode) {
@@ -114,16 +116,22 @@ public final class UpdatePreview {
 					.toList();
 			changes.add(new ChangeSet.Change(change.logicalPath(), change.kind(), occurrences));
 		}
-		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, ChangeSet.of(changes, changeSet.effects()), names);
+		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, ChangeSet.of(changes, changeSet.effects()), names, remainingWireBytes);
 	}
 
 	public UpdatePreview withReferences(ChangeSet.ReferenceProvider provider) {
-		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet.withReferences(provider), featureNames);
+		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet.withReferences(provider), featureNames, remainingWireBytes);
 	}
 
 	/** Re-labels the presentation mode without changing any planned disposition. */
 	public UpdatePreview withMode(Mode mode) {
-		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet, featureNames);
+		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet, featureNames, remainingWireBytes);
+	}
+
+	/** Remaining wire bytes for this preview, after CAS hits and finished staging slices. */
+	public UpdatePreview withRemainingWireBytes(long bytes) {
+		if (bytes < 0) throw new IllegalArgumentException("Remaining wire bytes cannot be negative");
+		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet, featureNames, bytes);
 	}
 
 	public long addedBytes() {
@@ -135,6 +143,7 @@ public final class UpdatePreview {
 	}
 
 	public long uncachedAcquisitionBytes() {
+		if (remainingWireBytes != null) return remainingWireBytes;
 		return decision.operations().stream()
 				.filter(operation -> operation.operation() == OperationType.INSTALL_OBJECT && operation.root() == Root.PROJECTION && operation.expectedExistingHash() == null)
 				.mapToLong(UpdatePlan.Operation::expectedSize).sum();

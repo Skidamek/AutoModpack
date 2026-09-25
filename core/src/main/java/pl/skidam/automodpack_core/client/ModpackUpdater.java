@@ -110,11 +110,9 @@ public class ModpackUpdater implements AutoCloseable {
 		return !missingSelectedTargetObjects().isEmpty();
 	}
 
-	/** The selected target's download cost with the local store: the bytes of its objects not already acquired. */
+	/** The selected target's remaining wire cost: missing objects minus finished staging slices. */
 	long uncachedSelectedTargetBytes() throws IOException {
-		long bytes = 0;
-		for (var item : missingSelectedTargetObjects()) bytes += item.size;
-		return bytes;
+		return ModpackUtils.remainingUncachedBytes(missingSelectedTargetObjects(), storage);
 	}
 
 	ConnectionJsons.ConnectionInfo connectionInfo() {

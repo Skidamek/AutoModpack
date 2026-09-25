@@ -282,10 +282,8 @@ public class DownloadManager implements DownloadView {
 
 		try (FileCache cache = FileCache.open(dataLayout.fileCacheDirectory())) {
 			if (ClientObjectStore.acquireVerified(storeFile, hashPathPair.hash(), task.fileSize, List.of(), cache, ClientObjectStore.CorruptObjectPolicy.EVICT_QUIETLY).present()) {
-				totalBytesDownloaded.addAndGet(task.fileSize);
-				// IMPORTANT: Do NOT add cached bytes to Speedometer.
-				// It would fake a massive speed spike.
-
+				// The run's total is remaining wire bytes, so a CAS hit only fills the amount this task still owed.
+				totalBytesDownloaded.addAndGet(PartialResume.remainingBytes(dataLayout.stagingDirectory(), hashPathPair.hash(), task.fileSize));
 				cleanupAndFinalize(hashPathPair, task, storeFile, true, false);
 				return;
 			}
@@ -306,10 +304,7 @@ public class DownloadManager implements DownloadView {
 				return;
 			}
 			long already = PartialResume.presentBytes(partial, task.fileSize);
-			if (already > 0) {
-				totalBytesDownloaded.addAndGet(already);
-				data.remainingBytes.addAndGet(-already);
-			}
+			if (already > 0) data.remainingBytes.addAndGet(-already);
 			refreshDeadLinkSources(hashPathPair.hash(), task);
 			DownloadSource source = data.route == Route.HOST ? null : platformSourceForDomain(task, data.activeDomain);
 			if (data.route == Route.HOST || source == null) {
