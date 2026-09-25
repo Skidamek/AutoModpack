@@ -117,21 +117,22 @@ public class HttpFileDownloader {
 		WireCodec codec = WireCodec.negotiate(encoding);
 		if (codec == null && !encoding.isEmpty()) throw new IOException("Unsupported Content-Encoding: " + encoding);
 
-		try (InputStream rawIn = response.body();
-				InputStream in = codec == null ? rawIn : codec.unwrap(rawIn);
-				OutputStream out = PartialResume.writer(target, fileSize, writeOffset)) {
-
+		try (InputStream rawIn = response.body()) {
 			AtomicLong lastProgressNanos = new AtomicLong(System.nanoTime());
 			ScheduledFuture<?> stallFuse = armBodyStallFuse(rawIn, lastProgressNanos, target.getFileName());
-			try {
+			try (InputStream in = codec == null ? rawIn : codec.unwrap(rawIn);
+					OutputStream out = PartialResume.writer(target, fileSize, writeOffset)) {
 				byte[] buffer = READ_BUFFERS.get();
+				long written = writeOffset;
 				int bytesRead;
 				while ((bytesRead = in.read(buffer)) != -1) {
 					if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
 					out.write(buffer, 0, bytesRead);
+					written += bytesRead;
 					lastProgressNanos.set(System.nanoTime());
 					if (progressAction != null) progressAction.accept(bytesRead);
 				}
+				if (written < fileSize) throw new IOException("Platform body ended at " + written + " of " + fileSize + " bytes for " + target.getFileName());
 			} finally {
 				stallFuse.cancel(false);
 			}
