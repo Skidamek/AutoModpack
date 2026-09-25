@@ -2,7 +2,7 @@
 
 `automodpack/server.conf` in the server root directory. The file is created on the first start with defaults.
 
-The file is plain text - comments (`#`), bare values and one entry per line. A pre-existing `server-config.json` file is read as-is and migrates to `server.conf` on the first automatic save; your values carry over and every option gets its documentation comment.
+The file uses a small subset of HOCON - comments (`#`), `key: value` options, inline lists and braced nesting. A pre-existing `server-config.json` file is read as-is and migrates to `server.conf` on the first automatic save; your values carry over and every option gets its documentation comment.
 
 ## Editing the file
 

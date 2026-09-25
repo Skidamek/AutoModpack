@@ -2,11 +2,11 @@
 
 `automodpack/client.conf` in the game directory of the instance. The file is created on the first start with defaults.
 
-The file is plain text - comments (`#`), bare values and one entry per line. A pre-existing `client-config.json` file is read as-is and migrates to `client.conf` on the first automatic save; your values carry over and every option gets its documentation comment.
+The file uses a small subset of HOCON - comments (`#`), `key: value` options, inline lists and braced nesting. A pre-existing `client-config.json` file is read as-is and migrates to `client.conf` on the first automatic save; your values carry over and every option gets its documentation comment.
 
 ## Editing the file
 
-- The file is plain text: `#` starts a comment, options are `key: value` lines, lists are inline `[a, b, c]`. Plain JSON also parses.
+- The format is a HOCON subset: `#` starts a comment, options are `key: value` lines, lists are inline `[a, b, c]`, braces nest sections. Plain JSON also parses.
 - Restart the game after editing, unless a note below says otherwise.
 - A mistake stops the launch with the file, line, and column in the message. Unknown keys are logged and ignored.
 - AutoModpack writes the file by splicing in only the changed value, so your comments and layout survive every save. Leave `DO_NOT_CHANGE_IT` alone.
