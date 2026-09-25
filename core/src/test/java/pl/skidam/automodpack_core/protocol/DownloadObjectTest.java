@@ -249,11 +249,11 @@ class DownloadObjectTest {
 				var thrown = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertInstanceOf(RangeIgnoredException.class, rootCause(thrown));
 				assertTrue(client.rangeIgnoredHost, "the chunked verdict degrades the whole client");
-				assertFalse(Files.exists(destination), "the body was never consumed into the destination");
+				assertTrue(PartialResume.remaining(destination, object.length).stream().anyMatch(range -> range[0] == 0), "the body was never consumed into a finished slice");
 
 				// The manager requeues the task; under the flag it skips tiling and rides one open-ended take.
 				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
-				assertArrayEquals(object, Files.readAllBytes(destination));
+				assertArrayEquals(object, assembledBytes(destination, object.length));
 			}
 		}
 	}
