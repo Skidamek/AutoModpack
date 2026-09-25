@@ -33,7 +33,6 @@
   "automodpack.confirm.computerRisk": "A modpack modjai olyan programok, amelyek a számítógépeden futnak. Megváltoztathatnak fájlokat, ellophatnak bejelentkezési adatokat, vagy átengedhetik a gépedet valaki másnak. Ez nem jelenti azt, hogy ezt tennék.",
   "automodpack.confirm.commands": "Nézd át a fájlokat, mielőtt letöltöd. Ha a launchereden van védett mód, kapcsold be. Ha alig ismered a szerver üzemeltetőit, vagy nem bízol bennük, ne töltsd le.",
   "automodpack.confirm.unverifiedCount": "%s modfájl %s közül nem található a Modrinthon vagy a CurseForge-on.",
-  "automodpack.confirm.sourceCounts": "Modrinthon megtalálva: %s  |  CurseForge-on megtalálva: %s  |  Csak a szerveren: %s",
   "automodpack.confirm.unverifiedExplain": "Lehetnek ártalmatlan saját modok, módosított modok vagy rosszindulatú modok. Az AutoModpack nem tudja megkülönböztetni őket.",
   "automodpack.confirm.ack": "Megértem a kockázatot, és bízom ebben a szerverben.",
   "automodpack.confirm.ackCountdown": "A kockázati mező %s másodperc múlva oldódik.",

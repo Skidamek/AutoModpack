@@ -33,7 +33,6 @@
   "automodpack.confirm.computerRisk": "Mody w modpaku to zwykłe programy, co działajōm na twojim kōmputerze. Mogōm zmiyniać pliki, ukraść dane do logowaniŏ abo oddać kōmputer cudzij kōntroli. To niy znaczy, że tak zrobiōm.",
   "automodpack.confirm.commands": "Przidejrzij pliki, niżyż je pobjerzesz. Jak twōj launcher mo piaskownica, włōncz jōm. Jak ledwo znŏsz ludzi, co prowadzōm tyn serwer, abo im niy ufasz, to niy pobjerŏj.",
   "automodpack.confirm.unverifiedCount": "%s ze %s plikōw modōw niy znŏlazło sie na Modrinth ani CurseForge.",
-  "automodpack.confirm.sourceCounts": "Znojdziano na Modrinth: %s  |  Znojdziano na CurseForge: %s  |  Tylko z serwera: %s",
   "automodpack.confirm.unverifiedExplain": "Mogōm to być niyszkodliwe własne mody, zmiyniōne mody abo złośliwe mody. AutoModpack niy umie ich rozrōżnić.",
   "automodpack.confirm.ack": "Rozumiym ryzyko i ufŏm tymu serwerowi.",
   "automodpack.confirm.ackCountdown": "Pole ryzyka ôdblokuje sie za %s sekund.",

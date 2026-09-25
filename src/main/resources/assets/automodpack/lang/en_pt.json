@@ -33,7 +33,6 @@
   "automodpack.confirm.computerRisk": "Mods in any modpack be just programs that run on yer ship. They can change files, steal yer secrets, or hand yer ship to another captain. That don't mean they will.",
   "automodpack.confirm.commands": "Inspect the files before ye download. If yer launcher has a sandbox, turn it on. If ye barely know the crew runnin' this server, or ye don't trust 'em, don't download.",
   "automodpack.confirm.unverifiedCount": "%s of %s mod files weren't found on Modrinth or CurseForge.",
-  "automodpack.confirm.sourceCounts": "Matched on Modrinth: %s  |  Matched on CurseForge: %s  |  Only from th' server: %s",
   "automodpack.confirm.unverifiedExplain": "They could be harmless custom mods, tinkered mods, or cursed mods. AutoModpack can't tell which.",
   "automodpack.confirm.ack": "I know the risk and trust this crew.",
   "automodpack.confirm.ackCountdown": "The risk box unlocks in %s seconds.",
