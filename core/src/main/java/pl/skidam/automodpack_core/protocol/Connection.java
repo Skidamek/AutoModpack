@@ -279,7 +279,7 @@ class Connection implements AutoCloseable {
 				synchronized (gate) {
 					waiting = pending.size();
 				}
-				LOGGER.warn("The modpack wire lane died: conn={} pending={} request={} failure={}", traceId, waiting, request.originPath, failure.toString());
+				LOGGER.debug("The modpack wire lane died: conn={} pending={} request={} failure={}", traceId, waiting, request.originPath, failure.toString());
 				WireTrace.log("READER_EXIT", "conn", traceId, "reason", "fail:" + failure);
 				// The lane is marked dead before any failure is announced: a dependent that re-issues its request inline
 				// must land on a fresh lane, never on this dying one. The peeked request is still first in pending,

@@ -119,7 +119,7 @@ public class ModpackUtils {
 						ClientObjectStore.CorruptObjectPolicy.EVICT_AND_REPORT);
 				switch (acquisition.outcome()) {
 					case PRESENT -> LOGGER.debug("Verified file already exists in store: {}", entry.file);
-					case COPIED -> LOGGER.info("Copying existing file from CWD to store: {}", entry.file);
+					case COPIED -> LOGGER.debug("Copying existing file from CWD to store: {}", entry.file);
 					case EVICTION_FAILED -> LOGGER.error("Failed to evict corrupt store object {}", entry.sha1, acquisition.evictionFailure());
 					case MISSING_SOURCE -> {
 					}

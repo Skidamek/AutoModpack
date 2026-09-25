@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -150,7 +151,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 	@Override
 	public void channelInactive(ChannelHandlerContext ctx) {
-		LOGGER.info("HTTP contract connection closed: responses={} bytes={} streaming={} pendingHeaders={}B", responsesServed, bytesServed, activeStream != null,
+		LOGGER.debug("HTTP contract connection closed: responses={} bytes={} streaming={} pendingHeaders={}B", responsesServed, bytesServed, activeStream != null,
 				cumulation == null ? 0 : cumulation.readableBytes());
 		if (activeStream != null) activeStream.discard();
 		if (inFlightSpan != null) tracker.completeDropped(inFlightSpan);
@@ -165,8 +166,23 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 	@Override
 	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-		LOGGER.error("The HTTP contract connection failed; closing it", cause);
+		if (benignDisconnect(cause)) LOGGER.debug("HTTP contract connection closed: {}", cause.toString());
+		else LOGGER.error("The HTTP contract connection failed; closing it", cause);
 		ctx.close();
+	}
+
+	/** A client hang-up, reset, or TLS close_notify is the usual end of a lane, not a hosting failure. */
+	private static boolean benignDisconnect(Throwable cause) {
+		for (Throwable t = cause; t != null; t = t.getCause()) {
+			if (t instanceof ClosedChannelException) return true;
+			String message = t.getMessage();
+			if (message == null) continue;
+			String text = message.toLowerCase(Locale.ROOT);
+			if (text.contains("connection reset") || text.contains("broken pipe") || text.contains("closed") || text.contains("forcibly closed") || text.contains("connection timed out")
+					|| text.contains("close_notify"))
+				return true;
+		}
+		return false;
 	}
 
 	@Override
@@ -175,7 +191,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		// a chunk well inside this window at the receipted drain floor, so the event can only fire for a connection
 		// with no request in flight and no body draining.
 		if (evt instanceof IdleStateEvent idle) {
-			LOGGER.info("HTTP contract connection went idle ({}); closing it. streaming={} responses={}", idle.state(), activeStream != null, responsesServed);
+			LOGGER.debug("HTTP contract connection went idle ({}); closing it. streaming={} responses={}", idle.state(), activeStream != null, responsesServed);
 			ctx.close();
 			return;
 		}
@@ -636,7 +652,8 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		private void fail(Throwable failure) {
 			if (done) return;
-			LOGGER.error("The streamed response to {} died mid-body ({} bytes sent)", span.routeKey, sent, failure);
+			if (benignDisconnect(failure)) LOGGER.debug("The streamed response to {} ended mid-body ({} bytes sent): {}", span.routeKey, sent, failure.toString());
+			else LOGGER.error("The streamed response to {} died mid-body ({} bytes sent)", span.routeKey, sent, failure);
 			complete(failure);
 		}
 

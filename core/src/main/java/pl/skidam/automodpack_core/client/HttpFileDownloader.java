@@ -108,7 +108,7 @@ public class HttpFileDownloader {
 				throw new HttpStatusException(statusCode);
 			}
 		} else if (offset > 0) {
-			LOGGER.info("Server ignored the Range header for {}; pulling the whole object from zero", target.getFileName());
+			LOGGER.debug("Server ignored the Range header for {}; pulling the whole object from zero", target.getFileName());
 			PartialResume.delete(target);
 			writeOffset = 0;
 		}
@@ -160,7 +160,7 @@ public class HttpFileDownloader {
 
 		try {
 			HttpResponse<InputStream> response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
-			LOGGER.info("HTTPS Download {}: Provider={} Host={} Protocol={} Status={}", target.getFileName(), source.provider(), uri.getHost(),
+			LOGGER.debug("HTTPS Download {}: Provider={} Host={} Protocol={} Status={}", target.getFileName(), source.provider(), uri.getHost(),
 					response.version(), response.statusCode());
 			return response;
 		} catch (InterruptedException | IOException e) {

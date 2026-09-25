@@ -69,7 +69,7 @@ public class HolepunchSocket extends Socket {
 				boolean localClose = closed;
 				closed = true;
 				in.feedEnd();
-				if (!localClose) LOGGER.info("Holepunch transport closed unexpectedly: [{}] {}", failure.kind(), failure.getMessage());
+				if (!localClose) LOGGER.debug("Holepunch transport closed: [{}] {}", failure.kind(), failure.getMessage());
 			}
 		};
 	}

@@ -214,7 +214,7 @@ public final class ManifestFetcher {
 		return fetchJournal(transport, storage, journalConditional).exceptionallyCompose(error -> {
 			Throwable cause = Throwables.unwrap(error);
 			if (!(cause instanceof IOException) || cause instanceof UnauthorizedException || cause instanceof MissingObjectException) return CompletableFuture.failedFuture(error);
-			LOGGER.warn("The pipelined journal fetch lost its lane; fetching the journal again on a fresh one", cause);
+			LOGGER.debug("The pipelined journal fetch lost its lane; fetching the journal again on a fresh one", cause);
 			return fetchJournal(transport, storage, journalConditional);
 		});
 	}

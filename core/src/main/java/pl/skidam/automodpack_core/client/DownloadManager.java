@@ -184,7 +184,7 @@ public class DownloadManager implements DownloadView {
 		// The dispatch is committed: the task leaves both queue structures, so a later requeue re-enters exactly once.
 		queuedDownloads.remove(key);
 
-		LOGGER.info("Queueing download for: {} {} {}", task.file, task.fileSize, activeDomain);
+		LOGGER.debug("Queueing download for: {} {} {}", task.file, task.fileSize, activeDomain);
 
 		CompletableFuture<Void> future = new CompletableFuture<>();
 		DownloadData data = new DownloadData(future, task.file, activeDomain, task.fileSize);
@@ -389,7 +389,7 @@ public class DownloadManager implements DownloadView {
 		} catch (IOException e) {
 			if (cancelled || Thread.currentThread().isInterrupted()) throw new InterruptedException("Download of CAS object " + hashPathPair.hash() + " was cancelled");
 			task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
-			LOGGER.warn("Remote source failed for CAS object {}", hashPathPair.hash(), e);
+			LOGGER.debug("Remote source failed for CAS object {}", hashPathPair.hash(), e);
 			return false;
 		} finally {
 			// Every byte that arrived is real bandwidth data for the path it actually travelled, whatever happened to the transfer.
@@ -438,7 +438,7 @@ public class DownloadManager implements DownloadView {
 				deletePartial(task);
 			} else {
 				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
-				LOGGER.warn("Remote source failed for CAS object {}", hashPathPair.hash(), error);
+				LOGGER.debug("Remote source failed for CAS object {}", hashPathPair.hash(), error);
 			}
 			cleanupAndFinalize(hashPathPair, task, dataLayout.objectFile(hashPathPair.hash()), false, false);
 			return;
@@ -519,7 +519,7 @@ public class DownloadManager implements DownloadView {
 				activeTemporaryFiles.remove(key);
 				downloadedCount.incrementAndGet();
 				acquiredFiles.incrementAndGet();
-				LOGGER.info("Acquired CAS object {} for {}", storeFile.getFileName(), task.file.getFileName());
+				LOGGER.debug("Acquired CAS object {} for {}", storeFile.getFileName(), task.file.getFileName());
 				try {
 					task.successCallback.run();
 				} finally {
@@ -544,7 +544,7 @@ public class DownloadManager implements DownloadView {
 		}
 		if (task.lastFailureCategory != FailureCategory.LOCAL_STORAGE && task.attempts < (task.sources.size() + 1) * MAX_DOWNLOAD_ATTEMPTS) {
 			WireTrace.log("REQUEUE", "task", task.file.getFileName(), "attempts", task.attempts, "category", task.lastFailureCategory);
-			LOGGER.warn("Retrying download: {}", task.file.getFileName());
+			LOGGER.debug("Retrying download: {}", task.file.getFileName());
 			task.attempts++;
 			requeue(key, task);
 			return false;
