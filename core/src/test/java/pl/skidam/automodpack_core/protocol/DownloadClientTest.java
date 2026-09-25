@@ -328,13 +328,15 @@ class DownloadClientTest {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
+				int windowTakes = (int) (NetUtils.PIPELINE_WINDOW_BYTES / NetUtils.WIRE_CHUNK_BYTES);
+				int requests = windowTakes - 1; // every debit fits the one lane's window, so no second lane ever opens
 				List<CompletableFuture<Path>> downloads = new ArrayList<>();
-				for (int i = 0; i < 6; i++) downloads.add(client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), -1L, null));
+				for (int i = 0; i < requests; i++) downloads.add(client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("download-" + i), -1L, null));
 
-				server.awaitRequests(6);
-				assertEquals(1, server.acceptedConnections(), "a lane's window holds sixteen 4 MiB debits, so six requests share one connection");
+				server.awaitRequests(requests);
+				assertEquals(1, server.acceptedConnections(), "a lane's window holds " + windowTakes + " 4 MiB debits, so " + requests + " requests share one connection");
 
-				server.allowResponses(6);
+				server.allowResponses(requests);
 				CompletableFuture.allOf(downloads.toArray(CompletableFuture[]::new)).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertEquals(1, server.acceptedConnections());
 			}

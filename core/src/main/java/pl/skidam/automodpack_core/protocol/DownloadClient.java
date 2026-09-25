@@ -445,6 +445,9 @@ public class DownloadClient implements PackTransport {
 		// least one unsettled take until its range is fully claimed - its own settles always re-pump it, so nothing
 		// can go dormant and no revive path is needed.
 		private static final int MAX_OUTSTANDING_TAKES = (int) (LANES * NetUtils.PIPELINE_WINDOW_BYTES / WIRE_CHUNK_BYTES);
+		// The AIMD floor: one take per lane. Under loss the cap may fall this low, because a refused window costs
+		// waiting while an oversized one costs re-downloading everything queued behind a dropped segment.
+		private static final int MIN_OUTSTANDING_TAKES = LANES;
 
 		private final byte[] sha1Hex;
 		private final Path destination;
@@ -492,12 +495,19 @@ public class DownloadClient implements PackTransport {
 			return future;
 		}
 
-		/** Issues tail takes while the transfer holds fewer unsettled takes than the pool's whole-window bound; every settle re-pumps. */
+		// The adaptive bound: starts at the ceiling and halves on every take the wire failed, because in-flight
+		// exposure that buys re-downloads instead of bytes is exactly what loss punishes; doubles back per
+		// window-worth of clean settles. Fast shapes never fail, so they hold the ceiling; a lossy stretch trades
+		// window for waste. This is the one idea worth keeping from the deleted WirePacer, stripped of its machinery.
+		private int outstandingCap = MAX_OUTSTANDING_TAKES;
+		private int cleanSettles;
+
+		/** Issues tail takes while the transfer holds fewer unsettled takes than the adaptive bound allows; every settle re-pumps. */
 		private void pump() {
 			while (true) {
 				Take take;
 				synchronized (lock) {
-					if (error != null || pendingItems >= MAX_OUTSTANDING_TAKES || cursor <= floor()) return;
+					if (error != null || pendingItems >= outstandingCap || cursor <= floor()) return;
 					take = claimLocked();
 				}
 				LOGGER.debug("[download] lane {} takes bytes {}..{} of {}", take.lane(), take.start(), take.end(), objectName());
@@ -589,7 +599,8 @@ public class DownloadClient implements PackTransport {
 
 		private void onTakeSettled(Take take, AtomicLong takeBytes, Throwable takeError) {
 			if (takeError instanceof RangeIgnoredException) markRangeIgnoredHost();
-			if (takeError != null && take.attempt() < MAX_TAKE_ATTEMPTS && retryWorth(takeError)) {
+			boolean retried = takeError != null && take.attempt() < MAX_TAKE_ATTEMPTS && retryWorth(takeError);
+			if (retried) {
 				takeRetries.incrementAndGet();
 				// The barrier stays charged: the retried range is the same one unsettled unit of work. A throttled
 				// answer waits out its window on the retry clock instead of an immediate re-issue - the wait never
@@ -609,6 +620,21 @@ public class DownloadClient implements PackTransport {
 			boolean done;
 			Throwable failure;
 			synchronized (lock) {
+				if (retried) {
+					// The wire failed this take: halve the in-flight bound and forget the clean streak. Lost or
+					// reset bytes mean the unsettled queue was buying re-downloads, not progress.
+					if (outstandingCap > MIN_OUTSTANDING_TAKES) {
+						outstandingCap = Math.max(MIN_OUTSTANDING_TAKES, outstandingCap / 2);
+						WireTrace.log("TAKE_WINDOW_DOWN", "object", objectName(), "cap", outstandingCap);
+					}
+					cleanSettles = 0;
+				} else if (takeError == null && ++cleanSettles >= Math.max(MIN_OUTSTANDING_TAKES, outstandingCap)) {
+					cleanSettles = 0;
+					if (outstandingCap < MAX_OUTSTANDING_TAKES) {
+						outstandingCap = Math.min(MAX_OUTSTANDING_TAKES, outstandingCap * 2);
+						WireTrace.log("TAKE_WINDOW_UP", "object", objectName(), "cap", outstandingCap);
+					}
+				}
 				if (takeError != null && error == null) error = Throwables.unwrap(takeError);
 				if (take.start() != offset && takeBytes.get() > 0) positionedWrites = true;
 				done = --pendingItems == 0 && (error != null || cursor <= floor());

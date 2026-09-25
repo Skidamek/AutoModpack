@@ -43,11 +43,13 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  */
 class PipeliningTest {
 	private static final int AWAIT_SECONDS = 20;
-	/** Eight whole-object takes debit 32 MiB of the 64 MiB window: deep enough to pipeline, far under the bound. */
-	private static final int IN_FLIGHT = 8;
+	/** A full lane window of big takes: the count the byte window admits before the next one queues. */
+	private static final int IN_FLIGHT = (int) (NetUtils.PIPELINE_WINDOW_BYTES / NetUtils.WIRE_CHUNK_BYTES);
+	/** The same count, named for what it means at the connection's admission gate. */
+	private static final int WINDOW_TAKES = IN_FLIGHT;
 
 	@Test
-	void eightInFlightRequestsAnswerInOrderOnOneConnection(@TempDir Path directory) throws Exception {
+	void aFullWindowOfInFlightRequestsAnswersInOrderOnOneConnection(@TempDir Path directory) throws Exception {
 		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
 			List<String> hashes = storeObjects(server, IN_FLIGHT);
 			server.expectPipeline(IN_FLIGHT);
@@ -155,11 +157,12 @@ class PipeliningTest {
 	}
 
 	/**
-	 * The window is bytes, not slots: sixteen 4 MiB takes fill one lane's whole budget and the 17th is rejected, while
-	 * the same budget holds the small-take pipeline thousands of requests deep (pinned by the count tripwire test).
+	 * The window is bytes, not slots: a window's worth of 4 MiB takes fills one lane's whole budget and the next is
+	 * rejected, while the same budget holds the small-take pipeline thousands of requests deep (pinned by the count
+	 * tripwire test).
 	 */
 	@Test
-	void theWindowAdmitsSixteenBigTakesAndRejectsTheSeventeenth(@TempDir Path directory) throws Exception {
+	void theWindowAdmitsEveryBigTakeItHoldsAndRejectsTheNext(@TempDir Path directory) throws Exception {
 		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
 			byte[] object = new byte[NetUtils.WIRE_CHUNK_BYTES];
 			new SecureRandom().nextBytes(object);
@@ -168,16 +171,16 @@ class PipeliningTest {
 			server.setResponseDelayMillis(30_000); // nothing settles: the wire shows the raw window
 			try (Connection connection = connection(server, "test-secret")) {
 				List<CompletableFuture<Path>> pending = new ArrayList<>();
-				for (int i = 0; i < 16; i++) pending.add(takeWholeChunk(connection, sha1, directory.resolve("take-" + i)));
+				for (int i = 0; i < WINDOW_TAKES; i++) pending.add(takeWholeChunk(connection, sha1, directory.resolve("take-" + i)));
 				for (CompletableFuture<Path> future : pending) assertFalse(future.isDone(), "every take inside the window must stay unsettled");
-				assertRejected(connection, sha1, directory.resolve("take-16"), "window");
+				assertRejected(connection, sha1, directory.resolve("take-" + WINDOW_TAKES), "window");
 			}
 		}
 	}
 
-	/** Open-ended takes (the range-ignoring-host degrade) debit one chunk flat, so the 17th is rejected at 16 unsettled. */
+	/** Open-ended takes (the range-ignoring-host degrade) debit one chunk flat, so the next one past the window is rejected. */
 	@Test
-	void openEndedTakesDebitAChunkEachAndTheSeventeenthIsRejected(@TempDir Path directory) throws Exception {
+	void openEndedTakesDebitAChunkEachAndTheOnePastTheWindowIsRejected(@TempDir Path directory) throws Exception {
 		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
 			byte[] object = "a-small-object-behind-an-open-ended-take".getBytes(StandardCharsets.UTF_8);
 			String sha1 = HashUtils.sha1(object);
@@ -185,12 +188,13 @@ class PipeliningTest {
 			server.setResponseDelayMillis(30_000);
 			try (Connection connection = connection(server, "test-secret")) {
 				List<CompletableFuture<Path>> pending = new ArrayList<>();
-				for (int i = 0; i < 16; i++) {
+				for (int i = 0; i < WINDOW_TAKES; i++) {
 					pending.add(connection.sendDownloadFile(sha1.getBytes(StandardCharsets.UTF_8), Connection.ObjectTake.rangedSlice(directory.resolve("open-" + i), null, 0, -1, -1)));
 				}
 				for (CompletableFuture<Path> future : pending) assertFalse(future.isDone(), "every open-ended take inside the window must stay unsettled");
 				var thrown = assertThrows(ExecutionException.class,
-						() -> connection.sendDownloadFile(sha1.getBytes(StandardCharsets.UTF_8), Connection.ObjectTake.rangedSlice(directory.resolve("open-16"), null, 0, -1, -1)).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+						() -> connection.sendDownloadFile(sha1.getBytes(StandardCharsets.UTF_8), Connection.ObjectTake.rangedSlice(directory.resolve("open-" + WINDOW_TAKES), null, 0, -1, -1)).get(AWAIT_SECONDS,
+								TimeUnit.SECONDS));
 				assertTrue(rootCause(thrown).getMessage().contains("window"), String.valueOf(rootCause(thrown)));
 			}
 		}

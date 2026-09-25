@@ -689,7 +689,7 @@ class HttpContractHandlerTest {
 		byte[] body = new byte[NetUtils.WIRE_CHUNK_BYTES * 2 + 1024];
 		Path object = tempDir.resolve("stall.bin");
 		Files.write(object, body);
-			ExecutorService readers = Executors.newFixedThreadPool(2);
+		ExecutorService readers = Executors.newFixedThreadPool(2);
 		class SlowChannel extends EmbeddedChannel {
 			SlowChannel(ChannelHandler handler) {
 				super(handler);
