@@ -36,7 +36,7 @@ public final class BootstrapInstaller {
 		}
 
 		String originKey = AddressHelpers.formatAddress(bootstrap.origin());
-		String previousSelectedModpackId = clientConfig.selectedModpackId;
+		String previousSelectedModpackId = storage.selectedModpackId();
 		ConnectionJsons.ConnectionInfo previousConnection = null;
 		ConnectionJsons.CertificateTrustEntry previousTrust;
 		try {
@@ -47,8 +47,7 @@ public final class BootstrapInstaller {
 				ConnectionJsons.ConnectionInfo seeded = new ConnectionJsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.connectionMode(), null, null);
 				seeded.approveOrigin(originKey);
 				ConnectionStore.saveConnection(storage, bootstrap.modpackId(), seeded);
-				clientConfig = clientConfig.withSelectedModpackId(bootstrap.modpackId());
-				ReconfConfigs.save(storage.clientConfigFile(), clientConfig, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+				storage.writeSelectedModpackId(bootstrap.modpackId());
 			}
 			if (bootstrap.hasSecret()) {
 				if (!bootstrap.installsModpack()) throw new ConfigTools.ConfigException("Bootstrap secret requires an installable modpack");

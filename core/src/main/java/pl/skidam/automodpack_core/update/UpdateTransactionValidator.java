@@ -261,14 +261,20 @@ public final class UpdateTransactionValidator {
 
 	private void validatePlannedClientConfig(UpdateTransaction transaction) throws IOException {
 		ClientConfigJsons.ClientConfigFieldsV3 config = transaction.plan().plannedClientConfig();
-		if (config == null || !transaction.plan().modpackId().equals(config.selectedModpackId))
+		if (config == null || !transaction.plan().modpackId().equals(plannedFollow(transaction)))
 			throw new IOException("Planned client config does not select the transaction modpack");
 	}
 
 	private void validateRemovalClientConfig(UpdateTransaction transaction) throws IOException {
 		ClientConfigJsons.ClientConfigFieldsV3 config = transaction.plan().plannedClientConfig();
-		if (config == null || transaction.plan().modpackId().equals(config.selectedModpackId))
+		if (config == null || transaction.plan().modpackId().equals(plannedFollow(transaction)))
 			throw new IOException("Removal client config still selects the removed modpack");
+	}
+
+	static String plannedFollow(UpdateTransaction transaction) {
+		String follow = transaction.plan().plannedSelectedModpackId();
+		if ((follow == null || follow.isBlank()) && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) return transaction.plan().modpackId();
+		return follow == null ? "" : follow;
 	}
 
 	private void validateManifest(ModpackJsons.ModpackContentFields manifest, String modpackId) throws IOException {

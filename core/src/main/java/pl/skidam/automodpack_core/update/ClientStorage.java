@@ -63,6 +63,7 @@ public final class ClientStorage {
 	private final Path restartLoopStateFile;
 	private final Path stuckTransactionStateFile;
 	private final Path clientConfigFile;
+	private final Path selectedModpackFile;
 	private final Path modpackContentTempFile;
 	private final Path historyDirectory;
 	private final Path stateHistoryDirectory;
@@ -96,6 +97,7 @@ public final class ClientStorage {
 		this.restartLoopStateFile = this.gameDirectory.resolve(CLIENT_RESTART_LOOP_STATE_FILE).normalize();
 		this.stuckTransactionStateFile = this.gameDirectory.resolve(CLIENT_STUCK_TRANSACTION_STATE_FILE).normalize();
 		this.clientConfigFile = this.gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize();
+		this.selectedModpackFile = this.gameDirectory.resolve(CLIENT_SELECTED_FILE).normalize();
 		this.modpackContentTempFile = this.gameDirectory.resolve(CLIENT_CONTENT_TEMP_FILE).normalize();
 		this.historyDirectory = this.gameDirectory.resolve(CLIENT_HISTORY_DIR).normalize();
 		this.stateHistoryDirectory = this.gameDirectory.resolve(CLIENT_STATE_HISTORY_DIR).normalize();
@@ -268,6 +270,27 @@ public final class ClientStorage {
 
 	public Path clientConfigFile() {
 		return clientConfigFile;
+	}
+
+	public Path selectedModpackFile() {
+		return selectedModpackFile;
+	}
+
+	public String selectedModpackId() {
+		ClientConfigJsons.SelectedModpackFields fields = ConfigTools.read(selectedModpackFile, ClientConfigJsons.SelectedModpackFields.class).orElse(null);
+		if (fields == null || fields.modpackId == null) return "";
+		return fields.modpackId;
+	}
+
+	public boolean hasSelectedModpack() {
+		return !selectedModpackId().isBlank();
+	}
+
+	public void writeSelectedModpackId(String modpackId) throws IOException {
+		ClientConfigJsons.SelectedModpackFields fields = new ClientConfigJsons.SelectedModpackFields();
+		fields.modpackId = modpackId == null ? "" : modpackId;
+		Files.createDirectories(selectedModpackFile.getParent());
+		ConfigTools.writeAtomic(selectedModpackFile, fields);
 	}
 
 	public Path fileCacheDirectory() {
@@ -469,17 +492,22 @@ public final class ClientStorage {
 		}
 		if (state == null) return null;
 
-		ClientConfigJsons.ClientConfigFieldsV3 config = ConfigTools.read(gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize(), ClientConfigJsons.ClientConfigFieldsV3.class).orElse(null);
-		if (activeSelectionMismatch(config, state) != null) return null;
+		ClientConfigJsons.SelectedModpackFields selected = ConfigTools.read(gameDirectory.resolve(CLIENT_SELECTED_FILE).normalize(), ClientConfigJsons.SelectedModpackFields.class).orElse(null);
+		if (activeSelectionMismatch(selected, state) != null) return null;
 		return activeModsDirectory;
 	}
 
 	/** Why the persisted active selection does not match the configured one, or null when the projection would load. */
-	public static String activeSelectionMismatch(ClientConfigJsons.ClientConfigFieldsV3 config, ClientStorageJsons.ClientGenerationStateFields state) {
-		if (config == null || !config.hasSelectedModpack()) return "no modpack is selected";
-		if (!ModpackId.isValid(config.selectedModpackId)) return "the configured selected modpack ID is invalid: " + config.selectedModpackId;
+	public static String activeSelectionMismatch(ClientConfigJsons.SelectedModpackFields selected, ClientStorageJsons.ClientGenerationStateFields state) {
+		return activeSelectionMismatch(selected == null ? null : selected.modpackId, state);
+	}
+
+	public static String activeSelectionMismatch(String followId, ClientStorageJsons.ClientGenerationStateFields state) {
+		if (followId == null) followId = "";
+		if (followId.isBlank()) return "no modpack is selected";
+		if (!ModpackId.isValid(followId)) return "the configured selected modpack ID is invalid: " + followId;
 		if (state == null) return "the active state is missing";
-		if (!config.selectedModpackId.equals(state.modpackId)) return "the active state belongs to " + state.modpackId + ", but the selected modpack is " + config.selectedModpackId;
+		if (!followId.equals(state.modpackId)) return "the active state belongs to " + state.modpackId + ", but the selected modpack is " + followId;
 		return null;
 	}
 
@@ -553,7 +581,8 @@ public final class ClientStorage {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
 		validateWithin(clientDirectory, overlaysDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory,
-				historyDirectory, stateHistoryDirectory, stateHistoryTreesDirectory(), stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, stuckTransactionStateFile,
+				historyDirectory, stateHistoryDirectory, stateHistoryTreesDirectory(), stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, selectedModpackFile, restartLoopStateFile,
+				stuckTransactionStateFile,
 				modpackContentTempFile,
 				journalTempFile);
 		validateWithin(dataDirectory, objectsDirectory, fileCacheDirectory, modCacheDirectory, platformCacheDirectory, packsDirectory, stagingDirectory(), knownHostsFile, knownHostsLockFile);

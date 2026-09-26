@@ -34,7 +34,7 @@ public class ConfigUtils {
 	public static ServerConfigJsons.ServerConfigFieldsV3 loadOrCreateServerConfig() {
 		ServerConfigJsons.ServerConfigFieldsV3 config = ReconfConfigs.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
 		String before = ConfigTools.GSON.toJson(config);
-		// Seeded on first load only; an admin-edited set is honored as-is, including one that dropped this server's loader.
+		// Seeded on first load only. Handshake still accepts this server's loader if the file later omits it.
 		if (config.acceptedLoaders == null || config.acceptedLoaders.isEmpty()) config.acceptedLoaders = new HashSet<>(Set.of(LOADER));
 		normalizeServerConfig(config);
 		if (!before.equals(ConfigTools.GSON.toJson(config))) saveServerConfig(config);
@@ -66,18 +66,18 @@ public class ConfigUtils {
 				var group = groupEntry.getValue();
 				if (group == null) throw new ConfigTools.ConfigParseException("Group '" + groupEntry.getKey() + "' in category '" + categoryEntry.getKey() + "' is null; declare it or remove the entry");
 				Pattern ownGroupPrefix = Pattern.compile("^/?automodpack/host-modpack/" + Pattern.quote(groupEntry.getKey()) + "(?:/|$)");
-				group.syncedFiles = normalizeRuleSet(group.syncedFiles, "syncedFiles", groupEntry.getKey(), ownGroupPrefix, true);
-				group.excludedFiles = normalizeRuleSet(group.excludedFiles, "excludedFiles", groupEntry.getKey(), ownGroupPrefix, false);
-				group.allowEditsInFiles = normalizeRuleSet(group.allowEditsInFiles, "allowEditsInFiles", groupEntry.getKey(), ownGroupPrefix, false);
+				group.fromServer = normalizeRuleSet(group.fromServer, "from-server", groupEntry.getKey(), ownGroupPrefix, true);
+				group.exclude = normalizeRuleSet(group.exclude, "exclude", groupEntry.getKey(), ownGroupPrefix, false);
+				group.editable = normalizeRuleSet(group.editable, "editable", groupEntry.getKey(), ownGroupPrefix, false);
 			}
 		}
 	}
 
 	/**
 	 * Normalizes one rule set: logs away null and blank entries, strips leading slashes and the host-modpack group
-	 * prefix. A '!' rule stays put and keeps its set-local meaning: in syncedFiles it excepts the path from the synced
-	 * set only - the group directory may still provide it - while excludedFiles keeps it from clients entirely, so
-	 * moving one to the other would change what ships. syncedFiles entries under the group directory are dropped
+	 * prefix. A '!' rule stays put and keeps its set-local meaning: in from-server it excepts the path from the synced
+	 * set only - the group directory may still provide it - while exclude keeps it from clients entirely, so
+	 * moving one to the other would change what ships. from-server entries under the group directory are dropped
 	 * instead of stripped: the directory is included in full, so a synced rule there can only be redundant.
 	 */
 	private static Set<String> normalizeRuleSet(Set<String> ruleSet, String configKey, String groupId, Pattern ownGroupPrefix, boolean dropOwnGroupPaths) {
@@ -131,5 +131,16 @@ public class ConfigUtils {
 
 	private static Set<String> rules(Set<String> ruleSet) {
 		return ruleSet == null ? Set.of() : ruleSet;
+	}
+
+	/** Loaders advertised in the login handshake: the file's extra names plus this server's loader. */
+	public static Set<String> advertisedLoaders(ServerConfigJsons.ServerConfigFieldsV3 config) {
+		LinkedHashSet<String> accepted = new LinkedHashSet<>();
+		if (config != null && config.acceptedLoaders != null) for (String loader : config.acceptedLoaders) {
+			if (loader == null || loader.isBlank()) continue;
+			accepted.add(loader);
+		}
+		if (LOADER != null && !LOADER.isBlank()) accepted.add(LOADER);
+		return accepted;
 	}
 }

@@ -8,6 +8,7 @@ import java.util.List;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 
@@ -30,7 +31,8 @@ final class ClientPreferences {
 	private static void save(ClientConfigJsons.ClientConfigFieldsV3 next) {
 		clientConfig = next;
 		try {
-			ConfigTools.writeAtomic(ClientStorage.open(GameDirectory.current()).clientConfigFile(), clientConfig);
+			ReconfConfigs.save(ClientStorage.open(GameDirectory.current()).clientConfigFile(), clientConfig, ClientConfigJsons.ClientConfigFieldsV3.class,
+					ClientConfigJsons.ClientConfigFieldsV3::new);
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Failed to save client configuration", e);
 		}

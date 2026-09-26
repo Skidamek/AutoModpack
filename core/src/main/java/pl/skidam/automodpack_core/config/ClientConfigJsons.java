@@ -4,34 +4,33 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import com.google.gson.annotations.SerializedName;
+
 import pl.skidam.automodpack_core.loader.PinnedMods;
 
 public class ClientConfigJsons {
 
 	public static class ClientConfigFieldsV3 {
-		@ReconfConfigs.Comment("file version - do not change")
-		public int DO_NOT_CHANGE_IT = 3;
-		@ReconfConfigs.Comment("id of the installed modpack this instance follows; automodpack manages this")
-		public String selectedModpackId = "";
-		@ReconfConfigs.Comment("fetch and apply the pack during launch, before the game loads")
+		@ReconfConfigs.Comment("fetch and apply the pack during launch")
+		@SerializedName("update-selected-modpack-on-launch")
 		public boolean updateSelectedModpackOnLaunch = true;
-		@ReconfConfigs.Comment("let the mod update itself")
+		@SerializedName("self-updater")
 		public boolean selfUpdater = false;
-		@ReconfConfigs.Comment("match the automodpack version the server runs, via modrinth")
+		@SerializedName("sync-auto-modpack-version")
 		public boolean syncAutoModpackVersion = true;
-		@ReconfConfigs.Comment("let the server switch this instance's loader version")
+		@SerializedName("sync-loader-version")
 		public boolean syncLoaderVersion = true;
-		@ReconfConfigs.Comment("play music while a download runs")
+		@SerializedName("play-music")
 		public boolean playMusic = true;
-		@ReconfConfigs.Comment("show the modpack settings button")
+		@SerializedName("show-modpack-settings-button")
 		public boolean showModpackSettingsButton = true;
 		@ReconfConfigs.Comment("mod ids that keep loading from this instance's own mods folder")
+		@SerializedName("pinned-mod-ids")
 		public List<String> pinnedModIds = new ArrayList<>();
 
 		public ClientConfigFieldsV3() {}
 
 		public ClientConfigFieldsV3(ClientConfigFieldsV3 source) {
-			this.selectedModpackId = source.selectedModpackId;
 			this.updateSelectedModpackOnLaunch = source.updateSelectedModpackOnLaunch;
 			this.selfUpdater = source.selfUpdater;
 			this.syncAutoModpackVersion = source.syncAutoModpackVersion;
@@ -39,17 +38,6 @@ public class ClientConfigJsons {
 			this.playMusic = source.playMusic;
 			this.showModpackSettingsButton = source.showModpackSettingsButton;
 			this.pinnedModIds = new ArrayList<>(PinnedMods.normalize(source.pinnedModIds));
-		}
-
-		public ClientConfigFieldsV3 withSelectedModpackId(String selectedModpackId) {
-			ClientConfigFieldsV3 copy = new ClientConfigFieldsV3(this);
-			copy.selectedModpackId = selectedModpackId;
-			return copy;
-		}
-
-		/** Blank is the unset sentinel: no modpack selected yet; anything else must be a valid ID. */
-		public boolean hasSelectedModpack() {
-			return selectedModpackId != null && !selectedModpackId.isBlank();
 		}
 
 		public ClientConfigFieldsV3 withPlayMusic(boolean playMusic) {
@@ -65,11 +53,10 @@ public class ClientConfigJsons {
 		}
 
 		/** Reapplies a pending plan only to settings that the user has not changed since planning. */
-		public ClientConfigFieldsV3 rebase(ClientConfigFieldsV3 expected, ClientConfigFieldsV3 planned, boolean mayUpdateSelectedModpack) {
+		public ClientConfigFieldsV3 rebase(ClientConfigFieldsV3 expected, ClientConfigFieldsV3 planned) {
 			Objects.requireNonNull(expected, "expected config");
 			Objects.requireNonNull(planned, "planned config");
 			ClientConfigFieldsV3 rebased = new ClientConfigFieldsV3(this);
-			if (mayUpdateSelectedModpack && Objects.equals(selectedModpackId, expected.selectedModpackId)) rebased.selectedModpackId = planned.selectedModpackId;
 			if (updateSelectedModpackOnLaunch == expected.updateSelectedModpackOnLaunch)
 				rebased.updateSelectedModpackOnLaunch = planned.updateSelectedModpackOnLaunch;
 			if (selfUpdater == expected.selfUpdater) rebased.selfUpdater = planned.selfUpdater;
@@ -88,21 +75,25 @@ public class ClientConfigJsons {
 			if (!(object instanceof ClientConfigFieldsV3 other)) return false;
 			return updateSelectedModpackOnLaunch == other.updateSelectedModpackOnLaunch && selfUpdater == other.selfUpdater
 					&& syncAutoModpackVersion == other.syncAutoModpackVersion && syncLoaderVersion == other.syncLoaderVersion && playMusic == other.playMusic
-					&& showModpackSettingsButton == other.showModpackSettingsButton && Objects.equals(selectedModpackId, other.selectedModpackId)
+					&& showModpackSettingsButton == other.showModpackSettingsButton
 					&& Objects.equals(PinnedMods.normalize(pinnedModIds), PinnedMods.normalize(other.pinnedModIds));
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(selectedModpackId, updateSelectedModpackOnLaunch, selfUpdater, syncAutoModpackVersion, syncLoaderVersion, playMusic, showModpackSettingsButton, PinnedMods.normalize(pinnedModIds));
+			return Objects.hash(updateSelectedModpackOnLaunch, selfUpdater, syncAutoModpackVersion, syncLoaderVersion, playMusic, showModpackSettingsButton, PinnedMods.normalize(pinnedModIds));
 		}
 
-		/** Canonical with {@link #equals}: normalized pins, no file-version field. */
 		@Override
 		public String toString() {
-			return "ClientConfigFieldsV3[selectedModpackId=" + selectedModpackId + ", updateSelectedModpackOnLaunch=" + updateSelectedModpackOnLaunch + ", selfUpdater=" + selfUpdater
+			return "ClientConfigFieldsV3[updateSelectedModpackOnLaunch=" + updateSelectedModpackOnLaunch + ", selfUpdater=" + selfUpdater
 					+ ", syncAutoModpackVersion=" + syncAutoModpackVersion + ", syncLoaderVersion=" + syncLoaderVersion + ", playMusic=" + playMusic
 					+ ", showModpackSettingsButton=" + showModpackSettingsButton + ", pinnedModIds=" + PinnedMods.normalize(pinnedModIds) + "]";
 		}
+	}
+
+	/** Machine-owned follow pointer: which pack this instance follows. */
+	public static class SelectedModpackFields {
+		public String modpackId = "";
 	}
 }

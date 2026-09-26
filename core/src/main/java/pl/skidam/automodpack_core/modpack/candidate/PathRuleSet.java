@@ -7,8 +7,8 @@ import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 
 /**
  * A set of glob path rules. A path is matched when a positive rule matches it and no '!'-negated rule does - one
- * primitive each field points at its own posture: syncedFiles includes, excludedFiles excludes (where a '!' rule
- * un-excludes), allowEditsInFiles marks editable.
+ * primitive each field points at its own posture: from-server includes, exclude excludes (where a '!' rule
+ * un-excludes), editable marks editable.
  */
 public final class PathRuleSet {
 	private final List<CompiledRule> positive;
@@ -77,6 +77,7 @@ public final class PathRuleSet {
 			List<Pattern> matchers = new ArrayList<>();
 			matchers.add(globToRegex(pattern));
 			if (pattern.contains("/**/")) matchers.add(globToRegex(pattern.replace("/**/", "/")));
+			if (pattern.startsWith("**/")) matchers.add(globToRegex(pattern.substring(3)));
 			return List.copyOf(matchers);
 		} catch (RuntimeException e) {
 			throw new IllegalArgumentException("Invalid path rule: " + pattern, e);

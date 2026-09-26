@@ -785,9 +785,7 @@ class UpdatePlannerTest {
 	}
 
 	private static ClientConfigJsons.ClientConfigFieldsV3 config(String modpackId) {
-		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
-		config.selectedModpackId = modpackId;
-		return config;
+		return new ClientConfigJsons.ClientConfigFieldsV3();
 	}
 
 	private static Map<FileKey, FileState> projectedFiles(UpdatePlan plan) {

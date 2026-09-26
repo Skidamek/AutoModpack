@@ -64,4 +64,21 @@ class PathRuleSetTest {
 		assertTrue(rules.matches("mods/sodium.jar"));
 		assertFalse(rules.matches("mods/x.jasper"));
 	}
+
+	@Test
+	void gitignoreDoubleStarPrefixAlsoMatchesTheRoot() {
+		PathRuleSet hidden = new PathRuleSet(List.of("**/.*"));
+		assertTrue(hidden.matches(".env"));
+		assertTrue(hidden.matches("foo/.env"));
+
+		PathRuleSet junk = new PathRuleSet(List.of("**/*.{tmp,disabled,bak}"));
+		assertTrue(junk.matches("a.tmp"));
+		assertTrue(junk.matches("dir/a.tmp"));
+		assertTrue(junk.matches("a.disabled"));
+		assertTrue(junk.matches("dir/a.bak"));
+
+		PathRuleSet hiddenDirs = new PathRuleSet(List.of("**/.*/**"));
+		assertTrue(hiddenDirs.matches(".git/config"));
+		assertTrue(hiddenDirs.matches("foo/.git/config"));
+	}
 }

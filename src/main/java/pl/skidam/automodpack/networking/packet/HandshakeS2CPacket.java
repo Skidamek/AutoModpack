@@ -27,6 +27,8 @@ import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.config.ConfigUtils;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
 
@@ -95,15 +97,17 @@ public class HandshakeS2CPacket {
 			String clientResponse = buf.readUtf(Short.MAX_VALUE);
 			HandshakePacket clientHandshakePacket = HandshakePacket.fromJson(clientResponse);
 
-			boolean isAcceptedLoader = false;
-			for (String loader : serverConfig.acceptedLoaders) {
-				if (clientHandshakePacket.loaders.contains(loader)) {
-					isAcceptedLoader = true;
-					break;
-				}
+			boolean isAcceptedLoader = acceptedLoader(clientHandshakePacket);
+
+			if (!isAcceptedLoader) {
+				Component reason = VersionedText.literal("This server does not accept your mod loader. Join with "
+						+ LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT) + ".");
+				connection.send(new ClientboundLoginDisconnectPacket(reason));
+				connection.disconnect(reason);
+				return;
 			}
 
-			if (!isAcceptedLoader || !clientHandshakePacket.amVersion.equals(AM_VERSION)) {
+			if (!clientHandshakePacket.amVersion.equals(AM_VERSION)) {
 				Component reason = VersionedText.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for "
 						+ LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT) + " to play on this server!");
 				if (isClientVersionHigher(clientHandshakePacket.amVersion)) {
@@ -154,6 +158,22 @@ public class HandshakeS2CPacket {
 			connection.send(new ClientboundLoginDisconnectPacket(reason));
 			connection.disconnect(reason);
 		}
+	}
+
+	private static boolean acceptedLoader(HandshakePacket clientHandshakePacket) {
+		if (serverConfig.acceptedLoaders != null) for (String loader : serverConfig.acceptedLoaders) {
+			if (loader == null || loader.isBlank() || knownLoader(loader)) continue;
+			LOGGER.warn("Unknown accepted-loader '{}'; it will never match", loader);
+		}
+		if (clientHandshakePacket.loaders == null) return false;
+		for (String loader : ConfigUtils.advertisedLoaders(serverConfig)) if (clientHandshakePacket.loaders.contains(loader)) return true;
+		return false;
+	}
+
+	private static boolean knownLoader(String loader) {
+		for (LoaderManagerService.ModPlatform type : LoaderManagerService.ModPlatform.values())
+			if (type.name().toLowerCase(Locale.ROOT).equals(loader.toLowerCase(Locale.ROOT))) return true;
+		return LOADER != null && LOADER.equalsIgnoreCase(loader);
 	}
 
 	private static boolean isClientVersionHigher(String clientVersion) {

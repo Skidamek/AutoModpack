@@ -5,8 +5,6 @@ dedicated verb is needed for them.
 """
 from __future__ import annotations
 
-from automodpack_autotester import reconf_min
-
 import base64
 import hashlib
 import json
@@ -319,16 +317,14 @@ def assert_bootstrap_import(ctx, _step):
     if bootstrap_path.exists():
         raise AssertionError(f"Preload did not delete imported bootstrap file: {bootstrap_path}")
     try:
-        client_config_path = ctx.game_dir / "automodpack" / "client.conf"
-        if not client_config_path.exists():
-            client_config_path = ctx.game_dir / "automodpack" / "client-config.json"
-        client_config = reconf_min.read_config(client_config_path)
+        selected_path = ctx.game_dir / "automodpack" / "client" / "selected.json"
+        selected = json.loads(selected_path.read_text(encoding="utf-8"))
         known_hosts = json.loads((ctx.game_dir / "automodpack" / "client" / "data" / "known-hosts.json").read_text(encoding="utf-8"))
         connection = json.loads((ctx.game_dir / "automodpack" / "client" / "data" / "packs" / expected["modpackId"] / "connection.json").read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"Preload did not persist bootstrap state: {error}") from error
-    if client_config.get("selectedModpackId") != expected["modpackId"]:
-        raise AssertionError(f"bootstrap selectedModpackId mismatch: expected {expected['modpackId']!r}, got {client_config.get('selectedModpackId')!r}")
+    if selected.get("modpackId") != expected["modpackId"]:
+        raise AssertionError(f"bootstrap selected.json mismatch: expected {expected['modpackId']!r}, got {selected.get('modpackId')!r}")
     host = known_hosts.get("hosts", {}).get(expected["origin"])
     normalized_expected_fingerprint = expected["fingerprint"].replace(":", "").lower()
     if (not isinstance(host, dict) or host.get("reason") != "SEED"

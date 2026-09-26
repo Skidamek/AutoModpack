@@ -30,6 +30,7 @@ public final class UpdatePlan {
 	private List<Operation> operations;
 	private List<ProjectedFile> projectedFinalState;
 	private ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig;
+	private String plannedSelectedModpackId;
 	private Set<RestartReason> restartReasons;
 	private List<Preservation> preservations;
 	private List<BaselineCapture> baselineCaptures;
@@ -43,6 +44,12 @@ public final class UpdatePlan {
 	public UpdatePlan(String modpackId, PackTarget packTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
 			ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons, List<Preservation> preservations,
 			List<BaselineCapture> baselineCaptures, List<Conflict> conflicts, List<NestedCopy> generatedCopies, ChangeSet consequences) {
+		this(modpackId, packTarget, operations, projectedFinalState, plannedClientConfig, null, restartReasons, preservations, baselineCaptures, conflicts, generatedCopies, consequences);
+	}
+
+	public UpdatePlan(String modpackId, PackTarget packTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
+			ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig, String plannedSelectedModpackId, Set<RestartReason> restartReasons, List<Preservation> preservations,
+			List<BaselineCapture> baselineCaptures, List<Conflict> conflicts, List<NestedCopy> generatedCopies, ChangeSet consequences) {
 		this.packTarget = Objects.requireNonNull(packTarget, "packTarget");
 		if (modpackId != null && !modpackId.equals(packTarget.modpackId())) throw new IllegalArgumentException("Plan and pack target modpack IDs disagree");
 		this.modpackId = packTarget.modpackId();
@@ -54,6 +61,7 @@ public final class UpdatePlan {
 		this.operations = List.copyOf(operations);
 		this.projectedFinalState = List.copyOf(projectedFinalState);
 		this.plannedClientConfig = plannedClientConfig;
+		this.plannedSelectedModpackId = plannedSelectedModpackId == null ? "" : plannedSelectedModpackId;
 		this.restartReasons = stableSet(restartReasons);
 		this.preservations = List.copyOf(preservations);
 		this.baselineCaptures = List.copyOf(baselineCaptures);
@@ -66,7 +74,7 @@ public final class UpdatePlan {
 
 	/** Re-runs constructor validation so a Gson-built plan is either whole or rejected as unusable content. */
 	public UpdatePlan validated() {
-		return new UpdatePlan(modpackId, new PackTarget(modpackId, contentToken, policySha1, ledgerDigest), operations, projectedFinalState, plannedClientConfig, restartReasons,
+		return new UpdatePlan(modpackId, new PackTarget(modpackId, contentToken, policySha1, ledgerDigest), operations, projectedFinalState, plannedClientConfig, plannedSelectedModpackId, restartReasons,
 				preservations, baselineCaptures, conflicts, generatedCopies, consequences);
 	}
 
@@ -89,6 +97,15 @@ public final class UpdatePlan {
 
 	public ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig() {
 		return plannedClientConfig;
+	}
+
+	public String plannedSelectedModpackId() {
+		return plannedSelectedModpackId == null ? "" : plannedSelectedModpackId;
+	}
+
+	public UpdatePlan withPlannedSelectedModpackId(String selectedModpackId) {
+		return new UpdatePlan(modpackId, packTarget(), operations, projectedFinalState, plannedClientConfig, selectedModpackId, restartReasons, preservations, baselineCaptures, conflicts, generatedCopies,
+				consequences);
 	}
 
 	public Set<RestartReason> restartReasons() {
@@ -118,7 +135,7 @@ public final class UpdatePlan {
 	public UpdatePlan withRestartReason(RestartReason reason) {
 		LinkedHashSet<RestartReason> reasons = new LinkedHashSet<>(restartReasons);
 		if (!reasons.add(Objects.requireNonNull(reason, "restart reason"))) return this;
-		return new UpdatePlan(modpackId, packTarget(), operations, projectedFinalState, plannedClientConfig, reasons, preservations, baselineCaptures, conflicts, generatedCopies,
+		return new UpdatePlan(modpackId, packTarget(), operations, projectedFinalState, plannedClientConfig, plannedSelectedModpackId, reasons, preservations, baselineCaptures, conflicts, generatedCopies,
 				consequences.withEffects(List.of(ChangeSet.Effect.restart(reason.name()))));
 	}
 

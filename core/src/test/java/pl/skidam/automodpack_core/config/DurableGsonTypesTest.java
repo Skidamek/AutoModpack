@@ -28,7 +28,8 @@ class DurableGsonTypesTest {
 	@Test
 	void gsonFacingTypesAreNotRecords() throws IOException {
 		Set<Class<?>> visited = new HashSet<>();
-		for (Class<?> type : List.of(UpdateTransaction.class, ClientConfigJsons.ClientConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3.class, AuthJsons.SecretsFields.class,
+		for (Class<?> type : List.of(UpdateTransaction.class, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.SelectedModpackFields.class, ServerConfigJsons.ServerConfigFieldsV3.class,
+				AuthJsons.SecretsFields.class,
 				IssuedSecret.class, Secrets.Secret.class, ConnectionJsons.ConnectionRecordFields.class, ConnectionJsons.KnownHostsFields.class, ConnectionJsons.KnownHostsBootstrapFields.class,
 				SelectionJsons.ClientSelectionStoreFields.class, GenerationJsons.HeadDocumentFields.class, GenerationJsons.JournalEntryFields.class, ModpackJsons.CompleteModpackContentFields.class,
 				ModpackJsons.ModpackContentFields.class, StorageJsons.ObjectOwnershipFields.class, StorageJsons.SelfUpdateFields.class, ClientStorageJsons.ClientGeneratedCopiesFields.class,

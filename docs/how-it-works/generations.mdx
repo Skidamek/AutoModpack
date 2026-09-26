@@ -6,7 +6,7 @@ A generation is one published state of the modpack. It consists of a manifest de
 
 `/automodpack generate` scans the pack sources described in [building the modpack](../pack-content) and computes a content token from the result. When the token matches the current generation, nothing changed and nothing is published. Otherwise the scan becomes a new generation, appended to the journal, and connecting clients receive it.
 
-With `generateModpackOnStart` on (the default), the server publishes on every start the same way: a generation appears only when the content changed.
+With `generate-modpack-on-start` on (the default), the server publishes on every start the same way: a generation appears only when the content changed.
 
 Patch notes travel with the generation. Pass them inline with `generate notes <text...>`, or write them to `automodpack/host-modpack/patch-notes.md`, which is read and cleared when a publish succeeds. A preview with `generate preview` shows the same diff a publish would produce, without publishing.
 

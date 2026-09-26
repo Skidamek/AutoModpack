@@ -359,6 +359,7 @@ public final class UpdateTransactionExecutor {
 			} catch (IOException e) {
 				throw new ConfigTools.ConfigException("Failed to save client configuration", e);
 			}
+		if (!preserveNewerSelection) context.storage().writeSelectedModpackId(UpdateTransactionValidator.plannedFollow(transaction));
 		if (context.beforeManifestAction() != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
 			context.beforeManifestAction().run(transaction, resolved.flatTarget());
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {

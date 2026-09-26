@@ -48,7 +48,7 @@ Edit these by hand only when support asks you to; AutoModpack owns their content
 | `state-history/` | Instance timeline journal and per-instance tree documents |
 | `overlays/<modpack-id>/` | Player edits that survive generation switches |
 | `generated-copies/`, `incoming/`, `backup/` | Update, repair, and loader-copy working state |
-| `active-state.json`, `selections.json`, `restart-state.json`, `update-transaction.json`, `repair.json` | Pointers and in-flight work |
+| `selected.json`, `active-state.json`, `selections.json`, `restart-state.json`, `update-transaction.json`, `repair.json` | Follow pointer (`modpackId`), installed generation, and in-flight work |
 
 `automodpack/helper/`, outside `client/`, is where detached update and repair helpers log their runs.
 
@@ -68,6 +68,6 @@ The store contains Git-style objects under `objects/`, metadata caches, per-pack
 
 The selected generation is materialized into the fixed path `~/automodpack/client/active/`. Immutable files are hard-linked from the content store where the filesystem allows it, so most packs cost little extra disk space. Editable files keep their live copy in the game directory and use the overlay only after the player changes them.
 
-The game directory receives live copies for files the loader or game must read there, and for every editable file, players included: the standard `mods` folder gets the AutoModpack loader, loader-required copies, files pinned through `pinnedModIds`, and editable mod jars. Non-editable mods load straight from the projection, so a pack jar only meets the player's `mods` folder when the pack says the player may touch it. The projection path never changes with generation identity, so switching or restoring a generation rewires one tree instead of juggling one physical tree per pack.
+The game directory receives live copies for files the loader or game must read there, and for every editable file, players included: the standard `mods` folder gets the AutoModpack loader, loader-required copies, files pinned through `pinned-mod-ids`, and editable mod jars. Non-editable mods load straight from the projection, so a pack jar only meets the player's `mods` folder when the pack says the player may touch it. The projection path never changes with generation identity, so switching or restoring a generation rewires one tree instead of juggling one physical tree per pack.
 
 A bad update is also recoverable before the loader sees it: the fix lands in the projection, rather than crashing the game from the standard `mods` folder.

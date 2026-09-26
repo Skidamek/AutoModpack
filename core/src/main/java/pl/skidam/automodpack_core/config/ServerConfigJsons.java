@@ -15,6 +15,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
+import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
@@ -22,56 +23,57 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 public class ServerConfigJsons {
 
 	public static class ServerConfigFieldsV3 {
-		@ReconfConfigs.Comment("file version - do not change")
-		public int DO_NOT_CHANGE_IT = 3;
-		@ReconfConfigs.Comment("serve the modpack to clients from this server")
+		@SerializedName("modpack-host")
 		public boolean modpackHost = true;
-		@ReconfConfigs.Comment("scan and regenerate the modpack on every server start")
+		@SerializedName("generate-modpack-on-start")
 		public boolean generateModpackOnStart = true;
-		// Category name -> group id -> declaration. The group id is referenced by requires/breaksWith and by the client's saved selection; the category name is the player-facing section label.
-		@ReconfConfigs.Comment("what clients receive. name is the pack's display name; host-modpack/<group>/ ships in full, syncedFiles pulls from the server root, excludedFiles keeps files off clients (put server-only mods there)")
+		@ReconfConfigs.Comment("host-modpack/<id>/ is included in full. from-server pulls extra files from the server root. exclude and editable apply after that; they do not add files.")
 		public ModpackFields modpack = ModpackFields.withMainGroup();
-		@ReconfConfigs.Comment("leave mods marked as server-side out of the synced modpack")
+		@SerializedName("auto-exclude-server-side-mods")
 		public boolean autoExcludeServerSideMods = true;
-		@ReconfConfigs.Comment("require clients to install the modpack")
+		@SerializedName("require-modpack")
 		public boolean requireModpack = true;
-		@ReconfConfigs.Comment("show a message to players joining without the mod")
+		@SerializedName("nag-un-modded-clients")
 		public boolean nagUnModdedClients = true;
-		@ReconfConfigs.Comment("message shown to unmodded players")
+		@SerializedName("nag-message")
 		public String nagMessage = "Install the AutoModpack mod to get this server's modpack!";
-		@ReconfConfigs.Comment("text of the clickable nag message")
+		@SerializedName("nag-clickable-message")
 		public String nagClickableMessage = "Click here to get the AutoModpack!";
-		@ReconfConfigs.Comment("link the nag message opens")
+		@SerializedName("nag-clickable-link")
 		public String nagClickableLink = "https://modrinth.com/project/automodpack";
-		@ReconfConfigs.Comment("address the modpack host binds to; empty = all interfaces")
+		@SerializedName("bind-address")
 		public String bindAddress = "";
-		@ReconfConfigs.Comment("port the modpack host binds to; -1 = same as the server port")
+		@SerializedName("bind-port")
 		public int bindPort = -1;
-		@ReconfConfigs.Comment("host advertised to clients; empty = automatic")
+		@SerializedName("advertised-endpoint-host")
 		public String advertisedEndpointHost = "";
-		@ReconfConfigs.Comment("port advertised to clients; -1 = same as the bind port")
+		@SerializedName("advertised-endpoint-port")
 		public int advertisedEndpointPort = -1;
-		@ReconfConfigs.Comment("disable the built-in TLS listener")
+		@SerializedName("disable-internal-tls")
 		public boolean disableInternalTLS = false;
-		@ReconfConfigs.Comment("honor HAProxy PROXY protocol headers; enable only behind a trusted proxy")
+		@SerializedName("accept-proxy-protocol")
 		public boolean acceptProxyProtocol = false;
-		@ReconfConfigs.Comment("HOLEPUNCH, MAGIC or HTTP; HOLEPUNCH carries the pack through the Minecraft server port")
+		@ReconfConfigs.Comment("HOLEPUNCH uses the Minecraft port. MAGIC can share it or use bindPort. HTTP uses bindPort.")
+		@SerializedName("connection-mode")
 		public ModpackConnectionMode connectionMode = ModpackConnectionMode.HOLEPUNCH;
-		@ReconfConfigs.Comment("per-client transfer cap in MiB/s; 0 = unlimited")
+		@SerializedName("bandwidth-limit")
 		public int bandwidthLimit = 0;
-		@ReconfConfigs.Comment("require clients to hold a server-issued secret")
+		@ReconfConfigs.Comment("require a login-issued download secret")
+		@SerializedName("validate-secrets")
 		public boolean validateSecrets = true;
-		@ReconfConfigs.Comment("secret lifetime in hours; 336 = 14 days")
+		@SerializedName("secret-lifetime")
 		public long secretLifetime = 336;
-		@ReconfConfigs.Comment("export the URL-contract tree (head, journal, objects/) to this directory after every publish for any static HTTPS host; empty = off")
+		@SerializedName("export-http-directory")
 		public String exportHttpDirectory = "";
-		@ReconfConfigs.Comment("include every object in the HTTP export even when Modrinth or CurseForge serves it; keeps the host as a backstop for link rot")
+		@SerializedName("export-http-include-all")
 		public boolean exportHttpIncludeAll = false;
-		@ReconfConfigs.Comment("let the mod update itself")
+		@SerializedName("self-updater")
 		public boolean selfUpdater = false;
-		@ReconfConfigs.Comment("loaders a client may run the modpack with; seeded once, then yours to edit")
+		@ReconfConfigs.Comment("extra loaders allowed to join; this server's loader is always accepted")
+		@SerializedName("accepted-loaders")
 		public Set<String> acceptedLoaders = new HashSet<>();
-		@ReconfConfigs.Comment("publish the pack's loader and Minecraft versions so clients match them; off = files-only pack")
+		@ReconfConfigs.Comment("tell clients the pack Minecraft and loader versions")
+		@SerializedName("advertise-versions-to-sync")
 		public boolean advertiseVersionsToSync = true;
 	}
 
@@ -86,15 +88,19 @@ public class ServerConfigJsons {
 		return config;
 	}
 
-	// Default group for a fresh config. The sets are linked so a generated file is byte-identical across runs (§7.4 determinism).
+	static final List<String> FACTORY_FROM_SERVER = List.of("mods/*.jar", "kubejs/**", "emotes/*");
+	static final List<String> FACTORY_JUNK_EXCLUDE = List.of("**/.*", "**/.*/**", "**/*.{tmp,disabled,bak}");
+	static final List<String> FACTORY_EXCLUDE = List.of("**/.*", "**/.*/**", "**/*.{tmp,disabled,bak}", "kubejs/server_scripts/**");
+	static final List<String> FACTORY_EDITABLE = List.of("options.txt", "config/**");
+
 	private static GroupDeclaration mainGroupDeclaration() {
 		GroupDeclaration declaration = new GroupDeclaration();
 		declaration.description = "Core modpack files";
 		declaration.required = true;
 		declaration.defaultSelected = true;
-		declaration.syncedFiles = new LinkedHashSet<>(List.of("mods/*.jar", "kubejs/**", "emotes/*"));
-		declaration.excludedFiles = new LinkedHashSet<>(List.of(".*", ".*/**", "**/.*", "**/.*/**", "*.tmp", "**/*.tmp", "*.disabled", "**/*.disabled", "*.bak", "**/*.bak", "kubejs/server_scripts/**"));
-		declaration.allowEditsInFiles = new LinkedHashSet<>(List.of("options.txt", "config/**"));
+		declaration.fromServer = new LinkedHashSet<>(FACTORY_FROM_SERVER);
+		declaration.exclude = new LinkedHashSet<>(FACTORY_EXCLUDE);
+		declaration.editable = new LinkedHashSet<>(FACTORY_EDITABLE);
 		return declaration;
 	}
 
@@ -118,7 +124,7 @@ public class ServerConfigJsons {
 
 		public static ModpackFields withStandaloneMain() {
 			ModpackFields fields = withMainGroup();
-			fields.categories.get("General").get("main").syncedFiles = Set.of();
+			fields.categories.get("General").get("main").fromServer = Set.of();
 			return fields;
 		}
 
@@ -160,26 +166,31 @@ public class ServerConfigJsons {
 	}
 
 	public static class GroupDeclaration {
-		// UI metadata. The map key is the group id; displayName is what the player sees.
+		@SerializedName("display-name")
 		public String displayName = "";
 		public String description = "";
 
-		// If required, the client cannot uncheck it. defaultSelected is ignored when required.
 		public boolean required = false;
+		@SerializedName("default-selected")
 		public boolean defaultSelected = false;
 
-		// Group ids this one conflicts with / depends on.
+		@SerializedName("breaks-with")
 		public Set<String> breaksWith = Set.of();
 		public Set<String> requires = Set.of();
+		@SerializedName("compatible-platforms")
 		public Set<String> compatiblePlatforms = Set.of();
 
 		/**
 		 * File rules scoped to this group. Two postures: the group's directory under host-modpack is included in full
-		 * and {@code excludedFiles} is the only way to leave content out of it, while nothing is synced from the server
-		 * directory unless a {@code syncedFiles} rule includes it - excludedFiles carves exceptions out of either.
+		 * and {@code exclude} is the only way to leave content out of it, while nothing is synced from the server
+		 * directory unless a {@code from-server} rule includes it - exclude carves exceptions out of either.
 		 */
-		public Set<String> syncedFiles = Set.of();
-		public Set<String> excludedFiles = Set.of();
-		public Set<String> allowEditsInFiles = Set.of();
+		@ReconfConfigs.Comment("extra paths from the server root")
+		@SerializedName("from-server")
+		public Set<String> fromServer = Set.of();
+		@ReconfConfigs.Comment("drop these from the pack; they do not add files")
+		public Set<String> exclude = Set.of();
+		@ReconfConfigs.Comment("pack files players may change; listing a path here does not add it to the pack")
+		public Set<String> editable = Set.of();
 	}
 }

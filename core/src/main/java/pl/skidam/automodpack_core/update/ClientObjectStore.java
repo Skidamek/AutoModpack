@@ -442,7 +442,7 @@ public final class ClientObjectStore {
 		ObjectStoreMaintenance.FileTotals total = fileTotals(regularFiles(storage.fileCacheDirectory(), "client file cache"));
 		total = total.plus(fileTotals(regularFiles(storage.modCacheDirectory(), "client mod metadata")));
 		total = total.plus(fileTotals(regularFiles(storage.packsDirectory(), "client pack metadata")));
-		for (Path file : List.of(storage.stateFile(), storage.selectionFile(), storage.clientConfigFile(), storage.restartLoopStateFile(), storage.modpackContentTempFile()))
+		for (Path file : List.of(storage.stateFile(), storage.selectionFile(), storage.selectedModpackFile(), storage.clientConfigFile(), storage.restartLoopStateFile(), storage.modpackContentTempFile()))
 			if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) total = total.plus(fileTotals(List.of(FileTrees.requireRegularFile(file, "client metadata"))));
 		return total;
 	}

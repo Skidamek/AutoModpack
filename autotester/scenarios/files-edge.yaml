@@ -97,7 +97,7 @@ topology:
     automodpack:
       config:
         # Replaces the permissive /config/** default: only this one file tolerates local edits.
-        allowEditsInFiles: ["/config/edge/editable.txt"]
+        editable: ["/config/edge/editable.txt"]
         # The bundled waiting track, re-hosted as the server's custom one so the client exercises GET /music.
         waitingMusicFile: automodpack/waiting-music.ogg
 

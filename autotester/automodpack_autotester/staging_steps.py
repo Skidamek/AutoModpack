@@ -385,18 +385,24 @@ def _v_stage_modpack(ctx: Context, step):
     host = ctx.server_host or "127.0.0.1"
     addr = host if ":" in host else f"{host}:25565"
     cfg = {
-        "DO_NOT_CHANGE_IT": 3,
-        "selectedModpackId": modpack_id,
         "updateSelectedModpackOnLaunch": False,
     }
     cfg.update(ctx.resolve(step.get("config", {}) or {}))
+    follow_id = cfg.pop("selectedModpackId", modpack_id)
+    cfg.pop("DO_NOT_CHANGE_IT", None)
     automodpack.mkdir(parents=True, exist_ok=True)
-    (automodpack / "client-config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    client_root.mkdir(parents=True, exist_ok=True)
+    (client_root / "selected.json").write_text(json.dumps({"modpackId": follow_id}) + "\n", encoding="utf-8")
+    launch_update = cfg.pop("updateSelectedModpackOnLaunch", False)
+    (automodpack / "client.conf").write_text(
+        f"update-selected-modpack-on-launch: {'true' if launch_update else 'false'}\n",
+        encoding="utf-8",
+    )
 
     # The offline fallback that explicitly enables launch updates still needs the
     # current production connection-store record. It is deliberately created only
     # for that path; ordinary offline staging and recordOnly staging stay local.
-    if cfg["updateSelectedModpackOnLaunch"]:
+    if launch_update:
         connection_path = data_root / "packs" / modpack_id / "connection.json"
         connection_path.parent.mkdir(parents=True, exist_ok=True)
         connection_path.write_text(

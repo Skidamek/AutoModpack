@@ -160,6 +160,6 @@ public class ModpackUtils {
 
 	public static ClientConfigJsons.ClientConfigFieldsV3 planCachedModpackSelection(String modpackId, ClientConfigJsons.ClientConfigFieldsV3 currentConfig) {
 		ModpackId.requireValid(modpackId);
-		return currentConfig.withSelectedModpackId(modpackId);
+		return new ClientConfigJsons.ClientConfigFieldsV3(currentConfig);
 	}
 }

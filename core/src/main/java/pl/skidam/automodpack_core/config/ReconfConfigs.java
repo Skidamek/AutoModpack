@@ -1,6 +1,12 @@
 package pl.skidam.automodpack_core.config;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.storage.StoragePaths.CLIENT_DIR;
+import static pl.skidam.automodpack_core.storage.StoragePaths.CLIENT_SELECTED_FILE;
+import static pl.skidam.automodpack_core.storage.StoragePaths.V4_CLIENT_CONFIG_ALT_FILE;
+import static pl.skidam.automodpack_core.storage.StoragePaths.V4_CLIENT_CONFIG_FILE;
+import static pl.skidam.automodpack_core.storage.StoragePaths.V4_SERVER_CONFIG_ALT_FILE;
+import static pl.skidam.automodpack_core.storage.StoragePaths.V4_SERVER_CONFIG_FILE;
 
 import java.io.IOException;
 import java.lang.annotation.ElementType;
@@ -8,6 +14,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -22,6 +29,8 @@ import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.annotations.SerializedName;
 
 import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.OsPaths;
@@ -35,15 +44,13 @@ import pl.skidam.reconf.Value;
 
 /**
  * The reconf-backed store for the human-editable configs (server and client config; the embedding contract of
- * RECONF-SPEC §13). Reads accept both the historical Gson-written JSON files and hand-edited reconf - claim 1 makes
- * them one format family. Saves never rewrite the file wholesale: the current document is reconciled with the
- * model, so user comments, blank lines, layout and line endings survive every programmatic change by construction.
- * Machine-owned state documents stay on {@link ConfigTools} Gson serialization.
+ * RECONF-SPEC §13). JSON predecessors are mapped once on load into a fresh canonical {@code .conf}; after that only
+ * {@code .conf} is read. Saves reconcile the current document so user comments, blank lines, layout and line endings
+ * survive. Machine-owned state documents stay on {@link ConfigTools} Gson serialization.
  *
  * <p>
  * A field annotated with {@link Comment} gets its comment emitted on fresh generation and is materialized by
- * {@code ensure} (with that comment) when an existing file lacks it - the release-to-release convergence of the
- * spec's embedding contract. Unannotated fields are reconcile-only and never re-materialize.
+ * {@code ensure} (with that comment) when an existing file lacks it.
  */
 public final class ReconfConfigs {
 	private ReconfConfigs() {}
@@ -55,22 +62,14 @@ public final class ReconfConfigs {
 		String value();
 	}
 
-	private static final String BANNER = "AutoModpack configuration - your edits and comments survive updates. Docs: https://moddedmc.wiki/en/project/automodpack/docs Discord: https://discord.gg/hS6aMyeA9P";
+	private static final String BANNER = "AutoModpack configuration. Docs: https://moddedmc.wiki/en/project/automodpack/docs";
 
-	/** Reads one human config; empty when neither it nor its pre-reconf {@code .json} predecessor exists, {@link ConfigTools.ConfigParseException} with position when it is corrupt. */
+	/** Reads one human config; empty when neither it nor a JSON predecessor exists, {@link ConfigTools.ConfigParseException} with position when it is corrupt. */
 	public static <T> Optional<T> read(Path path, Class<T> type) {
-		Path effective = Files.isRegularFile(path) ? path : legacyPath(path);
-		if (!Files.isRegularFile(effective)) return Optional.empty();
-		byte[] bytes;
-		try {
-			bytes = Files.readAllBytes(effective);
-		} catch (IOException e) {
-			throw new ConfigTools.ConfigException("Failed to read configuration " + effective.toAbsolutePath().normalize(), e);
-		}
-		String json = parseJson(effective, bytes);
-		List<String> unknown = ConfigTools.unknownKeys(json, type);
-		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
-		return Optional.of(ConfigTools.parse(json, type));
+		if (Files.isRegularFile(path)) return Optional.of(readConf(path, type));
+		Path jsonSource = firstJsonSource(path);
+		if (jsonSource == null) return Optional.empty();
+		return Optional.of(migrateJson(path, jsonSource, type));
 	}
 
 	/** Reads or generates one human config; a fresh file is generated canonically with the {@link Comment} declarations. */
@@ -89,24 +88,11 @@ public final class ReconfConfigs {
 	 * regenerating it would hide the defect.
 	 */
 	public static <T> void save(Path path, T model, Class<T> type, Supplier<T> defaults) throws IOException {
-		Path legacy = legacyPath(path);
-		byte[] legacyBytes = !Files.isRegularFile(path) && Files.isRegularFile(legacy) ? Files.readAllBytes(legacy) : null;
-		byte[] bytes = Files.isRegularFile(path) ? Files.readAllBytes(path) : legacyBytes;
 		Document document;
-		if (bytes == null) {
-			document = freshDocument(model, type);
-		} else if (legacyBytes != null) {
-			// format migration (one-time, released json -> conf): the model was read through the legacy
-			// fallback, so generating fresh carries every current value into the documented canonical
-			// file; the old file goes away only after the new one is written
-			ParseResult legacyResult = Reconf.parse(legacyBytes);
-			if (!legacyResult.isOk()) {
-				ParseError error = legacyResult.error();
-				throw new ConfigTools.ConfigParseException("Cannot migrate " + legacy.getFileName() + ": the file is corrupt at line " + error.line() + ":"
-						+ error.column() + " (" + error.kind() + "): " + error.message() + "; fix or remove the file and retry");
-			}
+		if (!Files.isRegularFile(path)) {
 			document = freshDocument(model, type);
 		} else {
+			byte[] bytes = Files.readAllBytes(path);
 			ParseResult result = Reconf.parse(bytes);
 			if (!result.isOk()) {
 				ParseError error = result.error();
@@ -119,9 +105,9 @@ public final class ReconfConfigs {
 		document.reconcile(tree);
 		setArrays(document, tree, document.tree(), ConfigPath.root());
 		ensureDeclared(document, type, defaults.get());
+		ensureGroupListComments(document, model);
 		OsPaths.requirePublishableConfig(path);
 		DurableFiles.writeAtomic(path, document.text());
-		if (legacyBytes != null) Files.deleteIfExists(legacy);
 	}
 
 	/**
@@ -145,17 +131,98 @@ public final class ReconfConfigs {
 		}
 	}
 
-	/** The released pre-conf {@code .json} name of a config file (the basenames diverged when {@code -config} was dropped); the read fallback and the save migration source. */
-	private static Path legacyPath(Path path) {
-		String name = path.getFileName().toString();
-		String legacyName = switch (name) {
-			case "server.conf" -> "server-config.json";
-			case "client.conf" -> "client-config.json";
-			default -> null;
-		};
-		if (legacyName != null) return path.resolveSibling(legacyName);
-		int dot = name.lastIndexOf('.');
-		return path.resolveSibling((dot > 0 ? name.substring(0, dot) : name) + ".json");
+	static List<Path> jsonSources(Path canonical) {
+		String name = canonical.getFileName().toString();
+		if (name.equals("server.conf")) return List.of(canonical.resolveSibling(V4_SERVER_CONFIG_FILE.getFileName()), canonical.resolveSibling(V4_SERVER_CONFIG_ALT_FILE.getFileName()));
+		if (name.equals("client.conf")) return List.of(canonical.resolveSibling(V4_CLIENT_CONFIG_FILE.getFileName()), canonical.resolveSibling(V4_CLIENT_CONFIG_ALT_FILE.getFileName()));
+		return List.of();
+	}
+
+	private static Path firstJsonSource(Path canonical) {
+		for (Path source : jsonSources(canonical)) if (Files.isRegularFile(source)) return source;
+		return null;
+	}
+
+	private static <T> T readConf(Path path, Class<T> type) {
+		byte[] bytes;
+		try {
+			bytes = Files.readAllBytes(path);
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to read configuration " + path.toAbsolutePath().normalize(), e);
+		}
+		String json = parseJson(path, bytes);
+		List<String> unknown = ConfigTools.unknownKeys(json, type);
+		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
+		return ConfigTools.parse(json, type);
+	}
+
+	private static <T> T migrateJson(Path canonical, Path jsonSource, Class<T> type) {
+		JsonObject object = readJsonObject(jsonSource);
+		T model;
+		String followId = "";
+		if (type == ServerConfigJsons.ServerConfigFieldsV3.class) {
+			@SuppressWarnings("unchecked")
+			T mapped = (T) HumanConfigMigration.mapServer(object);
+			model = mapped;
+		} else if (type == ClientConfigJsons.ClientConfigFieldsV3.class) {
+			HumanConfigMigration.MappedClient mapped = HumanConfigMigration.mapClient(object);
+			@SuppressWarnings("unchecked")
+			T config = (T) mapped.config();
+			model = config;
+			followId = mapped.followId();
+		} else {
+			throw new ConfigTools.ConfigException("Cannot migrate " + jsonSource.getFileName() + " to " + type.getSimpleName());
+		}
+		writeFresh(canonical, model, type);
+		if (type == ClientConfigJsons.ClientConfigFieldsV3.class && followId != null && !followId.isBlank()) writeFollowId(canonical, followId);
+		backupJson(jsonSource);
+		return model;
+	}
+
+	private static JsonObject readJsonObject(Path path) {
+		String text;
+		try {
+			text = Files.readString(path, StandardCharsets.UTF_8);
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to read configuration " + path.toAbsolutePath().normalize(), e);
+		}
+		try {
+			JsonElement tree = JsonParser.parseString(text);
+			if (tree == null || !tree.isJsonObject()) throw new ConfigTools.ConfigParseException("Configuration JSON is not an object: " + path.getFileName());
+			return tree.getAsJsonObject();
+		} catch (JsonSyntaxException e) {
+			throw new ConfigTools.ConfigParseException("Invalid JSON for " + path.getFileName(), e);
+		}
+	}
+
+	private static void writeFollowId(Path clientConf, String followId) {
+		Path selected = clientConf.resolveSibling(CLIENT_DIR.getFileName()).resolve(CLIENT_SELECTED_FILE.getFileName());
+		ClientConfigJsons.SelectedModpackFields fields = new ClientConfigJsons.SelectedModpackFields();
+		fields.modpackId = followId;
+		try {
+			Files.createDirectories(selected.getParent());
+			ConfigTools.writeAtomic(selected, fields);
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to write selected modpack " + selected.toAbsolutePath().normalize(), e);
+		}
+	}
+
+	private static void backupJson(Path jsonSource) {
+		Path backup = uniqueBackup(jsonSource);
+		try {
+			Files.move(jsonSource, backup);
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to rename " + jsonSource.getFileName() + " to " + backup.getFileName(), e);
+		}
+	}
+
+	private static Path uniqueBackup(Path jsonSource) {
+		Path first = jsonSource.resolveSibling(jsonSource.getFileName() + ".backup");
+		if (!Files.exists(first)) return first;
+		for (int n = 2;; n++) {
+			Path candidate = jsonSource.resolveSibling(jsonSource.getFileName() + ".backup-" + n);
+			if (!Files.exists(candidate)) return candidate;
+		}
 	}
 
 	/** Generates one fresh document: canonical reconf with the banner and the {@link Comment} declarations. */
@@ -164,9 +231,11 @@ public final class ReconfConfigs {
 		Map<String, String> byKey = new LinkedHashMap<>();
 		for (Field field : type.getDeclaredFields()) {
 			Comment comment = field.getAnnotation(Comment.class);
-			if (comment != null) byKey.put(field.getName(), comment.value());
+			if (comment != null) byKey.put(serializedName(field), comment.value());
 		}
-		return Reconf.parse(Reconf.canonical(root, Comments.of(BANNER, byKey))).document();
+		Document document = Reconf.parse(Reconf.canonical(root, Comments.of(BANNER, byKey))).document();
+		ensureGroupListComments(document, model);
+		return document;
 	}
 
 	/** Ensures every {@link Comment} field declared in {@code type} exists in the document, materializing with the declared default and comment. */
@@ -176,11 +245,43 @@ public final class ReconfConfigs {
 			if (comment == null) continue;
 			try {
 				Value defaultValue = toJsonValue(ConfigTools.GSON.toJsonTree(field.get(defaults)));
-				document.ensure(ConfigPath.of(field.getName()), defaultValue, comment.value());
+				document.ensure(ConfigPath.of(serializedName(field)), defaultValue, comment.value());
 			} catch (IllegalAccessException e) {
 				throw new ConfigTools.ConfigException("Cannot read default of annotated config field " + field.getName(), e);
 			}
 		}
+	}
+
+	private static void ensureGroupListComments(Document document, Object model) {
+		if (!(model instanceof ServerConfigJsons.ServerConfigFieldsV3 server) || server.modpack == null || server.modpack.categories == null) return;
+		for (var category : server.modpack.categories.entrySet()) {
+			if (category.getValue() == null) continue;
+			for (var group : category.getValue().entrySet()) {
+				ServerConfigJsons.GroupDeclaration declaration = group.getValue();
+				if (declaration == null) continue;
+				ensureGroupList(document, ConfigPath.of("modpack", category.getKey(), group.getKey()), declaration);
+			}
+		}
+	}
+
+	private static void ensureGroupList(Document document, ConfigPath groupPath, ServerConfigJsons.GroupDeclaration declaration) {
+		for (Field field : ServerConfigJsons.GroupDeclaration.class.getDeclaredFields()) {
+			Comment comment = field.getAnnotation(Comment.class);
+			if (comment == null) continue;
+			try {
+				Value value = toJsonValue(ConfigTools.GSON.toJsonTree(field.get(declaration)));
+				ConfigPath path = groupPath.appended(serializedName(field));
+				document.ensure(path, value, comment.value());
+				if (document.attachedComment(path).isEmpty()) document.setComment(path, comment.value());
+			} catch (IllegalAccessException e) {
+				throw new ConfigTools.ConfigException("Cannot read group list " + field.getName(), e);
+			}
+		}
+	}
+
+	private static String serializedName(Field field) {
+		SerializedName name = field.getAnnotation(SerializedName.class);
+		return name == null ? field.getName() : name.value();
 	}
 
 	private static <T> void writeFresh(Path path, T model, Class<T> type) {

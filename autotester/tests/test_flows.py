@@ -86,8 +86,8 @@ def _seed_bootstrap(ctx, step):
     ctx.vars["fake_bootstrap_imported"] = True
     data = ctx.game_dir / "automodpack" / "client" / "data"
     (data / "packs" / "packaaa").mkdir(parents=True, exist_ok=True)
-    (ctx.game_dir / "automodpack" / "client-config.json").write_text(
-        json.dumps({"selectedModpackId": "packaaa"}), encoding="utf-8"
+    (ctx.game_dir / "automodpack" / "client" / "selected.json").write_text(
+        json.dumps({"modpackId": "packaaa"}), encoding="utf-8"
     )
     (data / "known-hosts.json").write_text(
         json.dumps(
@@ -492,10 +492,10 @@ def test_release_gate_flow(make_ctx, flow_verbs):
         ctx.game_dir
         / "automodpack/client/overlays/packaaa/config/pack-shared-editable.txt"
     ).exists()
-    client_config = json.loads(
-        (ctx.game_dir / "automodpack/client-config.json").read_text(encoding="utf-8")
+    selected = json.loads(
+        (ctx.game_dir / "automodpack/client/selected.json").read_text(encoding="utf-8")
     )
-    assert client_config.get("selectedModpackId") == ""
+    assert selected.get("modpackId") == ""
     assert not (ctx.game_dir / "mods/local-unowned.jar").exists()
     preservation = (
         ctx.game_dir

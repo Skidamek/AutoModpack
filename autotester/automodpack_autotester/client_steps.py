@@ -111,13 +111,13 @@ def _defer_first_sync_to_login(ctx: Context, game_dir: Path) -> None:
     # The policy is per-connection-path scenario data (deferFirstSyncToLogin), so the YAML shows who defers.
     if not (ctx.scenario.get("connectionPath") or {}).get("deferFirstSyncToLogin", False):
         return
-    config_path = game_dir / "automodpack" / "client-config.json"
+    config_path = game_dir / "automodpack" / "client.conf"
     # Later launches must keep whatever the bootstrap import and the install commit persisted there - rewriting the
     # stub would drop the selected modpack and turn every following login into a first contact.
-    if config_path.exists():
+    if config_path.exists() or (game_dir / "automodpack" / "client-config.json").exists() or (game_dir / "automodpack" / "automodpack-client.json").exists():
         return
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(json.dumps({"updateSelectedModpackOnLaunch": False}, indent=2) + "\n", encoding="utf-8")
+    config_path.write_text("update-selected-modpack-on-launch: false\n", encoding="utf-8")
 
 
 def _client_cache_paths(ctx: Context) -> tuple[Path, Path]:

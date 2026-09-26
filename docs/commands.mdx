@@ -26,7 +26,7 @@ Patch notes for the next publish can also be written to `automodpack/host-modpac
 - `/automodpack host fingerprint dns <minecraft-hostname>` - Prints a DNSSEC record that lets clients verify a self-signed certificate automatically.
 - `/automodpack host fingerprint share <minecraft-address>` - Prints a plain and a pinned copyable join address.
 - `/automodpack host bootstrap pin <origin>` - Writes `automodpack/automodpack-bootstrap.exported.json` with a TLS pin, for distributing to clients.
-- `/automodpack host bootstrap install <origin> [endpoint] [connection-mode]` - Writes an install export with the published pack, a provisioning secret, and the advertised endpoint. Requires `disableInternalTLS` to be off.
+- `/automodpack host bootstrap install <origin> [endpoint] [connection-mode]` - Writes an install export with the published pack, a provisioning secret, and the advertised endpoint. Requires `disable-internal-tls` to be off.
 
 Both bootstrap exports contain trust data or a provisioning secret. Treat them like credentials; anyone holding one can provision themselves onto your pack. See [bootstrap files](how-it-works/files-on-disk#bootstrap) for how clients import them.
 

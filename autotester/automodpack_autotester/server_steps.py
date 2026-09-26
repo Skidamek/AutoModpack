@@ -471,7 +471,7 @@ def _v_seed_bootstrap(ctx: Context, step):
         raise RuntimeError(f"live server projection has no modpackId: {projection_path}")
     origin = str(ctx.resolve(step.get("origin", "${server.host}"))).strip()
     endpoint = str(ctx.resolve(step.get("endpoint", "${server.endpoint}"))).strip()
-    connection_mode = str(step.get("connectionMode") or server_config.get("connectionMode") or "").strip().upper()
+    connection_mode = str(step.get("connectionMode") or server_config.get("connection-mode") or server_config.get("connectionMode") or "").strip().upper()
     if not origin or not endpoint or not connection_mode:
         raise RuntimeError("bootstrap requires origin, endpoint, and connectionMode")
     fields = {

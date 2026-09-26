@@ -107,10 +107,10 @@ topology:
               displayName: Core
               required: true
               defaultSelected: true
-              syncedFiles: ["/config/amp-installed-base.txt"]
+              from-server: ["/config/amp-installed-base.txt"]
             optional:
               displayName: Optional Feature
-              syncedFiles: ["/config/amp-installed-optional.txt"]
+              from-server: ["/config/amp-installed-optional.txt"]
 
 serverFiles:
   modpackName: Installed Group Acquisition

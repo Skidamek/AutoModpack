@@ -65,7 +65,7 @@ class UpdateTransactionExecutorTest {
 		assertEquals(target.packTarget().contentToken(), activeState.contentToken);
 		assertEquals(target.document().ownershipLedger(), OwnershipLedger.fromFields(activeState.ownershipLedger));
 		assertEquals(target.selection().intent(), new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).orElseThrow());
-		assertEquals(target.manifest().modpackId(), ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
+		assertEquals(target.manifest().modpackId(), storage.selectedModpackId());
 		assertFalse(Files.exists(storage.automodpackDirectory().resolve("modpacks")));
 		assertFalse(Files.exists(storage.transactionFile()));
 	}
@@ -84,7 +84,8 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.GAME_DIR, "mods/nested.jar", OperationType.INSTALL_OBJECT, nestedHash, nestedBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/root.jar", true, rootHash, rootBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "mods/nested.jar", true, nestedHash, nestedBytes.length)),
-				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.FIXED_NESTED_MODS), List.of(), List.of(), List.of(), List.of(generated), ChangeSet.empty());
+				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.FIXED_NESTED_MODS), List.of(), List.of(), List.of(), List.of(generated), ChangeSet.empty())
+				.withPlannedSelectedModpackId(target.manifest().modpackId());
 
 		assertTrue(commit(storage, plan, target).success());
 
@@ -108,7 +109,8 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.GAME_DIR, "mods/nested.jar", OperationType.INSTALL_OBJECT, nestedHash, nestedBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/root.jar", true, rootHash, rootBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "mods/nested.jar", true, nestedHash, nestedBytes.length)),
-				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.FIXED_NESTED_MODS), List.of(), List.of(), List.of(), List.of(generated), ChangeSet.empty());
+				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.FIXED_NESTED_MODS), List.of(), List.of(), List.of(), List.of(generated), ChangeSet.empty())
+				.withPlannedSelectedModpackId(target.manifest().modpackId());
 		Files.createDirectories(storage.modsDirectory().resolve("nested.jar"));
 
 		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
@@ -144,7 +146,7 @@ class UpdateTransactionExecutorTest {
 		SelectedModpackTarget target = target(storage, "mods/existing.jar", "mod", false, hash, bytes.length);
 		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of(),
-				ChangeSet.empty());
+				ChangeSet.empty()).withPlannedSelectedModpackId(target.manifest().modpackId());
 
 		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
 
@@ -167,7 +169,7 @@ class UpdateTransactionExecutorTest {
 		SelectedModpackTarget target = target(storage, "mods/existing.jar", "mod", false, hash, bytes.length);
 		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of(),
-				ChangeSet.empty());
+				ChangeSet.empty()).withPlannedSelectedModpackId(target.manifest().modpackId());
 
 		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
 
@@ -482,7 +484,7 @@ class UpdateTransactionExecutorTest {
 		ReconfConfigs.save(storage.clientConfigFile(), current, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
 
-		assertEquals(target.manifest().modpackId(), ClientProjectionView.open(storage).logicalConfig(current).selectedModpackId);
+		assertEquals(target.manifest().modpackId(), ClientProjectionView.open(storage).logicalSelectedModpackId());
 		assertFalse(ClientProjectionView.open(storage).logicalConfig(current).syncLoaderVersion);
 		assertFalse(ClientProjectionView.open(storage).logicalConfig(current).playMusic);
 	}
@@ -847,7 +849,8 @@ class UpdateTransactionExecutorTest {
 	}
 
 	private static UpdatePlan plan(SelectedModpackTarget target, ClientConfigJsons.ClientConfigFieldsV3 config, List<Operation> operations, List<ProjectedFile> finalState) {
-		return new UpdatePlan(target.manifest().modpackId(), target.packTarget(), operations, finalState, config, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(),
+		return new UpdatePlan(target.manifest().modpackId(), target.packTarget(), operations, finalState, config, target.manifest().modpackId(), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(),
+				List.of(), List.of(),
 				ChangeSet.empty());
 	}
 
@@ -905,9 +908,7 @@ class UpdateTransactionExecutorTest {
 	}
 
 	private static ClientConfigJsons.ClientConfigFieldsV3 clientConfig(String modpackId) {
-		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
-		config.selectedModpackId = modpackId;
-		return config;
+		return new ClientConfigJsons.ClientConfigFieldsV3();
 	}
 
 	private static UpdateTransaction createTransaction(ClientStorage storage, UpdatePlan plan, SelectedModpackTarget target) throws IOException {

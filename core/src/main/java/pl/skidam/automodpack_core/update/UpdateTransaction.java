@@ -44,6 +44,7 @@ public final class UpdateTransaction {
 	public List<String> excludedGroups;
 	public String overlayDigest;
 	public ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig;
+	public String expectedSelectedModpackId;
 	public GenerationJsons.OwnershipLedgerFields ownershipLedger;
 	/** The state-history kind of this mutation when the flow itself knows it better than the purpose mapping: rollbacks declare it, everything else derives. */
 	public String stateKind = "";
@@ -75,6 +76,11 @@ public final class UpdateTransaction {
 
 	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest,
 			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
+		return create(plan, target, overlayDigest, expectedClientConfig, "");
+	}
+
+	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest,
+			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig, String expectedSelectedModpackId) {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(target, "target");
 		if (!plan.modpackId().equals(target.manifest().modpackId())) throw new IllegalArgumentException("Plan and selected target modpack IDs disagree");
@@ -94,22 +100,33 @@ public final class UpdateTransaction {
 		transaction.excludedGroups = new ArrayList<>(target.selection().intent().excludedGroups());
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
+		transaction.expectedSelectedModpackId = expectedSelectedModpackId == null ? "" : expectedSelectedModpackId;
 		transaction.plan = plan;
 		return transaction;
 	}
 
 	public static UpdateTransaction createRemoval(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, GenerationJsons.OwnershipLedgerFields ownershipLedger,
 			String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
-		return createRemovalLike(Purpose.MODPACK_REMOVAL, plan, platform, expectedPriorIntent, ownershipLedger, overlayDigest, expectedClientConfig);
+		return createRemoval(plan, platform, expectedPriorIntent, ownershipLedger, overlayDigest, expectedClientConfig, "");
+	}
+
+	public static UpdateTransaction createRemoval(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, GenerationJsons.OwnershipLedgerFields ownershipLedger,
+			String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig, String expectedSelectedModpackId) {
+		return createRemovalLike(Purpose.MODPACK_REMOVAL, plan, platform, expectedPriorIntent, ownershipLedger, overlayDigest, expectedClientConfig, expectedSelectedModpackId);
 	}
 
 	public static UpdateTransaction createDeactivation(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, GenerationJsons.OwnershipLedgerFields ownershipLedger,
 			String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
-		return createRemovalLike(Purpose.MODPACK_DEACTIVATION, plan, platform, expectedPriorIntent, ownershipLedger, overlayDigest, expectedClientConfig);
+		return createDeactivation(plan, platform, expectedPriorIntent, ownershipLedger, overlayDigest, expectedClientConfig, "");
+	}
+
+	public static UpdateTransaction createDeactivation(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, GenerationJsons.OwnershipLedgerFields ownershipLedger,
+			String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig, String expectedSelectedModpackId) {
+		return createRemovalLike(Purpose.MODPACK_DEACTIVATION, plan, platform, expectedPriorIntent, ownershipLedger, overlayDigest, expectedClientConfig, expectedSelectedModpackId);
 	}
 
 	private static UpdateTransaction createRemovalLike(Purpose purpose, UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent,
-			GenerationJsons.OwnershipLedgerFields ownershipLedger, String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
+			GenerationJsons.OwnershipLedgerFields ownershipLedger, String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig, String expectedSelectedModpackId) {
 		Objects.requireNonNull(plan, "plan");
 		UpdateTransaction transaction = base(purpose);
 		fillGeneration(transaction, plan.packTarget(), OwnershipLedger.fromFields(ownershipLedger));
@@ -123,6 +140,7 @@ public final class UpdateTransaction {
 		transaction.excludedGroups = List.of();
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
+		transaction.expectedSelectedModpackId = expectedSelectedModpackId == null ? "" : expectedSelectedModpackId;
 		transaction.plan = plan;
 		return transaction;
 	}
