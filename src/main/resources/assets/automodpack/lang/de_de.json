@@ -305,7 +305,7 @@
   "automodpack.stateHistory.restoreFile": "Datei wiederherstellen",
   "automodpack.stateHistory.restoreFileReady": "Legt die Datei dorthin zurück, wo sie war. Verweigert das Überschreiben einer anderen Datei.",
   "automodpack.stateHistory.restoreFileOwned": "Das aktive Pack besitzt diesen Pfad, darum ist keine Wiederherstellung möglich, solange das Pack ihn nutzt. Speichere stattdessen eine Kopie.",
-  "automodpack.stateHistory.broughtBack": "Wieder synchron mit dem Pack — die Datei war lokal geändert oder entfernt worden.",
+  "automodpack.stateHistory.broughtBack": "Wieder synchron mit dem Pack - die Datei war lokal geändert oder entfernt worden.",
   "automodpack.stateHistory.restoreFileManaged": "Nur Dateien im Spielordner können an ihren ursprünglichen Pfad zurückgegeben werden.",
   "automodpack.stateHistory.restoreFileProtected": "Das ist das laufende AutoModpack selbst. Wird die Datei überschrieben, kann das Spiel möglicherweise nicht mehr aktualisieren.",
   "automodpack.stateHistory.saveCopy": "Kopie speichern",

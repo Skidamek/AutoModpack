@@ -313,7 +313,7 @@
   "automodpack.stateHistory.restoreFileOwned": "Ta ścieżka należy do aktywnego modpacka, więc nie można jej przywrócić, dopóki modpack jej używa. Zamiast tego zapisz kopię.",
   "automodpack.stateHistory.restoreFileManaged": "Do pierwotnej ścieżki można przywrócić tylko pliki z katalogu gry.",
   "automodpack.stateHistory.restoreFileProtected": "To sam działający AutoModpack. Przywrócenie pliku na jego miejsce może uniemożliwić grze aktualizację.",
-  "automodpack.stateHistory.broughtBack": "Przywrócono zgodność z packiem — plik był zmieniony lub usunięty lokalnie.",
+  "automodpack.stateHistory.broughtBack": "Przywrócono zgodność z packiem - plik był zmieniony lub usunięty lokalnie.",
   "automodpack.stateHistory.saveCopy": "Zapisz kopię",
   "automodpack.stateHistory.openFolder": "Otwórz folder",
   "automodpack.stateHistory.restoredTo": "Przywrócono plik do pierwotnej ścieżki.",

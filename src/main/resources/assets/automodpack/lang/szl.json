@@ -313,7 +313,7 @@
   "automodpack.stateHistory.restoreFileOwned": "Ta ścieżka przinoleży do aktywnego modpaka, tōż niy idzie ji prtwrōcić, aże modpak jej używo. Zamiast tego zapisz kopiōm.",
   "automodpack.stateHistory.restoreFileManaged": "Yno pliki ze katalogu gry idzie prtwrōcić na piyrwotnŏ ścieżka.",
   "automodpack.stateHistory.restoreFileProtected": "To sam robiōncŏ AutoModpak. Prziwrōcanie na jego miejsce może sprowić, coby gra niy mogła sie aktualizować.",
-  "automodpack.stateHistory.broughtBack": "Znowu zgrane z pakym — plik bōł zmiyniōny abo usunięty lokalnie.",
+  "automodpack.stateHistory.broughtBack": "Znowu zgrane z pakym - plik bōł zmiyniōny abo usunięty lokalnie.",
   "automodpack.stateHistory.saveCopy": "Zapisz kopijo",
   "automodpack.stateHistory.openFolder": "Ôdewrzij folder",
   "automodpack.stateHistory.restoredTo": "Prziwrōcōno plik na piyrwotnŏ ścieżka.",

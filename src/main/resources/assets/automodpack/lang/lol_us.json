@@ -403,7 +403,7 @@
   "automodpack.restart.reason.CHANGED_GAME_VERSION": "da launcher Minecraft version changd",
   "automodpack.stateHistory.restoreArmed": "click agen 2 put dis stait bak",
   "automodpack.stateHistory.forgetArmed": "click agen 2 ferget older snapshotz",
-  "automodpack.stateHistory.broughtBack": "syncd wif da pak agen — file wuz changd or yeeted lokully.",
+  "automodpack.stateHistory.broughtBack": "syncd wif da pak agen - file wuz changd or yeeted lokully.",
   "automodpack.storage.staging": "half-dun downlodes yeeted: %s (%s)",
   "automodpack.validation.confirm.text": "paste da full fingerprint from da servr hooman. AutoModpack checks it agenst da servr fingerprint:"
 }

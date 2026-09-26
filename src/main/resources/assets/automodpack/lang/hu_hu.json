@@ -305,7 +305,7 @@
   "automodpack.stateHistory.restoreFile": "Fájl visszaállítása",
   "automodpack.stateHistory.restoreFileReady": "Visszateszi a fájlt arra a helyre, ahol volt. Megtagadja más fájl felülírását.",
   "automodpack.stateHistory.restoreFileOwned": "Ezt az útvonalat az aktív pack használja, ezért addig nem állítható vissza, amíg a pack használja. Inkább ments másolatot.",
-  "automodpack.stateHistory.broughtBack": "Visszaállt a packkal való szinkronba — a fájl helyben módosítva vagy törölve volt.",
+  "automodpack.stateHistory.broughtBack": "Visszaállt a packkal való szinkronba - a fájl helyben módosítva vagy törölve volt.",
   "automodpack.stateHistory.restoreFileManaged": "Csak a játékmappában lévő fájlok állíthatók vissza az eredeti útvonalukra.",
   "automodpack.stateHistory.restoreFileProtected": "Ez maga a futó AutoModpack. Ha visszaállítod fölötte, előfordulhat, hogy a játék nem tud frissülni.",
   "automodpack.stateHistory.saveCopy": "Másolat mentése",

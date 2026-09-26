@@ -302,7 +302,7 @@
   "automodpack.stateHistory.restoreFile": "恢复文件",
   "automodpack.stateHistory.restoreFileReady": "把文件放回原来的位置。拒绝覆盖不同的文件。",
   "automodpack.stateHistory.restoreFileOwned": "活动整合包占用此路径，因此在该整合包使用期间无法恢复。请改为保存副本。",
-  "automodpack.stateHistory.broughtBack": "已重新与整合包同步 — 该文件之前在本地被更改或移除。",
+  "automodpack.stateHistory.broughtBack": "已重新与整合包同步 - 该文件之前在本地被更改或移除。",
   "automodpack.stateHistory.restoreFileManaged": "只有游戏目录中的文件才能恢复到其原始路径。",
   "automodpack.stateHistory.restoreFileProtected": "这是正在运行的 AutoModpack 本身。在其上恢复可能导致游戏无法更新。",
   "automodpack.stateHistory.saveCopy": "保存副本",
