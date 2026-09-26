@@ -87,7 +87,7 @@ def render_markdown(summary: dict) -> str:
     lines = [
         "## In-game Test Results",
         "",
-        f"**{'PASS' if summary['ok'] else 'FAIL'}** — {summary['passed']}/{summary['total']} passed, {summary['failed']} failed",
+        f"**{'PASS' if summary['ok'] else 'FAIL'}** - {summary['passed']}/{summary['total']} passed, {summary['failed']} failed",
         "",
         "| Status | Target | Duration | Error |",
         "|--------|--------|----------|-------|",

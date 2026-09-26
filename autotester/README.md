@@ -12,7 +12,7 @@ opt-in file bridge, and verifies that the modpack sync flow works end to end.
 - Built AutoModpack artifacts in `merged/`
 
 Build artifacts first from the repository root. Use `build` (which runs the jar
-merge as a finalizer) rather than `mergeJar` directly — `mergeJar` on its own
+merge as a finalizer) rather than `mergeJar` directly - `mergeJar` on its own
 does not rebuild the dependency modules. The `-Pautomodpack.autotest` flag bundles
 the in-game test instrumentation (`AutoTestBridge` + the `dev` mixins) into the
 jars; it is required for the autotester and is never included in release builds.
@@ -103,7 +103,7 @@ with `uv --project autotester run autotester build-images`.
 Scenarios are **declarative**: a `flow` is an ordered list of *steps*, where each
 step is a verb plus arguments. Verbs are generic building blocks (click a button,
 type into a field, wait for a condition, verify files), so most tests need no
-Python — behavior is expressed entirely in YAML.
+Python - behavior is expressed entirely in YAML.
 
 ```yaml
 id: download-only
@@ -144,15 +144,15 @@ Scenario-header keys decouple *how* a scenario runs from *what* it tests:
 
 | Key | Values | Meaning |
 | --- | --- | --- |
-| `network` | `bridge` (default) / `host` | Container transport. `bridge` wires a per-run user network (CI). `host` puts both containers in the host network namespace (the client reaches the server on `localhost`) — the only topology a host-network-only sandbox allows. Run host transport with `--jobs 1`: host-mode servers all bind `25565` and would collide. Also settable globally via `network:` in `settings.yaml`. |
-| `mode` | `full` (default) / `client-only` | `full` launches a server + client. `client-only` launches **only** the client against a pre-staged generation — no server, no certificate/download/restart dance. |
+| `network` | `bridge` (default) / `host` | Container transport. `bridge` wires a per-run user network (CI). `host` puts both containers in the host network namespace (the client reaches the server on `localhost`) - the only topology a host-network-only sandbox allows. Run host transport with `--jobs 1`: host-mode servers all bind `25565` and would collide. Also settable globally via `network:` in `settings.yaml`. |
+| `mode` | `full` (default) / `client-only` | `full` launches a server + client. `client-only` launches **only** the client against a pre-staged generation - no server, no certificate/download/restart dance. |
 | `targets` / `loaders` / `minecraft` | list (globs where noted) | Scope the scenario to compatible targets. A target must pass every key present: `targets` (glob on id), `loaders` (exact), `minecraft` (glob). Out-of-scope targets are skipped with a `SKIP` line instead of failing on missing mods. |
 | `renderClient` | boolean | Run Minecraft in Xvfb with Mesa software rendering at the 320x240 logical minimum. Set this to `true` for `screenshot` steps; ordinary scenarios keep the faster HeadlessMC renderer stub. |
 
 #### Client-only (offline / pre-staged) mode
 
 `mode: client-only` is the fast loader-debugging path: stage a generation, boot
-just the client, and assert on the launch log — seconds per iteration instead of
+just the client, and assert on the launch log - seconds per iteration instead of
 a multi-minute gameplay round trip. The `stage_modpack` verb writes the fixed
 `automodpack/client/active/` projection, its immutable generation
 record, CAS objects, active state, and a client config with
@@ -196,7 +196,7 @@ autotester targets --scenario all      # print the in-scope target IDs as JSON
 ```
 
 `validate` expands macros and checks that every verb/macro name resolves and
-every condition uses known keys — catching typos in seconds instead of after
+every condition uses known keys - catching typos in seconds instead of after
 minutes in Docker. `run` performs the same check before launching containers and
 aborts on a malformed scenario.
 
@@ -220,7 +220,7 @@ aborts on a malformed scenario.
 | `wait_join` | Wait until the player is in-game (no screen open). |
 
 Run `autotester verbs` to print this list (with one-line docs) and the valid
-condition keys, generated straight from the registry — no need to grep `@verb(`.
+condition keys, generated straight from the registry - no need to grep `@verb(`.
 
 ### Selectors
 
@@ -255,7 +255,7 @@ condition must hold (AND):
 | `screen_none` | No screen is open (the player is in-game). |
 | `element` / `no_element` | A selector matches at least one / no elements. |
 | `file` / `file_gone` | A path under the game dir exists / does not exist. |
-| `log` | A regex matches a log source — container stdout or a game-dir file (see below). |
+| `log` | A regex matches a log source - container stdout or a game-dir file (see below). |
 | `all` / `any` / `not` | Combine sub-conditions. |
 
 #### The `log` condition

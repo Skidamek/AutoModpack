@@ -2,17 +2,9 @@
 
 `automodpack/client.conf` in the game directory of the instance. The file is created on the first start with defaults.
 
-The file uses a small subset of HOCON: comments (`#`), `key: value` options, inline lists, and braced nesting. JSON is not a live format. If `client.conf` is missing, AutoModpack reads the first existing JSON once (`automodpack-client.json`, then `client-config.json`), maps it to the current keys, writes a fresh `client.conf`, and renames the JSON to `.backup` (`.backup-2` on collision).
-
-Which pack this instance follows is not in this file. It lives in machine-owned `automodpack/client/selected.json` (`modpackId`).
+The file uses a small subset of HOCON: comments (`#`), `key: value` options, inline lists, and braced nesting.
 
 ## Editing the file
-
-- The format is a HOCON subset: `#` starts a comment, options are `key: value` lines, lists are inline `[a, b, c]`, braces nest sections. JSON is not a live format.
-- Restart the game after editing, unless a note below says otherwise.
-- A mistake stops the launch with the file, line, and column in the message. Unknown keys are logged and ignored.
-- AutoModpack writes the file by splicing in only the changed value, so your comments and layout survive every save.
-- Keys are kebab-case (`update-selected-modpack-on-launch`, `pinned-mod-ids`).
 
 | Setting | Default | Description |
 |---|---|---|

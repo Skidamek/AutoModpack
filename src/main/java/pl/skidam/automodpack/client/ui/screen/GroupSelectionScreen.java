@@ -236,7 +236,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 		if (item.kind() == GroupSelectionList.Kind.GROUP) inspect(item.id());
 	}
 
-	/** The Files button on a group row opens the pack's file browser pre-filtered to that group — the row tooltip already carries the group's metadata. */
+	/** The Files button on a group row opens the pack's file browser pre-filtered to that group - the row tooltip already carries the group's metadata. */
 	private void inspect(String groupId) {
 		if (!groups.containsKey(groupId)) return;
 		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.literal(displayName(groupId)),

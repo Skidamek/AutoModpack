@@ -21,8 +21,8 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /**
- * The single write-ahead record for one client update. It carries the reviewed {@link UpdatePlan} itself — the one
- * durable spelling of what this update means — plus the transactional context the plan cannot know (the observed
+ * The single write-ahead record for one client update. It carries the reviewed {@link UpdatePlan} itself - the one
+ * durable spelling of what this update means - plus the transactional context the plan cannot know (the observed
  * client state it was planned against, the selection intents, the target's ledger) and the execution lifecycle.
  */
 public final class UpdateTransaction {

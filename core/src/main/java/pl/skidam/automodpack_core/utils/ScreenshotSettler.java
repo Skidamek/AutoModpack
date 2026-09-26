@@ -3,7 +3,7 @@ package pl.skidam.automodpack_core.utils;
 /**
  * The autotest screenshot settling policy, shared with the in-game test bridge: a target screen counts as settled only
  * after it rendered unchanged without an overlay on two consecutive frames, and counts as gone when two consecutive
- * frames rendered some other screen. Screens are compared by identity, never by equality. Pure decision — the caller
+ * frames rendered some other screen. Screens are compared by identity, never by equality. Pure decision - the caller
  * captures the frames and performs the actual screenshot.
  */
 public final class ScreenshotSettler {

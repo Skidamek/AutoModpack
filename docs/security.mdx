@@ -1,6 +1,6 @@
 # Security
 
-AutoModpack delivers executable files to players. Mods can read files and run code on every client, so a player connecting to your server is trusting you with their machine. Two mechanisms back that trust: clients verify the server's identity before accepting anything, and the server decides who may download the pack.
+Security != Safety. This page makes sure the connection between server and a client is secure, it doesn't make client safe from downloading malicious mods containing malware!
 
 ## How clients verify a server
 
@@ -10,9 +10,10 @@ The download endpoint is advertised over the Minecraft login, a channel that aut
 
 | Method | Best for | Client stores | Certificate rotation |
 | --- | --- | --- | --- |
-| DNSSEC AMP1 | Servers with a DNSSEC-enabled domain; recommended default | Nothing; the record is checked whenever no CA chain covers the address | Update the DNS record; clients follow on their next connect |
-| Pinned join address | Communities that can share one address | A pin for the address | Distribute a new pinned address |
-| Manual verification | Tunnels and setups with none of the above | A pin for the address, after the player accepts once | The pin holds until a player removes it, or the operator hands out a new pinned address |
+| DNSSEC AMP1 | Servers with a DNSSEC-enabled domain; recommended | Nothing; the record is checked whenever no CA chain covers the address | Update the DNS record; clients follow on their next connect |
+| CA signed certificate | Servers with domain lacking DNSSEC support | Nothing | Replace the certificate files; clients follow on their next connect |
+| Pinned join address | Servers without a domain | A pin for the address | Distribute a new pinned address |
+| Manual verification | Not recommended, worst UX | A pin for the address, after the player accepts once | The pin holds until a player removes it, or the operator hands out a new pinned address |
 
 The client verifies in this order:
 
@@ -55,7 +56,7 @@ Use the hostname players type into Minecraft, including the public name that own
 _automodpack.play.example.com. IN TXT "v=amp1;fp=<certificate-sha256>"
 ```
 
-Publish exactly one AMP1 record in the DNSSEC-signed zone. Any DNSSEC-capable provider works; [deSEC](https://desec.io/) is a free managed option if yours has none. When TLS terminates somewhere else — a tunnel, a reverse proxy — the embedded server never sees the certificate, so fingerprint the front-end's leaf certificate yourself:
+Publish exactly one AMP1 record in the DNSSEC-signed zone. Any DNSSEC-capable provider works; [deSEC](https://desec.io/) is a free managed option if yours has none. When TLS terminates somewhere else - a tunnel, a reverse proxy - the embedded server never sees the certificate, so fingerprint the front-end's leaf certificate yourself:
 
 ```bash
 openssl s_client -connect <tunnel-host>:443 -servername <tunnel-host> 2>/dev/null | openssl x509 -fingerprint -sha256
@@ -63,7 +64,7 @@ openssl s_client -connect <tunnel-host>:443 -servername <tunnel-host> 2>/dev/nul
 
 A front-end that rotates its certificates (managed tunnels do) needs the record updated with each rotation; until then, connections fail closed.
 
-Clients resolve the record over DNS-over-HTTPS through Cloudflare and Quad9. The certificate is accepted only when both resolvers confirm DNSSEC validation, agree on the record, and the fingerprint matches a currently valid certificate. A mismatch or a malformed record fails. A missing or unreachable record falls through to the manual prompt on a first contact; the CA check has already had its say by the time the record is consulted. A pinned origin never consults the record: its pin is law.
+Clients resolve the record over DNS-over-HTTPS through Cloudflare and Quad9. The certificate is accepted only when both resolvers confirm DNSSEC validation, agree on the record, and the fingerprint matches presented certificate. A mismatch or a malformed record fails. A missing or unreachable record falls through to the manual prompt; the CA check has already had its say by the time the record is consulted. A pinned origin never consults the record: its pin is law.
 
 When the certificate changes, update the `fp` value and wait out DNS caching before deploying it.
 
@@ -92,7 +93,7 @@ play.example.com:25565#othermod1=<value>#amp1=<fingerprint>
 
 ### Manual verification
 
-When no CA chain covers the typed hostname and no record applies, the first connection shows the fingerprint the endpoint presents. Players compare it against a fingerprint you share out of band — the screen has a field to paste it into — then accept. Skipping is possible and is marked as the risky choice; an accepted or skipped decision is saved as a pin for that `host:port` and enforced from then on.
+When no CA chain covers the typed hostname and no record applies, the first connection shows the fingerprint the endpoint presents. Players compare it against a fingerprint you share out of band - the screen has a field to paste it into - then accept. Skipping is possible and is marked as the risky choice; an accepted or skipped decision is saved as a pin for that `host:port` and enforced from then on.
 
 Print the current fingerprint with:
 
@@ -104,13 +105,13 @@ A fingerprint is public verification data, closer to a serial number than to a p
 
 ### Why this matters
 
-An attacker who controls the modpack connection chooses which files every connecting player downloads. Certificate verification is what turns "some server on this address" into "the server that owns this name or this fingerprint". It complements, and does not replace, normal server administration: strong passwords, restricted file permissions, current software, and careful private-key handling.
+Without this type verification users are vulnablre to Man-In-The-Middle attacks, meaning a user might think they are connecting and downloading modpack from server X while a malicious actor is sitting between the user and the server X, qualietly passing their own maliciously crafted modpack instead of original. This however does not protect users from a geunine server providing a maliciously crafted modpack or the server itself getting stolen from original authors.
 
 ## Certificate mismatch
 
 A saved pin says: this address serves exactly this certificate. When the server presents any other certificate, the client stops the connection and shows the certificate mismatch screen with both fingerprints. There is no bypass on that screen, and no modpack is downloaded.
 
-Only two things can cause a mismatch: the certificate on the server changed, or something else answers on that address. A renewal, a move to a new host, or a new proxy changes the certificate; so does an impostor. The two fingerprints on the screen cannot tell you which happened — the server operator can.
+Only two things can cause a mismatch: the certificate on the server changed, or something else answers on that address. A renewal, a move to a new host, or a new proxy changes the certificate; so does an impostor. The two fingerprints on the screen cannot tell you which happened - the server operator can.
 
 Ask the operator about the change through a channel you trust. If the change is real, there are two recoveries: the operator hands out a new pinned join address, or you remove the pin yourself. To remove it, select the server in the multiplayer menu, press Edit, press the Certificate pin button twice, and reconnect, verifying the new certificate like a first connection. A published DNS record cannot recover a pin. Until the operator confirms the change, leave the pin in place, because it is what stops an impostor from serving you mods from that address.
 

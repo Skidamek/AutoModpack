@@ -8,8 +8,8 @@ import pl.skidam.automodpack_core.update.RestartPolicy;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 
 /**
- * Modpack lifecycle: removal and deactivation of the installed modpack. SwitchFlow's sibling: the flow owns the dance —
- * prepare, preview, confirm, commit, and the removal apply tail — while the facade keeps the shared attempt bookkeeping
+ * Modpack lifecycle: removal and deactivation of the installed modpack. SwitchFlow's sibling: the flow owns the dance -
+ * prepare, preview, confirm, commit, and the removal apply tail - while the facade keeps the shared attempt bookkeeping
  * and the restart machinery. {@link RemovalAttempt} stays the approve/commit seam under the flow.
  */
 final class LifecycleFlow {

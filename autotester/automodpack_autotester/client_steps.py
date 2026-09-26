@@ -128,7 +128,7 @@ def _client_cache_paths(ctx: Context) -> tuple[Path, Path]:
     # The client image symlinks <cache>/versions -> /work/hmc-shared-versions. Mount
     # a persistent host dir there so downloaded version jars survive between runs
     # instead of being re-fetched every time (the symlink target was unmounted, so
-    # versions landed in ephemeral container storage). Kept per-target — sharing one
+    # versions landed in ephemeral container storage). Kept per-target - sharing one
     # dir across parallel targets would reintroduce the installer-corruption race.
     shared_versions = (ctx.out_dir.parent / ".hmc-cache" / "shared-versions" / tid).resolve()
     shared_versions.mkdir(parents=True, exist_ok=True)
@@ -642,7 +642,7 @@ def _v_wait_bridge(ctx: Context, step):
                 _launch_client(ctx)
                 continue
             # Keep whole trailing lines (not a mid-line byte slice) so the crash
-            # tail — including the exception header — stays readable.
+            # tail - including the exception header - stays readable.
             tail = "\n".join(logs.splitlines()[-80:])
             raise TimeoutError(f"Client exited before bridge: {e}\n--- logs ---\n{tail}")
         try:
@@ -766,13 +766,13 @@ def _v_wait_client_exit(ctx: Context, step):
     """Wait for the client container to exit, optionally asserting *how* it exited.
 
     ``expect:`` makes "loaded then crashed/idled" a first-class outcome:
-      any   (default) — exited for any reason; don't judge the code
-      clean — exit code 0
-      crash — non-zero exit code
+      any   (default) - exited for any reason; don't judge the code
+      clean - exit code 0
+      crash - non-zero exit code
     The ``timeout`` wrapper around the client exits 124, which counts as a crash.
 
     ``or_alive: true`` tolerates the client *still running* after the grace period
-    instead of failing — for "loaded then idles" on a real-GPU host where the
+    instead of failing - for "loaded then idles" on a real-GPU host where the
     client never crashes. Pair it with a positive ``wait_for`` marker beforehand
     so the step still proves the client got far enough. Only meaningful with
     ``expect: any`` (a still-alive client has no exit code to judge).
@@ -783,7 +783,7 @@ def _v_wait_client_exit(ctx: Context, step):
         _wait_exited(ctx.cli_name, timeout=timeout)
     except TimeoutError:
         if or_alive:
-            return  # still loaded and running after the grace period — acceptable
+            return  # still loaded and running after the grace period - acceptable
         raise
     expect = str(step.get("expect", "any")).lower()
     if expect == "any":

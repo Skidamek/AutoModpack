@@ -2,13 +2,11 @@
 
 `automodpack/server.conf` in the server root directory. The file is created on the first start with defaults.
 
-The file uses a small subset of HOCON: comments (`#`), `key: value` options, inline lists, and braced nesting. JSON is not a live format. If `server.conf` is missing, AutoModpack reads the first existing JSON once (`automodpack-server.json`, then `server-config.json`), maps it to the current keys, writes a fresh `server.conf`, and renames the JSON to `.backup` (`.backup-2` on collision).
+The file uses a small subset of HOCON: comments (`#`), `key: value` options, inline lists, and braced nesting.
 
 ## Editing the file
 
-- Apply changes with `/automodpack config reload` or a restart. When the reload changes connection settings, run `/automodpack host restart` to apply them.
-- A parse error fails the start or the reload with the file, line, and column. The previous file stays in place. Unknown keys are ignored and logged.
-- Keys are kebab-case (`connection-mode`, `from-server`). Category names and group ids stay as you type them.
+Apply changes with `/automodpack config reload` or a restart. When the reload changes connection settings, run `/automodpack host restart` to apply them.
 
 ## General
 

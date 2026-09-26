@@ -18,7 +18,7 @@ With `update-selected-modpack-on-launch` off, launch loads the current state wit
 
 The client first asks the platform APIs. Files found on Modrinth or CurseForge download straight from their CDNs through direct links, so mod authors get the download credit and your server ships less traffic. The client matches files by SHA-1 on Modrinth and by content fingerprint on CurseForge.
 
-Everything else downloads from the modpack host over its TLS connection. Each response negotiates its encoding per request - zstd first, gzip as the fallback - and the compression also runs on pack files, where zstd -3 measurably shaves about 14% off the served bytes even for jars. When a platform link fails, the client falls back to your server automatically.
+Everything else downloads from the modpack host over its TLS connection.
 
 ## Editable files
 

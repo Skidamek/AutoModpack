@@ -516,7 +516,7 @@ public class VersionedScreen extends Screen {
 	protected record DialogColumn(int bodyTop, int bodyBottom, boolean scrolls, int stackTop) {}
 
 	/**
-	 * Lays a dialog out as one column — body, then an optional pinned stack — above the footer. A column
+	 * Lays a dialog out as one column - body, then an optional pinned stack - above the footer. A column
 	 * that fits centers in the space between the top reserve and the footer; only a real overflow clips
 	 * the body into the remaining window while the stack pins above the footer.
 	 */

@@ -28,7 +28,7 @@ def canonical_timestamp(moment: datetime) -> str:
 
     The client rejects any other shape as a non-canonical generation timestamp, so a staged generation stamped with a
     fixed-width fraction (e.g. ``.800000Z``) is strictly invalid and crashes the first storage validation that reads
-    it — a ~10% flake per staged record. Verified against jshell: Instant.parse("...32.800000Z").toString() gives
+    it - a ~10% flake per staged record. Verified against jshell: Instant.parse("...32.800000Z").toString() gives
     "...32.800Z", while minimal forms like "...32.8Z" are equally rejected. Keep this next to the only writer.
     """
     if moment.tzinfo is None:
@@ -225,7 +225,7 @@ def _verify_staged_generation(policy_object: Path, token: str, policy_sha1: str,
     """Re-read a staged generation's policy object and its mirror line and prove both are strictly valid before any client can see them.
 
     A malformed staged generation (non-canonical timestamp, mismatched content token, or ledger digest drift) stays
-    invisible until a client storage validation reads it — potentially minutes and hundreds of steps later, on a
+    invisible until a client storage validation reads it - potentially minutes and hundreds of steps later, on a
     random shard. Fail here instead, where the cause is obvious.
     """
     try:

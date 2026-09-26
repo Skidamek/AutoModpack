@@ -53,7 +53,7 @@ public final class ConfigTools {
 	/**
 	 * Stream-reader strictness for the integral types, registered because Gson 2.8.9 deserializing from a parsed tree
 	 * instead of a string narrows every number through a double and silently truncates out-of-range or fractional
-	 * literals — a hand-edited or corrupt config must fail loudly at parse, never take a truncated port or size.
+	 * literals - a hand-edited or corrupt config must fail loudly at parse, never take a truncated port or size.
 	 */
 	private static final Map<Class<?>, Object> STRICT_INTEGRAL_DESERIALIZERS = Map.of(byte.class, StrictIntegralDeserializer.BYTE, Byte.class, StrictIntegralDeserializer.BYTE,
 			short.class, StrictIntegralDeserializer.SHORT, Short.class, StrictIntegralDeserializer.SHORT, int.class, StrictIntegralDeserializer.INT, Integer.class,
@@ -110,7 +110,7 @@ public final class ConfigTools {
 	 * non-regular path occupying the name) is set aside as evidence and also reads as empty, and only real IO trouble
 	 * of a regular file propagates. The mapper folds every content validation in; the state's owner stays the sole
 	 * authority on what its document must look like. A failed aside is IO trouble, never empty. This leniency is for
-	 * machine-written state only — user-owned config files take the strict {@link #read} path, which never sets
+	 * machine-written state only - user-owned config files take the strict {@link #read} path, which never sets
 	 * anything aside.
 	 */
 	public static <F, S> Optional<S> readState(Path path, Class<F> type, String description, Function<F, S> fromFields) throws IOException {

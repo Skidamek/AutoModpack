@@ -2,8 +2,8 @@
 
 A mod entry in a ``stage_modpack`` step is either:
 
-  - a string — a path relative to the repo root (a jar already in the tree), or
-  - a mapping ``{url, sha512[, name]}`` — a pinned remote jar (e.g. a Modrinth CDN
+  - a string - a path relative to the repo root (a jar already in the tree), or
+  - a mapping ``{url, sha512[, name]}`` - a pinned remote jar (e.g. a Modrinth CDN
     URL) downloaded once into ``autotester/.mod-cache/`` and verified against its
     ``sha512``.
 

@@ -4,6 +4,8 @@ AutoModpack keeps its files in an `automodpack/` folder inside the game director
 
 ## Bootstrap
 
+Bootstrap allows making a very simple user friednly setup for private server, it only requires installing AutoModpack and provide a single file to client, on a first client boot, AutoModpack will install the default selection of a modpack, boot straight into it and keep in sync.
+
 The one-shot client drop-in is `~/automodpack/automodpack-bootstrap.json`. Put a copy there, start the game, and AutoModpack imports it and deletes it. AutoModpack must already be installed. The file lives inside `automodpack/` because a pack can never write there; the same file name at the instance root is ignored with a warning. If the file includes `serverName`, the import also creates the entry in the vanilla server list.
 
 `/automodpack host bootstrap` writes `~/automodpack/automodpack-bootstrap.exported.json`. Copy that file to clients as `automodpack-bootstrap.json`. It is never imported by the instance that wrote it, so running the command on a logical server does not reroute the same instance. An install export contains a provisioning secret, so treat it like a credential.
@@ -28,7 +30,7 @@ The one-shot client drop-in is `~/automodpack/automodpack-bootstrap.json`. Put a
 
 ## AutoModpack manages these
 
-Edit these by hand only when support asks you to; AutoModpack owns their contents.
+Do not edit those manually!
 
 ### Server runtime: `~/automodpack/server/`
 
@@ -66,7 +68,7 @@ The store contains Git-style objects under `objects/`, metadata caches, per-pack
 
 ## The projection
 
-The selected generation is materialized into the fixed path `~/automodpack/client/active/`. Immutable files are hard-linked from the content store where the filesystem allows it, so most packs cost little extra disk space. Editable files keep their live copy in the game directory and use the overlay only after the player changes them.
+The selected generation is materialized into the fixed path `~/automodpack/client/active/`. Immutable files are hard-linked from the content store where the filesystem allows it, so most packs cost little extra disk space. All editable files keep their live copy in the game directory and use the overlay only after the player changes them.
 
 The game directory receives live copies for files the loader or game must read there, and for every editable file, players included: the standard `mods` folder gets the AutoModpack loader, loader-required copies, files pinned through `pinned-mod-ids`, and editable mod jars. Non-editable mods load straight from the projection, so a pack jar only meets the player's `mods` folder when the pack says the player may touch it. The projection path never changes with generation identity, so switching or restoring a generation rewires one tree instead of juggling one physical tree per pack.
 

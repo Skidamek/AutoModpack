@@ -125,7 +125,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		if (auxiliaryAction != null) actionButtons.get(actionButtons.size() - 1).active = auxiliaryAction.active();
 		int footerTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
 		int summaryY = footerTop - this.font.lineHeight - 5;
-		// The pane reserves all three bands — path, facts, action rail — so selection never moves the layout.
+		// The pane reserves all three bands - path, facts, action rail - so selection never moves the layout.
 		int paneTop = summaryY - 3 - (2 * this.font.lineHeight + 2 + ActionAreaLayout.BUTTON_HEIGHT);
 		this.summaryY = summaryY;
 		this.paneTop = paneTop;

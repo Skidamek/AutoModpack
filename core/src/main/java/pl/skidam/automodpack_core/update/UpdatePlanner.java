@@ -267,7 +267,7 @@ public final class UpdatePlanner {
 		return paths;
 	}
 
-	/** Installs every target manifest item into the projection, its overlay, and — when not protected from the player's mods directory — the live copy. */
+	/** Installs every target manifest item into the projection, its overlay, and - when not protected from the player's mods directory - the live copy. */
 	private static void planTargetInstalls(Input input, Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, Set<String> liveCopyPaths,
 			Set<String> protectedIds, Map<String, ModInfo> targetModsByPath, PlanningSession session) {
 		Map<String, FileState> overlays = overlaysByRelative(input.files());
@@ -639,8 +639,8 @@ public final class UpdatePlanner {
 	}
 
 	/**
-	 * The mutable accumulator for one planning run. Projected state and operations move in lockstep — every operation
-	 * immediately updates the projection — so they live here instead of being threaded through passes as parallel parameters.
+	 * The mutable accumulator for one planning run. Projected state and operations move in lockstep - every operation
+	 * immediately updates the projection - so they live here instead of being threaded through passes as parallel parameters.
 	 */
 	static final class PlanningSession {
 		private final Map<FileKey, FileState> projected;

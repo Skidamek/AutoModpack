@@ -1,13 +1,13 @@
 ---
 title: Loader behavior
-description: How AutoModpack hosts pack mods on Fabric, Forge, and NeoForge — what loads in place, what gets copied, and why.
+description: How AutoModpack hosts pack mods on Fabric, Forge, and NeoForge - what loads in place, what gets copied, and why.
 ---
 
 # Loader behavior
 
 AutoModpack keeps pack mods out of your `mods/` folder by loading them from its own
-directory (`automodpack/client/active/mods/`). How that works — and what still ends up
-in `mods/` — depends on the mod loader, because each loader discovers mods differently.
+directory (`automodpack/client/active/mods/`). How that works - and what still ends up
+in `mods/` - depends on the mod loader, because each loader discovers mods differently.
 
 ## Loading in place (the default, every loader)
 
@@ -22,8 +22,8 @@ Everything below exists because of the consequences of that Fabric difference.
 
 ## The generated bundle (Fabric)
 
-On Fabric, a dependency that exists *only inside the pack* — a library nested in one of
-its jars, or a pack mod your own mod needs — is invisible to the pass that resolves your
+On Fabric, a dependency that exists *only inside the pack* - a library nested in one of
+its jars, or a pack mod your own mod needs - is invisible to the pass that resolves your
 `mods/` mods. AutoModpack detects exactly those unmet dependencies and writes **one**
 generated jar:
 
@@ -32,24 +32,24 @@ mods/automodpack-generated.jar
 ```
 
 This file is created, updated, and deleted by AutoModpack. It carries every jar the
-loader needs inside it and nothing else — when the pack or your mods change, its content
+loader needs inside it and nothing else - when the pack or your mods change, its content
 is regenerated; when nothing needs it anymore, it disappears. Do not delete or rename it:
-while it is missing, the loader fails mod resolution before AutoModpack can run — the
+while it is missing, the loader fails mod resolution before AutoModpack can run - the
 game will not start, and no AutoModpack screen is reachable. Restore the file manually
 (for example from the recycle bin), remove the mod that needed it, or reinstall the pack.
-Renaming it leaves a stray duplicate behind — the real file comes back, and the stray is
+Renaming it leaves a stray duplicate behind - the real file comes back, and the stray is
 cleaned up by the next repair.
 
 Two rules worth knowing:
 
 - If the pack updates any jar inside the bundle, the bundle is regenerated and a restart
-  is required — the old copy was already loaded into the game.
+  is required - the old copy was already loaded into the game.
 - The bundle never appears for packs whose dependencies are all satisfied without it.
 
 ## Force-copied mods (Forge and NeoForge)
 
 Both Forge and NeoForge pick the mod that provides the **early loading window**
-(`IMMEDIATE_WINDOW_PROVIDER`) *before* mod discovery and run it immediately — before
+(`IMMEDIATE_WINDOW_PROVIDER`) *before* mod discovery and run it immediately - before
 AutoModpack's pack directory is reachable. If the pack ships such a mod, AutoModpack
 copies it into `mods/` so the loader finds it in time, and asks for a restart:
 

@@ -17,7 +17,7 @@ import pl.skidam.automodpack_core.Constants;
 /*?}*/
 
 // ClientboundCustomQueryPacket exists on every version, so below 1.20.2 the body
-// is simply disabled — the readPayload injection only exists from 1.20.2 —
+// is simply disabled - the readPayload injection only exists from 1.20.2 -
 // leaving an intentional no-op mixin.
 @Mixin(value = ClientboundCustomQueryPacket.class, priority = 300)
 public class LoginQueryRequestS2CPacketMixin {

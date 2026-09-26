@@ -472,7 +472,7 @@ public final class AutoTestBridge {
 
 		// children() (and nested ContainerEventHandler children) is what rebuildWidgets replaces.
 		// Field scraping used to also pick up Screen.focused, which keeps the pre-rebuild widget with
-		// stale text and visible=true — a ghost that could satisfy wait_for/no_element.
+		// stale text and visible=true - a ghost that could satisfy wait_for/no_element.
 		LinkedHashSet<AbstractWidget> widgets = new LinkedHashSet<>();
 		List<RowViewport> rowViewports = new ArrayList<>();
 		for (GuiEventListener child : screen.children()) collectAttachedWidgets(child, widgets, rowViewports);

@@ -22,7 +22,7 @@ import pl.skidam.automodpack_core.utils.DurableFiles;
 
 /**
  * The client boot ordering: load the config, recover the offline repair, recover the pending update transaction, and
- * import a bootstrap install — in that order, once, before any update work runs. Preload is its thin loader adapter;
+ * import a bootstrap install - in that order, once, before any update work runs. Preload is its thin loader adapter;
  * the deferred-transaction policy itself lives in {@link UpdateRecovery}.
  */
 public final class BootRecovery {

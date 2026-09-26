@@ -21,7 +21,7 @@ public final class ChangeSummary {
 
 	private ChangeSummary() {}
 
-	/** "+1 added ~4 changed -6 removed 3 kept !0 unsafe" — zero segments are omitted. */
+	/** "+1 added ~4 changed -6 removed 3 kept !0 unsafe" - zero segments are omitted. */
 	public static String diffLine(int added, int modified, int removed, int preserved, int unsafe) {
 		List<String> parts = new ArrayList<>();
 		if (added > 0) parts.add("+" + added + " " + VersionedText.str("automodpack.summary.kind.added"));

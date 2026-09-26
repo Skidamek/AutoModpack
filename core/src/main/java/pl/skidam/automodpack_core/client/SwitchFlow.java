@@ -21,7 +21,7 @@ import pl.skidam.automodpack_core.update.UpdatePreview;
 
 /**
  * The installed-generation switch and its rollback: resolve the target, review the switch plan, and apply it. Both
- * entries own the whole dance — preview, continue/cancel, failure, close, and the caller's release — so no screen
+ * entries own the whole dance - preview, continue/cancel, failure, close, and the caller's release - so no screen
  * assembles it from engine parts. The release always lands on the client thread.
  */
 public final class SwitchFlow {
