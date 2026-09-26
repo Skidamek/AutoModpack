@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -336,8 +337,9 @@ public class Commands {
 		}
 	}
 
-	private static final DateTimeFormatter ACTIVITY_CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT);
-	private static final DateTimeFormatter ACTIVITY_PRECISE_CLOCK = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT);
+	// Instants carry no clock fields, so the formatters need the zone to resolve them through; server-local matches the console's own clock.
+	private static final DateTimeFormatter ACTIVITY_CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT).withZone(ZoneId.systemDefault());
+	private static final DateTimeFormatter ACTIVITY_PRECISE_CLOCK = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT).withZone(ZoneId.systemDefault());
 	private static final int ACTIVITY_SHOWN_ENTRIES = 5;
 
 	private static int activity(CommandContext<CommandSourceStack> context) {
