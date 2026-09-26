@@ -414,11 +414,11 @@ final class InstalledModpackController {
 		return record == null ? Map.of() : groupNames(record.manifest());
 	}
 
-	/** A group id to display-name map for a manifest; unnamed groups fall back to "Unknown group". */
+	/** A group id to display-name map for a manifest; unnamed groups fall back to their id. */
 	static Map<String, String> groupNames(GroupManifest manifest) {
 		Map<String, String> names = new TreeMap<>();
 		manifest.groups().forEach((groupId, group) -> names.put(groupId,
-				group.displayName().isBlank() ? VersionedText.str("automodpack.browser.unknownGroup") : group.displayName()));
+				group.displayName().isBlank() ? groupId : group.displayName()));
 		return Map.copyOf(names);
 	}
 

@@ -215,7 +215,7 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 			return String.join(" | ", parts);
 		}
 
-		/** The file's group display names, alphabetically; ids without a name fall back to "Unknown group". */
+		/** The file's group display names, alphabetically; unnamed groups arrive as their id, and an id absent from the map is a broken reference. */
 		private List<String> visibleGroups(ChangeBrowserProjection.FileRow file) {
 			return file.features().stream().map(groupNames::get).map(name -> name == null || name.isBlank() ? VersionedText.str("automodpack.browser.unknownGroup") : name)
 					.distinct().sorted(String.CASE_INSENSITIVE_ORDER).toList();

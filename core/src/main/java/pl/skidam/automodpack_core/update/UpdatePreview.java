@@ -93,13 +93,13 @@ public final class UpdatePreview {
 		return featureNames;
 	}
 
-	/** Adds presentation names without reclassifying any planned disposition. */
+	/** Adds presentation names (unnamed groups present their id) without reclassifying any planned disposition. */
 	public UpdatePreview withFeatureManifest(GroupManifest manifest) {
 		Objects.requireNonNull(manifest, "feature manifest");
 		Map<String, String> names = new TreeMap<>();
 		Map<String, List<String>> ownersByPath = new TreeMap<>();
 		manifest.groups().forEach((groupId, group) -> {
-			names.put(groupId, group.displayName());
+			names.put(groupId, group.displayName().isBlank() ? groupId : group.displayName());
 			group.files().keySet().forEach(path -> ownersByPath.computeIfAbsent(path, ignored -> new ArrayList<>()).add(groupId));
 		});
 		List<ChangeSet.Change> changes = new ArrayList<>(changeSet.changes().size());

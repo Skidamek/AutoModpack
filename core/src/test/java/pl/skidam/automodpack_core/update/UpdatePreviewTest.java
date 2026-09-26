@@ -111,6 +111,20 @@ class UpdatePreviewTest {
 	}
 
 	@Test
+	void unnamedGroupsPresentTheirId() {
+		ModpackJsons.ModpackContentFields target = manifest(item("mods/example.jar", TARGET_HASH, 9, "mod"),
+				entry("mods/example.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT));
+		UpdatePreview preview = UpdatePreview.create(plan(target, Map.of()), null, UpdatePreview.Mode.UPDATE);
+		GroupManifest.Group feature = new GroupManifest.Group("", "", "General", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
+				new TreeMap<>(Map.of("mods/example.jar", new GroupManifest.GroupFile(9, "mod", false, TARGET_HASH, "0"))));
+		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("main", feature)));
+
+		UpdatePreview named = preview.withFeatureManifest(manifest);
+
+		assertEquals("main", named.featureNames().get("main"));
+	}
+
+	@Test
 	void addingRestartReasonUpdatesDecisionAndConsequencesTogether() {
 		UpdatePlan decision = plan(manifest(), Map.of()).withRestartReason(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION);
 
