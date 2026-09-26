@@ -7,6 +7,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import net.minecraft.client.multiplayer.ClientPacketListener;
 
+import pl.skidam.automodpack.client.ClientHostMessage;
 import pl.skidam.automodpack_core.client.SessionUpdateState;
 
 /**
@@ -18,5 +19,6 @@ public class ClientPlayJoinMixin {
 	@Inject(method = "handleLogin", at = @At("RETURN"))
 	private void automodpack$worldEntered(CallbackInfo ci) {
 		SessionUpdateState.worldEntered();
+		ClientHostMessage.announcePendingFailure();
 	}
 }

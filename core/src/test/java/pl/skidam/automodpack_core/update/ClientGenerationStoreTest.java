@@ -25,6 +25,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.Journal;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
@@ -452,6 +454,50 @@ class ClientGenerationStoreTest {
 		storage.clearActiveState();
 		generations.forgetModpack(FIRST_PACK);
 		assertTrue(generations.compactionReceipt(FIRST_PACK).isEmpty(), "the receipt is deleted with the pack");
+	}
+
+	@Test
+	void hostingServesTheActivePackFromMirrorAndCas() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "projection-object");
+		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
+		TestPacks.stageGeneration(storage, document);
+		writeHead(storage, FIRST_PACK, document);
+		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields());
+
+		GenerationHosting hosting = new ClientGenerationStore(storage).hosting();
+
+		assertEquals(storage.historyHeadFile(FIRST_PACK), hosting.get(GenerationHosting.HEAD_DOCUMENT_KEY));
+		assertEquals(storage.historyJournalFile(FIRST_PACK), hosting.get(GenerationHosting.JOURNAL_KEY));
+		assertEquals(storage.objectFile(document.policySha1()), hosting.get(document.policySha1()));
+		assertEquals(storage.objectFile(hash), hosting.get(hash));
+	}
+
+	@Test
+	void hostingFailsLoudlyWhenAContentObjectIsMissing() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "projection-object");
+		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
+		TestPacks.stageGeneration(storage, document);
+		writeHead(storage, FIRST_PACK, document);
+		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields());
+		Files.delete(storage.objectFile(hash));
+
+		assertThrows(IOException.class, () -> new ClientGenerationStore(storage).hosting());
+	}
+
+	@Test
+	void hostingWithoutAnActivePackFails() throws Exception {
+		ClientStorage storage = storage();
+		assertThrows(IOException.class, () -> new ClientGenerationStore(storage).hosting());
+	}
+
+	private static void writeHead(ClientStorage storage, String modpackId, PackDocument document) throws IOException {
+		GenerationJsons.HeadDocumentFields head = new GenerationJsons.HeadDocumentFields();
+		head.contentToken = document.contentToken();
+		head.policySha1 = document.policySha1();
+		head.journalHead = 1;
+		ConfigTools.writeAtomic(storage.historyHeadFile(modpackId), head);
 	}
 
 	private ClientStorage storage() throws Exception {
