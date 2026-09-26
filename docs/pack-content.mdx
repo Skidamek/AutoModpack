@@ -112,7 +112,7 @@ Remove the file from the server, or keep it on the server and add it to `exclude
 
 ## What never ships
 
-- AutoModpack's own jar. `/automodpack generate` never packs it and never publishes its updates: clients follow the AutoModpack version the server runs and pick the matching release up from Modrinth. To update players, update the jar on the server, restart, and clients sync to it on their next connection. The details, including `sync-auto-modpack-version` and `self-updater`, are in [AutoModpack's own updates](how-it-works/client-updates#automodpacks-own-updates).
+- AutoModpack's own jar. `/automodpack generate` never packs it and never publishes its updates: clients follow the AutoModpack version the server runs and pick the matching release up from Modrinth. To update players, update the jar on the server, restart, and clients sync to it on their next connection. The details, including `sync-automodpack-version` and `self-updater`, are in [AutoModpack's own updates](how-it-works/client-updates#automodpacks-own-updates).
 - Mods whose metadata declares them server-side, when `auto-exclude-server-side-mods` is on (default).
 - Empty, hidden, `.tmp`, `.disabled`, and `.bak` files. The default `exclude` rules carry these patterns and can be edited; the `automodpack/` namespace and Windows-reserved device names are always left out and cannot be turned back on.
 - The paths `saves/`, `screenshots/`, `logs/`, and `automodpack/` can never be claimed by the pack.

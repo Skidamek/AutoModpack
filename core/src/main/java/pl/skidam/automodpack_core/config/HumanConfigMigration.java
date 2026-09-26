@@ -32,7 +32,7 @@ public final class HumanConfigMigration {
 		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
 		copyBoolean(json, config, "updateSelectedModpackOnLaunch", "update-selected-modpack-on-launch");
 		copyBoolean(json, config, "selfUpdater", "self-updater");
-		copyBoolean(json, config, "syncAutoModpackVersion", "sync-auto-modpack-version");
+		copyBoolean(json, config, "syncAutoModpackVersion", "sync-automodpack-version");
 		copyBoolean(json, config, "syncLoaderVersion", "sync-loader-version", "sync-versions");
 		copyBoolean(json, config, "playMusic", "play-music");
 		copyBoolean(json, config, "showModpackSettingsButton", "show-modpack-settings-button");

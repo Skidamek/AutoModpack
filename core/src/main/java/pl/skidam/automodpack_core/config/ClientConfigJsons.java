@@ -16,7 +16,7 @@ public class ClientConfigJsons {
 		public boolean updateSelectedModpackOnLaunch = true;
 		@SerializedName("self-updater")
 		public boolean selfUpdater = false;
-		@SerializedName("sync-auto-modpack-version")
+		@SerializedName("sync-automodpack-version")
 		public boolean syncAutoModpackVersion = true;
 		@SerializedName(value = "sync-versions", alternate = {"sync-loader-version", "syncLoaderVersion"})
 		public boolean syncVersions = true;
