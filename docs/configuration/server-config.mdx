@@ -46,7 +46,6 @@ A leading `/` is allowed and ignored. Rules are otherwise relative to the server
 
 - `*` matches within a single directory, for example `mods/*.jar`.
 - `**` matches recursively, for example `kubejs/**`.
-- `**/foo` matches `foo` at the server root, like gitignore.
 - `!` negates a rule inside its own list. A path matches a list when a positive rule matches it and no `!` rule does.
 
 Where the negation applies depends on the list it sits in. Inside `from-server` it skips a path from the synced set only, and the group directory may still provide it. `exclude` keeps a path from reaching clients entirely, so prefer it for exclusions and reach for a `from-server` negation only when the group-directory copy should still ship.
