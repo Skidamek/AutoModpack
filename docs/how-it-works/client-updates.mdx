@@ -6,7 +6,7 @@ This page follows one pack through a client: when updates apply, where the bytes
 
 With `update-selected-modpack-on-launch` on (the default), every launch fetches the server's current generation and applies it before the game loads anything. Projection-only work, such as config and resource pack changes, needs no restart at all: the game reads those files from the managed projection.
 
-When the plan touches files in the standard `mods` folder or the loader version, AutoModpack stops and asks for a relaunch, so the loader reads the real file tree. Fabric enumerates `mods/` early in boot and Forge and NeoForge later, but the restart rule is the same for every loader.
+When the plan touches files in the standard `mods` folder (99% mods load from projection so need no restart) or the loader version, AutoModpack stops and asks for a relaunch, so the loader reads the real file tree.
 
 Joining a server while in-game goes through a review screen instead: it shows what the update would change, asks for consent when your own extra mods would be touched, and applies group selections. Mod jars that could not be matched on Modrinth or CurseForge are listed as unverified and need an explicit risk acknowledgement before the download starts. A first install always waits for this review. A pack installed through a [trusted bootstrap](files-on-disk#bootstrap) is the exception and applies on that launch.
 
