@@ -197,6 +197,7 @@ val writeReleaseMatrix =
 			// The game-version list is the distinct union across the selected targets, in stable order;
 			// tildes collapse to their base because Modrinth's game-version lists enumerate real
 			// releases only - the tilde rides in the jar, not in the listing.
+			// mc-publish splits list inputs on newlines only, so the joins stay newline-based.
 			val publishVersions =
 				selectedTargets
 					.map { target -> structuredString(target.substringBeforeLast('-'), "publish_versions") }
@@ -204,7 +205,7 @@ val writeReleaseMatrix =
 					.map { it.removePrefix("~") }
 					.filter { it.isNotBlank() }
 					.distinct()
-					.joinToString(",")
+					.joinToString("\n")
 			val entries =
 				listOf(
 					mapOf(
@@ -214,7 +215,7 @@ val writeReleaseMatrix =
 							selectedTargets
 								.map { it.substringAfterLast('-') }
 								.distinct()
-								.joinToString(","),
+								.joinToString("\n"),
 						"name" to "$displayName $modVersion",
 						"file" to "$modName-$modVersion.jar",
 						"mod_name" to displayName,
