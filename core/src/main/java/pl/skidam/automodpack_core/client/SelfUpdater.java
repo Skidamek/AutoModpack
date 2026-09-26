@@ -135,7 +135,7 @@ public class SelfUpdater {
 			}
 
 			// Safety / Downgrade Check
-			if (!validUpdate(remoteVersion)) {
+			if (!validUpdate(remoteVersion, currentVersion)) {
 				// If the specific version requested by server is unsafe, we abort.
 				// If we are just scanning the list, we skip this invalid entry.
 				if (gettingServerVersion) return false;
@@ -153,16 +153,17 @@ public class SelfUpdater {
 
 	/**
 	 * Checks if the target update is safe.
-	 * Prevents downgrading below 5.0.0 Stable.
+	 * Prevents landing below 5.0.0 Stable.
 	 * * Logic:
 	 * 5.0.0 (Stable) is SAFE.
 	 * 5.1.0 (Stable) is SAFE.
-	 * 5.0.0-betaX is UNSAFE (because it is < 5.0.0 Stable).
+	 * 5.0.0-betaX from 5.0.0 Stable is UNSAFE (a downgrade below the floor).
+	 * 5.0.0-rc.1 from 5.0.0-betaX is SAFE (still below the floor, but it moves forward).
 	 */
-	public static boolean validUpdate(SemanticVersion remoteVersion) {
-		if (remoteVersion.compareTo(MINIMUM_SAFE_VERSION) < 0) {
-			LOGGER.error("Downgrading AutoModpack to version {} is strongly discouraged/disabled due to security concerns (Target is older than 5.0.0 Stable).",
-					remoteVersion);
+	public static boolean validUpdate(SemanticVersion remoteVersion, SemanticVersion currentVersion) {
+		if (remoteVersion.compareTo(MINIMUM_SAFE_VERSION) < 0 && remoteVersion.compareTo(currentVersion) <= 0) {
+			LOGGER.error("Downgrading AutoModpack to version {} is strongly discouraged/disabled due to security concerns (Target is older than 5.0.0 Stable and not newer than the installed {}).",
+					remoteVersion, currentVersion);
 			return false;
 		}
 		return true;
