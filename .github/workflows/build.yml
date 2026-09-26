@@ -42,7 +42,8 @@ jobs:
           add-job-summary: never
           cache-provider: basic
       - name: Build targets
-        run: ./gradlew build writeReleaseMatrix --continue
+        # -x test: the core suite runs in CI on every push; a release only ships artifacts.
+        run: ./gradlew build -x test writeReleaseMatrix --continue
       - name: Verify artifacts
         id: matrix
         run: |
