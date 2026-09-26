@@ -108,12 +108,8 @@ public class HandshakeS2CPacket {
 			}
 
 			if (!clientHandshakePacket.amVersion.equals(AM_VERSION)) {
-				Component reason = VersionedText.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for "
-						+ LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT) + " to play on this server!");
-				if (isClientVersionHigher(clientHandshakePacket.amVersion)) {
-					reason = VersionedText.literal(
-							"You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
-				}
+				Component reason = VersionedText.literal("AutoModpack version mismatch. This server runs " + AM_VERSION
+						+ ", so install that version of AutoModpack for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT) + " to join.");
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);
 				return;
@@ -174,21 +170,5 @@ public class HandshakeS2CPacket {
 		for (LoaderManagerService.ModPlatform type : LoaderManagerService.ModPlatform.values())
 			if (type.name().toLowerCase(Locale.ROOT).equals(loader.toLowerCase(Locale.ROOT))) return true;
 		return LOADER != null && LOADER.equalsIgnoreCase(loader);
-	}
-
-	private static boolean isClientVersionHigher(String clientVersion) {
-		String versionPattern = "\\d+\\.\\d+\\.\\d+";
-		if (!clientVersion.matches(versionPattern)) return false;
-
-		if (!clientVersion.equals(AM_VERSION)) {
-			String[] clientVersionComponents = clientVersion.split("\\.");
-			String[] serverVersionComponents = AM_VERSION.split("\\.");
-
-			for (int i = 0, n = clientVersionComponents.length; i < n; i++) {
-				if (clientVersionComponents[i].compareTo(serverVersionComponents[i]) > 0) return true;
-			}
-		}
-
-		return false;
 	}
 }
