@@ -78,7 +78,14 @@ public class SelfUpdater {
 			}
 
 			LOGGER.info("Syncing AutoModpack to server version: {}", serverModpackContent.automodpackVersion);
-			modrinthAPIList.add(ModrinthAPI.getModSpecificVersion(AUTOMODPACK_ID, serverModpackContent.automodpackVersion, serverModpackContent.mcVersion));
+			String mcVersion = lookupMcVersion(serverModpackContent.mcVersion);
+			ModrinthAPI lookup = ModrinthAPI.getModSpecificVersion(AUTOMODPACK_ID, serverModpackContent.automodpackVersion, mcVersion);
+			if (lookup == null) {
+				LOGGER.warn("Modrinth has no AutoModpack {} build for Minecraft {}, so the client stays on {}", serverModpackContent.automodpackVersion,
+						mcVersion, AM_VERSION);
+				return false;
+			}
+			modrinthAPIList.add(lookup);
 		} else {
 			LOGGER.info("Checking if AutoModpack is up-to-date...");
 			modrinthAPIList = ModrinthAPI.getModInfosFromID(AUTOMODPACK_ID);
@@ -159,6 +166,16 @@ public class SelfUpdater {
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * The Minecraft version to look an AutoModpack build up for: the pack's advertised one, or the running game's
+	 * when the pack publishes none. A files-only pack (advertise-versions-to-sync: false) cannot switch the game
+	 * version, so the running version is the one the updated build has to match. The lookup's loader side is already
+	 * the running loader: ModrinthAPI reads it from the loader manager.
+	 */
+	static String lookupMcVersion(String advertisedMcVersion) {
+		return advertisedMcVersion == null || advertisedMcVersion.isBlank() ? MC_VERSION : advertisedMcVersion;
 	}
 
 	public static void installModVersion(ModrinthAPI automodpack) {

@@ -415,10 +415,13 @@ public class ModpackExecutor {
 		String modpackId = previous == null ? ModpackId.generate() : ModpackId.requireValid(previous.manifest().modpackId());
 		try (FileCache fileCache = FileCache.open(dataLayout.fileCacheDirectory());
 				ModFileCache modFileCache = ModFileCache.open(dataLayout.modCacheDirectory())) {
-			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpack.name, AM_VERSION, LOADER,
-					serverConfig.advertiseVersionsToSync ? LOADER_VERSION : null, MC_VERSION, serverRoot, groupRoot, serverConfig.modpack.categories,
-					serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()), creationExecutor,
-					generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects);
+			// Unadvertised versions leave the manifest fields empty, so clients see a files-only pack instead of a
+			// pack whose versions they must switch to.
+			boolean advertiseVersions = serverConfig.advertiseVersionsToSync;
+			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpack.name, AM_VERSION,
+					advertiseVersions ? LOADER : null, advertiseVersions ? LOADER_VERSION : null, advertiseVersions ? MC_VERSION : null, serverRoot, groupRoot,
+					serverConfig.modpack.categories, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()),
+					creationExecutor, generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects);
 			ModpackCandidate candidate = candidateScan.scan(request);
 			for (ExcludedCandidate exclusion : candidate.exclusions())
 				LOGGER.info("Excluded from the modpack: {}/{} - {} ({})", exclusion.source().groupId(), exclusion.source().logicalPath(),

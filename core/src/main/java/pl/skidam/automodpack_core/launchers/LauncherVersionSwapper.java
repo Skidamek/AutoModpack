@@ -87,6 +87,7 @@ public class LauncherVersionSwapper {
 	 * Decides what launcher-metadata work the target pack demands of this client. The axes come from the detected
 	 * launcher's own records; without launcher metadata (vanilla launcher and other unmanaged clients) only the
 	 * fatal axes are compared, and the pack goes manual: the player sets the versions in the launcher by hand.
+	 * A pack that publishes no version metadata at all is files-only: no switch and no refusal.
 	 */
 	public static SwitchPlan planSwitch(String serverLoader, String serverLoaderVersion, String serverMcVersion, boolean syncVersions, String clientLoader,
 			String clientMcVersion) {
@@ -95,6 +96,11 @@ public class LauncherVersionSwapper {
 
 	static SwitchPlan planSwitch(String serverLoader, String serverLoaderVersion, String serverMcVersion, boolean syncVersions, String clientLoader,
 			String clientMcVersion, LauncherAdapter adapter, BiPredicate<String, String> versionKnown) {
+		if (blank(serverLoader) && blank(serverLoaderVersion) && blank(serverMcVersion)) {
+			// The pack publishes no version metadata (advertise-versions-to-sync: false): the pack syncs as files and
+			// the launcher's own versions stand. The unsupported-loader refusal below needs a named loader to judge.
+			return SwitchPlan.none();
+		}
 		if (adapter == null) {
 			// Launchers without metadata manage their own loader, so a bare loader-version bump is theirs to handle
 			// (the established behavior). A version/loader-type change cannot be applied here either, but the pack
@@ -164,6 +170,10 @@ public class LauncherVersionSwapper {
 
 	private static boolean differs(String target, String current) {
 		return target != null && !target.isBlank() && !target.equals(current);
+	}
+
+	private static boolean blank(String value) {
+		return value == null || value.isBlank();
 	}
 
 	private static boolean differsIgnoreCase(String target, String current) {
