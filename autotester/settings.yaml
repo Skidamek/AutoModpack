@@ -76,18 +76,24 @@ serverCache:
 
 automodpack:
   config:
-    DO_NOT_CHANGE_IT: 2
     modpackHost: true
     generateModpackOnStart: true
-    syncedFiles:
-      - "/mods/*.jar"
-      - "/kubejs/**"
-      - "!/kubejs/server_scripts/**"
-      - "/emotes/*"
-    allowEditsInFiles:
-      - "/config/**"
+    modpack:
+      General:
+        main:
+          from-server:
+            - "mods/*.jar"
+            - "kubejs/**"
+            - "!kubejs/server_scripts/**"
+            - "emotes/*"
+          exclude:
+            - "**/.*"
+            - "**/.*/**"
+            - "**/*.{tmp,disabled,bak}"
+            - "kubejs/server_scripts/**"
+          editable:
+            - "config/**"
     autoExcludeServerSideMods: true
-    autoExcludeUnnecessaryFiles: true
     requireModpack: true
     nagUnModdedClients: false
     bindAddress: ""

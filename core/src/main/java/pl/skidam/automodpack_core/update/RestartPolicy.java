@@ -8,7 +8,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 
 /**
  * Restart consequences of one plan: preload and in-game ask the same three-way question. Preload never
- * offers — configs land on disk for the next read, and projection mods hot-load — so it only returns
+ * offers - configs land on disk for the next read, and projection mods hot-load - so it only returns
  * {@link RestartDemand#REQUIRED} or {@link RestartDemand#NONE}.
  */
 public final class RestartPolicy {

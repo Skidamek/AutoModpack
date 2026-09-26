@@ -34,7 +34,7 @@ public interface ScreenService {
 
 	/**
 	 * Asks the player to verify a server certificate during a join. The join is already owned by this prompt, so
-	 * backing out of it always lands on the multiplayer hub — never on the vanilla connecting screen the prompt
+	 * backing out of it always lands on the multiplayer hub - never on the vanilla connecting screen the prompt
 	 * interrupted, which has no live connection to return to.
 	 */
 	default void validation(String fingerprint, String origin, Runnable validated, Runnable canceled) {}
@@ -87,7 +87,7 @@ public interface ScreenService {
 
 	/**
 	 * Ends the current wait/download episode and returns to the remembered parent. No-op when a successor already
-	 * claimed the episode (restart, welcome, preview, failure) or no wait is showing — including when that successor
+	 * claimed the episode (restart, welcome, preview, failure) or no wait is showing - including when that successor
 	 * is still waiting on the loading dwell. A wait cannot outlive the engine: {@code ModpackUpdater.close()} always
 	 * calls this.
 	 */

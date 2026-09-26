@@ -17,8 +17,8 @@ import pl.skidam.automodpack.networking.client.LoginResponsePayload;
 /*?}*/
 
 // Below 1.20.2 the stonecutter replacement rewrites the target to its old name
-// (ServerboundCustomQueryAnswerPacket) and the body is disabled — the readPayload
-// injection only exists from 1.20.2 — leaving an intentional no-op mixin.
+// (ServerboundCustomQueryAnswerPacket) and the body is disabled - the readPayload
+// injection only exists from 1.20.2 - leaving an intentional no-op mixin.
 @Mixin(value = ServerboundCustomQueryAnswerPacket.class, priority = 300)
 public class LoginQueryResponseC2SPacketMixin {
 

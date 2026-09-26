@@ -65,7 +65,7 @@ class ManifestFetcherMirrorChainTest {
 		storage.writeActiveState(MODPACK_ID, head.contentToken, head.ownershipLedger);
 
 		// The second contact carries the mirror's hash as the validator: the server answers without a body and the
-		// content is served from the mirror. The flow's local verification runs regardless — only the transfer is skipped.
+		// content is served from the mirror. The flow's local verification runs regardless - only the transfer is skipped.
 		var second = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(20, TimeUnit.SECONDS);
 		assertTrue(second.successful(), () -> "second fetch failed: " + second.failure());
 		assertEquals(head.contentToken, second.content().contentToken);

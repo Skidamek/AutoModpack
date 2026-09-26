@@ -109,9 +109,9 @@ final class RemovalAttempt implements UpdateAttempt {
 	private static UpdateTransaction transactionOf(ClientUpdatePlanBuilder.RemovalPreparation preparation, Kind kind, String overlayDigest) {
 		if (kind == Kind.REMOVAL)
 			return UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), preparation.installed().ownershipLedger, overlayDigest,
-					preparation.expectedClientConfig());
+					preparation.expectedClientConfig(), preparation.expectedSelectedModpackId());
 		return UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), preparation.installed().ownershipLedger, overlayDigest,
-				preparation.expectedClientConfig());
+				preparation.expectedClientConfig(), preparation.expectedSelectedModpackId());
 	}
 
 	private UpdatePreview removalPreview(ClientUpdatePlanBuilder.RemovalPreparation preparation, UpdatePreview.Mode mode) throws IOException {

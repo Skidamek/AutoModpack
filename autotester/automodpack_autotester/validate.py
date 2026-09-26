@@ -1,4 +1,4 @@
-"""Static scenario validation — catch typos before a multi-minute Docker run."""
+"""Static scenario validation - catch typos before a multi-minute Docker run."""
 from __future__ import annotations
 
 import re

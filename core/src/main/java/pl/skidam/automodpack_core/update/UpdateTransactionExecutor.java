@@ -22,6 +22,7 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
@@ -352,7 +353,13 @@ public final class UpdateTransactionExecutor {
 	private void finalizeModpackState(UpdateTransaction transaction, boolean preserveNewerSelection) throws IOException {
 		SelectedModpackTarget resolved = validator.resolvedTarget(transaction, validator.targetDocument(transaction));
 		if (transaction.plan().plannedClientConfig() != null && !preserveNewerSelection)
-			ConfigTools.writeAtomic(context.storage().clientConfigFile(), transaction.plan().plannedClientConfig());
+			try {
+				ReconfConfigs.save(context.storage().clientConfigFile(), transaction.plan().plannedClientConfig(), ClientConfigJsons.ClientConfigFieldsV3.class,
+						ClientConfigJsons.ClientConfigFieldsV3::new);
+			} catch (IOException e) {
+				throw new ConfigTools.ConfigException("Failed to save client configuration", e);
+			}
+		if (!preserveNewerSelection) context.storage().writeSelectedModpackId(UpdateTransactionValidator.plannedFollow(transaction));
 		if (context.beforeManifestAction() != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
 			context.beforeManifestAction().run(transaction, resolved.flatTarget());
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {

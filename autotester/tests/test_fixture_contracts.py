@@ -99,8 +99,8 @@ def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
     (client / "data/packs/packaaa").mkdir(parents=True)
     (client / "data/packs/packaaa/connection.json").write_text('{"connection": {}}', encoding="utf-8")
     (client / "active-state.json").write_text("{}", encoding="utf-8")
-    (ctx.game_dir / "automodpack/client-config.json").write_text(
-        '{"selectedModpackId": "packaaa"}', encoding="utf-8"
+    (ctx.game_dir / "automodpack/client/selected.json").write_text(
+        '{"modpackId": "packaaa"}', encoding="utf-8"
     )
     fixture = {
         "modId": "amp_autotest_removed",
@@ -125,8 +125,8 @@ def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
         client / "data/packs/packaaa/connection.json"
     ).read_text(encoding="utf-8") == '{"connection": {}}'
     assert (
-        ctx.game_dir / "automodpack/client-config.json"
-    ).read_text(encoding="utf-8") == '{"selectedModpackId": "packaaa"}'
+        ctx.game_dir / "automodpack/client/selected.json"
+    ).read_text(encoding="utf-8") == '{"modpackId": "packaaa"}'
     client_steps._v_reset_isolated_client_objects(ctx, {})
     assert not (client / "data/objects").exists()
 
@@ -380,11 +380,12 @@ def test_offline_staging_does_not_create_connection_state_by_default(make_ctx):
         },
     )
 
-    config = json.loads(
-        (ctx.game_dir / "automodpack/client-config.json").read_text(encoding="utf-8")
+    selected = json.loads(
+        (ctx.game_dir / "automodpack/client/selected.json").read_text(encoding="utf-8")
     )
-    assert config["updateSelectedModpackOnLaunch"] is False
-    assert "modpackConnections" not in config
+    assert selected["modpackId"] == "packaaa"
+    conf = (ctx.game_dir / "automodpack/client.conf").read_text(encoding="utf-8")
+    assert "update-selected-modpack-on-launch: false" in conf
     assert not (
         ctx.game_dir
         / "automodpack/client/data/packs/packaaa/connection.json"
@@ -415,11 +416,8 @@ def test_offline_update_fallback_writes_the_production_connection_record(make_ct
         },
         "secrets": {},
     }
-    config = json.loads(
-        (ctx.game_dir / "automodpack/client-config.json").read_text(encoding="utf-8")
-    )
-    assert config["updateSelectedModpackOnLaunch"] is True
-    assert "modpackConnections" not in config
+    conf = (ctx.game_dir / "automodpack/client.conf").read_text(encoding="utf-8")
+    assert "update-selected-modpack-on-launch: true" in conf
 
 
 def test_record_only_staging_links_same_pack_history(make_ctx):

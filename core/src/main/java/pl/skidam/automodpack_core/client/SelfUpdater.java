@@ -78,7 +78,14 @@ public class SelfUpdater {
 			}
 
 			LOGGER.info("Syncing AutoModpack to server version: {}", serverModpackContent.automodpackVersion);
-			modrinthAPIList.add(ModrinthAPI.getModSpecificVersion(AUTOMODPACK_ID, serverModpackContent.automodpackVersion, serverModpackContent.mcVersion));
+			String mcVersion = lookupMcVersion(serverModpackContent.mcVersion);
+			ModrinthAPI lookup = ModrinthAPI.getModSpecificVersion(AUTOMODPACK_ID, serverModpackContent.automodpackVersion, mcVersion);
+			if (lookup == null) {
+				LOGGER.warn("Modrinth has no AutoModpack {} build for Minecraft {}, so the client stays on {}", serverModpackContent.automodpackVersion,
+						mcVersion, AM_VERSION);
+				return false;
+			}
+			modrinthAPIList.add(lookup);
 		} else {
 			LOGGER.info("Checking if AutoModpack is up-to-date...");
 			modrinthAPIList = ModrinthAPI.getModInfosFromID(AUTOMODPACK_ID);
@@ -128,7 +135,7 @@ public class SelfUpdater {
 			}
 
 			// Safety / Downgrade Check
-			if (!validUpdate(remoteVersion)) {
+			if (!validUpdate(remoteVersion, currentVersion)) {
 				// If the specific version requested by server is unsafe, we abort.
 				// If we are just scanning the list, we skip this invalid entry.
 				if (gettingServerVersion) return false;
@@ -146,19 +153,30 @@ public class SelfUpdater {
 
 	/**
 	 * Checks if the target update is safe.
-	 * Prevents downgrading below 5.0.0 Stable.
+	 * Prevents landing below 5.0.0 Stable.
 	 * * Logic:
 	 * 5.0.0 (Stable) is SAFE.
 	 * 5.1.0 (Stable) is SAFE.
-	 * 5.0.0-betaX is UNSAFE (because it is < 5.0.0 Stable).
+	 * 5.0.0-betaX from 5.0.0 Stable is UNSAFE (a downgrade below the floor).
+	 * 5.0.0-rc.1 from 5.0.0-betaX is SAFE (still below the floor, but it moves forward).
 	 */
-	public static boolean validUpdate(SemanticVersion remoteVersion) {
-		if (remoteVersion.compareTo(MINIMUM_SAFE_VERSION) < 0) {
-			LOGGER.error("Downgrading AutoModpack to version {} is strongly discouraged/disabled due to security concerns (Target is older than 5.0.0 Stable).",
-					remoteVersion);
+	public static boolean validUpdate(SemanticVersion remoteVersion, SemanticVersion currentVersion) {
+		if (remoteVersion.compareTo(MINIMUM_SAFE_VERSION) < 0 && remoteVersion.compareTo(currentVersion) <= 0) {
+			LOGGER.error("Downgrading AutoModpack to version {} is strongly discouraged/disabled due to security concerns (Target is older than 5.0.0 Stable and not newer than the installed {}).",
+					remoteVersion, currentVersion);
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * The Minecraft version to look an AutoModpack build up for: the pack's advertised one, or the running game's
+	 * when the pack publishes none. A files-only pack (advertise-versions-to-sync: false) cannot switch the game
+	 * version, so the running version is the one the updated build has to match. The lookup's loader side is already
+	 * the running loader: ModrinthAPI reads it from the loader manager.
+	 */
+	static String lookupMcVersion(String advertisedMcVersion) {
+		return advertisedMcVersion == null || advertisedMcVersion.isBlank() ? MC_VERSION : advertisedMcVersion;
 	}
 
 	public static void installModVersion(ModrinthAPI automodpack) {

@@ -15,8 +15,8 @@ import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
@@ -86,13 +86,22 @@ public final class ClientProjectionView {
 		if (pending.expectedClientConfig == null) throw new IOException("Pending client configuration precondition is missing");
 		ClientConfigJsons.ClientConfigFieldsV3 expected = pending.expectedClientConfig;
 		ClientConfigJsons.ClientConfigFieldsV3 planned = pending.plan().plannedClientConfig();
+		return persisted.rebase(expected, planned);
+	}
+
+	public String logicalSelectedModpackId() throws IOException {
+		UpdateTransaction pending = readPending();
+		String current = storage.selectedModpackId();
+		if (pending == null || pending.plan().plannedSelectedModpackId() == null) return current;
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
-		boolean mayUpdateSelectedModpack = active == null || Objects.equals(persisted.selectedModpackId, active.modpackId);
-		return persisted.rebase(expected, planned, mayUpdateSelectedModpack);
+		boolean mayUpdateSelectedModpack = active == null || Objects.equals(current, active.modpackId);
+		if (mayUpdateSelectedModpack && Objects.equals(current, pending.expectedSelectedModpackId == null ? "" : pending.expectedSelectedModpackId))
+			return pending.plan().plannedSelectedModpackId();
+		return current;
 	}
 
 	private ClientConfigJsons.ClientConfigFieldsV3 persistedClientConfig() {
-		return ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+		return ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 	}
 

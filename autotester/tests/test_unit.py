@@ -1,5 +1,5 @@
 """Unit tests for the declarative engine: parsing, selectors, conditions,
-templating, polling, and the flow executor — all Docker-free."""
+templating, polling, and the flow executor - all Docker-free."""
 from __future__ import annotations
 
 import hashlib
@@ -514,7 +514,7 @@ def test_log_whole_log_default_sees_early_lines(make_ctx):
         _LOGS.splitlines()[-tail:]
     )
     assert conditions.evaluate(ctx, {"log": {"matches": "Prelaunching AutoModpack"}}) is True
-    # A small explicit tail would scroll the early line out — proving the default matters.
+    # A small explicit tail would scroll the early line out - proving the default matters.
     assert conditions.evaluate(ctx, {"log": {"tail": 5, "matches": "Prelaunching AutoModpack"}}) is False
 
 

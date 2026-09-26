@@ -204,27 +204,27 @@ topology:
               displayName: Core
               required: true
               defaultSelected: true
-              syncedFiles: ["/config/amp-autotest-navigation.txt"]
+              from-server: ["/config/amp-autotest-navigation.txt"]
             extra1:
               displayName: Extra One
-              syncedFiles: ["/config/amp-navigation-extra-1.txt"]
+              from-server: ["/config/amp-navigation-extra-1.txt"]
             extra2:
               displayName: Extra Two
-              syncedFiles: ["/config/amp-navigation-extra-2.txt"]
+              from-server: ["/config/amp-navigation-extra-2.txt"]
             extra3:
               displayName: Extra Three
-              syncedFiles: ["/config/amp-navigation-extra-3.txt"]
+              from-server: ["/config/amp-navigation-extra-3.txt"]
             extra4:
               displayName: Extra Four
-              syncedFiles: ["/config/amp-navigation-extra-4.txt"]
+              from-server: ["/config/amp-navigation-extra-4.txt"]
             extra5:
               displayName: Extra Five
               requires: [visual]
-              syncedFiles: ["/config/amp-navigation-extra-5.txt"]
+              from-server: ["/config/amp-navigation-extra-5.txt"]
           Visuals:
             visual:
               displayName: Visuals
-              syncedFiles: ["/config/amp-navigation-visual.txt", "/mods/amp-autotest-navigation-visual.jar"]
+              from-server: ["/config/amp-navigation-visual.txt", "/mods/amp-autotest-navigation-visual.jar"]
 
 serverFiles:
   modpackName: amp-autotest

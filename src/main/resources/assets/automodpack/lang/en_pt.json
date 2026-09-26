@@ -242,8 +242,8 @@
   "automodpack.selection.status.available": "Up fer grabs",
   "automodpack.selection.blockedBy": "Can't use this. It needs %s",
   "automodpack.selection.conflictsWith": "Fights with %s",
-  "automodpack.selection.conflictTurnedOff.one": "Turned off %2$s — conflicts with %3$s",
-  "automodpack.selection.conflictTurnedOff.other": "Turned off %2$s — conflict with %3$s",
+  "automodpack.selection.conflictTurnedOff.one": "Turned off %2$s - conflicts with %3$s",
+  "automodpack.selection.conflictTurnedOff.other": "Turned off %2$s - conflict with %3$s",
   "automodpack.selection.savedInvalid": "Some saved picks cannot share a ship. Change the marked ones to carry on.",
   "automodpack.selection.changeInvalid": "That feature change be unavailable.",
   "automodpack.selection.cannotSelect": "%s cannot be picked with this modpack setup.",
@@ -403,7 +403,7 @@
   "automodpack.restart.reason.CHANGED_GAME_VERSION": "Th' launcher Minecraft version changed",
   "automodpack.stateHistory.restoreArmed": "Click again to bring back this state",
   "automodpack.stateHistory.forgetArmed": "Click again to ferget older snapshots",
-  "automodpack.stateHistory.broughtBack": "Back in sync with th' pack — the file had been changed or scuttled locally.",
+  "automodpack.stateHistory.broughtBack": "Back in sync with th' pack - the file had been changed or scuttled locally.",
   "automodpack.storage.staging": "Unfinished hauls scuttled: %s (%s)",
   "automodpack.validation.confirm.text": "Paste th' full fingerprint from th' server operator. AutoModpack checks it against th' server fingerprint:"
 }

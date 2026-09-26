@@ -1,40 +1,40 @@
 # Commands
 
-`/amp` is a shorthand for `/automodpack`. Commands run on the server console or in-game with operator permission level 3, which is the level the `/whitelist` and `/ban` commands use.
+ Assume all commands below are prefixed with `/automodpack`, `/amp` is a shorthand for `/automodpack`. Commands run on the server console or in-game with operator permission level 3.
 
 ## Publishing
 
-- `/automodpack generate` - Publishes a new generation when the content changed. Unchanged content publishes nothing.
-- `/automodpack generate notes <text...>` - Publishes a generation with patch notes.
-- `/automodpack generate preview [notes <text...>]` - Builds the next generation and reports what would change, without publishing.
-- `/automodpack generate if-content <content-token> [notes <text...>]` - Publishes only while the content still matches the given token, so a scripted publish cannot race a manual change.
-- `/automodpack generate history` - Prints the newest hundred journal entries with sequence number, date, change summary, and patch notes.
-- `/automodpack generate revert <seq>` - Previews a rollback to journal sequence `<seq>`.
-- `/automodpack generate revert <seq> confirm [notes <text...>]` - Publishes the selected old state as a new generation.
-- `/automodpack generate storage` - Reports how many bytes the journal and the object store hold.
-- `/automodpack generate export-http [--all] <directory>` - Writes the URL-contract tree (`head`, `journal`, `objects/<sha1>`) as byte-for-byte copies of the hosted files, ready for any static HTTPS host. Objects Modrinth or CurseForge still serve themselves are left out; `--all` keeps every object in the tree. The command reports what was exported, omitted, and unresolvable. Works in every connection mode and never deletes anything from the directory.
-- `/automodpack generate storage collect confirm` - Deletes every object the current generation does not serve. Older generations stay listed in the journal but can no longer be restored.
+- `generate` - Publishes a new generation when the content changed. Unchanged content publishes nothing.
+- `generate notes <text...>` - Publishes a generation with patch notes.
+- `generate preview [notes <text...>]` - Builds the next generation and reports what would change, without publishing.
+- `generate if-content <content-token> [notes <text...>]` - Publishes only while the content still matches the given token, so a scripted publish cannot race a manual change.
+- `generate history` - Prints the newest hundred journal entries with sequence number, date, change summary, and patch notes.
+- `generate revert <seq>` - Previews a rollback to journal sequence `<seq>`.
+- `generate revert <seq> confirm [notes <text...>]` - Publishes the selected old state as a new generation.
+- `generate storage` - Reports how many bytes the journal and the object store hold.
+- `generate export-http [--all] <directory>` - Writes the URL-contract tree (`head`, `journal`, `objects/<sha1>`) as byte-for-byte copies of the hosted files, ready for any static HTTPS host. Objects Modrinth or CurseForge still serve themselves are left out; `--all` keeps every object in the tree. The command reports what was exported, omitted, and unresolvable. Works in every connection mode and never deletes anything from the directory.
+- `generate storage collect confirm` - Deletes every object the current generation does not serve. Older generations stay listed in the journal but can no longer be restored.
 
 Patch notes for the next publish can also be written to `automodpack/host-modpack/patch-notes.md`; the file is read and cleared when a generation publishes. Publishing, rollbacks, and storage are explained in [generations](how-it-works/generations).
 
 ## Hosting
 
-- `/automodpack host` - Hosting status.
-- `/automodpack host start`, `stop`, `restart` - Control the modpack host.
-- `/automodpack host activity` - Shows modpack request activity since startup: totals, recent transfers, in-flight downloads; hover for per-player stats.
-- `/automodpack host fingerprint` - Prints the [certificate fingerprint](security#how-clients-verify-a-server) of the modpack host.
-- `/automodpack host fingerprint dns <minecraft-hostname>` - Prints a DNSSEC record that lets clients verify a self-signed certificate automatically.
-- `/automodpack host fingerprint share <minecraft-address>` - Prints a plain and a pinned copyable join address.
-- `/automodpack host bootstrap pin <origin>` - Writes `automodpack/automodpack-bootstrap.exported.json` with a TLS pin, for distributing to clients.
-- `/automodpack host bootstrap install <origin> [endpoint] [connection-mode]` - Writes an install export with the published pack, a provisioning secret, and the advertised endpoint. Requires `disableInternalTLS` to be off.
+- `host` - Hosting status.
+- `host start`, `stop`, `restart` - Control the modpack host.
+- `host activity` - Shows modpack request activity since startup: totals, recent transfers, in-flight downloads; hover for per-player stats.
+- `host fingerprint` - Prints the [certificate fingerprint](security#how-clients-verify-a-server) of the modpack host.
+- `host fingerprint dns <minecraft-hostname>` - Prints a DNSSEC record that lets clients verify a self-signed certificate automatically.
+- `host fingerprint share <minecraft-address>` - Prints a plain and a pinned copyable join address.
+- `host bootstrap pin <origin>` - Writes `automodpack/automodpack-bootstrap.exported.json` with a TLS pin, for distributing to clients.
+- `host bootstrap install <origin> [endpoint] [connection-mode]` - Writes an install export with the published pack, a provisioning secret, and the advertised endpoint. Requires `disable-internal-tls` to be off.
 
 Both bootstrap exports contain trust data or a provisioning secret. Treat them like credentials; anyone holding one can provision themselves onto your pack. See [bootstrap files](how-it-works/files-on-disk#bootstrap) for how clients import them.
 
 ## Configuration
 
-- `/automodpack config reload` - Reloads the server config. When connection settings changed, it tells you to run `/automodpack host restart` to apply them.
+- `config reload` - Reloads the server config. When connection settings changed, it tells you to run `host restart` to apply them.
 
 ## Groups
 
-- `/automodpack groups` - Lists every modpack group under its category, with published file counts and sizes.
-- `/automodpack groups <group-id>` - Shows one group's flags, dependencies, glob rules, and the files its published generation carries.
+- `groups` - Lists every modpack group under its category, with published file counts and sizes.
+- `groups <group-id>` - Shows one group's flags, dependencies, glob rules, and the files its published generation carries.

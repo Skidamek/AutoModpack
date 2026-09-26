@@ -85,6 +85,40 @@ class LauncherVersionSwapperTest {
 		assertFalse(plan.manual());
 	}
 
+	// --- unadvertised versions: the pack is files-only, never the unsupported-loader refusal ---
+
+	@Test
+	void noAdvertisedVersionsIsFilesOnlyInsteadOfAnUnsupportedLoader() throws IOException {
+		Path mmcPack = dir.resolve("mmc-pack.json");
+		write(mmcPack, mmcPack("1.20.1", "net.minecraftforge", "47.4.0"));
+		LauncherVersionSwapper.SwitchPlan plan = LauncherVersionSwapper.planSwitch(null, null, null, true, "forge", "1.20.1", new MultiMCMeta(mmcPack),
+				(uid, version) -> true);
+		assertFalse(plan.refused());
+		assertFalse(plan.required());
+		assertFalse(plan.manual());
+	}
+
+	@Test
+	void blankAdvertisedVersionsAreFilesOnlyToo() throws IOException {
+		// The published manifest normalizes unadvertised versions to empty strings before a client sees them.
+		Path mmcPack = dir.resolve("mmc-pack.json");
+		write(mmcPack, mmcPack("1.20.1", "net.minecraftforge", "47.4.0"));
+		LauncherVersionSwapper.SwitchPlan plan = LauncherVersionSwapper.planSwitch("", "", "", true, "forge", "1.20.1", new MultiMCMeta(mmcPack),
+				(uid, version) -> true);
+		assertFalse(plan.refused());
+		assertFalse(plan.required());
+	}
+
+	@Test
+	void halfAdvertisedVersionsStillRefuse() throws IOException {
+		// A pack without a loader that still names a Minecraft version is malformed, not files-only.
+		Path mmcPack = dir.resolve("mmc-pack.json");
+		write(mmcPack, mmcPack("1.20.1", "net.minecraftforge", "47.4.0"));
+		LauncherVersionSwapper.SwitchPlan plan = LauncherVersionSwapper.planSwitch("", "", "1.21.1", true, "forge", "1.20.1", new MultiMCMeta(mmcPack),
+				(uid, version) -> true);
+		assertTrue(plan.refused());
+	}
+
 	// --- MultiMC / Prism ---
 
 	private String mmcPack(String mcVersion, String loaderUid, String loaderVersion) {

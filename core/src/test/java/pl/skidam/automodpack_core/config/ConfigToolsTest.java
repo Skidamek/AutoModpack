@@ -25,11 +25,11 @@ class ConfigToolsTest {
 		assertTrue(ConfigTools.read(missing, ClientConfigJsons.ClientConfigFieldsV3.class).isEmpty());
 		assertFalse(Files.exists(missing));
 
-		Path existing = temporaryDirectory.resolve("client.json");
-		String json = "{\n  \"selectedModpackId\": \"pack\"\n}\n";
+		Path existing = temporaryDirectory.resolve("selected.json");
+		String json = "{\n  \"modpackId\": \"pack\"\n}\n";
 		Files.writeString(existing, json, StandardCharsets.UTF_8);
 
-		assertEquals("pack", ConfigTools.read(existing, ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
+		assertEquals("pack", ConfigTools.read(existing, ClientConfigJsons.SelectedModpackFields.class).orElseThrow().modpackId);
 		assertEquals(json, Files.readString(existing, StandardCharsets.UTF_8));
 	}
 
@@ -38,7 +38,7 @@ class ConfigToolsTest {
 		Path config = temporaryDirectory.resolve("invalid.json");
 		Files.writeString(config, "{ invalid", StandardCharsets.UTF_8);
 
-		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.read(config, ClientConfigJsons.ClientConfigFieldsV3.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.read(config, ClientConfigJsons.SelectedModpackFields.class));
 		assertEquals("{ invalid", Files.readString(config, StandardCharsets.UTF_8));
 	}
 
@@ -46,13 +46,13 @@ class ConfigToolsTest {
 	void readOrCreateOnlyWritesDefaultsWhenAbsent() throws Exception {
 		Path config = temporaryDirectory.resolve("client.json");
 
-		ClientConfigJsons.ClientConfigFieldsV3 created = ConfigTools.readOrCreate(config, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
-		assertEquals(3, created.DO_NOT_CHANGE_IT);
+		ClientConfigJsons.SelectedModpackFields created = ConfigTools.readOrCreate(config, ClientConfigJsons.SelectedModpackFields.class, ClientConfigJsons.SelectedModpackFields::new);
+		assertEquals("", created.modpackId);
 		assertTrue(Files.isRegularFile(config));
 
-		String existing = "{\"selectedModpackId\":\"preserve\"}";
+		String existing = "{\"modpackId\":\"preserve\"}";
 		Files.writeString(config, existing, StandardCharsets.UTF_8);
-		assertEquals("preserve", ConfigTools.readOrCreate(config, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new).selectedModpackId);
+		assertEquals("preserve", ConfigTools.readOrCreate(config, ClientConfigJsons.SelectedModpackFields.class, ClientConfigJsons.SelectedModpackFields::new).modpackId);
 		assertEquals(existing, Files.readString(config, StandardCharsets.UTF_8));
 	}
 
@@ -61,11 +61,11 @@ class ConfigToolsTest {
 		Path config = temporaryDirectory.resolve("client.json");
 		Files.writeString(config, "not-json", StandardCharsets.UTF_8);
 
-		ClientConfigJsons.ClientConfigFieldsV3 value = new ClientConfigJsons.ClientConfigFieldsV3();
-		value.selectedModpackId = "replacement";
+		ClientConfigJsons.SelectedModpackFields value = new ClientConfigJsons.SelectedModpackFields();
+		value.modpackId = "replacement";
 		ConfigTools.writeAtomic(config, value);
 
-		assertEquals("replacement", ConfigTools.read(config, ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
+		assertEquals("replacement", ConfigTools.read(config, ClientConfigJsons.SelectedModpackFields.class).orElseThrow().modpackId);
 		try (var files = Files.list(temporaryDirectory)) {
 			assertFalse(files.anyMatch(path -> path.getFileName().toString().endsWith(".tmp")));
 		}
@@ -75,7 +75,7 @@ class ConfigToolsTest {
 	void keepsConnectionStateOutOfTheUserConfig() throws Exception {
 		String configJson = """
 				{
-				  "selectedModpackId": "pack",
+				  "play-music": true,
 				  "installedModpacks": {
 				    "pack": {
 				      "serverAddress": "Play.Example.com",
@@ -87,7 +87,7 @@ class ConfigToolsTest {
 				""";
 		ClientConfigJsons.ClientConfigFieldsV3 config = ConfigTools.parse(configJson, ClientConfigJsons.ClientConfigFieldsV3.class);
 
-		assertEquals("pack", config.selectedModpackId);
+		assertTrue(config.playMusic);
 
 		Path path = temporaryDirectory.resolve("client.json");
 		ConfigTools.writeAtomic(path, config);
@@ -148,7 +148,8 @@ class ConfigToolsTest {
 				}
 				""";
 
-		assertEquals(List.of("syncedfile", "modpack.General.main.syncedfile", "modpack.General.extra.bogus"), ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class));
+		assertEquals(List.of("syncedfile", "modpack.General.main.syncedfile", "modpack.General.extra.displayName", "modpack.General.extra.bogus"),
+				ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class));
 	}
 
 	@Test
@@ -167,7 +168,7 @@ class ConfigToolsTest {
 
 		List<String> first = ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class);
 		List<String> second = ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class);
-		assertEquals(List.of("syncedfile", "modpack.General.main.syncedfile", "modpack.General.extra.bogus"), first);
+		assertEquals(List.of("syncedfile", "modpack.General.main.syncedfile", "modpack.General.extra.displayName", "modpack.General.extra.bogus"), first);
 		assertEquals(first, second);
 	}
 
@@ -180,7 +181,7 @@ class ConfigToolsTest {
 	@Test
 	void wrongTypedValueFailsLoudlyWithoutTouchingTheFile() throws Exception {
 		Path config = temporaryDirectory.resolve("server-config.json");
-		String json = "{\"bindPort\": \"x\"}";
+		String json = "{\"bind-port\": \"x\"}";
 		Files.writeString(config, json, StandardCharsets.UTF_8);
 
 		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.readOrCreate(config, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new));

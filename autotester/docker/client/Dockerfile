@@ -14,7 +14,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 # Fetch by ref so HEADLESSMC_REF can be a branch, tag, or commit SHA (a shallow
-# `clone --branch` only accepts branch/tag names — fetching FETCH_HEAD also takes SHAs).
+# `clone --branch` only accepts branch/tag names - fetching FETCH_HEAD also takes SHAs).
 RUN git init -q . \
     && git remote add origin "${HEADLESSMC_REPO}" \
     && git fetch --depth 1 origin "${HEADLESSMC_REF}" \

@@ -27,9 +27,9 @@ public abstract class ServerLoginNetworkHandlerMixin {
 	 *   HELLO, KEY, AUTHENTICATING:  no-op (just timeout counter)
 	 *   NEGOTIATING:                  no-op (just timeout counter)
 	 *   READY_TO_ACCEPT (≤ 1.20.1):  calls handleAcceptedLogin()
-	 *                                   — login finalization + compression setup
+	 *                                   - login finalization + compression setup
 	 *   VERIFYING     (≥ 1.21.1):    calls verifyLoginAndFinishConnectionSetup()
-	 *                                   — login finalization + compression setup
+	 *                                   - login finalization + compression setup
 	 *   DELAY_ACCEPT  (≤ 1.20.1):    duplicate player check
 	 *   WAITING_FOR_DUPE_DISCONNECT: duplicate player check
 	 */
@@ -54,11 +54,11 @@ public abstract class ServerLoginNetworkHandlerMixin {
 	 * exchange completes. Both NEGOTIATING and READY_TO_ACCEPT/VERIFYING
 	 * are checked, but for different reasons:
 	 *
-	 *   NEGOTIATING — START queries.  tick() is a no-op here, so we use
+	 *   NEGOTIATING - START queries.  tick() is a no-op here, so we use
 	 *   this state to call queryTick() which sends the initial handshake
 	 *   query.  Cancel is harmless (tick does nothing critical).
 	 *
-	 *   READY_TO_ACCEPT / VERIFYING — PREVENT finalization.  In this state
+	 *   READY_TO_ACCEPT / VERIFYING - PREVENT finalization.  In this state
 	 *   tick() calls the login finaliser (handleAcceptedLogin /
 	 *   verifyLoginAndFinishConnectionSetup) which sets up compression and
 	 *   places the player.  We MUST cancel to delay this step until queries

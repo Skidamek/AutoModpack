@@ -415,10 +415,13 @@ public class ModpackExecutor {
 		String modpackId = previous == null ? ModpackId.generate() : ModpackId.requireValid(previous.manifest().modpackId());
 		try (FileCache fileCache = FileCache.open(dataLayout.fileCacheDirectory());
 				ModFileCache modFileCache = ModFileCache.open(dataLayout.modCacheDirectory())) {
-			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
-					serverConfig.advertiseVersionsToSync ? LOADER_VERSION : null, MC_VERSION, serverRoot, groupRoot, serverConfig.modpack,
-					serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()), creationExecutor,
-					generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects);
+			// Unadvertised versions leave the manifest fields empty, so clients see a files-only pack instead of a
+			// pack whose versions they must switch to.
+			boolean advertiseVersions = serverConfig.advertiseVersionsToSync;
+			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpack.name, AM_VERSION,
+					advertiseVersions ? LOADER : null, advertiseVersions ? LOADER_VERSION : null, advertiseVersions ? MC_VERSION : null, serverRoot, groupRoot,
+					serverConfig.modpack.categories, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()),
+					creationExecutor, generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects);
 			ModpackCandidate candidate = candidateScan.scan(request);
 			for (ExcludedCandidate exclusion : candidate.exclusions())
 				LOGGER.info("Excluded from the modpack: {}/{} - {} ({})", exclusion.source().groupId(), exclusion.source().logicalPath(),
@@ -499,9 +502,9 @@ public class ModpackExecutor {
 	}
 
 	private static void validateConfiguration() throws CandidateBuildException {
-		if (serverConfig == null || serverConfig.modpack == null || serverConfig.modpack.isEmpty())
+		if (serverConfig == null || serverConfig.modpack.categories.isEmpty())
 			throw new CandidateBuildException("Server group configuration is missing");
-		for (var categoryEntry : serverConfig.modpack.entrySet()) {
+		for (var categoryEntry : serverConfig.modpack.categories.entrySet()) {
 			var category = categoryEntry.getValue();
 			if (category == null) throw new CandidateBuildException("Category '" + categoryEntry.getKey() + "' has no declaration");
 			for (var entry : category.entrySet()) {
@@ -517,7 +520,7 @@ public class ModpackExecutor {
 
 	private void prepareDirectories() throws IOException, CandidateBuildException {
 		Map<String, Path> groupDirectories = new TreeMap<>();
-		for (var categoryEntry : serverConfig.modpack.entrySet()) {
+		for (var categoryEntry : serverConfig.modpack.categories.entrySet()) {
 			if (categoryEntry.getValue() == null) continue;
 			for (String groupId : categoryEntry.getValue().keySet()) {
 				Path groupDirectory = groupRoot.resolve(groupId).normalize();

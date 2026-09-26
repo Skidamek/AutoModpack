@@ -111,7 +111,7 @@ class ModpackCandidateScannerTest {
 		Files.writeString(server.resolve("config/kept.txt"), "kept", StandardCharsets.UTF_8);
 		Files.writeString(groups.resolve("main/config/example.txt"), "explicit", StandardCharsets.UTF_8);
 		ServerConfigJsons.GroupDeclaration main = group("/config/**");
-		main.excludedFiles = new LinkedHashSet<>(List.of("config/example.txt"));
+		main.exclude = new LinkedHashSet<>(List.of("config/example.txt"));
 
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", main));
 
@@ -302,12 +302,12 @@ class ModpackCandidateScannerTest {
 
 	private static ServerConfigJsons.GroupDeclaration group(String... rules) {
 		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
-		group.syncedFiles = new LinkedHashSet<>(List.of(rules));
+		group.fromServer = new LinkedHashSet<>(List.of(rules));
 		return group;
 	}
 
 	@Test
-	void excludedFilesLeaveGroupDirectoryContentOutOfThePack() throws Exception {
+	void excludeLeaveGroupDirectoryContentOutOfThePack() throws Exception {
 		Path server = tempDir.resolve("server");
 		Path groups = tempDir.resolve("groups");
 		Files.createDirectories(groups.resolve("main/config"));
@@ -315,7 +315,7 @@ class ModpackCandidateScannerTest {
 		Files.writeString(groups.resolve("main/pakku-params.json"), "params", StandardCharsets.UTF_8);
 		Files.writeString(groups.resolve("main/pakku-cache.json"), "cache", StandardCharsets.UTF_8);
 		ServerConfigJsons.GroupDeclaration main = group();
-		main.excludedFiles = new LinkedHashSet<>(List.of("pakku-*.json"));
+		main.exclude = new LinkedHashSet<>(List.of("pakku-*.json"));
 
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", main));
 		var files = candidate.manifest().groups().get("main").files();
@@ -331,14 +331,14 @@ class ModpackCandidateScannerTest {
 	}
 
 	@Test
-	void excludedFilesCarveExceptionsOutOfSyncedRules() throws Exception {
+	void excludeCarveExceptionsOutOfSyncedRules() throws Exception {
 		Path server = tempDir.resolve("server");
 		Path groups = tempDir.resolve("groups");
 		Files.createDirectories(server.resolve("kubejs/server_scripts"));
 		Files.writeString(server.resolve("kubejs/main.js"), "script", StandardCharsets.UTF_8);
 		Files.writeString(server.resolve("kubejs/server_scripts/secret.js"), "secret", StandardCharsets.UTF_8);
 		ServerConfigJsons.GroupDeclaration main = group("kubejs/**");
-		main.excludedFiles = new LinkedHashSet<>(List.of("kubejs/server_scripts/**"));
+		main.exclude = new LinkedHashSet<>(List.of("kubejs/server_scripts/**"));
 
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", main));
 		var files = candidate.manifest().groups().get("main").files();
@@ -362,7 +362,7 @@ class ModpackCandidateScannerTest {
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", main));
 		var files = candidate.manifest().groups().get("main").files();
 
-		// The synced copy is skipped, but the group directory still provides the path - only excludedFiles could remove it entirely.
+		// The synced copy is skipped, but the group directory still provides the path - only exclude could remove it entirely.
 		assertTrue(files.containsKey("config/dup.txt"));
 		assertEquals(0, candidate.exclusions().size());
 	}
@@ -375,7 +375,7 @@ class ModpackCandidateScannerTest {
 		Files.writeString(groups.resolve("main/pakku-params.json"), "params", StandardCharsets.UTF_8);
 		Files.writeString(groups.resolve("main/pakku-keep.json"), "keep", StandardCharsets.UTF_8);
 		ServerConfigJsons.GroupDeclaration main = group();
-		main.excludedFiles = new LinkedHashSet<>(List.of("pakku-*.json", "!pakku-keep.json"));
+		main.exclude = new LinkedHashSet<>(List.of("pakku-*.json", "!pakku-keep.json"));
 
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", main));
 		var files = candidate.manifest().groups().get("main").files();
@@ -394,7 +394,7 @@ class ModpackCandidateScannerTest {
 		Files.writeString(groups.resolve("main/config/options.txt"), "options", StandardCharsets.UTF_8);
 		Files.writeString(groups.resolve("main/config/fancymenu/theme.txt"), "theme", StandardCharsets.UTF_8);
 		ServerConfigJsons.GroupDeclaration main = group();
-		main.allowEditsInFiles = new LinkedHashSet<>(List.of("config/**", "!config/fancymenu/**"));
+		main.editable = new LinkedHashSet<>(List.of("config/**", "!config/fancymenu/**"));
 
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", main));
 		var files = candidate.manifest().groups().get("main").files();
@@ -444,7 +444,7 @@ class ModpackCandidateScannerTest {
 		Files.writeString(groups.resolve("main/config/.gitkeep"), "keep", StandardCharsets.UTF_8);
 		Files.writeString(groups.resolve("main/config/kept.txt"), "kept", StandardCharsets.UTF_8);
 
-		ModpackCandidate candidate = scan(server, groups, new ServerConfigJsons.ServerConfigFieldsV3().modpack.get("General"));
+		ModpackCandidate candidate = scan(server, groups, new ServerConfigJsons.ServerConfigFieldsV3().modpack.categories.get("General"));
 		var files = candidate.manifest().groups().get("main").files();
 
 		assertTrue(files.containsKey("config/kept.txt"));

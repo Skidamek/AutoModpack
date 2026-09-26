@@ -1,6 +1,8 @@
 """Server lifecycle verbs and live server-state inspection (journal, projection, object store)."""
 from __future__ import annotations
 
+from automodpack_autotester import reconf_min
+
 import hashlib
 import json
 import re
@@ -456,10 +458,12 @@ def _v_seed_bootstrap(ctx: Context, step):
     if not fingerprint:
         raise RuntimeError("seed_bootstrap requires read_server_fingerprint first")
     projection_path = ctx.server_dir / "automodpack" / "server" / "current-projection.json"
-    config_path = ctx.server_dir / "automodpack" / "server-config.json"
+    config_path = ctx.server_dir / "automodpack" / "server.conf"
+    if not config_path.exists():
+        config_path = ctx.server_dir / "automodpack" / "server-config.json"
     try:
         projection = json.loads(projection_path.read_text(encoding="utf-8"))
-        server_config = json.loads(config_path.read_text(encoding="utf-8"))
+        server_config = reconf_min.read_config(config_path)
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise RuntimeError(f"live server bootstrap state is not readable: {error}") from error
     modpack_id = str((projection.get("policy", {}) or {}).get("modpackId", "")).strip()
@@ -467,7 +471,7 @@ def _v_seed_bootstrap(ctx: Context, step):
         raise RuntimeError(f"live server projection has no modpackId: {projection_path}")
     origin = str(ctx.resolve(step.get("origin", "${server.host}"))).strip()
     endpoint = str(ctx.resolve(step.get("endpoint", "${server.endpoint}"))).strip()
-    connection_mode = str(step.get("connectionMode") or server_config.get("connectionMode") or "").strip().upper()
+    connection_mode = str(step.get("connectionMode") or server_config.get("connection-mode") or server_config.get("connectionMode") or "").strip().upper()
     if not origin or not endpoint or not connection_mode:
         raise RuntimeError("bootstrap requires origin, endpoint, and connectionMode")
     fields = {

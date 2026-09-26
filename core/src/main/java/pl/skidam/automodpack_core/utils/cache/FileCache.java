@@ -206,7 +206,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	/**
 	 * Whether {@code file} is still the named immutable bytes. A matching record is trusted without
 	 * reading content; a missing or disturbed record forces one stable full read that is published
-	 * either way, so every answer — true or false — reflects bytes seen at the current fingerprint
+	 * either way, so every answer - true or false - reflects bytes seen at the current fingerprint
 	 * and repeated asks of unchanged disturbed bytes are answered by stat alone. The tripwire
 	 * compares only what a content write changes (size, mtime, inode): our own publication
 	 * ({@code link()}, {@code chmod()}) bumps inode ctime by design, and treating that as disturb

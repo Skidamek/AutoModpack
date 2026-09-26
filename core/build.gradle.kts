@@ -27,6 +27,7 @@ val gsonVersion = versionProperty("versionGson")
 val bouncyCastleVersion = versionProperty("versionBouncyCastle")
 val junitVersion = versionProperty("versionJunit")
 val mcholepunchVersion = versionProperty("versionMcholepunch")
+val reconfVersion = versionProperty("versionReconf")
 val aircompressorVersion = versionProperty("versionAircompressor")
 
 val deps =
@@ -40,6 +41,7 @@ val deps =
 
 dependencies {
 	implementation(":mcholepunch-core:$mcholepunchVersion")
+	implementation(":reconf:$reconfVersion")
 	implementation(":mcholepunch-server-netty:$mcholepunchVersion")
 
 	// minecraft/loaders uses these, so we cant just implement them because it wont resolve in gradle

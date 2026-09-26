@@ -48,7 +48,7 @@ If you would like to translate AutoModpack to other languages, go ahead!
 2. Open `src/main/resources/assets/automodpack/lang/`.
 3. Check whether a file for your language already exists. Minecraft in-game locale codes are listed [on the wiki](https://minecraft.wiki/w/Language#Languages).
 4. If it does not exist, copy `en_us.json` to a new file named with that locale code (for example `it_it.json`).
-5. Translate the values. Keep every `%s` placeholder — the count must match English.
+5. Translate the values. Keep every `%s` placeholder - the count must match English.
 6. Submit a pull request.
 
 Every locale must keep the same *regular* keys as `en_us.json`. Count-dependent strings are a bit different; see **Plural strings** below.
@@ -66,7 +66,7 @@ Categories we use:
 | `.many` | The rest of those Slavic counts: `0, 5, 11–14, 25…` |
 | `.other` | Everything else, and the **required fallback** for every family |
 
-`en_us.json` typically ships `.one` and `.other`. Chinese (`zh_cn`, `zh_tw`) and Korean only need `.other` — those languages have no cardinal agreement, so `PluralCategory` always selects `other`. Polish, Silesian, Russian, and Ukrainian should add `.few` and `.many` next to `.one` and `.other`:
+`en_us.json` typically ships `.one` and `.other`. Chinese (`zh_cn`, `zh_tw`) and Korean only need `.other` - those languages have no cardinal agreement, so `PluralCategory` always selects `other`. Polish, Silesian, Russian, and Ukrainian should add `.few` and `.many` next to `.one` and `.other`:
 
 ```json
 "automodpack.browser.summary.one": "%s plik, %s",

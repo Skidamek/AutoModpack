@@ -777,7 +777,7 @@ def test_write_generated_round_trips_generated_content(tmp_path):
 # ── staged generation timestamps are Java-canonical ─────────────────────────
 # A fixed-width microsecond fraction (e.g. ".800000Z") fails the client's strict
 # Instant round-trip check and crashes the first storage validation that reads the
-# record — a ~10% flake per staged record (1.21.10-neoforge DIRECT, run 33695849021;
+# record - a ~10% flake per staged record (1.21.10-neoforge DIRECT, run 33695849021;
 # 26.2-fabric MAGIC/HOLEPUNCH, run 33744193609). Canonical means no fraction or
 # exactly 3/6/9 digits, verified against jshell Instant.toString behavior.
 

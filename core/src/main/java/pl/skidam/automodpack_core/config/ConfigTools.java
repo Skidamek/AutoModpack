@@ -47,12 +47,13 @@ import pl.skidam.automodpack_core.utils.OsPaths;
 public final class ConfigTools {
 	/** The custom JSON shapes registered on {@link #GSON}; the same set defines which types key-reflection may not inspect. */
 	private static final Map<Class<?>, Object> CUSTOM_JSON_ADAPTERS = Map.of(InetSocketAddress.class, new InetSocketAddressTypeAdapter(), ConnectionJsons.ConnectionInfo.class,
-			new ConnectionInfoTypeAdapter(), ConnectionJsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter());
+			new ConnectionInfoTypeAdapter(), ConnectionJsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter(), ServerConfigJsons.ModpackFields.class,
+			new ServerConfigJsons.ModpackFields.Adapter());
 
 	/**
 	 * Stream-reader strictness for the integral types, registered because Gson 2.8.9 deserializing from a parsed tree
 	 * instead of a string narrows every number through a double and silently truncates out-of-range or fractional
-	 * literals — a hand-edited or corrupt config must fail loudly at parse, never take a truncated port or size.
+	 * literals - a hand-edited or corrupt config must fail loudly at parse, never take a truncated port or size.
 	 */
 	private static final Map<Class<?>, Object> STRICT_INTEGRAL_DESERIALIZERS = Map.of(byte.class, StrictIntegralDeserializer.BYTE, Byte.class, StrictIntegralDeserializer.BYTE,
 			short.class, StrictIntegralDeserializer.SHORT, Short.class, StrictIntegralDeserializer.SHORT, int.class, StrictIntegralDeserializer.INT, Integer.class,
@@ -108,7 +109,9 @@ public final class ConfigTools {
 	 * Reads one persisted-but-rebuildable state document: a missing file reads as empty, unusable content (including a
 	 * non-regular path occupying the name) is set aside as evidence and also reads as empty, and only real IO trouble
 	 * of a regular file propagates. The mapper folds every content validation in; the state's owner stays the sole
-	 * authority on what its document must look like. A failed aside is IO trouble, never empty.
+	 * authority on what its document must look like. A failed aside is IO trouble, never empty. This leniency is for
+	 * machine-written state only - user-owned config files take the strict {@link #read} path, which never sets
+	 * anything aside.
 	 */
 	public static <F, S> Optional<S> readState(Path path, Class<F> type, String description, Function<F, S> fromFields) throws IOException {
 		return readPersisted(path, type, description, fromFields, PersistFate.REBUILDABLE);
@@ -198,7 +201,11 @@ public final class ConfigTools {
 		return unknown;
 	}
 
-	private static void collectUnknownKeys(JsonElement element, Type type, String prefix, List<String> unknown) {
+	/**
+	 * Walks one JSON document against a type and collects the paths that match no field. Public so an
+	 * {@link UnknownKeyScanner} can hand the generic reflection back in for the parts of its shape that are plain.
+	 */
+	public static void collectUnknownKeys(JsonElement element, Type type, String prefix, List<String> unknown) {
 		if (type instanceof ParameterizedType parameterized) {
 			Class<?> raw = (Class<?>) parameterized.getRawType();
 			Type[] arguments = parameterized.getActualTypeArguments();
@@ -210,7 +217,13 @@ public final class ConfigTools {
 			}
 			return;
 		}
-		if (!(type instanceof Class<?> raw) || !isInspectable(raw) || !element.isJsonObject()) return;
+		if (!(type instanceof Class<?> raw) || !element.isJsonObject()) return;
+		if (OPAQUE_JSON_TYPES.contains(raw)) {
+			// reflection cannot read a custom-JSON shape, so the type itself keeps the unknown-key warning honest
+			if (CUSTOM_JSON_ADAPTERS.get(raw) instanceof UnknownKeyScanner scanner) scanner.collectUnknownKeys(element, prefix, unknown);
+			return;
+		}
+		if (!isInspectable(raw)) return;
 		Map<String, Field> fields = jsonFieldNames(raw);
 		for (var entry : element.getAsJsonObject().entrySet()) {
 			String path = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
@@ -222,6 +235,14 @@ public final class ConfigTools {
 
 	/** Types key-reflection may not inspect, derived from the {@link #CUSTOM_JSON_ADAPTERS} registry; JSON primitives are excluded separately. */
 	private static final Set<Class<?>> OPAQUE_JSON_TYPES = CUSTOM_JSON_ADAPTERS.keySet();
+
+	/**
+	 * A custom-JSON type whose shape reflection cannot read keeps its unknown-key warning by walking its own members
+	 * and calling {@link #collectUnknownKeys} back for the parts of its shape that are plain.
+	 */
+	public interface UnknownKeyScanner {
+		void collectUnknownKeys(JsonElement element, String prefix, List<String> unknown);
+	}
 
 	private static boolean isInspectable(Class<?> raw) {
 		return !raw.isPrimitive() && !raw.isArray() && !raw.isEnum() && !raw.isInterface() && !OPAQUE_JSON_TYPES.contains(raw) && raw != String.class && raw != Boolean.class

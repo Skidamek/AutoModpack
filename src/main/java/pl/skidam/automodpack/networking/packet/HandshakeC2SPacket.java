@@ -73,7 +73,7 @@ public class HandshakeC2SPacket {
 
 		SemanticVersion semver = SemanticVersion.parse(automodpack.fileVersion());
 
-		if (SelfUpdater.validUpdate(semver)) {
+		if (SelfUpdater.validUpdate(semver, SemanticVersion.parse(AM_VERSION))) {
 			ScreenManager.waiting();
 			ClientLoginDisconnect.disconnect(handler);
 			SelfUpdater.installModVersion(automodpack);

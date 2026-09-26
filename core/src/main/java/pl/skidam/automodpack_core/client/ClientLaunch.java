@@ -6,12 +6,10 @@ import static pl.skidam.automodpack_core.Constants.clientConfig;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
-import java.nio.file.Path;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -74,15 +72,19 @@ public final class ClientLaunch {
 	}
 
 	private StoredModpackConnection.Seeded seedSelected() {
-		if (!clientConfig.hasSelectedModpack()) return null;
-		if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
-			LOGGER.error("Ignoring invalid selected modpack ID: {}", clientConfig.selectedModpackId);
-			clientConfig = clientConfig.withSelectedModpackId("");
-			writeConfig(storage.clientConfigFile(), clientConfig);
+		String followId = storage.selectedModpackId();
+		if (followId.isBlank()) return null;
+		if (!ModpackId.isValid(followId)) {
+			LOGGER.error("Ignoring invalid selected modpack ID: {}", followId);
+			try {
+				storage.writeSelectedModpackId("");
+			} catch (IOException e) {
+				LOGGER.error("Failed to clear invalid selected modpack ID", e);
+			}
 			return null;
 		}
 		try {
-			return StoredModpackConnection.seed(storage, clientConfig.selectedModpackId);
+			return StoredModpackConnection.seed(storage, followId);
 		} catch (IOException e) {
 			LOGGER.error("Failed to load selected modpack connection state", e);
 			return null;
@@ -90,7 +92,8 @@ public final class ClientLaunch {
 	}
 
 	private void syncFromServer(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) throws Exception {
-		var manifestResult = ManifestFetcher.requestServerModpackContent(storage, connectionInfo, secret, false, clientConfig.selectedModpackId);
+		String followId = storage.selectedModpackId();
+		var manifestResult = ManifestFetcher.requestServerModpackContent(storage, connectionInfo, secret, false, followId);
 		if (!manifestResult.successful()) {
 			// An unreachable server is a normal boot condition, not a failure: the installed pack keeps working and the
 			// next launch with the server up catches up. One calm line says so; the cause stays at debug.
@@ -111,8 +114,8 @@ public final class ClientLaunch {
 			return;
 		}
 		ModpackJsons.ModpackContentFields latestModpackContent = selectedTarget.flatTarget();
-		if (!Objects.equals(clientConfig.selectedModpackId, latestModpackContent.modpackId)) {
-			LOGGER.error("Selected modpack catalogue changed ID from {} to {}", clientConfig.selectedModpackId, latestModpackContent.modpackId);
+		if (!Objects.equals(followId, latestModpackContent.modpackId)) {
+			LOGGER.error("Selected modpack catalogue changed ID from {} to {}", followId, latestModpackContent.modpackId);
 			transport.close();
 			loadLocalModpack(connectionInfo, secret, hasActiveProjection());
 			return;
@@ -155,9 +158,10 @@ public final class ClientLaunch {
 
 	/** The active pointer is unique state whose unusable content fails the boot in place, so its read failure propagates instead of reading as no projection. */
 	private boolean hasActiveProjection() throws IOException {
-		if (!clientConfig.hasSelectedModpack()) return false;
-		if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
-			LOGGER.warn("Skipping active modpack load because the configured selected modpack ID is invalid: {}", clientConfig.selectedModpackId);
+		String followId = storage.selectedModpackId();
+		if (followId.isBlank()) return false;
+		if (!ModpackId.isValid(followId)) {
+			LOGGER.warn("Skipping active modpack load because the configured selected modpack ID is invalid: {}", followId);
 			return false;
 		}
 		if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return false;
@@ -166,22 +170,14 @@ public final class ClientLaunch {
 			LOGGER.warn("Skipping active modpack load because the active projection has no active state");
 			return false;
 		}
-		if (!clientConfig.selectedModpackId.equals(state.modpackId)) {
-			LOGGER.warn("Skipping active modpack load because active state belongs to {}, but the selected modpack is {}", state.modpackId, clientConfig.selectedModpackId);
+		if (!followId.equals(state.modpackId)) {
+			LOGGER.warn("Skipping active modpack load because active state belongs to {}, but the selected modpack is {}", state.modpackId, followId);
 			return false;
 		}
 		return true;
 	}
 
 	private boolean isDetachedFromServer() throws IOException {
-		return new ClientGenerationStore(storage).isDetached(clientConfig.selectedModpackId);
-	}
-
-	private static void writeConfig(Path path, Object value) {
-		try {
-			ConfigTools.writeAtomic(path, value);
-		} catch (IOException e) {
-			throw new ConfigTools.ConfigException("Failed to save configuration " + path.toAbsolutePath().normalize(), e);
-		}
+		return new ClientGenerationStore(storage).isDetached(storage.selectedModpackId());
 	}
 }

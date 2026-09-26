@@ -78,7 +78,7 @@ public final class GroupSelectionResolver {
 		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
 	}
 
-	/** Excludes every optional group in the category and drops the category request, so one click turns the whole category off — even groups that are on by default. */
+	/** Excludes every optional group in the category and drops the category request, so one click turns the whole category off - even groups that are on by default. */
 	public static SelectionIntent excludeCategory(GroupManifest manifest, SelectionIntent current, String category, ClientPlatform platform) {
 		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(current);

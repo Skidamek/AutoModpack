@@ -6,20 +6,20 @@ AutoModpack keeps every player's game in sync with the server's modpack. Install
 
 1. Download AutoModpack from [Modrinth](https://modrinth.com/mod/automodpack) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack). The release ships one jar that works on every supported Minecraft version and loader.
 2. Put the jar in the `mods` folder of the server, and in the `mods` folder of every client.
-3. Back up anything valuable in the client instance first. A mod that manages files deserves a backup.
-4. Start the server once. AutoModpack creates `automodpack/server-config.hconf` and publishes the first generation of the pack.
+3. Back up anything valuable in the client instance first to make sure AutoModpack doesn't mess something up.
+4. Start the server once. AutoModpack publishes the first generation of the pack using default config.
 
-By default the pack contains every jar in the server's `mods` folder plus `kubejs/**` and `emotes/*`. The files `options.txt` and `config/**` are marked editable, so players can change them locally. To keep a server mod off clients, or to add client-only mods, see [which files reach clients](pack-content#which-files-reach-clients). [Building the modpack](pack-content) explains how all of that is decided.
+By default the pack contains every jar in the server's `mods` folder. The files `options.txt` and `config/**` are marked editable, so players can change them locally. To keep a server mod off clients, or to add client-only mods, see [which files reach clients](pack-content#which-files-reach-clients). [Building the modpack](pack-content) explains how all of that is decided.
 
 Before inviting players, connect once with a client that has only AutoModpack installed. If that works, the setup is proven and any future problem points at pack content.
 
 ## 2. Connect
 
 1. Join the server as usual. Before anything is downloaded, AutoModpack verifies the server's identity: a pinned join address, a CA-signed certificate, or a DNSSEC-published fingerprint passes on its own, and anything else shows the certificate fingerprint and asks. The methods are compared in [security](security).
-2. Confirm the installation prompt. The confirm screen shows how many mod files were matched on Modrinth or CurseForge; jars matched on neither are clearly listed and ask for an explicit risk acknowledgement before the download starts. On a server with `requireModpack` off, the prompt asks first whether you want the pack; declining joins without it.
+2. Confirm the installation prompt. The confirm screen shows how many mod files were matched on Modrinth or CurseForge; jars matched on neither are clearly listed and ask for an explicit risk acknowledgement before the download starts. On a server with `require-modpack` off, the prompt asks first whether you want the pack; declining joins without it.
 3. Restart the game and connect again. The pack is loaded.
 
-From then on, clients update during launch. Most changes apply before the game loads anything; the mod asks for a restart only when files in the standard `mods` folder or the loader version change. [Client updates](how-it-works/client-updates) explains when a restart is needed and what happens while you are already in-game.
+From then on, clients update during launch. Most changes apply before the game loads anything; the mod asks for a restart only when files in the standard `mods` folder (99% mods load from projection so need no restart) or the loader version change. [Client updates](how-it-works/client-updates) explains when a restart is needed and what happens while you are already in-game.
 
 ## 3. Add your own content
 

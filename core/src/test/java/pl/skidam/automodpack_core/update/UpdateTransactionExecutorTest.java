@@ -21,6 +21,7 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
@@ -64,7 +65,7 @@ class UpdateTransactionExecutorTest {
 		assertEquals(target.packTarget().contentToken(), activeState.contentToken);
 		assertEquals(target.document().ownershipLedger(), OwnershipLedger.fromFields(activeState.ownershipLedger));
 		assertEquals(target.selection().intent(), new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).orElseThrow());
-		assertEquals(target.manifest().modpackId(), ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
+		assertEquals(target.manifest().modpackId(), storage.selectedModpackId());
 		assertFalse(Files.exists(storage.automodpackDirectory().resolve("modpacks")));
 		assertFalse(Files.exists(storage.transactionFile()));
 	}
@@ -83,7 +84,8 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.GAME_DIR, "mods/nested.jar", OperationType.INSTALL_OBJECT, nestedHash, nestedBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/root.jar", true, rootHash, rootBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "mods/nested.jar", true, nestedHash, nestedBytes.length)),
-				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.FIXED_NESTED_MODS), List.of(), List.of(), List.of(), List.of(generated), ChangeSet.empty());
+				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.FIXED_NESTED_MODS), List.of(), List.of(), List.of(), List.of(generated), ChangeSet.empty())
+				.withPlannedSelectedModpackId(target.manifest().modpackId());
 
 		assertTrue(commit(storage, plan, target).success());
 
@@ -107,7 +109,8 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.GAME_DIR, "mods/nested.jar", OperationType.INSTALL_OBJECT, nestedHash, nestedBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/root.jar", true, rootHash, rootBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "mods/nested.jar", true, nestedHash, nestedBytes.length)),
-				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.FIXED_NESTED_MODS), List.of(), List.of(), List.of(), List.of(generated), ChangeSet.empty());
+				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.FIXED_NESTED_MODS), List.of(), List.of(), List.of(), List.of(generated), ChangeSet.empty())
+				.withPlannedSelectedModpackId(target.manifest().modpackId());
 		Files.createDirectories(storage.modsDirectory().resolve("nested.jar"));
 
 		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
@@ -143,7 +146,7 @@ class UpdateTransactionExecutorTest {
 		SelectedModpackTarget target = target(storage, "mods/existing.jar", "mod", false, hash, bytes.length);
 		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of(),
-				ChangeSet.empty());
+				ChangeSet.empty()).withPlannedSelectedModpackId(target.manifest().modpackId());
 
 		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
 
@@ -166,7 +169,7 @@ class UpdateTransactionExecutorTest {
 		SelectedModpackTarget target = target(storage, "mods/existing.jar", "mod", false, hash, bytes.length);
 		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of(),
-				ChangeSet.empty());
+				ChangeSet.empty()).withPlannedSelectedModpackId(target.manifest().modpackId());
 
 		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
 
@@ -395,16 +398,16 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.PROJECTION, "mods/config-drift.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/config-drift.jar", true, hash, bytes.length)));
 		ClientConfigJsons.ClientConfigFieldsV3 expected = new ClientConfigJsons.ClientConfigFieldsV3();
-		ConfigTools.writeAtomic(storage.clientConfigFile(), expected);
+		ReconfConfigs.save(storage.clientConfigFile(), expected, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()), expected);
 		ClientConfigJsons.ClientConfigFieldsV3 newer = new ClientConfigJsons.ClientConfigFieldsV3(expected);
 		newer.playMusic = false;
-		ConfigTools.writeAtomic(storage.clientConfigFile(), newer);
+		ReconfConfigs.save(storage.clientConfigFile(), newer, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 
 		UpdateTransactionExecutor.Execution execution = executor(storage).commit(transaction);
 
 		assertTrue(execution.replanRequired());
-		assertFalse(ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().playMusic);
+		assertFalse(ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().playMusic);
 		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, persistedTransaction(storage).resultStatus);
 	}
 
@@ -474,15 +477,15 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.PROJECTION, "mods/pending-selection.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/pending-selection.jar", true, hash, bytes.length)));
 		UpdateTransaction transaction = createTransaction(storage, plan, target);
-		transaction.plan().plannedClientConfig().syncLoaderVersion = false;
+		transaction.plan().plannedClientConfig().syncVersions = false;
 		ClientConfigJsons.ClientConfigFieldsV3 current = new ClientConfigJsons.ClientConfigFieldsV3();
 		transaction.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(current);
 		current.playMusic = false;
-		ConfigTools.writeAtomic(storage.clientConfigFile(), current);
+		ReconfConfigs.save(storage.clientConfigFile(), current, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
 
-		assertEquals(target.manifest().modpackId(), ClientProjectionView.open(storage).logicalConfig(current).selectedModpackId);
-		assertFalse(ClientProjectionView.open(storage).logicalConfig(current).syncLoaderVersion);
+		assertEquals(target.manifest().modpackId(), ClientProjectionView.open(storage).logicalSelectedModpackId());
+		assertFalse(ClientProjectionView.open(storage).logicalConfig(current).syncVersions);
 		assertFalse(ClientProjectionView.open(storage).logicalConfig(current).playMusic);
 	}
 
@@ -814,7 +817,7 @@ class UpdateTransactionExecutorTest {
 	}
 
 	private static UpdateTransactionExecutor.Execution commit(ClientStorage storage, UpdatePlan plan, SelectedModpackTarget target) throws IOException {
-		ClientConfigJsons.ClientConfigFieldsV3 expected = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+		ClientConfigJsons.ClientConfigFieldsV3 expected = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		return executor(storage).commit(plan, target, storage.overlayDigest(target.manifest().modpackId()), expected);
 	}
@@ -846,7 +849,8 @@ class UpdateTransactionExecutorTest {
 	}
 
 	private static UpdatePlan plan(SelectedModpackTarget target, ClientConfigJsons.ClientConfigFieldsV3 config, List<Operation> operations, List<ProjectedFile> finalState) {
-		return new UpdatePlan(target.manifest().modpackId(), target.packTarget(), operations, finalState, config, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(),
+		return new UpdatePlan(target.manifest().modpackId(), target.packTarget(), operations, finalState, config, target.manifest().modpackId(), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(),
+				List.of(), List.of(),
 				ChangeSet.empty());
 	}
 
@@ -904,13 +908,11 @@ class UpdateTransactionExecutorTest {
 	}
 
 	private static ClientConfigJsons.ClientConfigFieldsV3 clientConfig(String modpackId) {
-		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
-		config.selectedModpackId = modpackId;
-		return config;
+		return new ClientConfigJsons.ClientConfigFieldsV3();
 	}
 
 	private static UpdateTransaction createTransaction(ClientStorage storage, UpdatePlan plan, SelectedModpackTarget target) throws IOException {
-		ClientConfigJsons.ClientConfigFieldsV3 expected = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+		ClientConfigJsons.ClientConfigFieldsV3 expected = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		return UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()), expected);
 	}

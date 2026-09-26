@@ -43,6 +43,7 @@ repositories {
 val bouncyCastleVersion = versionProperty("versionBouncyCastle")
 val nettyVersion = versionProperty("versionNetty")
 val mcholepunchVersion = versionProperty("versionMcholepunch")
+val reconfVersion = versionProperty("versionReconf")
 val aircompressorVersion = versionProperty("versionAircompressor")
 
 dependencies {
@@ -54,10 +55,14 @@ dependencies {
 		isTransitive = false
 	}
 
-	// mcholepunch jars — shadowed into the loader so classes are available at
+	// mcholepunch jars - shadowed into the loader so classes are available at
 	// the root classpath (needed by the preload-stage client).
 	implementation(":mcholepunch-core:$mcholepunchVersion")
 	implementation(":mcholepunch-server-netty:$mcholepunchVersion")
+
+	// reconf - the config format/edit layer for the human-editable configs (core's compile dep,
+	// shadowed into the loader the same way as the mcholepunch jars).
+	implementation(":reconf:$reconfVersion")
 }
 
 configurations {

@@ -60,7 +60,7 @@ final class ProjectionLoader {
 		if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return;
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null) return;
-		String mismatch = ClientStorage.activeSelectionMismatch(clientConfig, state);
+		String mismatch = ClientStorage.activeSelectionMismatch(storage.selectedModpackId(), state);
 		if (mismatch != null) {
 			LOGGER.warn("Skipping active modpack load after preload because {}", mismatch);
 			return;

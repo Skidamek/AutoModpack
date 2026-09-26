@@ -16,7 +16,7 @@ def _find_root() -> Path:
         if (p / "settings.yaml").is_file():
             return p
     raise FileNotFoundError(
-        "settings.yaml not found — run from project root or autotester/"
+        "settings.yaml not found - run from project root or autotester/"
     )
 
 

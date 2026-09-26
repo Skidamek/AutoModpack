@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_core.modpack.candidate;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -50,7 +52,7 @@ public final class ModpackCandidateScanner {
 			if (!groupDirectory.startsWith(request.groupRoot().toAbsolutePath().normalize()))
 				throw new CandidateBuildException("Group directory escapes host-modpack: " + groupId);
 			for (var file : walk(groupDirectory).entrySet()) {
-				// The group directory is included in full; excludedFiles is the only way to leave content out of it.
+				// The group directory is included in full; exclude is the only way to leave content out of it.
 				PathRuleSet.Decision excluded = groupRules.excluded(file.getKey());
 				if (excluded.matched()) {
 					ruleExclusions.add(new ExcludedCandidate(new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.GROUP_DIRECTORY, file.getValue(), null),
@@ -62,10 +64,10 @@ public final class ModpackCandidateScanner {
 			}
 		}
 
-		List<GroupRules> synchronizedGroups = rulesByGroup.values().stream().filter(rules -> !rules.syncedFiles().isEmpty()).toList();
+		List<GroupRules> synchronizedGroups = rulesByGroup.values().stream().filter(rules -> !rules.fromServer().isEmpty()).toList();
 		if (!synchronizedGroups.isEmpty()) {
 			Set<String> scanRoots = new TreeSet<>();
-			for (GroupRules rules : synchronizedGroups) scanRoots.addAll(rules.syncedFiles().safeScanRoots());
+			for (GroupRules rules : synchronizedGroups) scanRoots.addAll(rules.fromServer().safeScanRoots());
 			Set<String> minimalRoots = minimalScanRoots(scanRoots);
 			Map<String, List<String>> groupsByScanRoot = indexGroupsByScanRoot(minimalRoots, rulesByGroup);
 			for (String scanRoot : minimalRoots) {
@@ -159,6 +161,7 @@ public final class ModpackCandidateScanner {
 				categories.computeIfAbsent(categoryByGroup.get(entry.getKey()), ignored -> new LinkedHashMap<>()).put(entry.getKey(), group);
 			}
 			fields.categories = categories;
+			warnUnmatchedEditableRules(declarations, filesByGroup);
 			GroupManifest manifest = GroupManifestValidator.validate(fields);
 			if (manifest.groups().values().stream().allMatch(group -> group.files().isEmpty()))
 				throw new CandidateBuildException("Candidate contains no published files");
@@ -197,8 +200,27 @@ public final class ModpackCandidateScanner {
 	}
 
 	private static GroupRules compileRules(String groupId, ServerConfigJsons.GroupDeclaration declaration) throws CandidateBuildException {
-		return new GroupRules(compileRuleSet(declaration.syncedFiles, groupId, "syncedFiles"), compileRuleSet(declaration.excludedFiles, groupId, "excludedFiles"),
-				compileRuleSet(declaration.allowEditsInFiles, groupId, "allowEditsInFiles"));
+		return new GroupRules(compileRuleSet(declaration.fromServer, groupId, "from-server"), compileRuleSet(declaration.exclude, groupId, "exclude"),
+				compileRuleSet(declaration.editable, groupId, "editable"));
+	}
+
+	private static void warnUnmatchedEditableRules(Map<String, ServerConfigJsons.GroupDeclaration> declarations,
+			Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields>> filesByGroup) {
+		for (var entry : declarations.entrySet()) {
+			Set<String> rules = entry.getValue().editable;
+			if (rules == null || rules.isEmpty()) continue;
+			Set<String> paths = filesByGroup.getOrDefault(entry.getKey(), Map.of()).keySet();
+			for (String rule : rules) {
+				if (rule == null || rule.startsWith("!")) continue;
+				PathRuleSet matcher = new PathRuleSet(List.of(rule));
+				boolean matched = false;
+				for (String path : paths) if (matcher.matches(path)) {
+					matched = true;
+					break;
+				}
+				if (!matched) LOGGER.warn("editable rule '{}' in group '{}' matched no pack files", rule, entry.getKey());
+			}
+		}
 	}
 
 	private static PathRuleSet compileRuleSet(Set<String> rules, String groupId, String name) throws CandidateBuildException {
@@ -259,7 +281,7 @@ public final class ModpackCandidateScanner {
 		for (String scanRoot : scanRoots) {
 			List<String> groups = new ArrayList<>();
 			for (var entry : rulesByGroup.entrySet()) {
-				Set<String> groupRoots = entry.getValue().syncedFiles().safeScanRoots();
+				Set<String> groupRoots = entry.getValue().fromServer().safeScanRoots();
 				if (groupRoots.stream().anyMatch(groupRoot -> groupRoot.isEmpty() || scanRoot.isEmpty() || scanRoot.equals(groupRoot)
 						|| scanRoot.startsWith(groupRoot + "/") || groupRoot.startsWith(scanRoot + "/")))
 					groups.add(entry.getKey());
@@ -303,17 +325,17 @@ public final class ModpackCandidateScanner {
 		return values == null ? Set.of() : new LinkedHashSet<>(new TreeSet<>(values));
 	}
 
-	private record GroupRules(PathRuleSet syncedFiles, PathRuleSet excludedFiles, PathRuleSet allowEditsInFiles) {
+	private record GroupRules(PathRuleSet fromServer, PathRuleSet exclude, PathRuleSet editableRules) {
 		private PathRuleSet.Decision synced(String path) {
-			return syncedFiles.evaluate(path);
+			return fromServer.evaluate(path);
 		}
 
 		private PathRuleSet.Decision excluded(String path) {
-			return excludedFiles.evaluate(path);
+			return exclude.evaluate(path);
 		}
 
 		private PathRuleSet.Decision editable(String path) {
-			return allowEditsInFiles.evaluate(path);
+			return editableRules.evaluate(path);
 		}
 	}
 

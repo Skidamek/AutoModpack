@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -336,8 +337,9 @@ public class Commands {
 		}
 	}
 
-	private static final DateTimeFormatter ACTIVITY_CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT);
-	private static final DateTimeFormatter ACTIVITY_PRECISE_CLOCK = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT);
+	// Instants carry no clock fields, so the formatters need the zone to resolve them through; server-local matches the console's own clock.
+	private static final DateTimeFormatter ACTIVITY_CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT).withZone(ZoneId.systemDefault());
+	private static final DateTimeFormatter ACTIVITY_PRECISE_CLOCK = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT).withZone(ZoneId.systemDefault());
 	private static final int ACTIVITY_SHOWN_ENTRIES = 5;
 
 	private static int activity(CommandContext<CommandSourceStack> context) {
@@ -696,7 +698,7 @@ public class Commands {
 		Util.backgroundExecutor().execute(() -> {
 			try {
 				Optional<PackDocument> published = modpackExecutor.currentDocument();
-				for (String line : GroupInspector.overview(serverConfig.modpack, published.map(PackDocument::manifest).orElse(null)))
+				for (String line : GroupInspector.overview(serverConfig.modpack.categories, published.map(PackDocument::manifest).orElse(null)))
 					send(context, line, ChatFormatting.WHITE, false);
 			} catch (IOException e) {
 				send(context, "Failed to read the published modpack: " + e.getMessage(), ChatFormatting.RED, true);
@@ -710,7 +712,7 @@ public class Commands {
 		Util.backgroundExecutor().execute(() -> {
 			try {
 				Optional<PackDocument> published = modpackExecutor.currentDocument();
-				Optional<List<String>> lines = GroupInspector.detail(serverConfig.modpack, groupId, published.map(PackDocument::manifest).orElse(null));
+				Optional<List<String>> lines = GroupInspector.detail(serverConfig.modpack.categories, groupId, published.map(PackDocument::manifest).orElse(null));
 				if (lines.isEmpty()) {
 					send(context, "Unknown group id: " + groupId + ". Run /automodpack groups for the list.", ChatFormatting.RED, false);
 					return;

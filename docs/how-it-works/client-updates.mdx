@@ -4,25 +4,25 @@ This page follows one pack through a client: when updates apply, where the bytes
 
 ## When updates apply
 
-With `updateSelectedModpackOnLaunch` on (the default), every launch fetches the server's current generation and applies it before the game loads anything. Projection-only work, such as config and resource pack changes, needs no restart at all: the game reads those files from the managed projection.
+With `update-selected-modpack-on-launch` on (the default), every launch fetches the server's current generation and applies it before the game loads anything. Projection-only work, such as config and resource pack changes, needs no restart at all: the game reads those files from the managed projection.
 
-When the plan touches files in the standard `mods` folder or the loader version, AutoModpack stops and asks for a relaunch, so the loader reads the real file tree. Fabric enumerates `mods/` early in boot and Forge and NeoForge later, but the restart rule is the same for every loader.
+When the plan touches files in the standard `mods` folder (99% mods load from projection so need no restart) or the loader version, AutoModpack stops and asks for a relaunch, so the loader reads the real file tree.
 
 Joining a server while in-game goes through a review screen instead: it shows what the update would change, asks for consent when your own extra mods would be touched, and applies group selections. Mod jars that could not be matched on Modrinth or CurseForge are listed as unverified and need an explicit risk acknowledgement before the download starts. A first install always waits for this review. A pack installed through a [trusted bootstrap](files-on-disk#bootstrap) is the exception and applies on that launch.
 
 When an installed pack starts being served from a new address, the client shows an origin change prompt before trusting the address, and remembers the approved origins per pack. Declining an update joins on the locally kept pack and stays detached until you sync again from the pack manager.
 
-With `updateSelectedModpackOnLaunch` off, launch loads the current state without contacting the server, and updates happen only when you join.
+With `update-selected-modpack-on-launch` off, launch loads the current state without contacting the server, and updates happen only when you join.
 
 ## Where files come from
 
 The client first asks the platform APIs. Files found on Modrinth or CurseForge download straight from their CDNs through direct links, so mod authors get the download credit and your server ships less traffic. The client matches files by SHA-1 on Modrinth and by content fingerprint on CurseForge.
 
-Everything else downloads from the modpack host over its TLS connection. Each response negotiates its encoding per request - zstd first, gzip as the fallback - and the compression also runs on pack files, where zstd -3 measurably shaves about 14% off the served bytes even for jars. When a platform link fails, the client falls back to your server automatically.
+Everything else downloads from the modpack host over its TLS connection.
 
 ## Editable files
 
-`allowEditsInFiles` marks pack files players may change, such as `options.txt` and `config/**` by default. Every editable file keeps its copy in the game directory, no matter the type: an editable mod jar materializes in the standard `mods` folder and loads from there. The client records the player's copy in an overlay that shadows the pack version, so ordinary edits survive every update.
+`editable` marks pack files players may change, such as `options.txt` and `config/**` by default. Every editable file keeps its copy in the game directory, no matter the type: an editable mod jar materializes in the standard `mods` folder and loads from there. The client records the player's copy in an overlay that shadows the pack version, so ordinary edits survive every update.
 
 Removing an editable file is a statement, not an accident: the file stays away through updates and through edits to other files. When the server replaces that file's content, the removal is spent and the new version comes back.
 
@@ -42,4 +42,4 @@ When a file leaves the pack, clients remove their copy only when the generation'
 
 ## AutoModpack's own updates
 
-Clients follow the AutoModpack version the server runs when `syncAutoModpackVersion` is on, updating or downgrading through Modrinth. This flow never runs through the pack: `/automodpack generate` excludes the AutoModpack jar, so the jar a client loads depends only on the server's version, not on pack content. A client with `selfUpdater` on also checks Modrinth for newer releases on its own. Updates stage a version swap and apply it on restart, and the mod never downgrades a client below version 5.0.0. Both settings are in the [client config](../configuration/client-config).
+Clients follow the AutoModpack version the server runs when `sync-automodpack-version` is on, updating or downgrading through Modrinth. This flow never runs through the pack: `/automodpack generate` excludes the AutoModpack jar, so the jar a client loads depends only on the server's version, not on pack content. A client with `self-updater` on also checks Modrinth for newer releases on its own. Updates stage a version swap and apply it on restart. The mod never moves a client below version 5.0.0; a client already below it, such as a beta or release candidate, still follows the server forward. Both settings are in the [client config](../configuration/client-config).

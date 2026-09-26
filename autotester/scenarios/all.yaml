@@ -1065,13 +1065,14 @@ flow:
     name: re-bootstrap the fresh client from the live server generation
   - do: write_file
     name: keep the fresh client on the mandatory review path
-    path: automodpack/client-config.json
+    path: automodpack/client/selected.json
     content: |
-      {
-        "DO_NOT_CHANGE_IT": 3,
-        "selectedModpackId": "${bootstrap_modpack_id}",
-        "updateSelectedModpackOnLaunch": true
-      }
+      {"modpackId": "${bootstrap_modpack_id}"}
+  - do: write_file
+    name: keep the fresh client on the launch-update path
+    path: automodpack/client.conf
+    content: |
+      update-selected-modpack-on-launch: true
   - do: launch_client
     name: launch the fresh client without generation history or CAS
   - do: wait_bridge
@@ -1300,32 +1301,32 @@ topology:
               description: Required core files
               required: true
               defaultSelected: true
-              allowEditsInFiles: ["/config/pack-shared-editable.txt"]
-              syncedFiles: ["/config/amp-autotest-alpha.txt", "/config/amp-autotest-beta.json", "/config/amp-autotest-gamma.cfg", "/config/amp-autotest-baseline.json", "/config/amp-autotest-delta.txt", "/config/amp-autotest-marker.json", "/config/pack-a-only.txt", "/config/pack-shared-editable.txt", "/mods/amp-autotest-removed.jar"]
+              editable: ["/config/pack-shared-editable.txt"]
+              from-server: ["/config/amp-autotest-alpha.txt", "/config/amp-autotest-beta.json", "/config/amp-autotest-gamma.cfg", "/config/amp-autotest-baseline.json", "/config/amp-autotest-delta.txt", "/config/amp-autotest-marker.json", "/config/pack-a-only.txt", "/config/pack-shared-editable.txt", "/mods/amp-autotest-removed.jar"]
           Visuals:
             visual:
               displayName: Visuals
               description: Default client visuals
               defaultSelected: true
               requires: [main]
-              syncedFiles: ["/config/amp-autotest-visual.txt"]
+              from-server: ["/config/amp-autotest-visual.txt"]
           Extras:
             addon:
               displayName: Addon
               description: Optional addon depending on visuals
               requires: [visual]
-              syncedFiles: ["/config/amp-autotest-addon.txt"]
+              from-server: ["/config/amp-autotest-addon.txt"]
             alternative:
               displayName: Alternative
               description: Mutually exclusive alternative
               breaksWith: [visual]
-              syncedFiles: ["/config/amp-autotest-alternative.txt"]
+              from-server: ["/config/amp-autotest-alternative.txt"]
           Platform:
             windows:
               displayName: Windows-only
               description: Platform-filtered fixture
               compatiblePlatforms: [windows]
-              syncedFiles: ["/config/amp-autotest-windows.txt"]
+              from-server: ["/config/amp-autotest-windows.txt"]
 
 serverFiles:
   modpackName: Pack A

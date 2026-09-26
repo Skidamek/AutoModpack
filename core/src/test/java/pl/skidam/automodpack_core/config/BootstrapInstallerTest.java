@@ -34,12 +34,11 @@ class BootstrapInstallerTest {
 				AddressHelpers.parseEndpoint("downloads.example.com:25564"), ModpackConnectionMode.HTTP, secret, "Pack Server");
 		ConfigTools.writeAtomic(storage.bootstrapFile(), fields);
 
-		ClientConfigJsons.ClientConfigFieldsV3 clientConfig = new ClientConfigJsons.ClientConfigFieldsV3();
-		clientConfig.selectedModpackId = "oldpack1";
-		BootstrapInstaller.Receipt receipt = BootstrapInstaller.importIfPresent(storage, clientConfig).orElseThrow();
+		storage.writeSelectedModpackId("oldpack1");
+		BootstrapInstaller.Receipt receipt = BootstrapInstaller.importIfPresent(storage, new ClientConfigJsons.ClientConfigFieldsV3()).orElseThrow();
 
 		assertFalse(Files.exists(storage.bootstrapFile()));
-		assertEquals("abc1234", receipt.clientConfig().selectedModpackId);
+		assertEquals("abc1234", storage.selectedModpackId());
 		assertTrue(receipt.hasSecret());
 		assertEquals("SEED", OriginTrustStore.get(storage, AddressHelpers.parseOrigin("play.example.com")).reason);
 		assertEquals("downloads.example.com:25564", AddressHelpers.formatAddress(ConnectionStore.getConnection(storage, "abc1234").endpoint));

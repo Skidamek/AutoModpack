@@ -16,9 +16,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -266,7 +266,7 @@ final class UpdateSession implements UpdateAttempt {
 
 	private UpdateTransactionExecutor.Execution commitPlanObjects(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
 		planBuilder.preparePlanObjects(prepared.plan(), target.flatTarget());
-		UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig());
+		UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig(), prepared.expectedSelectedModpackId());
 		transaction.stateKind = stateKind == null ? "" : stateKind.name();
 		return UpdateTransactionSupport.executor().commit(transaction, target);
 	}
@@ -299,9 +299,7 @@ final class UpdateSession implements UpdateAttempt {
 	}
 
 	private void ensureSelectedModpackUnchanged(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
-		ClientConfigJsons.ClientConfigFieldsV3 current = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
-				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
-		if (!Objects.equals(current.selectedModpackId, prepared.expectedClientConfig().selectedModpackId))
+		if (!Objects.equals(storage.selectedModpackId(), prepared.expectedSelectedModpackId()))
 			throw new UpdateReplanRequiredException(null, "Selected modpack changed while the update was being applied");
 	}
 
@@ -325,9 +323,9 @@ final class UpdateSession implements UpdateAttempt {
 	/** Rebuilds a pending update from current mutable inputs and commits it when the approved outcome still holds. */
 	static UpdateTransactionExecutor.Execution resume(ClientStorage storage, UpdateTransaction pending, ModpackLoaderService modpackLoader, String loaderType) throws Exception {
 		ClientUpdatePlanBuilder builder = new ClientUpdatePlanBuilder(storage, modpackLoader, loaderType);
-		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
-		SelectedModpackTarget target = targetFor(storage, pending, currentConfig);
+		SelectedModpackTarget target = targetFor(storage, pending);
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); ModFileCache modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			builder.reconcileEditableState(cache, target.flatTarget());
 			ClientUpdatePlanBuilder.PreparedPlan prepared = builder.buildPlan(new ClientUpdatePlanBuilder.Input(target, null, currentConfig, true), cache, modCache);
@@ -335,27 +333,26 @@ final class UpdateSession implements UpdateAttempt {
 				throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending update outcome; a new review is required");
 			builder.preparePlanObjects(prepared.plan(), target.flatTarget());
 			// The rebuilt transaction must keep the pending one's state-history story, or a resumed rollback lands mislabeled.
-			UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig());
+			UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig(), prepared.expectedSelectedModpackId());
 			transaction.stateKind = pending.stateKind;
 			return UpdateTransactionSupport.executor().commit(transaction, target);
 		}
 	}
 
-	private static SelectedModpackTarget targetFor(ClientStorage storage, UpdateTransaction pending, ClientConfigJsons.ClientConfigFieldsV3 currentConfig) throws IOException {
+	private static SelectedModpackTarget targetFor(ClientStorage storage, UpdateTransaction pending) throws IOException {
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
 		PackDocument pendingDocument = generations.document(pending);
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
-		boolean configStillDescribesThePendingInput = active == null
-				? !currentConfig.hasSelectedModpack()
-				: Objects.equals(currentConfig.selectedModpackId, active.modpackId);
+		String followId = storage.selectedModpackId();
+		boolean configStillDescribesThePendingInput = active == null ? followId.isBlank() : Objects.equals(followId, active.modpackId);
 		PackDocument record;
-		if (configStillDescribesThePendingInput || pending.plan().modpackId().equals(currentConfig.selectedModpackId))
+		if (configStillDescribesThePendingInput || pending.plan().modpackId().equals(followId))
 			record = newer(pendingDocument, newest(generations, pending.plan().modpackId()));
 		else {
-			if (!ModpackId.isValid(currentConfig.selectedModpackId))
+			if (!ModpackId.isValid(followId))
 				throw new IOException("Selected modpack changed to an invalid or empty ID while replanning the pending update");
-			record = newest(generations, currentConfig.selectedModpackId);
-			if (record == null) throw new IOException("Selected modpack generation is not installed: " + currentConfig.selectedModpackId);
+			record = newest(generations, followId);
+			if (record == null) throw new IOException("Selected modpack generation is not installed: " + followId);
 		}
 		ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
 		SelectionIntent storedIntent = selections.get(record.manifest().modpackId()).orElse(null);

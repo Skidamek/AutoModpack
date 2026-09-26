@@ -60,9 +60,9 @@ public final class GroupInspector {
 			addJoined(lines, "Platforms", declaration.compatiblePlatforms);
 			addJoined(lines, "Requires", declaration.requires);
 			addJoined(lines, "Breaks with", declaration.breaksWith);
-			addRules(lines, "Synced files", declaration.syncedFiles);
-			addRules(lines, "Excluded files", declaration.excludedFiles);
-			addRules(lines, "Allow edits in", declaration.allowEditsInFiles);
+			addRules(lines, "From server", declaration.fromServer);
+			addRules(lines, "Exclude", declaration.exclude);
+			addRules(lines, "Editable", declaration.editable);
 		}
 		if (publishedGroup == null) lines.add("Published: (not published yet)");
 		else filesSection(lines, publishedGroup);

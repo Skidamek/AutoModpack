@@ -14,8 +14,8 @@ import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
@@ -157,7 +157,7 @@ public final class UpdateTransactionValidator {
 	}
 
 	private ClientConfigJsons.ClientConfigFieldsV3 currentClientConfig() {
-		return ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
+		return ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 	}
 
 	private boolean selectionChanged(UpdateTransaction transaction) throws IOException {
@@ -261,14 +261,20 @@ public final class UpdateTransactionValidator {
 
 	private void validatePlannedClientConfig(UpdateTransaction transaction) throws IOException {
 		ClientConfigJsons.ClientConfigFieldsV3 config = transaction.plan().plannedClientConfig();
-		if (config == null || !transaction.plan().modpackId().equals(config.selectedModpackId))
+		if (config == null || !transaction.plan().modpackId().equals(plannedFollow(transaction)))
 			throw new IOException("Planned client config does not select the transaction modpack");
 	}
 
 	private void validateRemovalClientConfig(UpdateTransaction transaction) throws IOException {
 		ClientConfigJsons.ClientConfigFieldsV3 config = transaction.plan().plannedClientConfig();
-		if (config == null || transaction.plan().modpackId().equals(config.selectedModpackId))
+		if (config == null || transaction.plan().modpackId().equals(plannedFollow(transaction)))
 			throw new IOException("Removal client config still selects the removed modpack");
+	}
+
+	static String plannedFollow(UpdateTransaction transaction) {
+		String follow = transaction.plan().plannedSelectedModpackId();
+		if ((follow == null || follow.isBlank()) && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) return transaction.plan().modpackId();
+		return follow == null ? "" : follow;
 	}
 
 	private void validateManifest(ModpackJsons.ModpackContentFields manifest, String modpackId) throws IOException {

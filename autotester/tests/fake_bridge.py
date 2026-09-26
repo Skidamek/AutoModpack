@@ -568,14 +568,9 @@ class FakeBridge:
             shutil.rmtree(active)
         client = self.ctx.game_dir / "automodpack" / "client"
         (client / "active-state.json").unlink(missing_ok=True)
-        client_config = self.ctx.game_dir / "automodpack" / "client-config.json"
-        try:
-            config = json.loads(client_config.read_text(encoding="utf-8")) if client_config.is_file() else {}
-        except (OSError, TypeError, ValueError, json.JSONDecodeError):
-            config = {}
-        config["selectedModpackId"] = ""
-        client_config.parent.mkdir(parents=True, exist_ok=True)
-        client_config.write_text(json.dumps(config), encoding="utf-8")
+        selected = self.ctx.game_dir / "automodpack" / "client" / "selected.json"
+        selected.parent.mkdir(parents=True, exist_ok=True)
+        selected.write_text(json.dumps({"modpackId": ""}) + "\n", encoding="utf-8")
         for hosted in self.ctx.scenario_files:
             self.ctx.path(hosted.path).unlink(missing_ok=True)
         for rel, content in self.baseline_snapshots.items():

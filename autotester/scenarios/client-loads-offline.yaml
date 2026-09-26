@@ -1,12 +1,12 @@
 id: client-loads-offline
 description: |
   Offline / client-only smoke test. Pre-stage a modpack into the client game dir
-  and boot just the client — no server, no certificate/download/restart dance —
+  and boot just the client - no server, no certificate/download/restart dance -
   then assert on the launch log that AutoModpack prelaunched and loaded the staged
   modpack without a classloading failure. Tolerant of the client exiting afterward
   (e.g. a headless render crash), so it is robust on both headless and GPU hosts.
 
-  This is the fast loader-debugging path: edit code, rebuild, rerun, read logs —
+  This is the fast loader-debugging path: edit code, rebuild, rerun, read logs -
   seconds, not the minutes an end-to-end gameplay round trip takes.
 
 # No server is launched; the client loads a locally staged modpack.

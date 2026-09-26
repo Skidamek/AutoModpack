@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.networking.packet;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.clientConfig;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -96,7 +95,7 @@ final class ClientLoginUpdateFlow {
 
 	private static CompletableFuture<LoginUpdateResponse> fetchAndReconcile(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo,
 			Secrets.Secret secret, ClientStorage storage) {
-		String selectedModpackId = clientConfig.selectedModpackId;
+		String selectedModpackId = storage.selectedModpackId();
 		return ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo, secret, true, selectedModpackId).thenComposeAsync(manifestResult -> {
 			if (!manifestResult.successful()) {
 				disconnectImmediately(handler);

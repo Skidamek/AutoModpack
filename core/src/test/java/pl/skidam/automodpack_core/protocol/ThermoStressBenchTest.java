@@ -238,7 +238,7 @@ class ThermoStressBenchTest {
 	}
 
 	/**
-	 * The deep-pipeline attack: 2000 tiny (16 KiB) objects, every transfer dispatched at once with no in-flight cap —
+	 * The deep-pipeline attack: 2000 tiny (16 KiB) objects, every transfer dispatched at once with no in-flight cap -
 	 * thousands of queued takes against the per-lane byte window and the request-count tripwire. Correctness and a
 	 * bounded wall are the assertions; the number reports what the deep window buys over a round trip per request.
 	 */

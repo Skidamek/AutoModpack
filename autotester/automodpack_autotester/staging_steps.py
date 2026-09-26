@@ -28,7 +28,7 @@ def canonical_timestamp(moment: datetime) -> str:
 
     The client rejects any other shape as a non-canonical generation timestamp, so a staged generation stamped with a
     fixed-width fraction (e.g. ``.800000Z``) is strictly invalid and crashes the first storage validation that reads
-    it — a ~10% flake per staged record. Verified against jshell: Instant.parse("...32.800000Z").toString() gives
+    it - a ~10% flake per staged record. Verified against jshell: Instant.parse("...32.800000Z").toString() gives
     "...32.800Z", while minimal forms like "...32.8Z" are equally rejected. Keep this next to the only writer.
     """
     if moment.tzinfo is None:
@@ -225,7 +225,7 @@ def _verify_staged_generation(policy_object: Path, token: str, policy_sha1: str,
     """Re-read a staged generation's policy object and its mirror line and prove both are strictly valid before any client can see them.
 
     A malformed staged generation (non-canonical timestamp, mismatched content token, or ledger digest drift) stays
-    invisible until a client storage validation reads it — potentially minutes and hundreds of steps later, on a
+    invisible until a client storage validation reads it - potentially minutes and hundreds of steps later, on a
     random shard. Fail here instead, where the cause is obvious.
     """
     try:
@@ -385,18 +385,24 @@ def _v_stage_modpack(ctx: Context, step):
     host = ctx.server_host or "127.0.0.1"
     addr = host if ":" in host else f"{host}:25565"
     cfg = {
-        "DO_NOT_CHANGE_IT": 3,
-        "selectedModpackId": modpack_id,
         "updateSelectedModpackOnLaunch": False,
     }
     cfg.update(ctx.resolve(step.get("config", {}) or {}))
+    follow_id = cfg.pop("selectedModpackId", modpack_id)
+    cfg.pop("DO_NOT_CHANGE_IT", None)
     automodpack.mkdir(parents=True, exist_ok=True)
-    (automodpack / "client-config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    client_root.mkdir(parents=True, exist_ok=True)
+    (client_root / "selected.json").write_text(json.dumps({"modpackId": follow_id}) + "\n", encoding="utf-8")
+    launch_update = cfg.pop("updateSelectedModpackOnLaunch", False)
+    (automodpack / "client.conf").write_text(
+        f"update-selected-modpack-on-launch: {'true' if launch_update else 'false'}\n",
+        encoding="utf-8",
+    )
 
     # The offline fallback that explicitly enables launch updates still needs the
     # current production connection-store record. It is deliberately created only
     # for that path; ordinary offline staging and recordOnly staging stay local.
-    if cfg["updateSelectedModpackOnLaunch"]:
+    if launch_update:
         connection_path = data_root / "packs" / modpack_id / "connection.json"
         connection_path.parent.mkdir(parents=True, exist_ok=True)
         connection_path.write_text(
