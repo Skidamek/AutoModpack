@@ -164,7 +164,7 @@ final class ClientUpdatePlanBuilder {
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, input.target(), files, forceCopyServices, targetMods, standardMods,
 				previousCopies, nestedCandidates, selection, plannedConfig, input.consentedLocalModFiles())).withPlannedSelectedModpackId(input.target().modpackId);
-		return new PreparedPlan(withSwitchConsequences(plan, input.target(), logicalConfig.syncLoaderVersion), files, targetOverlay.digest(), expectedClientConfig, expectedSelectedModpackId);
+		return new PreparedPlan(withSwitchConsequences(plan, input.target(), logicalConfig.syncVersions), files, targetOverlay.digest(), expectedClientConfig, expectedSelectedModpackId);
 	}
 
 	/** Refuses a pack this client cannot run, plans the launcher-metadata switch (with its restart demand) when it can, and marks the manual switches. */

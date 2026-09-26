@@ -18,8 +18,8 @@ public class ClientConfigJsons {
 		public boolean selfUpdater = false;
 		@SerializedName("sync-auto-modpack-version")
 		public boolean syncAutoModpackVersion = true;
-		@SerializedName("sync-loader-version")
-		public boolean syncLoaderVersion = true;
+		@SerializedName(value = "sync-versions", alternate = {"sync-loader-version", "syncLoaderVersion"})
+		public boolean syncVersions = true;
 		@SerializedName("play-music")
 		public boolean playMusic = true;
 		@SerializedName("show-modpack-settings-button")
@@ -34,7 +34,7 @@ public class ClientConfigJsons {
 			this.updateSelectedModpackOnLaunch = source.updateSelectedModpackOnLaunch;
 			this.selfUpdater = source.selfUpdater;
 			this.syncAutoModpackVersion = source.syncAutoModpackVersion;
-			this.syncLoaderVersion = source.syncLoaderVersion;
+			this.syncVersions = source.syncVersions;
 			this.playMusic = source.playMusic;
 			this.showModpackSettingsButton = source.showModpackSettingsButton;
 			this.pinnedModIds = new ArrayList<>(PinnedMods.normalize(source.pinnedModIds));
@@ -61,7 +61,7 @@ public class ClientConfigJsons {
 				rebased.updateSelectedModpackOnLaunch = planned.updateSelectedModpackOnLaunch;
 			if (selfUpdater == expected.selfUpdater) rebased.selfUpdater = planned.selfUpdater;
 			if (syncAutoModpackVersion == expected.syncAutoModpackVersion) rebased.syncAutoModpackVersion = planned.syncAutoModpackVersion;
-			if (syncLoaderVersion == expected.syncLoaderVersion) rebased.syncLoaderVersion = planned.syncLoaderVersion;
+			if (syncVersions == expected.syncVersions) rebased.syncVersions = planned.syncVersions;
 			if (playMusic == expected.playMusic) rebased.playMusic = planned.playMusic;
 			if (showModpackSettingsButton == expected.showModpackSettingsButton) rebased.showModpackSettingsButton = planned.showModpackSettingsButton;
 			if (Objects.equals(PinnedMods.normalize(pinnedModIds), PinnedMods.normalize(expected.pinnedModIds)))
@@ -74,20 +74,20 @@ public class ClientConfigJsons {
 			if (this == object) return true;
 			if (!(object instanceof ClientConfigFieldsV3 other)) return false;
 			return updateSelectedModpackOnLaunch == other.updateSelectedModpackOnLaunch && selfUpdater == other.selfUpdater
-					&& syncAutoModpackVersion == other.syncAutoModpackVersion && syncLoaderVersion == other.syncLoaderVersion && playMusic == other.playMusic
+					&& syncAutoModpackVersion == other.syncAutoModpackVersion && syncVersions == other.syncVersions && playMusic == other.playMusic
 					&& showModpackSettingsButton == other.showModpackSettingsButton
 					&& Objects.equals(PinnedMods.normalize(pinnedModIds), PinnedMods.normalize(other.pinnedModIds));
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(updateSelectedModpackOnLaunch, selfUpdater, syncAutoModpackVersion, syncLoaderVersion, playMusic, showModpackSettingsButton, PinnedMods.normalize(pinnedModIds));
+			return Objects.hash(updateSelectedModpackOnLaunch, selfUpdater, syncAutoModpackVersion, syncVersions, playMusic, showModpackSettingsButton, PinnedMods.normalize(pinnedModIds));
 		}
 
 		@Override
 		public String toString() {
 			return "ClientConfigFieldsV3[updateSelectedModpackOnLaunch=" + updateSelectedModpackOnLaunch + ", selfUpdater=" + selfUpdater
-					+ ", syncAutoModpackVersion=" + syncAutoModpackVersion + ", syncLoaderVersion=" + syncLoaderVersion + ", playMusic=" + playMusic
+					+ ", syncAutoModpackVersion=" + syncAutoModpackVersion + ", syncVersions=" + syncVersions + ", playMusic=" + playMusic
 					+ ", showModpackSettingsButton=" + showModpackSettingsButton + ", pinnedModIds=" + PinnedMods.normalize(pinnedModIds) + "]";
 		}
 	}

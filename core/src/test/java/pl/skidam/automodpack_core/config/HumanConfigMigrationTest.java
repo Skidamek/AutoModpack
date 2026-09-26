@@ -98,7 +98,7 @@ class HumanConfigMigrationTest {
 		assertFalse(config.updateSelectedModpackOnLaunch);
 		assertTrue(config.selfUpdater);
 		assertFalse(config.syncAutoModpackVersion);
-		assertFalse(config.syncLoaderVersion);
+		assertFalse(config.syncVersions);
 		assertFalse(config.playMusic);
 		assertTrue(Files.isRegularFile(conf));
 		assertTrue(Files.isRegularFile(dir.resolve("automodpack-client.json.backup")));

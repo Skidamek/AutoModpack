@@ -33,7 +33,7 @@ public final class HumanConfigMigration {
 		copyBoolean(json, config, "updateSelectedModpackOnLaunch", "update-selected-modpack-on-launch");
 		copyBoolean(json, config, "selfUpdater", "self-updater");
 		copyBoolean(json, config, "syncAutoModpackVersion", "sync-auto-modpack-version");
-		copyBoolean(json, config, "syncLoaderVersion", "sync-loader-version");
+		copyBoolean(json, config, "syncLoaderVersion", "sync-loader-version", "sync-versions");
 		copyBoolean(json, config, "playMusic", "play-music");
 		copyBoolean(json, config, "showModpackSettingsButton", "show-modpack-settings-button");
 		List<String> pins = stringList(first(json, "pinnedModIds", "pinned-mod-ids"));
@@ -218,15 +218,15 @@ public final class HumanConfigMigration {
 		}
 	}
 
-	private static void copyBoolean(JsonObject json, ClientConfigJsons.ClientConfigFieldsV3 config, String camel, String kebab) {
-		JsonElement element = first(json, camel, kebab);
+	private static void copyBoolean(JsonObject json, ClientConfigJsons.ClientConfigFieldsV3 config, String... names) {
+		JsonElement element = first(json, names);
 		if (element == null || !element.isJsonPrimitive()) return;
 		boolean value = element.getAsBoolean();
-		switch (camel) {
+		switch (names[0]) {
 			case "updateSelectedModpackOnLaunch" -> config.updateSelectedModpackOnLaunch = value;
 			case "selfUpdater" -> config.selfUpdater = value;
 			case "syncAutoModpackVersion" -> config.syncAutoModpackVersion = value;
-			case "syncLoaderVersion" -> config.syncLoaderVersion = value;
+			case "syncLoaderVersion" -> config.syncVersions = value;
 			case "playMusic" -> config.playMusic = value;
 			case "showModpackSettingsButton" -> config.showModpackSettingsButton = value;
 			default -> {

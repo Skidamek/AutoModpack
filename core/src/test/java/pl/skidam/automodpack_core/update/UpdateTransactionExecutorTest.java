@@ -477,7 +477,7 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.PROJECTION, "mods/pending-selection.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/pending-selection.jar", true, hash, bytes.length)));
 		UpdateTransaction transaction = createTransaction(storage, plan, target);
-		transaction.plan().plannedClientConfig().syncLoaderVersion = false;
+		transaction.plan().plannedClientConfig().syncVersions = false;
 		ClientConfigJsons.ClientConfigFieldsV3 current = new ClientConfigJsons.ClientConfigFieldsV3();
 		transaction.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(current);
 		current.playMusic = false;
@@ -485,7 +485,7 @@ class UpdateTransactionExecutorTest {
 		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
 
 		assertEquals(target.manifest().modpackId(), ClientProjectionView.open(storage).logicalSelectedModpackId());
-		assertFalse(ClientProjectionView.open(storage).logicalConfig(current).syncLoaderVersion);
+		assertFalse(ClientProjectionView.open(storage).logicalConfig(current).syncVersions);
 		assertFalse(ClientProjectionView.open(storage).logicalConfig(current).playMusic);
 	}
 

@@ -142,4 +142,23 @@ class ReconfConfigsTest {
 		assertFalse(text.contains("\nadvertise-versions-to-sync:"), "ensure re-materialized a user-disabled key:\n" + text);
 		assertTrue(text.contains("# advertise-versions-to-sync: false"), "tombstone disturbed:\n" + text);
 	}
+
+	@Test
+	void colonLessObjectMembersParse() throws IOException {
+		String text = """
+				modpack-host: true
+				modpack {
+				  name: "Pack"
+				  General {
+				    main {
+				      from-server: [mods/*.jar]
+				    }
+				  }
+				}
+				""";
+		Files.writeString(serverConfig(), text, StandardCharsets.UTF_8);
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		assertEquals("Pack", config.modpack.name);
+		assertEquals(Set.of("mods/*.jar"), config.modpack.categories.get("General").get("main").fromServer);
+	}
 }

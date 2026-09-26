@@ -11,7 +11,7 @@ The file uses a small subset of HOCON: comments (`#`), `key: value` options, inl
 | `update-selected-modpack-on-launch` | `true` | Fetches and applies the selected pack during launch, before the game loads it. When false, launch loads the current state and contacts the server only when you join. See [client updates](../how-it-works/client-updates). |
 | `self-updater` | `false` | Checks Modrinth on its own for AutoModpack updates. Turning this off does not affect modpack installs. |
 | `sync-auto-modpack-version` | `true` | Matches the AutoModpack version the server runs, updating or downgrading from Modrinth as needed. |
-| `sync-loader-version` | `true` | Lets AutoModpack switch the launcher instance to the versions the server publishes (loader version, and on a pack switch also the game version and loader type). Applies on Prism, MultiMC forks, and Pandora; see [launcher compatibility](../compatibility/launchers#version-sync-and-switching). |
+| `sync-versions` | `true` | Lets AutoModpack switch the launcher instance to the versions the server publishes (loader, loader version, and Minecraft version). Applies on Prism, MultiMC forks, and Pandora; see [launcher compatibility](../compatibility/launchers#version-sync-and-switching). |
 | `play-music` | `true` | Plays music while a download runs in-game. |
 | `show-modpack-settings-button` | `true` | Shows the "Modpacks" button on the multiplayer screen. It opens the installed-pack list, where players manage the pack and pick optional [groups](server-config#groups). |
 | `pinned-mod-ids` | `[]` | Mod ids this instance always loads from its own `mods` folder. See below. |
