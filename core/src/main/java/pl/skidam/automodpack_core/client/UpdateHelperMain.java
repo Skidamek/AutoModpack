@@ -22,6 +22,7 @@ import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.SelfUpdateSwap;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.JarUtils;
@@ -86,7 +87,7 @@ public final class UpdateHelperMain {
 				try {
 					if (!waitForGameExit(parentPid)) return 1;
 
-					UpdateTransactionExecutor executor = UpdateTransactionSupport.executor();
+					UpdateTransactionExecutor executor = UpdateTransactionSupport.executor(ClientStorage.open(gameDirectory));
 					long backoff = UpdateRecovery.INITIAL_BACKOFF_MILLIS;
 					for (int attempt = 1;; attempt++) {
 						boolean selfUpdateRecovered = recoverSelfUpdate(gameDirectory, dataLocation);

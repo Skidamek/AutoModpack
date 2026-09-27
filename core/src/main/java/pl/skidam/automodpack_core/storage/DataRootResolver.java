@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.DurableFiles;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
@@ -93,8 +94,10 @@ public final class DataRootResolver {
 	/**
 	 * Resolves the one AutoModpack data root for an instance: the content-addressed bytes, their coordination state,
 	 * and the host trust. Dedicated servers own their cache at {@code automodpack/server/data}; every other process
-	 * shares the platform data root, so instances on one machine reuse downloaded bytes; an explicit
-	 * {@code AUTOMODPACK_DATA_ROOT} always wins. The instance's own answer to "what is installed here" never lives here.
+	 * shares the platform data root when it sits on the instance's own volume, so instances on one machine reuse
+	 * downloaded bytes at hard-link speed, while an instance on another volume gets its own instance-local root,
+	 * because nothing can be hard-linked across volumes anyway. An explicit {@code AUTOMODPACK_DATA_ROOT} always
+	 * wins. The instance's own answer to "what is installed here" never lives here.
 	 */
 	public static Location resolve(Path gameDirectory, LoaderManagerService.EnvironmentType environment) {
 		Path requestedRoot = Objects.requireNonNull(gameDirectory, "game directory").toAbsolutePath().normalize();
@@ -102,7 +105,7 @@ public final class DataRootResolver {
 			Path gameRoot = canonicalGameRoot(requestedRoot);
 			Path automodpackDirectory = gameRoot.resolve(StoragePaths.AUTOMODPACK_DIR).normalize();
 			createLocalDataDirectory(gameRoot, automodpackDirectory);
-			Path root = selectRoot(gameRoot, environment);
+			Path root = selectRoot(gameRoot, automodpackDirectory, environment);
 			String localFailure = probe(root);
 			if (localFailure != null) throw new IOException("AutoModpack data storage is not writable: " + localFailure);
 			return new Location(root, computeOwnerIdentity(gameRoot), gameRoot);
@@ -153,7 +156,7 @@ public final class DataRootResolver {
 		if (!gameRoot.equals(realDirectory.getParent())) throw new IOException("AutoModpack data directory resolves outside the game directory: " + directory);
 	}
 
-	private static Path selectRoot(Path gameRoot, LoaderManagerService.EnvironmentType environment) throws IOException {
+	private static Path selectRoot(Path gameRoot, Path automodpackDirectory, LoaderManagerService.EnvironmentType environment) throws IOException {
 		Path configured = configuredRoot(gameRoot);
 		if (configured != null) {
 			String failure = probe(configured);
@@ -168,12 +171,13 @@ public final class DataRootResolver {
 		}
 		Path sharedRoot = platformDataRoot();
 		String sharedFailure = probe(sharedRoot);
-		if (sharedFailure == null) {
+		if (sharedFailure == null && FileTrees.hardLinkSupported(sharedRoot, automodpackDirectory)) {
 			logRootOnce("AutoModpack shared data root: {}", sharedRoot);
 			return sharedRoot;
 		}
 		Path clientRoot = gameRoot.resolve(StoragePaths.CLIENT_DATA_DIR).normalize();
-		LOGGER.warn("Shared AutoModpack data root {} is unusable ({}); falling back to instance-local {}", sharedRoot, sharedFailure, clientRoot);
+		if (sharedFailure != null) LOGGER.warn("Shared AutoModpack data root {} is unusable ({}); falling back to instance-local {}", sharedRoot, sharedFailure, clientRoot);
+		else LOGGER.info("Shared AutoModpack data root {} is on another volume than the instance; using the instance-local data root {} so installs can hard-link", sharedRoot, clientRoot);
 		return clientRoot;
 	}
 

@@ -142,7 +142,7 @@ public final class ClientLaunch {
 		try {
 			new ModpackUpdater(connectionInfo, secret, storage).loadModpack();
 		} catch (MissingGenerationContentException e) {
-			forgetUnresolvableModpack(e);
+			forgetUnresolvableModpack(storage, e);
 		}
 	}
 
@@ -151,7 +151,7 @@ public final class ClientLaunch {
 	 * cannot load this boot. Retire the pointer as evidence and continue without the modpack; joining the server again
 	 * reinstalls it, and the planner repairs the stale instance files as drifted live state.
 	 */
-	private void forgetUnresolvableModpack(MissingGenerationContentException e) throws IOException {
+	static void forgetUnresolvableModpack(ClientStorage storage, MissingGenerationContentException e) throws IOException {
 		DurableFiles.setAside(storage.stateFile(), "Client active state", e);
 		LOGGER.warn(
 				"The installed modpack's records are missing from the shared data root: it was deleted, moved, or the drive is not mounted. Starting without the modpack; join the server again to reinstall it. The old pointer was saved aside next to the state file as evidence.",
@@ -170,7 +170,7 @@ public final class ClientLaunch {
 		try {
 			target = new ClientGenerationStore(storage).readActiveTarget().orElse(null);
 		} catch (MissingGenerationContentException e) {
-			forgetUnresolvableModpack(e);
+			forgetUnresolvableModpack(storage, e);
 			return;
 		}
 		if (target == null) {

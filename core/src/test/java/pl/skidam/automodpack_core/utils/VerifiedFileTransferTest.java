@@ -153,6 +153,21 @@ class VerifiedFileTransferTest {
 		assertTrue(FileIntegrity.matches(target, size, hash));
 	}
 
+	@Test
+	void aLinkFallbackCopyOfAProtectedSourceComesOutOwnerWritable() throws IOException {
+		Path object = Files.writeString(tempDir.resolve("object"), "protected-bytes", StandardCharsets.UTF_8);
+		String hash = HashUtils.getHash(object);
+		long size = Files.size(object);
+		ImmutableFiles.protect(object);
+		Path temporary = tempDir.resolve(".object.123.tmp");
+		try (FileCache cache = FileCache.open(tempDir.resolve("file-cache"))) {
+			cache.overwriteCache(object, hash);
+			VerifiedFileTransfer.copyNamedOrHashed(object, temporary, size, hash, cache);
+			assertTrue(Files.isWritable(temporary), "the link fallback's copy is reopened for the force sync, so it must come out writable");
+			assertTrue(FileIntegrity.matches(temporary, size, hash));
+		}
+	}
+
 	private static Path differentFileStoreDirectory(Path targetRoot) throws IOException {
 		FileStore targetStore = Files.getFileStore(targetRoot);
 		for (Path candidate : List.of(Path.of(System.getProperty("user.home")), Path.of("/dev/shm"), Path.of("/tmp"))) {

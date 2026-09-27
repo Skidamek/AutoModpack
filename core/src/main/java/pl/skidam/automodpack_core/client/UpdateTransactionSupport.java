@@ -6,7 +6,6 @@ import java.util.Set;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.launchers.LauncherVersionSwapper;
-import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
@@ -15,19 +14,11 @@ import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 public final class UpdateTransactionSupport {
 	private UpdateTransactionSupport() {}
 
-	public static ClientStorage storage() {
-		return ClientStorage.open(GameDirectory.current());
-	}
-
 	/**
-	 * The executor for a booted client or server process and for the detached helper alike: the planned switch axes
-	 * ride the transaction's restart reasons, so no client session state is needed to apply the launcher metadata.
+	 * The executor against one storage root: the caller names the root its plan was built against, so every executor
+	 * mutation lands there. The planned switch axes ride the transaction's restart reasons, so no client session
+	 * state is needed to apply the launcher metadata.
 	 */
-	public static UpdateTransactionExecutor executor() {
-		return executor(storage());
-	}
-
-	/** The production wiring against the caller's own storage, so every executor mutation lands on one root. */
 	public static UpdateTransactionExecutor executor(ClientStorage storage) {
 		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(storage, (transaction, manifest) -> applyLauncherMetadata(transaction, manifest)));
 	}

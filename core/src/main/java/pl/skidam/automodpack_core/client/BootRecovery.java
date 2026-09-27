@@ -92,8 +92,14 @@ public final class BootRecovery {
 			finishPendingRecovery(execution, transaction);
 		} catch (UpdateReplanRequiredException e) {
 			finishPendingRecovery(new UpdateTransactionExecutor.Execution(UpdateTransaction.Status.REPLAN_REQUIRED, transaction, null, e.changedPath(), e.getMessage(), null), transaction);
+		} catch (UpdateDeferredException e) {
+			// The deferred restart owns this transaction now: ReLauncher exits the process in every preload path, so
+			// reaching this arm means that contract broke. Rethrow rather than let the quarantine below undo a
+			// handoff the deferred path intentionally kept.
+			throw e;
 		} catch (IOException | RuntimeException e) {
 			// Retiring a mid-apply journal without restoring the last good tree would let the next boot sweep backup/, the only full copy of it.
+			// A detached helper from a deferred restart may still be retrying; the aside makes its next attempt see nothing pending, so the race converges.
 			UpdateTransactionSupport.executor(storage).revertUnfinalizedPublication(transaction);
 			DurableFiles.setAside(storage.transactionFile(), "Persisted update transaction", e);
 		}

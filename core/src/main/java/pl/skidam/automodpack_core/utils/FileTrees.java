@@ -52,6 +52,34 @@ public final class FileTrees {
 		}
 	}
 
+	/**
+	 * Whether a file in {@code sourceDirectory} can be hard-linked into {@code targetDirectory}: one filesystem, both permitting links. Links a temp file and removes it; the per-operation link attempt stays the
+	 * authority.
+	 */
+	public static boolean hardLinkSupported(Path sourceDirectory, Path targetDirectory) throws IOException {
+		Path probe;
+		try {
+			probe = Files.createTempFile(sourceDirectory, ".hardlink-probe-", DurableFiles.TEMPORARY_SUFFIX);
+		} catch (IOException | RuntimeException e) {
+			return false;
+		}
+		Path link = targetDirectory.resolve(probe.getFileName() + ".link");
+		try {
+			Files.createLink(link, probe);
+			return true;
+		} catch (UnsupportedOperationException | IOException e) {
+			return false;
+		} finally {
+			try {
+				ImmutableFiles.deleteIfExists(link);
+				ImmutableFiles.deleteIfExists(probe);
+			} catch (IOException cleanupFailure) {
+				// The probe is disposable and carries the swept temporary suffix; a failed cleanup must not turn a
+				// should-fallback answer into a boot failure.
+			}
+		}
+	}
+
 	/** Creates a managed directory and rejects symbolic-link aliases. */
 	public static void createManagedDirectory(Path directory, String description) throws IOException {
 		if (Files.isSymbolicLink(directory)) throw new IOException("Managed " + description + " cannot be a symbolic link: " + directory);

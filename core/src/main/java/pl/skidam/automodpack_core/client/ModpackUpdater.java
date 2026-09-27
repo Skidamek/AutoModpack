@@ -37,6 +37,7 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.MissingGenerationContentException;
 import pl.skidam.automodpack_core.update.RestartDemand;
 import pl.skidam.automodpack_core.update.RestartPolicy;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
@@ -581,9 +582,9 @@ public class ModpackUpdater implements AutoCloseable {
 
 	/**
 	 * The reviewed apply harness owning the shared tails of every flow once: a deferred transaction warns with the
-	 * flow's name and takes the flow's deferred restart, a failure goes to the flow's failure handling, and every
-	 * exit closes through the flow's close handling. The body is the flow's own steps; the harness absorbs none of
-	 * its decisions.
+	 * flow's name and takes the flow's deferred restart, missing generation content forgets the pack through the shared
+	 * boot recovery instead of a flow failure, a failure goes to the flow's failure handling, and every exit closes
+	 * through the flow's close handling. The body is the flow's own steps; the harness absorbs none of its decisions.
 	 */
 	private ApplyStatus runReviewedFlow(ApplyFlow flow, FlowBody body) {
 		try {
@@ -595,6 +596,15 @@ public class ModpackUpdater implements AutoCloseable {
 			deferToHelper();
 			flow.deferredRestart().run();
 			return ApplyStatus.DEFERRED;
+		} catch (MissingGenerationContentException e) {
+			try {
+				ClientLaunch.forgetUnresolvableModpack(storage, e);
+				return ApplyStatus.APPLIED;
+			} catch (IOException recoveryFailure) {
+				recoveryFailure.addSuppressed(e);
+				flow.failed().accept(recoveryFailure);
+				return ApplyStatus.FAILED;
+			}
 		} catch (Exception e) {
 			flow.failed().accept(e);
 			return ApplyStatus.FAILED;

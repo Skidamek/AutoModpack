@@ -38,6 +38,8 @@ class BootRecoveryStaleReviewTest {
 
 	@Test
 	void aPendingUpdateWhoseReviewedGroupsChangedRevertsInsteadOfCrashingTheBoot(@TempDir Path temp) throws Exception {
+		ModpackLoaderService previousLoader = Constants.MODPACK_LOADER;
+		String previousLoaderId = Constants.LOADER;
 		if (Constants.MODPACK_LOADER == null) {
 			Constants.MODPACK_LOADER = new ModpackLoaderService() {
 				@Override
@@ -45,29 +47,34 @@ class BootRecoveryStaleReviewTest {
 			};
 			Constants.LOADER = "fabric";
 		}
-		ClientStorage storage = TestDataRoot.open(temp.resolve("game"), temp.resolve("data"));
-		GroupManifest manifest = TestPacks.manifest("test pack", "config/a.txt", "hello");
-		String modpackId = manifest.modpackId();
-		TestPacks.stageGeneration(storage, TestPacks.document(manifest));
-		SelectionIntent selected = new SelectionIntent(Set.of("main"));
-		new ClientSelectionStore(storage.selectionFile()).compareAndSet(modpackId, null, selected);
-		SelectedModpackTarget target = SelectedModpackTarget.prepare(TestPacks.document(manifest), selected, selected, ClientPlatform.LINUX);
-		String hash = HashUtils.sha1("hello".getBytes(StandardCharsets.UTF_8));
-		UpdatePlan plan = new UpdatePlan(modpackId, target.packTarget(), List.of(
-				new UpdatePlan.Operation(UpdatePlan.Root.PROJECTION, "config/a.txt", UpdatePlan.OperationType.INSTALL_OBJECT, hash, 5L, null)),
-				List.of(new UpdatePlan.ProjectedFile(UpdatePlan.Root.PROJECTION, "config/a.txt", true, hash, 5L)),
-				new ClientConfigJsons.ClientConfigFieldsV3(), modpackId, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
-		ClientConfigJsons.ClientConfigFieldsV3 expectedConfig = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
-				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
-		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTransaction.create(plan, target, storage.overlayDigest(modpackId), new PlannedAgainst(expectedConfig, "", null)));
+		try {
+			ClientStorage storage = TestDataRoot.open(temp.resolve("game"), temp.resolve("data"));
+			GroupManifest manifest = TestPacks.manifest("test pack", "config/a.txt", "hello");
+			String modpackId = manifest.modpackId();
+			TestPacks.stageGeneration(storage, TestPacks.document(manifest));
+			SelectionIntent selected = new SelectionIntent(Set.of("main"));
+			new ClientSelectionStore(storage.selectionFile()).compareAndSet(modpackId, null, selected);
+			SelectedModpackTarget target = SelectedModpackTarget.prepare(TestPacks.document(manifest), selected, selected, ClientPlatform.LINUX);
+			String hash = HashUtils.sha1("hello".getBytes(StandardCharsets.UTF_8));
+			UpdatePlan plan = new UpdatePlan(modpackId, target.packTarget(), List.of(
+					new UpdatePlan.Operation(UpdatePlan.Root.PROJECTION, "config/a.txt", UpdatePlan.OperationType.INSTALL_OBJECT, hash, 5L, null)),
+					List.of(new UpdatePlan.ProjectedFile(UpdatePlan.Root.PROJECTION, "config/a.txt", true, hash, 5L)),
+					new ClientConfigJsons.ClientConfigFieldsV3(), modpackId, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
+			ClientConfigJsons.ClientConfigFieldsV3 expectedConfig = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+					.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
+			ConfigTools.writeAtomic(storage.transactionFile(), UpdateTransaction.create(plan, target, storage.overlayDigest(modpackId), new PlannedAgainst(expectedConfig, "", null)));
 
-		new ClientSelectionStore(storage.selectionFile()).remove(modpackId, selected);
-		BootRecovery.BootDecision decision = new BootRecovery(storage).recover();
+			new ClientSelectionStore(storage.selectionFile()).remove(modpackId, selected);
+			BootRecovery.BootDecision decision = new BootRecovery(storage).recover();
 
-		assertTrue(decision.rolledBackStuckUpdate());
-		assertFalse(Files.exists(storage.transactionFile()));
-		try (Stream<Path> files = Files.list(storage.clientDirectory())) {
-			assertTrue(files.anyMatch(path -> path.getFileName().toString().startsWith("update-transaction.stuck-")));
+			assertTrue(decision.rolledBackStuckUpdate());
+			assertFalse(Files.exists(storage.transactionFile()));
+			try (Stream<Path> files = Files.list(storage.clientDirectory())) {
+				assertTrue(files.anyMatch(path -> path.getFileName().toString().startsWith("update-transaction.stuck-")));
+			}
+		} finally {
+			Constants.MODPACK_LOADER = previousLoader;
+			Constants.LOADER = previousLoaderId;
 		}
 	}
 }

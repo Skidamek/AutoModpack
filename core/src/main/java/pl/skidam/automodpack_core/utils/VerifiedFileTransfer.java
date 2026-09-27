@@ -186,7 +186,6 @@ public final class VerifiedFileTransfer {
 		boolean valid = false;
 		try {
 			copyNamedOrHashed(sourceFile, temporary, expectedSize, expectedSha1, cache);
-			ImmutableFiles.allowOwnerWrite(temporary);
 			FileTrees.forceFile(temporary);
 			valid = true;
 			return temporary;
@@ -195,13 +194,18 @@ public final class VerifiedFileTransfer {
 		}
 	}
 
-	private static void copyNamedOrHashed(Path sourceFile, Path temporary, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
+	/**
+	 * Copies a verified source into the caller's private temporary. The result is always owner-writable whatever the source's mode: a copied store object inherits the source's mode, and the caller force-syncs what it
+	 * receives.
+	 */
+	static void copyNamedOrHashed(Path sourceFile, Path temporary, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
 		if (namedSource(sourceFile, expectedSize, expectedSha1, cache)) {
 			Files.copy(sourceFile, temporary, StandardCopyOption.REPLACE_EXISTING);
 			if (Files.size(temporary) != expectedSize) throw new IOException("Copied file failed size verification: " + temporary);
-			return;
+		} else {
+			String copied = HashUtils.copyAndSha1(sourceFile, temporary);
+			if (Files.size(temporary) != expectedSize || !expectedSha1.equalsIgnoreCase(copied)) throw new IOException("Copied file failed size/SHA-1 verification: " + temporary);
 		}
-		String copied = HashUtils.copyAndSha1(sourceFile, temporary);
-		if (Files.size(temporary) != expectedSize || !expectedSha1.equalsIgnoreCase(copied)) throw new IOException("Copied file failed size/SHA-1 verification: " + temporary);
+		ImmutableFiles.allowOwnerWrite(temporary);
 	}
 }

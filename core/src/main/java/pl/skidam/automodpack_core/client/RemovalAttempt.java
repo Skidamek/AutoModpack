@@ -79,7 +79,7 @@ final class RemovalAttempt implements UpdateAttempt {
 		review.beginExecution();
 		boolean remove = kind == Kind.REMOVAL;
 		UpdatePreview applied = removalPreview(prepared, remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION);
-		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transactionOf(prepared, kind, storage.overlayDigest(prepared.installed().modpackId)));
+		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(storage).commit(transactionOf(prepared, kind, storage.overlayDigest(prepared.installed().modpackId)));
 		if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
 		if (!execution.success()) throw new IOException(remove ? "Modpack removal did not complete" : "Modpack deactivation did not complete");
 		review.complete();
@@ -103,7 +103,7 @@ final class RemovalAttempt implements UpdateAttempt {
 		UpdateTransaction transaction = transactionOf(preparation, kind, storage.overlayDigest(preparation.installed().modpackId));
 		if (!ReviewedUpdatePlan.outcomeCompatible(pending.plan(), preparation.plan()))
 			throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending removal outcome; a new review is required");
-		return UpdateTransactionSupport.executor().commit(transaction);
+		return UpdateTransactionSupport.executor(storage).commit(transaction);
 	}
 
 	private static UpdateTransaction transactionOf(ClientUpdatePlanBuilder.RemovalPreparation preparation, Kind kind, String overlayDigest) {

@@ -205,7 +205,7 @@ final class UpdateSession implements UpdateAttempt {
 		recordChangelogs(prepared());
 		review().beginExecution();
 		AtomicReference<ClientUpdatePlanBuilder.PreparedPlan> applied = new AtomicReference<>(prepared());
-		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commitWithReplan(
+		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(storage).commitWithReplan(
 				() -> commitPlanObjects(applied.get()),
 				failedExecution -> {
 					ClientUpdatePlanBuilder.PreparedPlan replanned = replanFromMutableInputs(applied.get(), failedExecution);
@@ -273,7 +273,7 @@ final class UpdateSession implements UpdateAttempt {
 			planBuilder.preparePlanObjects(prepared.plan(), target.flatTarget(), ClientProjectionView.observe(storage), cache);
 			UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.plannedAgainst());
 			transaction.stateKind = stateKind == null ? "" : stateKind.name();
-			return UpdateTransactionSupport.executor().commit(transaction, target);
+			return UpdateTransactionSupport.executor(storage).commit(transaction, target);
 		}
 	}
 
