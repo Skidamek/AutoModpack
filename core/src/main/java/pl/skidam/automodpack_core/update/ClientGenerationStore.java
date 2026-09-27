@@ -198,7 +198,7 @@ public final class ClientGenerationStore {
 	public GroupManifest policyDocument(String policySha1) throws IOException {
 		String hash = ClientObjectStore.normalizeHash(policySha1);
 		Path object = storage.objectFile(hash);
-		if (!Files.exists(object, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client policy document is missing: " + hash);
+		if (!Files.exists(object, LinkOption.NOFOLLOW_LINKS)) throw new MissingGenerationContentException("Client policy document is missing: " + hash);
 		if (Files.isSymbolicLink(object) || !Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client policy document is not a regular file: " + object);
 		try {
 			ModpackJsons.CompleteModpackContentFields fields = ConfigTools.read(object, ModpackJsons.CompleteModpackContentFields.class)

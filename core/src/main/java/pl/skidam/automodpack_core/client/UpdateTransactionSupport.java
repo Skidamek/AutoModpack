@@ -24,7 +24,11 @@ public final class UpdateTransactionSupport {
 	 * ride the transaction's restart reasons, so no client session state is needed to apply the launcher metadata.
 	 */
 	public static UpdateTransactionExecutor executor() {
-		ClientStorage storage = storage();
+		return executor(storage());
+	}
+
+	/** The production wiring against the caller's own storage, so every executor mutation lands on one root. */
+	public static UpdateTransactionExecutor executor(ClientStorage storage) {
 		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(storage, (transaction, manifest) -> applyLauncherMetadata(transaction, manifest)));
 	}
 

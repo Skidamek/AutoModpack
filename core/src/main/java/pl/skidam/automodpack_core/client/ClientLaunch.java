@@ -19,7 +19,9 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.MissingGenerationContentException;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.DurableFiles;
 
 /**
  * After pending recovery, how this client boot starts the selected pack: load the local projection,
@@ -137,7 +139,23 @@ public final class ClientLaunch {
 
 	private void loadLocalModpack(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean projectionActive) throws Exception {
 		if (!projectionActive) return;
-		new ModpackUpdater(connectionInfo, secret, storage).loadModpack();
+		try {
+			new ModpackUpdater(connectionInfo, secret, storage).loadModpack();
+		} catch (MissingGenerationContentException e) {
+			forgetUnresolvableModpack(e);
+		}
+	}
+
+	/**
+	 * The pointer is fine but its generation content is gone (data root deleted, moved, or not mounted), so the pack
+	 * cannot load this boot. Retire the pointer as evidence and continue without the modpack; joining the server again
+	 * reinstalls it, and the planner repairs the stale instance files as drifted live state.
+	 */
+	private void forgetUnresolvableModpack(MissingGenerationContentException e) throws IOException {
+		DurableFiles.setAside(storage.stateFile(), "Client active state", e);
+		LOGGER.warn(
+				"The installed modpack's records are missing from the shared data root: it was deleted, moved, or the drive is not mounted. Starting without the modpack; join the server again to reinstall it. The old pointer was saved aside next to the state file as evidence.",
+				e);
 	}
 
 	/**
@@ -148,7 +166,13 @@ public final class ClientLaunch {
 	 */
 	private void reconcileStoredTarget(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) throws Exception {
 		if (!hasActiveProjection()) return;
-		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget().orElse(null);
+		SelectedModpackTarget target;
+		try {
+			target = new ClientGenerationStore(storage).readActiveTarget().orElse(null);
+		} catch (MissingGenerationContentException e) {
+			forgetUnresolvableModpack(e);
+			return;
+		}
 		if (target == null) {
 			loadLocalModpack(connectionInfo, secret, true);
 			return;

@@ -75,10 +75,19 @@ public final class UpdateRecovery {
 				return new RecoveryAttempt(execution, deferred, false);
 			}
 		}
+		if (execution.replanRequired()) {
+			// The pending plan no longer means what the player approved, and no restart can re-approve it - only the
+			// next sync's fresh review can - so the revert is immediate instead of deferred-restart counted.
+			Path stuckJournal = UpdateTransactionSupport.executor(storage).abandonStuckPublication(deferred);
+			clearDeferredGuard(storage);
+			LOGGER.error("The pending update {} needs a fresh review a restart cannot give ({}); kept the last finalized generation and retired the transaction to {}", deferred.transactionId,
+					execution.message(), stuckJournal.toAbsolutePath().normalize());
+			return new RecoveryAttempt(execution, deferred, true);
+		}
 		UpdateLoopDetector.Outcome loop = deferredGuard(storage).evaluateAndRecord(deferred.transactionId);
 		logDeferredRecovery(storage, deferred, execution, loop);
 		if (loop.decision() == UpdateLoopDetector.Decision.SUPPRESS) {
-			Path stuckJournal = UpdateTransactionSupport.executor().abandonStuckPublication(deferred);
+			Path stuckJournal = UpdateTransactionSupport.executor(storage).abandonStuckPublication(deferred);
 			clearDeferredGuard(storage);
 			LOGGER.error("The same update transaction {} failed after {} deferred restarts; kept the last finalized generation and retired the transaction to {}", deferred.transactionId,
 					loop.restarts(), stuckJournal.toAbsolutePath().normalize());

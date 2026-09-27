@@ -168,6 +168,23 @@ public final class UpdateTransactionExecutor {
 
 	private Path abandonStuckPublicationPersisted(UpdateTransaction transaction) throws IOException {
 		ClientStorage storage = context.storage();
+		revertUnfinalizedPublicationPersisted(transaction);
+		Path stuckJournal = storage.clientDirectory().resolve("update-transaction.stuck-" + UUID.randomUUID() + ".json");
+		Files.move(storage.transactionFile(), stuckJournal, StandardCopyOption.REPLACE_EXISTING);
+		return stuckJournal;
+	}
+
+	/** Drops in-flight publication and restores the last finalized generation, keeping {@code backup/} only while finalize has not yet written {@code active-state.json}. */
+	public void revertUnfinalizedPublication(UpdateTransaction transaction) throws IOException {
+		Objects.requireNonNull(transaction, "transaction");
+		ClientStorageMutation.run(context.storage(), () -> {
+			revertUnfinalizedPublicationPersisted(transaction);
+			return null;
+		});
+	}
+
+	private void revertUnfinalizedPublicationPersisted(UpdateTransaction transaction) throws IOException {
+		ClientStorage storage = context.storage();
 		Path active = storage.activeDirectory();
 		Path backup = storage.backupDirectory();
 		FileTrees.delete(storage.incomingDirectory());
@@ -177,9 +194,6 @@ public final class UpdateTransactionExecutor {
 		} else {
 			FileTrees.delete(backup);
 		}
-		Path stuckJournal = storage.clientDirectory().resolve("update-transaction.stuck-" + UUID.randomUUID() + ".json");
-		Files.move(storage.transactionFile(), stuckJournal, StandardCopyOption.REPLACE_EXISTING);
-		return stuckJournal;
 	}
 
 	private boolean generationAlreadyFinalized(UpdateTransaction transaction) throws IOException {

@@ -85,15 +85,17 @@ public final class BootRecovery {
 				transaction.phase, transaction.resultStatus, transaction.resultOperation, transaction.resultPath, transaction.resultMessage);
 
 		try {
-			UpdateTransactionExecutor executor = UpdateTransactionSupport.executor();
+			UpdateTransactionExecutor executor = UpdateTransactionSupport.executor(storage);
 			UpdateTransactionExecutor.Execution execution = executor.commitWithReplan(
 					() -> recoverPendingExecution(executor, transaction),
 					failedExecution -> replanPendingExecution(transaction, failedExecution));
 			finishPendingRecovery(execution, transaction);
 		} catch (UpdateReplanRequiredException e) {
-			throw e;
+			finishPendingRecovery(new UpdateTransactionExecutor.Execution(UpdateTransaction.Status.REPLAN_REQUIRED, transaction, null, e.changedPath(), e.getMessage(), null), transaction);
 		} catch (IOException | RuntimeException e) {
-			quarantineTransaction(e);
+			// Retiring a mid-apply journal without restoring the last good tree would let the next boot sweep backup/, the only full copy of it.
+			UpdateTransactionSupport.executor(storage).revertUnfinalizedPublication(transaction);
+			DurableFiles.setAside(storage.transactionFile(), "Persisted update transaction", e);
 		}
 	}
 
@@ -125,14 +127,14 @@ public final class BootRecovery {
 		} catch (UpdateReplanRequiredException e) {
 			throw e;
 		} catch (IOException e) {
-			throw new UpdateReplanRequiredException(null, "Pending update could not be replanned; its durable mailbox was retained", e);
+			throw new UpdateReplanRequiredException(null, "Pending update could not be replanned", e);
 		}
 	}
 
 	private void finishPendingRecovery(UpdateTransactionExecutor.Execution execution, UpdateTransaction original) throws IOException {
 		UpdateTransaction deferred = execution.transaction() == null ? original : execution.transaction();
 		if (!execution.success()) {
-			UpdateRecovery.RecoveryAttempt attempt = UpdateRecovery.blockedRecovery(storage, deferred, execution, () -> UpdateTransactionSupport.executor().recoverLatest());
+			UpdateRecovery.RecoveryAttempt attempt = UpdateRecovery.blockedRecovery(storage, deferred, execution, () -> UpdateTransactionSupport.executor(storage).recoverLatest());
 			execution = attempt.execution();
 			deferred = attempt.deferred();
 			if (attempt.reverted()) {
@@ -150,10 +152,6 @@ public final class BootRecovery {
 					.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing"));
 		}
 		LOGGER.info("Recovered update transaction {}", deferred.transactionId);
-	}
-
-	private void quarantineTransaction(Exception reason) throws IOException {
-		DurableFiles.setAside(storage.transactionFile(), "Persisted update transaction", reason);
 	}
 
 	private void importBootstrap() {
