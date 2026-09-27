@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.modpack.generation.ContentTree;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -133,14 +134,29 @@ class ModpackCandidateScannerTest {
 		Files.createDirectories(server);
 		Files.createFile(groups.resolve("main/config/aux.txt"));
 
-		CandidateBuildException failure = assertThrows(CandidateBuildException.class, () -> scan(server, groups, Map.of("main", group())));
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()));
 
-		assertTrue(failure.getMessage().contains("no published files"));
-		if (Files.exists(tempDir.resolve("staging"))) {
-			try (var files = Files.list(tempDir.resolve("staging"))) {
-				assertEquals(0, files.count());
-			}
-		}
+		assertEquals(1, candidate.exclusions().size());
+		assertEquals(ExcludedCandidate.Reason.RESERVED_WINDOWS_NAME, candidate.exclusions().get(0).reason());
+		assertEquals(0, candidate.manifest().groups().get("main").files().size());
+	}
+
+	/**
+	 * The scanner describes what is on disk, so a server with nothing to publish is a truthful empty candidate rather
+	 * than a failure. Refusing to publish one is the executor's policy and lives with it.
+	 */
+	@Test
+	void nothingToPublishIsACandidateNotAFailure() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.createDirectories(server);
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()));
+
+		assertEquals(1, candidate.manifest().groups().size());
+		assertEquals(0, candidate.manifest().groups().get("main").files().size());
+		assertTrue(ContentTree.tokenOf(candidate.manifest()) != null);
 	}
 
 	@Test

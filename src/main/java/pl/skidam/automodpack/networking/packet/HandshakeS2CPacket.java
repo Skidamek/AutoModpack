@@ -29,8 +29,10 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.modpack.PackAbsence;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
+import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 public class HandshakeS2CPacket {
 
@@ -66,10 +68,19 @@ public class HandshakeS2CPacket {
 			profile = new GameProfile(offlineUUID, playerName);
 		}
 
+		// Nothing local to serve is this process's problem only when this process is the one that would serve it. An
+		// externally handled endpoint is fed by a proxy, a separate host or an exported tree whose current generation
+		// this server never sees, so an empty local store says nothing about what a client will fetch there.
+		PackAbsence absence = modpackExecutor.packAbsence();
+		boolean nothingToServeHere = absence != null && hostServer.endpointOwner() == NettyServer.EndpointOwner.BUILT_IN;
+
 		if (!understood) {
 			Common.players.put(playerName, false);
 			LOGGER.warn("{} has not installed AutoModpack.", playerName);
-			if (serverConfig.requireModpack) {
+			// A built-in host with nothing to serve has no pack to install, so the requirement is vacuous and nagging
+			// about it would only send players after a modpack that does not exist. An external endpoint may well
+			// have one, so the configured rule stands.
+			if (serverConfig.requireModpack && !nothingToServeHere) {
 				Component reason = VersionedText.literal(serverConfig.nagMessage);
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);
@@ -87,10 +98,10 @@ public class HandshakeS2CPacket {
 		if (!understood) return;
 
 		Common.players.put(playerName, true);
-		handleHandshake(connection, profile, buf, sender);
+		handleHandshake(connection, profile, buf, sender, nothingToServeHere);
 	}
 
-	private static void handleHandshake(Connection connection, GameProfile profile, FriendlyByteBuf buf, PacketSender sender) {
+	private static void handleHandshake(Connection connection, GameProfile profile, FriendlyByteBuf buf, PacketSender sender, boolean nothingToServeHere) {
 		try {
 			LOGGER.info("{} has installed AutoModpack.", GameHelpers.getPlayerName(profile));
 
@@ -119,6 +130,15 @@ public class HandshakeS2CPacket {
 				Component reason = VersionedText.literal("AutoModpack is generating modpack. Please wait a moment and try again.");
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);
+				return;
+			}
+
+			// Nothing is served from here, so there is no head document to fetch and every endpoint would fail the manifest
+			// fetch with an error that blames the operator for a state they chose. Say nothing and let the player in; the
+			// boot line is the receipt. An external endpoint is advertised as configured, because this process cannot know
+			// what the host behind it is currently serving.
+			if (nothingToServeHere) {
+				LOGGER.info("{} joined a server that hosts no modpack", GameHelpers.getPlayerName(profile));
 				return;
 			}
 

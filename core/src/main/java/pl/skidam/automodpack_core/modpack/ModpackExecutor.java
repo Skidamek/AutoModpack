@@ -16,6 +16,7 @@ import java.util.function.Supplier;
 
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.loader.ModFileCache;
+import pl.skidam.automodpack_core.modpack.PackAbsence.Kind;
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
 import pl.skidam.automodpack_core.modpack.candidate.ExcludedCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
@@ -27,6 +28,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNotes;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.platforms.PlatformSourceLookup;
@@ -51,6 +53,7 @@ public class ModpackExecutor {
 	private final HostingBinder hostingBinder;
 	private final Supplier<ServerConfigJsons.ServerConfigFieldsV3> config;
 	private final PlatformSourceLookup platformSourceLookup;
+	private volatile PackAbsence packAbsence;
 
 	public ModpackExecutor() {
 		this(GameDirectory.current(), HOST_MODPACK_DIR, GameDirectory.current().resolve(SERVER_DIR), PlatformSourceLookup.resolving());
@@ -123,10 +126,12 @@ public class ModpackExecutor {
 		try (operation) {
 			GenerationStore.Current current = generationStore.loadCurrent().orElse(null);
 			try (ModpackCandidate candidate = buildCandidate(current, false)) {
+				warnUnusableSelectedGroups(candidate.manifest());
+				PackAbsence absence = refuse(candidate);
 				GenerationDiff diff = GenerationDiff.between(current == null ? null : current.manifest(), candidate.manifest());
 				String token = ContentTree.tokenOf(candidate.manifest());
 				GenerationPatchNotes.Resolution notes = GenerationPatchNotes.resolve(inlineNotes, patchNotesFile);
-				return new PreviewReady(candidateState(current, candidate, token, diff, Optional.of(notes.source())));
+				return new PreviewReady(candidateState(current, candidate, token, diff, Optional.of(notes.source())), Optional.ofNullable(absence));
 			}
 		} catch (Exception e) {
 			LOGGER.error("Failed to preview modpack generation", e);
@@ -342,7 +347,9 @@ public class ModpackExecutor {
 		OperationLease operation = acquire(true);
 		if (operation == null) return new PublishResult.Rejected("Another modpack operation is already in progress", null);
 		try (operation) {
-			return bindHosting(publishLocked(expectedContentToken, inlineNotes));
+			PublishResult result = bindHosting(publishLocked(expectedContentToken, inlineNotes));
+			if (result instanceof PublishResult.NothingToPublish nothing) packAbsence = nothing.absence();
+			return result;
 		} catch (Exception e) {
 			LOGGER.error("Failed to publish modpack generation", e);
 			return new PublishResult.Rejected(Throwables.detail(e), e);
@@ -358,6 +365,9 @@ public class ModpackExecutor {
 				return new PublishResult.Rejected("A state guard is unavailable before the root generation is published", null);
 			try (ModpackCandidate candidate = buildCandidate(current, true);
 					FileCache fileCache = FileCache.open(dataLayout.fileCacheDirectory())) {
+				warnUnusableSelectedGroups(candidate.manifest());
+				PackAbsence absence = refuse(candidate);
+				if (absence != null) return new PublishResult.NothingToPublish(absence);
 				GenerationDiff diff = GenerationDiff.between(current == null ? null : current.manifest(), candidate.manifest());
 				String token = ContentTree.tokenOf(candidate.manifest());
 				CandidateState candidateState = candidateState(current, candidate, token, diff, Optional.empty());
@@ -385,8 +395,18 @@ public class ModpackExecutor {
 		OperationLease operation = acquire(false);
 		if (operation == null) return new LoadResult.Rejected("Another modpack operation is already in progress", null);
 		try (operation) {
-			GenerationStore.Current current = generationStore.loadCurrent().orElseThrow(() -> new IOException("No modpack journal exists"));
-			return bindHosting(new Loaded(currentDocument(current), generationStore.hosting()));
+			GenerationStore.Current current = generationStore.loadCurrent().orElse(null);
+			if (current == null) {
+				PackAbsence absence = new PackAbsence(Kind.NEVER_PUBLISHED, "No modpack has been published yet. Run /automodpack generate, or leave generate-modpack-on-start enabled to publish one at startup.");
+				packAbsence = absence;
+				return new LoadResult.NothingPublished(absence);
+			}
+			PackDocument document = currentDocument(current);
+			warnUnusableSelectedGroups(document.manifest());
+			LoadResult loaded = bindHosting(new Loaded(document, generationStore.hosting()));
+			// The bind clears the absence; the loaded generation's own emptiness sets it right back when it serves nobody.
+			packAbsence = absenceOf(document.manifest());
+			return loaded;
 		} catch (Exception e) {
 			LOGGER.error("Failed to load the current modpack generation", e);
 			return new LoadResult.Rejected(Throwables.detail(e), e);
@@ -395,6 +415,18 @@ public class ModpackExecutor {
 
 	public Optional<PackDocument> currentDocument() throws IOException {
 		return generationStore.loadCurrent().map(this::currentDocument);
+	}
+
+	/**
+	 * Why this server hosts no modpack, or null when it hosts one. The verdict of the last generation attempt, kept
+	 * here so the boot, the login handshake and the commands all read the same answer instead of re-deriving it: a
+	 * joining client is told what this server can offer, and a live {@code /automodpack generate} that succeeds clears
+	 * the absence without a restart. Clearing lives where hosting binds, so a revert to a real generation
+	 * re-advertises it the same way a publish does; a rejected attempt changed nothing about what the store holds, so
+	 * the previous verdict stands.
+	 */
+	public PackAbsence packAbsence() {
+		return packAbsence;
 	}
 
 	private PackDocument currentDocument(GenerationStore.Current current) {
@@ -430,6 +462,55 @@ public class ModpackExecutor {
 		}
 	}
 
+	/**
+	 * Why this candidate must never be published, or null when it may. Scanning whatever is on disk is the scanner's
+	 * whole job and a zero-file manifest is a truthful answer to it; refusing to publish one is a separate policy, and
+	 * it lives here so a caller that only wants to look at the candidate is never refused one.
+	 */
+	private static PackAbsence refuse(ModpackCandidate candidate) {
+		GroupManifest manifest = candidate.manifest();
+		if (manifest.groups().values().stream().allMatch(group -> group.files().isEmpty()))
+			return candidate.exclusions().isEmpty()
+					? new PackAbsence(Kind.NOTHING_FOUND, "Nothing to sync: the scan found no publishable file for any of the " + manifest.groups().size()
+							+ " configured groups (" + String.join(", ", manifest.groups().keySet()) + "). Install mods on the server, or check the from-server rules and the group directories under host-modpack/.")
+					: new PackAbsence(Kind.ALL_EXCLUDED, "Nothing to sync: all " + candidate.exclusions().size()
+							+ " files the scan found were excluded from the modpack. Check the exclude rules; the AutoModpack jar and server-side-only mods are never published.");
+		return absenceOf(manifest);
+	}
+
+	/**
+	 * Why a generation would hand no default client any file, or null when it serves one. The selection story is the
+	 * same for a refused publication and a loaded journal, so both verdicts come from here: the flags decide who
+	 * receives the pack, and only the files decide whether that reception is empty - an empty group holding the flags
+	 * satisfies nobody.
+	 */
+	static PackAbsence absenceOf(GroupManifest manifest) {
+		if (manifest.groups().values().stream().allMatch(group -> group.files().isEmpty()))
+			return new PackAbsence(Kind.NOTHING_FOUND, "Nothing to sync: the published generation holds no files for any of the " + manifest.groups().size()
+					+ " configured groups (" + String.join(", ", manifest.groups().keySet()) + ").");
+		if (manifest.groups().values().stream().noneMatch(group -> (group.required() || group.defaultSelected()) && !group.files().isEmpty()))
+			return new PackAbsence(Kind.NOTHING_SELECTED, "Nothing to sync: the modpack holds " + fileCount(manifest)
+					+ " files, but no group that is required or selected by default carries any of them. Mark a group that carries files required or selected by default.");
+		return null;
+	}
+
+	/**
+	 * A group that is required or selected by default and carries no files is dead configuration: every default client
+	 * is handed it and receives nothing through it. It is a receipt, not a refusal, because the operator may be
+	 * mid-edit and other groups may still carry the pack.
+	 */
+	private static void warnUnusableSelectedGroups(GroupManifest manifest) {
+		for (var entry : manifest.groups().entrySet())
+			if (entry.getValue().files().isEmpty() && (entry.getValue().required() || entry.getValue().defaultSelected()))
+				LOGGER.warn("Group '{}' is required or selected by default but carries no files; a default client receives nothing through it", entry.getKey());
+	}
+
+	private static int fileCount(GroupManifest manifest) {
+		int files = 0;
+		for (var group : manifest.groups().values()) files += group.files().size();
+		return files;
+	}
+
 	private OperationLease acquire(boolean publication) {
 		if (!scanActive.compareAndSet(false, true)) return null;
 		if (publication && !publicationActive.compareAndSet(false, true)) {
@@ -458,10 +539,11 @@ public class ModpackExecutor {
 
 	/**
 	 * Hosting follows the committed generation of every outcome that carries one, bound once here inside the operation lease instead of remembered per code path; a failed swap is reported on the committed outcome, never
-	 * as a rejection of a durable commit.
+	 * as a rejection of a durable commit. Binding a generation is also what clears the pack absence: a bound host has something to serve.
 	 */
 	private <R extends HostingOutcome> R bindHosting(R result) {
 		if (!(result instanceof CommittedOutcome committed)) return result;
+		packAbsence = null;
 		R bound = result;
 		try {
 			hostingBinder.bind(committed.hosting());
@@ -562,12 +644,8 @@ public class ModpackExecutor {
 		}
 
 		static CandidateSummary from(ModpackCandidate candidate, GenerationDiff diff) {
-			int files = candidate.manifest().groups().values().stream().mapToInt(group -> group.files().size()).sum();
+			int files = fileCount(candidate.manifest());
 			return new CandidateSummary(candidate.manifest().groups().size(), files, candidate.objects().size(), candidate.exclusions(), diff.summary());
-		}
-
-		static CandidateSummary empty() {
-			return new CandidateSummary(0, 0, 0, List.of(), new GenerationDiff.Summary(0, 0, 0, 0, 0));
 		}
 	}
 
@@ -600,9 +678,14 @@ public class ModpackExecutor {
 		}
 	}
 
-	public record PreviewReady(CandidateState state) implements PreviewResult {
+	/**
+	 * A ready preview, carrying the absence that would refuse its publication. The preview still answers "what would
+	 * this scan produce", so an unpublishable candidate previews truthfully and the caller says so next to it.
+	 */
+	public record PreviewReady(CandidateState state, Optional<PackAbsence> absence) implements PreviewResult {
 		public PreviewReady {
 			Objects.requireNonNull(state, "state");
+			Objects.requireNonNull(absence, "absence");
 			if (state.patchNotesSource().isEmpty()) throw new IllegalArgumentException("Preview result requires a resolved patch-note source");
 		}
 	}
@@ -635,7 +718,17 @@ public class ModpackExecutor {
 		}
 	}
 
-	public sealed interface PublishResult extends HostingOutcome permits Published, NoChanges, PublishResult.Rejected {
+	public sealed interface PublishResult extends HostingOutcome permits Published, NoChanges, PublishResult.NothingToPublish, PublishResult.Rejected {
+
+		/**
+		 * The candidate was a truthful scan of the server and must not be published; the absence says which way, in
+		 * the words that fix it. This is a state, not a failure, so the boot logs it and keeps the world running.
+		 */
+		record NothingToPublish(PackAbsence absence) implements PublishResult {
+			public NothingToPublish {
+				absence = Objects.requireNonNull(absence, "absence");
+			}
+		}
 
 		/** The publication produced no generation; the detail explains the refusal or failure. */
 		record Rejected(String detail, Throwable cause) implements PublishResult {
@@ -687,7 +780,14 @@ public class ModpackExecutor {
 		}
 	}
 
-	public sealed interface LoadResult extends HostingOutcome permits Loaded, LoadResult.Rejected {
+	public sealed interface LoadResult extends HostingOutcome permits Loaded, LoadResult.NothingPublished, LoadResult.Rejected {
+
+		/** No generation was ever published, which is the same state a refused publication leaves behind. */
+		record NothingPublished(PackAbsence absence) implements LoadResult {
+			public NothingPublished {
+				absence = Objects.requireNonNull(absence, "absence");
+			}
+		}
 
 		/** The load produced no generation; the detail explains the refusal or failure. */
 		record Rejected(String detail, Throwable cause) implements LoadResult {

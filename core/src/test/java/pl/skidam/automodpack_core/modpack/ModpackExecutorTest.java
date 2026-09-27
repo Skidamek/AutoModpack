@@ -22,11 +22,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.platforms.PlatformSourceLookup;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -534,15 +537,119 @@ class ModpackExecutorTest {
 		}
 	}
 
+	@Test
+	void aServerWithNothingToPublishBootsIntoAnAbsence() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("host-modpack");
+		Path generationRoot = tempDir.resolve("host-generations");
+		Files.createDirectories(server);
+
+		ConstantsSnapshot snapshot = new ConstantsSnapshot();
+		Constants.AM_VERSION = "test";
+		Constants.LOADER = "test";
+		Constants.LOADER_VERSION = "test";
+		Constants.MC_VERSION = "test";
+		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
+		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
+		try {
+			Constants.serverConfig = config();
+			ModpackExecutor.PublishResult.NothingToPublish empty = assertInstanceOf(ModpackExecutor.PublishResult.NothingToPublish.class, executor.publish());
+			assertEquals(PackAbsence.Kind.NOTHING_FOUND, empty.absence().kind());
+			assertEquals(empty.absence(), executor.packAbsence());
+			assertTrue(executor.currentDocument().isEmpty());
+			assertTrue(Files.notExists(generationRoot.resolve(StoragePaths.SERVER_JOURNAL_FILE.getFileName().toString())));
+
+			// The same empty store reached without asking for a publication is the same absence, not a load failure.
+			ModpackExecutor.LoadResult.NothingPublished never = assertInstanceOf(ModpackExecutor.LoadResult.NothingPublished.class, executor.loadLast());
+			assertEquals(PackAbsence.Kind.NEVER_PUBLISHED, never.absence().kind());
+
+			// A preview is a truthful account of the scan, and it says alongside itself that publishing is refused.
+			ModpackExecutor.PreviewReady previewed = assertInstanceOf(ModpackExecutor.PreviewReady.class, executor.preview());
+			assertEquals(0, previewed.state().summary().files());
+			assertEquals(PackAbsence.Kind.NOTHING_FOUND, previewed.absence().orElseThrow().kind());
+
+			// Files that no group would hand out are refused too, and named as the group configuration they are.
+			Constants.serverConfig = config(false, false);
+			Files.createDirectories(groups.resolve("main/config"));
+			Files.writeString(groups.resolve("main/config/example.txt"), "one", StandardCharsets.UTF_8);
+			ModpackExecutor.PublishResult.NothingToPublish unselected = assertInstanceOf(ModpackExecutor.PublishResult.NothingToPublish.class, executor.publish());
+			assertEquals(PackAbsence.Kind.NOTHING_SELECTED, unselected.absence().kind());
+			assertTrue(executor.currentDocument().isEmpty());
+
+			// A group selected by default is enough; only a required one is not the sole way out.
+			Constants.serverConfig = config(false, true);
+			assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
+			assertNull(executor.packAbsence());
+			assertTrue(executor.currentDocument().isPresent());
+
+			// The absence cannot outlive a bound host: a later refused scan keeps the journal, and reverting to an
+			// earlier generation re-advertises it the same way a publish does.
+			Files.writeString(groups.resolve("main/config/example.txt"), "two", StandardCharsets.UTF_8);
+			assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
+			Constants.serverConfig = config(false, false);
+			ModpackExecutor.PublishResult.NothingToPublish refusedAgain = assertInstanceOf(ModpackExecutor.PublishResult.NothingToPublish.class, executor.publish());
+			assertEquals(PackAbsence.Kind.NOTHING_SELECTED, refusedAgain.absence().kind());
+			assertNotNull(executor.packAbsence());
+			ModpackExecutor.RevertResult reverted = executor.revert(1, null);
+			assertInstanceOf(ModpackExecutor.Reverted.class, reverted);
+			assertNull(executor.packAbsence());
+			assertTrue(executor.currentDocument().isPresent());
+		} finally {
+			executor.stop();
+			snapshot.restore();
+			if (previous == null) System.clearProperty(StoragePaths.DATA_ROOT_PROPERTY);
+			else System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, previous);
+		}
+	}
+
+	@Test
+	void theAbsenceVerdictIsAPropertyOfTheManifest() {
+		// An all-empty manifest refuses regardless of flags: there is nothing any selection could hand out.
+		assertEquals(PackAbsence.Kind.NOTHING_FOUND, ModpackExecutor.absenceOf(manifestOf(Map.of("main", new boolean[]{true, true}), Map.of())).kind());
+
+		// The flags alone satisfy nobody: a selected-but-empty group next to files nobody receives is refused too.
+		PackAbsence unselected = ModpackExecutor.absenceOf(manifestOf(Map.of("main", new boolean[]{true, false}, "extra", new boolean[]{false, false}),
+				Map.of("main", Map.of(), "extra", Map.of("config/extra.txt", "extra"))));
+		assertEquals(PackAbsence.Kind.NOTHING_SELECTED, unselected.kind());
+
+		// A group that carries files and would be received is all the pack needs.
+		assertNull(ModpackExecutor.absenceOf(manifestOf(Map.of("main", new boolean[]{false, true}), Map.of("main", Map.of("config/a.txt", "a")))));
+	}
+
 	private static ServerConfigJsons.ServerConfigFieldsV3 config() {
+		return config(true, false);
+	}
+
+	private static ServerConfigJsons.ServerConfigFieldsV3 config(boolean required, boolean defaultSelected) {
 		ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
 		ServerConfigJsons.GroupDeclaration main = new ServerConfigJsons.GroupDeclaration();
-		main.required = true;
+		main.required = required;
+		main.defaultSelected = defaultSelected;
 		main.fromServer = Set.of();
 		config.modpack.categories = Map.of("General", Map.of("main", main));
 		config.autoExcludeServerSideMods = false;
 		config.validateSecrets = false;
 		return config;
+	}
+
+	private static GroupManifest manifestOf(Map<String, boolean[]> groups, Map<String, Map<String, String>> filesByGroup) {
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
+		fields.modpackId = "abc1234";
+		Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> category = new HashMap<>();
+		for (var entry : groups.entrySet()) {
+			ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+			group.required = entry.getValue()[0];
+			group.defaultSelected = entry.getValue()[1];
+			Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new HashMap<>();
+			for (var file : filesByGroup.getOrDefault(entry.getKey(), Map.of()).entrySet()) {
+				String sha1 = HashUtils.sha1(file.getValue().getBytes(StandardCharsets.UTF_8));
+				files.put(file.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(file.getValue().length()), "config", false, sha1, null));
+			}
+			group.files = files;
+			category.put(entry.getKey(), group);
+		}
+		fields.categories = Map.of("General", category);
+		return GroupManifestValidator.validate(fields);
 	}
 
 	private static final class ConstantsSnapshot {

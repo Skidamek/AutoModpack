@@ -36,6 +36,11 @@ public class Server {
 
 		if (generation instanceof ModpackExecutor.Published || generation instanceof ModpackExecutor.NoChanges) {
 			LOGGER.info("Modpack generation completed!");
+		} else if (generation instanceof ModpackExecutor.PublishResult.NothingToPublish nothing) {
+			// A host with nothing to host has no world to keep running for, and exiting 0 reads as a clean shutdown to
+			// whatever supervises it. Say why and leave non-zero.
+			LOGGER.error("This host has no modpack to serve: {}", nothing.absence().detail());
+			System.exit(1);
 		} else if (generation instanceof ModpackExecutor.PublishResult.Rejected rejected) {
 			LOGGER.error("Failed to generate modpack: {}", rejected.detail(), rejected.cause());
 		}

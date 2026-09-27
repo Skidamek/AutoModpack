@@ -134,6 +134,7 @@
   "automodpack.error.category.security": "Security",
   "automodpack.error.category.internal": "Unexpected error",
   "automodpack.error.hostContent": "AutoModpack did not read the server modpack. Contact the server operator.",
+  "automodpack.error.emptyModpack": "This server's modpack has no files you can install. Ask the server operator to check the server's modpack groups.",
   "automodpack.error.connection": "AutoModpack did not connect to the modpack host.",
   "automodpack.error.storage": "AutoModpack did not update its local storage.",
   "automodpack.error.update": "AutoModpack did not apply the modpack update.",

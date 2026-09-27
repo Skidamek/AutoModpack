@@ -155,11 +155,59 @@ final class ClientLoginUpdateFlow {
 				return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
 			}
 
-			return continueReconcile(handler, connectionInfo, secret, storage, transport, selectedTarget, false, false);
+			return suppliesNothing(selectedTarget)
+					? resolveWhatToInstall(handler, connectionInfo, secret, storage, transport, manifestResult.content(), savedSelection)
+					: continueReconcile(handler, connectionInfo, secret, storage, transport, selectedTarget, false, false);
 		}, ModpackUpdater.executor()).exceptionally(e -> {
 			disconnectImmediately(handler);
 			return presentReconcileFailure(Throwables.unwrap(e), null);
 		});
+	}
+
+	/**
+	 * The selection this client resolved to installs nothing. A pack whose own default selection is empty is the
+	 * operator's configuration, so it is named as theirs and they are not let to paper over it by hand. A selection
+	 * the player brought is theirs, and the group screen is the fix, so they get it with the multiplayer hub as the way
+	 * out. Picking still nothing means the pack holds nothing this client can use, which is the operator's again.
+	 */
+	private static CompletableFuture<LoginUpdateResponse> resolveWhatToInstall(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
+			ClientStorage storage, PackTransport transport, GenerationJsons.HeadDocumentFields fields, SelectionIntent savedSelection) {
+		if (savedSelection == null) {
+			transport.close();
+			presentFailure(new IllegalStateException("The server's modpack selects no files for this client"), "automodpack.error.emptyModpack", FailureCategory.HOST);
+			disconnectImmediately(handler);
+			return CompletableFuture.completedFuture(LoginUpdateResponse.HOST_ERROR);
+		}
+
+		disconnectImmediately(handler);
+		AtomicBoolean abandoned = new AtomicBoolean();
+		ScreenImpl.repairSelection(fields, savedSelection, intent -> {
+			ScreenManager.waiting(() -> {
+				abandoned.set(true);
+				transport.close();
+			});
+			ModpackUpdater.executor().execute(() -> {
+				if (abandoned.get()) return;
+				try {
+					SelectedModpackTarget repaired = SelectedModpackTarget.prepare(fields, savedSelection, intent, ClientPlatform.effective(intent));
+					if (suppliesNothing(repaired)) {
+						transport.close();
+						presentFailure(new IllegalStateException("The server's modpack selects no files for this client"), "automodpack.error.emptyModpack", FailureCategory.HOST);
+						return;
+					}
+					continueReconcile(handler, connectionInfo, secret, storage, transport, repaired, true, false);
+				} catch (RuntimeException e) {
+					if (abandoned.get()) return;
+					transport.close();
+					presentFailure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
+				}
+			});
+		}, transport::close);
+		return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
+	}
+
+	private static boolean suppliesNothing(SelectedModpackTarget target) {
+		return target.flatTarget().list == null || target.flatTarget().list.isEmpty();
 	}
 
 	/**

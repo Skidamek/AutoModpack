@@ -48,22 +48,30 @@ public class Common {
 		serverRuntimePrepared = true;
 	}
 
+	/**
+	 * A server with nothing to sync is a state, not a failure: it boots, hosts nothing, and the operator gets the one
+	 * line that says why. Only a genuine failure - a corrupt store, an unreadable config, a broken disk - takes the
+	 * world down with it, because a half-published modpack is worse than a loud crash.
+	 */
 	private static void runGeneration() {
+		long genStart = System.currentTimeMillis();
 		if (serverConfig.generateModpackOnStart) {
 			LOGGER.info("Generating modpack...");
-			long genStart = System.currentTimeMillis();
 			var generation = modpackExecutor.publish();
 			if (generation instanceof ModpackExecutor.Published || generation instanceof ModpackExecutor.NoChanges) {
 				LOGGER.info("Modpack generation completed! took {}ms", System.currentTimeMillis() - genStart);
+			} else if (generation instanceof ModpackExecutor.PublishResult.NothingToPublish nothing) {
+				LOGGER.warn("{}", nothing.absence().detail());
 			} else if (generation instanceof ModpackExecutor.PublishResult.Rejected rejected) {
 				throw new IllegalStateException("Failed to generate modpack: " + rejected.detail(), rejected.cause());
 			}
 		} else {
 			LOGGER.info("Loading last modpack...");
-			long genStart = System.currentTimeMillis();
 			var generation = modpackExecutor.loadLast();
 			if (generation instanceof ModpackExecutor.Loaded loaded) {
 				LOGGER.info("Modpack loaded at content {}! took {}ms", loaded.current().contentToken(), System.currentTimeMillis() - genStart);
+			} else if (generation instanceof ModpackExecutor.LoadResult.NothingPublished nothing) {
+				LOGGER.warn("{}", nothing.absence().detail());
 			} else if (generation instanceof ModpackExecutor.LoadResult.Rejected rejected) {
 				throw new IllegalStateException("Failed to load modpack: " + rejected.detail(), rejected.cause());
 			}
@@ -80,6 +88,12 @@ public class Common {
 			return;
 		}
 		prepareServerRuntime();
+		startHostWhenOneIsBound();
+	}
+
+	/** A host with no generation has nothing to start; the absence line from the generation attempt is the receipt. */
+	private static void startHostWhenOneIsBound() {
+		if (modpackExecutor.packAbsence() != null) return;
 		hostServer.start();
 	}
 
@@ -94,7 +108,7 @@ public class Common {
 		try {
 			prepareRuntime();
 			if (!adoptActivePack()) runGeneration();
-			hostServer.start();
+			startHostWhenOneIsBound();
 		} catch (Exception e) {
 			try {
 				if (hostServer != null) hostServer.stop();

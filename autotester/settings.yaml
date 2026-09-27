@@ -81,6 +81,11 @@ automodpack:
     modpack:
       General:
         main:
+          # The shipped default marks this group required and default-selected; the
+          # autotester config replaces the whole block, so it has to say so too or
+          # every client resolves an empty selection and syncs nothing.
+          required: true
+          default-selected: true
           from-server:
             - "mods/*.jar"
             - "kubejs/**"

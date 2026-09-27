@@ -15,18 +15,58 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 class NettyServerObjectResolutionTest {
 	@TempDir
 	Path tempDir;
+
+	/**
+	 * Who serves the advertised endpoint is the question the login handshake asks before it decides that an empty
+	 * local store means there is nothing to sync. Every mode that carries the route over something this process does
+	 * not own has to answer EXTERNAL, or a server that only advertises would treat its own absent generation as a
+	 * reason to stop advertising - while a perfectly good pack sits behind the endpoint.
+	 */
+	@Test
+	void theEndpointOwnerFollowsTheModeAndPortRatherThanTheConfigDefaults() {
+		ServerConfigJsons.ServerConfigFieldsV3 previous = Constants.serverConfig;
+		try {
+			NettyServer server = server();
+
+			Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
+			assertEquals(NettyServer.EndpointOwner.BUILT_IN, server.endpointOwner(), "HOLEPUNCH carries the route over the Minecraft connection itself");
+
+			Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
+			Constants.serverConfig.connectionMode = ModpackConnectionMode.MAGIC;
+			Constants.serverConfig.bindPort = -1;
+			assertEquals(NettyServer.EndpointOwner.BUILT_IN, server.endpointOwner(), "MAGIC on the Minecraft port is still this process's listener");
+
+			Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
+			Constants.serverConfig.connectionMode = ModpackConnectionMode.HTTP;
+			assertEquals(NettyServer.EndpointOwner.EXTERNAL, server.endpointOwner(), "bindPort defaults to -1, so HTTP with no port configured is the external shape");
+
+			Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
+			Constants.serverConfig.connectionMode = ModpackConnectionMode.HTTP;
+			Constants.serverConfig.bindPort = 40001;
+			assertEquals(NettyServer.EndpointOwner.BUILT_IN, server.endpointOwner(), "a port of its own makes this process the listener");
+
+			Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
+			Constants.serverConfig.modpackHost = false;
+			assertEquals(NettyServer.EndpointOwner.EXTERNAL, server.endpointOwner(), "an operator who turned hosting off only advertises");
+		} finally {
+			Constants.serverConfig = previous;
+		}
+	}
 
 	@Test
 	void storedObjectsResolveThroughCaseInsensitiveSha1Keys() throws Exception {
@@ -103,6 +143,10 @@ class NettyServerObjectResolutionTest {
 	}
 
 	private record TestSetup(GenerationStore store, NettyServer server, String valid) {}
+
+	private NettyServer server() {
+		return new NettyServer();
+	}
 
 	private NettyServer server(GenerationStore store, GenerationStore.Publication publication) {
 		NettyServer server = new NettyServer();

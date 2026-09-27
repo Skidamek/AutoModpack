@@ -24,6 +24,7 @@ import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.netty.ActivityTracker;
+import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.storage.GameDirectory;
@@ -273,7 +274,13 @@ public class Commands {
 	private static String requireBootstrapFingerprint() {
 		if (serverConfig.disableInternalTLS) throw new IllegalArgumentException("Bootstrap export requires AutoModpack TLS to be enabled");
 		String fingerprint = hostServer.getCertificateFingerprint();
-		if (fingerprint == null) throw new IllegalArgumentException("Certificate fingerprint is unavailable; start the AutoModpack host with TLS enabled first");
+		if (fingerprint == null) {
+			// An externally served endpoint terminates TLS in front of this process, so the certificate clients
+			// actually see belongs to that proxy - pinning this host's own pair would be a receipt for the wrong document.
+			if (hostServer.endpointOwner() == NettyServer.EndpointOwner.EXTERNAL)
+				throw new IllegalArgumentException("The advertised endpoint is served externally, so its certificate belongs to whatever terminates TLS in front of it; export that proxy's fingerprint instead of this host's");
+			throw new IllegalArgumentException("Certificate fingerprint is unavailable; start the AutoModpack host with TLS enabled first");
+		}
 		return fingerprint;
 	}
 
@@ -529,35 +536,40 @@ public class Commands {
 		Util.backgroundExecutor().execute(() -> {
 			send(context, preview ? "Preparing modpack preview..." : "Generating modpack...", ChatFormatting.YELLOW, !preview);
 			long start = System.currentTimeMillis();
-			if (preview) {
-				ModpackExecutor.PreviewResult result = modpackExecutor.preview(notes);
-				if (result instanceof ModpackExecutor.PreviewReady ready) {
-					headline(context, "PREVIEW READY", start, ready.state().contentToken(), ChatFormatting.GREEN, false);
-					reportGenerationDetails(context, ready.state(), true, false);
-					if (ready.state().parent().isEmpty())
-						send(context, "Guarded publication is unavailable until an unguarded root publication exists", ChatFormatting.YELLOW, false);
-				} else if (result instanceof ModpackExecutor.PreviewResult.Rejected rejected) {
-					send(context, "PREVIEW FAILED: " + rejected.detail(), ChatFormatting.RED, false);
-				}
-				return;
-			}
-
-			ModpackExecutor.PublishResult result = guarded ? modpackExecutor.publishIfContent(expectedToken, notes) : modpackExecutor.publish(notes);
-			if (result instanceof ModpackExecutor.Published published) {
-				headline(context, "PUBLISHED", start, published.state().contentToken(), ChatFormatting.GREEN, true);
-				reportGenerationDetails(context, published.state(), false, true);
-				published.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, true));
-				reportHostingFailure(context, published.hostingFailure());
-			} else if (result instanceof ModpackExecutor.NoChanges noChanges) {
-				headline(context, "NO_CHANGES", start, noChanges.state().contentToken(), ChatFormatting.YELLOW, true);
-				reportGenerationDetails(context, noChanges.state(), false, true);
-				noChanges.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, true));
-				reportHostingFailure(context, noChanges.hostingFailure());
-			} else if (result instanceof ModpackExecutor.PublishResult.Rejected rejected) {
-				send(context, "FAILED: " + rejected.detail(), ChatFormatting.RED, true);
-			}
+			if (preview) reportPreview(context, start, modpackExecutor.preview(notes));
+			else reportPublication(context, start, guarded ? modpackExecutor.publishIfContent(expectedToken, notes) : modpackExecutor.publish(notes));
 		});
 		return Command.SINGLE_SUCCESS;
+	}
+
+	/** A preview answers what the scan found, so an unpublishable candidate previews truthfully and says next to itself that publishing it is refused. */
+	private static void reportPreview(CommandContext<CommandSourceStack> context, long start, ModpackExecutor.PreviewResult result) {
+		if (result instanceof ModpackExecutor.PreviewReady ready) {
+			headline(context, "PREVIEW READY", start, ready.state().contentToken(), ChatFormatting.GREEN, false);
+			reportGenerationDetails(context, ready.state(), true, false);
+			ready.absence().ifPresent(absence -> send(context, "PUBLISHING THIS WOULD BE REFUSED: " + absence.detail(), ChatFormatting.YELLOW, false));
+			if (ready.state().parent().isEmpty()) send(context, "Guarded publication is unavailable until an unguarded root publication exists", ChatFormatting.YELLOW, false);
+		} else if (result instanceof ModpackExecutor.PreviewResult.Rejected rejected) {
+			send(context, "PREVIEW FAILED: " + rejected.detail(), ChatFormatting.RED, false);
+		}
+	}
+
+	private static void reportPublication(CommandContext<CommandSourceStack> context, long start, ModpackExecutor.PublishResult result) {
+		if (result instanceof ModpackExecutor.Published published) {
+			headline(context, "PUBLISHED", start, published.state().contentToken(), ChatFormatting.GREEN, true);
+			reportGenerationDetails(context, published.state(), false, true);
+			published.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, true));
+			reportHostingFailure(context, published.hostingFailure());
+		} else if (result instanceof ModpackExecutor.NoChanges noChanges) {
+			headline(context, "NO_CHANGES", start, noChanges.state().contentToken(), ChatFormatting.YELLOW, true);
+			reportGenerationDetails(context, noChanges.state(), false, true);
+			noChanges.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, true));
+			reportHostingFailure(context, noChanges.hostingFailure());
+		} else if (result instanceof ModpackExecutor.PublishResult.NothingToPublish nothing) {
+			send(context, "FAILED: " + nothing.absence().detail(), ChatFormatting.RED, true);
+		} else if (result instanceof ModpackExecutor.PublishResult.Rejected rejected) {
+			send(context, "FAILED: " + rejected.detail(), ChatFormatting.RED, true);
+		}
 	}
 
 	/** The generation is committed, but the live host may still serve the previous view; only an explicit restart rebinds it. */

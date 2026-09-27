@@ -128,6 +128,23 @@ public class NettyServer {
 		return activityView.snapshot();
 	}
 
+	/**
+	 * Who serves the endpoint the login handshake advertises. The built-in host answers for itself, so anything that
+	 * has to reason about what a client will actually fetch - whether an absent generation is the operator's problem or
+	 * nobody's - asks here instead of re-reading the mode and port.
+	 */
+	public enum EndpointOwner {
+		/** This process runs the listener the advertised endpoint points at. */
+		BUILT_IN,
+		/** The advertised endpoint is served outside this process, which cannot validate that routing from here. */
+		EXTERNAL
+	}
+
+	public EndpointOwner endpointOwner() {
+		if (!serverConfig.modpackHost) return EndpointOwner.EXTERNAL;
+		return serverConfig.connectionMode == ModpackConnectionMode.HTTP && serverConfig.bindPort == -1 ? EndpointOwner.EXTERNAL : EndpointOwner.BUILT_IN;
+	}
+
 	public synchronized Optional<ChannelFuture> start() {
 		if (isRunning()) {
 			LOGGER.warn("Modpack hosting is already running");
@@ -136,6 +153,14 @@ public class NettyServer {
 
 		if (!serverConfig.modpackHost) {
 			LOGGER.warn("Built-in modpack hosting is disabled in config");
+			return Optional.empty();
+		}
+
+		// An externally served endpoint has no listener to prepare, so this is asked before the TLS pair and the disk
+		// reader pool exist rather than after. HOLEPUNCH and MAGIC on the Minecraft port keep theirs below, because
+		// those modes carry the route over the game connection itself.
+		if (endpointOwner() == EndpointOwner.EXTERNAL) {
+			LOGGER.info("Modpack hosting is advertised without a built-in listener; expecting the endpoint to be served externally");
 			return Optional.empty();
 		}
 
@@ -166,13 +191,6 @@ public class NettyServer {
 				LOGGER.info("Hosting modpack through magic packet routing on the Minecraft port");
 				startSharedTraffic();
 				sharedMagicEnabled = true;
-				return Optional.empty();
-			}
-
-			if (serverConfig.bindPort == -1) {
-				LOGGER.info("{} is advertised without a built-in listener; expecting the endpoint to be served externally", connectionMode);
-				diskReads.shutdownNow();
-				diskReads = null;
 				return Optional.empty();
 			}
 
