@@ -60,9 +60,9 @@ public abstract class ConnectScreenMixin {
 
 		var originAddress = AddressHelpers.format(address.getHost(), address.getPort());
 		var savedTrust = CertificateTrustStore.get(originAddress);
+		// A pin from the address pins this session only; trust is imported solely by adding the server (or accepting a cert by hand).
 		String expectedFingerprint = parsed.hasPin() ? parsed.fingerprint() : savedTrust == null ? null : savedTrust.fingerprint;
-		String trustReason = parsed.hasPin() ? CertificateTrustStore.Reason.ADDRESS_PIN.name() : null;
-		ModPackets.setConnectionAttempt(new ModPackets.ConnectionAttempt(originAddress, expectedFingerprint, trustReason));
+		ModPackets.setConnectionAttempt(new ModPackets.ConnectionAttempt(originAddress, expectedFingerprint));
 	/*? if >= 1.20.5 {*/
 		original.call(parent, client, address, info, quickPlay, transferState);
 	/*?} else if >1.19.3 {*/

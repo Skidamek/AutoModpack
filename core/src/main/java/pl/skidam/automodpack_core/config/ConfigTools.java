@@ -312,7 +312,7 @@ public final class ConfigTools {
 				ModpackConnectionMode connectionMode = modeElement == null || modeElement.isJsonNull()
 						? ModpackConnectionMode.HOLEPUNCH
 						: context.deserialize(modeElement, ModpackConnectionMode.class);
-				ConnectionJsons.ConnectionInfo connection = new ConnectionJsons.ConnectionInfo(origin, endpoint, connectionMode, null, null);
+				ConnectionJsons.ConnectionInfo connection = new ConnectionJsons.ConnectionInfo(origin, endpoint, connectionMode, null);
 				JsonElement approved = object.get("approvedOrigins");
 				if (approved != null && approved.isJsonArray()) for (JsonElement element : approved.getAsJsonArray()) if (element.isJsonPrimitive()) connection.approveOrigin(element.getAsString());
 				return connection;
@@ -331,9 +331,9 @@ public final class ConfigTools {
 	private static class CertificateTrustEntryTypeAdapter implements JsonDeserializer<ConnectionJsons.CertificateTrustEntry> {
 		@Override
 		public ConnectionJsons.CertificateTrustEntry deserialize(JsonElement json, Type type, JsonDeserializationContext context) throws JsonParseException {
-			if (json.isJsonPrimitive()) return new ConnectionJsons.CertificateTrustEntry(json.getAsString(), "TOFU");
+			if (json.isJsonPrimitive()) return new ConnectionJsons.CertificateTrustEntry(json.getAsString(), ConnectionJsons.Reason.TOFU.name());
 			var object = json.getAsJsonObject();
-			String reason = object.has("reason") ? object.get("reason").getAsString() : "TOFU";
+			String reason = object.has("reason") ? object.get("reason").getAsString() : ConnectionJsons.Reason.TOFU.name();
 			return new ConnectionJsons.CertificateTrustEntry(object.get("fingerprint").getAsString(), reason);
 		}
 	}

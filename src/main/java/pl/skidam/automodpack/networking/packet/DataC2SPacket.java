@@ -74,7 +74,7 @@ public class DataC2SPacket {
 
 			LOGGER.info("AutoModpack endpoint: {}:{} ({})", endpoint.getHostString(), endpoint.getPort(), connectionMode);
 
-			connectionInfo = new ConnectionJsons.ConnectionInfo(connectionAttempt.origin(), endpoint, connectionMode, connectionAttempt.expectedFingerprint(), connectionAttempt.trustReason());
+			connectionInfo = new ConnectionJsons.ConnectionInfo(connectionAttempt.origin(), endpoint, connectionMode, connectionAttempt.expectedFingerprint());
 		} catch (Exception e) {
 			LOGGER.error("Error preparing AutoModpack endpoint from data packet", e);
 			return CompletableFuture.completedFuture(buildResponse(LoginUpdateResponse.HOST_ERROR));

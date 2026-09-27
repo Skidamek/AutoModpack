@@ -89,7 +89,7 @@ class TlsSessionResumptionTest {
 			server.store().put(sha1, object);
 			List<X509Certificate> deferred = new CopyOnWriteArrayList<>();
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null, null);
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, "test-secret", certificate -> {
 				deferred.add(certificate);
 				return CompletableFuture.completedFuture(true);
@@ -189,7 +189,7 @@ class TlsSessionResumptionTest {
 			server.store().put("head", head);
 			CompletableFuture<Boolean> trust = new CompletableFuture<>();
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null, null);
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null);
 			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, "test-secret", ignored -> trust, Duration.ofMillis(50));
 			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(AWAIT_SECONDS);
 			while (!server.requests.contains("/head") && System.nanoTime() < deadline) Thread.sleep(10);

@@ -1,0 +1,69 @@
+id: pinned-direct-connect
+description: |
+  A certificate pin typed into the Minecraft address has to reach the handshake
+  intact, and it has to stay a session pin. Joining with host#amp1=<fingerprint>
+  satisfies verification on its own, so reaching the first-install review at all
+  is the assertion - a pin stripped before the join degrades to the manual prompt
+  and never gets there. The same client then reconnects with the plain address
+  and has to be asked again, because a pin in the address imports no trust: only
+  adding the server or accepting a certificate by hand does.
+renderClient: true
+
+flow:
+  - do: launch_server
+    name: start server
+  - do: launch_client
+    name: start client (boots in parallel with the server)
+  - use: read_server_fingerprint
+  - do: wait_server
+    name: wait for server to finish loading
+  - do: wait_bridge
+    name: wait for the client test bridge
+  - do: connect
+    name: join with the certificate pinned in the address
+    host: "${server.host}#amp1=${fingerprint}"
+  - do: wait_for
+    name: the pinned address reaches the review with no certificate prompt
+    timeout: 120s
+    until:
+      all:
+        - screen: PackConfirmScreen
+        - no_element: { key: automodpack.validation.verify }
+  - use: download_modpack
+  - use: restart_client
+  - do: launch_client
+    name: relaunch after the pinned install
+  - do: wait_bridge
+    name: wait for the relaunched client bridge
+  - do: connect
+    name: reconnect with the plain address
+  # Nothing was imported by the pinned join, so the plain address is unverified
+  # again and has to be checked by hand.
+  - use: accept_certificate
+  - do: wait_join
+    name: wait until the hand-verified plain join completes
+  - do: quit
+    name: quit the client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+    automodpack:
+      config:
+        modpack:
+          General:
+            main:
+              displayName: Core
+              description: Required core files
+              required: true
+              defaultSelected: true
+              from-server: ["/config/amp-autotest-marker.json", "/config/amp-autotest-pinned.txt"]
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  files:
+    - path: config/amp-autotest-pinned.txt
+      content: "pinned\n"

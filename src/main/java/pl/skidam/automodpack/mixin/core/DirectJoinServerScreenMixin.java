@@ -13,6 +13,6 @@ import pl.skidam.automodpack_core.auth.ServerAddressPin;
 public abstract class DirectJoinServerScreenMixin {
 	@ModifyExpressionValue(method = "removed", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/components/EditBox;getValue()Ljava/lang/String;"))
 	private String automodpack$stripPinFromLastAddress(String address) {
-		return ServerAddressPin.sanitize(address);
+		return ServerAddressPin.parse(address).address();
 	}
 }

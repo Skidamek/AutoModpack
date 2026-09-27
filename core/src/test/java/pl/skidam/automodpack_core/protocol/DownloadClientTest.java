@@ -245,7 +245,7 @@ class DownloadClientTest {
 
 		try (TransferServer server = new TransferServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null, null);
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null);
 			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, null, ignored -> decision);
 
 			assertEquals(-1, server.earlyApplicationByte().get(AWAIT_SECONDS, TimeUnit.SECONDS));
@@ -269,7 +269,7 @@ class DownloadClientTest {
 
 		try (TransferServer server = new TransferServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null, null);
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null);
 			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, null, ignored -> decision);
 
 			assertEquals(-1, server.earlyApplicationByte().get(AWAIT_SECONDS, TimeUnit.SECONDS));
@@ -287,7 +287,7 @@ class DownloadClientTest {
 
 		try (TransferServer server = new TransferServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null, null);
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null);
 			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, null, ignored -> decision, Duration.ofMillis(100));
 
 			long deadline = System.currentTimeMillis() + 5000;
@@ -318,7 +318,7 @@ class DownloadClientTest {
 		String fingerprint = NetUtils.getFingerprint(certificate);
 		try (LeasingServer server = new LeasingServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
 				CompletableFuture<Path> first = client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("first"), -1L, null);
 				assertTrue(server.receivedRequest().await(AWAIT_SECONDS, TimeUnit.SECONDS));
@@ -346,7 +346,7 @@ class DownloadClientTest {
 
 		try (LeasingServer server = new LeasingServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
 				int windowTakes = (int) (NetUtils.PIPELINE_WINDOW_BYTES / NetUtils.WIRE_CHUNK_BYTES);
 				int requests = windowTakes - 1; // every debit fits the one lane's window, so no second lane ever opens
@@ -371,7 +371,7 @@ class DownloadClientTest {
 
 		try (LeasingServer server = new LeasingServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
 				int takesPerLane = (int) (NetUtils.PIPELINE_WINDOW_BYTES / NetUtils.WIRE_CHUNK_BYTES);
 				List<CompletableFuture<Path>> downloads = new ArrayList<>();
@@ -394,7 +394,7 @@ class DownloadClientTest {
 
 		try (LeasingServer server = new LeasingServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
 				int poolBound = (int) (DownloadClient.LANES * (NetUtils.PIPELINE_WINDOW_BYTES / NetUtils.WIRE_CHUNK_BYTES));
 				List<CompletableFuture<Path>> downloads = new ArrayList<>();
@@ -447,7 +447,7 @@ class DownloadClientTest {
 				}
 
 				ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-						new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint, null);
+						new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, fingerprint);
 				List<CompletableFuture<DocumentFetch>> downloads = new ArrayList<>();
 				try (DownloadClient client = DownloadClient.createAsync(connectionInfo, null, ignored -> CompletableFuture.completedFuture(false)).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
 					// Nothing answers until every submit is booked: the served lane takes the first sixteen fetches and

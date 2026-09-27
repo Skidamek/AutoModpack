@@ -61,14 +61,10 @@ public final class ServerAddressPin {
 		return new Parsed(address, error == null ? fingerprint : null, error);
 	}
 
-	public static String strip(String rawAddress) {
+	/** The address without AutoModpack metadata, or the input unchanged when the pin is malformed, so a broken pin can never poison address parsing. */
+	public static String lenientAddress(String rawAddress) {
 		Parsed parsed = parse(rawAddress);
 		return parsed.isMalformed() ? rawAddress : parsed.address();
-	}
-
-	/** Removes AutoModpack metadata even when its value is malformed. */
-	public static String sanitize(String rawAddress) {
-		return parse(rawAddress).address();
 	}
 
 	public static String format(String address, String fingerprint) {

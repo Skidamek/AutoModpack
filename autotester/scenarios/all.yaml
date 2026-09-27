@@ -71,6 +71,20 @@ flow:
       all:
         - screen: PackConfirmScreen
         - no_element: { text: verify }
+  # The address-pinned join can only re-open the first-install review before any
+  # pack is installed, so it rides directly behind the plain first connect. A pin
+  # stripped before the connect screen parses it degrades to the manual
+  # certificate prompt and this review never returns.
+  - do: connect
+    name: join again with the certificate pinned in the address
+    host: "${server.host}#amp1=${fingerprint}"
+  - do: wait_for
+    name: the pinned address reaches the review with no certificate prompt
+    timeout: 120s
+    until:
+      all:
+        - screen: PackConfirmScreen
+        - no_element: { key: automodpack.validation.verify }
   - do: click
     name: open advanced group selection
     select: { text: Customize }

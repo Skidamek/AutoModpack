@@ -14,10 +14,6 @@ import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 /** Exact certificate pins owned by the original Minecraft server identity. */
 public final class CertificateTrustStore {
-	public enum Reason {
-		ADDRESS_PIN, TOFU, SEED
-	}
-
 	private CertificateTrustStore() {}
 
 	public static synchronized ConnectionJsons.CertificateTrustEntry get(InetSocketAddress origin) {
@@ -38,7 +34,7 @@ public final class CertificateTrustStore {
 		return Objects.equals(getFingerprint(origin), fingerprint);
 	}
 
-	public static synchronized void save(InetSocketAddress origin, String fingerprint, Reason reason) {
+	public static synchronized void save(InetSocketAddress origin, String fingerprint, ConnectionJsons.Reason reason) {
 		if (origin == null || reason == null) throw new IllegalArgumentException("Origin and trust reason are required");
 		String normalized = NetUtils.normalizeFingerprint(fingerprint);
 		ConnectionJsons.CertificateTrustEntry existing = get(origin);

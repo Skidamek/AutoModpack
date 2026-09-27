@@ -37,7 +37,7 @@ class ServerAddressPinTest {
 	void leavesPlainAndOtherModAddressesAlone() {
 		assertEquals("play.example.com", ServerAddressPin.parse("play.example.com").address());
 		assertFalse(ServerAddressPin.parse("play.example.com").hasPin());
-		assertEquals("play.example.com#othermod1=value", ServerAddressPin.strip("play.example.com#othermod1=value"));
+		assertEquals("play.example.com#othermod1=value", ServerAddressPin.lenientAddress("play.example.com#othermod1=value"));
 	}
 
 	@Test
@@ -45,17 +45,20 @@ class ServerAddressPinTest {
 		String first = "play.example.com:25565#amp1=" + FINGERPRINT + "#othermod1=value";
 		String last = "play.example.com:25565#othermod1=value#amp1=" + FINGERPRINT;
 
-		assertEquals("play.example.com:25565#othermod1=value", ServerAddressPin.strip(first));
-		assertEquals("play.example.com:25565#othermod1=value", ServerAddressPin.strip(last));
+		assertEquals("play.example.com:25565#othermod1=value", ServerAddressPin.lenientAddress(first));
+		assertEquals("play.example.com:25565#othermod1=value", ServerAddressPin.lenientAddress(last));
 		assertEquals(last, ServerAddressPin.format("play.example.com:25565#othermod1=value", FINGERPRINT));
 	}
 
 	@Test
-	void rejectsMalformedPinsButCanSanitizeThemBeforeSaving() {
+	void rejectsMalformedPinsAndKeepsTheLenientPathFromCarryingThem() {
 		assertTrue(ServerAddressPin.parse("#amp1=" + FINGERPRINT).isMalformed());
 		assertTrue(ServerAddressPin.parse("play.example.com#amp1=abc").isMalformed());
 		assertTrue(ServerAddressPin.parse("play.example.com#amp1=" + FINGERPRINT + "#amp1=" + FINGERPRINT).isMalformed());
 		assertTrue(ServerAddressPin.parse("play.example.com#amp1=" + FINGERPRINT + "&other=value").isMalformed());
-		assertEquals("play.example.com#other=value", ServerAddressPin.sanitize("play.example.com#amp1=abc#other=value"));
+		// The strict path drops the pin even when its value is broken, which is what saving a server list entry needs.
+		assertEquals("play.example.com#other=value", ServerAddressPin.parse("play.example.com#amp1=abc#other=value").address());
+		// The lenient path keeps the input, so a broken pin can never reach the address parser the strict path feeds.
+		assertEquals("play.example.com#amp1=abc", ServerAddressPin.lenientAddress("play.example.com#amp1=abc"));
 	}
 }

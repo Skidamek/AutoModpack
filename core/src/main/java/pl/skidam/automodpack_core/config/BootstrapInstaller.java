@@ -41,10 +41,10 @@ public final class BootstrapInstaller {
 		ConnectionJsons.CertificateTrustEntry previousTrust;
 		try {
 			previousTrust = OriginTrustStore.get(storage, bootstrap.origin());
-			if (bootstrap.hasFingerprint()) OriginTrustStore.save(storage, bootstrap.origin(), new ConnectionJsons.CertificateTrustEntry(bootstrap.fingerprint(), "SEED"));
+			if (bootstrap.hasFingerprint()) OriginTrustStore.save(storage, bootstrap.origin(), new ConnectionJsons.CertificateTrustEntry(bootstrap.fingerprint(), ConnectionJsons.Reason.SEED.name()));
 			if (bootstrap.installsModpack()) {
 				previousConnection = ConnectionStore.getConnection(storage, bootstrap.modpackId());
-				ConnectionJsons.ConnectionInfo seeded = new ConnectionJsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.connectionMode(), null, null);
+				ConnectionJsons.ConnectionInfo seeded = new ConnectionJsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.connectionMode(), null);
 				seeded.approveOrigin(originKey);
 				ConnectionStore.saveConnection(storage, bootstrap.modpackId(), seeded);
 				storage.writeSelectedModpackId(bootstrap.modpackId());

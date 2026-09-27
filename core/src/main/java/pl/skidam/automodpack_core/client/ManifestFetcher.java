@@ -96,7 +96,7 @@ public final class ManifestFetcher {
 			return CompletableFuture.completedFuture(new ManifestFetchResult(connectionFailedState, null, null, new IllegalArgumentException("Connection origin or endpoint is missing")));
 		}
 
-		CompletableFuture<ManifestFetchResult> fetch = createTransport(connectionInfo, secret == null ? null : secret.secret(), manualValidationCallbackAsync(connectionInfo, allowAskingUser))
+		CompletableFuture<ManifestFetchResult> fetch = DownloadClient.createAsync(connectionInfo, secret == null ? null : secret.secret(), manualValidationCallbackAsync(connectionInfo, allowAskingUser))
 				.thenCompose(transport -> {
 					abandonment.opened.set(transport);
 					return fetchModpackContentAsync(storage, connectionInfo, transport, ModpackId.isValid(selectedModpackId) ? selectedModpackId : null).handle((fetched, error) -> {
@@ -338,17 +338,6 @@ public final class ManifestFetcher {
 		}, DownloadClient.NET_EXECUTOR).whenComplete((ignored, error) -> deleteJournalTemp(storage));
 	}
 
-	private static CompletableFuture<PackTransport> createTransport(ConnectionJsons.ConnectionInfo connectionInfo, String secret,
-			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
-		CompletableFuture<DownloadClient> transport = DownloadClient.createAsync(connectionInfo, secret, trustCallback);
-		return transport.thenApply(created -> {
-			if (connectionInfo.trustReason != null) {
-				CertificateTrustStore.save(connectionInfo.origin, connectionInfo.expectedFingerprint, CertificateTrustStore.Reason.valueOf(connectionInfo.trustReason));
-			}
-			return created;
-		});
-	}
-
 	private static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(ConnectionJsons.ConnectionInfo connectionInfo, boolean allowAskingUser) {
 		String originHost = connectionInfo.origin.getHostString();
 		return certificate -> {
@@ -381,7 +370,7 @@ public final class ManifestFetcher {
 		CompletableFuture<Boolean> result = new CompletableFuture<>();
 		Runnable trustAction = () -> {
 			LOGGER.info("Certificate trust accepted by the player for {}", originHost);
-			CertificateTrustStore.save(connectionInfo.origin, fingerprint, CertificateTrustStore.Reason.TOFU);
+			CertificateTrustStore.save(connectionInfo.origin, fingerprint, ConnectionJsons.Reason.TOFU);
 			result.complete(true);
 		};
 		Runnable cancelAction = () -> {

@@ -160,7 +160,7 @@ class ThermoStressBenchTest {
 		ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(
 				InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 				new InetSocketAddress(InetAddress.getLoopbackAddress(), port),
-				ModpackConnectionMode.HTTP, target.getCertificateFingerprint(), null);
+				ModpackConnectionMode.HTTP, target.getCertificateFingerprint());
 		return DownloadClient.createAsync(connectionInfo, "ignored", ignored -> CompletableFuture.completedFuture(false))
 				.get(30, TimeUnit.SECONDS);
 	}
@@ -357,7 +357,7 @@ class ThermoStressBenchTest {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(
 					InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), listener.getLocalPort()),
-					ModpackConnectionMode.HTTP, fingerprint, null);
+					ModpackConnectionMode.HTTP, fingerprint);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, "ignored", ignored -> CompletableFuture.completedFuture(false))
 					.get(30, TimeUnit.SECONDS)) {
 				String sha1 = new ArrayList<>(universe.keySet()).get(0);

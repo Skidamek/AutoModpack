@@ -33,12 +33,12 @@ class ConnectionStoreTest {
 	void approvalsSurviveAReconnectToAnotherServer() throws Exception {
 		ClientStorage storage = TestDataRoot.open(Files.createDirectory(temporaryDirectory.resolve("game")), Files.createDirectory(temporaryDirectory.resolve("data")));
 		ConnectionJsons.ConnectionInfo creative = new ConnectionJsons.ConnectionInfo(AddressHelpers.parseOrigin("creative.example.com"),
-				AddressHelpers.parseEndpoint("downloads.example.com:25564"), ModpackConnectionMode.HTTP, null, null);
+				AddressHelpers.parseEndpoint("downloads.example.com:25564"), ModpackConnectionMode.HTTP, null);
 		creative.approveOrigin(AddressHelpers.formatAddress(creative.origin));
 		ConnectionStore.saveConnection(storage, "pack111", creative);
 
 		ConnectionJsons.ConnectionInfo survival = new ConnectionJsons.ConnectionInfo(AddressHelpers.parseOrigin("survival.example.com"),
-				AddressHelpers.parseEndpoint("downloads2.example.com:25564"), ModpackConnectionMode.HTTP, null, null);
+				AddressHelpers.parseEndpoint("downloads2.example.com:25564"), ModpackConnectionMode.HTTP, null);
 		ConnectionJsons.ConnectionInfo stored = ConnectionStore.getConnection(storage, "pack111");
 		stored.approvedOrigins().forEach(survival::approveOrigin);
 		survival.approveOrigin(AddressHelpers.formatAddress(survival.origin));
@@ -83,9 +83,9 @@ class ConnectionStoreTest {
 	void stalePacksAreTheInstalledOnesThisOriginNoLongerServes() throws Exception {
 		ClientStorage storage = TestDataRoot.open(Files.createDirectory(temporaryDirectory.resolve("game")), Files.createDirectory(temporaryDirectory.resolve("data")));
 		ConnectionJsons.ConnectionInfo shared = new ConnectionJsons.ConnectionInfo(AddressHelpers.parseOrigin("shared.example.com"),
-				AddressHelpers.parseEndpoint("downloads.example.com:25564"), ModpackConnectionMode.HTTP, null, null);
+				AddressHelpers.parseEndpoint("downloads.example.com:25564"), ModpackConnectionMode.HTTP, null);
 		ConnectionJsons.ConnectionInfo elsewhere = new ConnectionJsons.ConnectionInfo(AddressHelpers.parseOrigin("elsewhere.example.com"),
-				AddressHelpers.parseEndpoint("other.example.com:25564"), ModpackConnectionMode.HTTP, null, null);
+				AddressHelpers.parseEndpoint("other.example.com:25564"), ModpackConnectionMode.HTTP, null);
 		ConnectionStore.saveConnection(storage, "abc1234", shared);
 		ConnectionStore.saveConnection(storage, "xyz9876", shared);
 		ConnectionStore.saveConnection(storage, "pqr5432", elsewhere);

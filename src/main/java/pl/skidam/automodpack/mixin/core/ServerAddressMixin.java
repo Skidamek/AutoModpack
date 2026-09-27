@@ -13,11 +13,11 @@ import pl.skidam.automodpack_core.auth.ServerAddressPin;
 public abstract class ServerAddressMixin {
 	@WrapMethod(method = "parseString(Ljava/lang/String;)Lnet/minecraft/client/multiplayer/resolver/ServerAddress;")
 	private static ServerAddress automodpack$stripPin(String address, Operation<ServerAddress> original) {
-		return original.call(ServerAddressPin.strip(address));
+		return original.call(ServerAddressPin.lenientAddress(address));
 	}
 
 	@WrapMethod(method = "isValidAddress(Ljava/lang/String;)Z")
 	private static boolean automodpack$stripPinForValidation(String address, Operation<Boolean> original) {
-		return original.call(ServerAddressPin.strip(address));
+		return original.call(ServerAddressPin.lenientAddress(address));
 	}
 }

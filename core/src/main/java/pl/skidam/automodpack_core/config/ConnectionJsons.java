@@ -22,16 +22,14 @@ public class ConnectionJsons {
 		public ModpackConnectionMode connectionMode;
 		public List<String> approvedOrigins; // formatted origins the player allowed to serve this pack; origin always stays among them
 		public transient String expectedFingerprint; // runtime-only exact certificate pin bound to origin
-		public transient String trustReason; // non-null only while importing new trust
 
 		public ConnectionInfo() {}
 
-		public ConnectionInfo(InetSocketAddress origin, InetSocketAddress endpoint, ModpackConnectionMode connectionMode, String expectedFingerprint, String trustReason) {
+		public ConnectionInfo(InetSocketAddress origin, InetSocketAddress endpoint, ModpackConnectionMode connectionMode, String expectedFingerprint) {
 			this.origin = origin;
 			this.endpoint = endpoint;
 			this.connectionMode = connectionMode;
 			this.expectedFingerprint = expectedFingerprint;
-			this.trustReason = trustReason;
 		}
 
 		public boolean isComplete() {
@@ -71,6 +69,11 @@ public class ConnectionJsons {
 			this.fingerprint = fingerprint;
 			this.reason = reason;
 		}
+	}
+
+	/** Why an origin is pinned; the vocabulary of {@link CertificateTrustEntry#reason}. */
+	public enum Reason {
+		ADDRESS_PIN, TOFU, SEED
 	}
 
 	public static class KnownHostsBootstrapFields {

@@ -21,6 +21,7 @@ import net.minecraft.network.chat.Component;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.ServerAddressPin;
+import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.client.CertificateTrustStore;
 import pl.skidam.automodpack_core.screen.FailureCategory;
@@ -90,7 +91,7 @@ public abstract class EditServerScreenMixin extends Screen {
 	private String automodpack$importPin(String address) {
 		ServerAddressPin.Parsed parsed = ServerAddressPin.parse(address);
 		if (parsed.hasPin()) {
-			CertificateTrustStore.save(toOrigin(parsed.address()), parsed.fingerprint(), CertificateTrustStore.Reason.ADDRESS_PIN);
+			CertificateTrustStore.save(toOrigin(parsed.address()), parsed.fingerprint(), ConnectionJsons.Reason.ADDRESS_PIN);
 		}
 		return parsed.address();
 	}

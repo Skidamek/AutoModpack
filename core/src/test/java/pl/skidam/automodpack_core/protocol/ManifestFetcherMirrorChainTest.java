@@ -178,7 +178,7 @@ class ManifestFetcherMirrorChainTest {
 
 	private ConnectionJsons.ConnectionInfo connectionInfo() throws Exception {
 		return new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
-				new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, server.fingerprint(), null);
+				new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, server.fingerprint());
 	}
 
 	private Secrets.Secret secret() {
