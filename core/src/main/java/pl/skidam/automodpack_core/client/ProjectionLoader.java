@@ -30,7 +30,11 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 /** Loads an installed modpack projection into the running game without contacting the server. */
 final class ProjectionLoader {
 
-	/** The installed projection view of the owning updater; reading it may observe the pending transaction. */
+	/**
+	 * The installed projection view of the owning updater; reading it may observe the pending transaction. It must be
+	 * called per read and never captured: a commit between two reads retires the journal an observed view would
+	 * otherwise keep answering from.
+	 */
 	@FunctionalInterface
 	interface StoredTarget {
 		ModpackJsons.ModpackContentFields get() throws IOException;

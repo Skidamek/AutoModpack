@@ -27,6 +27,7 @@ import pl.skidam.automodpack_core.platforms.PlatformCache;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
+import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 import pl.skidam.automodpack_core.utils.DownloadSource;
@@ -95,8 +96,11 @@ final class ModpackObjectAcquisition {
 		Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items = target.list == null ? List.of() : target.list;
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> targetObjects = uniqueObjects(items);
 		reserveObjects(targetObjects.stream().map(item -> item.sha1).collect(Collectors.toSet()));
+		// Both populating passes read the same observed projection, and each takes its own file listing when it runs,
+		// so the one after the download still resolves against every object the download just acquired.
+		ClientProjectionView projectionView = ClientProjectionView.observe(storage);
 		ModpackUtils.populateStoreFromCWD(targetObjects, cache, storage);
-		planBuilder.populateStoreFromCachedLocations(target, cache);
+		planBuilder.populateStoreFromCachedLocations(target, projectionView, cache);
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missing = ModpackUtils.identifyUncachedFiles(targetObjects, cache, storage);
 		if (missing.isEmpty()) {
 			LOGGER.info("All {} selected modpack objects are already acquired locally", targetObjects.size());
@@ -119,7 +123,7 @@ final class ModpackObjectAcquisition {
 			throw e;
 		}
 
-		planBuilder.populateStoreFromLogicalProjection(target, cache);
+		planBuilder.populateStoreFromLogicalProjection(target, projectionView, cache);
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> stillMissing = ModpackUtils.identifyUncachedFiles(targetObjects, cache, storage);
 		if (!stillMissing.isEmpty()) throw new IOException("Verified selected-target objects are still missing after acquisition: " + stillMissing.size());
 		if (!playerFacing) LOGGER.info("Launch apply acquired {} complete modpack objects in {}ms", targetObjects.size(), System.currentTimeMillis() - start);

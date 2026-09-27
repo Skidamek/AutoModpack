@@ -37,7 +37,7 @@ public class ModpackUtils {
 
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate = new HashSet<>();
 		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
-			Map<String, UpdatePlan.FileState> live = ClientProjectionView.open(storage).liveFiles(cache);
+			Map<String, UpdatePlan.FileState> live = ClientProjectionView.liveFiles(storage, cache);
 			for (var serverItem : serverModpackContent.list) {
 				if (verifyActiveItem(serverItem, LogicalPath.normalize(serverItem.file), live) == FileVerification.MISMATCH) filesToUpdate.add(serverItem);
 			}
@@ -75,7 +75,7 @@ public class ModpackUtils {
 				LOGGER.info("Modpack is detached; its active files stay editable");
 				return;
 			}
-			Map<String, UpdatePlan.FileState> live = ClientProjectionView.open(storage).liveFiles(cache);
+			Map<String, UpdatePlan.FileState> live = ClientProjectionView.liveFiles(storage, cache);
 			for (var serverItem : serverModpackContent.list) {
 				String relative = LogicalPath.normalize(serverItem.file);
 				if (verifyActiveItem(serverItem, relative, live) == FileVerification.MATCH) ImmutableFiles.protect(storage.activePath(relative));

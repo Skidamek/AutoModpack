@@ -30,6 +30,10 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * Resolves the client projection used for planning and update checks.
  *
  * <p>
+ * An instance is one observation of the journal: {@link #observe} reads the pending transaction once and every method
+ * answers from that one observation, so a planning pass can never see the journal change under itself.
+ *
+ * <p>
  * The committed {@code active/} tree is the projection the game loads. A pending
  * transaction is only treated as that projection after publication has started
  * (incoming/backup exists, or the phase is already swapping). An unpublished
@@ -41,23 +45,28 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  */
 public final class ClientProjectionView {
 	private final ClientStorage storage;
+	private final UpdateTransaction pending;
+	private boolean stagedTargetResolved;
+	private ModpackJsons.ModpackContentFields stagedTarget;
 
-	private ClientProjectionView(ClientStorage storage) {
+	private ClientProjectionView(ClientStorage storage, UpdateTransaction pending) {
 		this.storage = Objects.requireNonNull(storage, "storage");
+		this.pending = pending;
 	}
 
-	public static ClientProjectionView open(ClientStorage storage) {
-		return new ClientProjectionView(storage);
+	/** Observes the journal once; every answer this instance gives is that observation. */
+	public static ClientProjectionView observe(ClientStorage storage) throws IOException {
+		Objects.requireNonNull(storage, "storage");
+		return new ClientProjectionView(storage, UpdateTransaction.read(storage.transactionFile()));
 	}
 
 	/** Returns the target represented by the published projection. */
 	public ModpackJsons.ModpackContentFields target() throws IOException {
-		UpdateTransaction pending = readPending();
 		if (publicationStarted(storage, pending)) {
 			ModpackJsons.ModpackContentFields staged = stagedTarget(pending);
 			if (staged != null) return staged;
 		}
-		return committedTarget();
+		return committedTarget(storage);
 	}
 
 	/**
@@ -67,7 +76,6 @@ public final class ClientProjectionView {
 	 */
 	public ClientConfigJsons.ClientConfigFieldsV3 logicalConfig(ClientConfigJsons.ClientConfigFieldsV3 current) throws IOException {
 		Objects.requireNonNull(current, "current config");
-		UpdateTransaction pending = readPending();
 		if (pending == null || pending.plan().plannedClientConfig() == null) return new ClientConfigJsons.ClientConfigFieldsV3(current);
 		return rebaseConfig(persistedClientConfig(), pending);
 	}
@@ -77,7 +85,6 @@ public final class ClientProjectionView {
 			ClientConfigJsons.ClientConfigFieldsV3 persisted) throws IOException {
 		Objects.requireNonNull(current, "current config");
 		Objects.requireNonNull(persisted, "persisted config");
-		UpdateTransaction pending = readPending();
 		if (pending == null || pending.plan().plannedClientConfig() == null) return new ClientConfigJsons.ClientConfigFieldsV3(current);
 		return rebaseConfig(persisted, pending);
 	}
@@ -90,7 +97,6 @@ public final class ClientProjectionView {
 	}
 
 	public String logicalSelectedModpackId() throws IOException {
-		UpdateTransaction pending = readPending();
 		String current = storage.selectedModpackId();
 		if (pending == null || pending.plan().plannedSelectedModpackId() == null) return current;
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
@@ -108,15 +114,18 @@ public final class ClientProjectionView {
 	/** Captures the projection observation for one planning pass. */
 	public Snapshot snapshot(FileCache cache) throws IOException {
 		Objects.requireNonNull(cache, "cache");
-		UpdateTransaction pending = readPending();
 		if (publicationStarted(storage, pending)) return stagedSnapshot(pending);
 		return liveSnapshot(cache, isProjectionTransaction(pending) ? pending : null);
 	}
 
-	/** Returns the committed {@code active/} tree the game loads, independent of any unpublished request. */
-	public Map<String, UpdatePlan.FileState> liveFiles(FileCache cache) throws IOException {
+	/**
+	 * Returns the committed {@code active/} tree the game loads, independent of any unpublished request. Journal-free by
+	 * construction: an update check must not read - and by reading, destroy - durable state it has no reason to look at.
+	 */
+	public static Map<String, UpdatePlan.FileState> liveFiles(ClientStorage storage, FileCache cache) throws IOException {
+		Objects.requireNonNull(storage, "storage");
 		Objects.requireNonNull(cache, "cache");
-		return readLiveFiles(cache);
+		return readLiveFiles(storage, cache, committedTarget(storage));
 	}
 
 	public static boolean publicationStarted(ClientStorage storage, UpdateTransaction transaction) {
@@ -144,14 +153,15 @@ public final class ClientProjectionView {
 	}
 
 	private Snapshot liveSnapshot(FileCache cache, UpdateTransaction pending) throws IOException {
-		return new Snapshot(committedTarget(), readLiveFiles(cache), pendingGameStates(pending), pending);
+		ModpackJsons.ModpackContentFields committed = committedTarget(storage);
+		return new Snapshot(committed, readLiveFiles(storage, cache, committed), pendingGameStates(pending), pending);
 	}
 
-	private Map<String, UpdatePlan.FileState> readLiveFiles(FileCache cache) throws IOException {
+	private static Map<String, UpdatePlan.FileState> readLiveFiles(ClientStorage storage, FileCache cache, ModpackJsons.ModpackContentFields committed) throws IOException {
 		Map<String, UpdatePlan.FileState> files = new LinkedHashMap<>();
 		Path active = storage.activeDirectory();
 		if (!Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) return files;
-		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> published = publishedProjectionItems();
+		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> published = publishedItems(committed);
 		try (var paths = Files.walk(active)) {
 			for (Path path : paths.filter(candidate -> Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)).toList()) {
 				String relative = LogicalPath.normalize(active.relativize(path).toString());
@@ -167,8 +177,7 @@ public final class ClientProjectionView {
 		return files;
 	}
 
-	private Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> publishedProjectionItems() throws IOException {
-		ModpackJsons.ModpackContentFields target = committedTarget();
+	private static Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> publishedItems(ModpackJsons.ModpackContentFields target) {
 		if (target == null || target.list == null) return Map.of();
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> items = new LinkedHashMap<>();
 		for (var item : target.list) {
@@ -206,26 +215,28 @@ public final class ClientProjectionView {
 		return pendingGameStates;
 	}
 
-	private ModpackJsons.ModpackContentFields committedTarget() throws IOException {
+	private static ModpackJsons.ModpackContentFields committedTarget(ClientStorage storage) throws IOException {
 		return new ClientGenerationStore(storage).readActiveTarget().map(SelectedModpackTarget::flatTarget).orElse(null);
 	}
 
 	private ModpackJsons.ModpackContentFields stagedTarget(UpdateTransaction pending) throws IOException {
+		if (!stagedTargetResolved) {
+			stagedTarget = resolveStagedTarget(pending);
+			stagedTargetResolved = true;
+		}
+		return stagedTarget;
+	}
+
+	private ModpackJsons.ModpackContentFields resolveStagedTarget(UpdateTransaction pending) throws IOException {
 		if (!isProjectionTransaction(pending)) return null;
 		if (pending.plan().packTarget().contentToken() == null) throw new IOException("Pending projection target generation is missing");
 		try {
 			PackDocument document = new ClientGenerationStore(storage).document(pending);
 			SelectionIntent intent = pending.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE ? pending.targetIntent() : pending.expectedPriorIntent();
 			return SelectedModpackTarget.prepare(document, pending.expectedPriorIntent(), intent, pending.platform()).flatTarget();
-		} catch (IOException e) {
-			throw e;
 		} catch (RuntimeException e) {
 			throw new IOException("Staged client projection target is invalid", e);
 		}
-	}
-
-	private UpdateTransaction readPending() throws IOException {
-		return UpdateTransaction.read(storage.transactionFile());
 	}
 
 	private static boolean isProjectionTransaction(UpdateTransaction transaction) {

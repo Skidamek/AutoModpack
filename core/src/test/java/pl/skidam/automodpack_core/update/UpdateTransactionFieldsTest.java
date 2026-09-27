@@ -43,7 +43,7 @@ class UpdateTransactionFieldsTest {
 				List.of(new UpdatePlan.BaselineCapture(Root.PROJECTION, "mods/old.jar", OBJECT_HASH, 34, false)),
 				List.of(new UpdatePlan.Conflict("packaa1", "c".repeat(40), Set.of("sodium"), "mods/a.jar", OBJECT_HASH, 1, "mods/b.jar", OBJECT_HASH, 2, UpdatePlan.ConflictAction.PRESERVE_LOCAL)),
 				List.of(new UpdatePlan.NestedCopy("mods/nested.jar", OBJECT_HASH, 2)), consequences);
-		UpdateTransaction transaction = UpdateTransaction.createRemoval(plan, ClientPlatform.LINUX, null, ledger.toFields(), "", new ClientConfigJsons.ClientConfigFieldsV3());
+		UpdateTransaction transaction = UpdateTransaction.createRemoval(plan, ClientPlatform.LINUX, null, "", new PlannedAgainst(new ClientConfigJsons.ClientConfigFieldsV3(), "", ledger.toFields()));
 
 		Path file = temporaryDirectory.resolve("update-transaction.json");
 		ConfigTools.writeAtomic(file, transaction);
@@ -62,5 +62,6 @@ class UpdateTransactionFieldsTest {
 		assertEquals(UpdatePlan.ConflictAction.PRESERVE_LOCAL, roundTripped.plan().conflicts().get(0).action());
 		assertEquals("mods/nested.jar", roundTripped.plan().generatedCopies().get(0).relativePath());
 		assertEquals(ChangeSet.Kind.ADDED, roundTripped.plan().consequences().changes().get(0).kind());
+		assertEquals(ledger, roundTripped.expectedInstalled());
 	}
 }

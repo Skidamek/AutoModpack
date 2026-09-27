@@ -39,6 +39,7 @@ import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.GeneratedCopyState;
 import pl.skidam.automodpack_core.update.InstanceTree;
+import pl.skidam.automodpack_core.update.PlannedAgainst;
 import pl.skidam.automodpack_core.update.StateHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
@@ -108,32 +109,27 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	record PreparedPlan(UpdatePlan plan, Map<UpdatePlan.FileKey, UpdatePlan.FileState> originalFiles, String overlayDigest,
-			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig, String expectedSelectedModpackId) {
+	record PreparedPlan(UpdatePlan plan, Map<UpdatePlan.FileKey, UpdatePlan.FileState> originalFiles, String overlayDigest, PlannedAgainst plannedAgainst) {
 		PreparedPlan {
 			originalFiles = Map.copyOf(originalFiles);
 			if (!HashUtils.isCanonicalSha1(overlayDigest)) throw new IllegalArgumentException("Prepared overlay digest is invalid");
-			expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(Objects.requireNonNull(expectedClientConfig, "expectedClientConfig"));
-			expectedSelectedModpackId = expectedSelectedModpackId == null ? "" : expectedSelectedModpackId;
+			plannedAgainst = Objects.requireNonNull(plannedAgainst, "plannedAgainst");
 		}
 	}
 
 	record RemovalPreparation(UpdatePlan plan, ModpackJsons.ModpackContentFields installed,
 			Map<String, InstanceTree.TrackedFile> priorGameDir, SelectionIntent expectedPriorIntent, ClientConfigJsons.ClientConfigFieldsV3 currentConfig,
-			ClientConfigJsons.ClientConfigFieldsV3 plannedConfig, Map<UpdatePlan.FileKey, UpdatePlan.FileState> files,
-			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig, String expectedSelectedModpackId) {
+			ClientConfigJsons.ClientConfigFieldsV3 plannedConfig, Map<UpdatePlan.FileKey, UpdatePlan.FileState> files, PlannedAgainst plannedAgainst) {
 		RemovalPreparation {
 			files = Map.copyOf(files);
-			expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(Objects.requireNonNull(expectedClientConfig, "expectedClientConfig"));
-			expectedSelectedModpackId = expectedSelectedModpackId == null ? "" : expectedSelectedModpackId;
+			plannedAgainst = Objects.requireNonNull(plannedAgainst, "plannedAgainst");
 		}
 	}
 
 	private record AvailablePreInstall(Map<String, InstanceTree.TrackedFile> priorGameDir, Set<String> objectHashes) {}
 
 	/** Inspection phase: observes live, overlay and projection state and produces the plan; expects {@link #reconcileEditableState} to have run already. */
-	PreparedPlan buildPlan(Input input, FileCache cache, ModFileCache modCache) throws IOException {
-		ClientProjectionView projectionView = ClientProjectionView.open(storage);
+	PreparedPlan buildPlan(Input input, ClientProjectionView projectionView, FileCache cache, ModFileCache modCache) throws IOException {
 		ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
 		ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
@@ -164,7 +160,8 @@ final class ClientUpdatePlanBuilder {
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, input.target(), files, forceCopyServices, targetMods, standardMods,
 				previousCopies, nestedCandidates, selection, plannedConfig, input.consentedLocalModFiles())).withPlannedSelectedModpackId(input.target().modpackId);
-		return new PreparedPlan(withSwitchConsequences(plan, input.target(), logicalConfig.syncVersions), files, targetOverlay.digest(), expectedClientConfig, expectedSelectedModpackId);
+		return new PreparedPlan(withSwitchConsequences(plan, input.target(), logicalConfig.syncVersions), files, targetOverlay.digest(),
+				new PlannedAgainst(expectedClientConfig, expectedSelectedModpackId, installed == null ? null : installed.ownershipLedger));
 	}
 
 	/** Refuses a pack this client cannot run, plans the launcher-metadata switch (with its restart demand) when it can, and marks the manual switches. */
@@ -185,7 +182,7 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	RemovalPreparation prepareRemoval() throws Exception {
-		ClientProjectionView projectionView = ClientProjectionView.open(storage);
+		ClientProjectionView projectionView = ClientProjectionView.observe(storage);
 		ModpackJsons.ModpackContentFields installed = projectionView.target();
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
 		if (activeState == null || installed == null) throw new IOException("Active modpack generation state is missing");
@@ -199,29 +196,30 @@ final class ClientUpdatePlanBuilder {
 
 		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 			AvailablePreInstall availablePreInstall = readAvailablePreInstall(installed.modpackId, cache);
+			reconcileEditableState(cache, projectionView, null);
 			ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
-			// The state history is immutable, so this read is reconciliation-order safe, unlike the old baseline file.
-			reconcileEditableState(cache, projection, null);
 			GeneratedCopyState generatedCopies = projection.generatedCopies();
 			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null, projection,
 					generatedCopies == null ? List.of() : generatedCopies.nestedCopies(), cache,
 					Map.of(installed.modpackId, storage.overlaySnapshot(installed.modpackId, cache)));
 			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, availablePreInstall.priorGameDir(), files, availablePreInstall.objectHashes(), generatedCopies, plannedConfig))
 					.withPlannedSelectedModpackId(plannedSelectedModpackId);
-			return new RemovalPreparation(plan, installed, availablePreInstall.priorGameDir(), expectedPriorIntent, currentConfig, plannedConfig, files, expectedClientConfig, expectedSelectedModpackId);
+			// A removal plans the installed generation away, so the projection it planned against is the one it carries.
+			return new RemovalPreparation(plan, installed, availablePreInstall.priorGameDir(), expectedPriorIntent, currentConfig, plannedConfig, files,
+					new PlannedAgainst(expectedClientConfig, expectedSelectedModpackId, installed.ownershipLedger));
 		}
 	}
 
-	void populateStoreFromLogicalProjection(ModpackJsons.ModpackContentFields target, FileCache cache) throws IOException {
-		populateStoreFromProjection(target, ClientProjectionView.open(storage).snapshot(cache), cache);
+	void populateStoreFromLogicalProjection(ModpackJsons.ModpackContentFields target, ClientProjectionView projectionView, FileCache cache) throws IOException {
+		populateStoreFromProjection(target, projectionView.snapshot(cache), cache);
 	}
 
 	private void populateStoreFromProjection(ModpackJsons.ModpackContentFields target, ClientProjectionView.Snapshot projection, FileCache cache) throws IOException {
 		populateStoreFromSources(target, cache, item -> projection.sourceCandidates(item.file));
 	}
 
-	void populateStoreFromCachedLocations(ModpackJsons.ModpackContentFields target, FileCache cache) throws IOException {
-		ClientProjectionView.Snapshot projection = ClientProjectionView.open(storage).snapshot(cache);
+	void populateStoreFromCachedLocations(ModpackJsons.ModpackContentFields target, ClientProjectionView projectionView, FileCache cache) throws IOException {
+		ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
 		populateStoreFromSources(target, cache, item -> {
 			List<Path> candidates = new ArrayList<>(projection.sourceCandidates(item.file));
 			candidates.add(livePath(item));
@@ -229,14 +227,8 @@ final class ClientUpdatePlanBuilder {
 		});
 	}
 
-	void preparePlanObjects(UpdatePlan plan, ModpackJsons.ModpackContentFields targetManifest) throws IOException {
-		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
-			ClientProjectionView.Snapshot projection = ClientProjectionView.open(storage).snapshot(cache);
-			preparePlanObjects(plan, targetManifest, projection, cache);
-		}
-	}
-
-	private void preparePlanObjects(UpdatePlan plan, ModpackJsons.ModpackContentFields targetManifest, ClientProjectionView.Snapshot projection, FileCache cache) throws IOException {
+	void preparePlanObjects(UpdatePlan plan, ModpackJsons.ModpackContentFields targetManifest, ClientProjectionView projectionView, FileCache cache) throws IOException {
+		ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> itemsByHash = targetManifest.list.stream()
 				.collect(Collectors.toMap(item -> item.sha1.toLowerCase(Locale.ROOT), item -> item, (first, second) -> first));
 		for (UpdatePlan.Operation operation : plan.operations()) {
@@ -291,12 +283,8 @@ final class ClientUpdatePlanBuilder {
 	 * @param target
 	 *            the modpack the plan will install, used to detect server-side replacements of editable files; {@code null} for removal planning
 	 */
-	void reconcileEditableState(FileCache cache, ModpackJsons.ModpackContentFields target) throws IOException {
-		reconcileEditableState(cache, ClientProjectionView.open(storage).snapshot(cache), target);
-	}
-
-	/** Same reconciliation against a caller-held projection snapshot. */
-	void reconcileEditableState(FileCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields target) throws IOException {
+	void reconcileEditableState(FileCache cache, ClientProjectionView projectionView, ModpackJsons.ModpackContentFields target) throws IOException {
+		ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
 		ModpackJsons.ModpackContentFields activeTarget = projection.target();
 		if (activeTarget == null || activeTarget.list == null) return;
 		Set<InstanceTree.Key> extra = new TreeSet<>(InstanceTree.Key.ORDER);

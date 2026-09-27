@@ -27,6 +27,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
+import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
@@ -46,14 +47,15 @@ class ReconcileEditableStateTest {
 		ClientStorage storage = storage();
 		ModpackJsons.ModpackContentFields packTarget = install(storage);
 		ClientUpdatePlanBuilder builder = builder(storage);
+		ClientProjectionView projectionView = ClientProjectionView.observe(storage);
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-			builder.reconcileEditableState(cache, packTarget);
+			builder.reconcileEditableState(cache, projectionView, packTarget);
 			assertEquals(List.of(EDITABLE_PATH), storage.readOverlayState(PACK_ID).deletedPaths);
 
 			// A same-content update keeps the removal; the pack replacing the content spends it and the file comes back.
-			builder.reconcileEditableState(cache, packTarget);
+			builder.reconcileEditableState(cache, projectionView, packTarget);
 			assertEquals(List.of(EDITABLE_PATH), storage.readOverlayState(PACK_ID).deletedPaths);
-			builder.reconcileEditableState(cache, flatTarget(REPLACED_HASH));
+			builder.reconcileEditableState(cache, projectionView, flatTarget(REPLACED_HASH));
 			assertTrue(storage.readOverlayState(PACK_ID).deletedPaths.isEmpty());
 		}
 		assertFalse(Files.exists(storage.gamePath(EDITABLE_PATH)));
@@ -67,7 +69,7 @@ class ReconcileEditableStateTest {
 		write(storage.gamePath(EDITABLE_PATH), edited);
 		ClientUpdatePlanBuilder builder = builder(storage);
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-			builder.reconcileEditableState(cache, packTarget);
+			builder.reconcileEditableState(cache, ClientProjectionView.observe(storage), packTarget);
 
 			assertTrue(storage.readOverlayState(PACK_ID).deletedPaths.isEmpty());
 			assertTrue(Arrays.equals(edited, Files.readAllBytes(storage.overlayFile(PACK_ID, EDITABLE_PATH))));

@@ -90,9 +90,10 @@ final class UpdateSession implements UpdateAttempt {
 			objectAcquisition.acquireTargetObjects(target.flatTarget(), cache, playerFacing);
 			// A review presented to the player must not have its unverified verdict flipped by a late platform lookup; the preload path never waits on platform APIs.
 			if (playerFacing) sourceCatalogue.awaitSourceLookup();
-			planBuilder.reconcileEditableState(cache, target.flatTarget());
-			prepared = planBuilder.buildPlan(planInput(true), cache, modCache);
-			if (prepareObjects) planBuilder.preparePlanObjects(prepared.plan(), target.flatTarget());
+			ClientProjectionView projectionView = ClientProjectionView.observe(storage);
+			planBuilder.reconcileEditableState(cache, projectionView, target.flatTarget());
+			prepared = planBuilder.buildPlan(planInput(true), projectionView, cache, modCache);
+			if (prepareObjects) planBuilder.preparePlanObjects(prepared.plan(), target.flatTarget(), projectionView, cache);
 			review = ReviewedUpdatePlan.pending(prepared.plan());
 		}
 	}
@@ -151,8 +152,9 @@ final class UpdateSession implements UpdateAttempt {
 		if (result == null || result.requiresUpdate()) return true;
 		if (storage.readActiveState() == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return true;
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
-			planBuilder.reconcileEditableState(cache, target.flatTarget());
-			ClientUpdatePlanBuilder.PreparedPlan estimate = planBuilder.buildPlan(planInput(false), cache, modCache);
+			ClientProjectionView projectionView = ClientProjectionView.observe(storage);
+			planBuilder.reconcileEditableState(cache, projectionView, target.flatTarget());
+			ClientUpdatePlanBuilder.PreparedPlan estimate = planBuilder.buildPlan(planInput(false), projectionView, cache, modCache);
 			return requiresReconciliation(estimate, storedTarget());
 		}
 	}
@@ -164,7 +166,7 @@ final class UpdateSession implements UpdateAttempt {
 	private boolean hasPlanImpact(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
 		UpdatePlan plan = prepared.plan();
 		return !plan.operations().isEmpty() || !plan.conflicts().isEmpty() || !plan.preservations().isEmpty() || !plan.baselineCaptures().isEmpty()
-				|| !plan.restartReasons().isEmpty() || !Objects.equals(plan.plannedClientConfig(), ClientProjectionView.open(storage).logicalConfig(clientConfig));
+				|| !plan.restartReasons().isEmpty() || !Objects.equals(plan.plannedClientConfig(), ClientProjectionView.observe(storage).logicalConfig(clientConfig));
 	}
 
 	/** Which installed state cuts a preview's journal tail: only a matching active bookmark, or the mirror's last entry as the switch flow's fallback. */
@@ -265,10 +267,14 @@ final class UpdateSession implements UpdateAttempt {
 	}
 
 	private UpdateTransactionExecutor.Execution commitPlanObjects(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
-		planBuilder.preparePlanObjects(prepared.plan(), target.flatTarget());
-		UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig(), prepared.expectedSelectedModpackId());
-		transaction.stateKind = stateKind == null ? "" : stateKind.name();
-		return UpdateTransactionSupport.executor().commit(transaction, target);
+		// A retried commit re-reads the journal on purpose: the plan's ownership proofs ride on the ledger it recorded,
+		// so where the plan's bytes are read from is the only thing this observation decides.
+		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
+			planBuilder.preparePlanObjects(prepared.plan(), target.flatTarget(), ClientProjectionView.observe(storage), cache);
+			UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.plannedAgainst());
+			transaction.stateKind = stateKind == null ? "" : stateKind.name();
+			return UpdateTransactionSupport.executor().commit(transaction, target);
+		}
 	}
 
 	/**
@@ -285,8 +291,9 @@ final class UpdateSession implements UpdateAttempt {
 			UpdateTransactionExecutor.Execution failedExecution) throws IOException {
 		ensureSelectedModpackUnchanged(prepared);
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
-			planBuilder.reconcileEditableState(cache, target.flatTarget());
-			ClientUpdatePlanBuilder.PreparedPlan replanned = planBuilder.buildPlan(planInput(true), cache, modCache);
+			ClientProjectionView projectionView = ClientProjectionView.observe(storage);
+			planBuilder.reconcileEditableState(cache, projectionView, target.flatTarget());
+			ClientUpdatePlanBuilder.PreparedPlan replanned = planBuilder.buildPlan(planInput(true), projectionView, cache, modCache);
 			try {
 				review().requireCompatible(replanned.plan());
 			} catch (IllegalStateException e) {
@@ -299,7 +306,7 @@ final class UpdateSession implements UpdateAttempt {
 	}
 
 	private void ensureSelectedModpackUnchanged(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
-		if (!Objects.equals(storage.selectedModpackId(), prepared.expectedSelectedModpackId()))
+		if (!Objects.equals(storage.selectedModpackId(), prepared.plannedAgainst().selectedModpackId()))
 			throw new UpdateReplanRequiredException(null, "Selected modpack changed while the update was being applied");
 	}
 
@@ -317,7 +324,7 @@ final class UpdateSession implements UpdateAttempt {
 	}
 
 	private ModpackJsons.ModpackContentFields storedTarget() throws IOException {
-		return ClientProjectionView.open(storage).target();
+		return ClientProjectionView.observe(storage).target();
 	}
 
 	/** Rebuilds a pending update from current mutable inputs and commits it when the approved outcome still holds. */
@@ -327,13 +334,14 @@ final class UpdateSession implements UpdateAttempt {
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		SelectedModpackTarget target = targetFor(storage, pending);
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); ModFileCache modCache = ModFileCache.open(storage.modCacheDirectory())) {
-			builder.reconcileEditableState(cache, target.flatTarget());
-			ClientUpdatePlanBuilder.PreparedPlan prepared = builder.buildPlan(new ClientUpdatePlanBuilder.Input(target, null, currentConfig, true), cache, modCache);
+			ClientProjectionView projectionView = ClientProjectionView.observe(storage);
+			builder.reconcileEditableState(cache, projectionView, target.flatTarget());
+			ClientUpdatePlanBuilder.PreparedPlan prepared = builder.buildPlan(new ClientUpdatePlanBuilder.Input(target, null, currentConfig, true), projectionView, cache, modCache);
 			if (!ReviewedUpdatePlan.outcomeCompatible(pending.plan(), prepared.plan()))
 				throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending update outcome; a new review is required");
-			builder.preparePlanObjects(prepared.plan(), target.flatTarget());
+			builder.preparePlanObjects(prepared.plan(), target.flatTarget(), projectionView, cache);
 			// The rebuilt transaction must keep the pending one's state-history story, or a resumed rollback lands mislabeled.
-			UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig(), prepared.expectedSelectedModpackId());
+			UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.plannedAgainst());
 			transaction.stateKind = pending.stateKind;
 			return UpdateTransactionSupport.executor().commit(transaction, target);
 		}

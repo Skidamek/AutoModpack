@@ -88,12 +88,6 @@ public final class UpdateTransactionExecutor {
 		validator = new UpdateTransactionValidator(context.storage());
 	}
 
-	public Execution commit(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest,
-			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) throws IOException {
-		UpdateTransaction transaction = UpdateTransaction.create(plan, target, overlayDigest, expectedClientConfig);
-		return commitPrepared(transaction, target);
-	}
-
 	public Execution commit(UpdateTransaction transaction) throws IOException {
 		return commitPrepared(transaction, null);
 	}

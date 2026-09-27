@@ -99,7 +99,7 @@ public final class UpdateTransactionValidator {
 		validateManifest(target, transaction.plan().modpackId());
 		validateSelectionMetadata(transaction);
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateGeneratedCopies(transaction);
-		validateStoredClientState(transaction, record);
+		validateStoredClientState(transaction);
 		if (transaction.plan().plannedClientConfig() == null) throw new IOException("Planned client config is missing");
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validatePlannedClientConfig(transaction);
 		else validateRemovalClientConfig(transaction);
@@ -128,8 +128,17 @@ public final class UpdateTransactionValidator {
 			}
 		}
 		validateBaselineCaptures(transaction);
-		validateConflicts(transaction, finalState, target);
-		validatePreservations(transaction, finalState, target);
+		// A plan built against no installed pack can carry no REMOVE_OWNED conflicts and no ACTIVE_LEDGER preservations,
+		// so proofs beside a null recorded ledger mean a pending document from before the ledger was recorded; failing
+		// validation reverts it at boot and the next sync re-proposes the update. Accepted for the rc.1 -> rc.2 upgrade.
+		OwnershipLedger installedLedger;
+		try {
+			installedLedger = transaction.expectedInstalled();
+		} catch (RuntimeException e) {
+			throw new IOException("Recorded installed ownership ledger is invalid", e);
+		}
+		validateConflicts(transaction, finalState, target, installedLedger);
+		validatePreservations(transaction, finalState, target, installedLedger);
 		if (target != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateManifestProjection(target, finalState);
 	}
 
@@ -204,6 +213,11 @@ public final class UpdateTransactionValidator {
 		}
 	}
 
+	/** The generation identity a commit can require: the pack, its content token, and the ownership history it was planned against. */
+	private static boolean sameGeneration(PackTarget first, PackTarget second) {
+		return first.modpackId().equals(second.modpackId()) && first.contentToken().equals(second.contentToken()) && first.ledgerDigest().equals(second.ledgerDigest());
+	}
+
 	private void validateGenerationIdentity(UpdateTransaction transaction, PackDocument record, ModpackJsons.ModpackContentFields target) throws IOException {
 		PackTarget transactionTarget;
 		try {
@@ -213,7 +227,10 @@ public final class UpdateTransactionValidator {
 		}
 		PackTarget recordTarget = PackTarget.from(record);
 		PackTarget flatTarget = PackTarget.fromFlat(target);
-		if (!transactionTarget.equals(recordTarget) || !transactionTarget.equals(flatTarget))
+		// The content token is the generation identity - every PackDocument constructor verifies its token against its
+		// tree - so a metadata-only policy advance shares the token with the generation it advances and the journal
+		// mirror can still witness the old policy. The ledger digest stays: same files with a diverging ownership history is real.
+		if (!sameGeneration(transactionTarget, recordTarget) || !sameGeneration(transactionTarget, flatTarget))
 			throw new IOException("Transaction, target generation, and selected target identities disagree");
 		if (!transaction.plan().modpackId().equals(record.manifest().modpackId())) throw new IOException("Target generation belongs to another modpack lineage");
 		try {
@@ -223,7 +240,12 @@ public final class UpdateTransactionValidator {
 		}
 	}
 
-	private void validateStoredClientState(UpdateTransaction transaction, PackDocument targetRecord) throws IOException {
+	/**
+	 * The active pointer's coherence, not a generation comparison: equal content tokens already prove equal content -
+	 * every record's constructor verifies its token against its tree - and a metadata-only policy advance legitimately
+	 * shares the token while its document differs.
+	 */
+	private void validateStoredClientState(UpdateTransaction transaction) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null) return;
 		if (!ModpackId.isValid(state.modpackId)) throw new IOException("Active client state modpack ID is invalid");
@@ -232,9 +254,6 @@ public final class UpdateTransactionValidator {
 		PackDocument stateRecord = new ClientGenerationStore(storage).activeDocument()
 				.orElseThrow(() -> new IOException("Active client generation is missing: " + state.contentToken));
 		if (!state.modpackId.equals(stateRecord.manifest().modpackId())) throw new IOException("Active client state and generation belong to different modpacks");
-		if (state.modpackId.equals(transaction.plan().modpackId()) && state.contentToken.equals(targetRecord.contentToken())) {
-			if (!stateRecord.equals(targetRecord)) throw new IOException("Active client state disagrees with its generation record");
-		}
 	}
 
 	private void validateSelectionMetadata(UpdateTransaction transaction) throws IOException {
@@ -345,7 +364,7 @@ public final class UpdateTransactionValidator {
 		}
 	}
 
-	private void validatePreservations(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, ModpackJsons.ModpackContentFields target) throws IOException {
+	private void validatePreservations(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, ModpackJsons.ModpackContentFields target, OwnershipLedger installedLedger) throws IOException {
 		boolean removal = transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL || transaction.purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION;
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && !removal) {
 			if (!transaction.plan().preservations().isEmpty()) throw new IOException("Only modpack transactions can preserve deleted files");
@@ -357,7 +376,6 @@ public final class UpdateTransactionValidator {
 			if (preservation == null || preservation.root() == null || preservation.relativePath() == null || preservation.expectedHash() == null || preservation.proof() == null)
 				throw new IOException("Invalid preservation");
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
-		OwnershipLedger activeLedger = activeLedger(activeState);
 		OwnershipLedger targetLedger = OwnershipLedger.fromFields(target.ownershipLedger);
 		Set<String> targetPaths = new HashSet<>();
 		for (var item : target.list) targetPaths.add(normalizeManifestPath(item.file));
@@ -394,14 +412,16 @@ public final class UpdateTransactionValidator {
 				continue;
 			}
 			if (!removal && targetPaths.contains(logicalPath)) throw new IOException("Preservation target remains in the selected target");
-			OwnershipLedger ledger = preservation.proof() == PreservationProof.ACTIVE_LEDGER ? activeLedger : targetLedger;
-			if (ledger == null) throw new IOException("Preservation has no active ownership ledger");
+			boolean againstInstalled = preservation.proof() == PreservationProof.ACTIVE_LEDGER;
+			String ledgerName = againstInstalled ? "installed" : "target";
+			OwnershipLedger ledger = againstInstalled ? installedLedger : targetLedger;
+			if (ledger == null) throw new IOException("Preservation has no " + ledgerName + " ownership ledger");
 			OwnershipLedger.Entry ledgerEntry = ledger.entries().get(logicalPath);
 			if (ledgerEntry == null) throw new IOException("Preservation path is not present in the ownership ledger");
 			if (preservation.proof() == PreservationProof.SERVER_LEDGER && ledgerEntry.currentStatus() != OwnershipLedger.Status.TOMBSTONE)
 				throw new IOException("Server-ledger preservation is not a tombstone");
 			if (!ledgerEntry.historicalHashes().contains(new OwnershipLedger.Content(preservation.expectedHash().toLowerCase(Locale.ROOT), preservation.expectedSize())))
-				throw new IOException("Preservation target is not owned by the target ledger");
+				throw new IOException("Preservation target is not owned by the " + ledgerName + " ledger");
 			ProjectedFile projected = finalState.get(new FileKey(preservation.root(), relative));
 			if (projected == null) throw new IOException("Preservation target is missing from projected final state");
 			if (projected.present() && preservation.expectedHash().equalsIgnoreCase(projected.expectedHash()) && preservation.expectedSize() == projected.expectedSize())
@@ -409,7 +429,7 @@ public final class UpdateTransactionValidator {
 		}
 	}
 
-	private void validateConflicts(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, ModpackJsons.ModpackContentFields target) throws IOException {
+	private void validateConflicts(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, ModpackJsons.ModpackContentFields target, OwnershipLedger installedLedger) throws IOException {
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE) {
 			if (!transaction.plan().conflicts().isEmpty()) throw new IOException("Only modpack updates may contain conflicts");
 			return;
@@ -425,7 +445,6 @@ public final class UpdateTransactionValidator {
 		}
 		List<Conflict> sorted = transaction.plan().conflicts().stream().sorted(Comparator.comparing(Conflict::conflictId)).toList();
 		if (!transaction.plan().conflicts().equals(sorted)) throw new IOException("Conflicts are not deterministically ordered");
-		OwnershipLedger activeLedger = activeLedger(storage.readActiveState());
 		Set<String> targetPaths = new HashSet<>();
 		for (var item : target.list) targetPaths.add(normalizeManifestPath(item.file));
 		Set<String> conflictIds = new HashSet<>();
@@ -452,8 +471,8 @@ public final class UpdateTransactionValidator {
 			if (sourceOperation.operation() == OperationType.DELETE && sourceOperation.expectedExistingHash() != null
 					&& !sourceOperation.expectedExistingHash().equalsIgnoreCase(conflict.sourceHash()))
 				throw new IOException("Conflict deletion hash disagrees with metadata");
-			boolean owned = activeLedger != null && activeLedger.entries().get(conflict.sourcePath()) != null
-					&& activeLedger.entries().get(conflict.sourcePath()).historicalHashes().contains(new OwnershipLedger.Content(conflict.sourceHash().toLowerCase(Locale.ROOT), conflict.sourceSize()));
+			boolean owned = installedLedger != null && installedLedger.entries().get(conflict.sourcePath()) != null
+					&& installedLedger.entries().get(conflict.sourcePath()).historicalHashes().contains(new OwnershipLedger.Content(conflict.sourceHash().toLowerCase(Locale.ROOT), conflict.sourceSize()));
 			if (conflict.action() == ConflictAction.REMOVE_OWNED && !owned) throw new IOException("Conflict claims ownership without ledger proof");
 			if (conflict.action() == ConflictAction.PRESERVE_LOCAL && owned) throw new IOException("Conflict preserves a ledger-owned file as local");
 			if (conflict.action() == ConflictAction.PRESERVE_LOCAL && sourceOperation.expectedExistingHash() == null)
@@ -463,12 +482,6 @@ public final class UpdateTransactionValidator {
 			ProjectedFile projected = finalState.get(sourceKey);
 			if (projected == null) throw new IOException("Conflict source is missing from projected final state");
 		}
-	}
-
-	/** The active client state's ownership ledger, or null when no pack is active. */
-	private static OwnershipLedger activeLedger(ClientStorageJsons.ClientGenerationStateFields state) {
-		if (state == null) return null;
-		return OwnershipLedger.fromFields(state.ownershipLedger);
 	}
 
 	private void validateInstall(Operation operation, ProjectedFile projected, FileCache fileCache) throws IOException {

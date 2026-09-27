@@ -100,7 +100,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missingSelectedTargetObjects() throws IOException {
 		if (selectedTarget == null || serverModpackContent == null) throw new IOException("Selected modpack target is unavailable");
 		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
-			planBuilder.populateStoreFromCachedLocations(selectedTarget.flatTarget(), cache);
+			planBuilder.populateStoreFromCachedLocations(selectedTarget.flatTarget(), ClientProjectionView.observe(storage), cache);
 			return objectAcquisition.missingTargetObjects(selectedTarget.flatTarget(), cache);
 		}
 	}
@@ -120,7 +120,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	ModpackJsons.ModpackContentFields storedTarget() throws IOException {
-		return ClientProjectionView.open(storage).target();
+		return ClientProjectionView.observe(storage).target();
 	}
 
 	/** Applies a new group selection to the installed target on an explicit review reselect. */

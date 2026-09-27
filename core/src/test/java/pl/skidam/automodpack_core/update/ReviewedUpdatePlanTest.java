@@ -138,7 +138,7 @@ class ReviewedUpdatePlanTest {
 		UpdatePlan plan = new UpdatePlan("packaa1", new PackTarget("packaa1", "a".repeat(40), "b".repeat(40), ledger.digest()), List.of(operation("mods/a.jar", OBJECT_HASH)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/a.jar", true, OBJECT_HASH, 1)), new ClientConfigJsons.ClientConfigFieldsV3(),
 				Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
-		UpdateTransaction transaction = UpdateTransaction.createRemoval(plan, ClientPlatform.LINUX, null, ledger.toFields(), "", new ClientConfigJsons.ClientConfigFieldsV3());
+		UpdateTransaction transaction = UpdateTransaction.createRemoval(plan, ClientPlatform.LINUX, null, "", new PlannedAgainst(new ClientConfigJsons.ClientConfigFieldsV3(), "", ledger.toFields()));
 
 		// Recovery replans after a partial apply, so shrunk work for the same outcome stays compatible...
 		UpdatePlan shrunk = new UpdatePlan("packaa1", new PackTarget("packaa1", "a".repeat(40), "b".repeat(40), ledger.digest()), List.of(operation("mods/a.jar", OTHER_HASH)),

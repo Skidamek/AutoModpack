@@ -46,6 +46,8 @@ public final class UpdateTransaction {
 	public ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig;
 	public String expectedSelectedModpackId;
 	public GenerationJsons.OwnershipLedgerFields ownershipLedger;
+	/** The installed projection this plan was planned against, null when nothing was installed. */
+	public GenerationJsons.OwnershipLedgerFields expectedInstalledLedger;
 	/** The state-history kind of this mutation when the flow itself knows it better than the purpose mapping: rollbacks declare it, everything else derives. */
 	public String stateKind = "";
 	public Status resultStatus;
@@ -74,13 +76,7 @@ public final class UpdateTransaction {
 		return transaction;
 	}
 
-	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest,
-			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
-		return create(plan, target, overlayDigest, expectedClientConfig, "");
-	}
-
-	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest,
-			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig, String expectedSelectedModpackId) {
+	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest, PlannedAgainst plannedAgainst) {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(target, "target");
 		if (!plan.modpackId().equals(target.manifest().modpackId())) throw new IllegalArgumentException("Plan and selected target modpack IDs disagree");
@@ -99,37 +95,28 @@ public final class UpdateTransaction {
 		transaction.requestedCategories = new ArrayList<>(target.selection().intent().requestedCategories());
 		transaction.excludedGroups = new ArrayList<>(target.selection().intent().excludedGroups());
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
-		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
-		transaction.expectedSelectedModpackId = expectedSelectedModpackId == null ? "" : expectedSelectedModpackId;
+		transaction.expectedClientConfig = plannedAgainst.clientConfig();
+		transaction.expectedSelectedModpackId = plannedAgainst.selectedModpackId();
+		transaction.expectedInstalledLedger = plannedAgainst.installedLedger();
 		transaction.plan = plan;
 		return transaction;
 	}
 
-	public static UpdateTransaction createRemoval(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, GenerationJsons.OwnershipLedgerFields ownershipLedger,
-			String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
-		return createRemoval(plan, platform, expectedPriorIntent, ownershipLedger, overlayDigest, expectedClientConfig, "");
+	public static UpdateTransaction createRemoval(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest, PlannedAgainst plannedAgainst) {
+		return createRemovalLike(Purpose.MODPACK_REMOVAL, plan, platform, expectedPriorIntent, overlayDigest, plannedAgainst);
 	}
 
-	public static UpdateTransaction createRemoval(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, GenerationJsons.OwnershipLedgerFields ownershipLedger,
-			String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig, String expectedSelectedModpackId) {
-		return createRemovalLike(Purpose.MODPACK_REMOVAL, plan, platform, expectedPriorIntent, ownershipLedger, overlayDigest, expectedClientConfig, expectedSelectedModpackId);
-	}
-
-	public static UpdateTransaction createDeactivation(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, GenerationJsons.OwnershipLedgerFields ownershipLedger,
-			String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
-		return createDeactivation(plan, platform, expectedPriorIntent, ownershipLedger, overlayDigest, expectedClientConfig, "");
-	}
-
-	public static UpdateTransaction createDeactivation(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, GenerationJsons.OwnershipLedgerFields ownershipLedger,
-			String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig, String expectedSelectedModpackId) {
-		return createRemovalLike(Purpose.MODPACK_DEACTIVATION, plan, platform, expectedPriorIntent, ownershipLedger, overlayDigest, expectedClientConfig, expectedSelectedModpackId);
+	public static UpdateTransaction createDeactivation(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest, PlannedAgainst plannedAgainst) {
+		return createRemovalLike(Purpose.MODPACK_DEACTIVATION, plan, platform, expectedPriorIntent, overlayDigest, plannedAgainst);
 	}
 
 	private static UpdateTransaction createRemovalLike(Purpose purpose, UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent,
-			GenerationJsons.OwnershipLedgerFields ownershipLedger, String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig, String expectedSelectedModpackId) {
+			String overlayDigest, PlannedAgainst plannedAgainst) {
 		Objects.requireNonNull(plan, "plan");
+		// A removal plans the installed generation away, so it always has an installed ledger to prove against.
+		OwnershipLedger ledger = OwnershipLedger.fromFields(Objects.requireNonNull(plannedAgainst.installedLedger(), "plannedAgainst.installedLedger"));
 		UpdateTransaction transaction = base(purpose);
-		fillGeneration(transaction, plan.packTarget(), OwnershipLedger.fromFields(ownershipLedger));
+		fillGeneration(transaction, plan.packTarget(), ledger);
 		transaction.targetPlatform = platform == null ? null : platform.id();
 		transaction.expectedPriorSelectionPresent = expectedPriorIntent != null;
 		transaction.expectedPriorRequestedGroups = intentValues(expectedPriorIntent, IntentPart.GROUPS);
@@ -139,8 +126,9 @@ public final class UpdateTransaction {
 		transaction.requestedCategories = List.of();
 		transaction.excludedGroups = List.of();
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
-		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
-		transaction.expectedSelectedModpackId = expectedSelectedModpackId == null ? "" : expectedSelectedModpackId;
+		transaction.expectedClientConfig = plannedAgainst.clientConfig();
+		transaction.expectedSelectedModpackId = plannedAgainst.selectedModpackId();
+		transaction.expectedInstalledLedger = plannedAgainst.installedLedger();
 		transaction.plan = plan;
 		return transaction;
 	}
@@ -190,6 +178,11 @@ public final class UpdateTransaction {
 		return targetPlatform == null ? null : ClientPlatform.parse(targetPlatform);
 	}
 
+	/** The installed projection this plan was planned against, or null when the plan saw no installed generation. */
+	public OwnershipLedger expectedInstalled() {
+		return expectedInstalledLedger == null ? null : OwnershipLedger.fromFields(expectedInstalledLedger);
+	}
+
 	public SelectionIntent expectedPriorIntent() {
 		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorRequestedGroups, expectedPriorRequestedCategories, expectedPriorExcludedGroups) : null;
 	}
@@ -212,10 +205,6 @@ public final class UpdateTransaction {
 		for (String value : intent.requestedCategories().stream().sorted().toList()) digest.update(("category=" + value + "\n").getBytes(StandardCharsets.UTF_8));
 		for (String value : intent.excludedGroups().stream().sorted().toList()) digest.update(("excluded=" + value + "\n").getBytes(StandardCharsets.UTF_8));
 		return HexFormat.of().formatHex(digest.digest());
-	}
-
-	private static ClientConfigJsons.ClientConfigFieldsV3 copyConfig(ClientConfigJsons.ClientConfigFieldsV3 config) {
-		return new ClientConfigJsons.ClientConfigFieldsV3(Objects.requireNonNull(config, "expectedClientConfig"));
 	}
 
 	public enum Phase {
