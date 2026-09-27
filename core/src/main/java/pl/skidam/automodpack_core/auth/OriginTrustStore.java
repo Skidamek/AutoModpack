@@ -3,17 +3,16 @@ package pl.skidam.automodpack_core.auth;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Objects;
+import java.util.function.Function;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.FileLocks;
-import pl.skidam.automodpack_core.utils.FileTrees;
 
 /** Shared exact certificate trust keyed by the original Minecraft server address. */
 public final class OriginTrustStore {
@@ -53,10 +52,7 @@ public final class OriginTrustStore {
 	}
 
 	private static ConnectionJsons.KnownHostsFields readUnlocked(Path file) throws IOException {
-		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return new ConnectionJsons.KnownHostsFields();
-		FileTrees.requireRegularFile(file, "Known-hosts file");
-		ConnectionJsons.KnownHostsFields fields = ConfigTools.read(file, ConnectionJsons.KnownHostsFields.class)
-				.orElseThrow(() -> new IOException("Known-hosts file is empty: " + file));
+		ConnectionJsons.KnownHostsFields fields = ConfigTools.readState(file, ConnectionJsons.KnownHostsFields.class, "Known-hosts file", Function.identity()).orElseGet(ConnectionJsons.KnownHostsFields::new);
 		if (fields.hosts == null) fields.hosts = new HashMap<>();
 		return fields;
 	}
