@@ -339,13 +339,10 @@ public final class StateHistory {
 			}
 		if (generation == null) throw new IOException("Pack history has no generation " + identity.contentToken() + " for " + identity.activeModpackId());
 		PackDocument document = generations.document(identity.activeModpackId(), generation);
-		storage.writeActiveState(identity.activeModpackId(), identity.contentToken(), document.ownershipLedger().toFields());
+		storage.writeActiveState(identity.activeModpackId(), identity.contentToken(), document.ownershipLedger().toFields(), identity.selection());
 		SelectionIntent target = identity.selection();
-		if (target != null) {
-			ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
-			SelectionIntent current = selections.get(identity.activeModpackId()).orElse(null);
-			selections.compareAndSet(identity.activeModpackId(), current, target);
-		}
+		// Checking an instance out is wanting what it ran: the snapshot's applied selection becomes the desire.
+		if (target != null) new ClientSelectionStore(storage.selectionFile()).put(identity.activeModpackId(), target);
 		Set<String> written = new HashSet<>();
 		for (InstanceTree.Tombstone tombstone : identity.tombstones()) {
 			storage.writeOverlayState(tombstone.modpackId(), new TreeSet<>(tombstone.deletedPaths()));

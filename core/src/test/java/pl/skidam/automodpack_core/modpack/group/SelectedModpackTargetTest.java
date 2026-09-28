@@ -21,7 +21,7 @@ class SelectedModpackTargetTest {
 		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("first", first, "second", second)));
 		ClientSelectionStore store = new ClientSelectionStore(temporaryDirectory.resolve("selection.json"));
 		SelectionIntent persisted = new SelectionIntent(Set.of("first", "second"));
-		store.compareAndSet(manifest.modpackId(), null, persisted);
+		store.put(manifest.modpackId(), persisted);
 
 		SelectionResolutionException failure = assertThrows(SelectionResolutionException.class,
 				() -> SelectedModpackTarget.prepare(TestPacks.head(manifest), store, ClientPlatform.LINUX));

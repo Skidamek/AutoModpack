@@ -58,19 +58,12 @@ flow:
   - do: click
     name: save the changed installed selection
     select: { text: Save }
+  # The save is the consent: acquisition runs under the waiting screen and the
+  # switch applies straight through, so the restart demand is the first - and
+  # only - screen the flow shows.
   - do: wait_for
-    name: acquire the missing object and show its review
-    timeout: 90s
-    until:
-      all:
-        - screen: UpdatePreviewScreen
-        - element: { text: Update, enabled: true }
-  - do: click
-    name: apply the acquired optional group
-    select: { text: Update }
-  - do: wait_for
-    name: require restart for the changed group selection
-    timeout: 90s
+    name: acquire the missing object, apply it, and demand the restart
+    timeout: 120s
     until: { screen: RestartScreen }
   - do: assert_file_content
     name: verify the never-cached optional file was installed

@@ -196,13 +196,15 @@ final class UpdateSession implements UpdateAttempt {
 	}
 
 	/**
-	 * The one commit of the reviewed plan: changelogs, then the transactional commit with its restart decision. An
-	 * executing plan is a durable fact, so the commit begins by sealing the review; the executor's own validation and
-	 * the outcome-checked replan carry every drift decision from here.
+	 * The one commit of the reviewed plan: changelogs, then the transactional commit with its restart decision. The
+	 * confirm is the consent moment, so the commit begins by recording the desire it was approved under; an executing
+	 * plan is a durable fact, so it then seals the review; the executor's own validation and the outcome-checked
+	 * replan carry every drift decision from here.
 	 */
 	@Override
 	public RestartDecision.ApplyResult commit() throws Exception {
 		recordChangelogs(prepared());
+		new ClientSelectionStore(storage.selectionFile()).put(target.manifest().modpackId(), target.selection().intent());
 		review().beginExecution();
 		AtomicReference<ClientUpdatePlanBuilder.PreparedPlan> applied = new AtomicReference<>(prepared());
 		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(storage).commitWithReplan(
@@ -362,12 +364,15 @@ final class UpdateSession implements UpdateAttempt {
 			record = newest(generations, followId);
 			if (record == null) throw new IOException("Selected modpack generation is not installed: " + followId);
 		}
+		// The desire is what a resume can trust: intact consent means the pending target still stands, a moved one
+		// replans from what the player now wants, and the prior is always the selection the pointer says was applied.
 		ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
-		SelectionIntent storedIntent = selections.get(record.manifest().modpackId()).orElse(null);
-		if (record.manifest().modpackId().equals(pending.plan().modpackId()) && Objects.equals(storedIntent, pending.expectedPriorIntent()))
-			return SelectedModpackTarget.prepare(record, storedIntent, pending.targetIntent(), pending.platform());
-		if (storedIntent == null) return SelectedModpackTarget.prepareDefault(record, pending.platform());
-		return SelectedModpackTarget.prepare(record, storedIntent, storedIntent, pending.platform());
+		SelectionIntent desired = selections.get(record.manifest().modpackId()).orElse(null);
+		SelectionIntent applied = new ClientGenerationStore(storage).appliedSelection(record.manifest().modpackId()).orElse(null);
+		if (record.manifest().modpackId().equals(pending.plan().modpackId()) && Objects.equals(desired, pending.targetIntent()))
+			return SelectedModpackTarget.prepare(record, applied, pending.targetIntent(), pending.platform());
+		if (desired == null) return SelectedModpackTarget.prepareDefault(record, pending.platform());
+		return SelectedModpackTarget.prepare(record, applied, desired, pending.platform());
 	}
 
 	private static PackDocument newest(ClientGenerationStore generations, String modpackId) throws IOException {

@@ -822,6 +822,8 @@ class UpdateTransactionExecutorTest {
 				&& operation.operation() == OperationType.DELETE && generatedHash.equals(operation.expectedExistingHash())));
 		UpdateTransaction transaction = UpdateTransaction.createRemoval(removal, ClientPlatform.LINUX, expected,
 				storage.overlayDigest(target.manifest().modpackId()), new PlannedAgainst(clientConfig(target.manifest().modpackId()), "", target.flatTarget().ownershipLedger));
+		// The removal confirm is a consent moment: wanting the pack gone is recorded before anything moves.
+		new ClientSelectionStore(storage.selectionFile()).remove(target.manifest().modpackId());
 		Files.delete(storage.objectFile(hash));
 
 		assertTrue(executor.commit(transaction).success());

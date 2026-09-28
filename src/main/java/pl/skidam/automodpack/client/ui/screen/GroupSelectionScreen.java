@@ -67,7 +67,6 @@ public class GroupSelectionScreen extends VersionedScreen {
 	private final Map<String, GroupManifest.Group> groups;
 	private final InstalledModpackController controller;
 	private final String origin;
-	private final SelectionIntent expectedSelection;
 	private final SelectionIntent initialSelection;
 	private final Consumer<SelectionIntent> selectionAction;
 	private final Runnable cancelAction;
@@ -95,20 +94,19 @@ public class GroupSelectionScreen extends VersionedScreen {
 	private int listBottom;
 
 	public GroupSelectionScreen(Screen parent, SelectedModpackTarget target, ReviewActions actions, Consumer<SelectionIntent> selectionAction) {
-		this(parent, target.manifest(),
-				new Entry(target.expectedPriorIntent(), target.selection().intent(), selectionAction, () -> {}, actions, null));
+		this(parent, target.manifest(), new Entry(target.selection().intent(), selectionAction, () -> {}, actions, null));
 	}
 
 	public static GroupSelectionScreen repair(Screen parent, GroupManifest manifest, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
-		return new GroupSelectionScreen(parent, manifest, new Entry(savedSelection, savedSelection, selectionAction, cancelAction, null, null));
+		return new GroupSelectionScreen(parent, manifest, new Entry(savedSelection, selectionAction, cancelAction, null, null));
 	}
 
 	static GroupSelectionScreen forInstalledRecord(Screen parent, PackDocument record) {
-		return new GroupSelectionScreen(parent, record.manifest(), new Entry(null, null, null, () -> {}, null, record));
+		return new GroupSelectionScreen(parent, record.manifest(), new Entry(null, null, () -> {}, null, record));
 	}
 
 	/** What an entry point varies; the screen settles everything else itself. */
-	private record Entry(SelectionIntent expectedSelection, SelectionIntent initialSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction,
+	private record Entry(SelectionIntent initialSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction,
 			ReviewActions actions, PackDocument localRecord) {}
 
 	private GroupSelectionScreen(Screen parent, GroupManifest manifest, Entry entry) {
@@ -120,27 +118,21 @@ public class GroupSelectionScreen extends VersionedScreen {
 		this.groups = manifest.groups();
 		this.controller = new InstalledModpackController();
 		this.origin = controller.originFor(modpackId);
-		this.expectedSelection = entry.expectedSelection() == null && entry.initialSelection() == null
-				? controller.savedSelection(modpackId)
-				: entry.expectedSelection();
 		this.selectionAction = entry.selectionAction();
 		this.cancelAction = entry.cancelAction();
 		this.actions = entry.actions();
 		this.activeModpack = controller.activeRecord(modpackId) != null;
 		this.localRecord = entry.localRecord();
-		SelectionIntent initial = entry.initialSelection() != null
-				? entry.initialSelection()
-				: this.expectedSelection == null ? GroupSelectionResolver.defaultIntent(manifest) : this.expectedSelection;
-		this.initialSelection = initial;
+		// The player edits the desire - what they last asked for - which may already sit ahead of what is installed.
+		SelectionIntent initial = entry.initialSelection() != null ? entry.initialSelection() : controller.savedSelection(modpackId);
+		this.initialSelection = initial == null ? GroupSelectionResolver.defaultIntent(manifest) : initial;
 		this.detectedPlatform = ClientPlatform.current();
 		this.platformOverride = initial.platform() == null || initial.platform().equals(detectedPlatform) ? null : initial.platform();
 		this.chosen.addAll(initial.requestedGroups());
 		this.chosenCategories.addAll(initial.requestedCategories());
 		this.excluded.addAll(initial.excludedGroups());
 		try {
-			this.resolution = this.expectedSelection == null && initialSelection == null
-					? GroupSelectionResolver.resolveDefault(manifest, effectivePlatform())
-					: GroupSelectionResolver.resolve(manifest, initial, effectivePlatform());
+			this.resolution = GroupSelectionResolver.resolve(manifest, initial, effectivePlatform());
 		} catch (SelectionResolutionException e) {
 			this.resolution = Objects.requireNonNull(e.resolution(), "Invalid selection did not include a partial resolution");
 			this.resolutionError = VersionedText.str("automodpack.selection.savedInvalid");
@@ -384,7 +376,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 	private void startCachedSwitch(SelectionIntent targetIntent) {
 		if (switchInFlight) return;
 		switchInFlight = true;
-		controller.switchSelection(localRecord, expectedSelection, targetIntent, modpackName, () -> switchInFlight = false);
+		controller.switchSelection(localRecord, targetIntent, modpackName, () -> switchInFlight = false);
 	}
 
 	private void back() {

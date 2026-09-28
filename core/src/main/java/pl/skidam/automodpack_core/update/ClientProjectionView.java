@@ -18,7 +18,6 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
-import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -298,7 +297,8 @@ public final class ClientProjectionView {
 				}
 			}
 			if (target == null) return null;
-			SelectionIntent intent = new ClientSelectionStore(storage.selectionFile()).get(target.modpackId).orElse(null);
+			// The copies that exist are the ones the applied selection generated; the desired one has not run yet.
+			SelectionIntent intent = new ClientGenerationStore(storage).appliedSelection(target.modpackId).orElse(null);
 			if (intent == null) return null;
 			try {
 				return GeneratedCopyState.read(storage, target.modpackId, target.contentToken, UpdateTransaction.digest(intent));

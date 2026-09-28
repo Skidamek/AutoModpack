@@ -19,7 +19,6 @@ import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
@@ -184,7 +183,8 @@ public final class InstanceTree {
 	static LiveIdentity observeIdentity(ClientStorage storage) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
 		if (active == null) return LiveIdentity.empty();
-		SelectionIntent selection = new ClientSelectionStore(storage.selectionFile()).get(active.modpackId).orElse(null);
+		// The identity of what runs is the applied selection; a saved desire is not instance state until it applies.
+		SelectionIntent selection = new ClientGenerationStore(storage).appliedSelection(active.modpackId).orElse(null);
 		List<Tombstone> tombstones = new ArrayList<>();
 		for (String modpackId : new ClientGenerationStore(storage).installedPackIds()) {
 			List<String> deleted = storage.readOverlayState(modpackId).deletedPaths;

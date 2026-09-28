@@ -23,7 +23,6 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
-import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
@@ -346,7 +345,6 @@ public final class UpdateTransactionExecutor {
 		if (finalized.selection() || finalized.configuration())
 			throw new UpdateReplanRequiredException(null, "Mutable client configuration changed before update finalization");
 		finalizeModpackState(transaction, preserveNewerSelection);
-		claimSelection(transaction);
 	}
 
 	/** Builds and swaps the incoming projection unless the active tree already matches; no-ops when the projection was published earlier. */
@@ -371,7 +369,7 @@ public final class UpdateTransactionExecutor {
 		if (context.beforeManifestAction() != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
 			context.beforeManifestAction().run(transaction, resolved.flatTarget());
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
-			context.storage().writeActiveState(transaction.plan().modpackId(), transaction.packTarget().contentToken(), resolved.document().ownershipLedger().toFields());
+			context.storage().writeActiveState(transaction.plan().modpackId(), transaction.packTarget().contentToken(), resolved.document().ownershipLedger().toFields(), resolved.selection().intent());
 		} else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
 			FileTrees.delete(context.storage().generatedCopiesGenerationDirectory(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken()));
 			context.storage().clearActiveState();
@@ -586,12 +584,6 @@ public final class UpdateTransactionExecutor {
 			Path object = context.storage().objectFile(capture.expectedHash());
 			VerifiedFileTransfer.copyAtomicImmutable(source, object, capture.expectedSize(), capture.expectedHash(), fileCache);
 		}
-	}
-
-	private void claimSelection(UpdateTransaction transaction) throws IOException {
-		ClientSelectionStore selections = new ClientSelectionStore(context.storage().selectionFile());
-		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) selections.compareAndSet(transaction.plan().modpackId(), transaction.expectedPriorIntent(), transaction.targetIntent());
-		else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) selections.remove(transaction.plan().modpackId(), transaction.expectedPriorIntent());
 	}
 
 	private void validateSelectionBeforeMutation(UpdateTransaction transaction) throws IOException {

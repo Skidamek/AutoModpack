@@ -27,11 +27,11 @@ import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.loader.NestedConflicts;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
-import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientOverlaySnapshot;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
@@ -192,7 +192,7 @@ final class ClientUpdatePlanBuilder {
 		ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = currentConfig;
 		String expectedSelectedModpackId = storage.selectedModpackId();
 		String plannedSelectedModpackId = installed.modpackId.equals(expectedSelectedModpackId) ? "" : expectedSelectedModpackId;
-		SelectionIntent expectedPriorIntent = new ClientSelectionStore(storage.selectionFile()).get(installed.modpackId).orElse(null);
+		SelectionIntent expectedPriorIntent = new ClientGenerationStore(storage).appliedSelection(installed.modpackId).orElse(null);
 
 		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 			AvailablePreInstall availablePreInstall = readAvailablePreInstall(installed.modpackId, cache);

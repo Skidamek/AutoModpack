@@ -93,12 +93,12 @@ class ConnectionStoreTest {
 		TestPacks.stageGeneration(storage, TestPacks.document(manifestFor("xyz9876", "stale", "config/b.txt", "b")));
 		TestPacks.stageGeneration(storage, TestPacks.document(manifestFor("pqr5432", "other origin", "config/c.txt", "c")));
 		ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
-		selections.compareAndSet("xyz9876", null, GroupSelectionResolver.defaultIntent(manifestFor("xyz9876", "stale", "config/b.txt", "b")));
-		selections.compareAndSet("pqr5432", null, GroupSelectionResolver.defaultIntent(manifestFor("pqr5432", "other origin", "config/c.txt", "c")));
+		selections.put("xyz9876", GroupSelectionResolver.defaultIntent(manifestFor("xyz9876", "stale", "config/b.txt", "b")));
+		selections.put("pqr5432", GroupSelectionResolver.defaultIntent(manifestFor("pqr5432", "other origin", "config/c.txt", "c")));
 
 		assertEquals(List.of("xyz9876"), ConnectionStore.staleSameOriginPackIds(storage, "abc1234"));
 		// A mirror fetch without consent is cache, and the active pack is never its own leftover.
-		selections.remove("xyz9876", selections.get("xyz9876").orElseThrow());
+		selections.remove("xyz9876");
 		assertEquals(List.of(), ConnectionStore.staleSameOriginPackIds(storage, "abc1234"));
 	}
 

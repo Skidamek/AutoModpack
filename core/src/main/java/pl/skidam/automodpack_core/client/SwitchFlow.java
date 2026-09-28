@@ -54,9 +54,10 @@ public final class SwitchFlow {
 			ModpackUpdater updater = null;
 			try {
 				PackDocument record = new ClientGenerationStore(storage).document(modpackId, entry);
-				SelectionIntent savedSelection = new ClientSelectionStore(storage.selectionFile()).get(modpackId).orElse(null);
-				SelectionIntent targetSelection = savedSelection == null ? GroupSelectionResolver.defaultIntent(record.manifest()) : savedSelection;
-				SelectedModpackTarget target = SelectedModpackTarget.prepare(record, savedSelection, targetSelection, ClientPlatform.effective(targetSelection));
+				SelectionIntent appliedSelection = new ClientGenerationStore(storage).appliedSelection(modpackId).orElse(null);
+				SelectionIntent desiredSelection = new ClientSelectionStore(storage.selectionFile()).get(modpackId).orElse(null);
+				SelectionIntent targetSelection = desiredSelection == null ? GroupSelectionResolver.defaultIntent(record.manifest()) : desiredSelection;
+				SelectedModpackTarget target = SelectedModpackTarget.prepare(record, appliedSelection, targetSelection, ClientPlatform.effective(targetSelection));
 				updater = new ModpackUpdater(target, null, null, storage);
 				if (updater.requiresSelectedTargetDownload())
 					throw new IOException("This version's files are no longer kept on this computer, so it cannot be restored");
@@ -71,8 +72,21 @@ public final class SwitchFlow {
 
 	private static void preview(ModpackUpdater updater, String modpackName, Runnable release, UpdatePreview.Mode forcedMode, boolean rollback) throws Exception {
 		UpdatePreview preview = updater.previewInstalledSwitch();
+		// A desire equal to the applied projection is the standard nothing-to-do answer: nothing switched, nothing shown.
+		if (preview == null) {
+			updater.close();
+			ScreenManager.clientThread(release);
+			return;
+		}
 		if (forcedMode != null) preview = preview.withMode(forcedMode);
 		boolean writesUnverifiedJar = (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && updater.planWritesUnverifiedJar(preview.plan());
+		// The save already consented to a selection switch, so the only thing worth an interposing screen is a plan
+		// that writes jars nobody vouched for; every other switch applies straight through, and the restart screen -
+		// whose buttons only pick when the game reloads - is the one screen a demanding change may still show.
+		if (!rollback && !writesUnverifiedJar) {
+			apply(updater, release, false);
+			return;
+		}
 		// One apply per review: a double confirm click must not start a second commit on the same updater.
 		AtomicBoolean applyArmed = new AtomicBoolean(true);
 		boolean shown = ScreenManager.preview(PreviewPayload.review(preview, modpackName, updater.joinOrigin(), writesUnverifiedJar, updater.getSelectedTarget(), updater.unverifiedSelectedJarPaths(),

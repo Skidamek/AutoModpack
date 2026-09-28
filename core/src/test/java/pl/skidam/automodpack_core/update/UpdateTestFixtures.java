@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -80,6 +81,8 @@ final class UpdateTestFixtures {
 	static UpdateTransaction createTransaction(ClientStorage storage, UpdatePlan plan, SelectedModpackTarget target, GenerationJsons.OwnershipLedgerFields installedLedger) throws IOException {
 		ClientConfigJsons.ClientConfigFieldsV3 expected = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
+		// Every real commit is a consent moment: the fixture records the desire the same way before the transaction.
+		new ClientSelectionStore(storage.selectionFile()).put(target.manifest().modpackId(), target.selection().intent());
 		return UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()), new PlannedAgainst(expected, "", installedLedger));
 	}
 }

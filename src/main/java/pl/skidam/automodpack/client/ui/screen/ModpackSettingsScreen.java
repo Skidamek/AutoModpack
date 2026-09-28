@@ -183,12 +183,14 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 	}
 
 	private void updateActions() {
+		// A desire saved ahead of the applied selection is pending work: the last up-to-date verdict no longer holds.
+		boolean pending = pack.active() && controller.pendingGroupChanges(pack);
 		for (int index = 0; index < actionButtons.size(); index++) {
 			boolean primary = index == 0;
-			actionButtons.get(index).active = !busyVisible && (!primary || !pack.active() || pack.connectionAvailable() && !upToDate);
+			actionButtons.get(index).active = !busyVisible && (!primary || !pack.active() || pack.connectionAvailable() && (!upToDate || pending));
 		}
 		if (actionButtons.isEmpty() || !pack.active()) return;
-		actionButtons.get(0).setMessage(VersionedText.text(upToDate ? "automodpack.management.upToDate" : "automodpack.management.update"));
+		actionButtons.get(0).setMessage(VersionedText.text(upToDate && !pending ? "automodpack.management.upToDate" : "automodpack.management.update"));
 	}
 
 	// The header stack: description, state, identity, id, contents, optional connection line, generation.

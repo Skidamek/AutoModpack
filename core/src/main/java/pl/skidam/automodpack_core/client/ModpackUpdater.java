@@ -163,18 +163,24 @@ public class ModpackUpdater implements AutoCloseable {
 		review.cancelFromPlayer();
 	}
 
-	/** Builds a reviewable switch plan for an installed generation, acquiring selected objects when necessary. */
+	/**
+	 * Builds the switch plan for an installed generation, acquiring selected objects when necessary, or returns null
+	 * when the desired state already is the applied one - a saved desire equal to the installed projection is the
+	 * standard nothing-to-do answer, not an error. Identity compares the target against what the pointer says was
+	 * applied, not against the target's own prior slot: a desire saved ahead of the installed projection is a pending
+	 * switch. Intent equality ignores the platform override on purpose, so the applied intent's platform is compared
+	 * separately: a platform-only rechoice changes the projection and must switch.
+	 */
 	UpdatePreview previewInstalledSwitch() throws Exception {
 		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Installed modpack target is unavailable");
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
 		boolean projectionPresent = active != null && Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS);
-		// SelectionIntent equality ignores the platform override on purpose, so the platform the active projection was
-		// built for is compared separately: a platform-only rechoice changes the projection and must switch, not throw.
+		SelectionIntent applied = new ClientGenerationStore(storage).appliedSelection(active == null ? selectedTarget.manifest().modpackId() : active.modpackId).orElse(null);
 		if (projectionPresent && selectedTarget.manifest().modpackId().equals(active.modpackId)
 				&& selectedTarget.document().contentToken().equals(active.contentToken)
-				&& Objects.equals(selectedTarget.expectedPriorIntent(), selectedTarget.selection().intent())
-				&& Objects.equals(selectedTarget.platform(), ClientPlatform.effective(selectedTarget.expectedPriorIntent())))
-			throw new IllegalArgumentException("Installed modpack target generation, group selection, and platform are already active");
+				&& Objects.equals(applied, selectedTarget.selection().intent())
+				&& Objects.equals(ClientPlatform.effective(applied), selectedTarget.platform()))
+			return null;
 		UpdateSession switchAttempt = beginUpdateAttempt();
 		switchAttempt.prepare(true, true);
 		return switchAttempt.preview(UpdateSession.InstalledTokenRule.ACTIVE_OR_MIRROR_HEAD);

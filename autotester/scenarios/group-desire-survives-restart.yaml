@@ -1,0 +1,136 @@
+id: group-desire-survives-restart
+description: |
+  A group deselected in the pack manager and saved must apply on the first
+  attempt. This is the reported second-attempt trap: Save used to persist
+  nothing and the change only landed when the whole dance was repeated. The
+  save is the one consent now: the switch applies straight through with no
+  interposing review, the restart screen's buttons only pick when the game
+  reloads, deferring it and closing changes nothing, and the pack page
+  honestly reports up to date again once its check runs.
+renderClient: true
+
+flow:
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - do: wait_generation
+    name: wait for the required-and-optional installation
+    patchNotes: "Group desire fixture."
+    timeout: 300s
+  - use: restart_client
+  - use: rejoin
+  - do: disconnect
+    name: return to the title screen
+  - use: open_multiplayer
+  - use: open_pack_manager
+  - do: click
+    name: open the installed pack details
+    select: { text: Group Desire Survives }
+  - do: wait_for
+    name: show the pack details actions
+    until:
+      all:
+        - screen: ModpackSettingsScreen
+        - element: { key: automodpack.management.groups, enabled: true }
+  - do: click
+    name: open the installed group selection
+    select: { key: automodpack.management.groups }
+  - do: wait_for
+    name: show the installed selection with the optional group ticked
+    until:
+      all:
+        - screen: GroupSelectionScreen
+        - element: { text: "Optional Feature (", checked: true }
+  - do: click
+    name: deselect the optional group
+    select: { text: "Optional Feature (" }
+  - do: wait_for
+    name: enable save for the changed selection
+    until:
+      all:
+        - element: { text: "Optional Feature (", checked: false }
+        - element: { text: Save, enabled: true }
+  - do: click
+    name: save the deselection
+    select: { text: Save }
+  # The save is the one consent: the switch applies straight through with no
+  # interposing review, and the restart screen - whose buttons only pick when
+  # the game reloads - is the single screen a demanding change shows.
+  - do: wait_for
+    name: the saved deselection applies and demands its restart
+    timeout: 90s
+    until: { screen: RestartScreen }
+  - do: click
+    name: defer the restart and keep playing
+    select: { key: automodpack.restart.cancel }
+  - do: assert
+    name: verify the deselected group's file was already removed by the apply
+    that: { file_gone: "${active_dir}/config/amp-group-optional.txt" }
+  - do: assert_file_content
+    name: verify the required group's file survived the deselection
+    path: config/amp-group-base.txt
+    content: "required base\n"
+  # Closing without restarting is the trap's old shape: the desire is applied
+  # and durable, so the relaunch must simply load the switched pack.
+  - do: quit
+    name: close the game with the restart deferred
+  - do: launch_client
+    name: relaunch the client on the switched pack
+  - do: wait_bridge
+    name: wait for the client test bridge
+  - do: assert
+    name: the relaunched pack stays without the deselected group
+    that: { file_gone: "${active_dir}/config/amp-group-optional.txt" }
+  - use: open_multiplayer
+  - use: open_pack_manager
+  - do: click
+    name: reopen the installed pack details
+    select: { text: Group Desire Survives }
+  - do: wait_for
+    name: show the pack details actions
+    until:
+      all:
+        - screen: ModpackSettingsScreen
+        - element: { text: Update, enabled: true }
+  # The up-to-date verdict is computed by the check, not assumed on open: the
+  # click asks, the flow finds nothing left to do, and the button settles.
+  - do: click
+    name: ask for an update and find nothing left to do
+    select: { text: Update }
+  - do: wait_for
+    name: the realized desire reads honestly as up to date again
+    timeout: 90s
+    until:
+      all:
+        - screen: ModpackSettingsScreen
+        - element: { key: automodpack.management.upToDate, enabled: false }
+  - do: quit
+    name: stop after the deselection applied on the first attempt
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+    automodpack:
+      config:
+        modpack:
+          General:
+            main:
+              displayName: Core
+              required: true
+              defaultSelected: true
+              from-server: ["/config/amp-group-base.txt"]
+            optional:
+              displayName: Optional Feature
+              defaultSelected: true
+              from-server: ["/config/amp-group-optional.txt"]
+
+serverFiles:
+  modpackName: Group Desire Survives
+  marker: config/amp-group-base.txt
+  generations:
+    - patchNotes: "Group desire fixture."
+      files:
+        - { group: main, path: config/amp-group-base.txt, content: "required base\n" }
+        - { group: optional, path: config/amp-group-optional.txt, content: "optional content\n" }

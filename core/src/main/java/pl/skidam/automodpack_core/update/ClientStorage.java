@@ -25,6 +25,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileTrees;
@@ -538,12 +539,31 @@ public final class ClientStorage {
 		return state;
 	}
 
+	public void writeActiveState(String modpackId, String contentToken, GenerationJsons.OwnershipLedgerFields ownershipLedger, SelectionIntent applied) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = baseActiveState(modpackId, contentToken, ownershipLedger);
+		SelectionIntent selection = Objects.requireNonNull(applied, "applied selection");
+		state.selectedGroups = List.copyOf(selection.requestedGroups());
+		state.selectedCategories = List.copyOf(selection.requestedCategories());
+		state.excludedGroups = List.copyOf(selection.excludedGroups());
+		state.selectedPlatform = selection.platform() == null ? null : selection.platform().id();
+		publishActiveState(state);
+	}
+
+	/** Stages a pointer with no recorded selection: the pre-split shape, whose applied answer falls back to the store. */
 	public void writeActiveState(String modpackId, String contentToken, GenerationJsons.OwnershipLedgerFields ownershipLedger) throws IOException {
+		publishActiveState(baseActiveState(modpackId, contentToken, ownershipLedger));
+	}
+
+	private ClientStorageJsons.ClientGenerationStateFields baseActiveState(String modpackId, String contentToken, GenerationJsons.OwnershipLedgerFields ownershipLedger) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = new ClientStorageJsons.ClientGenerationStateFields();
 		state.modpackId = ModpackId.requireValid(modpackId);
 		state.contentToken = HashUtils.requireDigest(contentToken, "generation ID");
 		state.ownershipLedger = Objects.requireNonNull(ownershipLedger, "ownership ledger");
 		state.detached = currentDetachmentFor(state.modpackId);
+		return state;
+	}
+
+	private void publishActiveState(ClientStorageJsons.ClientGenerationStateFields state) throws IOException {
 		Files.createDirectories(stateFile.getParent());
 		ConfigTools.writeAtomic(stateFile, state);
 	}

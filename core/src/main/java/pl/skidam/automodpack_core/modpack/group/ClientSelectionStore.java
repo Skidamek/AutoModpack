@@ -9,12 +9,12 @@ import pl.skidam.automodpack_core.config.SelectionJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 
 /**
- * The persisted per-modpack group selection.
+ * The persisted per-modpack group selection: the player's declared desire, written at every consent moment.
  *
  * <p>
- * Writers must hold the game-directory mutation lock, like every other durable state file; the
- * executor's claim and the generation store's forget paths already do. Reads are safe without it
- * because every write is an atomic replacement.
+ * Writers must hold the game-directory mutation lock, like every other durable state file; the consent moments
+ * (save, update confirm, removal confirm) and the generation store's forget path already do. Reads are safe
+ * without it because every write is an atomic replacement.
  * </p>
  */
 public final class ClientSelectionStore {
@@ -31,29 +31,22 @@ public final class ClientSelectionStore {
 		return selection == null ? Optional.empty() : Optional.of(intent(selection));
 	}
 
-	public void compareAndSet(String modpackId, SelectionIntent expected, SelectionIntent target) throws IOException {
+	/** Records the desire verbatim: the store is the player's declared choice, and the last consent wins. */
+	public void put(String modpackId, SelectionIntent target) throws IOException {
 		ModpackId.requireValid(modpackId);
 		Objects.requireNonNull(target);
 		SelectionJsons.ClientSelectionStoreFields fields = read();
-		SelectionJsons.ClientSelectionStoreFields.ModpackSelection currentFields = fields.selections.get(modpackId);
-		SelectionIntent current = currentFields == null ? null : intent(currentFields);
-		if (!Objects.equals(current, expected) && !Objects.equals(current, target))
-			throw new IOException("Group selection changed after planning for modpack " + modpackId);
 		fields.selections.put(modpackId, new SelectionJsons.ClientSelectionStoreFields.ModpackSelection(new LinkedHashSet<>(target.requestedGroups()),
 				new LinkedHashSet<>(target.requestedCategories()), new LinkedHashSet<>(target.excludedGroups()), target.platform() == null ? null : target.platform().id()));
 		fields.selections = new LinkedHashMap<>(new TreeMap<>(fields.selections));
 		ConfigTools.writeAtomic(path, fields);
 	}
 
-	public void remove(String modpackId, SelectionIntent expected) throws IOException {
+	/** Clears the desire: the player asked for the pack to go. */
+	public void remove(String modpackId) throws IOException {
 		ModpackId.requireValid(modpackId);
 		SelectionJsons.ClientSelectionStoreFields fields = read();
-		SelectionJsons.ClientSelectionStoreFields.ModpackSelection currentFields = fields.selections.get(modpackId);
-		SelectionIntent current = currentFields == null ? null : intent(currentFields);
-		if (current != null && !Objects.equals(current, expected))
-			throw new IOException("Group selection changed after removal planning for modpack " + modpackId);
-		if (current == null) return;
-		fields.selections.remove(modpackId);
+		if (fields.selections.remove(modpackId) == null) return;
 		fields.selections = new LinkedHashMap<>(new TreeMap<>(fields.selections));
 		ConfigTools.writeAtomic(path, fields);
 	}

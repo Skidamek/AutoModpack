@@ -129,20 +129,34 @@ public final class ClientGenerationStore {
 		return Optional.of(resolveActive(state, platform));
 	}
 
-	/** Same, resolving under the stored selection's own platform: the exact platform the selection last committed under. */
+	/** Same, resolving under the applied selection's own platform: the exact platform the selection last committed under. */
 	public Optional<SelectedModpackTarget> readActiveTarget() throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null) return Optional.empty();
-		ClientPlatform platform = ClientPlatform.effective(new ClientSelectionStore(storage.selectionFile()).get(state.modpackId).orElse(null));
+		ClientPlatform platform = ClientPlatform.effective(appliedSelection(state.modpackId).orElse(null));
 		return Optional.of(resolveActive(state, platform));
+	}
+
+	/**
+	 * The selection the active pointer was committed under: the applied answer to "what is installed", which the
+	 * store's desire may already sit ahead of. Pointers written before the selection was recorded fall back to the
+	 * store, which was the applied record before the two meanings split.
+	 */
+	public Optional<SelectionIntent> appliedSelection(String modpackId) throws IOException {
+		String normalizedModpackId = ModpackId.requireValid(modpackId);
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+		if (state == null || !normalizedModpackId.equals(state.modpackId)) return Optional.empty();
+		if (state.selectedGroups == null) return new ClientSelectionStore(storage.selectionFile()).get(normalizedModpackId);
+		return Optional.of(new SelectionIntent(state.selectedGroups, state.selectedCategories, state.excludedGroups,
+				state.selectedPlatform == null ? null : ClientPlatform.parse(state.selectedPlatform)));
 	}
 
 	private SelectedModpackTarget resolveActive(ClientStorageJsons.ClientGenerationStateFields state, ClientPlatform platform) throws IOException {
 		Objects.requireNonNull(platform, "platform");
 		PackDocument document = document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger));
-		Optional<SelectionIntent> stored = new ClientSelectionStore(storage.selectionFile()).get(state.modpackId);
-		return stored.isPresent()
-				? SelectedModpackTarget.prepare(document, null, stored.get(), platform)
+		Optional<SelectionIntent> applied = appliedSelection(state.modpackId);
+		return applied.isPresent()
+				? SelectedModpackTarget.prepare(document, null, applied.get(), platform)
 				: SelectedModpackTarget.prepareDefault(document, platform);
 	}
 
@@ -222,9 +236,7 @@ public final class ClientGenerationStore {
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Cannot forget a modpack while an update transaction is active");
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
 		if (activeState != null && normalizedModpackId.equals(activeState.modpackId)) throw new IOException("Cannot forget the active modpack");
-		ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
-		SelectionIntent expectedSelection = selections.get(normalizedModpackId).orElse(null);
-		selections.remove(normalizedModpackId, expectedSelection);
+		new ClientSelectionStore(storage.selectionFile()).remove(normalizedModpackId);
 		FileTrees.delete(storage.generatedCopiesPackDirectory(normalizedModpackId));
 		storage.clearOverlay(normalizedModpackId);
 		FileTrees.delete(storage.historyPackDirectory(normalizedModpackId));

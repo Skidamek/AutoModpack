@@ -57,13 +57,32 @@ class ClientGenerationStoreTest {
 		assertTrue(new ClientGenerationStore(storage).activeDocument().isEmpty());
 
 		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields());
-		new ClientSelectionStore(storage.selectionFile()).compareAndSet(FIRST_PACK, null, new SelectionIntent(Set.of("main")));
+		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
 		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX).orElseThrow();
 
 		assertEquals(document, target.document());
 		assertEquals(new SelectionIntent(Set.of("main")), target.selection().intent());
 		assertEquals(document.contentToken(), target.flatTarget().contentToken);
 		assertEquals(document.ownershipLedger(), target.document().ownershipLedger());
+	}
+
+	@Test
+	void aSavedDesireNeverMovesTheInstalledSelection() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "projection-object");
+		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
+		TestPacks.stageGeneration(storage, document);
+		SelectionIntent applied = new SelectionIntent(Set.of("main"));
+		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields(), applied);
+
+		// The pointer carries the applied answer even when the store's desire has already moved ahead of it.
+		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main", "extra")));
+		assertEquals(applied, new ClientGenerationStore(storage).appliedSelection(FIRST_PACK).orElseThrow());
+		assertEquals(applied, new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX).orElseThrow().selection().intent());
+
+		// A pointer written before the split falls back to the store, which was the applied record then.
+		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields());
+		assertEquals(new SelectionIntent(Set.of("main", "extra")), new ClientGenerationStore(storage).appliedSelection(FIRST_PACK).orElseThrow());
 	}
 
 	@Test
@@ -155,7 +174,7 @@ class ClientGenerationStoreTest {
 		appendEntry(storage, second);
 
 		storage.writeActiveState(FIRST_PACK, second.contentToken(), second.ownershipLedger().toFields());
-		new ClientSelectionStore(storage.selectionFile()).compareAndSet(FIRST_PACK, null, new SelectionIntent(Set.of("main")));
+		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
 		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX).orElseThrow();
 
 		assertEquals(second.policySha1(), target.document().policySha1());
@@ -173,7 +192,7 @@ class ClientGenerationStoreTest {
 		appendEntry(storage, second);
 
 		storage.writeActiveState(FIRST_PACK, second.contentToken(), second.ownershipLedger().toFields());
-		new ClientSelectionStore(storage.selectionFile()).compareAndSet(FIRST_PACK, null, new SelectionIntent(Set.of("main")));
+		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
 
 		IOException missing = assertThrows(IOException.class, () -> new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX));
 		assertTrue(missing.getMessage().contains(HashUtils.normalizeSha1(second.policySha1())), missing.getMessage());
@@ -242,7 +261,7 @@ class ClientGenerationStoreTest {
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
 		TestPacks.stageGeneration(storage, first);
 		TestPacks.stageGeneration(storage, second);
-		new ClientSelectionStore(storage.selectionFile()).compareAndSet(FIRST_PACK, null, new SelectionIntent(Set.of("main")));
+		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
 		storage.writeActiveState(SECOND_PACK, second.contentToken(), second.ownershipLedger().toFields());
 		Path overlay = storage.overlayFile(FIRST_PACK, "config/options.txt");
 		Files.createDirectories(overlay.getParent());
@@ -279,7 +298,7 @@ class ClientGenerationStoreTest {
 		Files.delete(storage.objectFile(first.policySha1()));
 		assertThrows(IOException.class, () -> generations.newestDocument(FIRST_PACK));
 
-		new ClientSelectionStore(storage.selectionFile()).compareAndSet(SECOND_PACK, null, new SelectionIntent(Set.of("main")));
+		new ClientSelectionStore(storage.selectionFile()).put(SECOND_PACK, new SelectionIntent(Set.of("main")));
 		assertEquals(List.of(SECOND_PACK), new ClientGenerationStore(storage).installedPackIds());
 		assertEquals(second, new ClientGenerationStore(storage).newestDocument(SECOND_PACK));
 	}

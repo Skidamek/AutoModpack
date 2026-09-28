@@ -25,7 +25,7 @@ class ClientSelectionStoreTest {
 		ClientSelectionStore store = new ClientSelectionStore(path);
 		SelectionIntent intent = new SelectionIntent(Set.of("optional", "stale-group"), Set.of("client"), Set.of("variant"));
 
-		store.compareAndSet("abc1234", null, intent);
+		store.put("abc1234", intent);
 
 		assertEquals(intent, store.get("abc1234").orElseThrow());
 		SelectionJsons.ClientSelectionStoreFields fields = ConfigTools.read(path, SelectionJsons.ClientSelectionStoreFields.class).orElseThrow();
@@ -36,26 +36,26 @@ class ClientSelectionStoreTest {
 	}
 
 	@Test
-	void preservesStaleGroupIdsDuringCompareAndSet() throws Exception {
+	void preservesStaleGroupIdsWhenSaved() throws Exception {
 		ClientSelectionStore store = new ClientSelectionStore(temporaryDirectory.resolve("selection.json"));
 		SelectionIntent intent = new SelectionIntent(Set.of("removed-group"));
 
-		store.compareAndSet("abc1234", null, intent);
+		store.put("abc1234", intent);
 
 		assertEquals(Set.of("removed-group"), store.get("abc1234").orElseThrow().requestedGroups());
 	}
 
 	@Test
-	void compareAndSetPersistsTheResolutionPlatform() throws Exception {
+	void savingPersistsTheResolutionPlatformAndTheLastConsentWins() throws Exception {
 		ClientSelectionStore store = new ClientSelectionStore(temporaryDirectory.resolve("selection.json"));
 		SelectionIntent intent = new SelectionIntent(Set.of("optional"), Set.of(), Set.of(), ClientPlatform.LINUX);
 
-		store.compareAndSet("abc1234", null, intent);
+		store.put("abc1234", intent);
 
 		// The stored platform is what later boots re-resolve under; equality still ignores it, so a
 		// platform-less expected intent still matches the stored selection with one.
 		assertEquals(ClientPlatform.LINUX, store.get("abc1234").orElseThrow().platform());
-		store.compareAndSet("abc1234", new SelectionIntent(Set.of("optional")), new SelectionIntent(Set.of("optional"), Set.of(), Set.of(), ClientPlatform.WINDOWS));
+		store.put("abc1234", new SelectionIntent(Set.of("optional"), Set.of(), Set.of(), ClientPlatform.WINDOWS));
 		assertEquals(ClientPlatform.WINDOWS, store.get("abc1234").orElseThrow().platform());
 	}
 

@@ -539,14 +539,11 @@ flow:
   - do: click
     name: review the Pack A to Pack B v2 switch
     select: { text: Activate }
+  # The activate click is the consent: the cached Pack B v2 switch applies
+  # straight through, and the restart demand is the flow's only screen.
   - do: wait_for
-    name: show Pack B v2 switch preview
-    until: { element: { text: Update, enabled: true } }
-  - do: click
-    name: accept the Pack B v2 switch
-    select: { text: Update }
-  - do: wait_for
-    name: wait for Pack B v2 restart
+    name: the Pack B v2 switch applies and demands its restart
+    timeout: 90s
     until: { screen: RestartScreen }
   - do: click
     name: restart into Pack B v2

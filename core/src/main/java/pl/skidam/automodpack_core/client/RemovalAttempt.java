@@ -11,6 +11,7 @@ import pl.skidam.automodpack_core.client.RestartDecision.ApplyResult;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -76,6 +77,8 @@ final class RemovalAttempt implements UpdateAttempt {
 	@Override
 	public ApplyResult commit() throws Exception {
 		if (prepared == null || review == null) throw new IllegalStateException("Modpack lifecycle action was not prepared");
+		// The confirm is the consent moment: wanting the pack gone is recorded before anything moves.
+		if (kind == Kind.REMOVAL) new ClientSelectionStore(storage.selectionFile()).remove(prepared.installed().modpackId);
 		review.beginExecution();
 		boolean remove = kind == Kind.REMOVAL;
 		UpdatePreview applied = removalPreview(prepared, remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION);

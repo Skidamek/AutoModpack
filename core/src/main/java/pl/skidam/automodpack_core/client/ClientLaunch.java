@@ -16,6 +16,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -108,7 +109,11 @@ public final class ClientLaunch {
 		PackTransport transport = manifestResult.transport();
 		SelectedModpackTarget selectedTarget;
 		try {
-			selectedTarget = SelectedModpackTarget.prepare(manifestResult.content(), new ClientSelectionStore(storage.selectionFile()), ClientPlatform.current());
+			String modpackId = ModpackId.requireValid(manifestResult.content().policy.modpackId);
+			SelectionIntent desired = new ClientSelectionStore(storage.selectionFile()).get(modpackId).orElse(null);
+			selectedTarget = desired == null
+					? SelectedModpackTarget.prepareDefault(manifestResult.content(), ClientPlatform.current())
+					: SelectedModpackTarget.prepare(manifestResult.content(), new ClientGenerationStore(storage).appliedSelection(modpackId).orElse(null), desired, ClientPlatform.current());
 		} catch (RuntimeException e) {
 			LOGGER.error("Failed to resolve the downloaded modpack catalogue and group selection", e);
 			transport.close();

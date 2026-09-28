@@ -104,7 +104,7 @@ class ReconcileEditableStateTest {
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
 		TestPacks.stageGeneration(storage, document);
 		SelectedModpackTarget target = SelectedModpackTarget.prepare(document, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
-		new ClientSelectionStore(storage.selectionFile()).compareAndSet(document.manifest().modpackId(), null, target.selection().intent());
+		new ClientSelectionStore(storage.selectionFile()).put(document.manifest().modpackId(), target.selection().intent());
 		storage.writeActiveState(document.manifest().modpackId(), document.contentToken(), document.ownershipLedger().toFields());
 		return flatTarget(HashUtils.sha1(packBytes));
 	}

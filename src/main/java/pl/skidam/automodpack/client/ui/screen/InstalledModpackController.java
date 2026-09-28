@@ -84,6 +84,11 @@ final class InstalledModpackController {
 		}
 	}
 
+	/** The selection the active pointer committed under; the prior every switch, activation, and update plans against. */
+	private SelectionIntent appliedSelection(String modpackId) throws IOException {
+		return new ClientGenerationStore(storage).appliedSelection(modpackId).orElse(null);
+	}
+
 	/** One applied selection change, the conflict the player must settle first, or the player-facing reason the change cannot apply. */
 	record SelectionChange(SelectionIntent intent, ResolvedSelection resolution, GroupSelectionResolver.ConflictReplacement conflict, String failure) {}
 
@@ -118,8 +123,17 @@ final class InstalledModpackController {
 		return pack(record, record.manifest().modpackId().equals(activeModpackId()), detached(record.manifest().modpackId()), connection(record.manifest().modpackId()));
 	}
 
-	void switchSelection(PackDocument record, SelectionIntent expected, SelectionIntent target, String modpackName, Runnable released) {
-		SwitchFlow.start(storage, record, expected, target, modpackName, released);
+	/** Save is the consent moment: the desire lands first, so backing out of the preview still keeps the intent. */
+	void switchSelection(PackDocument record, SelectionIntent target, String modpackName, Runnable released) {
+		try {
+			// The prior is read before the desire lands: legacy pointers fall back to this store for their applied selection.
+			SelectionIntent applied = appliedSelection(record.manifest().modpackId());
+			new ClientSelectionStore(storage.selectionFile()).put(record.manifest().modpackId(), target);
+			SwitchFlow.start(storage, record, applied, target, modpackName, released);
+		} catch (IOException e) {
+			released.run();
+			failure(e, "automodpack.error.update", FailureCategory.UPDATE);
+		}
 	}
 
 	Pack installedPack(String modpackId) {
@@ -292,6 +306,16 @@ final class InstalledModpackController {
 		ScreenImpl.setScreen(new StateHistoryScreen(parent, this, released));
 	}
 
+	/** Whether the saved desire composes a different pack than the applied one: pending work the update button must still offer. */
+	boolean pendingGroupChanges(Pack pack) {
+		try {
+			SelectionIntent desired = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
+			return desired != null && !desired.equals(appliedSelection(pack.modpackId()));
+		} catch (IOException | RuntimeException e) {
+			return false;
+		}
+	}
+
 	void update(Pack pack, Consumer<Boolean> completed) {
 		if (!pack.active() || !pack.connectionAvailable()) {
 			releaseOnClient(() -> completed.accept(false));
@@ -303,10 +327,11 @@ final class InstalledModpackController {
 				SelectedModpackTarget target;
 				try (StoredModpackConnection connection = StoredModpackConnection.open(storage, pack.modpackId(), true)) {
 					GenerationJsons.HeadDocumentFields advertised = connection.advertisedFields();
-					SelectionIntent savedSelection = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
-					target = savedSelection == null
-							? SelectedModpackTarget.prepareDefault(advertised, ClientPlatform.effective(savedSelection))
-							: SelectedModpackTarget.prepare(advertised, savedSelection, savedSelection, ClientPlatform.effective(savedSelection));
+					SelectionIntent desired = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
+					SelectionIntent applied = appliedSelection(pack.modpackId());
+					target = desired == null
+							? SelectedModpackTarget.prepareDefault(advertised, ClientPlatform.effective(desired))
+							: SelectedModpackTarget.prepare(advertised, applied, desired, ClientPlatform.effective(desired));
 					updater = connection.newUpdater(target, storage);
 				}
 				// An explicitly requested sync ends attached whatever it had to do; for an attached pack both clears are no-ops.
@@ -363,10 +388,10 @@ final class InstalledModpackController {
 
 	void activate(Pack pack, Runnable released) {
 		try {
-			SelectionIntent savedSelection = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
-			SelectionIntent targetSelection = savedSelection == null ? GroupSelectionResolver.defaultIntent(pack.record().manifest()) : savedSelection;
-			SwitchFlow.start(storage, pack.record(), savedSelection, targetSelection, pack.name(), released);
-		} catch (RuntimeException e) {
+			SelectionIntent desired = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
+			SelectionIntent targetSelection = desired == null ? GroupSelectionResolver.defaultIntent(pack.record().manifest()) : desired;
+			SwitchFlow.start(storage, pack.record(), appliedSelection(pack.modpackId()), targetSelection, pack.name(), released);
+		} catch (IOException | RuntimeException e) {
 			released.run();
 			failure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
 		}

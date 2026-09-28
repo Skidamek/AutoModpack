@@ -3,6 +3,7 @@ package pl.skidam.automodpack.networking.packet;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +24,7 @@ import pl.skidam.automodpack_core.client.ModpackUtils;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
@@ -119,13 +121,14 @@ final class ClientLoginUpdateFlow {
 			}
 			SelectedModpackTarget selectedTarget;
 			try {
+				SelectionIntent applied = appliedSelectionOrRethrow(storage, record.manifest().modpackId());
 				selectedTarget = savedSelection == null
 						? SelectedModpackTarget.prepareDefault(manifestResult.content(), ClientPlatform.effective(savedSelection))
-						: SelectedModpackTarget.prepare(manifestResult.content(), savedSelection, savedSelection, ClientPlatform.effective(savedSelection));
+						: SelectedModpackTarget.prepare(manifestResult.content(), applied, savedSelection, ClientPlatform.effective(savedSelection));
 			} catch (SelectionResolutionException e) {
 				if (savedSelection != null && canRepair(manifestResult.content(), savedSelection)) {
 					disconnectImmediately(handler);
-					openInteractiveRepair(manifestResult.content(), savedSelection, transport,
+					openInteractiveRepair(storage, manifestResult.content(), savedSelection, transport,
 							repaired -> continueReconcile(handler, connectionInfo, secret, storage, transport, repaired, true, false));
 					return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
 				}
@@ -165,7 +168,7 @@ final class ClientLoginUpdateFlow {
 		}
 
 		disconnectImmediately(handler);
-		openInteractiveRepair(fields, savedSelection, transport, repaired -> {
+		openInteractiveRepair(storage, fields, savedSelection, transport, repaired -> {
 			if (suppliesNothing(repaired)) {
 				transport.close();
 				presentFailure(new IllegalStateException("The server's modpack selects no files for this client"), "automodpack.error.emptyModpack", FailureCategory.HOST);
@@ -178,9 +181,9 @@ final class ClientLoginUpdateFlow {
 
 	/**
 	 * The shared repair-selection scaffolding: one abandonment flag, the waiting-cancel wiring, the executor hop, and the corrupt-state failure tail; the transport closes exactly once, or the continuation hands it to
-	 * the updater.
+	 * the updater. The picked repair is also the desire now, so it survives a failed apply instead of dying with the screen.
 	 */
-	private static void openInteractiveRepair(GenerationJsons.HeadDocumentFields fields, SelectionIntent savedSelection, PackTransport transport,
+	private static void openInteractiveRepair(ClientStorage storage, GenerationJsons.HeadDocumentFields fields, SelectionIntent savedSelection, PackTransport transport,
 			Consumer<SelectedModpackTarget> continuation) {
 		AtomicBoolean abandoned = new AtomicBoolean();
 		ScreenImpl.repairSelection(fields, savedSelection, intent -> {
@@ -191,7 +194,14 @@ final class ClientLoginUpdateFlow {
 			ModpackUpdater.executor().execute(() -> {
 				if (abandoned.get()) return;
 				try {
-					continuation.accept(SelectedModpackTarget.prepare(fields, savedSelection, intent, ClientPlatform.effective(intent)));
+					String modpackId = ModpackId.requireValid(fields.policy.modpackId);
+					try {
+						new ClientSelectionStore(storage.selectionFile()).put(modpackId, intent);
+					} catch (IOException desireWrite) {
+						throw new UncheckedIOException(desireWrite);
+					}
+					SelectionIntent applied = appliedSelectionOrRethrow(storage, modpackId);
+					continuation.accept(SelectedModpackTarget.prepare(fields, applied, intent, ClientPlatform.effective(intent)));
 				} catch (RuntimeException repairError) {
 					if (abandoned.get()) return;
 					transport.close();
@@ -199,6 +209,15 @@ final class ClientLoginUpdateFlow {
 				}
 			});
 		}, transport::close);
+	}
+
+	/** The applied selection read as these flows consume it: storage trouble is corrupt state, which their failure tail already owns. */
+	private static SelectionIntent appliedSelectionOrRethrow(ClientStorage storage, String modpackId) {
+		try {
+			return new ClientGenerationStore(storage).appliedSelection(modpackId).orElse(null);
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
 	}
 
 	private static boolean suppliesNothing(SelectedModpackTarget target) {
