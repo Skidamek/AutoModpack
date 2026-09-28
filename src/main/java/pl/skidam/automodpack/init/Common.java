@@ -11,6 +11,8 @@ import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.storage.StorageLeftovers;
+import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 
@@ -40,6 +42,8 @@ public class Common {
 	private static void prepareRuntime() {
 		if (serverRuntimePrepared) return;
 		if (serverConfig == null) serverConfig = ConfigUtils.loadOrCreateServerConfig();
+
+		StorageLeftovers.warnAbout(GameDirectory.current().resolve(StoragePaths.AUTOMODPACK_DIR));
 
 		ProvisioningSecretStore.ensure();
 

@@ -27,6 +27,7 @@ import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.storage.StorageLeftovers;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -138,6 +139,7 @@ public final class ClientStorage {
 			LOGGER.error("Could not publish the client object ownership receipt for {}; content collection stays refused until one publishes: {}", storage.gameDirectory, e.getMessage(), e);
 		}
 		OPEN_STORAGE.put(canonicalGameDirectory, new WeakReference<>(storage));
+		StorageLeftovers.warnAbout(storage.automodpackDirectory);
 		return storage;
 	}
 

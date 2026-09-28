@@ -10,6 +10,9 @@ import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.storage.StorageLeftovers;
+import pl.skidam.automodpack_core.storage.StoragePaths;
 
 public class Server {
 
@@ -25,6 +28,8 @@ public class Server {
 			LOGGER.error("Failed to load standalone host configuration: {}", e.getMessage());
 			return;
 		}
+
+		StorageLeftovers.warnAbout(GameDirectory.current().resolve(StoragePaths.AUTOMODPACK_DIR));
 
 		if (serverConfig.bindPort == -1) {
 			LOGGER.error("Host port not set in config!");
