@@ -7,6 +7,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributeView;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -16,6 +19,7 @@ import java.util.NavigableSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -129,13 +133,30 @@ public final class InstanceTree {
 		return new InstanceTree(sha1, canonical, List.copyOf(sorted));
 	}
 
+	/* Trees are content-addressed by file name and written atomically, so a parsed-and-verified tree stays valid while
+	   the file's (mtime, size) is unchanged. Sweeps read the same handful of trees per pass; without the memo every
+	   read re-serializes and re-hashes the whole tree just to re-prove what its atomic write already proved. */
+	private static final Map<String, VerifiedTree> VERIFIED_TREES = new ConcurrentHashMap<>();
+
+	private record VerifiedTree(FileTime modified, long size, InstanceTree tree) {}
+
 	public static InstanceTree read(ClientStorage storage, String sha1) throws IOException {
 		String normalized = HashUtils.normalizeSha1(sha1);
 		Path file = storage.stateHistoryTreeFile(normalized);
+		BasicFileAttributes attributes;
+		try {
+			attributes = Files.getFileAttributeView(file, BasicFileAttributeView.class, LinkOption.NOFOLLOW_LINKS).readAttributes();
+		} catch (IOException missing) {
+			throw new IOException("Instance tree is missing: " + normalized);
+		}
+		if (!attributes.isRegularFile()) throw new IOException("Instance tree is missing: " + normalized);
+		VerifiedTree memo = VERIFIED_TREES.get(normalized);
+		if (memo != null && memo.modified().equals(attributes.lastModifiedTime()) && memo.size() == attributes.size()) return memo.tree();
 		ClientStorageJsons.InstanceTreeFields fields = ConfigTools.readUnique(file, ClientStorageJsons.InstanceTreeFields.class, "Instance tree", parsed -> parsed)
 				.orElseThrow(() -> new IOException("Instance tree is missing: " + normalized));
 		InstanceTree tree = fromFields(fields);
 		if (!tree.sha1.equals(normalized)) throw new IOException("Instance tree hash does not match its file: " + normalized);
+		VERIFIED_TREES.put(normalized, new VerifiedTree(attributes.lastModifiedTime(), attributes.size(), tree));
 		return tree;
 	}
 

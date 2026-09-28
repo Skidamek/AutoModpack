@@ -4,9 +4,14 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributeView;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.Journal;
@@ -19,6 +24,13 @@ import pl.skidam.automodpack_core.utils.DurableFiles;
  */
 public final class JournalMirror {
 	private final ClientStorage storage;
+
+	/* The mirror is replaced whole by an atomic rename on every sync, so parsed entries stay valid while the file's
+	   (mtime, size) is unchanged. Joins and sweeps parse the same mirror several times per pass; the memo turns every
+	   repeat into a stat. An asided copy is never memoized - the aside changes the file underneath. */
+	private static final Map<Path, VerifiedMirror> VERIFIED_MIRRORS = new ConcurrentHashMap<>();
+
+	private record VerifiedMirror(FileTime modified, long size, List<JournalEntry> entries) {}
 
 	public JournalMirror(ClientStorage storage) {
 		this.storage = Objects.requireNonNull(storage, "storage");
@@ -33,8 +45,13 @@ public final class JournalMirror {
 		Path file = storage.historyJournalFile(modpackId);
 		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return List.of();
 		if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client journal mirror is not a regular file: " + file);
+		BasicFileAttributes attributes = Files.getFileAttributeView(file, BasicFileAttributeView.class, LinkOption.NOFOLLOW_LINKS).readAttributes();
+		VerifiedMirror memo = VERIFIED_MIRRORS.get(file);
+		if (memo != null && memo.modified().equals(attributes.lastModifiedTime()) && memo.size() == attributes.size()) return memo.entries();
 		try {
-			return Journal.openComplete(file).entries();
+			List<JournalEntry> entries = Journal.openComplete(file).entries();
+			VERIFIED_MIRRORS.put(file, new VerifiedMirror(attributes.lastModifiedTime(), attributes.size(), entries));
+			return entries;
 		} catch (Journal.UnusableContentException e) {
 			DurableFiles.setAside(file, "Client journal mirror", e);
 			return List.of();
