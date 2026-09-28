@@ -39,6 +39,13 @@ fun structuredProtocol(version: String): Int =
 		.toString()
 		.toInt()
 
+// A store listing entry for a cover: an exact version publishes as itself, a tilde line as the
+// mc-publish range of the runtime cover, so a listed 26.1 answers a live 26.1.2 too.
+fun publishVersion(cover: String): String =
+	Cover.parse(cover).let { parsed ->
+		if (!parsed.tilde) cover else ">=${cover.removePrefix("~")} <${parsed.upperBound().joinToString(".")}"
+	}
+
 // What each loader module compiles against: the oldest platform API floor that has everything the
 // module calls, so newer-API slips are compile errors here instead of LinkageErrors on a user's
 // install. loader-fabric-latest is not a module, it is a pin alias for the autotest fixtures, which
@@ -195,15 +202,15 @@ val writeReleaseMatrix =
 			// One jar publishes once per loader that actually has an impl among the selected targets;
 			// a partial selection must never advertise a loader whose manifest would crash the boot.
 			// The game-version list is the distinct union across the selected targets, in stable order;
-			// tildes collapse to their base because Modrinth's game-version lists enumerate real
-			// releases only - the tilde rides in the jar, not in the listing.
+			// tildes render as mc-publish ranges so the stores enumerate every real release the cover
+			// answers - the listing resolves with the same Cover semantics the manifest uses at runtime.
 			// mc-publish splits list inputs on newlines only, so the joins stay newline-based.
 			val publishVersions =
 				selectedTargets
 					.map { target -> structuredString(target.substringBeforeLast('-'), "publish_versions") }
 					.flatMap { it.split('\n') }
-					.map { it.removePrefix("~") }
 					.filter { it.isNotBlank() }
+					.map(::publishVersion)
 					.distinct()
 					.joinToString("\n")
 			val entries =

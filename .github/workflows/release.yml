@@ -141,7 +141,8 @@ jobs:
           version-type: ${{ contains(matrix.mod_version, '-') && 'beta' || 'release' }}
           loaders: ${{ matrix.loader }}
           game-versions: ${{ matrix.publish_versions }}
-          game-version-filter: any
+          # ranges need a filter: without it a range also matches the snapshots and betas inside it
+          game-version-filter: releases
           dependencies: ''
 
           github-changelog: ${{ needs.prepare.outputs.changelog }}
