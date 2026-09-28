@@ -25,9 +25,11 @@ import pl.skidam.automodpack_core.utils.DurableFiles;
 public final class JournalMirror {
 	private final ClientStorage storage;
 
-	/* The mirror is replaced whole by an atomic rename on every sync, so parsed entries stay valid while the file's
-	   (mtime, size) is unchanged. Joins and sweeps parse the same mirror several times per pass; the memo turns every
-	   repeat into a stat. An asided copy is never memoized - the aside changes the file underneath. */
+	/*
+	 * The mirror is replaced whole by an atomic rename on every sync, so parsed entries stay valid while the file's
+	 * (mtime, size) is unchanged. Joins and sweeps parse the same mirror several times per pass; the memo turns every
+	 * repeat into a stat. An asided copy is never memoized - the aside changes the file underneath.
+	 */
 	private static final Map<Path, VerifiedMirror> VERIFIED_MIRRORS = new ConcurrentHashMap<>();
 
 	private record VerifiedMirror(FileTime modified, long size, List<JournalEntry> entries) {}

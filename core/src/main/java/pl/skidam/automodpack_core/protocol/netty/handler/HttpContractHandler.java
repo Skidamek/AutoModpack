@@ -54,7 +54,10 @@ import pl.skidam.automodpack_core.protocol.netty.NettyServer;
  */
 public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
-	/** Tripwire past any real request header block. Complete heads are parsed out on every read, so only the unterminated tail is bounded; our own client pipelines up to 2048 heads of ~250 bytes and stays far under it. Only a broken client touches it. */
+	/**
+	 * Tripwire past any real request header block. Complete heads are parsed out on every read, so only the unterminated tail is bounded; our own client pipelines up to 2048 heads of ~250 bytes and stays far under it.
+	 * Only a broken client touches it.
+	 */
 	private static final int MAX_HEADER_BLOCK_BYTES = 8 * 1024;
 
 	// The cap on request heads held while a response body streams: 2048 pipelined heads at ~250 bytes each need

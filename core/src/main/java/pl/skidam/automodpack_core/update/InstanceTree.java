@@ -133,9 +133,11 @@ public final class InstanceTree {
 		return new InstanceTree(sha1, canonical, List.copyOf(sorted));
 	}
 
-	/* Trees are content-addressed by file name and written atomically, so a parsed-and-verified tree stays valid while
-	   the file's (mtime, size) is unchanged. Sweeps read the same handful of trees per pass; without the memo every
-	   read re-serializes and re-hashes the whole tree just to re-prove what its atomic write already proved. */
+	/*
+	 * Trees are content-addressed by file name and written atomically, so a parsed-and-verified tree stays valid while
+	 * the file's (mtime, size) is unchanged. Sweeps read the same handful of trees per pass; without the memo every
+	 * read re-serializes and re-hashes the whole tree just to re-prove what its atomic write already proved.
+	 */
 	private static final Map<String, VerifiedTree> VERIFIED_TREES = new ConcurrentHashMap<>();
 
 	private record VerifiedTree(FileTime modified, long size, InstanceTree tree) {}
