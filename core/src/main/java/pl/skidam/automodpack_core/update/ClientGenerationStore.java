@@ -10,11 +10,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -70,8 +70,13 @@ public final class ClientGenerationStore {
 
 	/** Every installed pack: fetched from a server AND locally consented. A fetch alone is cache; only {@link #hasLocalState} is an install. */
 	public List<String> installedPackIds() throws IOException {
+		return installedPackIds(storage.readActiveState(), new ClientSelectionStore(storage.selectionFile()));
+	}
+
+	/** One shared-state read per discovery pass: the active pointer and the selection file are parsed for every pack otherwise. */
+	public List<String> installedPackIds(ClientStorageJsons.ClientGenerationStateFields activeState, ClientSelectionStore selections) throws IOException {
 		List<String> installed = new ArrayList<>();
-		for (String modpackId : mirroredPackIds()) if (hasLocalState(modpackId)) installed.add(modpackId);
+		for (String modpackId : mirroredPackIds()) if (hasLocalState(modpackId, activeState, selections)) installed.add(modpackId);
 		return List.copyOf(installed);
 	}
 
@@ -81,10 +86,13 @@ public final class ClientGenerationStore {
 	 * review starts. Deactivation keeps the selection, so a deactivated pack is still not a first install; removal forgets both.
 	 */
 	public boolean hasLocalState(String modpackId) throws IOException {
+		return hasLocalState(modpackId, storage.readActiveState(), new ClientSelectionStore(storage.selectionFile()));
+	}
+
+	public boolean hasLocalState(String modpackId, ClientStorageJsons.ClientGenerationStateFields activeState, ClientSelectionStore selections) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
-		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-		if (state != null && normalizedModpackId.equals(state.modpackId)) return true;
-		return new ClientSelectionStore(storage.selectionFile()).get(normalizedModpackId).isPresent();
+		if (activeState != null && normalizedModpackId.equals(activeState.modpackId)) return true;
+		return selections.get(normalizedModpackId).isPresent();
 	}
 
 	/** The active pack's document: active-state identity and ledger, its mirror entry, and its policy document from the CAS. */
@@ -171,18 +179,25 @@ public final class ClientGenerationStore {
 
 	/** The newest mirror generation of one pack; its ledger comes from the active pointer when that is the newest generation. */
 	public PackDocument newestDocument(String modpackId) throws IOException {
+		return newestDocument(modpackId, storage.readActiveState());
+	}
+
+	public PackDocument newestDocument(String modpackId, ClientStorageJsons.ClientGenerationStateFields activeState) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		List<JournalEntry> entries = new JournalMirror(storage).entries(normalizedModpackId);
 		if (entries.isEmpty()) throw new IOException("Installed modpack journal mirror is missing: " + normalizedModpackId);
-		return document(normalizedModpackId, entries.get(entries.size() - 1));
+		return document(normalizedModpackId, entries.get(entries.size() - 1), activeState);
 	}
 
 	/** One mirror generation's document: the entry's policy from the CAS, and the exact active-state ledger when that generation is active, else the mirror replay. */
 	public PackDocument document(String modpackId, JournalEntry entry) throws IOException {
+		return document(modpackId, entry, storage.readActiveState());
+	}
+
+	public PackDocument document(String modpackId, JournalEntry entry, ClientStorageJsons.ClientGenerationStateFields activeState) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
-		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-		if (state != null && state.modpackId.equals(normalizedModpackId) && state.contentToken.equals(entry.contentToken()))
-			return document(normalizedModpackId, entry, OwnershipLedger.fromFields(state.ownershipLedger));
+		if (activeState != null && activeState.modpackId.equals(normalizedModpackId) && activeState.contentToken.equals(entry.contentToken()))
+			return document(normalizedModpackId, entry, OwnershipLedger.fromFields(activeState.ownershipLedger));
 		return document(normalizedModpackId, entry, replayedLedger(normalizedModpackId, entry));
 	}
 
@@ -210,12 +225,14 @@ public final class ClientGenerationStore {
 		return true;
 	}
 
-	/* Witnessed policies are immutable content-addressed objects - their file name is their hash and the store never
-	   rewrites them - so one parse serves every join, fold, and history screen. The outer key is the client directory:
-	   two storages can witness the same hash while one of them has deleted its copy, and a hit must never stand in for
-	   a missing object. A wholesale clear past the cap keeps each storage's map bounded against a server that never
-	   stops publishing; forgetting a pack clears the storage's map because that is the one path that may collect a
-	   policy object. */
+	/*
+	 * Witnessed policies are immutable content-addressed objects - their file name is their hash and the store never
+	 * rewrites them - so one parse serves every join, fold, and history screen. The outer key is the client directory:
+	 * two storages can witness the same hash while one of them has deleted its copy, and a hit must never stand in for
+	 * a missing object. A wholesale clear past the cap keeps each storage's map bounded against a server that never
+	 * stops publishing; forgetting a pack clears the storage's map because that is the one path that may collect a
+	 * policy object.
+	 */
 	private static final int POLICY_MEMO_CAP = 64;
 	private static final Map<Path, Map<String, GroupManifest>> POLICY_MEMOS = new ConcurrentHashMap<>();
 

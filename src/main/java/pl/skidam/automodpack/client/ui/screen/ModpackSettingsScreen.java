@@ -16,6 +16,7 @@ import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /** A single, calm entry point for all actions on one installed modpack. */
@@ -32,6 +33,18 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 	private boolean busyVisible;
 	private long busyAt;
 	private boolean upToDate;
+	// The header stack is one init-time build: no frame re-formats localized lines.
+	private MutableComponent nameLine;
+	private MutableComponent serverTooltip;
+	private MutableComponent descriptionLine;
+	private String stateLine;
+	private String versionLine;
+	private String idLine;
+	private String contentsLine;
+	private String connectionLine;
+	private String generationLine;
+	private MutableComponent idTooltip;
+	private MutableComponent generationTooltip;
 
 	public ModpackSettingsScreen(Screen parent, InstalledModpackController controller, InstalledModpackController.Pack pack) {
 		super(VersionedText.text("automodpack.packDetails.title"));
@@ -44,6 +57,7 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		actionButtons.clear();
+		buildHeaderLines();
 		List<Action> actions = new ArrayList<>();
 		actions.add(new Action(pack.active() ? "automodpack.management.update" : "automodpack.management.activate", this::primaryAction));
 		if (pack.active()) actions.add(new Action("automodpack.management.repair", this::repair));
@@ -168,7 +182,8 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 	}
 
 	private void returnToList() {
-		ScreenImpl.setScreen(parent instanceof InstalledModpacksScreen list ? list : parent);
+		if (parent instanceof InstalledModpacksScreen list) list.reload();
+		ScreenImpl.setScreen(parent);
 	}
 
 	private void reopenOrList() {
@@ -223,40 +238,47 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 		return 3;
 	}
 
+	private void buildHeaderLines() {
+		nameLine = VersionedText.literal(pack.name()).withStyle(ChatFormatting.BOLD);
+		serverTooltip = pack.connectionAvailable() ? VersionedText.text("automodpack.packDetails.server", pack.connectionOrigin()) : null;
+		descriptionLine = VersionedText.text("automodpack.packDetails.description").withStyle(ChatFormatting.GRAY);
+		stateLine = pack.active() ? VersionedText.str("automodpack.packManager.active", pack.name()) : VersionedText.str("automodpack.packManager.noActive");
+		GroupManifest manifest = pack.record().manifest();
+		versionLine = VersionedText.str("automodpack.packDetails.identity", manifest.loader(), manifest.loaderVersion(), manifest.mcVersion());
+		idLine = VersionedText.str("automodpack.packDetails.id", pack.modpackId());
+		contentsLine = VersionedText.str("automodpack.packDetails.contents", UiFormat.plural(pack.groupCount(), "automodpack.confirm.groupCount").getString(),
+				UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes()));
+		connectionLine = pack.connectionDetail() == null ? null : VersionedText.str("automodpack.packDetails.connection", pack.connectionOrigin(), pack.connectionDetail());
+		String contentToken = pack.record().contentToken();
+		generationLine = VersionedText.str("automodpack.packDetails.generation", contentToken.substring(0, Math.min(contentToken.length(), 7)), UiFormat.formatInstant(pack.record().createdAt()));
+		idTooltip = VersionedText.literal(pack.modpackId());
+		generationTooltip = VersionedText.literal(contentToken);
+	}
+
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		int width = panelWidth(PANEL_WIDTH);
-		MutableComponent name = VersionedText.literal(pack.name()).withStyle(ChatFormatting.BOLD);
-		drawCenteredTextWithShadow(matrices, this.font, name, this.width / 2, 12, TextColors.WHITE);
-		if (pack.connectionAvailable())
-			showHoverTooltip(VersionedText.text("automodpack.packDetails.server", pack.connectionOrigin()), this.width / 2 - this.font.width(name) / 2, 12, this.font.width(name), mouseX, mouseY);
+		drawCenteredTextWithShadow(matrices, this.font, nameLine, this.width / 2, 12, TextColors.WHITE);
+		if (serverTooltip != null) showHoverTooltip(serverTooltip, this.width / 2 - this.font.width(nameLine) / 2, 12, this.font.width(nameLine), mouseX, mouseY);
 		int y = HEADER_TOP;
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.packDetails.description").withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, descriptionLine, this.width / 2, y, TextColors.WHITE);
 		y += STATE_LINE_GAP;
-		String state = pack.active() ? VersionedText.str("automodpack.packManager.active", pack.name()) : VersionedText.str("automodpack.packManager.noActive");
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, width)).withStyle(pack.active() ? ChatFormatting.GREEN : ChatFormatting.GRAY), this.width / 2, y,
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, stateLine, width)).withStyle(pack.active() ? ChatFormatting.GREEN : ChatFormatting.GRAY), this.width / 2, y,
 				TextColors.WHITE);
 		y += IDENTITY_LINE_GAP;
-		String version = VersionedText.str("automodpack.packDetails.identity", pack.record().manifest().loader(), pack.record().manifest().loaderVersion(), pack.record().manifest().mcVersion());
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, version, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, versionLine, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += LINE_GAP;
-		String modpackId = VersionedText.str("automodpack.packDetails.id", pack.modpackId());
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, modpackId, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
-		showHoverTooltip(VersionedText.literal(pack.modpackId()), this.width / 2 - this.font.width(modpackId) / 2, y, this.font.width(modpackId), mouseX, mouseY);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, idLine, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+		showHoverTooltip(idTooltip, this.width / 2 - this.font.width(idLine) / 2, y, this.font.width(idLine), mouseX, mouseY);
 		y += LINE_GAP;
-		String contents = VersionedText.str("automodpack.packDetails.contents", UiFormat.plural(pack.groupCount(), "automodpack.confirm.groupCount").getString(),
-				UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes()));
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, contents, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, contentsLine, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += LINE_GAP;
-		if (pack.connectionDetail() != null) {
-			String connection = VersionedText.str("automodpack.packDetails.connection", pack.connectionOrigin(), pack.connectionDetail());
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, connection, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+		if (connectionLine != null) {
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, connectionLine, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 			y += LINE_GAP;
 		}
-		String contentToken = pack.record().contentToken();
-		String generation = VersionedText.str("automodpack.packDetails.generation", contentToken.substring(0, Math.min(contentToken.length(), 7)), UiFormat.formatInstant(pack.record().createdAt()));
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, generation, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
-		showHoverTooltip(VersionedText.literal(contentToken), this.width / 2 - this.font.width(generation) / 2, y, this.font.width(generation), mouseX, mouseY);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, generationLine, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+		showHoverTooltip(generationTooltip, this.width / 2 - this.font.width(generationLine) / 2, y, this.font.width(generationLine), mouseX, mouseY);
 		if (busyVisible)
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.packDetails.working").withStyle(ChatFormatting.YELLOW), this.width / 2, this.height - 44, TextColors.WHITE);
 	}

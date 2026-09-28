@@ -2,6 +2,7 @@ package pl.skidam.automodpack.client.ui.screen;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Future;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.MutableComponent;
@@ -24,6 +25,10 @@ public class RestartScreen extends VersionedScreen {
 
 	private final UpdateType updateType;
 	private final Changelogs changelogs;
+	private final InstalledModpackController controller = new InstalledModpackController();
+	private List<InstalledModpackController.StalePack> stalePacks = List.of();
+	private boolean stalePacksLoaded;
+	private Future<?> staleLoad;
 	private int titleTop;
 
 	public RestartScreen(UpdateType updateType, Changelogs changelogs) {
@@ -38,15 +43,16 @@ public class RestartScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		assert this.minecraft != null;
+		loadStalePacks();
 		boolean hasChangelogs = changelogs != null && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty() || !changelogs.latestPatchNotes().isBlank());
 		int preservedFiles = hasChangelogs ? changelogs.changeSet().summary().preservedFiles() : 0;
 		List<ActionRow> rows = new ArrayList<>();
 		if (hasChangelogs) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.changelog.view"), button -> ScreenManager.changelog(changelogs))));
 		if (preservedFiles > 0)
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.management.preservedFilesCount", preservedFiles), button -> openStateHistory())));
-		if (!new InstalledModpackController().stalePacks().isEmpty())
+		if (!stalePacks.isEmpty())
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.text("automodpack.restart.removeStale"),
-					button -> new InstalledModpackController().offerStalePackRemoval(() -> ScreenImpl.setScreen(this)))));
+					button -> controller.offerStalePackRemoval(() -> ScreenImpl.setScreen(this)))));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.text("automodpack.restart.cancel"), button -> ScreenImpl.multiplayer()),
 				primaryAction(VersionedText.text("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> minecraft.stop())));
@@ -56,6 +62,20 @@ public class RestartScreen extends VersionedScreen {
 		this.titleTop = layout.titleTop();
 		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 		this.addCenteredScrollBody(BODY, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
+	}
+
+	/** The stale-pack scan reads storage, so it runs off the render thread; the row appears when the scan lands. */
+	private void loadStalePacks() {
+		if (stalePacksLoaded || staleLoad != null) return;
+		staleLoad = ScreenManager.background(() -> {
+			List<InstalledModpackController.StalePack> loaded = controller.stalePacks();
+			this.minecraft.execute(() -> {
+				stalePacksLoaded = true;
+				staleLoad = null;
+				stalePacks = loaded;
+				rebuild();
+			});
+		});
 	}
 
 	/** The whole restart dialog as one centered column: what to do, what changed, why a restart is needed. */
