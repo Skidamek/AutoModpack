@@ -120,7 +120,7 @@ public final class UpdateTransactionExecutor {
 			validator.validate(transaction, unpublishedTarget, true, cache);
 			validateSelectionBeforeMutation(transaction);
 			preparePendingReplacement();
-			ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
+			ConfigTools.writeAtomicCompact(context.storage().transactionFile(), transaction);
 			// Receipt before the first mutation: other processes sharing the store see this instance only through
 			// its ownership receipt, so the journaled plan's objects must be pinned by name before apply runs.
 			ClientObjectStore.publishOwnership(context.storage());
@@ -389,7 +389,7 @@ public final class UpdateTransactionExecutor {
 		transaction.resultPath = blockedPath == null ? null : blockedPath.toString();
 		transaction.resultMessage = message;
 		try {
-			ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
+			ConfigTools.writeAtomicCompact(context.storage().transactionFile(), transaction);
 		} catch (IOException journalFailure) {
 			cause.addSuppressed(journalFailure);
 		}
@@ -403,7 +403,7 @@ public final class UpdateTransactionExecutor {
 	/** Persists the journal at a durable phase boundary, rewriting the whole record exactly where recovery depends on the phase. */
 	private void persistPhase(UpdateTransaction transaction, UpdateTransaction.Phase phase) throws IOException {
 		setPhase(transaction, phase);
-		ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
+		ConfigTools.writeAtomicCompact(context.storage().transactionFile(), transaction);
 	}
 
 	private void applyOperations(UpdateTransaction transaction, AtomicReference<Operation> current) throws IOException {
@@ -500,14 +500,34 @@ public final class UpdateTransactionExecutor {
 		Path incoming = context.storage().incomingDirectory();
 		FileTrees.delete(incoming);
 		Files.createDirectories(incoming);
+		int expected = 0;
 		for (ProjectedFile projected : transaction.plan().projectedFinalState()) {
 			if (projected.root() != Root.PROJECTION || !projected.present()) continue;
+			expected++;
 			Path source = context.storage().objectFile(projected.expectedHash());
 			Path target = incoming.resolve(UpdateTransactionValidator.normalizeOperationPath(projected.relativePath())).normalize();
 			if (!target.startsWith(incoming)) throw new IOException("Projection path escapes incoming directory");
 			VerifiedFileTransfer.linkAtomic(source, target, projected.expectedSize(), projected.expectedHash(), fileCache);
 		}
-		verifyProjection(incoming, transaction.plan().projectedFinalState());
+		assertIncomingStructure(incoming, expected);
+	}
+
+	/**
+	 * The freshly built tree's structural gate: every projected row was linked moments ago with its own size check
+	 * under the mutation lock, and the post-swap seed gate re-proves every file's object identity on the final path.
+	 * What this walk adds is shape: exactly the expected regular files, nothing else, and no symbolic links anywhere.
+	 */
+	private void assertIncomingStructure(Path incoming, int expected) throws IOException {
+		int regular = 0;
+		try (var paths = Files.walk(incoming)) {
+			for (Path path : paths.toList()) {
+				if (path.equals(incoming) || Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) continue;
+				if (Files.isSymbolicLink(path)) throw new IOException("Incoming projection contains a symbolic link: " + path);
+				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Incoming projection holds a non-regular entry: " + path);
+				regular++;
+			}
+		}
+		if (regular != expected) throw new IOException("Incoming projection holds " + regular + " files, expected " + expected);
 	}
 
 	/**
