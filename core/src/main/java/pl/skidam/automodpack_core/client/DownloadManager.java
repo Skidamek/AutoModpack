@@ -151,10 +151,6 @@ public class DownloadManager implements DownloadView {
 		// free worker. Among the candidate domains that can run now, chooseDomain picks the one whose measured speed
 		// makes backlog-plus-this-file finish soonest. Domains a task already burned its attempts on are withheld
 		// (candidateDomains); dead links are handled at attempt time.
-		Map<String, Long> inFlightBacklog = new HashMap<>();
-		for (DownloadData data : downloadsInProgress.values()) inFlightBacklog.merge(data.activeDomain, Math.max(0, data.remainingBytes.get()), Long::sum);
-
-		boolean workerFree = platformTasksInFlight() < PLATFORM_WORKERS;
 		List<QueuedDownload> waiting = new ArrayList<>();
 		QueuedDownload chosen = null;
 		String chosenDomain = null;
@@ -162,16 +158,17 @@ public class DownloadManager implements DownloadView {
 			List<String> domains = candidateDomains(candidate);
 			boolean hostCandidate = domains.contains(INTERNAL_CLIENT_SOURCE);
 			boolean hostRoute = transport != null && hostCandidate;
-			boolean platformRoute = workerFree && domains.stream().anyMatch(domain -> !domain.equals(INTERNAL_CLIENT_SOURCE));
+			boolean platformRoute = platformTasks.get() < PLATFORM_WORKERS && domains.stream().anyMatch(domain -> !domain.equals(INTERNAL_CLIENT_SOURCE));
 			if (!hostRoute && !platformRoute) {
 				waiting.add(candidate);
 				continue;
 			}
 			// Only routes that can run now are offered: a full worker budget pins the choice onto the host wire, and the
-			// scheduler's backlog heuristic weighs the rest.
+			// scheduler's backlog heuristic weighs the rest. The backlog is a snapshot over every in-flight task, so it is
+			// built only when more than one domain is actually on offer - a host-only wave never pays for it.
 			List<String> offerable = hostRoute && platformRoute ? domains : hostRoute ? List.of(INTERNAL_CLIENT_SOURCE) : domains;
 			chosen = candidate;
-			chosenDomain = scheduler.chooseDomain(new DownloadScheduler.QueuedFile<>(candidate.key, candidate.fileSize, offerable), inFlightBacklog);
+			chosenDomain = scheduler.chooseDomain(new DownloadScheduler.QueuedFile<>(candidate.key, candidate.fileSize, offerable), offerable.size() > 1 ? inFlightBacklog() : Map.of());
 			break;
 		}
 		dispatchOrder.addAll(waiting);
@@ -192,8 +189,10 @@ public class DownloadManager implements DownloadView {
 		data.task = task;
 		data.route = activeDomain.equals(INTERNAL_CLIENT_SOURCE) ? Route.HOST : Route.PLATFORM;
 		downloadsInProgress.put(key, data);
+		if (data.route == Route.PLATFORM) platformTasks.incrementAndGet();
 		if (cancelled || downloadExecutor.isShutdown()) {
 			downloadsInProgress.remove(key);
+			if (data.route == Route.PLATFORM) platformTasks.decrementAndGet();
 			failedFiles.incrementAndGet();
 			semaphore.release();
 			return false;
@@ -210,6 +209,7 @@ public class DownloadManager implements DownloadView {
 			});
 		} catch (RuntimeException error) {
 			downloadsInProgress.remove(key);
+			if (data.route == Route.PLATFORM) platformTasks.decrementAndGet();
 			failedFiles.incrementAndGet();
 			semaphore.release();
 			future.completeExceptionally(error);
@@ -227,9 +227,14 @@ public class DownloadManager implements DownloadView {
 		downloadNext();
 	}
 
-	/** Tasks currently routed to a platform source occupy a worker for their whole attempt; host-routed tasks do not. */
-	private long platformTasksInFlight() {
-		return downloadsInProgress.values().stream().filter(data -> data.route == Route.PLATFORM).count();
+	/** Tasks currently routed to a platform source occupy a worker for their whole attempt; host-routed tasks do not. Adjusted wherever a task's route changes. */
+	private final AtomicInteger platformTasks = new AtomicInteger();
+
+	/** Bytes still owed by every in-flight task, per domain; the scheduler's backlog input. */
+	private Map<String, Long> inFlightBacklog() {
+		Map<String, Long> backlog = new HashMap<>();
+		for (DownloadData data : downloadsInProgress.values()) backlog.merge(data.activeDomain, Math.max(0, data.remainingBytes.get()), Long::sum);
+		return backlog;
 	}
 
 	/** Where a dispatched attempt takes its bytes: a platform source picked at dispatch, or the host wire the burned-budget fallback re-routes to mid-attempt. */
@@ -316,6 +321,7 @@ public class DownloadManager implements DownloadView {
 					}
 					// The flip is the accounting: the task stops occupying a platform worker the moment its bytes move to the host wire.
 					data.route = Route.HOST;
+					platformTasks.decrementAndGet();
 				}
 				downloadFromHost(hashPathPair, task, data, partial);
 			} else {
@@ -510,6 +516,7 @@ public class DownloadManager implements DownloadView {
 
 	private void cleanupAndFinalize(FileInspection.HashPathPair key, QueuedDownload task, Path storeFile, boolean success, boolean interrupted) {
 		DownloadData data = downloadsInProgress.remove(key);
+		if (data != null && data.route == Route.PLATFORM) platformTasks.decrementAndGet();
 		// A failed attempt counts against the domain that served it, so the retry dispatches elsewhere before the
 		// attempts budget forces the task to give up.
 		if (data != null && !success && !interrupted) task.domainFailures.merge(data.activeDomain, 1, Integer::sum);
