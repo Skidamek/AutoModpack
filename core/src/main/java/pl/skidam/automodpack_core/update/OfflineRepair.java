@@ -230,6 +230,7 @@ public final class OfflineRepair {
 			boolean repaired = expected.place() == Place.PROJECTION
 					? VerifiedFileTransfer.linkAtomic(object, expected.path(), expected.content().size(), expected.content().hash(), fileCache)
 					: VerifiedFileTransfer.copyAtomic(object, expected.path(), expected.content().size(), expected.content().hash(), fileCache);
+			if (expected.place() == Place.PROJECTION) fileCache.overwriteCache(expected.path(), expected.content().hash());
 			if (repaired) repairedFiles++;
 		}
 		return new RepairCounts(repairedCas, repairedFiles);

@@ -86,21 +86,22 @@ public final class VerifiedFileTransfer {
 		return published;
 	}
 
-	/** Installs an immutable object as a hard link, with verified-copy fallback when linking is unavailable. */
+	/**
+	 * Installs an immutable object as a hard link, with verified-copy fallback when linking is unavailable. Protection is
+	 * per-inode and the source is protected once here, so the created link needs no policy work of its own; a link carries
+	 * no new bytes and any journal replay rebuilds it, so the caller's phase markers - not this method - carry durability.
+	 * The cache record is the caller's business: a tree that a rename will republish would only invalidate it.
+	 */
 	public static boolean linkAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
 		return linkAtomic(sourceFile, targetFile, expectedSize, expectedSha1, null);
 	}
 
 	public static boolean linkAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
-		if (FileIntegrity.matchesObject(targetFile, sourceFile, expectedSize, expectedSha1, cache)) {
-			ImmutableFiles.protect(targetFile);
-			record(cache, targetFile, expectedSha1);
-			return false;
-		}
+		if (FileIntegrity.matchesObject(targetFile, sourceFile, expectedSize, expectedSha1, cache)) return false;
 		requireValidSource(sourceFile, expectedSize, expectedSha1, cache);
 		ImmutableFiles.protect(sourceFile);
 		Path parent = OsPaths.requirePublishableParent(targetFile, "Target path");
-		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", DurableFiles.TEMPORARY_SUFFIX);
+		Path temporary = parent.resolve("." + targetFile.getFileName() + DurableFiles.TEMPORARY_SUFFIX);
 		Files.deleteIfExists(temporary);
 		try {
 			try {
@@ -108,13 +109,10 @@ public final class VerifiedFileTransfer {
 			} catch (UnsupportedOperationException | FileSystemException unsupportedLink) {
 				copyNamedOrHashed(sourceFile, temporary, expectedSize, expectedSha1, cache);
 				FileTrees.forceFile(temporary);
+				ImmutableFiles.protect(temporary);
 			}
 			if (Files.size(temporary) != expectedSize) throw new IOException("Linked file failed size verification: " + temporary);
-			ImmutableFiles.protect(temporary);
 			DurableFiles.replace(temporary, targetFile);
-			FileTrees.forceDirectory(parent);
-			ImmutableFiles.protect(targetFile);
-			record(cache, targetFile, expectedSha1);
 			return true;
 		} finally {
 			Files.deleteIfExists(temporary);
