@@ -14,7 +14,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
@@ -39,6 +38,7 @@ import io.netty.util.concurrent.Future;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ContractRoutes;
 import pl.skidam.automodpack_core.protocol.WireCodec;
 import pl.skidam.automodpack_core.protocol.netty.ActivityTracker;
@@ -266,16 +266,13 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		String key = ContractRoutes.key(head.target());
 		span.routeKey = key;
-		Optional<Path> path = key == null ? Optional.<Path>empty() : server.getPath(key);
-		if (path.isEmpty()) return finishBodyless(ctx, span, STATUS_404, 0, null, null, head.keepAlive());
+		// The hosting swap validated and sized every key at publication, so the loop answers from memory; the streamed
+		// body's open re-checks the promised size on the reader pool, which is the filesystem's only per-request touch.
+		Optional<GenerationHosting.HostedObject> hosted = key == null ? Optional.<GenerationHosting.HostedObject>empty() : server.hosted(key);
+		if (hosted.isEmpty()) return finishBodyless(ctx, span, STATUS_404, 0, null, null, head.keepAlive());
 
-		Path file = path.get();
-		long total;
-		try {
-			total = Files.size(file);
-		} catch (IOException e) {
-			return finishBodyless(ctx, span, STATUS_404, 0, null, null, head.keepAlive());
-		}
+		Path file = hosted.get().file();
+		long total = hosted.get().size();
 
 		// Objects already are their hash. A document's validator etag comes from the server's memo, keeping the SHA-1
 		// of a possibly large journal off the event loop for every conditional fetch; a plain GET carries no ETag.
