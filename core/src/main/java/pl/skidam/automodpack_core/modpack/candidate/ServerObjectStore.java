@@ -43,16 +43,18 @@ public final class ServerObjectStore {
 		FileTrees.createManagedDirectory(objectsDirectory, "immutable object directory");
 		FileTrees.createManagedDirectory(stagingDirectory, "staging directory");
 		TreeMap<String, Path> promoted = new TreeMap<>();
+		Set<Path> touchedDirectories = new LinkedHashSet<>();
 		for (StagedObject object : objects.values()) {
 			validateStaged(object);
 			Path destination = destination(object.sha1());
-			promote(object, destination, cache);
+			promote(object, destination, cache, touchedDirectories);
 			promoted.put(object.sha1(), destination);
 		}
+		for (Path directory : touchedDirectories) FileTrees.forceDirectory(directory);
 		return Collections.unmodifiableNavigableMap(promoted);
 	}
 
-	private void promote(StagedObject object, Path destination, FileCache cache) throws IOException {
+	private void promote(StagedObject object, Path destination, FileCache cache, Set<Path> touchedDirectories) throws IOException {
 		if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
 			ImmutableFiles.protect(destination);
 			if (FileIntegrity.matchesNamed(destination, object.size(), object.sha1(), cache)) {
@@ -65,7 +67,8 @@ public final class ServerObjectStore {
 		}
 		requireStagedSize(object);
 		FileTrees.forceFile(object.stagedPath());
-		ImmutableFilePublisher.publishFile(object.stagedPath(), destination, path -> requireSize(path, object));
+		ImmutableFilePublisher.publishFile(object.stagedPath(), destination, path -> requireSize(path, object), false);
+		touchedDirectories.add(destination.getParent());
 		ImmutableFiles.protect(destination);
 		object.delete();
 		if (cache != null) cache.overwriteCache(destination, object.sha1());

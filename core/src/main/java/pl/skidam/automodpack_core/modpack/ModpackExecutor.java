@@ -232,15 +232,15 @@ public class ModpackExecutor {
 	}
 
 	/** Requires the caller to hold an operation lease: the journal is appended in place during a publish, so a lease-free export can copy a torn one. */
-	private ExportHttpResult exportHttpLeased(Path targetDirectory, boolean includeAll) throws IOException {
+	private ExportHttpResult exportHttpLeased(Path targetDirectory, boolean includeAll, GenerationHosting hosting) throws IOException {
 		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
 		if (serverConfig != null && serverConfig.validateSecrets)
 			return new ExportHttpResult.Rejected("The pack validates download secrets, which a public mirror cannot enforce");
 		Path target = (targetDirectory.isAbsolute() ? targetDirectory : serverRoot.resolve(targetDirectory)).normalize();
 		boolean exportEverything = includeAll || serverConfig != null && serverConfig.exportHttpIncludeAll;
-		// The auto-export runs inside the publication lease, where nothing can slip in mid-export: the resolve may
-		// simply run where it is, and the copy sees one consistent generation.
-		GenerationHosting hosting = generationStore.hosting();
+		// The auto-export runs inside the publication lease over the hosting snapshot the publication already built,
+		// where nothing can slip in mid-export: the resolve may simply run where it is, and the copy sees one
+		// consistent generation.
 		return exportCopied(target, exportEverything, hosting, resolvePlatformServed(hosting, exportEverything));
 	}
 
@@ -363,8 +363,8 @@ public class ModpackExecutor {
 			GenerationStore.Current current = generationStore.loadCurrent().orElse(null);
 			if (expectedContentToken != null && current == null)
 				return new PublishResult.Rejected("A state guard is unavailable before the root generation is published", null);
-			try (ModpackCandidate candidate = buildCandidate(current, true);
-					FileCache fileCache = FileCache.open(dataLayout.fileCacheDirectory())) {
+			try (FileCache fileCache = FileCache.open(dataLayout.fileCacheDirectory());
+					ModpackCandidate candidate = buildCandidate(current, true, fileCache)) {
 				warnUnusableSelectedGroups(candidate.manifest());
 				PackAbsence absence = refuse(candidate);
 				if (absence != null) return new PublishResult.NothingToPublish(absence);
@@ -442,11 +442,16 @@ public class ModpackExecutor {
 	}
 
 	private ModpackCandidate buildCandidate(GenerationStore.Current previous, boolean materializeMissingObjects) throws IOException, CandidateBuildException {
+		try (FileCache fileCache = FileCache.open(dataLayout.fileCacheDirectory())) {
+			return buildCandidate(previous, materializeMissingObjects, fileCache);
+		}
+	}
+
+	private ModpackCandidate buildCandidate(GenerationStore.Current previous, boolean materializeMissingObjects, FileCache fileCache) throws IOException, CandidateBuildException {
 		validateConfiguration();
 		prepareDirectories();
 		String modpackId = previous == null ? ModpackId.generate() : ModpackId.requireValid(previous.manifest().modpackId());
-		try (FileCache fileCache = FileCache.open(dataLayout.fileCacheDirectory());
-				ModFileCache modFileCache = ModFileCache.open(dataLayout.modCacheDirectory())) {
+		try (ModFileCache modFileCache = ModFileCache.open(dataLayout.modCacheDirectory())) {
 			// Unadvertised versions leave the manifest fields empty, so clients see a files-only pack instead of a
 			// pack whose versions they must switch to.
 			boolean advertiseVersions = serverConfig.advertiseVersionsToSync;
@@ -553,17 +558,17 @@ public class ModpackExecutor {
 			R failed = (R) committed.withHostingFailure(e);
 			bound = failed;
 		}
-		autoExportHttp();
+		autoExportHttp(committed.hosting());
 		return bound;
 	}
 
 	/** Publish-time mirror of the URL contract for static hosting; a failed or refused export is logged loudly but never fails the committed publication. */
-	private void autoExportHttp() {
+	private void autoExportHttp(GenerationHosting hosting) {
 		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
 		String directory = serverConfig == null || serverConfig.exportHttpDirectory == null ? "" : serverConfig.exportHttpDirectory.trim();
 		if (directory.isEmpty()) return;
 		try {
-			ExportHttpResult result = exportHttpLeased(Path.of(directory), false);
+			ExportHttpResult result = exportHttpLeased(Path.of(directory), false, hosting);
 			if (result instanceof ExportHttpResult.Exported exported) LOGGER.info(exported.receipt(directory));
 			else if (result instanceof ExportHttpResult.Rejected refused) LOGGER.warn("Refused to export the HTTP contract tree to {}: {}", directory, refused.detail());
 		} catch (Exception e) {

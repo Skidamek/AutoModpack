@@ -19,8 +19,18 @@ public final class ImmutableFilePublisher {
 	private static final ConcurrentHashMap<Path, ReentrantLock> JVM_LOCKS = new ConcurrentHashMap<>();
 	private ImmutableFilePublisher() {}
 
-	/** Publishes a verified immutable source, using a copy only when a hard link is unavailable. */
+	/** Publishes a verified immutable source, using a copy only when a hard link is unavailable, and forces the target's directory entry. */
 	public static boolean publishFile(Path source, Path target, ExistingFileValidator existingFileValidator) throws IOException {
+		return publishFile(source, target, existingFileValidator, true);
+	}
+
+	/**
+	 * Publishes a verified immutable source, using a copy only when a hard link is unavailable. With
+	 * {@code forceDirectory} the caller owns the directory-entry durability: it owes one
+	 * {@link FileTrees#forceDirectory} per touched target directory once its batch lands, so a promotion loop pays
+	 * the barrier once instead of per file.
+	 */
+	public static boolean publishFile(Path source, Path target, ExistingFileValidator existingFileValidator, boolean forceDirectory) throws IOException {
 		Objects.requireNonNull(source, "source");
 		Path parent = OsPaths.requirePublishableParent(target, "Immutable target");
 		if (validateExisting(target, existingFileValidator, null)) {
@@ -30,13 +40,13 @@ public final class ImmutableFilePublisher {
 		ImmutableFiles.protect(source);
 		try {
 			Files.createLink(target, source);
-			FileTrees.forceDirectory(parent);
+			if (forceDirectory) FileTrees.forceDirectory(parent);
 			return true;
 		} catch (FileAlreadyExistsException e) {
 			validate(existingFileValidator, target, e);
 			return false;
 		} catch (UnsupportedOperationException | FileSystemException linkFailure) {
-			return publishCopy(source, target, parent, existingFileValidator, linkFailure, true);
+			return publishCopy(source, target, parent, existingFileValidator, linkFailure, true, forceDirectory);
 		}
 	}
 
@@ -45,10 +55,10 @@ public final class ImmutableFilePublisher {
 		Objects.requireNonNull(source, "source");
 		Path parent = OsPaths.requirePublishableParent(target, "Immutable target");
 		if (validateExisting(target, existingFileValidator, null)) return false;
-		return publishCopy(source, target, parent, existingFileValidator, null, false);
+		return publishCopy(source, target, parent, existingFileValidator, null, false, true);
 	}
 
-	private static boolean publishCopy(Path source, Path target, Path parent, ExistingFileValidator existingFileValidator, Exception linkFailure, boolean protect) throws IOException {
+	private static boolean publishCopy(Path source, Path target, Path parent, ExistingFileValidator existingFileValidator, Exception linkFailure, boolean protect, boolean forceDirectory) throws IOException {
 		Path temporary = Files.createTempFile(parent, ".immutable-", DurableFiles.TEMPORARY_SUFFIX);
 		try {
 			Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
@@ -57,7 +67,7 @@ public final class ImmutableFilePublisher {
 			validate(existingFileValidator, temporary, null);
 			if (protect) ImmutableFiles.protect(temporary);
 			try {
-				return publishTemporary(temporary, target, existingFileValidator);
+				return publishTemporary(temporary, target, existingFileValidator, forceDirectory);
 			} catch (IOException e) {
 				if (linkFailure != null) e.addSuppressed(linkFailure);
 				throw e;
@@ -67,7 +77,7 @@ public final class ImmutableFilePublisher {
 		}
 	}
 
-	private static boolean publishTemporary(Path temporary, Path target, ExistingFileValidator existingFileValidator) throws IOException {
+	private static boolean publishTemporary(Path temporary, Path target, ExistingFileValidator existingFileValidator, boolean forceDirectory) throws IOException {
 		Objects.requireNonNull(temporary, "temporary");
 		Path parent = OsPaths.requirePublishableParent(target, "Immutable target");
 		if (validateExisting(target, existingFileValidator, null)) return false;
@@ -79,16 +89,16 @@ public final class ImmutableFilePublisher {
 				validate(existingFileValidator, target, e);
 				return false;
 			} catch (UnsupportedOperationException | FileSystemException linkFailure) {
-				return publishAtomicMoveLocked(temporary, target, parent, existingFileValidator, linkFailure);
+				return publishAtomicMoveLocked(temporary, target, parent, existingFileValidator, linkFailure, forceDirectory);
 			}
 			published = true;
 			return true;
 		} finally {
-			if (published) FileTrees.forceDirectory(parent);
+			if (published && forceDirectory) FileTrees.forceDirectory(parent);
 		}
 	}
 
-	private static boolean publishAtomicMoveLocked(Path temporary, Path target, Path parent, ExistingFileValidator existingFileValidator, Exception linkFailure) throws IOException {
+	private static boolean publishAtomicMoveLocked(Path temporary, Path target, Path parent, ExistingFileValidator existingFileValidator, Exception linkFailure, boolean forceDirectory) throws IOException {
 		Path lockPath = publicationLockPath(parent);
 		ReentrantLock jvmLock = JVM_LOCKS.computeIfAbsent(lockPath, ignored -> new ReentrantLock());
 		jvmLock.lock();
@@ -96,7 +106,7 @@ public final class ImmutableFilePublisher {
 			if (validateExisting(target, existingFileValidator, null)) return false;
 			try {
 				Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
-				FileTrees.forceDirectory(parent);
+				if (forceDirectory) FileTrees.forceDirectory(parent);
 				return true;
 			} catch (FileAlreadyExistsException e) {
 				validate(existingFileValidator, target, e);

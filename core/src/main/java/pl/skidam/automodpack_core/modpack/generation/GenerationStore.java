@@ -27,6 +27,7 @@ import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance;
 import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
 import pl.skidam.automodpack_core.utils.DurableFiles;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -111,7 +112,7 @@ public final class GenerationStore {
 		try {
 			JournalEntry head = journal.head();
 			Current rebuilt = new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), loadPolicy(head.policySha1()), replayLedger(head.seq()),
-					journal.treeAt(head.seq()), publishWaitingMusicObject());
+					journal.treeAt(head.seq()), publishWaitingMusicObject(null));
 			writeProjection(rebuilt);
 			return rebuilt;
 		} catch (Journal.UnusableContentException e) {
@@ -188,19 +189,20 @@ public final class GenerationStore {
 			// The track's only head record is the projection, so a track-only republish still rewrites it; the journal
 			// stays untouched, exactly as a no-change publish demands.
 			if (waitingMusicSource != null) {
-				Current withTrack = current.withWaitingMusic(publishWaitingMusicObject());
+				Current withTrack = current.withWaitingMusic(publishWaitingMusicObject(fileCache));
 				writeProjection(withTrack);
 				this.current = withTrack;
+				return new Publication(journal.head(), manifest, ledger, hosting(withTrack));
 			}
-			return new Publication(journal.head(), manifest, ledger, hosting());
+			return new Publication(journal.head(), manifest, ledger, hosting(current));
 		}
 
 		JournalEntry entry = new JournalEntry(current == null ? 1 : current.seq() + 1, token, policySha1, Instant.now(), notes, JournalEntry.NO_RESTORE, changes);
 		journal.append(entry);
-		Current updated = new Current(entry.seq(), token, policySha1, entry.createdAt(), manifest, ledger, tree, publishWaitingMusicObject());
+		Current updated = new Current(entry.seq(), token, policySha1, entry.createdAt(), manifest, ledger, tree, publishWaitingMusicObject(fileCache));
 		this.current = updated;
 		writeProjection(updated);
-		return new Publication(entry, manifest, ledger, hosting());
+		return new Publication(entry, manifest, ledger, hosting(updated));
 	}
 
 	/** Restores the exact content and policy of a past journal entry as a new head entry. */
@@ -217,10 +219,10 @@ public final class GenerationStore {
 		JournalEntry entry = new JournalEntry(current.seq() + 1, target.contentToken(), target.policySha1(), Instant.now(), notes, targetSeq, changes);
 		journal.append(entry);
 
-		Current updated = new Current(entry.seq(), target.contentToken(), target.policySha1(), entry.createdAt(), manifest, ledger, targetTree, publishWaitingMusicObject());
+		Current updated = new Current(entry.seq(), target.contentToken(), target.policySha1(), entry.createdAt(), manifest, ledger, targetTree, publishWaitingMusicObject(null));
 		this.current = updated;
 		writeProjection(updated);
-		return new Publication(entry, manifest, ledger, hosting());
+		return new Publication(entry, manifest, ledger, hosting(updated));
 	}
 
 	/** Recent journal entries, oldest first, at most {@code limit} of them. */
@@ -337,15 +339,16 @@ public final class GenerationStore {
 	}
 
 	/** Publishes the convention track through the object store's discipline when present; empty means this generation serves none, and a changed file lands at the next publish. */
-	private String publishWaitingMusicObject() throws IOException {
+	private String publishWaitingMusicObject(FileCache fileCache) throws IOException {
 		if (waitingMusicSource == null || !Files.isRegularFile(waitingMusicSource)) return "";
 		if (Files.size(waitingMusicSource) > WAITING_MUSIC_MAX_BYTES) {
 			LOGGER.error("The waiting track {} exceeds {} bytes; it was not published. Shrink the file and publish again.",
 					waitingMusicSource, WAITING_MUSIC_MAX_BYTES);
 			return "";
 		}
-		String sha1 = HashUtils.normalizeSha1(HashUtils.getHash(waitingMusicSource));
-		objectStore.promoteCopy(waitingMusicSource, sha1);
+		String sha1 = HashUtils.normalizeSha1(fileCache == null ? HashUtils.getHash(waitingMusicSource) : fileCache.getOrComputeHash(waitingMusicSource));
+		long size = Files.size(waitingMusicSource);
+		if (!FileIntegrity.matchesNamed(DataRootResolver.objectFile(objectsDirectory, sha1), size, sha1, fileCache)) objectStore.promoteCopy(waitingMusicSource, sha1);
 		return sha1;
 	}
 
