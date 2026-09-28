@@ -15,6 +15,7 @@ import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack.networking.content.LoginUpdateResponse;
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.storage.GameDirectory;
@@ -81,8 +82,23 @@ public class DataC2SPacket {
 			return CompletableFuture.completedFuture(buildResponse(LoginUpdateResponse.HOST_ERROR));
 		}
 
-		ClientStorage storage = ClientStorage.open(GameDirectory.current());
-		return ClientLoginUpdateFlow.reconcile(handler, connectionInfo, secret, storage, dataPacket.requireModpack, false).thenApply(DataC2SPacket::buildResponse);
+		// The login-query handler runs on the netty event loop; storage opening and the reconcile prefix are disk work
+		// and belong on the app executor, with only the already-consumed packet reads left on the loop.
+		CompletableFuture<FriendlyByteBuf> reconciled = new CompletableFuture<>();
+		ModpackUpdater.executor().execute(() -> {
+			try {
+				ClientStorage storage = ClientStorage.open(GameDirectory.current());
+				ClientLoginUpdateFlow.reconcile(handler, connectionInfo, secret, storage, dataPacket.requireModpack, false)
+						.thenApply(DataC2SPacket::buildResponse)
+						.whenComplete((response, error) -> {
+							if (error == null) reconciled.complete(response);
+							else reconciled.completeExceptionally(error);
+						});
+			} catch (Throwable e) {
+				reconciled.completeExceptionally(e);
+			}
+		});
+		return reconciled;
 	}
 
 	private static FriendlyByteBuf buildResponse(LoginUpdateResponse result) {
