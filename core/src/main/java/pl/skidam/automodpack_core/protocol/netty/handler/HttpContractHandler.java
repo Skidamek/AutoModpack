@@ -249,7 +249,6 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		ActivityTracker.Span span = tracker.start(String.valueOf(addressOf(ctx.channel())));
 		String request = cumulation.readCharSequence(headerEnd, StandardCharsets.UTF_8).toString();
 		cumulation.skipBytes(4);
-		cumulation.discardReadBytes();
 
 		String[] lines = request.split("\r\n", -1);
 		String[] requestLine = lines[0].split(" ");
@@ -440,6 +439,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		private FileChannel file; // opened by the caller for identity, by the first read for negotiated
 		private OutputStream compressor; // the codec's continuous stream; read tasks only
 		private ByteArrayOutputStream frames; // its sink, drained on every emitted frame; read tasks only
+		private byte[] inputChunk; // the compressor's read target, reused across every chunk of this response; read tasks only
 		private long flushed; // compressed wire bytes emitted so far; read tasks only
 		private long readPosition; // loop mirror of the file cursor
 		private long fileRemaining; // loop mirror of the file bytes left
@@ -570,12 +570,13 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 				}
 				long consumed = 0;
 				boolean last = false;
+				if (inputChunk == null) inputChunk = new byte[COMPRESS_INPUT_CHUNK];
 				do {
 					int chunk = (int) Math.min((long) COMPRESS_INPUT_CHUNK, remaining - consumed);
-					ByteBuffer input = ByteBuffer.allocate(chunk);
+					ByteBuffer input = ByteBuffer.wrap(inputChunk, 0, chunk);
 					int read = file.read(input, position + consumed);
 					if (read < 0) throw new IOException("File ended before the response was fully streamed");
-					compressor.write(input.array(), 0, read);
+					compressor.write(inputChunk, 0, read);
 					consumed += read;
 					if (consumed == remaining) {
 						last = true;
