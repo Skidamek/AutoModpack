@@ -9,6 +9,8 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -208,16 +210,40 @@ public final class ClientGenerationStore {
 		return true;
 	}
 
-	/** One cached policy document from the client CAS; policy objects are never collected, so witnessed generations stay foldable. */
-	public GroupManifest policyDocument(String policySha1) throws IOException {
-		String hash = ClientObjectStore.normalizeHash(policySha1);
+	/* Witnessed policies are immutable content-addressed objects - their file name is their hash and the store never
+	   rewrites them - so one parse serves every join, fold, and history screen. The outer key is the client directory:
+	   two storages can witness the same hash while one of them has deleted its copy, and a hit must never stand in for
+	   a missing object. A wholesale clear past the cap keeps each storage's map bounded against a server that never
+	   stops publishing; forgetting a pack clears the storage's map because that is the one path that may collect a
+	   policy object. */
+	private static final int POLICY_MEMO_CAP = 64;
+	private static final Map<Path, Map<String, GroupManifest>> POLICY_MEMOS = new ConcurrentHashMap<>();
+
+	private void requirePolicyObject(String hash) throws IOException {
 		Path object = storage.objectFile(hash);
 		if (!Files.exists(object, LinkOption.NOFOLLOW_LINKS)) throw new MissingGenerationContentException("Client policy document is missing: " + hash);
 		if (Files.isSymbolicLink(object) || !Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client policy document is not a regular file: " + object);
+	}
+
+	/** One cached policy document from the client CAS; policy objects are never collected, so witnessed generations stay foldable. */
+	public GroupManifest policyDocument(String policySha1) throws IOException {
+		String hash = ClientObjectStore.normalizeHash(policySha1);
+		Map<String, GroupManifest> memo = POLICY_MEMOS.computeIfAbsent(storage.clientDirectory().toAbsolutePath().normalize(), ignored -> new ConcurrentHashMap<>());
+		GroupManifest witnessed = memo.get(hash);
+		if (witnessed != null) {
+			// A hit still proves presence: a collected or deleted object must read as missing, never as a remembered parse.
+			requirePolicyObject(hash);
+			return witnessed;
+		}
+		requirePolicyObject(hash);
+		Path object = storage.objectFile(hash);
 		try {
 			ModpackJsons.CompleteModpackContentFields fields = ConfigTools.read(object, ModpackJsons.CompleteModpackContentFields.class)
 					.orElseThrow(() -> new IOException("Client policy document is empty: " + object));
-			return GroupManifestValidator.validate(fields);
+			GroupManifest manifest = GroupManifestValidator.validate(fields);
+			if (memo.size() >= POLICY_MEMO_CAP) memo.clear();
+			memo.put(hash, manifest);
+			return manifest;
 		} catch (RuntimeException e) {
 			throw new IOException("Client policy document is invalid: " + object, e);
 		}
@@ -232,6 +258,7 @@ public final class ClientGenerationStore {
 	}
 
 	private void forgetModpackLocked(String modpackId) throws IOException {
+		POLICY_MEMOS.remove(storage.clientDirectory().toAbsolutePath().normalize());
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Cannot forget a modpack while an update transaction is active");
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
