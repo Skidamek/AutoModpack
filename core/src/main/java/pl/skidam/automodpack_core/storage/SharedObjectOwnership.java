@@ -56,7 +56,7 @@ public final class SharedObjectOwnership {
 		fields.component = canonicalComponent;
 		fields.ownerPath = location.ownerPath().toString();
 		fields.objectHashes = List.copyOf(hashes);
-		ConfigTools.writeAtomic(owners.resolve(location.ownerId() + "." + canonicalComponent + ".json"), fields);
+		ConfigTools.writeAtomicCompact(owners.resolve(location.ownerId() + "." + canonicalComponent + ".json"), fields);
 	}
 
 	/**
