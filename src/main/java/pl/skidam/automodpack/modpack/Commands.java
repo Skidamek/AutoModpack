@@ -130,14 +130,23 @@ public class Commands {
 										.then(literal("pin")
 												.then(argument("origin", StringArgumentType.word())
 														.executes(Commands::bootstrapPin)
+														.then(argument("server-name", StringArgumentType.greedyString())
+																.executes(Commands::bootstrapPinNamed)
+														)
 												)
 										)
 										.then(literal("install")
 												.then(argument("origin", StringArgumentType.word())
 														.executes(Commands::bootstrapInstallConfiguredEndpoint)
+														.then(argument("server-name", StringArgumentType.greedyString())
+																.executes(Commands::bootstrapInstallConfiguredEndpointNamed)
+														)
 														.then(argument("endpoint", StringArgumentType.word())
 																.then(argument("connection-mode", StringArgumentType.word())
 																		.executes(Commands::bootstrapInstallExplicitEndpoint)
+																		.then(argument("server-name", StringArgumentType.greedyString())
+																				.executes(Commands::bootstrapInstallExplicitEndpointNamed)
+																		)
 																)
 														)
 												)
@@ -233,9 +242,17 @@ public class Commands {
 	}
 
 	private static int bootstrapPin(CommandContext<CommandSourceStack> context) {
+		return exportBootstrapPin(context, null);
+	}
+
+	private static int bootstrapPinNamed(CommandContext<CommandSourceStack> context) {
+		return exportBootstrapPin(context, StringArgumentType.getString(context, "server-name"));
+	}
+
+	private static int exportBootstrapPin(CommandContext<CommandSourceStack> context, String serverName) {
 		try {
 			InetSocketAddress origin = AddressHelpers.parseOrigin(StringArgumentType.getString(context, "origin"));
-			return writeBootstrap(context, BootstrapConfig.pin(origin, requireBootstrapFingerprint()), false);
+			return writeBootstrap(context, BootstrapConfig.pin(origin, requireBootstrapFingerprint(), serverName), false);
 		} catch (IllegalArgumentException e) {
 			send(context, e.getMessage(), ChatFormatting.RED, false);
 			return 0;
@@ -243,28 +260,34 @@ public class Commands {
 	}
 
 	private static int bootstrapInstallConfiguredEndpoint(CommandContext<CommandSourceStack> context) {
-		try {
-			if (serverConfig.advertisedEndpointHost == null || serverConfig.advertisedEndpointHost.isBlank()
-					|| serverConfig.advertisedEndpointPort == -1)
-				throw new IllegalArgumentException("Configured bootstrap install requires explicit advertisedEndpointHost and advertisedEndpointPort values");
-			InetSocketAddress origin = AddressHelpers.parseOrigin(StringArgumentType.getString(context, "origin"));
-			InetSocketAddress endpoint = AddressHelpers.parseEndpoint(
-					AddressHelpers.formatAddress(AddressHelpers.format(serverConfig.advertisedEndpointHost, serverConfig.advertisedEndpointPort)));
-			return writeBootstrap(context,
-					BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), endpoint, serverConfig.connectionMode, requireProvisioningSecret()), true);
-		} catch (IllegalArgumentException e) {
-			send(context, e.getMessage(), ChatFormatting.RED, false);
-			return 0;
-		}
+		return exportBootstrapInstall(context, null, null, null);
+	}
+
+	private static int bootstrapInstallConfiguredEndpointNamed(CommandContext<CommandSourceStack> context) {
+		return exportBootstrapInstall(context, null, null, StringArgumentType.getString(context, "server-name"));
 	}
 
 	private static int bootstrapInstallExplicitEndpoint(CommandContext<CommandSourceStack> context) {
+		return exportBootstrapInstall(context, StringArgumentType.getString(context, "endpoint"), StringArgumentType.getString(context, "connection-mode"), null);
+	}
+
+	private static int bootstrapInstallExplicitEndpointNamed(CommandContext<CommandSourceStack> context) {
+		return exportBootstrapInstall(context, StringArgumentType.getString(context, "endpoint"), StringArgumentType.getString(context, "connection-mode"),
+				StringArgumentType.getString(context, "server-name"));
+	}
+
+	private static int exportBootstrapInstall(CommandContext<CommandSourceStack> context, String endpoint, String connectionMode, String serverName) {
 		try {
+			if (endpoint == null && (serverConfig.advertisedEndpointHost == null || serverConfig.advertisedEndpointHost.isBlank()
+					|| serverConfig.advertisedEndpointPort == -1))
+				throw new IllegalArgumentException("Configured bootstrap install requires explicit advertisedEndpointHost and advertisedEndpointPort values");
 			InetSocketAddress origin = AddressHelpers.parseOrigin(StringArgumentType.getString(context, "origin"));
-			InetSocketAddress endpoint = AddressHelpers.parseEndpoint(StringArgumentType.getString(context, "endpoint"));
-			ModpackConnectionMode connectionMode = parseConnectionMode(StringArgumentType.getString(context, "connection-mode"));
-			return writeBootstrap(context,
-					BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), endpoint, connectionMode, requireProvisioningSecret()), true);
+			InetSocketAddress resolvedEndpoint = endpoint == null
+					? AddressHelpers.parseEndpoint(AddressHelpers.formatAddress(AddressHelpers.format(serverConfig.advertisedEndpointHost, serverConfig.advertisedEndpointPort)))
+					: AddressHelpers.parseEndpoint(endpoint);
+			ModpackConnectionMode mode = connectionMode == null ? serverConfig.connectionMode : parseConnectionMode(connectionMode);
+			return writeBootstrap(context, BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), resolvedEndpoint, mode,
+					requireProvisioningSecret(), serverName), true);
 		} catch (IllegalArgumentException e) {
 			send(context, e.getMessage(), ChatFormatting.RED, false);
 			return 0;
@@ -310,6 +333,8 @@ public class Commands {
 		String absolutePath = bootstrapPath.toAbsolutePath().normalize().toString();
 		send(context, "Bootstrap file exported", ChatFormatting.GREEN, copyable(absolutePath), ChatFormatting.YELLOW, false);
 		send(context, "Copy it to clients as", ChatFormatting.WHITE, copyable("automodpack/automodpack-bootstrap.json"), ChatFormatting.YELLOW, false);
+		if (fields.serverName != null && !fields.serverName.isBlank())
+			send(context, "Clients will also get '" + fields.serverName + "' added to their server list", ChatFormatting.GRAY, false);
 		send(context, "The exported file is not imported on this instance. Clients must already have AutoModpack installed.", ChatFormatting.GRAY, false);
 		if (install) send(context, "The file includes a provisioning secret. Treat it as a credential.", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
