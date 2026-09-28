@@ -13,7 +13,7 @@ from pathlib import Path
 from .mod_fixtures import write_valid_mod_fixture
 from .supervisor import resource_labels
 from .client_steps import cas_object
-from .config import server_cache_volume, write_generated
+from .config import expand_generated, server_cache_volume, write_generated
 from .docker_harness import shaped_tcp_sysctls, _container, _container_logs, _ensure_volume, _exec_output, _remove_volume, _run_container, _uid, _gid, _wait_for_log
 from .engine import Context
 from .engine.registry import verb
@@ -74,6 +74,17 @@ def _write_server_generation(ctx: Context, index: int) -> None:
     declared_music = (ctx.scenario.get("serverFiles", {}) or {}).get("waitingMusic")
     if declared_music and "waitingMusic" not in generation:
         generation = {**generation, "waitingMusic": declared_music}
+    bulk = expand_generated(generation.get("generated"))
+    if bulk:
+        # Per-generation bulk fixtures expand exactly like the single-generation base, so a benchmark pack can
+        # carry its bulk through a generation bump without spelling out every file.
+        generation = {
+            **generation,
+            "files": [
+                *(generation.get("files") or []),
+                *({"path": str(hosted.path), "sizeBytes": hosted.size_bytes, "group": "main"} for hosted in bulk),
+            ],
+        }
     srv_dir = ctx.server_dir
     host_root = srv_dir / "automodpack" / "host-modpack"
     if host_root.exists():

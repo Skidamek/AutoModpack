@@ -1,0 +1,78 @@
+id: launch-apply-bench
+description: 'Boot-apply benchmark: first-install a ~800-file pack, publish a second generation changing only 4 small
+  files, relaunch the client, and capture the launch-apply duration from the client log. The captured Took value is
+  the receipt for publish-path performance work; the flow only requires the apply to complete.'
+renderClient: true
+connectionPaths:
+  - mode: HTTP
+    bindPort: 25567
+    endpointPort: 25567
+    deferFirstSyncToLogin: true
+flow:
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - do: verify_files
+    name: verify all synced files are present
+    timeout: 600s
+  - do: quit
+    name: quit the client after the first install
+  - do: write_file
+    name: enable the boot sync the deferred-login stub disabled
+    path: automodpack/client.conf
+    content: "update-selected-modpack-on-launch: true\n"
+  - do: publish_server_generation
+    name: publish the second generation changing four files
+    generation: 1
+  - do: launch_client
+    name: relaunch the client to run the launch apply at boot
+  - do: wait_bridge
+    name: wait for the client test bridge
+  - do: wait_for
+    name: capture the launch apply duration
+    timeout: 300s
+    until:
+      log:
+        container: client
+        matches: 'Launch apply completed; restart demand: \w+ Took: (\d+)ms'
+        capture: { launch_apply_ms: 1 }
+  - do: assert
+    name: the launch apply must not fail on the way
+    that:
+      log:
+        container: client
+        not_matches: ['Launch apply failed', 'UpdateReplanRequiredException']
+  - do: wait_for
+    name: the changed file lands in the active projection
+    timeout: 120s
+    until:
+      file: ${active_dir}/config/bench-changed-2.txt
+  - do: quit
+    name: quit the relaunched client
+topology:
+  server:
+    memory: 2G
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  generations:
+    - patchNotes: "Bench base: bulk pack plus four tracked files."
+      files:
+        - { group: main, path: config/bench-changed-1.txt, content: "bench-v1\n" }
+        - { group: main, path: config/bench-changed-2.txt, content: "bench-v1\n" }
+        - { group: main, path: config/bench-changed-3.txt, content: "bench-v1\n" }
+        - { group: main, path: config/bench-changed-4.txt, content: "bench-v1\n" }
+      generated:
+        - pattern: config/bench/tiny-{n:03d}.bin
+          count: 400
+          sizeBytes: 16384
+    - patchNotes: "Bench bump: four changed files over the same bulk."
+      files:
+        - { group: main, path: config/bench-changed-1.txt, content: "bench-v2\n" }
+        - { group: main, path: config/bench-changed-2.txt, content: "bench-v2\n" }
+        - { group: main, path: config/bench-changed-3.txt, content: "bench-v2\n" }
+        - { group: main, path: config/bench-changed-4.txt, content: "bench-v2\n" }
+      generated:
+        - pattern: config/bench/tiny-{n:03d}.bin
+          count: 400
+          sizeBytes: 16384
