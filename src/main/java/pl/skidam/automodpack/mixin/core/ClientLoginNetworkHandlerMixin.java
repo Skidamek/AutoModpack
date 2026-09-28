@@ -75,6 +75,11 @@ public class ClientLoginNetworkHandlerMixin implements IntentionalDisconnectCont
 	}
 	*//*?}*/
 
+	/*
+	 * Compression is the verdict point of the join: our addon holds the server's login and exchanges every query
+	 * before the login finaliser sends compression (see ServerLoginNetworkHandlerMixin), so a compression packet
+	 * means our queries either all arrived or all got swallowed. Login finished covers servers that never send one.
+	 */
 	@Unique
 	private void autoModpack$selfCheck() {
 		if (ModPackets.loginQueryArrived() || !autoModpack$selfCheckFired.compareAndSet(false, true)) return;

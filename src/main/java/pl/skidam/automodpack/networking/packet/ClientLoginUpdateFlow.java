@@ -53,7 +53,7 @@ final class ClientLoginUpdateFlow {
 	 */
 	static CompletableFuture<LoginUpdateResponse> reconcile(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo,
 			Secrets.Secret secret, ClientStorage storage, boolean requireModpack, boolean selfCheck) {
-		if (!requireModpack && !syncedFromOrigin(storage, connectionInfo.origin)) return offerModpack(handler, connectionInfo, secret, storage, selfCheck);
+		if (!requireModpack && !syncedFromOrigin(storage, connectionInfo.origin)) return offerModpack(handler, connectionInfo, secret, storage);
 		return fetchAndReconcile(handler, connectionInfo, secret, storage, selfCheck);
 	}
 
@@ -70,17 +70,18 @@ final class ClientLoginUpdateFlow {
 	/**
 	 * The join offer for an optional modpack: the player picks before any transport opens, so nothing is fetched or
 	 * persisted yet. Sync chains into the standard flow unchanged; joining without it resumes the login in-session and
-	 * persists no connection record, trust entry or secret; backing out drops the join at the multiplayer hub.
+	 * persists no connection record, trust entry or secret; backing out drops the join at the multiplayer hub. Only the
+	 * login query reaches this offer, because the self-check joins a pack it already knows is synced from this origin.
 	 */
 	private static CompletableFuture<LoginUpdateResponse> offerModpack(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo,
-			Secrets.Secret secret, ClientStorage storage, boolean selfCheck) {
+			Secrets.Secret secret, ClientStorage storage) {
 		if (!ScreenManager.hasScreen()) {
 			LOGGER.info("No screen available, treating the offered modpack as required");
-			return fetchAndReconcile(handler, connectionInfo, secret, storage, selfCheck);
+			return fetchAndReconcile(handler, connectionInfo, secret, storage, false);
 		}
 		LOGGER.info("The server offers its modpack; asking the player before any sync");
 		CompletableFuture<LoginUpdateResponse> answered = new CompletableFuture<>();
-		Runnable syncModpack = () -> ModpackUpdater.executor().execute(() -> fetchAndReconcile(handler, connectionInfo, secret, storage, selfCheck)
+		Runnable syncModpack = () -> ModpackUpdater.executor().execute(() -> fetchAndReconcile(handler, connectionInfo, secret, storage, false)
 				.whenComplete((response, error) -> {
 					if (error == null) answered.complete(response);
 					else answered.completeExceptionally(error);
@@ -112,37 +113,22 @@ final class ClientLoginUpdateFlow {
 
 			PackTransport transport = manifestResult.transport();
 			ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
-			PackDocument record;
-			SelectionIntent savedSelection;
-			try {
-				record = PackDocument.fromFields(manifestResult.content());
-				savedSelection = selections.get(record.manifest().modpackId()).orElse(null);
-			} catch (RuntimeException e) {
-				transport.close();
-				if (selfCheck) return CompletableFuture.completedFuture(selfCheckStop("the fetched head does not resolve against local state", e));
-				presentFailure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
-				disconnectImmediately(handler);
-				return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
-			}
+			SelectionIntent savedSelection = null;
 			SelectedModpackTarget selectedTarget;
 			try {
+				PackDocument record = PackDocument.fromFields(manifestResult.content());
+				savedSelection = selections.get(record.manifest().modpackId()).orElse(null);
 				SelectionIntent applied = appliedSelectionOrRethrow(storage, record.manifest().modpackId());
 				selectedTarget = savedSelection == null
 						? SelectedModpackTarget.prepareDefault(manifestResult.content(), ClientPlatform.effective(savedSelection))
 						: SelectedModpackTarget.prepare(manifestResult.content(), applied, savedSelection, ClientPlatform.effective(savedSelection));
-			} catch (SelectionResolutionException e) {
-				if (savedSelection != null && canRepair(manifestResult.content(), savedSelection)) {
+			} catch (RuntimeException e) {
+				if (e instanceof SelectionResolutionException && savedSelection != null && canRepair(manifestResult.content(), savedSelection)) {
 					disconnectImmediately(handler);
 					openInteractiveRepair(storage, manifestResult.content(), savedSelection, transport,
 							repaired -> continueReconcile(handler, connectionInfo, secret, storage, transport, repaired, true, false, selfCheck));
 					return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
 				}
-				transport.close();
-				if (selfCheck) return CompletableFuture.completedFuture(selfCheckStop("the fetched head does not resolve against local state", e));
-				presentFailure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
-				disconnectImmediately(handler);
-				return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
-			} catch (RuntimeException e) {
 				transport.close();
 				if (selfCheck) return CompletableFuture.completedFuture(selfCheckStop("the fetched head does not resolve against local state", e));
 				presentFailure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
@@ -276,7 +262,7 @@ final class ClientLoginUpdateFlow {
 		ModpackJsons.ModpackContentFields serverModpackContent = selectedTarget.flatTarget();
 		ConnectionJsons.ConnectionInfo stored = storedConnection(storage, serverModpackContent.modpackId);
 		if (!originApproved && stored != null && stored.origin != null && !stored.isApprovedOrigin(connectionInfo.origin)) {
-			return CompletableFuture.completedFuture(offerOriginChange(handler, connectionInfo, secret, storage, transport, selectedTarget, alreadyDisconnected, stored, selfCheck));
+			return CompletableFuture.completedFuture(offerOriginChange(handler, connectionInfo, secret, storage, transport, selectedTarget, alreadyDisconnected, stored));
 		}
 		if (stored != null) stored.approvedOrigins().forEach(connectionInfo::approveOrigin);
 		connectionInfo.approveOrigin(AddressHelpers.formatAddress(connectionInfo.origin));
@@ -380,9 +366,13 @@ final class ClientLoginUpdateFlow {
 		}
 	}
 
-	/** A new address serving an installed pack can be a sibling server, a migration or an impostor; the player decides once and the approval set makes it stick. */
+	/**
+	 * A new address serving an installed pack can be a sibling server, a migration or an impostor; the player decides
+	 * once and the approval set makes it stick. Only the login query reaches this prompt: the self-check joins the very
+	 * origin the stored record names, and a record keeps its own origin approved, so its approval always holds.
+	 */
 	private static LoginUpdateResponse offerOriginChange(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
-			ClientStorage storage, PackTransport transport, SelectedModpackTarget selectedTarget, boolean alreadyDisconnected, ConnectionJsons.ConnectionInfo stored, boolean selfCheck) {
+			ClientStorage storage, PackTransport transport, SelectedModpackTarget selectedTarget, boolean alreadyDisconnected, ConnectionJsons.ConnectionInfo stored) {
 		if (!alreadyDisconnected) disconnectImmediately(handler);
 		if (!ScreenManager.hasScreen()) {
 			LOGGER.warn("No screen available, refusing the changed origin for modpack {}", selectedTarget.flatTarget().modpackId);
@@ -394,7 +384,7 @@ final class ClientLoginUpdateFlow {
 		List<String> approved = new ArrayList<>(stored.approvedOrigins());
 		if (approved.isEmpty() && stored.origin != null) approved.add(AddressHelpers.formatAddress(stored.origin));
 		ScreenManager.originChange(modpackName, String.join(", ", approved), AddressHelpers.formatAddress(connectionInfo.origin),
-				() -> ModpackUpdater.executor().execute(() -> continueReconcile(handler, connectionInfo, secret, storage, transport, selectedTarget, true, true, selfCheck)),
+				() -> ModpackUpdater.executor().execute(() -> continueReconcile(handler, connectionInfo, secret, storage, transport, selectedTarget, true, true, false)),
 				() -> {
 					transport.close();
 					ScreenImpl.multiplayer();
