@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 
@@ -124,24 +125,8 @@ final class ClientLoginUpdateFlow {
 			} catch (SelectionResolutionException e) {
 				if (savedSelection != null && canRepair(manifestResult.content(), savedSelection)) {
 					disconnectImmediately(handler);
-					AtomicBoolean repairCancelled = new AtomicBoolean();
-					ScreenImpl.repairSelection(manifestResult.content(), savedSelection, intent -> {
-						ScreenManager.waiting(() -> {
-							repairCancelled.set(true);
-							transport.close();
-						});
-						ModpackUpdater.executor().execute(() -> {
-							if (repairCancelled.get()) return;
-							try {
-								SelectedModpackTarget repaired = SelectedModpackTarget.prepare(manifestResult.content(), savedSelection, intent, ClientPlatform.effective(intent));
-								continueReconcile(handler, connectionInfo, secret, storage, transport, repaired, true, false);
-							} catch (RuntimeException repairError) {
-								if (repairCancelled.get()) return;
-								transport.close();
-								presentFailure(repairError, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
-							}
-						});
-					}, transport::close);
+					openInteractiveRepair(manifestResult.content(), savedSelection, transport,
+							repaired -> continueReconcile(handler, connectionInfo, secret, storage, transport, repaired, true, false));
 					return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
 				}
 				transport.close();
@@ -180,6 +165,23 @@ final class ClientLoginUpdateFlow {
 		}
 
 		disconnectImmediately(handler);
+		openInteractiveRepair(fields, savedSelection, transport, repaired -> {
+			if (suppliesNothing(repaired)) {
+				transport.close();
+				presentFailure(new IllegalStateException("The server's modpack selects no files for this client"), "automodpack.error.emptyModpack", FailureCategory.HOST);
+				return;
+			}
+			continueReconcile(handler, connectionInfo, secret, storage, transport, repaired, true, false);
+		});
+		return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
+	}
+
+	/**
+	 * The shared repair-selection scaffolding: one abandonment flag, the waiting-cancel wiring, the executor hop, and the corrupt-state failure tail; the transport closes exactly once, or the continuation hands it to
+	 * the updater.
+	 */
+	private static void openInteractiveRepair(GenerationJsons.HeadDocumentFields fields, SelectionIntent savedSelection, PackTransport transport,
+			Consumer<SelectedModpackTarget> continuation) {
 		AtomicBoolean abandoned = new AtomicBoolean();
 		ScreenImpl.repairSelection(fields, savedSelection, intent -> {
 			ScreenManager.waiting(() -> {
@@ -189,21 +191,14 @@ final class ClientLoginUpdateFlow {
 			ModpackUpdater.executor().execute(() -> {
 				if (abandoned.get()) return;
 				try {
-					SelectedModpackTarget repaired = SelectedModpackTarget.prepare(fields, savedSelection, intent, ClientPlatform.effective(intent));
-					if (suppliesNothing(repaired)) {
-						transport.close();
-						presentFailure(new IllegalStateException("The server's modpack selects no files for this client"), "automodpack.error.emptyModpack", FailureCategory.HOST);
-						return;
-					}
-					continueReconcile(handler, connectionInfo, secret, storage, transport, repaired, true, false);
-				} catch (RuntimeException e) {
+					continuation.accept(SelectedModpackTarget.prepare(fields, savedSelection, intent, ClientPlatform.effective(intent)));
+				} catch (RuntimeException repairError) {
 					if (abandoned.get()) return;
 					transport.close();
-					presentFailure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
+					presentFailure(repairError, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
 				}
 			});
 		}, transport::close);
-		return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
 	}
 
 	private static boolean suppliesNothing(SelectedModpackTarget target) {
