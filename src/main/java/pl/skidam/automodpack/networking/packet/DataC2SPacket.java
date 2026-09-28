@@ -23,6 +23,7 @@ import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 public class DataC2SPacket {
 	public static CompletableFuture<FriendlyByteBuf> receive(Minecraft client, ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf) {
+		ModPackets.markLoginQueryArrived();
 		DataPacket dataPacket;
 		try {
 			String serverResponse = buf.readUtf(Short.MAX_VALUE);
@@ -81,7 +82,7 @@ public class DataC2SPacket {
 		}
 
 		ClientStorage storage = ClientStorage.open(GameDirectory.current());
-		return ClientLoginUpdateFlow.reconcile(handler, connectionInfo, secret, storage, dataPacket.requireModpack).thenApply(DataC2SPacket::buildResponse);
+		return ClientLoginUpdateFlow.reconcile(handler, connectionInfo, secret, storage, dataPacket.requireModpack, false).thenApply(DataC2SPacket::buildResponse);
 	}
 
 	private static FriendlyByteBuf buildResponse(LoginUpdateResponse result) {

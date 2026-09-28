@@ -47,11 +47,14 @@ import pl.skidam.automodpack_core.utils.Throwables;
 final class ClientLoginUpdateFlow {
 	private ClientLoginUpdateFlow() {}
 
-	/** The entry to the login work: an optional modpack first asks a client with nothing synced from this server whether it wants the pack at all. */
+	/**
+	 * The entry to the login work: an optional modpack first asks a client with nothing synced from this server whether it wants the pack at all. The self-check path runs the same ladder, quietly until an update is
+	 * actually found.
+	 */
 	static CompletableFuture<LoginUpdateResponse> reconcile(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo,
-			Secrets.Secret secret, ClientStorage storage, boolean requireModpack) {
-		if (!requireModpack && !syncedFromOrigin(storage, connectionInfo.origin)) return offerModpack(handler, connectionInfo, secret, storage);
-		return fetchAndReconcile(handler, connectionInfo, secret, storage);
+			Secrets.Secret secret, ClientStorage storage, boolean requireModpack, boolean selfCheck) {
+		if (!requireModpack && !syncedFromOrigin(storage, connectionInfo.origin)) return offerModpack(handler, connectionInfo, secret, storage, selfCheck);
+		return fetchAndReconcile(handler, connectionInfo, secret, storage, selfCheck);
 	}
 
 	/** Whether any installed pack's connection record names this joining origin; unreadable storage reads as never synced here, so the offer still shows. */
@@ -70,14 +73,14 @@ final class ClientLoginUpdateFlow {
 	 * persists no connection record, trust entry or secret; backing out drops the join at the multiplayer hub.
 	 */
 	private static CompletableFuture<LoginUpdateResponse> offerModpack(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo,
-			Secrets.Secret secret, ClientStorage storage) {
+			Secrets.Secret secret, ClientStorage storage, boolean selfCheck) {
 		if (!ScreenManager.hasScreen()) {
 			LOGGER.info("No screen available, treating the offered modpack as required");
-			return fetchAndReconcile(handler, connectionInfo, secret, storage);
+			return fetchAndReconcile(handler, connectionInfo, secret, storage, selfCheck);
 		}
 		LOGGER.info("The server offers its modpack; asking the player before any sync");
 		CompletableFuture<LoginUpdateResponse> answered = new CompletableFuture<>();
-		Runnable syncModpack = () -> ModpackUpdater.executor().execute(() -> fetchAndReconcile(handler, connectionInfo, secret, storage)
+		Runnable syncModpack = () -> ModpackUpdater.executor().execute(() -> fetchAndReconcile(handler, connectionInfo, secret, storage, selfCheck)
 				.whenComplete((response, error) -> {
 					if (error == null) answered.complete(response);
 					else answered.completeExceptionally(error);
@@ -97,12 +100,13 @@ final class ClientLoginUpdateFlow {
 	}
 
 	private static CompletableFuture<LoginUpdateResponse> fetchAndReconcile(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo,
-			Secrets.Secret secret, ClientStorage storage) {
+			Secrets.Secret secret, ClientStorage storage, boolean selfCheck) {
 		String selectedModpackId = storage.selectedModpackId();
 		return ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo, secret, true, selectedModpackId).thenComposeAsync(manifestResult -> {
 			if (!manifestResult.successful()) {
-				disconnectImmediately(handler);
 				Throwable failure = manifestResult.failure() == null ? new IOException("Modpack manifest fetch returned no failure cause") : manifestResult.failure();
+				if (selfCheck) return CompletableFuture.completedFuture(selfCheckStop("the manifest fetch failed", failure));
+				disconnectImmediately(handler);
 				return CompletableFuture.completedFuture(presentReconcileFailure(failure, manifestResult.state()));
 			}
 
@@ -115,6 +119,7 @@ final class ClientLoginUpdateFlow {
 				savedSelection = selections.get(record.manifest().modpackId()).orElse(null);
 			} catch (RuntimeException e) {
 				transport.close();
+				if (selfCheck) return CompletableFuture.completedFuture(selfCheckStop("the fetched head does not resolve against local state", e));
 				presentFailure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
 				disconnectImmediately(handler);
 				return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
@@ -129,26 +134,30 @@ final class ClientLoginUpdateFlow {
 				if (savedSelection != null && canRepair(manifestResult.content(), savedSelection)) {
 					disconnectImmediately(handler);
 					openInteractiveRepair(storage, manifestResult.content(), savedSelection, transport,
-							repaired -> continueReconcile(handler, connectionInfo, secret, storage, transport, repaired, true, false));
+							repaired -> continueReconcile(handler, connectionInfo, secret, storage, transport, repaired, true, false, selfCheck));
 					return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
 				}
 				transport.close();
+				if (selfCheck) return CompletableFuture.completedFuture(selfCheckStop("the fetched head does not resolve against local state", e));
 				presentFailure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
 				disconnectImmediately(handler);
 				return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
 			} catch (RuntimeException e) {
 				transport.close();
+				if (selfCheck) return CompletableFuture.completedFuture(selfCheckStop("the fetched head does not resolve against local state", e));
 				presentFailure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
 				disconnectImmediately(handler);
 				return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
 			}
 
 			return suppliesNothing(selectedTarget)
-					? resolveWhatToInstall(handler, connectionInfo, secret, storage, transport, manifestResult.content(), savedSelection)
-					: continueReconcile(handler, connectionInfo, secret, storage, transport, selectedTarget, false, false);
+					? resolveWhatToInstall(handler, connectionInfo, secret, storage, transport, manifestResult.content(), savedSelection, selfCheck)
+					: continueReconcile(handler, connectionInfo, secret, storage, transport, selectedTarget, false, false, selfCheck);
 		}, ModpackUpdater.executor()).exceptionally(e -> {
+			Throwable failure = Throwables.unwrap(e);
+			if (selfCheck) return selfCheckStop("the reconcile ladder failed", failure);
 			disconnectImmediately(handler);
-			return presentReconcileFailure(Throwables.unwrap(e), null);
+			return presentReconcileFailure(failure, null);
 		});
 	}
 
@@ -159,9 +168,10 @@ final class ClientLoginUpdateFlow {
 	 * out. Picking still nothing means the pack holds nothing this client can use, which is the operator's again.
 	 */
 	private static CompletableFuture<LoginUpdateResponse> resolveWhatToInstall(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
-			ClientStorage storage, PackTransport transport, GenerationJsons.HeadDocumentFields fields, SelectionIntent savedSelection) {
+			ClientStorage storage, PackTransport transport, GenerationJsons.HeadDocumentFields fields, SelectionIntent savedSelection, boolean selfCheck) {
 		if (savedSelection == null) {
 			transport.close();
+			if (selfCheck) return CompletableFuture.completedFuture(selfCheckStop("the modpack selects nothing for this client", null));
 			presentFailure(new IllegalStateException("The server's modpack selects no files for this client"), "automodpack.error.emptyModpack", FailureCategory.HOST);
 			disconnectImmediately(handler);
 			return CompletableFuture.completedFuture(LoginUpdateResponse.HOST_ERROR);
@@ -174,7 +184,7 @@ final class ClientLoginUpdateFlow {
 				presentFailure(new IllegalStateException("The server's modpack selects no files for this client"), "automodpack.error.emptyModpack", FailureCategory.HOST);
 				return;
 			}
-			continueReconcile(handler, connectionInfo, secret, storage, transport, repaired, true, false);
+			continueReconcile(handler, connectionInfo, secret, storage, transport, repaired, true, false, selfCheck);
 		});
 		return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
 	}
@@ -262,11 +272,11 @@ final class ClientLoginUpdateFlow {
 	}
 
 	private static CompletableFuture<LoginUpdateResponse> continueReconcile(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
-			ClientStorage storage, PackTransport transport, SelectedModpackTarget selectedTarget, boolean alreadyDisconnected, boolean originApproved) {
+			ClientStorage storage, PackTransport transport, SelectedModpackTarget selectedTarget, boolean alreadyDisconnected, boolean originApproved, boolean selfCheck) {
 		ModpackJsons.ModpackContentFields serverModpackContent = selectedTarget.flatTarget();
 		ConnectionJsons.ConnectionInfo stored = storedConnection(storage, serverModpackContent.modpackId);
 		if (!originApproved && stored != null && stored.origin != null && !stored.isApprovedOrigin(connectionInfo.origin)) {
-			return CompletableFuture.completedFuture(offerOriginChange(handler, connectionInfo, secret, storage, transport, selectedTarget, alreadyDisconnected, stored));
+			return CompletableFuture.completedFuture(offerOriginChange(handler, connectionInfo, secret, storage, transport, selectedTarget, alreadyDisconnected, stored, selfCheck));
 		}
 		if (stored != null) stored.approvedOrigins().forEach(connectionInfo::approveOrigin);
 		connectionInfo.approveOrigin(AddressHelpers.formatAddress(connectionInfo.origin));
@@ -275,6 +285,7 @@ final class ClientLoginUpdateFlow {
 			ConnectionStore.saveClientSecret(storage, serverModpackContent.modpackId, connectionInfo.origin, secret);
 		} catch (Exception e) {
 			transport.close();
+			if (selfCheck) return CompletableFuture.completedFuture(selfCheckStop("the connection state cannot be saved", e));
 			presentFailure(e, "automodpack.error.storage", FailureCategory.STORAGE);
 			if (!alreadyDisconnected) disconnectImmediately(handler);
 			return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
@@ -349,6 +360,13 @@ final class ClientLoginUpdateFlow {
 		return answered;
 	}
 
+	/** Nobody asked for this check and the server demanded nothing, so a stopped check is one logged line: no screen, no disconnect, and the join keeps its course. */
+	private static LoginUpdateResponse selfCheckStop(String what, Throwable failure) {
+		if (failure == null) LOGGER.warn("AutoModpack self-check stopped: {}", what);
+		else LOGGER.warn("AutoModpack self-check stopped: {}", what, failure);
+		return LoginUpdateResponse.CONTINUE;
+	}
+
 	private static void disconnectImmediately(ClientHandshakePacketListenerImpl handler) {
 		ClientLoginDisconnect.disconnect(handler);
 	}
@@ -364,7 +382,7 @@ final class ClientLoginUpdateFlow {
 
 	/** A new address serving an installed pack can be a sibling server, a migration or an impostor; the player decides once and the approval set makes it stick. */
 	private static LoginUpdateResponse offerOriginChange(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
-			ClientStorage storage, PackTransport transport, SelectedModpackTarget selectedTarget, boolean alreadyDisconnected, ConnectionJsons.ConnectionInfo stored) {
+			ClientStorage storage, PackTransport transport, SelectedModpackTarget selectedTarget, boolean alreadyDisconnected, ConnectionJsons.ConnectionInfo stored, boolean selfCheck) {
 		if (!alreadyDisconnected) disconnectImmediately(handler);
 		if (!ScreenManager.hasScreen()) {
 			LOGGER.warn("No screen available, refusing the changed origin for modpack {}", selectedTarget.flatTarget().modpackId);
@@ -376,7 +394,7 @@ final class ClientLoginUpdateFlow {
 		List<String> approved = new ArrayList<>(stored.approvedOrigins());
 		if (approved.isEmpty() && stored.origin != null) approved.add(AddressHelpers.formatAddress(stored.origin));
 		ScreenManager.originChange(modpackName, String.join(", ", approved), AddressHelpers.formatAddress(connectionInfo.origin),
-				() -> ModpackUpdater.executor().execute(() -> continueReconcile(handler, connectionInfo, secret, storage, transport, selectedTarget, true, true)),
+				() -> ModpackUpdater.executor().execute(() -> continueReconcile(handler, connectionInfo, secret, storage, transport, selectedTarget, true, true, selfCheck)),
 				() -> {
 					transport.close();
 					ScreenImpl.multiplayer();

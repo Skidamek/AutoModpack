@@ -3,6 +3,7 @@ package pl.skidam.automodpack.networking;
 import static pl.skidam.automodpack_core.Constants.*;
 
 import java.net.InetSocketAddress;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
@@ -26,13 +27,23 @@ public class ModPackets {
 	public record ConnectionAttempt(InetSocketAddress origin, String expectedFingerprint) {}
 
 	private static ConnectionAttempt connectionAttempt;
+	private static final AtomicBoolean loginQueryArrived = new AtomicBoolean();
 
 	public static void setConnectionAttempt(ConnectionAttempt attempt) {
 		connectionAttempt = attempt;
+		loginQueryArrived.set(false);
 	}
 
 	public static ConnectionAttempt getConnectionAttempt() {
 		return connectionAttempt;
+	}
+
+	public static void markLoginQueryArrived() {
+		loginQueryArrived.set(true);
+	}
+
+	public static boolean loginQueryArrived() {
+		return loginQueryArrived.get();
 	}
 
 	public static void registerC2SPackets() {
