@@ -353,13 +353,7 @@ class FakeBridge:
             self.alternative_selected = False
         elif element_id == 5:
             if self.screen == "preview":
-                self._timeline_snapshot("LIVE")
-                if self.pending_pack is not None:
-                    self._capture_editable_overlay(self.selected_pack)
-                    self.selected_pack = self.pending_pack
-                    self.pending_pack = None
-                self._write_modpack()
-                self._restore_editable_overlay(self.selected_pack)
+                self._apply_pending_switch()
                 self.screen = "restart"
         elif element_id == 6:
             self.screen = "multiplayer"
@@ -389,7 +383,10 @@ class FakeBridge:
                     self.acknowledged = False
                     self.screen = "strict_confirm"
                 else:
-                    self.screen = "preview"
+                    # The activate click is the consent: the switch applies straight
+                    # through and the restart demand is the flow's only screen.
+                    self._apply_pending_switch()
+                    self.screen = "restart"
             else:
                 self.screen = "preview"
         elif element_id == 70:
@@ -550,15 +547,19 @@ class FakeBridge:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(overlay, target)
 
-    def _confirm_download(self) -> None:
+    def _apply_pending_switch(self) -> None:
+        """Swap the pending pack in and rewrite the projection; the caller picks the landing screen."""
         self._timeline_snapshot("LIVE")
-        """Download on the first-install confirm applies the pack and restarts."""
         if self.pending_pack is not None:
             self._capture_editable_overlay(self.selected_pack)
             self.selected_pack = self.pending_pack
             self.pending_pack = None
         self._write_modpack()
         self._restore_editable_overlay(self.selected_pack)
+
+    def _confirm_download(self) -> None:
+        """Download on the first-install confirm applies the pack and restarts."""
+        self._apply_pending_switch()
         self.screen = "download"
 
     def _remove_active_pack(self) -> None:
