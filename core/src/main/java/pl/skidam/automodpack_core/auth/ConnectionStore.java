@@ -91,22 +91,41 @@ public final class ConnectionStore {
 	}
 
 	/**
-	 * Whether any installed pack's stored connection origin equals this joining origin: a client already synced from
-	 * this server skips the join offer for an optional modpack. An unreadable or origin-less record only hides its
-	 * pack, exactly like the stale-cleanup offer above.
+	 * The installed pack whose stored connection origin equals this joining origin, with its record: a client already
+	 * synced from this server skips the join offer for an optional modpack and self-checks against this record. The
+	 * selected pack wins when several packs name the origin, because it is the one the player currently serves it with.
+	 * An unreadable or origin-less record only hides its pack, exactly like the stale-cleanup offer above.
 	 */
-	public static boolean hasOriginConnection(ClientStorage storage, InetSocketAddress origin) throws IOException {
-		if (origin == null) return false;
+	public record OriginConnection(String modpackId, ConnectionJsons.ConnectionInfo connection) {}
+
+	public static OriginConnection connectionForOrigin(ClientStorage storage, InetSocketAddress origin) throws IOException {
+		if (origin == null) return null;
 		String joiningOrigin = AddressHelpers.formatAddress(origin);
-		for (String modpackId : new ClientGenerationStore(storage).installedPackIds()) {
-			try {
-				ConnectionJsons.ConnectionInfo connection = getConnection(storage, modpackId);
-				if (connection != null && connection.origin != null && AddressHelpers.formatAddress(connection.origin).equals(joiningOrigin)) return true;
-			} catch (IOException | RuntimeException e) {
-				LOGGER.debug("Cannot read the connection record of modpack {}; it does not count as synced here", modpackId, e);
-			}
+		String selected = storage.selectedModpackId();
+		if (!selected.isBlank()) {
+			OriginConnection originConnection = originConnection(storage, selected, joiningOrigin);
+			if (originConnection != null) return originConnection;
 		}
-		return false;
+		for (String modpackId : new ClientGenerationStore(storage).installedPackIds()) {
+			OriginConnection originConnection = originConnection(storage, modpackId, joiningOrigin);
+			if (originConnection != null) return originConnection;
+		}
+		return null;
+	}
+
+	private static OriginConnection originConnection(ClientStorage storage, String modpackId, String joiningOrigin) {
+		try {
+			ConnectionJsons.ConnectionInfo connection = getConnection(storage, modpackId);
+			if (connection != null && connection.origin != null && AddressHelpers.formatAddress(connection.origin).equals(joiningOrigin)) return new OriginConnection(modpackId, connection);
+		} catch (IOException | RuntimeException e) {
+			LOGGER.debug("Cannot read the connection record of modpack {}; it does not count as synced here", modpackId, e);
+		}
+		return null;
+	}
+
+	/** Whether {@link #connectionForOrigin} finds a pack for this joining origin. */
+	public static boolean hasOriginConnection(ClientStorage storage, InetSocketAddress origin) throws IOException {
+		return connectionForOrigin(storage, origin) != null;
 	}
 
 	private static Path file(ClientStorage storage, String modpackId) {

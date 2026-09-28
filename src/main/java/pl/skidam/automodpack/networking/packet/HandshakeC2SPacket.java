@@ -12,6 +12,7 @@ import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.FriendlyByteBuf;
 
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.client.ClientLoginDisconnect;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack_core.client.SelfUpdater;
@@ -22,6 +23,7 @@ import pl.skidam.automodpack_core.utils.SemanticVersion;
 public class HandshakeC2SPacket {
 
 	public static CompletableFuture<FriendlyByteBuf> receive(Minecraft client, ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf) {
+		ModPackets.markLoginQueryArrived();
 		FriendlyByteBuf outBuf = new FriendlyByteBuf(Unpooled.buffer());
 
 		try {

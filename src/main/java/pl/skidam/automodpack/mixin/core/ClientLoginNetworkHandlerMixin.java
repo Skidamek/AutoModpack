@@ -21,9 +21,17 @@ import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
+import net.minecraft.network.protocol.login.ClientboundLoginCompressionPacket;
+/*? if >=1.21.4 {*/
+import net.minecraft.network.protocol.login.ClientboundLoginFinishedPacket;
+/*?} else {*/
+/*import net.minecraft.network.protocol.login.ClientboundGameProfilePacket;
+*//*?}*/
 
+import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.client.ClientLoginNetworkAddon;
 import pl.skidam.automodpack.networking.client.IntentionalDisconnectControl;
+import pl.skidam.automodpack.networking.packet.LoginSelfCheck;
 
 @Mixin(value = ClientHandshakePacketListenerImpl.class, priority = 300)
 public class ClientLoginNetworkHandlerMixin implements IntentionalDisconnectControl {
@@ -34,6 +42,8 @@ public class ClientLoginNetworkHandlerMixin implements IntentionalDisconnectCont
 	private ClientLoginNetworkAddon autoModpack$addon;
 	@Unique
 	private final AtomicBoolean autoModpack$intentionalDisconnect = new AtomicBoolean();
+	@Unique
+	private final AtomicBoolean autoModpack$selfCheckFired = new AtomicBoolean();
 
 	@Inject(method = "<init>", at = @At("RETURN"))
 	private void initAddon(CallbackInfo ci) {
@@ -43,6 +53,37 @@ public class ClientLoginNetworkHandlerMixin implements IntentionalDisconnectCont
 	@WrapMethod(method = "handleCustomQuery")
 	private void handleQueryRequest(ClientboundCustomQueryPacket packet, Operation<Void> original) {
 		if (this.autoModpack$addon == null || !this.autoModpack$addon.handlePacket(packet)) original.call(packet);
+	}
+
+	@WrapMethod(method = "handleCompression")
+	private void autoModpack$selfCheckOnCompression(ClientboundLoginCompressionPacket packet, Operation<Void> original) {
+		autoModpack$selfCheck();
+		original.call(packet);
+	}
+
+	/*? if >=1.21.4 {*/
+	@WrapMethod(method = "handleLoginFinished")
+	private void autoModpack$selfCheckOnLoginSuccess(ClientboundLoginFinishedPacket packet, Operation<Void> original) {
+		autoModpack$selfCheck();
+		original.call(packet);
+	}
+	/*?} else {*/
+	/*@WrapMethod(method = "handleGameProfile")
+	private void autoModpack$selfCheckOnLoginSuccess(ClientboundGameProfilePacket packet, Operation<Void> original) {
+		autoModpack$selfCheck();
+		original.call(packet);
+	}
+	*//*?}*/
+
+	/*
+	 * Compression is the verdict point of the join: our addon holds the server's login and exchanges every query
+	 * before the login finaliser sends compression (see ServerLoginNetworkHandlerMixin), so a compression packet
+	 * means our queries either all arrived or all got swallowed. Login finished covers servers that never send one.
+	 */
+	@Unique
+	private void autoModpack$selfCheck() {
+		if (ModPackets.loginQueryArrived() || !autoModpack$selfCheckFired.compareAndSet(false, true)) return;
+		LoginSelfCheck.maybeRun((ClientHandshakePacketListenerImpl) (Object) this);
 	}
 
 	@Override
