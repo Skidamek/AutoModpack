@@ -188,10 +188,10 @@ final class UpdateSession implements UpdateAttempt {
 
 	private UpdatePreview previewFor(ClientUpdatePlanBuilder.PreparedPlan prepared, InstalledTokenRule tokenRule) throws IOException {
 		List<JournalEntry> journal = new JournalMirror(storage).entries(target.manifest().modpackId());
-		long remaining;
-		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
-			remaining = ModpackUtils.remainingUncachedBytes(objectAcquisition.missingTargetObjects(target.flatTarget(), cache), storage);
-		}
+		// The preview is only ever built from a prepared session, and acquisition's completion check
+		// (ModpackObjectAcquisition) has already thrown unless every target object is locally present,
+		// so nothing of the target is still uncached wire bytes here.
+		long remaining = 0;
 		return UpdatePreview.forUpdate(prepared.plan(), target.selection(), journal, tokenRule.installedToken(storage, target.manifest().modpackId()))
 				.withFeatureManifest(target.manifest()).withRemainingWireBytes(remaining);
 	}

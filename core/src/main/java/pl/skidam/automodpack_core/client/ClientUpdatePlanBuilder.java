@@ -294,9 +294,11 @@ final class ClientUpdatePlanBuilder {
 		if (target != null && target.list != null) target.list.forEach(item -> targetItems.put(LogicalPath.normalize(item.file), item));
 		boolean sameModpackTarget = target != null && target.modpackId.equals(activeTarget.modpackId);
 		Set<String> deletedPaths = new TreeSet<>(storage.readOverlayState(activeTarget.modpackId).deletedPaths);
+		Set<String> initialDeletedPaths = Set.copyOf(deletedPaths);
+		boolean mutated = false;
 		for (var item : activeTarget.list) {
 			if (!item.editable) {
-				resetDriftedServerFile(cache, projection, activeTarget, targetItems, item);
+				mutated |= resetDriftedServerFile(cache, projection, activeTarget, targetItems, item);
 				continue;
 			}
 			Path live = livePath(item);
@@ -333,9 +335,12 @@ final class ClientUpdatePlanBuilder {
 			Path object = storage.objectFile(hash);
 			if (!FileIntegrity.matchesNamed(object, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(live, object, size, hash, cache);
 			VerifiedFileTransfer.copyAtomic(object, overlay, size, hash, cache);
+			mutated = true;
 			deletedPaths.remove(LogicalPath.normalize(item.file));
 		}
+		if (!deletedPaths.equals(initialDeletedPaths)) mutated = true;
 		storage.writeOverlayState(activeTarget.modpackId, deletedPaths);
+		if (mutated) projectionView.invalidateLiveSnapshot();
 	}
 
 	/** A drifted file the pack owns: the drifted bytes are acquired for the state history and the live file gets the pack version back, without a review. */
@@ -352,23 +357,23 @@ final class ClientUpdatePlanBuilder {
 		return new UpdatePlan.FileState(item.sha1, packSize, true);
 	}
 
-	/** Silently resets client-side drift of an unchanged server-provided non-mod file so it never becomes an update prompt; the server changing the file stays a reviewable update. */
-	private void resetDriftedServerFile(FileCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields activeTarget,
+	/** Silently resets client-side drift of an unchanged server-provided non-mod file so it never becomes an update prompt; the server changing the file stays a reviewable update. Returns whether a reset happened. */
+	private boolean resetDriftedServerFile(FileCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields activeTarget,
 			Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, ModpackJsons.ModpackContentFields.ModpackContentItem item)
 			throws IOException {
-		if (targetItems.isEmpty()) return;
+		if (targetItems.isEmpty()) return false;
 		String relative = LogicalPath.normalize(item.file);
 		var targetItem = targetItems.get(relative);
-		if (targetItem == null || !targetItem.sha1.equalsIgnoreCase(item.sha1) || ModpackPathPolicy.isActiveMod(relative, item.type)) return;
+		if (targetItem == null || !targetItem.sha1.equalsIgnoreCase(item.sha1) || ModpackPathPolicy.isActiveMod(relative, item.type)) return false;
 		Path live = livePath(item);
-		if (!Files.isRegularFile(live, LinkOption.NOFOLLOW_LINKS)) return;
+		if (!Files.isRegularFile(live, LinkOption.NOFOLLOW_LINKS)) return false;
 		long packSize = item.size;
 		long size = Files.size(live);
-		if (size == packSize && FileIntegrity.matchesNamed(live, packSize, item.sha1, cache)) return;
+		if (size == packSize && FileIntegrity.matchesNamed(live, packSize, item.sha1, cache)) return false;
 		UpdatePlan.FileState state = new UpdatePlan.FileState(cache.getOrComputeHash(live), size, true);
-		if (projection.matchesPendingGameState(item.file, state)) return;
-		if (state.sha1().equalsIgnoreCase(item.sha1) && packSize == state.size()) return;
-		resetDriftedFile(cache, item, live, state);
+		if (projection.matchesPendingGameState(item.file, state)) return false;
+		if (state.sha1().equalsIgnoreCase(item.sha1) && packSize == state.size()) return false;
+		return resetDriftedFile(cache, item, live, state) != null;
 	}
 
 	private Path livePath(ModpackJsons.ModpackContentFields.ModpackContentItem item) {

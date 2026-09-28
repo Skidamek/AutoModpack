@@ -110,11 +110,22 @@ public final class ClientProjectionView {
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 	}
 
+	// The live snapshot of one planning pass: reconcile and buildPlan observe the same tree back-to-back, so the walk
+	// answers once until a caller mutates the tree and drops the memo through invalidateLiveSnapshot().
+	private Snapshot liveSnapshotMemo;
+
 	/** Captures the projection observation for one planning pass. */
 	public Snapshot snapshot(FileCache cache) throws IOException {
 		Objects.requireNonNull(cache, "cache");
 		if (publicationStarted(storage, pending)) return stagedSnapshot(pending);
-		return liveSnapshot(cache, isProjectionTransaction(pending) ? pending : null);
+		if (liveSnapshotMemo != null) return liveSnapshotMemo;
+		liveSnapshotMemo = liveSnapshot(cache, isProjectionTransaction(pending) ? pending : null);
+		return liveSnapshotMemo;
+	}
+
+	/** Drops the cached live observation after a caller mutated the observed tree behind the view's back. */
+	public void invalidateLiveSnapshot() {
+		liveSnapshotMemo = null;
 	}
 
 	/**
