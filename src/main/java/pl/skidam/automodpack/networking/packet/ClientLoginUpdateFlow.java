@@ -48,8 +48,8 @@ final class ClientLoginUpdateFlow {
 	private ClientLoginUpdateFlow() {}
 
 	/**
-	 * The entry to the login work: an optional modpack first asks a client with nothing synced from this server whether it wants the pack at all. The self-check path runs the same ladder, quietly until an update is
-	 * actually found.
+	 * The entry to the login work: an optional modpack first asks a client with nothing synced from this server whether it wants the pack at all. The self-check path runs the same ladder: quiet while it is only
+	 * checking, loud the moment it finds work for the player — a plain update syncs after the kick, an update needing a re-pick asks over a kicked-out join.
 	 */
 	static CompletableFuture<LoginUpdateResponse> reconcile(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo,
 			Secrets.Secret secret, ClientStorage storage, boolean requireModpack, boolean selfCheck) {
@@ -124,6 +124,7 @@ final class ClientLoginUpdateFlow {
 						: SelectedModpackTarget.prepare(manifestResult.content(), applied, savedSelection, ClientPlatform.effective(savedSelection));
 			} catch (RuntimeException e) {
 				if (e instanceof SelectionResolutionException && savedSelection != null && canRepair(manifestResult.content(), savedSelection)) {
+					// Loud for the self-check too: the re-pick is a step of the update, and a swallowed-query proxy offers no later join to ask at.
 					disconnectImmediately(handler);
 					openInteractiveRepair(storage, manifestResult.content(), savedSelection, transport,
 							repaired -> continueReconcile(handler, connectionInfo, secret, storage, transport, repaired, true, false, selfCheck));
@@ -163,6 +164,7 @@ final class ClientLoginUpdateFlow {
 			return CompletableFuture.completedFuture(LoginUpdateResponse.HOST_ERROR);
 		}
 
+		// Loud for the self-check too: the re-pick is a step of the update, and a swallowed-query proxy offers no later join to ask at.
 		disconnectImmediately(handler);
 		openInteractiveRepair(storage, fields, savedSelection, transport, repaired -> {
 			if (suppliesNothing(repaired)) {
