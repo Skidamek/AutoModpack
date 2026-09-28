@@ -205,7 +205,7 @@ public final class UpdateTransactionExecutor {
 	public boolean hasMutableInputDrift(UpdateTransaction transaction) throws IOException {
 		return withFileCache(cache -> {
 			if (transaction == null) return false;
-			UpdateTransactionValidator.MutableInputDrift drift = validator.mutableInputDrift(transaction);
+			UpdateTransactionValidator.MutableInputDrift drift = validator.mutableInputDrift(transaction, fileCache);
 			if (projectionPublicationStarted(transaction))
 				return drift.configuration() || transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
 						&& (!overlayStateMatches(transaction) || drift.selection());
@@ -242,7 +242,7 @@ public final class UpdateTransactionExecutor {
 		Path blockedPath = null;
 		boolean publicationStarted = projectionPublicationStarted(transaction);
 		boolean liveAlreadyApplied = transaction != null && (publicationStarted || managedStateMatches(transaction));
-		boolean preserveNewerSelection = publicationStarted && validator.mutableInputDrift(transaction).selection();
+		boolean preserveNewerSelection = publicationStarted && validator.mutableInputDrift(transaction, fileCache).selection();
 		try {
 			transaction.resultStatus = null;
 			transaction.resultOperation = null;
@@ -323,7 +323,7 @@ public final class UpdateTransactionExecutor {
 	/** The modpack apply sequence: pre-mutation captures, live operations, projection publication, and durable finalization. */
 	private void applyModpackTransaction(UpdateTransaction transaction, AtomicReference<Operation> current, boolean publicationStarted, boolean liveAlreadyApplied,
 			boolean preserveNewerSelection) throws IOException {
-		if (!publicationStarted && validator.mutableInputDrift(transaction).configuration())
+		if (!publicationStarted && validator.mutableInputDrift(transaction, fileCache).configuration())
 			throw new UpdateReplanRequiredException(null, "Client configuration changed after planning the update");
 		snapshotBefore(transaction);
 		capturePreStates(transaction);
@@ -333,15 +333,15 @@ public final class UpdateTransactionExecutor {
 		current.set(null);
 		if (!publicationStarted) {
 			verifyManagedFinalState(transaction);
-			UpdateTransactionValidator.MutableInputDrift applied = validator.mutableInputDrift(transaction);
+			UpdateTransactionValidator.MutableInputDrift applied = validator.mutableInputDrift(transaction, fileCache);
 			if (applied.selection()) throw new UpdateReplanRequiredException(null, "Group selection changed while applying the update");
 			if (applied.configuration()) throw new UpdateReplanRequiredException(null, "Client configuration changed while applying the update");
 		}
 		publishProjection(transaction);
 		if (publicationStarted
-				&& (!managedStateMatches(transaction) || preserveNewerSelection || validator.mutableInputDrift(transaction).configuration()))
+				&& (!managedStateMatches(transaction) || preserveNewerSelection || validator.mutableInputDrift(transaction, fileCache).configuration()))
 			throw new UpdateReplanRequiredException(null, "Mutable client state changed while publishing the update");
-		UpdateTransactionValidator.MutableInputDrift finalized = validator.mutableInputDrift(transaction);
+		UpdateTransactionValidator.MutableInputDrift finalized = validator.mutableInputDrift(transaction, fileCache);
 		if (finalized.selection() || finalized.configuration())
 			throw new UpdateReplanRequiredException(null, "Mutable client configuration changed before update finalization");
 		finalizeModpackState(transaction, preserveNewerSelection);
@@ -507,16 +507,15 @@ public final class UpdateTransactionExecutor {
 		verifyProjection(incoming, transaction.plan().projectedFinalState());
 	}
 
+	/**
+	 * Swaps the freshly built incoming projection over active. Only publishProjection calls this: active was just verified not to
+	 * match and nothing writes it before the move, and incoming was just loud-verified by buildIncomingProjection, so re-walking
+	 * either tree here would only repeat a verdict already handed down. Recovery re-enters through publishProjection.
+	 */
 	private void swapProjection(UpdateTransaction transaction) throws IOException {
 		Path active = context.storage().activeDirectory();
 		Path incoming = context.storage().incomingDirectory();
 		Path backup = context.storage().backupDirectory();
-		if (verifyProjectionQuietly(active, transaction.plan().projectedFinalState())) {
-			FileTrees.delete(incoming);
-			FileTrees.delete(backup);
-			return;
-		}
-		if (!verifyProjectionQuietly(incoming, transaction.plan().projectedFinalState())) buildIncomingProjection(transaction);
 		if (Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
 			FileTrees.delete(active);
 		} else if (Files.exists(active, LinkOption.NOFOLLOW_LINKS)) {
@@ -587,7 +586,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateSelectionBeforeMutation(UpdateTransaction transaction) throws IOException {
-		if (validator.mutableInputDrift(transaction).selection()) throw new IOException("Group selection changed after planning for modpack " + transaction.plan().modpackId());
+		if (validator.mutableInputDrift(transaction, fileCache).selection()) throw new IOException("Group selection changed after planning for modpack " + transaction.plan().modpackId());
 	}
 
 	private Path resolve(Operation operation, UpdateTransaction transaction) throws IOException {

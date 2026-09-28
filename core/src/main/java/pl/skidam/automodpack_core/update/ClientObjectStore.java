@@ -103,9 +103,10 @@ public final class ClientObjectStore {
 		String hash = HashUtils.normalizeSha1(sha1);
 		if (!HashUtils.sha1(bytes).equals(hash)) throw new IOException("Object bytes do not match their content hash: " + hash);
 		Path object = storage.objectFile(hash);
-		if (FileIntegrity.matches(object, bytes.length, hash)) return;
+		// The bytes were hash-proven above and the write is atomic, so both checks here are the CAS named tripwire, not content reads.
+		if (FileIntegrity.matchesNamed(object, bytes.length, hash, null)) return;
 		DurableFiles.writeAtomic(object, bytes);
-		if (!FileIntegrity.matches(object, bytes.length, hash)) throw new IOException("Stored client object failed verification: " + hash);
+		if (!FileIntegrity.matchesNamed(object, bytes.length, hash, null)) throw new IOException("Stored client object failed verification: " + hash);
 	}
 
 	/** A deterministic receipt for client CAS and adjacent durable state. */
@@ -414,20 +415,21 @@ public final class ClientObjectStore {
 		long missingCount = 0;
 		long invalidCount = 0;
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			Set<String> required = requireRequiredReferences ? references.required() : Set.of();
 			for (var entry : references.sizes().entrySet()) {
 				String hash = entry.getKey();
 				long expectedSize = entry.getValue();
 				if (expectedSize >= 0) expectedBytes = ObjectStoreMaintenance.addExact(expectedBytes, expectedSize, "referenced object bytes");
 				Path object = storage.objectFile(hash);
 				if (Files.isSymbolicLink(object) || !Files.exists(object, LinkOption.NOFOLLOW_LINKS)) {
-					if (requireRequiredReferences && references.required().contains(hash)) throw new IOException("Required client object is missing: " + hash);
+					if (required.contains(hash)) throw new IOException("Required client object is missing: " + hash);
 					missingCount = ObjectStoreMaintenance.addExact(missingCount, 1, "missing referenced object count");
 					continue;
 				}
 				long size = expectedSize >= 0 ? expectedSize : Files.size(object);
 				boolean valid = FileIntegrity.matchesNamed(object, size, hash, cache);
 				if (!valid) {
-					if (requireRequiredReferences && references.required().contains(hash)) throw new IOException("Required client object is corrupt: " + hash);
+					if (required.contains(hash)) throw new IOException("Required client object is corrupt: " + hash);
 					invalidCount = ObjectStoreMaintenance.addExact(invalidCount, 1, "invalid referenced object count");
 					continue;
 				}

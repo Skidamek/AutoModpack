@@ -151,7 +151,7 @@ final class ClientUpdatePlanBuilder {
 			standardMods.add(new UpdatePlan.ModInfo(root.logicalPath(), root.mod().hash(), Files.size(root.mod().path()), root.mod().version(), root.mod().IDs(), root.mod().deps()));
 		List<UpdatePlan.NestedCopy> previousCopies = previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies();
 		List<UpdatePlanner.NestedCandidate> nestedCandidates = input.prepareObjects()
-				? inspectNestedCopies(input.target(), cache, projection, targetMods, standardRoots, previousCopies, forceCopyServices)
+				? inspectNestedCopies(input.target(), cache, projection, targetMods, standardRoots, previousCopies, forceCopyServices, modCache)
 				: readGeneratedCopyState(input.target(), input.selectedTarget().selection().intent()).nestedCopies().stream().map(UpdatePlanner.NestedCandidate::previous).toList();
 		ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = input.connectionInfo() == null || !input.connectionInfo().isComplete()
 				? ModpackUtils.planCachedModpackSelection(input.target().modpackId, logicalConfig)
@@ -508,13 +508,13 @@ final class ClientUpdatePlanBuilder {
 	 */
 	private List<UpdatePlanner.NestedCandidate> inspectNestedCopies(ModpackJsons.ModpackContentFields target, FileCache cache,
 			ClientProjectionView.Snapshot projection, List<UpdatePlan.ModInfo> targetMods, List<NestedConflicts.StandardRoot> standardRoots,
-			List<UpdatePlan.NestedCopy> previousCopies, Set<String> forceCopyPaths) throws IOException {
+			List<UpdatePlan.NestedCopy> previousCopies, Set<String> forceCopyPaths, ModFileCache modCache) throws IOException {
 		if (!modpackLoader.discoversNestedConflicts()) return List.of();
 		List<NestedConflicts.PackRoot> packRoots = new ArrayList<>();
 		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(LogicalPath.normalize(value.file), value.type)).toList()) {
 			Path source = resolvedObject(item, projection, cache);
 			if (source == null) continue;
-			FileInspection.Mod root = FileInspection.getMod(source, cache);
+			FileInspection.Mod root = modCache.getModOrNull(source, item.sha1, cache);
 			if (root != null) packRoots.add(new NestedConflicts.PackRoot(LogicalPath.normalize(item.file), root));
 		}
 

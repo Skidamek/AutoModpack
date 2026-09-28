@@ -132,10 +132,11 @@ final class UpdateSession implements UpdateAttempt {
 	 * applies silently through the authorized no-op path instead of prompting.
 	 */
 	private boolean requiresPlayerReview(ClientUpdatePlanBuilder.PreparedPlan prepared, boolean firstInstall) throws IOException {
-		if (!firstInstall && !hasPlanImpact(prepared) && storedTarget() != null) return false;
+		boolean planImpact = hasPlanImpact(prepared);
 		ModpackJsons.ModpackContentFields installed = storedTarget();
+		if (!firstInstall && !planImpact && installed != null) return false;
 		PackTarget installedTarget = installed == null ? null : PackTarget.fromFlat(installed);
-		return UpdateReviewPolicy.requiresPlayerReview(firstInstall, installedTarget, prepared.plan().packTarget(), hasPlanImpact(prepared));
+		return UpdateReviewPolicy.requiresPlayerReview(firstInstall, installedTarget, prepared.plan().packTarget(), planImpact);
 	}
 
 	/** Login reconciliation must also advance a newly advertised generation, even when its files are unchanged. */

@@ -448,6 +448,11 @@ public final class ClientStorage {
 		return ClientOverlaySnapshot.capture(this, modpackId, null).digest();
 	}
 
+	/** The digest with tripwire-backed hashing: unchanged overlay files cost a stat, not a full read. */
+	public String overlayDigest(String modpackId, FileCache cache) throws IOException {
+		return ClientOverlaySnapshot.capture(this, modpackId, cache).digest();
+	}
+
 	public ClientOverlaySnapshot overlaySnapshot(String modpackId, FileCache cache) throws IOException {
 		return ClientOverlaySnapshot.capture(this, modpackId, cache);
 	}
