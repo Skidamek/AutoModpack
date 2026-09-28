@@ -168,6 +168,9 @@ public final class UpdateTransactionExecutor {
 	private Path abandonStuckPublicationPersisted(UpdateTransaction transaction) throws IOException {
 		ClientStorage storage = context.storage();
 		revertUnfinalizedPublicationPersisted(transaction);
+		// The journal may already be retired: a replayed predecessor's tail deletes it before this transaction's own
+		// failure path reaches here, and a journal that is already gone has nothing left to quarantine.
+		if (!Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) return null;
 		Path stuckJournal = storage.clientDirectory().resolve("update-transaction.stuck-" + UUID.randomUUID() + ".json");
 		Files.move(storage.transactionFile(), stuckJournal, StandardCopyOption.REPLACE_EXISTING);
 		return stuckJournal;
