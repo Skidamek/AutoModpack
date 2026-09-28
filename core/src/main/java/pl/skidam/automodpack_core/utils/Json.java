@@ -19,6 +19,8 @@ import com.google.gson.JsonParser;
 @SuppressWarnings("deprecation")
 public class Json {
 
+	private static final Gson GSON = new Gson();
+
 	public static JsonArray fromUrlAsArray(String url) {
 		JsonElement element = element(url, Map.of(), null);
 		if (element != null && element.isJsonArray()) return element.getAsJsonArray();
@@ -29,7 +31,7 @@ public class Json {
 		if (listOfSha1 == null || listOfSha1.isEmpty()) return null;
 
 		JsonObject jsonObject = new JsonObject();
-		jsonObject.add("hashes", new Gson().toJsonTree(listOfSha1));
+		jsonObject.add("hashes", GSON.toJsonTree(listOfSha1));
 		jsonObject.addProperty("algorithm", "sha1");
 
 		JsonElement element = element(requestUrl, Map.of("Content-Type", "application/json", "Accept", "application/json"),

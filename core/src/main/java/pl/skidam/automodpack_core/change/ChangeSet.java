@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /**
  * The immutable, logical view of a set of file changes.
@@ -440,7 +441,7 @@ public final class ChangeSet {
 	private static String normalizeHash(String value, String label) {
 		if (value == null || value.isBlank()) return null;
 		String normalized = value.trim().toLowerCase(Locale.ROOT);
-		if (!normalized.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid " + label);
+		if (!HashUtils.isSha1(normalized)) throw new IllegalArgumentException("Invalid " + label);
 		return normalized;
 	}
 

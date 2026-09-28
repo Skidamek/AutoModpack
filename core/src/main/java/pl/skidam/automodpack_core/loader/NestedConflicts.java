@@ -142,9 +142,10 @@ public final class NestedConflicts {
 		winners.sort(Comparator.comparing(node -> node.entryName));
 		for (Node winner : winners) {
 			FileInspection.Mod winnerMod = winner.mod;
+			SemanticVersion parsedWinner = SemanticVersion.parseOrNull(winnerMod.version());
 			List<Collider> colliders = new ArrayList<>();
 			for (StandardRoot root : standardRoots)
-				if (root.mod().hash() != null && nestsBeatenVersion(root.mod(), winnerMod)) colliders.add(new Collider(root.logicalPath(), root.mod().hash()));
+				if (root.mod().hash() != null && nestsBeatenVersion(root.mod(), winnerMod, parsedWinner)) colliders.add(new Collider(root.logicalPath(), root.mod().hash()));
 			if (colliders.isEmpty()) continue;
 			if (winnerMod.IDs().stream().anyMatch(id -> emission.claimed.contains(id.toLowerCase(Locale.ROOT)))) continue;
 			emission.emit(winner, colliders);
@@ -375,8 +376,7 @@ public final class NestedConflicts {
 	 * nested jar speaks for the root. Every non-blank version parses, so a missing version string is the only way a
 	 * nested jar escapes comparison.
 	 */
-	private static boolean nestsBeatenVersion(FileInspection.Mod root, FileInspection.Mod winner) {
-		SemanticVersion parsedWinner = SemanticVersion.parseOrNull(winner.version());
+	private static boolean nestsBeatenVersion(FileInspection.Mod root, FileInspection.Mod winner, SemanticVersion parsedWinner) {
 		if (parsedWinner == null) return false;
 		for (String id : winner.IDs()) {
 			SemanticVersion newest = null;

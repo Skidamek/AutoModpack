@@ -181,6 +181,19 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	 * CurseForge murmur of stable bytes. Requires a valid SHA-1 record for {@code file}; computes and
 	 * stores murmur only when that record has none.
 	 */
+	/** Records a murmur computed from other bytes the cache already hash-proved equal at this path, so a staged copy's page-warm reads can answer the source's record. */
+	public void publishMurmur(Path file, String murmur) throws IOException {
+		Path absPath = file.toAbsolutePath().normalize();
+		String pathKey = absPath.toString();
+		synchronized (lock(pathKey)) {
+			CachedFile cached = readRecord(pathKey, CachedFile.class);
+			if (cached == null || !statsMatch(cached, statSnapshot(absPath).fingerprint())) throw new IOException("Cannot attach a computed murmur without a stable hash record: " + absPath);
+			if (cached.murmur() != null) return;
+			writeRecord(pathKey, new CachedFile(cached.path(), cached.contentHash(), cached.lastModifiedNanos(), cached.creationTimeNanos(), cached.changeTimeNanos(), cached.size(), cached.fileKey(),
+					cached.validatedAtNanos(), murmur));
+		}
+	}
+
 	public String getOrComputeMurmur(Path file) throws IOException {
 		Path absPath = file.toAbsolutePath().normalize();
 		String pathKey = absPath.toString();

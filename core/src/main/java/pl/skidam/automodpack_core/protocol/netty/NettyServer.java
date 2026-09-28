@@ -48,6 +48,7 @@ public class NettyServer {
 	public static final AttributeKey<SocketAddress> REAL_REMOTE_ADDR = AttributeKey.valueOf("REAL_REMOTE_ADDR");
 	private volatile TrafficShaper trafficShaper;
 	private volatile Map<String, Path> paths = Map.of();
+	private volatile GenerationHosting hosting = new GenerationHosting(Map.of());
 	private MultithreadEventLoopGroup eventLoopGroup;
 	private ExecutorService diskReads;
 	private ChannelFuture serverChannel;
@@ -88,6 +89,7 @@ public class NettyServer {
 	}
 
 	public void replacePaths(GenerationHosting hosting) {
+		this.hosting = hosting;
 		this.paths = hosting.asMap();
 		documentEtags.replace(getPath(GenerationHosting.HEAD_DOCUMENT_KEY), getPath(GenerationHosting.JOURNAL_KEY));
 	}
@@ -107,6 +109,15 @@ public class NettyServer {
 		if (!HashUtils.isSha1(requestKey)) return Optional.empty();
 
 		return regularPath(paths.get(HashUtils.normalizeSha1(requestKey)));
+	}
+
+	/** The request-serving lookup: validated and sized at the hosting swap, so the event loop touches no filesystem. */
+	public Optional<GenerationHosting.HostedObject> hosted(String requestKey) {
+		if (requestKey == null) return Optional.empty();
+		String key = requestKey.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || requestKey.equals(GenerationHosting.JOURNAL_KEY)
+				? requestKey
+				: HashUtils.isSha1(requestKey) ? HashUtils.normalizeSha1(requestKey) : null;
+		return key == null ? Optional.empty() : hosting.hosted(key);
 	}
 
 	private static Optional<Path> regularPath(Path path) {

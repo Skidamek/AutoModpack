@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.update;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -103,7 +104,7 @@ public final class UpdateTransactionValidator {
 		if (transaction.plan().plannedClientConfig() == null) throw new IOException("Planned client config is missing");
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validatePlannedClientConfig(transaction);
 		else validateRemovalClientConfig(transaction);
-		if (verifyMutableInputs && mutableInputDrift(transaction).overlay())
+		if (verifyMutableInputs && mutableInputDrift(transaction, fileCache).overlay())
 			throw new IOException("Client editable overlay changed after planning");
 
 		Map<FileKey, ProjectedFile> finalState = validateFinalState(transaction.plan().projectedFinalState(), transaction.plan().modpackId());
@@ -153,9 +154,9 @@ public final class UpdateTransactionValidator {
 	 * The canonical mutable-input precondition: which planned-against inputs (client configuration, group selection,
 	 * editable overlays) drifted since the transaction was planned. Evaluated once per stage boundary; the caller owns the throw.
 	 */
-	MutableInputDrift mutableInputDrift(UpdateTransaction transaction) throws IOException {
+	MutableInputDrift mutableInputDrift(UpdateTransaction transaction, FileCache fileCache) throws IOException {
 		return new MutableInputDrift(configurationChanged(transaction), selectionChanged(transaction),
-				!Objects.equals(transaction.overlayDigest, storage.overlayDigest(transaction.plan().modpackId())));
+				!Objects.equals(transaction.overlayDigest, storage.overlayDigest(transaction.plan().modpackId(), fileCache)));
 	}
 
 	private boolean configurationChanged(UpdateTransaction transaction) throws IOException {
@@ -447,6 +448,11 @@ public final class UpdateTransactionValidator {
 		if (!transaction.plan().conflicts().equals(sorted)) throw new IOException("Conflicts are not deterministically ordered");
 		Set<String> targetPaths = new HashSet<>();
 		for (var item : target.list) targetPaths.add(normalizeManifestPath(item.file));
+		// Operation targets are unique per (root, normalized path) by the earlier duplicate check, so one prebuilt map
+		// answers every conflict's source lookup without rescanning the operation list per conflict.
+		Map<String, Operation> gameDirOperations = new HashMap<>();
+		for (Operation operation : transaction.plan().operations())
+			if (operation.root() == Root.GAME_DIR) gameDirOperations.put(normalizeOperationPath(operation.relativePath()), operation);
 		Set<String> conflictIds = new HashSet<>();
 		for (Conflict conflict : sorted) {
 			if (conflict == null || conflict.action() == null || !transaction.plan().modpackId().equals(conflict.modpackId()) || !conflictIds.add(conflict.conflictId()))
@@ -457,12 +463,7 @@ public final class UpdateTransactionValidator {
 			validateHash(conflict.targetHash(), "conflict target SHA-1");
 			if (conflict.sourceSize() < 0 || conflict.targetSize() < 0 || conflict.modIds().isEmpty()) throw new IOException("Conflict content metadata is invalid");
 			FileKey sourceKey = new FileKey(Root.GAME_DIR, conflict.sourcePath());
-			Operation sourceOperation = null;
-			for (Operation operation : transaction.plan().operations())
-				if (operation.root() == Root.GAME_DIR && conflict.sourcePath().equals(normalizeOperationPath(operation.relativePath()))) {
-					sourceOperation = operation;
-					break;
-				}
+			Operation sourceOperation = gameDirOperations.get(conflict.sourcePath());
 			if (sourceOperation == null || (sourceOperation.operation() == OperationType.DELETE && sourceOperation.expectedExistingHash() == null)
 					|| (sourceOperation.operation() == OperationType.INSTALL_OBJECT && (!conflict.sourcePath().equals(conflict.targetPath()) || sourceOperation.expectedExistingHash() == null)))
 				throw new IOException("Conflict has no ownership-safe source operation");

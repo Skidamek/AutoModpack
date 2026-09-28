@@ -7,13 +7,19 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributeView;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -127,13 +133,32 @@ public final class InstanceTree {
 		return new InstanceTree(sha1, canonical, List.copyOf(sorted));
 	}
 
+	/*
+	 * Trees are content-addressed by file name and written atomically, so a parsed-and-verified tree stays valid while
+	 * the file's (mtime, size) is unchanged. Sweeps read the same handful of trees per pass; without the memo every
+	 * read re-serializes and re-hashes the whole tree just to re-prove what its atomic write already proved.
+	 */
+	private static final Map<String, VerifiedTree> VERIFIED_TREES = new ConcurrentHashMap<>();
+
+	private record VerifiedTree(FileTime modified, long size, InstanceTree tree) {}
+
 	public static InstanceTree read(ClientStorage storage, String sha1) throws IOException {
 		String normalized = HashUtils.normalizeSha1(sha1);
 		Path file = storage.stateHistoryTreeFile(normalized);
+		BasicFileAttributes attributes;
+		try {
+			attributes = Files.getFileAttributeView(file, BasicFileAttributeView.class, LinkOption.NOFOLLOW_LINKS).readAttributes();
+		} catch (IOException missing) {
+			throw new IOException("Instance tree is missing: " + normalized);
+		}
+		if (!attributes.isRegularFile()) throw new IOException("Instance tree is missing: " + normalized);
+		VerifiedTree memo = VERIFIED_TREES.get(normalized);
+		if (memo != null && memo.modified().equals(attributes.lastModifiedTime()) && memo.size() == attributes.size()) return memo.tree();
 		ClientStorageJsons.InstanceTreeFields fields = ConfigTools.readUnique(file, ClientStorageJsons.InstanceTreeFields.class, "Instance tree", parsed -> parsed)
 				.orElseThrow(() -> new IOException("Instance tree is missing: " + normalized));
 		InstanceTree tree = fromFields(fields);
 		if (!tree.sha1.equals(normalized)) throw new IOException("Instance tree hash does not match its file: " + normalized);
+		VERIFIED_TREES.put(normalized, new VerifiedTree(attributes.lastModifiedTime(), attributes.size(), tree));
 		return tree;
 	}
 
@@ -159,12 +184,26 @@ public final class InstanceTree {
 	}
 
 	static InstanceTree observe(ClientStorage storage, Set<Key> extraPaths, FileCache cache) throws IOException {
+		return observe(storage, extraPaths, cache, null);
+	}
+
+	static InstanceTree observe(ClientStorage storage, Set<Key> extraPaths, FileCache cache, UpdatePlan published) throws IOException {
 		Set<Key> paths = new TreeSet<>(Key.ORDER);
 		paths.addAll(extraPaths);
 		ClientStateJournal journal = ClientStateJournal.open(storage);
 		if (!journal.entries().isEmpty()) paths.addAll(read(storage, journal.head().treeSha1()).keys());
+		Map<String, UpdatePlan.ProjectedFile> publishedProjection = new HashMap<>();
+		if (published != null)
+			for (UpdatePlan.ProjectedFile projected : published.projectedFinalState())
+				if (projected != null && projected.root() == Root.PROJECTION) publishedProjection.put(LogicalPath.normalize(projected.relativePath()), projected);
 		List<TrackedFile> files = new ArrayList<>();
 		for (Key key : paths) {
+			UpdatePlan.ProjectedFile projected = key.root() == Root.PROJECTION ? publishedProjection.get(key.path()) : null;
+			if (projected != null) {
+				// The publication just proved these bytes on disk; recording the tree takes the plan's word instead of re-reading the pack.
+				if (projected.present()) files.add(new TrackedFile(Root.PROJECTION, "", key.path(), projected.expectedHash(), projected.expectedSize()));
+				continue;
+			}
 			Path disk = storage.rootedPath(key.root(), key.overlayPackId(), key.path());
 			if (!Files.isRegularFile(disk, LinkOption.NOFOLLOW_LINKS) || isRunningModJar(disk)) continue;
 			long size = Files.size(disk);

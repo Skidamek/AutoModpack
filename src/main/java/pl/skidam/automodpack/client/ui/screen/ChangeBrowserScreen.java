@@ -48,7 +48,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private final List<MutableComponent> preamble;
 	private final long downloadBytes;
 	private ChangeSet changes;
-	private final Map<String, String> groupNames;
+	private Map<String, String> groupNames;
 	private final BrowserAction auxiliaryAction;
 	private boolean closed;
 	private boolean cacheLookupStarted;
@@ -94,6 +94,11 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.auxiliaryAction = auxiliaryAction;
 		this.downloadBytes = Math.max(0, downloadBytes);
 		this.selectedGroup = initialGroup == null ? "" : initialGroup;
+	}
+
+	/** Swaps the display names after an async load; the browser keeps rendering whatever ids resolve. */
+	void setGroupNames(Map<String, String> names) {
+		this.groupNames = Map.copyOf(names == null ? Map.of() : names);
 	}
 
 	@Override

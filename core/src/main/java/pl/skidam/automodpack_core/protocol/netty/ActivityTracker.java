@@ -74,6 +74,9 @@ public final class ActivityTracker {
 		}
 	}
 
+	/** A host-secret name that keeps joining forever must not grow the stats map without bound; past the cap it sheds rows in no particular order. */
+	private static final int PLAYERS_CAP = 1024;
+
 	/** Ends one span; re-completion (a drop racing the normal finish) is ignored. */
 	public void complete(Span span, int status, long bytes) {
 		synchronized (lock) {
@@ -96,6 +99,7 @@ public final class ActivityTracker {
 			if (span.actor != null) {
 				players.merge(span.actor, new PlayerStats(span.actor, 1, bytes, endMillis),
 						(previous, ignored) -> new PlayerStats(previous.name, previous.requests + 1, previous.bytes + bytes, endMillis));
+				while (players.size() > PLAYERS_CAP) players.remove(players.keySet().iterator().next());
 			}
 		}
 	}

@@ -81,7 +81,7 @@ public final class UpdateRecovery {
 			Path stuckJournal = UpdateTransactionSupport.executor(storage).abandonStuckPublication(deferred);
 			clearDeferredGuard(storage);
 			LOGGER.error("The pending update {} needs a fresh review a restart cannot give ({}); kept the last finalized generation and retired the transaction to {}", deferred.transactionId,
-					execution.message(), stuckJournal.toAbsolutePath().normalize());
+					execution.message(), stuckJournal == null ? "its already-retired journal" : stuckJournal.toAbsolutePath().normalize());
 			return new RecoveryAttempt(execution, deferred, true);
 		}
 		UpdateLoopDetector.Outcome loop = deferredGuard(storage).evaluateAndRecord(deferred.transactionId);
@@ -90,7 +90,7 @@ public final class UpdateRecovery {
 			Path stuckJournal = UpdateTransactionSupport.executor(storage).abandonStuckPublication(deferred);
 			clearDeferredGuard(storage);
 			LOGGER.error("The same update transaction {} failed after {} deferred restarts; kept the last finalized generation and retired the transaction to {}", deferred.transactionId,
-					loop.restarts(), stuckJournal.toAbsolutePath().normalize());
+					loop.restarts(), stuckJournal == null ? "its already-retired journal" : stuckJournal.toAbsolutePath().normalize());
 			LOGGER.error("If the update keeps failing, send that file together with {} and the latest log", GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());
 			return new RecoveryAttempt(execution, deferred, true);
 		}

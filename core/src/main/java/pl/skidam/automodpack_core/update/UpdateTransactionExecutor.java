@@ -120,7 +120,7 @@ public final class UpdateTransactionExecutor {
 			validator.validate(transaction, unpublishedTarget, true, cache);
 			validateSelectionBeforeMutation(transaction);
 			preparePendingReplacement();
-			ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
+			ConfigTools.writeAtomicCompact(context.storage().transactionFile(), transaction);
 			// Receipt before the first mutation: other processes sharing the store see this instance only through
 			// its ownership receipt, so the journaled plan's objects must be pinned by name before apply runs.
 			ClientObjectStore.publishOwnership(context.storage());
@@ -168,6 +168,9 @@ public final class UpdateTransactionExecutor {
 	private Path abandonStuckPublicationPersisted(UpdateTransaction transaction) throws IOException {
 		ClientStorage storage = context.storage();
 		revertUnfinalizedPublicationPersisted(transaction);
+		// The journal may already be retired: a replayed predecessor's tail deletes it before this transaction's own
+		// failure path reaches here, and a journal that is already gone has nothing left to quarantine.
+		if (!Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) return null;
 		Path stuckJournal = storage.clientDirectory().resolve("update-transaction.stuck-" + UUID.randomUUID() + ".json");
 		Files.move(storage.transactionFile(), stuckJournal, StandardCopyOption.REPLACE_EXISTING);
 		return stuckJournal;
@@ -205,7 +208,7 @@ public final class UpdateTransactionExecutor {
 	public boolean hasMutableInputDrift(UpdateTransaction transaction) throws IOException {
 		return withFileCache(cache -> {
 			if (transaction == null) return false;
-			UpdateTransactionValidator.MutableInputDrift drift = validator.mutableInputDrift(transaction);
+			UpdateTransactionValidator.MutableInputDrift drift = validator.mutableInputDrift(transaction, fileCache);
 			if (projectionPublicationStarted(transaction))
 				return drift.configuration() || transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
 						&& (!overlayStateMatches(transaction) || drift.selection());
@@ -242,7 +245,7 @@ public final class UpdateTransactionExecutor {
 		Path blockedPath = null;
 		boolean publicationStarted = projectionPublicationStarted(transaction);
 		boolean liveAlreadyApplied = transaction != null && (publicationStarted || managedStateMatches(transaction));
-		boolean preserveNewerSelection = publicationStarted && validator.mutableInputDrift(transaction).selection();
+		boolean preserveNewerSelection = publicationStarted && validator.mutableInputDrift(transaction, fileCache).selection();
 		try {
 			transaction.resultStatus = null;
 			transaction.resultOperation = null;
@@ -297,7 +300,7 @@ public final class UpdateTransactionExecutor {
 	 * and the checkpoint is always durable before the record that produced it can be forgotten.
 	 */
 	private void recordStateHistory(UpdateTransaction transaction) throws IOException {
-		StateHistory.snapshotIfDirty(context.storage(), StateHistory.planPaths(transaction.plan()), snapshotKind(transaction), transaction.plan().modpackId(), transaction.transactionId);
+		StateHistory.snapshotApplied(context.storage(), transaction.plan(), snapshotKind(transaction), transaction.plan().modpackId(), transaction.transactionId);
 	}
 
 	private void snapshotBefore(UpdateTransaction transaction) throws IOException {
@@ -323,7 +326,7 @@ public final class UpdateTransactionExecutor {
 	/** The modpack apply sequence: pre-mutation captures, live operations, projection publication, and durable finalization. */
 	private void applyModpackTransaction(UpdateTransaction transaction, AtomicReference<Operation> current, boolean publicationStarted, boolean liveAlreadyApplied,
 			boolean preserveNewerSelection) throws IOException {
-		if (!publicationStarted && validator.mutableInputDrift(transaction).configuration())
+		if (!publicationStarted && validator.mutableInputDrift(transaction, fileCache).configuration())
 			throw new UpdateReplanRequiredException(null, "Client configuration changed after planning the update");
 		snapshotBefore(transaction);
 		capturePreStates(transaction);
@@ -333,15 +336,15 @@ public final class UpdateTransactionExecutor {
 		current.set(null);
 		if (!publicationStarted) {
 			verifyManagedFinalState(transaction);
-			UpdateTransactionValidator.MutableInputDrift applied = validator.mutableInputDrift(transaction);
+			UpdateTransactionValidator.MutableInputDrift applied = validator.mutableInputDrift(transaction, fileCache);
 			if (applied.selection()) throw new UpdateReplanRequiredException(null, "Group selection changed while applying the update");
 			if (applied.configuration()) throw new UpdateReplanRequiredException(null, "Client configuration changed while applying the update");
 		}
 		publishProjection(transaction);
 		if (publicationStarted
-				&& (!managedStateMatches(transaction) || preserveNewerSelection || validator.mutableInputDrift(transaction).configuration()))
+				&& (!managedStateMatches(transaction) || preserveNewerSelection || validator.mutableInputDrift(transaction, fileCache).configuration()))
 			throw new UpdateReplanRequiredException(null, "Mutable client state changed while publishing the update");
-		UpdateTransactionValidator.MutableInputDrift finalized = validator.mutableInputDrift(transaction);
+		UpdateTransactionValidator.MutableInputDrift finalized = validator.mutableInputDrift(transaction, fileCache);
 		if (finalized.selection() || finalized.configuration())
 			throw new UpdateReplanRequiredException(null, "Mutable client configuration changed before update finalization");
 		finalizeModpackState(transaction, preserveNewerSelection);
@@ -386,7 +389,7 @@ public final class UpdateTransactionExecutor {
 		transaction.resultPath = blockedPath == null ? null : blockedPath.toString();
 		transaction.resultMessage = message;
 		try {
-			ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
+			ConfigTools.writeAtomicCompact(context.storage().transactionFile(), transaction);
 		} catch (IOException journalFailure) {
 			cause.addSuppressed(journalFailure);
 		}
@@ -400,7 +403,7 @@ public final class UpdateTransactionExecutor {
 	/** Persists the journal at a durable phase boundary, rewriting the whole record exactly where recovery depends on the phase. */
 	private void persistPhase(UpdateTransaction transaction, UpdateTransaction.Phase phase) throws IOException {
 		setPhase(transaction, phase);
-		ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
+		ConfigTools.writeAtomicCompact(context.storage().transactionFile(), transaction);
 	}
 
 	private void applyOperations(UpdateTransaction transaction, AtomicReference<Operation> current) throws IOException {
@@ -497,33 +500,70 @@ public final class UpdateTransactionExecutor {
 		Path incoming = context.storage().incomingDirectory();
 		FileTrees.delete(incoming);
 		Files.createDirectories(incoming);
+		int expected = 0;
 		for (ProjectedFile projected : transaction.plan().projectedFinalState()) {
 			if (projected.root() != Root.PROJECTION || !projected.present()) continue;
+			expected++;
 			Path source = context.storage().objectFile(projected.expectedHash());
 			Path target = incoming.resolve(UpdateTransactionValidator.normalizeOperationPath(projected.relativePath())).normalize();
 			if (!target.startsWith(incoming)) throw new IOException("Projection path escapes incoming directory");
 			VerifiedFileTransfer.linkAtomic(source, target, projected.expectedSize(), projected.expectedHash(), fileCache);
 		}
-		verifyProjection(incoming, transaction.plan().projectedFinalState());
+		assertIncomingStructure(incoming, expected);
 	}
 
+	/**
+	 * The freshly built tree's structural gate: every projected row was linked moments ago with its own size check
+	 * under the mutation lock, and the post-swap seed gate re-proves every file's object identity on the final path.
+	 * What this walk adds is shape: exactly the expected regular files, nothing else, and no symbolic links anywhere.
+	 */
+	private void assertIncomingStructure(Path incoming, int expected) throws IOException {
+		int regular = 0;
+		try (var paths = Files.walk(incoming)) {
+			for (Path path : paths.toList()) {
+				if (path.equals(incoming) || Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) continue;
+				if (Files.isSymbolicLink(path)) throw new IOException("Incoming projection contains a symbolic link: " + path);
+				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Incoming projection holds a non-regular entry: " + path);
+				regular++;
+			}
+		}
+		if (regular != expected) throw new IOException("Incoming projection holds " + regular + " files, expected " + expected);
+	}
+
+	/**
+	 * Swaps the freshly built incoming projection over active. Only publishProjection calls this: active was just verified not to
+	 * match and nothing writes it before the move, and incoming was just loud-verified by buildIncomingProjection, so re-walking
+	 * either tree here would only repeat a verdict already handed down. Recovery re-enters through publishProjection.
+	 */
 	private void swapProjection(UpdateTransaction transaction) throws IOException {
 		Path active = context.storage().activeDirectory();
 		Path incoming = context.storage().incomingDirectory();
 		Path backup = context.storage().backupDirectory();
-		if (verifyProjectionQuietly(active, transaction.plan().projectedFinalState())) {
-			FileTrees.delete(incoming);
-			FileTrees.delete(backup);
-			return;
-		}
-		if (!verifyProjectionQuietly(incoming, transaction.plan().projectedFinalState())) buildIncomingProjection(transaction);
 		if (Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
 			FileTrees.delete(active);
 		} else if (Files.exists(active, LinkOption.NOFOLLOW_LINKS)) {
 			FileTrees.moveRecoverableDirectory(active, backup);
 		}
 		FileTrees.moveRecoverableDirectory(incoming, active);
-		verifyProjection(active, transaction.plan().projectedFinalState());
+		seedProjectionRecords(transaction);
+	}
+
+	/**
+	 * The post-swap gate: every projected file answers its pack-object identity on the final path - two stats, no content read -
+	 * and that answer seeds the cache records the next boot's worktree observation lives on. Without it, publication would
+	 * re-hash the whole pack once per apply to rebuild the records the link-and-rename dance invalidates.
+	 */
+	private void seedProjectionRecords(UpdateTransaction transaction) throws IOException {
+		Path active = context.storage().activeDirectory();
+		if (!Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Active client projection is not a directory: " + active);
+		for (ProjectedFile projected : transaction.plan().projectedFinalState()) {
+			if (projected == null || projected.root() != Root.PROJECTION || !projected.present()) continue;
+			Path file = active.resolve(UpdateTransactionValidator.normalizeOperationPath(projected.relativePath())).normalize();
+			if (!file.startsWith(active)) throw new IOException("Projection path escapes active directory");
+			if (!FileIntegrity.matchesObject(file, context.storage().objectFile(projected.expectedHash()), projected.expectedSize(), projected.expectedHash(), fileCache))
+				throw new IOException("Client projection file verification failed: " + file);
+			fileCache.overwriteCache(file, projected.expectedHash());
+		}
 	}
 
 	private void verifyProjection(Path projection, List<ProjectedFile> finalState) throws IOException {
@@ -587,7 +627,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateSelectionBeforeMutation(UpdateTransaction transaction) throws IOException {
-		if (validator.mutableInputDrift(transaction).selection()) throw new IOException("Group selection changed after planning for modpack " + transaction.plan().modpackId());
+		if (validator.mutableInputDrift(transaction, fileCache).selection()) throw new IOException("Group selection changed after planning for modpack " + transaction.plan().modpackId());
 	}
 
 	private Path resolve(Operation operation, UpdateTransaction transaction) throws IOException {

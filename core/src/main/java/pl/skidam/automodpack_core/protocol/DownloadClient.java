@@ -443,11 +443,11 @@ public class DownloadClient implements PackTransport {
 		// Survives two consecutive lane deaths (each retry picks a fresh lane via laneCounter); a third failure means the server, not a lane, is gone.
 		private static final int MAX_TAKE_ATTEMPTS = 3;
 		// The one physical flow-control bound, receipted: a transfer may never hold more unsettled takes than the
-		// whole pool's byte window holds of them (5 lanes × 64 MiB / the 4 MiB take = 80), so its takes fill every
-		// lane exactly once and further tiles queue as settles free them. Transfers under 80 tiles (~320 MiB) never
-		// gate at all, and since the pump only stops early while takes are still outstanding, every transfer owns at
-		// least one unsettled take until its range is fully claimed - its own settles always re-pump it, so nothing
-		// can go dormant and no revive path is needed.
+		// whole pool's byte window holds of them (5 lanes × 16 MiB / the 4 MiB take = 20, per the loss bench that
+		// cut the lane window from 64 MiB), so its takes fill every lane exactly once and further tiles queue as
+		// settles free them. Transfers under 20 tiles (~80 MiB) never gate at all, and since the pump only stops
+		// early while takes are still outstanding, every transfer owns at least one unsettled take until its range
+		// is fully claimed - its own settles always re-pump it, so nothing can go dormant and no revive path is needed.
 		private static final int MAX_OUTSTANDING_TAKES = (int) (LANES * NetUtils.PIPELINE_WINDOW_BYTES / WIRE_CHUNK_BYTES);
 		// The AIMD floor: one take per lane. Under loss the cap may fall this low, because a refused window costs
 		// waiting while an oversized one costs re-downloading everything queued behind a dropped segment.

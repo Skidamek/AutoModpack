@@ -132,10 +132,11 @@ final class UpdateSession implements UpdateAttempt {
 	 * applies silently through the authorized no-op path instead of prompting.
 	 */
 	private boolean requiresPlayerReview(ClientUpdatePlanBuilder.PreparedPlan prepared, boolean firstInstall) throws IOException {
-		if (!firstInstall && !hasPlanImpact(prepared) && storedTarget() != null) return false;
+		boolean planImpact = hasPlanImpact(prepared);
 		ModpackJsons.ModpackContentFields installed = storedTarget();
+		if (!firstInstall && !planImpact && installed != null) return false;
 		PackTarget installedTarget = installed == null ? null : PackTarget.fromFlat(installed);
-		return UpdateReviewPolicy.requiresPlayerReview(firstInstall, installedTarget, prepared.plan().packTarget(), hasPlanImpact(prepared));
+		return UpdateReviewPolicy.requiresPlayerReview(firstInstall, installedTarget, prepared.plan().packTarget(), planImpact);
 	}
 
 	/** Login reconciliation must also advance a newly advertised generation, even when its files are unchanged. */
@@ -151,11 +152,24 @@ final class UpdateSession implements UpdateAttempt {
 	boolean requiresUpdateBeforeLogin(ModpackUtils.UpdateCheckResult result) throws Exception {
 		if (result == null || result.requiresUpdate()) return true;
 		if (storage.readActiveState() == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return true;
-		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
+		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 			ClientProjectionView projectionView = ClientProjectionView.observe(storage);
 			planBuilder.reconcileEditableState(cache, projectionView, target.flatTarget());
-			ClientUpdatePlanBuilder.PreparedPlan estimate = planBuilder.buildPlan(planInput(false), projectionView, cache, modCache);
-			return requiresReconciliation(estimate, storedTarget());
+			// The estimate plan this check used to build answered three questions, and the byte-level verdict above
+			// already proved the live tree equals the target, so no plan is needed to answer them: is there an
+			// installed target, does its identity equal the advertised one, and would the selection-driven client
+			// config move - the only plan impact left when the bytes already match. A no-update join must not do more
+			// planning work than an updating one.
+			ModpackJsons.ModpackContentFields installed = storedTarget();
+			if (installed == null) return true;
+			if (!PackTarget.fromFlat(installed).equals(PackTarget.fromFlat(target.flatTarget()))) return true;
+			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+					.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
+			ClientConfigJsons.ClientConfigFieldsV3 logicalConfig = projectionView.logicalConfig(clientConfig, expectedClientConfig);
+			ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = connectionInfo != null && connectionInfo.isComplete()
+					? ModpackUtils.planModpackSelection(target.manifest().modpackId(), connectionInfo, logicalConfig)
+					: ModpackUtils.planCachedModpackSelection(target.manifest().modpackId(), logicalConfig);
+			return !Objects.equals(plannedConfig, logicalConfig);
 		}
 	}
 
@@ -187,10 +201,10 @@ final class UpdateSession implements UpdateAttempt {
 
 	private UpdatePreview previewFor(ClientUpdatePlanBuilder.PreparedPlan prepared, InstalledTokenRule tokenRule) throws IOException {
 		List<JournalEntry> journal = new JournalMirror(storage).entries(target.manifest().modpackId());
-		long remaining;
-		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
-			remaining = ModpackUtils.remainingUncachedBytes(objectAcquisition.missingTargetObjects(target.flatTarget(), cache), storage);
-		}
+		// The preview is only ever built from a prepared session, and acquisition's completion check
+		// (ModpackObjectAcquisition) has already thrown unless every target object is locally present,
+		// so nothing of the target is still uncached wire bytes here.
+		long remaining = 0;
 		return UpdatePreview.forUpdate(prepared.plan(), target.selection(), journal, tokenRule.installedToken(storage, target.manifest().modpackId()))
 				.withFeatureManifest(target.manifest()).withRemainingWireBytes(remaining);
 	}

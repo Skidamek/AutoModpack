@@ -598,6 +598,14 @@ public class GroupSelectionScreen extends VersionedScreen {
 
 	/** The estimated download size of the current selection: unique SHA-1s across the selected groups, shared files counted once. */
 	private long selectionBytes() {
+		if (resolution != renderedSelection) {
+			renderedSelectionBytes = computeSelectionBytes();
+			renderedSelection = resolution;
+		}
+		return renderedSelectionBytes;
+	}
+
+	private long computeSelectionBytes() {
 		Set<String> counted = new HashSet<>();
 		long total = 0;
 		for (String groupId : resolution.selectedGroups()) {
@@ -606,6 +614,20 @@ public class GroupSelectionScreen extends VersionedScreen {
 			for (GroupManifest.GroupFile file : group.files().values()) if (counted.add(file.sha1())) total = Math.addExact(total, file.size());
 		}
 		return total;
+	}
+
+	// Per-frame caches: the rail wrap and the byte total only change when the window resizes or the selection moves.
+	private List<String> wrappedDescription = List.of();
+	private int wrappedDescriptionWidth = -1;
+	private ResolvedSelection renderedSelection;
+	private long renderedSelectionBytes;
+
+	private List<String> wrappedDescription(int width, String description) {
+		if (width != wrappedDescriptionWidth) {
+			wrappedDescription = wrapToWidth(this.font, description, width);
+			wrappedDescriptionWidth = width;
+		}
+		return wrappedDescription;
 	}
 
 	@Override
@@ -627,7 +649,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 			drawTextWithShadow(matrices, this.font, VersionedText.text("automodpack.packDetails.server", origin).withStyle(ChatFormatting.GRAY), railLeft, railY, TextColors.WHITE);
 			railY += 11;
 		}
-		List<String> descriptionLines = wrapToWidth(this.font, description.getString(), railWidth - platformDropdown.getWidth() - 8);
+		List<String> descriptionLines = wrappedDescription(railWidth - platformDropdown.getWidth() - 8, description.getString());
 		// The description shares the rail with the summary line at y=44, so it may only use the rows above it.
 		int maxDescriptionLines = Math.max(1, (44 - railY) / 11);
 		if (descriptionLines.size() > maxDescriptionLines) descriptionLines = descriptionLines.subList(0, maxDescriptionLines);

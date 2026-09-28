@@ -14,7 +14,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
@@ -39,6 +38,7 @@ import io.netty.util.concurrent.Future;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ContractRoutes;
 import pl.skidam.automodpack_core.protocol.WireCodec;
 import pl.skidam.automodpack_core.protocol.netty.ActivityTracker;
@@ -54,7 +54,10 @@ import pl.skidam.automodpack_core.protocol.netty.NettyServer;
  */
 public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
-	/** Tripwire past any real request header block; an honest client holds ≤ 8 requests ≈ 2 KB of headers in flight, 4× under this cap. Only a broken client touches it. */
+	/**
+	 * Tripwire past any real request header block. Complete heads are parsed out on every read, so only the unterminated tail is bounded; our own client pipelines up to 2048 heads of ~250 bytes and stays far under it.
+	 * Only a broken client touches it.
+	 */
 	private static final int MAX_HEADER_BLOCK_BYTES = 8 * 1024;
 
 	// The cap on request heads held while a response body streams: 2048 pipelined heads at ~250 bytes each need
@@ -249,7 +252,6 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		ActivityTracker.Span span = tracker.start(String.valueOf(addressOf(ctx.channel())));
 		String request = cumulation.readCharSequence(headerEnd, StandardCharsets.UTF_8).toString();
 		cumulation.skipBytes(4);
-		cumulation.discardReadBytes();
 
 		String[] lines = request.split("\r\n", -1);
 		String[] requestLine = lines[0].split(" ");
@@ -267,16 +269,13 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		String key = ContractRoutes.key(head.target());
 		span.routeKey = key;
-		Optional<Path> path = key == null ? Optional.<Path>empty() : server.getPath(key);
-		if (path.isEmpty()) return finishBodyless(ctx, span, STATUS_404, 0, null, null, head.keepAlive());
+		// The hosting swap validated and sized every key at publication, so the loop answers from memory; the streamed
+		// body's open re-checks the promised size on the reader pool, which is the filesystem's only per-request touch.
+		Optional<GenerationHosting.HostedObject> hosted = key == null ? Optional.<GenerationHosting.HostedObject>empty() : server.hosted(key);
+		if (hosted.isEmpty()) return finishBodyless(ctx, span, STATUS_404, 0, null, null, head.keepAlive());
 
-		Path file = path.get();
-		long total;
-		try {
-			total = Files.size(file);
-		} catch (IOException e) {
-			return finishBodyless(ctx, span, STATUS_404, 0, null, null, head.keepAlive());
-		}
+		Path file = hosted.get().file();
+		long total = hosted.get().size();
 
 		// Objects already are their hash. A document's validator etag comes from the server's memo, keeping the SHA-1
 		// of a possibly large journal off the event loop for every conditional fetch; a plain GET carries no ETag.
@@ -440,6 +439,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		private FileChannel file; // opened by the caller for identity, by the first read for negotiated
 		private OutputStream compressor; // the codec's continuous stream; read tasks only
 		private ByteArrayOutputStream frames; // its sink, drained on every emitted frame; read tasks only
+		private byte[] inputChunk; // the compressor's read target, reused across every chunk of this response; read tasks only
 		private long flushed; // compressed wire bytes emitted so far; read tasks only
 		private long readPosition; // loop mirror of the file cursor
 		private long fileRemaining; // loop mirror of the file bytes left
@@ -570,12 +570,13 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 				}
 				long consumed = 0;
 				boolean last = false;
+				if (inputChunk == null) inputChunk = new byte[COMPRESS_INPUT_CHUNK];
 				do {
 					int chunk = (int) Math.min((long) COMPRESS_INPUT_CHUNK, remaining - consumed);
-					ByteBuffer input = ByteBuffer.allocate(chunk);
+					ByteBuffer input = ByteBuffer.wrap(inputChunk, 0, chunk);
 					int read = file.read(input, position + consumed);
 					if (read < 0) throw new IOException("File ended before the response was fully streamed");
-					compressor.write(input.array(), 0, read);
+					compressor.write(inputChunk, 0, read);
 					consumed += read;
 					if (consumed == remaining) {
 						last = true;

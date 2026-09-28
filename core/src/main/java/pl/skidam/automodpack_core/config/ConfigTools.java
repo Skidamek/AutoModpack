@@ -268,6 +268,11 @@ public final class ConfigTools {
 		});
 	}
 
+	/** Machine-read durable documents serialize compact: nobody hand-edits them, and their bytes are written and re-parsed per apply. */
+	public static void writeAtomicCompact(Path path, Object value) throws IOException {
+		DurableFiles.writeAtomic(path, COMPACT.toJson(value).getBytes(StandardCharsets.UTF_8));
+	}
+
 	public static void writeAtomic(Path path, Object value) throws IOException {
 		OsPaths.requirePublishableConfig(path);
 		DurableFiles.writeAtomic(path, GSON.toJson(value).getBytes(StandardCharsets.UTF_8));

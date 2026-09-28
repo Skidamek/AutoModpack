@@ -55,6 +55,7 @@
   "automodpack.summary.restartRequired": "Restart required",
   "automodpack.summary.restartOffered": "You will be asked to restart",
   "automodpack.packManager.title": "Installed modpacks",
+  "automodpack.packManager.loading": "Loading installed modpacks...",
   "automodpack.packManager.description": "Choose a pack to review its groups. Selecting a row does not activate it.",
   "automodpack.packManager.empty": "No complete modpack records are available on this client.",
   "automodpack.packManager.active": "Active pack: %s",

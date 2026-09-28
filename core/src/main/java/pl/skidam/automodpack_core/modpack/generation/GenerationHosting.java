@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -7,6 +8,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.function.Function;
 
@@ -19,7 +21,11 @@ public final class GenerationHosting {
 	public static final String HEAD_DOCUMENT_KEY = "head";
 	public static final String JOURNAL_KEY = "journal";
 
+	/** A served entry with the size its publication promised, so request serving never stats the filesystem. */
+	public record HostedObject(Path file, long size) {}
+
 	private final NavigableMap<String, Path> paths;
+	private final Map<String, HostedObject> objects;
 
 	/**
 	 * Builds the hosting surface of one generation: the reserved head and journal keys, the policy document object,
@@ -42,14 +48,23 @@ public final class GenerationHosting {
 
 	public GenerationHosting(Map<String, Path> paths) {
 		TreeMap<String, Path> normalized = new TreeMap<>();
+		Map<String, HostedObject> hosted = new TreeMap<>();
 		if (paths != null) {
 			for (var entry : paths.entrySet()) {
 				String key = Objects.requireNonNull(entry.getKey(), "hosting path key");
 				Path path = Objects.requireNonNull(entry.getValue(), "hosting path").toAbsolutePath().normalize();
 				normalized.put(key, path);
+				// Validation and sizing happen once at the publish-time swap, never per request on the event loop;
+				// an entry that does not validate serves 404 exactly as a per-request check would answer.
+				try {
+					if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
+					hosted.put(key, new HostedObject(path, Files.size(path)));
+				} catch (IOException unreadable) {
+				}
 			}
 		}
 		this.paths = Collections.unmodifiableNavigableMap(normalized);
+		this.objects = Collections.unmodifiableMap(hosted);
 	}
 
 	public Path get(String key) {
@@ -62,5 +77,10 @@ public final class GenerationHosting {
 
 	public NavigableMap<String, Path> asMap() {
 		return paths;
+	}
+
+	/** The validated, pre-sized entry a request serves from memory; empty when publication did not validate the key. */
+	public Optional<HostedObject> hosted(String key) {
+		return Optional.ofNullable(objects.get(key));
 	}
 }

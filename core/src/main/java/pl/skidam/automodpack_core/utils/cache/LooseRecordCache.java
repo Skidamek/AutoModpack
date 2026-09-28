@@ -21,12 +21,23 @@ public abstract class LooseRecordCache<T> implements AutoCloseable {
 	protected final Path recordsDirectory;
 	private final String description;
 	/* Readers and writers hold different per-key locks, so the map itself must be concurrent. */
-	protected final Map<String, T> hotRecords = new ConcurrentHashMap<>();
+	protected final Map<String, T> hotRecords;
 	private final Object[] locks = new Object[64];
+
+	/*
+	 * Warm records survive instance close: every open site is try-with-resources, so a per-instance map is wiped at
+	 * each refcount-0 boundary and the next pass re-reads every record from disk - thousands of loads per join. The
+	 * map is keyed per records directory (one record type per directory), bounded by the keys a process touches, and
+	 * every read still tripwire-validates, so warmth is exactly as trustworthy as the disk copy.
+	 */
+	private static final Map<Path, Map<String, Object>> WARM_RECORDS = new ConcurrentHashMap<>();
 
 	public LooseRecordCache(Path recordsDirectory, String description) {
 		this.recordsDirectory = recordsDirectory;
 		this.description = description;
+		@SuppressWarnings("unchecked")
+		Map<String, T> warm = (Map<String, T>) WARM_RECORDS.computeIfAbsent(recordsDirectory.toAbsolutePath().normalize(), ignored -> new ConcurrentHashMap<>());
+		this.hotRecords = warm;
 		for (int i = 0; i < locks.length; i++) locks[i] = new Object();
 	}
 
@@ -78,6 +89,7 @@ public abstract class LooseRecordCache<T> implements AutoCloseable {
 
 	@Override
 	public void close() {
-		if (releaseFromRegistry()) hotRecords.clear();
+		// Warm records stay: the registry hands the next opener a fresh instance over the same shared map.
+		releaseFromRegistry();
 	}
 }

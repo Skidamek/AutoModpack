@@ -96,6 +96,8 @@ public class SelfUpdater {
 			return false;
 		}
 
+		// The jar's identity cannot change while this loop runs, so it is hashed once, not per candidate.
+		String localJarHash = FileIntegrity.identityHash(THIS_MOD_JAR, null);
 		for (ModrinthAPI automodpack : modrinthAPIList) {
 			if (automodpack == null || automodpack.fileVersion() == null) continue;
 
@@ -109,7 +111,7 @@ public class SelfUpdater {
 			}
 
 			// Exact Hash Match (Fastest check)
-			if (automodpack.SHA1Hash().equals(FileIntegrity.identityHash(THIS_MOD_JAR, null))) {
+			if (automodpack.SHA1Hash().equals(localJarHash)) {
 				LOGGER.info("Already on the target version (Hash match): {}", AM_VERSION);
 				return false;
 			}

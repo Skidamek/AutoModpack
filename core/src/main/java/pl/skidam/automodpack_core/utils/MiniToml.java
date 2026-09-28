@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Minimal TOML-subset reader for our one job - parsing forge/neoforge mods.toml metadata - not a general TOML implementation.
@@ -17,6 +18,8 @@ import java.util.Set;
  * Datetimes are not supported and fail loudly.
  */
 public final class MiniToml {
+
+	private static final Pattern DATETIME_PREFIX = Pattern.compile("\\d{4}-\\d{2}.*");
 
 	/** Thrown on any syntax or structure violation; the message always names the 1-based line. */
 	public static final class ParseException extends RuntimeException {
@@ -278,7 +281,7 @@ public final class MiniToml {
 		}
 		boolean negative = token.startsWith("-");
 		String unsigned = token.startsWith("+") || negative ? token.substring(1) : token;
-		if (token.indexOf(':') >= 0 || unsigned.matches("\\d{4}-\\d{2}.*")) throw error("datetimes are not supported: '" + token + "'");
+		if (token.indexOf(':') >= 0 || DATETIME_PREFIX.matcher(unsigned).matches()) throw error("datetimes are not supported: '" + token + "'");
 		String digits = unsigned.replace("_", "");
 		try {
 			if (digits.startsWith("0x") || digits.startsWith("0o") || digits.startsWith("0b")) {

@@ -26,6 +26,8 @@ import pl.skidam.automodpack_core.utils.HttpClientPool;
 public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, String fileSize, String releaseType, String murmurHash,
 		String sha1Hash, int modId, String projectPageUrl) {
 
+	private static final Gson GSON = new Gson();
+
 	private static final String KEY = "JDJhJDEwJHNrbDRkNFkyTVI2Yy5uWmhWM3VWSy5HQmVLZDNNTDRSS3lNbnM4RFpxajkxSGpmL0hZcmNT";
 	public static final String API_HOST = "api.curseforge.com";
 	public static final String CDN_HOST = "edge.forgecdn.net";
@@ -165,7 +167,7 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		List<Integer> modIds = infos.stream().map(CurseForgeAPI::modId).filter(id -> id > 0).distinct().toList();
 		if (modIds.isEmpty()) return new HashMap<>();
 		JsonObject request = new JsonObject();
-		request.add("modIds", new Gson().toJsonTree(modIds));
+		request.add("modIds", GSON.toJsonTree(modIds));
 		JsonObject response = fromCurseForgeUrl(baseUrl + "/mods", endpoint, request);
 		if (response == null || !response.has("data") || !response.get("data").isJsonArray()) return null;
 		Map<Integer, String> listed = new HashMap<>();
@@ -189,7 +191,7 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 
 	private static JsonObject murmurRequest(List<String> murmurHashes) {
 		JsonObject request = new JsonObject();
-		request.add("fingerprints", new Gson().toJsonTree(murmurHashes));
+		request.add("fingerprints", GSON.toJsonTree(murmurHashes));
 		return request;
 	}
 

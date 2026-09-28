@@ -40,6 +40,7 @@ import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.loader.GameCallService;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.protocol.NetUtils;
@@ -527,8 +528,8 @@ class HttpContractHandlerTest {
 		String hash = HashUtils.sha1(body);
 		NettyServer pipelineServer = new NettyServer() {
 			@Override
-			public Optional<Path> getPath(String requestKey) {
-				return requestKey.equals(hash) ? Optional.of(object) : Optional.empty();
+			public Optional<GenerationHosting.HostedObject> hosted(String requestKey) {
+				return requestKey.equals(hash) ? Optional.of(new GenerationHosting.HostedObject(object, body.length)) : Optional.empty();
 			}
 		};
 		HoldableChannel channel = holdableChannel(pipelineServer, "/objects/" + hash);
@@ -564,8 +565,8 @@ class HttpContractHandlerTest {
 		String hash = HashUtils.sha1(body);
 		NettyServer heldServer = new NettyServer() {
 			@Override
-			public Optional<Path> getPath(String requestKey) {
-				return requestKey.equals(hash) ? Optional.of(object) : Optional.empty();
+			public Optional<GenerationHosting.HostedObject> hosted(String requestKey) {
+				return requestKey.equals(hash) ? Optional.of(new GenerationHosting.HostedObject(object, body.length)) : Optional.empty();
 			}
 		};
 		HoldableChannel channel = holdableChannel(heldServer, "/objects/" + hash);
@@ -595,8 +596,8 @@ class HttpContractHandlerTest {
 		String hash = HashUtils.sha1(body);
 		NettyServer junkServer = new NettyServer() {
 			@Override
-			public Optional<Path> getPath(String requestKey) {
-				return requestKey.equals(hash) ? Optional.of(object) : Optional.empty();
+			public Optional<GenerationHosting.HostedObject> hosted(String requestKey) {
+				return requestKey.equals(hash) ? Optional.of(new GenerationHosting.HostedObject(object, body.length)) : Optional.empty();
 			}
 		};
 		HoldableChannel channel = holdableChannel(junkServer, "/objects/" + hash);
@@ -620,8 +621,8 @@ class HttpContractHandlerTest {
 		String hash = HashUtils.sha1(body);
 		NettyServer dropServer = new NettyServer() {
 			@Override
-			public Optional<Path> getPath(String requestKey) {
-				return requestKey.equals(hash) ? Optional.of(object) : Optional.empty();
+			public Optional<GenerationHosting.HostedObject> hosted(String requestKey) {
+				return requestKey.equals(hash) ? Optional.of(new GenerationHosting.HostedObject(object, body.length)) : Optional.empty();
 			}
 		};
 		HoldableChannel channel = holdableChannel(dropServer, "/objects/" + hash);
@@ -707,8 +708,8 @@ class HttpContractHandlerTest {
 		// chunk, so the completed-write counter freezes and the fuse is the only thing left to act.
 		NettyServer stallServer = new NettyServer() {
 			@Override
-			public Optional<Path> getPath(String requestKey) {
-				return HashUtils.isSha1(requestKey) ? Optional.of(object) : Optional.empty();
+			public Optional<GenerationHosting.HostedObject> hosted(String requestKey) {
+				return HashUtils.isSha1(requestKey) ? Optional.of(new GenerationHosting.HostedObject(object, body.length)) : Optional.empty();
 			}
 		};
 		SlowChannel channel = new SlowChannel(new HttpContractHandler(stallServer, readers, 1, 3));

@@ -40,14 +40,17 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		synchronized (lock(hash)) {
 			ModRecord cached = readRecord(hash, ModRecord.class);
 			if (isComplete(cached)) return cached.at(absPath);
+			if (ModRecord.isNotAMod(cached)) return null;
 
 			hash = contentHash(absPath, knownSha1, cache);
 			if (hash == null) return null;
 			cached = readRecord(hash, ModRecord.class);
 			if (isComplete(cached)) return cached.at(absPath);
+			if (ModRecord.isNotAMod(cached)) return null;
 
 			FileInspection.Mod modFile = FileInspection.getMod(absPath, cache);
 			if (modFile != null) writeRecord(hash, new ModRecord(modFile));
+			else if (!FileInspection.isMod(absPath)) writeRecord(hash, new ModRecord(hash));
 			return modFile;
 		}
 	}
@@ -107,6 +110,15 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 			nestedMods = mod.nestedMods().stream().map(ModRecord::new).collect(Collectors.toSet());
 			id = mod.id();
 			services = mod.services();
+		}
+
+		/** A content-keyed verdict that the bytes are no mod jar; id and services stay null, so it can never pass {@link #isComplete} or produce a Mod. */
+		private ModRecord(String contentHash) {
+			hash = contentHash;
+		}
+
+		private static boolean isNotAMod(ModRecord record) {
+			return record != null && record.hash != null && record.id == null && record.services == null;
 		}
 
 		private FileInspection.Mod at(Path path) {
