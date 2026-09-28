@@ -15,6 +15,11 @@ flow:
   - do: verify_files
     name: verify all synced files are present
     timeout: 600s
+  - do: wait_for
+    name: wait for the install commit to retire its journal
+    timeout: 120s
+    until:
+      file_gone: automodpack/client/update-transaction.json
   - do: quit
     name: quit the client after the first install
   - do: write_file
