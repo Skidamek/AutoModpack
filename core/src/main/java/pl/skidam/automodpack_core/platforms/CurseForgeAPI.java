@@ -149,11 +149,10 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 			return null;
 		}
 
-		// Download url may be null if mod author dont allow it
+		// The download url may be null; the match itself already confirmed the exact file.
 		String downloadUrl = fileJson.get("downloadUrl").isJsonNull() ? null : fileJson.get("downloadUrl").getAsString();
-		if (downloadUrl == null) return null;
 		String fileName = fileJson.get("fileName").getAsString();
-		String fileVersion = fileJson.get("displayName").getAsString();
+		String fileVersion = fileJson.get("displayName").isJsonNull() ? null : fileJson.get("displayName").getAsString();
 		String fileSize = String.valueOf(fileJson.get("fileLength").getAsLong());
 		String murmur = hashes.get(sha1);
 		int modId = fileJson.has("modId") && !fileJson.get("modId").isJsonNull() ? fileJson.get("modId").getAsInt() : 0;

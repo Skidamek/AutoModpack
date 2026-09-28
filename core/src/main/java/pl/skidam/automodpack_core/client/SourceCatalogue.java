@@ -84,11 +84,11 @@ final class SourceCatalogue {
 		return path != null && path.toLowerCase(Locale.ROOT).endsWith(".jar");
 	}
 
-	/** A sha1 counts as first-party when the running lookup resolved it or a previous resolution is persisted in the platform cache. */
+	/** A sha1 counts as first-party when the running lookup confirmed it on a platform, downloadable or not, or a previous resolution is persisted in the platform cache. */
 	boolean firstPartyHit(String sha1) {
 		if (sha1 == null || sha1.isBlank()) return false;
 		FetchManager manager = sourceFetchManager;
-		if (manager != null && manager.hasSource(sha1)) return true;
+		if (manager != null && manager.hasListing(sha1)) return true;
 		PlatformCache.Record record = platformCache.getAll(List.of(sha1)).get(sha1);
 		return record != null && (record.modrinth() != null || record.curseforge() != null);
 	}
@@ -133,7 +133,7 @@ final class SourceCatalogue {
 	private boolean platformHit(String sha1, Map<String, PlatformCache.Record> records, DownloadSource.Provider provider) {
 		if (sha1 == null || sha1.isBlank()) return false;
 		FetchManager manager = sourceFetchManager;
-		if (manager != null) for (DownloadSource source : manager.sourcesFor(sha1)) if (source.provider() == provider) return true;
+		if (manager != null && manager.listedOn(sha1, provider)) return true;
 		PlatformCache.Record record = records.get(sha1);
 		return record != null && (provider == DownloadSource.Provider.MODRINTH ? record.modrinth() != null : record.curseforge() != null);
 	}

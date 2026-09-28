@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.platforms;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -34,10 +35,14 @@ class CurseForgeAPIHttpTest {
 	private static HttpServer server;
 	private static final List<Served> SERVED = new ArrayList<>();
 	private static final Map<String, Deque<Integer>> SCRIPTED = new HashMap<>();
+	private static final Map<String, Deque<String>> SCRIPTED_BODIES = new HashMap<>();
 
 	private static final String SHA1 = "a".repeat(40);
 	private static final String FINGERPRINTS_200 = """
 			{"data":{"exactMatches":[{"file":{"releaseType":1,"hashes":[{"algo":1,"value":"%s"}],"downloadUrl":"http://cdn.example/a.jar","fileName":"a.jar","displayName":"A 1.2.3","fileLength":123,"modId":7}}]}}"""
+			.formatted(SHA1);
+	private static final String FINGERPRINTS_200_NO_DOWNLOAD_URL = """
+			{"data":{"exactMatches":[{"file":{"releaseType":1,"hashes":[{"algo":1,"value":"%s"}],"downloadUrl":null,"fileName":"a.jar","displayName":"A 1.2.3","fileLength":123,"modId":7}}]}}"""
 			.formatted(SHA1);
 	private static final String MODS_200 = """
 			{"data":[{"id":7,"isAvailable":true,"slug":"a-mod","links":{"websiteUrl":"https://www.curseforge.com/minecraft/mc-mods/a-mod"}}]}""";
@@ -81,8 +86,16 @@ class CurseForgeAPIHttpTest {
 		SCRIPTED.put(path, script);
 	}
 
+	private static void scriptBody(String path, String body) {
+		Deque<String> bodies = new ConcurrentLinkedDeque<>();
+		bodies.add(body);
+		SCRIPTED_BODIES.put(path, bodies);
+	}
+
 	private static String body(String path) {
-		return path.endsWith("/mods") ? MODS_200 : FINGERPRINTS_200;
+		Deque<String> bodies = SCRIPTED_BODIES.get(path);
+		String scripted = bodies == null ? null : bodies.poll();
+		return scripted != null ? scripted : path.endsWith("/mods") ? MODS_200 : FINGERPRINTS_200;
 	}
 
 	private static String baseUrl() {
@@ -123,6 +136,24 @@ class CurseForgeAPIHttpTest {
 		assertEquals(NetUtils.USER_AGENT, fingerprints.get(0).userAgent());
 		assertEquals(CurseForgeAPI.summonKey(), fingerprints.get(0).apiKey());
 		assertEquals(1, served("/v1/mods").size());
+	}
+
+	@Test
+	void aListedFileWithoutADownloadUrlIsStillAnExactMatch() {
+		SERVED.clear();
+		scriptBody("/v1/fingerprints", FINGERPRINTS_200_NO_DOWNLOAD_URL);
+		List<CurseForgeAPI> infos = CurseForgeAPI.getModInfosFromFingerPrints(baseUrl(), localEndpoint(), hashes());
+		assertEquals(1, infos.size(), "an author-disabled download must not drop the confirmed file");
+		CurseForgeAPI info = infos.get(0);
+		assertNull(info.downloadUrl());
+		assertEquals("a.jar", info.fileName());
+		assertEquals("A 1.2.3", info.fileVersion());
+		assertEquals("123", info.fileSize());
+		assertEquals("release", info.releaseType());
+		assertEquals("12345", info.murmurHash());
+		assertEquals(SHA1, info.sha1Hash());
+		assertEquals(7, info.modId());
+		assertEquals("https://www.curseforge.com/minecraft/mc-mods/a-mod", info.projectPageUrl(), "the project page lookup still runs without a download url");
 	}
 
 	@Test

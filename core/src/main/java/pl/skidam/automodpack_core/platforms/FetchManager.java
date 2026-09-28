@@ -25,7 +25,7 @@ public class FetchManager {
 	}
 
 	public record FetchData(String file, String sha1, String murmur, String fileType) {}
-	private record FetchedData(List<DownloadSource> sources, List<String> mainPageUrls) {}
+	private record FetchedData(List<DownloadSource> sources, List<DownloadSource.Provider> listings, List<String> mainPageUrls) {}
 	private record Datas(FetchData fetchData, FetchedData fetchedData) {}
 	private record DeadLink(String murmur, String fileType) {}
 	private final Map<String, Datas> fetchDatas = new HashMap<>();
@@ -47,7 +47,7 @@ public class FetchManager {
 		this.lookups = lookups;
 		for (FetchData fetchData : fetchDatas) {
 			this.fetchDatas.put(fetchData.sha1,
-					new Datas(fetchData, new FetchedData(Collections.synchronizedList(new ArrayList<>(2)), Collections.synchronizedList(new ArrayList<>(2)))));
+					new Datas(fetchData, new FetchedData(Collections.synchronizedList(new ArrayList<>(2)), Collections.synchronizedList(new ArrayList<>(2)), Collections.synchronizedList(new ArrayList<>(2)))));
 		}
 	}
 
@@ -123,8 +123,8 @@ public class FetchManager {
 	public int resolvedFiles() {
 		int resolved = 0;
 		for (Datas data : fetchDatas.values()) {
-			synchronized (data.fetchedData.sources()) {
-				if (!data.fetchedData.sources().isEmpty()) resolved++;
+			synchronized (data.fetchedData.listings()) {
+				if (!data.fetchedData.listings().isEmpty()) resolved++;
 			}
 		}
 		return resolved;
@@ -273,6 +273,7 @@ public class FetchManager {
 		for (CurseForgeAPI info : curseForgeInfos) {
 			String sha1 = info.sha1Hash().toLowerCase(Locale.ROOT);
 			platformCache.putCurseForge(info.sha1Hash(), info);
+			if (info.downloadUrl() == null) continue; // a listing without a download is not a source
 			fresh.computeIfAbsent(sha1, key -> new ArrayList<>()).add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.CURSEFORGE));
 		}
 		return fresh;
@@ -296,14 +297,16 @@ public class FetchManager {
 
 	private void applyModrinth(Datas datas, String downloadUrl, String mainPageUrl) {
 		if (datas == null) return;
-		datas.fetchedData().sources().add(new DownloadSource(downloadUrl, DownloadSource.Provider.MODRINTH));
+		datas.fetchedData().listings().add(DownloadSource.Provider.MODRINTH);
+		if (downloadUrl != null) datas.fetchedData().sources().add(new DownloadSource(downloadUrl, DownloadSource.Provider.MODRINTH));
 		addMainPageUrl(datas, mainPageUrl, true);
 		fetchesDone.incrementAndGet();
 	}
 
 	private void applyCurseForge(Datas datas, String downloadUrl, String projectPageUrl) {
 		if (datas == null) return;
-		datas.fetchedData().sources().add(new DownloadSource(downloadUrl, DownloadSource.Provider.CURSEFORGE));
+		datas.fetchedData().listings().add(DownloadSource.Provider.CURSEFORGE);
+		if (downloadUrl != null) datas.fetchedData().sources().add(new DownloadSource(downloadUrl, DownloadSource.Provider.CURSEFORGE));
 		addMainPageUrl(datas, projectPageUrl, false);
 		fetchesDone.incrementAndGet();
 	}
@@ -331,10 +334,16 @@ public class FetchManager {
 		}
 	}
 
-	/** Whether the third-party lookup produced at least one source for this sha1. */
-	public boolean hasSource(String sha1) {
+	/** Whether the third-party lookup confirmed this sha1 on a platform, downloadable from it or not. */
+	public boolean hasListing(String sha1) {
 		Datas data = dataFor(sha1);
-		return data != null && !snapshot(data.fetchedData().sources()).isEmpty();
+		return data != null && !snapshot(data.fetchedData().listings()).isEmpty();
+	}
+
+	/** Whether this sha1 is confirmed on the given platform, downloadable from it or not. */
+	public boolean listedOn(String sha1, DownloadSource.Provider provider) {
+		Datas data = dataFor(sha1);
+		return data != null && snapshot(data.fetchedData().listings()).contains(provider);
 	}
 
 	/** Whether this sha1 takes part in the third-party lookup at all. */

@@ -51,7 +51,7 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 	}
 
 	public void putCurseForge(String sha1, CurseForgeAPI info) {
-		if (sha1 == null || sha1.isBlank() || info == null || info.downloadUrl() == null) return;
+		if (sha1 == null || sha1.isBlank() || info == null) return;
 		String normalizedHash = sha1.toLowerCase(Locale.ROOT);
 		synchronized (lock(normalizedHash)) {
 			Record record = readOrCreateRecord(normalizedHash);
