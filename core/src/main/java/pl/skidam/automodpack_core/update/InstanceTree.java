@@ -9,7 +9,9 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Objects;
 import java.util.Set;
@@ -159,12 +161,26 @@ public final class InstanceTree {
 	}
 
 	static InstanceTree observe(ClientStorage storage, Set<Key> extraPaths, FileCache cache) throws IOException {
+		return observe(storage, extraPaths, cache, null);
+	}
+
+	static InstanceTree observe(ClientStorage storage, Set<Key> extraPaths, FileCache cache, UpdatePlan published) throws IOException {
 		Set<Key> paths = new TreeSet<>(Key.ORDER);
 		paths.addAll(extraPaths);
 		ClientStateJournal journal = ClientStateJournal.open(storage);
 		if (!journal.entries().isEmpty()) paths.addAll(read(storage, journal.head().treeSha1()).keys());
+		Map<String, UpdatePlan.ProjectedFile> publishedProjection = new HashMap<>();
+		if (published != null)
+			for (UpdatePlan.ProjectedFile projected : published.projectedFinalState())
+				if (projected != null && projected.root() == Root.PROJECTION) publishedProjection.put(LogicalPath.normalize(projected.relativePath()), projected);
 		List<TrackedFile> files = new ArrayList<>();
 		for (Key key : paths) {
+			UpdatePlan.ProjectedFile projected = key.root() == Root.PROJECTION ? publishedProjection.get(key.path()) : null;
+			if (projected != null) {
+				// The publication just proved these bytes on disk; recording the tree takes the plan's word instead of re-reading the pack.
+				if (projected.present()) files.add(new TrackedFile(Root.PROJECTION, "", key.path(), projected.expectedHash(), projected.expectedSize()));
+				continue;
+			}
 			Path disk = storage.rootedPath(key.root(), key.overlayPackId(), key.path());
 			if (!Files.isRegularFile(disk, LinkOption.NOFOLLOW_LINKS) || isRunningModJar(disk)) continue;
 			long size = Files.size(disk);

@@ -169,6 +169,25 @@ public final class StateHistory {
 		});
 	}
 
+	/**
+	 * Records the state a finished apply produced: projection rows answer from the plan's verified final state, so the
+	 * timeline checkpoint never re-reads pack content the publication just proved. Non-projection keys observe the
+	 * worktree exactly like any other row.
+	 */
+	public static void snapshotApplied(ClientStorage storage, UpdatePlan plan, Kind kind, String modpackId, String transactionId) throws IOException {
+		ClientStorageMutation.run(storage, () -> {
+			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+				InstanceTree live = InstanceTree.observe(storage, planPaths(plan), cache, plan);
+				ClientStateJournal journal = ClientStateJournal.open(storage);
+				if (!journal.entries().isEmpty() && live.sameAs(InstanceTree.read(storage, journal.head().treeSha1()))) return null;
+				acquireTreeBlobs(storage, live, cache);
+				live.write(storage);
+				journal.append(live.sha1(), kind, modpackId, transactionId);
+				return null;
+			}
+		});
+	}
+
 	public static Path checkout(ClientStorage storage, long seq) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
@@ -300,8 +319,10 @@ public final class StateHistory {
 			Path object = storage.objectFile(file.sha1());
 			if (FileIntegrity.matchesNamed(destination, file.size(), file.sha1(), cache)) continue;
 			FileTrees.requireNoSymbolicLinkDescendants(storage.root(file.root(), file.overlayPackId().isEmpty() ? "_" : file.overlayPackId()), destination, "instance restore");
-			if (file.root() == Root.PROJECTION) VerifiedFileTransfer.linkAtomic(object, destination, file.size(), file.sha1(), cache);
-			else VerifiedFileTransfer.copyAtomic(object, destination, file.size(), file.sha1(), cache);
+			if (file.root() == Root.PROJECTION) {
+				VerifiedFileTransfer.linkAtomic(object, destination, file.size(), file.sha1(), cache);
+				cache.overwriteCache(destination, file.sha1());
+			} else VerifiedFileTransfer.copyAtomic(object, destination, file.size(), file.sha1(), cache);
 		}
 		for (TrackedFile file : live.files()) {
 			if (wanted.contains(file.key())) continue;

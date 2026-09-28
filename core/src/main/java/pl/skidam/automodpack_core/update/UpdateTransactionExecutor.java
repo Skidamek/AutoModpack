@@ -297,7 +297,7 @@ public final class UpdateTransactionExecutor {
 	 * and the checkpoint is always durable before the record that produced it can be forgotten.
 	 */
 	private void recordStateHistory(UpdateTransaction transaction) throws IOException {
-		StateHistory.snapshotIfDirty(context.storage(), StateHistory.planPaths(transaction.plan()), snapshotKind(transaction), transaction.plan().modpackId(), transaction.transactionId);
+		StateHistory.snapshotApplied(context.storage(), transaction.plan(), snapshotKind(transaction), transaction.plan().modpackId(), transaction.transactionId);
 	}
 
 	private void snapshotBefore(UpdateTransaction transaction) throws IOException {
@@ -522,7 +522,25 @@ public final class UpdateTransactionExecutor {
 			FileTrees.moveRecoverableDirectory(active, backup);
 		}
 		FileTrees.moveRecoverableDirectory(incoming, active);
-		verifyProjection(active, transaction.plan().projectedFinalState());
+		seedProjectionRecords(transaction);
+	}
+
+	/**
+	 * The post-swap gate: every projected file answers its pack-object identity on the final path - two stats, no content read -
+	 * and that answer seeds the cache records the next boot's worktree observation lives on. Without it, publication would
+	 * re-hash the whole pack once per apply to rebuild the records the link-and-rename dance invalidates.
+	 */
+	private void seedProjectionRecords(UpdateTransaction transaction) throws IOException {
+		Path active = context.storage().activeDirectory();
+		if (!Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Active client projection is not a directory: " + active);
+		for (ProjectedFile projected : transaction.plan().projectedFinalState()) {
+			if (projected == null || projected.root() != Root.PROJECTION || !projected.present()) continue;
+			Path file = active.resolve(UpdateTransactionValidator.normalizeOperationPath(projected.relativePath())).normalize();
+			if (!file.startsWith(active)) throw new IOException("Projection path escapes active directory");
+			if (!FileIntegrity.matchesObject(file, context.storage().objectFile(projected.expectedHash()), projected.expectedSize(), projected.expectedHash(), fileCache))
+				throw new IOException("Client projection file verification failed: " + file);
+			fileCache.overwriteCache(file, projected.expectedHash());
+		}
 	}
 
 	private void verifyProjection(Path projection, List<ProjectedFile> finalState) throws IOException {
