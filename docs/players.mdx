@@ -1,0 +1,67 @@
+# For players
+
+AutoModpack keeps your game in sync with the server's modpack. You install one jar, add the server, and join; the mod downloads the pack and follows every change the server publishes. One jar covers every supported Minecraft version and loader. Get AutoModpack from [Modrinth](https://modrinth.com/mod/automodpack) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack).
+
+## The first join
+
+Before anything downloads, the server proves who it is. The verification screen shows the server's fingerprint, the SHA-256 of its TLS certificate. If the admin gave you a fingerprint, compare it with the one on the screen, or paste it into the field. If the admin gave you a pinned join address, one ending in `#amp1=...`, the address carries the fingerprint and the check happens by itself. You can skip the check, and the screen marks skipping as the risky choice. A fingerprint mismatch stops the connection. [Security](security) explains what this protects and what a mismatch means.
+
+The install review comes next. It counts how many mod files were matched on Modrinth or CurseForge. Jars that matched on neither are listed as unverified, and starting the download needs an explicit risk confirmation for them: they can be harmless custom mods, edited mods, or malicious mods, and AutoModpack cannot tell which. "Customize" opens the group list, where you pick the optional parts of the pack before the download starts.
+
+Mods you already have show up on the same screen. Keeping them checked leaves them in your mods folder, and unchecking removes them there while keeping a copy on the instance timeline. Copies you kept can come back later through the timeline.
+
+The download runs on a progress screen, and a music button there mutes the waiting track. The first install ends with a restart question, because the mod has to place its files where the game loads them. Answer "Yes, close the game", start the game again, and join.
+
+## Restarts
+
+With the default settings, every launch fetches the server's current generation and applies it before the game loads anything, and joining applies what changed since your last visit. Changes that only touch the managed pack folder need no restart: configs land on disk, and mods load from the managed folder.
+
+A restart is only needed when the change touches the mods folder, the loader, or the game version. In-game the mod asks first, and you can decline and keep playing. The review before an update tells you whether a restart is expected, and the question names the reasons when one is. When the mod cannot switch your launcher to the version the server publishes, it tells you the version to set in the launcher yourself before the next start. If a mod changed on disk after the game loaded it, a "Restart might fix this" toast says that restarting and joining again is the thing to try.
+
+## Your own mods stay yours
+
+Extra mods in your standard mods folder keep loading beside the pack. The pack's own files load from a managed folder, so your mods and the pack's mods usually never meet. When your copy and the pack's copy are the same mod, the mod resolves the duplicate at update time, so only one version loads.
+
+To force your version of a mod, pin its id. The "Pinned mods" button on the Modpacks screen opens the pinned mods screen, or you can list the ids in `pinned-mod-ids` in the [client configuration](configuration/client-config#pinned-mods). AutoModpack still downloads the pack's copy but does not load it, so your jar wins. A pin can break a pack that needs the version it ships. Restart to apply a pin.
+
+## Optional groups
+
+Servers can split the pack into optional groups: a shader bundle, a platform-specific mod set, whatever the admin declares. You pick them on the Group Selection screen, reached through "Customize" on the first install or through Modpack Settings under "Pack groups". Categories group the options, and a platform dropdown at the top picks the platform the groups resolve for. A summary line under it shows your platform, the selected groups, and the download size. Required groups stay selected and locked, and the screen refuses combinations that fight each other, so you cannot save a broken selection. Your choice sticks across updates. [Groups](groups#the-group-selection-screen) describes the screen row by row.
+
+## The Modpacks screen
+
+The "Modpacks" button on the multiplayer screen opens the list of every pack this instance installed. The `show-modpack-settings-button` client setting hides or shows that button. Each row shows the pack's name in green when it is the active one, plus a label saying whether it follows a server or lives only on this instance. Selecting a row does not activate anything on its own. Selecting a pack opens Modpack Settings, where each action does one job:
+
+- "Update" fetches the server's current generation and shows what changes before it applies.
+- "Repair" re-checks the local files and re-downloads what does not match. For editable files it offers to keep your changes, one file at a time.
+- "Deactivate" and "Activate" keep a pack installed without making it the active one.
+- "Stop syncing" and "Resume syncing" stop and restart following the server. Your files stay as they are while stopped, and "Sync now" reattaches the pack and applies the server's current generation.
+- "Pack history" lists every generation the server published, with its patch notes. Restoring an older one works offline, as long as its bytes are still kept on your computer.
+- "Pack groups" opens the Group Selection screen for that pack, and "Pack files" shows its complete file catalogue.
+- "Remove" deletes the pack's files from the instance. Snapshots on the instance timeline stay.
+
+The Modpacks screen itself carries the tools that are not about one pack. "Instance timeline" records what this installation had at every step: you can restore the whole instance or one file, and "Save a copy" writes a file to `automodpack/recovered/`. A restore is local and never contacts the server, and it stops the restored pack from following the server until you sync again. "Local storage" opens the clean and verify tools, described in [safety nets](how-it-works/safety-nets#maintenance).
+
+## When the server is offline
+
+At launch, an unreachable pack server is normal: the local pack keeps working, and the game starts with it. You only notice the server being gone when the game itself cannot reach it. A join fails with a clear message when the Minecraft server is up but its pack host is down. The disconnect reasons are decoded in [troubleshooting](troubleshooting).
+
+## LAN worlds
+
+The player who opens a LAN world can share the pack with everyone joining it. Joiners install AutoModpack the same way. Run `/automodpack generate` and then `/automodpack host start` in the host's game, and joiners connect as usual. If hosting fails, a toast titled "AutoModpack hosting failed" says so.
+
+## Offers to sync
+
+On a server that does not require the mod, joining shows a choice: "Sync modpack", or "Join without it". Nothing forces the choice, and you can sync at any time later. On a pack you stopped syncing, joining shows "Sync now" or lets you continue on your local files. While you play a locally kept state, the game tells you that the server may expect different files, so joining can fail or the game can crash.
+
+## Two servers, one instance
+
+One pack is active at a time. When you join a server whose pack differs, the review screen offers the switch, and nothing changes until you confirm it there. The other pack stays in the Modpacks list with its own group selections. Joining its server again, or activating it in the list, switches back. When a pack you already have starts being served from a new address, joining shows a "New server address" prompt first, and declining returns you to the multiplayer screen with your files untouched.
+
+## Moving or removing
+
+The downloaded bytes and the saved certificate pins live in a per-user folder outside the instance. Moving the instance to another computer leaves them behind, so the moved instance re-downloads the pack on the first join and treats the server like a first contact. The folder locations are in [files on disk](how-it-works/files-on-disk#content-store). An instance that keeps its store inside its own folder is the exception: its bytes and pins travel with it. To remove the mod, remove the pack in the Modpacks screen first, then delete the jar.
+
+## Problems
+
+Disconnect reasons, the error screen, and restart reasons are decoded in [troubleshooting](troubleshooting). Common questions, including what happens to your own mods and settings, are answered in the [FAQ](faq).

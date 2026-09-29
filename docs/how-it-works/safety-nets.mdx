@@ -1,6 +1,6 @@
 # Safety nets
 
-AutoModpack assumes that mistakes and crashes happen. Every layer has a recovery path: the server can roll a publish back, an interrupted update repairs itself, and a player can put their whole instance back to an earlier moment. This page lists the layers. Each section names what the layer protects and where the details live.
+AutoModpack assumes that mistakes and crashes happen. Every layer has a recovery path: the server can roll a publish back, an interrupted update repairs itself, and a player can put their whole instance back to an earlier moment. This page lists the layers, then the local storage they stand on: the instance timeline, pack history, and the tools that keep the client's store in shape.
 
 ## On the server
 
@@ -23,26 +23,45 @@ On the client, an update is a transaction recorded in `automodpack/client/update
 
 A file locked by another program on Windows hands the swap to a detached helper process. The helper waits for the game to exit and finishes the work.
 
-## The instance timeline
+## Instance timeline
 
-The instance timeline records what this Minecraft installation actually had at every step. Each install, update, rollback, repair, and restore appends a snapshot of the files the instance had, with the changed files listed. Restores are local and never contact the server.
+The instance timeline records what this Minecraft installation actually had at every step. Each install, update, rollback, repair, and restore appends a snapshot of the tracked files plus the live identity at that moment: the active pack, the group selection, the overlays. A snapshot's file list shows what changed from the previous snapshot. The "Instance timeline" button on the Modpacks screen opens it.
 
-"Restore this state" puts the whole instance back to a snapshot and detaches the pack, so the server cannot overwrite the restored state on the next join. Single files can be restored too, as long as they are game-directory files. A file the active pack owns non-editably refuses the restore and points to "Save a copy" instead, which writes the file to `automodpack/recovered/`. "Forget older than this" drops older snapshots and is the only thing that frees their bytes, which makes it the retention control for the timeline. The screen is described in [client storage](client-storage#instance-timeline).
+Restores are local and never contact the server. "Restore this state" puts the whole instance back to a snapshot and detaches the pack, so the server cannot overwrite the restored state on the next join, and every installed pack stays in the pack list. Single files can be restored too, as long as they are game-directory files, and a single-file restore only writes when the path is free. A file the active pack owns non-editably refuses the restore and points to "Save a copy" instead, which writes the file to `automodpack/recovered/`.
+
+"Forget older than this" drops older snapshots on this computer and unpins the file data nothing else still names. That makes it the retention control for the timeline: "Clean local storage" does not drop timeline snapshots.
 
 ## Pack history
 
-The client mirrors the server's journal, so Pack history shows every published generation with its patch notes without asking the server. Restoring an older generation works offline from the local store when the bytes are still kept, because the server serves only the current generation. A restore detaches the pack, and "Sync now" reattaches it and applies the server's current state.
+The client mirrors the server's journal, so Pack history lists every published generation of a pack without asking the server. It works offline. Each entry shows the generation number, the date, and the published patch notes. Restoring an older generation applies files already in the local store, because the server serves only the current generation, and an entry whose bytes are no longer kept shows as not kept on this computer.
+
+## Stop syncing and detachment
+
+A restore and "Stop syncing" lead to the same state, which the glossary calls detached. A restored pack stops following the server, so the restored files survive the next join, and "Stop syncing" does the same from the pack manager without changing any file. While detached, joining shows a prompt: "Sync now" reattaches the pack and applies the server's current generation, and "Continue" plays on with the local files.
 
 ## Maintenance
 
-The local storage screen offers two tools:
+The local storage screen offers two tools, and Repair is a third that lives in Modpack Settings. Each finished run prints a receipt: the date of the run, the generation it reached, and how much it reclaimed or found.
 
-- Clean local storage deletes file data that only older pack-history entries still name, plus orphaned and incomplete downloads. It always keeps the active and newest generation, the patch notes, editable files, and every timeline snapshot.
-- Verify storage reads every referenced object and reports how many are present and valid. It deletes nothing.
+### Clean local storage
 
-Repair is a third tool, but it lives in Modpack Settings rather than the storage screen. It compares the local files against the pack and downloads what does not match, offering to keep player changes per editable file.
+Cleaning is the explicit pass for pack-history objects that the instance timeline does not pin. Per pack it keeps the active generation and the newest generation, plus every generation's patch notes, and it always keeps every timeline snapshot. File data that only older generations still name, and that no instance snapshot names, is deleted, along with orphaned and incomplete downloads. After it finishes, the screen shows one receipt per pack: the date of the clean, the generation it cleaned through, and how much was reclaimed. Pack-history restore of those older generations then shows as not kept on this computer. A clean refuses to run while an update transaction is active.
 
-The receipts each tool prints are described in [client storage](client-storage).
+Timeline snapshots keep their bytes until you use "Forget older than this" on the timeline.
+
+### Verify storage
+
+"Verify storage" reads every object the pack and the instance timeline reference and reports how many are present and valid. It deletes nothing. It runs in the background and keeps running when you leave the screen.
+
+### Repair
+
+If files are corrupted or the game crashes on load, the Modpack Settings screen offers "Repair". Repair compares the local files against the pack and re-downloads what does not match. For editable files it offers to keep the player's changes, per file.
+
+## How big does this get
+
+The store grows as you use the pack. New generations, timeline snapshots, and repairs all add objects, and nothing is pruned automatically. The store has no size cap.
+
+Reclaiming space is manual, and three paths do it. "Clean local storage" reclaims the pack-history bytes that only older generations still name. "Forget older than this" reclaims the timeline bytes that older snapshots still pin. Removing a pack in the Modpacks list deletes that pack's records and then collects the objects that nothing else names.
 
 ## Deletions are measured
 

@@ -25,8 +25,11 @@ When a page uses a word you do not know, look it up here. Three names are canoni
 - **Pack history** The client's mirror of the server journal. Every published generation's metadata stays browsable offline; the bytes of older generations stay only until Clean local storage reclaims them. It is not the instance timeline.
 - **Pin** A saved certificate fingerprint for one server address, enforced on every connection.
 - **Pinned join address** A server address that carries the fingerprint inside it, as `#amp1=<fingerprint>`.
+- **Pinned mods** Mod ids this instance always loads from its own `mods` folder, set in the [client config](configuration/client-config#pinned-mods) or on the pinned mods screen. AutoModpack downloads the pack's copy but does not load it.
 - **Policy** The pack's full description: name, version metadata, categories, groups, and every file's hash, size, type, and editable flag.
 - **Projection** The materialized current pack at `automodpack/client/active/`, the folder the game loads from.
 - **Publishing** The `generate` step that appends a new generation. The server publishes when the content or the policy changed; when neither changed, it reports `NO_CHANGES`.
+- **Receipt** The line a finished operation prints about what it did: the date, the generation it reached, and the bytes it reclaimed or found.
 - **Selection** A player's saved choice of groups for one pack, stored per pack in `automodpack/client/selections.json`. The choice survives updates.
 - **Self-update swap** A staged change of AutoModpack's own version, held in `automodpack/self-update.json` until the next boot applies it.
+- **Update transaction** The record of an in-flight client update, at `automodpack/client/update-transaction.json`. A boot that finds a pending transaction resumes it or restores the last fully applied generation, and a storage clean waits while one runs.

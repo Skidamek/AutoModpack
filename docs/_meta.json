@@ -3,6 +3,10 @@
     "name": "Quick start",
     "icon": null
   },
+  "players.mdx": {
+    "name": "For players",
+    "icon": null
+  },
   "pack-content.mdx": {
     "name": "Building the modpack",
     "icon": null

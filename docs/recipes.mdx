@@ -24,7 +24,7 @@ A script or a panel copies new files into the pack sources and publishes them, w
 1. Copy the new files into `automodpack/host-modpack/main/` or your other group directories.
 2. Run `generate preview`. It shows what a publish would change and publishes nothing.
 3. Run `generate if-content <content-token>`. The command publishes only while the pack still matches the token you give it. When someone changed the pack in between, the command reports the mismatch and publishes nothing.
-4. The token is the content token of the generation you last saw, a 40 character SHA-1. Every publish prints it, and `generate history` lists it per entry. In-game, the value is click to copy. The term is defined in the [glossary](glossary).
+4. The token is the content token of the generation you last saw, a 40 character SHA-1. Every publish prints it, and `generate history` lists it per entry. In-game, clicking the value copies it. The term is defined in the [glossary](glossary).
 5. Optional: set `export-http-directory` in the [server config](configuration/server-config#network-and-hosting) to write a static copy of the pack after every publish. The automatic export runs only when `validate-secrets` is off, since a public mirror cannot enforce download secrets; with it on, the refusal is logged after each publish.
 
 [Generations](how-it-works/generations) explains publishing and tokens, and [HTTP contract export](how-it-works/hosting#http-contract-export) explains the static copy.

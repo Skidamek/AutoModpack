@@ -116,12 +116,10 @@ Remove the file from the server, or keep it on the server and add it to `exclude
 
 `editable` marks pack files that players may change. The default list is `options.txt` and `config/**`. The flag decides how a file behaves on the client:
 
-- An editable file is delivered as a real copy in the game directory. An editable mod jar lands in the player's standard `mods` folder and loads from there, so a player can replace or remove it.
-- Player edits never trigger updates. Update checks skip the hash comparison for editable files, so nothing a player changes makes the pack look out of date.
-- A deleted editable file stays deleted. Updates do not bring it back. The deletion is spent when the server changes that file's content or removes the path from the `editable` list: either one delivers the pack's version exactly once, and the player's previous bytes are kept on the instance timeline first.
-- A non-editable file that no longer matches the pack is brought back to the pack's bytes, and the player's bytes are kept on the instance timeline first. A drifted non-editable file that is not a mod is reset on the next launch. A drifted non-editable mod is caught by the update check and replaced through the normal update flow, with a restart.
-
-The first install already counts as a delivery. When a player who already has a file with the same name in the game directory, a tuned `options.txt` for example, installs the pack, the pack's copy replaces that file once, and the player's previous bytes land on the instance timeline before the overwrite. The change shows in the install review like any other file change. The "Keep existing mod files" consent on that screen covers mods only; files like `options.txt` are replaced without their own checkbox. From that moment the editable rules above apply: the delivered file is the player's own, and their edits survive until the server changes the content.
+- An editable file is delivered as a real copy in the game directory. An editable mod jar lands in the player's standard `mods` folder and loads from there, so the player can replace or remove it.
+- Player edits survive updates until the server changes the file's content or removes the path from the `editable` list; either one delivers the pack's version exactly once.
+- The first install already counts as a delivery. A player who already has a file with the same name, a tuned `options.txt` for example, gets the pack's copy once, and the player's previous bytes land on the instance timeline first. The install review's "Keep existing mod files" consent covers mods only; files like `options.txt` are replaced without their own checkbox.
+- A non-editable file is kept identical to the pack.
 
 `editable` never pulls a file into the pack, and an `editable` rule that matches no pack file only produces a warning at publish. The client-side mechanics are in [client updates](how-it-works/client-updates#editable-files).
 
