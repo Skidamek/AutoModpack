@@ -1,6 +1,29 @@
 # Security
 
-Security != Safety. This page makes sure the connection between server and a client is secure, it doesn't make client safe from downloading malicious mods containing malware!
+The checks on this page prove that the connection reaches your server. They do not judge the mods that the server sends. Only join servers you trust.
+
+## What AutoModpack runs and contacts
+
+The mod runs one process, the game itself, plus two small helpers:
+
+- A detached helper JVM that finishes a staged update after the game closes. It exists because the running game locks its own files, notably on Windows.
+- A small dialog JVM that shows a restart message on the screen when an update ends the game.
+
+The mod never relaunches the game. It closes it, and the player starts it again. The AutoModpack self-update is a jar swap staged on disk and applied at that restart.
+
+On the network, AutoModpack talks to these endpoints and no others:
+
+| Endpoint | When |
+| --- | --- |
+| `api.modrinth.com` | File lookups by hash, and AutoModpack's own updates. Matched files download from `cdn.modrinth.com`. |
+| `api.curseforge.com` | File lookups by fingerprint. Matched files download from CurseForge's CDN at `edge.forgecdn.net`. |
+| `meta.prismlauncher.org` | Only when a launcher version switch must check that the target game or loader version exists. |
+| `cloudflare-dns.com` and `dns.quad9.net` | Only to resolve and validate the DNSSEC AMP1 record, over DNS-over-HTTPS. |
+| The pack host | Modpack downloads. |
+
+There is no telemetry. The requests on this list are all of the mod's own outbound traffic.
+
+The direct answer to "can a server run code on my PC": AutoModpack inspects downloaded jars without loading them as code. It reads the jar entries and their metadata. The game's mod loader then loads the pack's mods at launch, exactly like mods the player installed by hand. So a server can give you mods, and those mods run. That is why this page starts with the sentence it does: only join servers you trust.
 
 ## How clients verify a server
 
@@ -11,9 +34,9 @@ The download endpoint is advertised over the Minecraft login, a channel that aut
 | Method | Best for | Client stores | Certificate rotation |
 | --- | --- | --- | --- |
 | DNSSEC AMP1 | Servers with a DNSSEC-enabled domain; recommended | Nothing; the record is checked whenever no CA chain covers the address | Update the DNS record; clients follow on their next connect |
-| CA signed certificate | Servers with domain lacking DNSSEC support | Nothing | Replace the certificate files; clients follow on their next connect |
+| CA signed certificate | Servers with domain lacking DNSSEC support | Nothing | Replace the certificate files; clients without a pin follow on their next connect. A player who once verified by hand holds a pin, and a pin outlives certificate renewals, so those players must verify again after you replace the certificate. |
 | Pinned join address | Servers without a domain | A pin for the address | Distribute a new pinned address |
-| Manual verification | Not recommended, worst UX | A pin for the address, after the player accepts once | The pin holds until a player removes it, or the operator hands out a new pinned address |
+| Manual verification | Any server; the player confirms once | A pin for the address, after the player accepts once | The pin holds until a player removes it, or the operator hands out a new pinned address |
 
 The client verifies in this order:
 
@@ -82,7 +105,7 @@ The pinned form appends the fingerprint to a normal address:
 play.example.com:25565#amp1=<certificate-sha256>
 ```
 
-A client that imports this address saves the fingerprint as a pin for the origin and the plain address in its server list, so removing AutoModpack leaves a working vanilla entry. The pin is exact: the presented leaf certificate must match, and nothing overrides it. A CA chain, a published DNSSEC record, and the player's own first-contact consent all stop at the pin. Rotating the certificate means distributing a new pinned join address, or the player removes the pin by hand and re-verifies like a first connection.
+Players add the pinned address as the server address in Minecraft, `#amp1=` part included. A client that imports this address saves the fingerprint as a pin for the origin and the plain address in its server list, so removing AutoModpack leaves a working vanilla entry. The pin is exact: the presented leaf certificate must match, and nothing overrides it. A CA chain, a published DNSSEC record, and the player's own first-contact consent all stop at the pin. Rotating the certificate means distributing a new pinned join address, or the player removes the pin by hand and re-verifies like a first connection.
 
 The pin protects only as far as the channel you distribute it through. Metadata from other mods can coexist as further `#key=value` segments in any order; AutoModpack removes only its own `amp1` segment:
 
@@ -93,7 +116,7 @@ play.example.com:25565#othermod1=<value>#amp1=<fingerprint>
 
 ### Manual verification
 
-When no CA chain covers the typed hostname and no record applies, the first connection shows the fingerprint the endpoint presents. Players compare it against a fingerprint you share out of band - the screen has a field to paste it into - then accept. Skipping is possible and is marked as the risky choice; an accepted or skipped decision is saved as a pin for that `host:port` and enforced from then on.
+When no CA chain covers the typed hostname and no record applies, the first connection shows the fingerprint the endpoint presents. The screen has a field to paste a fingerprint into: share yours out of band, the player pastes it there, and comparing the two by eye is the alternative. The player then accepts, or skips, which is marked as the risky choice. An accepted or skipped decision is saved as a pin for that `host:port` and enforced from then on.
 
 Print the current fingerprint with:
 
@@ -105,7 +128,7 @@ A fingerprint is public verification data, closer to a serial number than to a p
 
 ### Why this matters
 
-Without this type verification users are vulnerable to Man-In-The-Middle attacks, meaning a user might think they are connecting and downloading modpack from server X while a malicious actor is sitting between the user and the server X, quietly passing their own maliciously crafted modpack instead of original. This however does not protect users from a genuine server providing a maliciously crafted modpack or the server itself getting stolen from original authors.
+Without this type of verification users are vulnerable to Man-In-The-Middle attacks, meaning a user might think they are connecting and downloading modpack from server X while a malicious actor is sitting between the user and the server X, quietly passing their own maliciously crafted modpack instead of original. This however does not protect users from a genuine server providing a maliciously crafted modpack or the server itself getting stolen from original authors.
 
 ## Certificate mismatch
 
@@ -123,4 +146,26 @@ When a player connects and `validate-secrets` is on, the server issues a random 
 
 A static host of an exported contract tree cannot check any header, so it is public by nature: exporting refuses while `validate-secrets` is on.
 
-A standalone host process (running outside a Minecraft server) has no login to issue secrets, so a fresh standalone configuration defaults `validate-secrets` to `false` and holds a provisioning secret in `automodpack/credentials/provisioning-secret` for bootstrap installs instead. Both settings are described in the [server config](configuration/server-config#network-and-hosting); the provisioning secret is described with the [bootstrap files](how-it-works/files-on-disk#bootstrap).
+A standalone host process (running outside a Minecraft server) has no login to issue secrets, so a fresh standalone configuration defaults `validate-secrets` to `false` and holds a provisioning secret in `automodpack/credentials/provisioning-secret` for bootstrap installs instead. Both settings are described in the [server config](configuration/server-config#network-and-hosting), and the security side of bootstrap files is in [bootstrap files](#bootstrap-files).
+
+## Bootstrap files
+
+A bootstrap file is one-file onboarding: the player drops a single file into the instance's `automodpack/` folder and starts the game once. The import sets up trust, the server address, and the pack in one step. That convenience is why this section is on this page: the file makes two security decisions on the player's behalf, and it is worth knowing exactly which.
+
+Two commands write two different files, and they do not carry the same weight:
+
+- `host bootstrap pin <origin> [server-name]` writes a pin export: the origin and the certificate fingerprint. This is public verification data, the same payload as a [pinned join address](#pinned-join-addresses). Hand it out anywhere you would hand out the server address itself.
+- `host bootstrap install <origin> [endpoint] [connection-mode] [server-name]` writes an install export: everything above, plus the published pack id and a provisioning secret. The provisioning secret is a bearer credential for downloads, so treat the file like a password. Send it only over a channel you trust, and expect anyone holding it to download the pack without passing the Minecraft login.
+
+What the import changes on the client:
+
+- Trust. The import saves the file's fingerprint as a pin for the origin, the same kind of pin a player accepts by hand on the verification screen. The verification ladder above then applies with no exception: the pin is law on every later connection, it shows on the same Certificate pin screen, and it is removed the same way. The import does not skip verification. It performs it in advance.
+- Authorization. An install export also stores the provisioning secret, so the client's download requests pass the gate in [download authorization](#download-authorization) without a login-issued secret.
+
+The honest limits:
+
+- The file is only as trustworthy as the channel it traveled over. A bootstrap file from an attacker points the client at the attacker's server, exactly like a pinned address from an attacker would. Share it the way you would share a password.
+- A leaked install export keeps working until you rotate the secret. Delete `automodpack/credentials/provisioning-secret` on the server to revoke it for running downloads within seconds, and a new secret is generated on the next start. Install exports made before the rotation stop working.
+- The drop-in location is inside `automodpack/`, a path no pack can ever write to. A pack therefore cannot plant a bootstrap file on a player.
+
+The command syntax is in [commands](commands#hosting), the mechanics of the export and the import are in [bootstrap files](how-it-works/files-on-disk#bootstrap), and the complete onboarding walk-through is the [one-file recipe](recipes#onboard-a-player-with-one-file).

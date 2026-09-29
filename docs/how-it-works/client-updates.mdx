@@ -4,13 +4,13 @@ This page follows one pack through a client: when updates apply, where the bytes
 
 ## When updates apply
 
-With `update-selected-modpack-on-launch` on (the default), every launch fetches the server's current generation and applies it before the game loads anything. Projection-only work, such as config and resource pack changes, needs no restart at all: the game reads those files from the managed projection.
+With `update-selected-modpack-on-launch` on (the default), every launch fetches the server's current generation and applies it before the game loads anything. Changes that only touch the managed pack folder need no restart: configs land on disk, and mods load from the managed projection.
 
-When the plan touches files in the standard `mods` folder (99% mods load from projection so need no restart) or the loader version, AutoModpack stops and asks for a relaunch, so the loader reads the real file tree.
+A restart is forced when the loader type, the loader version, or the game version changes, and when files have to land in the standard `mods` folder: first-install cleanups, editable mods, nested-jar fixes, and the removal of extra mods that do not belong to the pack all write there. At launch, picking optional groups never forces a restart; in-game, a group change that adds or removes mods requires one.
 
-Joining a server while in-game goes through a review screen instead: it shows what the update would change, asks for consent when your own extra mods would be touched, and applies group selections. Mod jars that could not be matched on Modrinth or CurseForge are listed as unverified and need an explicit risk acknowledgement before the download starts. A first install always waits for this review. A pack installed through a [trusted bootstrap](files-on-disk#bootstrap) is the exception and applies on that launch.
+Joining a server while in-game goes through a review screen instead: it shows what the update would change, asks for consent when your own extra mods would be touched, and applies group selections. Mod jars that could not be matched on Modrinth or CurseForge are listed as unverified and need an explicit risk acknowledgement before the download starts. A first install always waits for this review. A pack installed through a [trusted bootstrap](files-on-disk#bootstrap) is the exception and applies on that launch. In-game, a change that touches mods requires a restart, and a change to other files only offers one; you can return to the game without it.
 
-When an installed pack starts being served from a new address, the client shows an origin change prompt before trusting the address, and remembers the approved origins per pack. Declining an update joins on the locally kept pack and stays detached until you sync again from the pack manager.
+When an installed pack starts being served from a new address, the client shows an origin change prompt before trusting the address, and remembers the approved origins per pack. A player who declines the prompt cancels the join: the game returns to the multiplayer screen, the local pack stays as it is, and the prompt shows again on the next join.
 
 With `update-selected-modpack-on-launch` off, launch loads the current state without contacting the server, and updates happen only when you join.
 
@@ -24,7 +24,7 @@ Everything else downloads from the modpack host over its TLS connection.
 
 `editable` marks pack files players may change, such as `options.txt` and `config/**` by default. Every editable file keeps its copy in the game directory, no matter the type: an editable mod jar materializes in the standard `mods` folder and loads from there. The client records the player's copy in an overlay that shadows the pack version, so ordinary edits survive every update.
 
-Removing an editable file is a statement, not an accident: the file stays away through updates and through edits to other files. When the server replaces that file's content, the removal is spent and the new version comes back.
+Removing an editable file is a statement, not an accident: the file stays away through updates and through edits to other files. The removal is spent when the server replaces that file's content or removes the path from the `editable` list; either one brings the pack's version back exactly once.
 
 The comparison that matters is between the server's new generation and the generation currently installed. When the server changes an editable file:
 
@@ -38,7 +38,7 @@ A file that is *not* editable but no longer matches the pack is treated the same
 
 ## Deletions are measured
 
-When a file leaves the pack, clients remove their copy only when the generation's [ownership ledger](generations#what-clients-keep) proves the file is AutoModpack's: the path is a managed location, and the local hash and size match a historical entry. Anything the player created or changed survives, and so does everything under `saves/`, `screenshots/`, `logs/`, and `automodpack/`. Before a deletion, the file's bytes are kept in the client's own store.
+When a file leaves the pack, clients remove their copy only when the generation's [ownership ledger](generations#what-clients-keep) proves the file is AutoModpack's: the path is a managed location, and the local hash and size match a historical entry. Anything the player created or changed survives, and so does everything under `saves/`, `screenshots/`, `logs/`, and `automodpack/`. Before a deletion, the file's bytes are kept in the client's own store. The same reserved roots bound the write side: a pack can never write into `saves/`, `screenshots/`, `logs/`, or `automodpack/` either, and a manifest that tries fails validation at publish.
 
 ## AutoModpack's own updates
 

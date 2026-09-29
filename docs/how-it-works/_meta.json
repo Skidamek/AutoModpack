@@ -1,4 +1,12 @@
 {
+  "concepts.mdx": {
+    "name": "The big picture",
+    "icon": null
+  },
+  "pack-pipeline.mdx": {
+    "name": "How a pack is built",
+    "icon": null
+  },
   "generations.mdx": {
     "name": "Generations and publishing",
     "icon": null
@@ -11,8 +19,16 @@
     "name": "Client updates and edits",
     "icon": null
   },
+  "loader-behavior.mdx": {
+    "name": "Loader behavior",
+    "icon": null
+  },
   "client-storage.mdx": {
     "name": "Client storage",
+    "icon": null
+  },
+  "safety-nets.mdx": {
+    "name": "Safety nets",
     "icon": null
   },
   "files-on-disk.mdx": {

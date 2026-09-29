@@ -13,7 +13,7 @@ Apply changes with `/automodpack config reload` or a restart. When the reload ch
 | Setting | Default | Description |
 |---|---|---|
 | `modpack-host` | `true` | Runs AutoModpack's built-in connection handling. When false, clients still receive connection information, which can point at a proxy or an externally handled endpoint. See [hosting](../how-it-works/hosting). |
-| `generate-modpack-on-start` | `true` | Publishes a new generation on every start when the content changed. |
+| `generate-modpack-on-start` | `true` | Publishes a new generation on every start when the content changed. When false, the server serves the last published generation instead of publishing. |
 | `auto-exclude-server-side-mods` | `true` | Leaves out mods whose metadata declares them server-side only. |
 | `require-modpack` | `true` | When true, players without AutoModpack are kicked and modded clients sync the pack before joining. When false, the pack is optional: players without the mod join vanilla, and modded clients are asked whether to sync before they join. |
 | `accepted-loaders` | current loader | Extra loaders allowed to join. The set is seeded with this server's loader on first load; this server's loader is always accepted even if you remove it. Unknown names are logged and ignored. Most mods are loader-specific, so change it with care. |
@@ -79,7 +79,7 @@ When a client cannot detect a platform at all, groups without `compatible-platfo
 | `bind-port` | `-1` | Controls built-in listeners according to `connection-mode`; see the [mode matrix](../how-it-works/hosting#connection-modes-and-ports). Values unused by the selected mode are preserved. |
 | `advertised-endpoint-host` | `""` | Public hostname or IP sent to clients as the download endpoint. Empty uses the hostname the player connected to. |
 | `advertised-endpoint-port` | `-1` | Public TCP port sent to clients. `-1` uses the connected port. |
-| `bandwidth-limit` | `0` | Upload speed limit in MiB/s per client. `0` means unlimited. |
+| `bandwidth-limit` | `0` | Upload speed limit in Mbps (megabits per second). The cap is one limit shared by all clients combined, not per client. `0` means unlimited; a negative value warns and counts as unlimited. |
 | `disable-internal-tls` | `false` | Skips AutoModpack's own TLS termination. Clients always start TLS, so an external terminator must forward decrypted traffic. Expert setting; see [hosting](../how-it-works/hosting#tls). |
 | `accept-proxy-protocol` | `false` | Honors HAProxy PROXY protocol headers on dedicated listeners. Enable only behind a trusted proxy: a claimed source address feeds IP bans and audit logs, and a forged one lets a banned player past the ban. |
 | `validate-secrets` | `true` | Requires a per-player secret, issued through the Minecraft login, for pack downloads. See [security](../security#download-authorization). A standalone host process has no login to provision secrets, so a fresh standalone config defaults this to `false`. |
@@ -96,6 +96,6 @@ With `require-modpack` off, players who join without AutoModpack stay in the gam
 | Setting | Default | Description |
 |---|---|---|
 | `nag-un-modded-clients` | `true` | Shows a chat message to players without the mod. |
-| `nag-message` | `Install the AutoModpack mod to get this server's modpack!` | The message text. |
+| `nag-message` | `Install the AutoModpack mod to get this server's modpack!` | The message text. With `require-modpack` on, players without the mod are disconnected with this message as the reason. |
 | `nag-clickable-message` | `Click here to get the AutoModpack!` | The clickable link text. |
 | `nag-clickable-link` | AutoModpack on Modrinth | The URL opened on click. |

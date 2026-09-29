@@ -1,0 +1,72 @@
+# Troubleshooting
+
+This page explains the messages AutoModpack shows when a join or an update fails. Each entry says what the message means and which side fixes it. If a message is not on this page, the log usually holds the details.
+
+## Join disconnect reasons
+
+When a join cannot continue, the server ends the login and the game shows the reason on the disconnect screen. A few reasons carry a version or a loader name, so the table quotes the part of each message that stays the same.
+
+| Message | What it means | Who fixes it |
+| --- | --- | --- |
+| `[AutoModpack] Install/Update modpack to join` | The client just installed or updated the modpack, and the change needs a game restart. | Player: close the game, start it again, and join again. |
+| `Install the AutoModpack mod to get this server's modpack!` | The player joined without the AutoModpack mod, and this server requires it. This text is the server's `nag-message` setting, so it can differ. | Player: install the mod. Admin: check `require-modpack` in the [server config](configuration/server-config). |
+| `This server does not accept your mod loader. Join with` | The player joined with a loader the server does not accept, for example Forge on a Fabric server. The message names the loader to use. | Player: join with that loader. |
+| `AutoModpack version mismatch. This server runs` | The player's AutoModpack version differs from the server's. The message names the version to install and the loader to install it for. | Player: install that AutoModpack version from [Modrinth](https://modrinth.com/mod/automodpack). |
+| `AutoModpack is generating modpack. Please wait a moment and try again.` | The server is publishing a [generation](glossary) at this moment, so there is nothing to serve yet. | Player: join again in a moment. |
+| `You are not authorized to join this server!` | The login did not pass the server's identity checks, such as the whitelist or a ban. | Admin: check the whitelist and the bans. Players ask the admin. |
+| `[AutoModpack] Your client stopped this connection: the server's certificate does not match the certificate saved for this server.` | The server presented a certificate that does not match the pin saved on the client. | Both: see [certificate mismatch](security#certificate-mismatch). |
+| `[AutoModpack] Certificate verification was dismissed. Reconnect and verify the certificate to join.` | The player closed the certificate verification screen without deciding. | Player: reconnect and accept or skip. |
+| `[AutoModpack] Join cancelled.` | The player backed out during the optional modpack offer. | Player: join again when ready. |
+| `[AutoModpack] Host server error. Please contact server administrator to check the server logs!` | The client could not use the pack host the server advertised, or answered with something the server did not expect. | Admin: read the server log. Start at [reading the join logs](how-it-works/hosting#reading-the-join-logs). |
+| `[AutoModpack] Your modpack verification response was unreadable.` | The server failed to read the client's answer. The connection dropped or the client is broken. | Player: reconnect. Admin: check the log if it repeats. |
+| `[AutoModpack] The server failed to process your handshake.` | The server hit an error while checking the login. | Admin: check the server log. |
+| `AutoModpack modpack hosting is unavailable on the server.` | The server advertises the default `HOLEPUNCH` mode, but its modpack host never came up. | Admin: check the server log and the [hosting setup](how-it-works/hosting). |
+
+## The error screen
+
+When AutoModpack fails and cannot continue, it shows its own screen with the title `Something went wrong!`. The screen names a category and shows one sentence about the failure. The categories and their usual meaning:
+
+| Category | What it usually means | What to do |
+| --- | --- | --- |
+| Connection | AutoModpack did not connect to the modpack host. | Check that the server is up and that the address is right. |
+| Server content | AutoModpack did not read the server modpack. | Contact the server operator. |
+| Invalid local data | AutoModpack found invalid local modpack data. | Try `Retry` first. If it repeats, report it with the log. |
+| Update | AutoModpack did not apply the modpack update. | Try `Retry`. If it repeats, report it with the log. |
+| Local storage | AutoModpack did not update its local storage. | Try `Retry`. If it repeats, report it with the log. |
+| Security | A certificate pin input was invalid, for example a mistyped pinned address. | Paste the complete address the operator gave you. |
+| Unexpected error | AutoModpack ran into a problem it did not expect. | Report it with the log. |
+
+The screen has up to four buttons:
+
+- `Retry` starts the failed step again. It appears only when the step can be retried.
+- `Open logs` opens the log folder, so the log is at hand.
+- `Copy details` copies the diagnostic text to the clipboard, and a green `Copied` note appears at the top of the screen. Paste the details into a bug report.
+- `Back` closes the screen.
+
+The screen also says that the full diagnostic details are in the log file.
+
+## Restart reasons
+
+When an update closes the game, the restart screen lists its reasons under `Restart needed because:`. The lines are plain sentences. The less obvious ones:
+
+| Screen line | What happened |
+| --- | --- |
+| `The launcher Minecraft version changed` | The pack runs a different Minecraft version than the instance. |
+| `The launcher modloader changed` | The pack runs a different mod loader, for example Fabric instead of Forge. |
+| `The mod loader version changed` | The mod loader version changed. |
+| `Mods were copied into the standard mods directory` | The update placed mods in the standard `mods` folder, where only a restart loads them. |
+| `Nested mods were unpacked into the standard mods directory` | A mod that ships another mod was unpacked, and the copies need a restart to load. |
+| `Duplicate mods were removed` | The same mod existed twice, and the extra copy was removed. |
+| `Mods that do not belong to the modpack were removed from the standard mods directory` | Mods outside the pack were removed so they cannot conflict with it. |
+| `Your local mods were kept on the instance timeline` | The player approved keeping own mods. They moved to the instance timeline, out of the game directory. |
+| `Your group selection changed` | The optional parts of the pack the player picked changed which mods load. |
+| `The selected modpack changed` | The player switched to a different pack on the same server. |
+| `Set this instance to Minecraft %s (%s) in your launcher before the next start` | The pack needs a different game version or loader, and the launcher manages them. The player sets both in the launcher. The screen fills in the Minecraft version and the loader with its version. |
+
+## The server side
+
+The same failures leave their mark in the server log. When a join fails, the log line names the player and the reason. The page [reading the join logs](how-it-works/hosting#reading-the-join-logs) lists the lines to look for. To watch downloads live, run `host activity` on the server, described in [commands](commands#hosting).
+
+## Where are the logs
+
+The client and the server both log to the standard Minecraft log, `latest.log`, in the `logs` folder. When the detached update helper runs, it writes its own report to `automodpack/helper/last-helper-run.log`. The [FAQ](faq#where-are-the-logs) covers the log locations in short.

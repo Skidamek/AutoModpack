@@ -1,0 +1,76 @@
+# Recipes
+
+Each recipe solves one setup from start to finish. The mechanisms behind the steps are explained on the linked pages. Commands run in the server console or in-game as an operator, as described in [commands](commands).
+
+## Adopt an existing server pack
+
+You already distribute a modpack as a zip, or a hosting panel handed you a pack folder, and you want AutoModpack to serve it.
+
+You need AutoModpack installed on the server, started once, so the `automodpack` folder exists.
+
+1. Unpack the pack into `automodpack/host-modpack/main/`. Keep its layout: `mods/`, `config/`, `resourcepacks/`, and the rest.
+2. Leave server-only mods in the server's own `mods` folder. The default `from-server` rules pull that folder into the pack, and `auto-exclude-server-side-mods` drops mods that declare themselves server-side. Add an `exclude` entry for anything else that must never reach clients.
+3. Run `/automodpack generate preview` and read the diff.
+4. Run `/automodpack generate`.
+5. Connect with a clean client that has only AutoModpack installed. Jars that matched on neither Modrinth nor CurseForge show up as unverified, and the client asks for an explicit risk confirmation before downloading them.
+6. Invite players when the clean client works.
+
+There is no importer. The steps above are the whole adoption path. The file rules are explained in [building the modpack](pack-content#which-files-reach-clients), the pipeline in [how a pack is built](how-it-works/pack-pipeline).
+
+## Publish from a script
+
+A script or a panel copies new files into the pack sources and publishes them, with no human reading the output. The risk is racing a manual change made at the same time.
+
+1. Copy the new files into `automodpack/host-modpack/main/` or your other group directories.
+2. Run `generate preview`. It shows what a publish would change and publishes nothing.
+3. Run `generate if-content <content-token>`. The command publishes only while the pack still matches the token you give it. When someone changed the pack in between, the command reports the mismatch and publishes nothing.
+4. The token is the content token of the generation you last saw, a 40 character SHA-1. Every publish prints it, and `generate history` lists it per entry. In-game, the value is click to copy. The term is defined in the [glossary](glossary).
+5. Optional: set `export-http-directory` in the [server config](configuration/server-config#network-and-hosting) to write a static copy of the pack after every publish. The automatic export runs only when `validate-secrets` is off, since a public mirror cannot enforce download secrets; with it on, the refusal is logged after each publish.
+
+[Generations](how-it-works/generations) explains publishing and tokens, and [HTTP contract export](how-it-works/hosting#http-contract-export) explains the static copy.
+
+## Ship an update safely
+
+The server is live, players are on, and you want a way back if the update turns out bad.
+
+1. Run `generate preview` and read the diff.
+2. Publish with patch notes, `generate notes <text...>`. Off-hours publishes give players a quiet restart.
+3. Connect with your own test client. It picks up the update on its next connection, like any player.
+4. When the update is bad, run `generate revert <seq> confirm`. `generate history` lists the sequence numbers. The revert publishes the old state as a new generation, so players roll back on their next connection.
+
+One warning: `generate storage collect confirm` deletes the object bytes that older generations need. After it, those generations are listed in the journal but can no longer be restored. Do not run it while you still want a way back. Both commands are in [commands](commands#publishing), the model behind them in [generations](how-it-works/generations).
+
+## Onboard a player with one file
+
+A player who cannot manage mod installs gets a single file to drop into their instance.
+
+You need the built-in TLS on: both bootstrap commands refuse to run when `disable-internal-tls` is on. For a restricted pack, also keep `validate-secrets` on and use the whitelist, as in [the FAQ](faq#how-do-i-restrict-access-to-my-modpack).
+
+1. Run `host bootstrap install <origin> [server-name]`. The server writes `automodpack/automodpack-bootstrap.exported.json`. The optional server name becomes an entry in the player's vanilla server list.
+2. Send that file to the player through a channel you trust. It carries a provisioning secret, so treat it like a credential. Anyone holding one can provision themselves onto your pack. Deleting `automodpack/credentials/provisioning-secret` on the server revokes it.
+3. The player installs AutoModpack, drops the file at `automodpack/automodpack-bootstrap.json` inside the instance folder, and starts the game. The import installs the pack and boots straight into it, without the usual first-install review stop.
+
+The import is one-shot: the client deletes the file after reading it. The details are in [bootstrap files](how-it-works/files-on-disk#bootstrap), and the security weight of each export in [bootstrap files](security#bootstrap-files) on the security page.
+
+## Move the server to a new address or host
+
+The Minecraft server moves to a new machine or a new domain, and the pack must follow it.
+
+1. When you advertise an endpoint, update `advertised-endpoint-host` and `advertised-endpoint-port` in the [server config](configuration/server-config#network-and-hosting). Without an advertised endpoint, clients keep using the address they typed, so a moved address means a new address for the pack too.
+2. Verification is anchored to the hostname players type. Hand out new [pinned join addresses](security#pinned-join-addresses) with `host fingerprint share <new-address>`, or publish the [AMP1 record](security#dnssec-amp1) for the new hostname.
+3. Tell players to add the new address. On the first connection to it, the client shows the origin change prompt before it trusts the address, and it remembers approved origins per pack. A player who declines cancels the join and returns to the multiplayer screen; the prompt shows again on the next join.
+
+Why the prompt exists, and what it protects: [how clients verify a server](security#how-clients-verify-a-server). The player side is in [client updates](how-it-works/client-updates#when-updates-apply).
+
+## Put the pack host on a second machine
+
+The Minecraft server box is small, and you want downloads to leave from a different machine.
+
+You need a second machine with Java, and a route between it and the players.
+
+1. Set up the pack on the second machine: run the `automodpack-server` jar there with its own `automodpack/` folder and `server.conf`. It publishes a generation on start and serves it. The shape is described in [standalone host](how-it-works/hosting#standalone-host).
+2. On the game server, set `modpack-host` to `false` so it opens no listeners of its own.
+3. Point `advertised-endpoint-host` and `advertised-endpoint-port` at the second machine. The game server then only advertises the endpoint during the login, and players download from the host machine.
+4. The endpoint must speak the advertised connection mode exactly. A `HTTP` endpoint behind your own front-end is the common shape. See [reverse proxies and external endpoints](how-it-works/hosting#reverse-proxies-and-external-endpoints).
+
+The game server and the pack host do not sync content between themselves. The pack sources on the second machine are the ones that ship, and `generate` there is what publishes.

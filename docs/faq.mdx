@@ -7,6 +7,12 @@ Put them in `automodpack/host-modpack/main/mods/` on the server. They ship to cl
 ### How do I keep a server mod from reaching clients?
 Add it to `exclude` in the [server config](configuration/server-config#rule-lists), for example `mods/the-server-mod.jar`. Client-only mods go the other way, into `automodpack/host-modpack/main/mods/`. The recipes, including a complete server/client split, are in [which files reach clients](pack-content#which-files-reach-clients).
 
+### How do I give players default keybinds and settings?
+Put a prepared `options.txt` into `automodpack/host-modpack/main/` on the server. It ships editable, so players own their changes afterwards. Mods like Default Options cannot do this job, because the pack files are written before mods load. The recipe is in [default settings and keybinds](pack-content#default-settings-and-keybinds).
+
+### How do I ship resource packs, and can they enable automatically?
+Put them in `automodpack/host-modpack/main/resourcepacks/`. AutoModpack does not enable them: players tick them in Options once, or you ship an `options.txt` that lists them, or you ship [Paxi](https://modrinth.com/mod/paxi) alongside the packs. Both recipes are in [resource packs and shader packs](pack-content#resource-packs-and-shader-packs). Shader packs are always picked in the shader mod's own menu.
+
 ### How do I restrict access to my modpack?
 Keep `validate-secrets` on in the [server config](configuration/server-config), set `online-mode=true` in `server.properties`, and use the whitelist or bans as usual. Downloads then require a secret issued through the Minecraft login. See [security](security#download-authorization).
 
@@ -19,14 +25,38 @@ Yes, since AutoModpack version 5, they should work just fine.
 ### Can I use extra mods alongside the pack?
 Yes. Put any mod in the instance's standard `mods` folder as usual.
 
+### Can I play on two AutoModpack servers with one instance?
+Yes. One pack is active at a time. When you join a server whose pack differs, the mod offers the switch through a review screen, and nothing changes until you confirm it there. The other pack stays in the Modpacks list, and each pack keeps its own group selections. Switch back by joining the other server, or by activating the pack in the Modpacks list.
+
+### My friend already has one of the pack's mods. What happens?
+Their own jar stays where it is. AutoModpack resolves the duplicate at update time and may ask them to remove the pack's duplicate copy, so only one version loads. A player who wants to keep their own version of a mod pins it in the [client config](configuration/client-config#pinned-mods).
+
+### Does AutoModpack add keybinds or chat commands for players?
+No. Players get screens and buttons, like the "Modpacks" button on the multiplayer screen. Chat commands exist for server operators only and need permission level 3; see [commands](commands).
+
 ### How do I delete files from the pack?
 Delete them from the server, or add them to `exclude` list. Both are described in [building the modpack](pack-content#deleting-content). Clients remove their copy on the next update when the ownership ledger proves the file was removed.
 
 ### Can the pack delete arbitrary files from my computer?
 The pack can only remove files it can prove it delivered: the path and the exact hash and size must match the pack's ownership ledger, and the file's bytes are kept on your side before deletion. Files you created or changed survive, and `saves/`, `screenshots/`, `logs/`, and `automodpack/` are always off limits. The details are in [client updates](how-it-works/client-updates#deletions-are-measured).
 
+### Will the pack overwrite my players' settings?
+On the very first install, yes, once: the pack's copy of `options.txt` and any packed config replaces the file the player already had, and the player's previous version is kept on the instance timeline. From then on, files on the default `editable` list (`options.txt`, `config/**`) are the player's own: their edits survive every update, and only a real content change on the server replaces them again, exactly once. Non-editable files are kept identical to the pack. The full policy is in [client updates](how-it-works/client-updates#editable-files).
+
+### A file came back after I deleted it. Why?
+If the file is editable, the deletion holds until the server changes that file's content or removes the path from the `editable` list; either one brings the new version back exactly once. If the file is not editable, the pack resets it on the next launch. Both cases are covered in [the editable policy](pack-content#the-editable-policy).
+
+### My edit to a pack file vanished. Why?
+The file was not on the `editable` list, so the pack reset it to the server's bytes. Your version is kept on the instance timeline and can be restored from there. To keep edits, add the path to `editable` in the [server config](configuration/server-config#rule-lists).
+
+### Does it work on a hosting provider?
+Yes, when the panel lets you add a jar to the server's `mods` folder and open a console. With the default settings the pack republishes on every server start, so restarting the server through the panel publishes changes without a console command. The default `HOLEPUNCH` mode needs no extra port; see [hosting](how-it-works/hosting#connection-modes-and-ports).
+
 ### Do I have to open a port on my router?
 Usually not. The default `HOLEPUNCH` mode carries the modpack connection through the Minecraft login, so it needs nothing beyond the already open Minecraft port. The modes and their port behavior are in [hosting](how-it-works/hosting#connection-modes-and-ports).
+
+### Can players still use the pack when the server is offline?
+At game launch, an unreachable pack server is normal: the local pack keeps working, and the game starts with it. A pack host that is down while the Minecraft server is up fails the join handshake with a clear disconnect message.
 
 ### What happens when the server updates AutoModpack itself?
 Clients follow the version the server runs: they update or downgrade through Modrinth to match it. See [AutoModpack's own updates](how-it-works/client-updates#automodpacks-own-updates).
@@ -40,11 +70,29 @@ Optional parts of a modpack, like a shader bundle or a platform-specific mod set
 ### Is my launcher supported?
 All standard launchers should just work, for wider compatibility check the [launcher list](compatibility/launchers).
 
+### What happens to my pack if I move Minecraft to another computer?
+The downloaded bytes and the saved certificate pins live in a per-user data root outside the instance folder, so they stay behind on the old computer. On the new computer the instance downloads the pack again on the first connection, and verification treats the server like a first contact. An instance whose store lives inside its own folder carries its bytes and pins with it, so nothing changes. The store locations are in [files on disk](how-it-works/files-on-disk).
+
 ### Does AutoModpack update my mods to their latest versions?
 AutoModpack keeps clients identical to the server, and updating the server's mods stays your job.
+
+### The join fails, or the verification screen rejects my fingerprint
+Check the pasted fingerprint for typos, make sure the address matches what the admin shared, and ask the admin whether the certificate changed. Then check `latest.log`; see [where the logs are](#where-are-the-logs).
+
+### My antivirus flagged a modpack file during an update.
+Windows Defender cloud scans can pause file writes for tens of seconds. AutoModpack retries and finishes the update. When it does pause, close programs holding the modpack folder, including File Explorer windows, and start the game again.
+
+### Where are the logs?
+In the standard Minecraft log, `latest.log`. When the detached update helper runs, its report is in `automodpack/helper/last-helper-run.log`.
 
 ### I found a bug. What should I do?
 Report it on the [issue tracker](https://github.com/Skidamek/AutoModpack/issues). Include the Minecraft version, loader, and the log from the side that misbehaved.
 
 ### I found a security vulnerability. What should I do?
 Report it privately to the author on [Discord](https://discordapp.com/users/464522287618457631).
+
+### Does AutoModpack collect any data about me?
+No. The mod has no analytics and no telemetry. It contacts only the endpoints listed on the [security](security) page: file hash lookups, pack downloads, certificate record checks, and its own updates.
+
+### How do I remove AutoModpack?
+On the server, delete the AutoModpack jar and the `automodpack` folder. Keep a backup first. On a client, open the Modpacks screen, remove the pack there (this deletes the pack's files), then delete the mod jar.

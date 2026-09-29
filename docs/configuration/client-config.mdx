@@ -4,6 +4,10 @@
 
 The file uses a small subset of HOCON: comments (`#`), `key: value` options, inline lists, and braced nesting.
 
+These seven options are the whole file. Two of them can also be changed in the game: the music button on the download screen writes `play-music`, and the pinned mods screen writes `pinned-mod-ids`.
+
+A v4 config file is converted automatically: `automodpack-client.json` and `client-config.json` are read once, written as `client.conf`, and renamed to end in `.backup`. See [upgrading from v4](../migrating-from-v4).
+
 ## Editing the file
 
 | Setting | Default | Description |
@@ -11,7 +15,7 @@ The file uses a small subset of HOCON: comments (`#`), `key: value` options, inl
 | `update-selected-modpack-on-launch` | `true` | Fetches and applies the selected pack during launch, before the game loads it. When false, launch loads the current state and contacts the server only when you join. See [client updates](../how-it-works/client-updates). |
 | `self-updater` | `false` | Checks Modrinth on its own for AutoModpack updates. Turning this off does not affect modpack installs. |
 | `sync-automodpack-version` | `true` | Matches the AutoModpack version the server runs, updating or downgrading from Modrinth as needed. |
-| `sync-versions` | `true` | Lets AutoModpack switch the launcher instance to the versions the server publishes (loader, loader version, and Minecraft version). Applies on Prism, MultiMC forks, and Pandora; see [launcher compatibility](../compatibility/launchers#version-sync-and-switching). |
+| `sync-versions` | `true` | Lets AutoModpack switch the launcher instance to the versions the server publishes (loader, loader version, and Minecraft version). Applies on Prism, MultiMC forks, and Pandora; on other launchers the mod tells you the version to switch to instead. See [launcher compatibility](../compatibility/launchers#version-sync-and-switching). |
 | `play-music` | `true` | Plays music while a download runs in-game. |
 | `show-modpack-settings-button` | `true` | Shows the "Modpacks" button on the multiplayer screen. It opens the installed-pack list, where players manage the pack and pick optional [groups](server-config#groups). |
 | `pinned-mod-ids` | `[]` | Mod ids this instance always loads from its own `mods` folder. See below. |
@@ -20,4 +24,4 @@ The file uses a small subset of HOCON: comments (`#`), `key: value` options, inl
 
 A player who wants to run their own version of a mod adds its id to `pinned-mod-ids`. AutoModpack still syncs the pack's copy into the managed storage but does not load it, so the instance's own jar wins.
 
-Matching covers `modId` and `provides`. A pin with no matching jar does nothing. The pack may genuinely need the version it ships, so a pin can break a pack; that is between the player and the pack. Restart to apply changes.
+Ids are compared trimmed and lowercased, and duplicates collapse. The ids `automodpack` and `automodpack_mod` are rejected. Matching covers `modId` and `provides`. A pin with no matching jar does nothing. The pack may genuinely need the version it ships, so a pin can break a pack; that is between the player and the pack. Restart to apply changes.

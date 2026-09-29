@@ -1,0 +1,44 @@
+# How a pack is built
+
+`/automodpack generate` turns the pack sources on the server into a published generation. This page follows one run from start to finish: the inputs it reads, the work it does, and what a client receives. The journal that stores published generations, with rollback and patch notes, is described in [generations](generations).
+
+## The inputs
+
+The command reads three things, all declared in `server.conf`:
+
+- The group directories. Each group owns the folder `automodpack/host-modpack/<id>/`, and the folder ships in full unless `exclude` keeps something out. Content the server itself has no use for goes here, for example client-side mods.
+- The `from-server` rules. A group can pull matching files from the server root. The factory rules pull the server's `mods/*.jar`, `kubejs/**`, and `emotes/*`, which is how a plain server turns its own mods folder into a pack.
+- The per-group `exclude` and `editable` lists. `exclude` keeps files out of the pack, and `editable` marks files players may change. Neither list adds files.
+
+The rule language and the factory values are documented in [building the modpack](../pack-content) and in the [group settings](../configuration/server-config#groups).
+
+With `generate-modpack-on-start` on, the default, the server runs this pipeline on every start and publishes only when the content changed.
+
+## The work
+
+The steps run in a fixed order:
+
+1. The command compiles every group's rules and walks the sources. Each group directory is walked in full, and the server root is walked where a group's `from-server` rules match. When a path exists in both sources, the group directory copy wins.
+2. Every scanned file is hashed. During a publish, new or changed bytes are staged into the object store; a preview stages nothing, and bytes already trusted in the store are reused instead of staged again.
+3. Mods whose metadata declares them server-side are dropped when `auto-exclude-server-side-mods` is on, which is the default.
+4. Paths that can never ship are always excluded and reported in the output: anything under `automodpack/`, Windows-reserved device names, and reserved file names such as `automodpack-content.json`. The AutoModpack jar itself is skipped silently.
+5. Validation runs next. The command refuses a pack with duplicate group ids, an empty category, a `requires` cycle, a group that requires or conflicts with itself, one path shipped with different content by two groups that players could select together, or a file whose recorded size, type, or hash disagrees with the file. Two groups that `breaks-with` each other are valid on purpose; that is how variants exclude each other.
+
+A failure is loud. The command prints the reason and stops, and nothing is published. The server keeps serving the last good generation.
+
+`generate preview` runs the same work without publishing, so you can see the diff a publish would produce.
+
+## The output
+
+The command computes a content token for the scanned pack: a SHA-1 over every path, hash, and size in it. When the token and the policy document both equal the current generation's, nothing changed. The command reports `NO_CHANGES` and touches nothing. A policy-only edit, such as a new pack name or a changed `editable` flag, publishes as a new generation with an empty change list.
+
+Otherwise the run appends a new generation to the journal. A generation consists of:
+
+- A head document. It records the content token, an ownership ledger covering every managed path, and the full policy: pack name, version metadata, every category, every group, and every file with its hash, size, type, and editable flag.
+- The file bytes in the content-addressed store. Identical bytes are stored once, no matter how many generations reference them, which keeps updates, storage, and backups small.
+
+Hosting then swaps onto the new generation without a restart, and clients keep receiving the previous generation until the swap happens, so publishing with players online is safe. Patch notes attach to the generation when they were provided with the publish.
+
+## What a client receives
+
+A connecting client fetches the head document and the journal, resolves its group selection, and downloads only the files it lacks locally. Mods matched on Modrinth or CurseForge come from those platforms: Modrinth matches by SHA-1 and CurseForge by a content fingerprint. Everything else downloads from the server.

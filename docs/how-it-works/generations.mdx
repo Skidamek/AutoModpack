@@ -1,6 +1,6 @@
 # Generations and publishing
 
-A generation is one published state of the modpack. It consists of a manifest describing every file, the content token that identifies the state, and the file bytes in the server's object store. Publishing is how changes reach players.
+A generation is one published state of the modpack. It consists of a manifest describing every file, the content token that identifies the state, and the file bytes in the server's object store. Publishing is how changes reach players. [How a pack is built](pack-pipeline) follows one publish end to end, from the pack sources to the bytes a client downloads.
 
 ## Publishing
 
@@ -20,6 +20,10 @@ The server keeps every published generation in an append-only journal at `automo
 
 `generate storage collect confirm` is the only deletion. It removes object bytes that the current generation does not reference. Older generations remain listed in the journal but their bytes are gone, and they can no longer be restored; the command prints exactly what it deleted.
 
+## Growth
+
+The journal is append-only and grows forever by design. The ownership ledger inside each head document is cumulative, so the head document grows with every distinct content state the pack has ever had. Every join downloads the head document and the journal, so both travel to every client. `generate storage collect confirm` frees object bytes, not journal entries: the list of generations keeps its length either way.
+
 ## What clients keep
 
-Each generation's manifest includes a cumulative ownership ledger: every historical hash and size each managed path ever had. Clients use it to prove that a local file belongs to the pack before deleting it, which is why [client deletions are safe](client-updates#deletions-are-measured) even after content moved around across many updates.
+Each generation's head document includes a cumulative ownership ledger: every historical hash and size each managed path ever had. Clients use it to prove that a local file belongs to the pack before deleting it, which is why [client deletions are safe](client-updates#deletions-are-measured) even after content moved around across many updates.

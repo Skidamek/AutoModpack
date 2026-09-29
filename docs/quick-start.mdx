@@ -1,39 +1,53 @@
 # Quick start
 
-AutoModpack keeps every player's game in sync with the server's modpack. Install the mod on both sides. After that, clients download the pack on their first connection and follow every change you publish.
+AutoModpack keeps every player's game in sync with the server's modpack. The same jar runs on both sides: the server publishes a pack, and clients download it on their first connection and follow every change you publish.
 
-## 1. Install
+## Set up the server
 
-1. Download AutoModpack from [Modrinth](https://modrinth.com/mod/automodpack) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack). The release ships one jar that works on every supported Minecraft version and loader.
-2. Put the jar in the `mods` folder of the server, and in the `mods` folder of every client.
-3. Back up anything valuable in the client instance first to make sure AutoModpack doesn't mess something up.
-4. Start the server once. AutoModpack publishes the first generation of the pack using default config.
+1. Back up the server folder first. A backup turns any mistake into a rollback.
+2. Download the newest release of AutoModpack from [Modrinth](https://modrinth.com/mod/automodpack) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack). The release ships one jar that works on every supported Minecraft version and loader.
+3. Put the jar in the server's `mods` folder and start the server once. AutoModpack creates an `automodpack` folder in the server root, writes the [server config](configuration/server-config) `server.conf`, and publishes the first [generation](glossary) of the pack. The pack source folder `automodpack/host-modpack/main/` comes with `resourcepacks/` and `shaderpacks/` folders ready to fill. If you run the server on a hosting provider, see [the FAQ](faq#does-it-work-on-a-hosting-provider).
+4. Everything under `automodpack/host-modpack/main/` ships with the pack, even files the server itself has no use for. That is where client-only mods and configs go:
 
-By default the pack contains every jar in the server's `mods` folder. The files `options.txt` and `config/**` are marked editable, so players can change them locally. To keep a server mod off clients, or to add client-only mods, see [which files reach clients](pack-content#which-files-reach-clients). [Building the modpack](pack-content) explains how all of that is decided.
+   ```
+   automodpack/host-modpack/main/mods/sodium-extra.jar
+   ```
 
-Before inviting players, connect once with a client that has only AutoModpack installed. If that works, the setup is proven and any future problem points at pack content.
+   You can also give players your settings and keybinds by placing a prepared `options.txt` in the same folder. A player's game keeps its own `mods` folder for their extra mods; the pack's files live in a managed `automodpack` folder and load from there. [Building the modpack](pack-content) explains how all of this is decided.
+5. Run `/automodpack generate` after changing anything. Commands run in the server console, or in in-game chat as an operator. The server also runs the same generation automatically on every start by default, so a restart through a hosting panel publishes changes too. Players receive the new version on their next connection.
+6. Before inviting anyone, connect once with a clean client that has only AutoModpack installed. If that works, the setup is proven, and any future problem points at pack content.
+7. Tell players how to connect. Two ways work:
 
-## 2. Connect
+   - Give players the plain server address and the fingerprint printed by `/automodpack host fingerprint`. They compare the fingerprints once, on the verification screen, or paste yours into the field there.
+   - Or run `/automodpack host fingerprint share <address>` and hand out the pinned address it prints. A pinned address carries the fingerprint inside it, so verification needs no extra step.
 
-1. Join the server as usual. Before anything is downloaded, AutoModpack verifies the server's identity: a pinned join address, a CA-signed certificate, or a DNSSEC-published fingerprint passes on its own, and anything else shows the certificate fingerprint and asks. The methods are compared in [security](security).
-2. Confirm the installation prompt. The confirm screen shows how many mod files were matched on Modrinth or CurseForge; jars matched on neither are clearly listed and ask for an explicit risk acknowledgement before the download starts. On a server with `require-modpack` off, the prompt asks first whether you want the pack; declining joins without it.
-3. Restart the game and connect again. The pack is loaded.
+   [Security](security) compares the methods.
 
-From then on, clients update during launch. Most changes apply before the game loads anything; the mod asks for a restart only when files in the standard `mods` folder (99% mods load from projection so need no restart) or the loader version change. [Client updates](how-it-works/client-updates) explains when a restart is needed and what happens while you are already in-game.
+## Join as a player
 
-## 3. Add your own content
-
-Everything under `automodpack/host-modpack/main/` on the server ships with the pack, even when the server itself has no such file. This is where client-side-only mods go:
-
-```
-automodpack/host-modpack/main/mods/sodium-extra.jar
-```
-
-Run `/automodpack generate` after changing anything, and players receive the new version on their next connection. Optional groups that players can turn on and off, file rules, and editable files are all covered in [building the modpack](pack-content).
+1. Put the same AutoModpack jar in your instance's `mods` folder. One jar covers every Minecraft version and loader. Back up anything valuable in the instance first.
+2. Add the server and join it as usual. Before anything downloads, the mod checks that the server is who it claims to be. The certificate verification screen shows the server's fingerprint. If the admin gave you a fingerprint, compare it with the one on the screen, or paste it into the field on the screen. If the admin gave you a pinned address, this step is already done. You can skip the check; the screen marks skipping as the risky choice. [Security](security) explains what this protects.
+3. Confirm the install. The screen shows how many mod files were matched on Modrinth or CurseForge. Jars that matched on neither are listed, and starting the download needs an explicit risk confirmation for them. "Customize" opens the group list, where you pick optional parts of the pack.
+4. When a change needs a restart, the mod closes the game and you start it again to load the change. In-game, the mod asks first, and you can decline and return to the game; you may see that question even for a small change, like one to a config. From then on the mod keeps you in sync: updates apply at launch or when you join, and a restart is only needed when the change touches the `mods` folder, the loader, or the game version. [Client updates](how-it-works/client-updates) explains when.
 
 ## Where to go next
 
-- [Building the modpack](pack-content): file rules, groups, editable files.
+- [Building the modpack](pack-content): file rules, editable files, default keybinds and settings.
+- [Groups](groups): optional parts of the pack, and how players pick them.
+- [How a pack is built](how-it-works/pack-pipeline): what `generate` reads, checks, and publishes.
 - [Server configuration](configuration/server-config): every server setting.
 - [Commands](commands): publishing, hosting, certificates, rollbacks.
+- [Security](security): how clients verify a server, and how downloads are authorized.
 - [FAQ](faq): common questions and troubleshooting.
+
+## A message for your friends
+
+Fill in the two placeholders and send the message:
+
+```
+We play on a modded server. Install AutoModpack from Modrinth (https://modrinth.com/mod/automodpack), put the jar in your mods folder, then add this address as the server in Minecraft and join:
+
+<server-address>#amp1=<fingerprint>
+
+The address carries the server's fingerprint, so the first connection verifies itself.
+```

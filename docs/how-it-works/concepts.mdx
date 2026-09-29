@@ -1,0 +1,16 @@
+# The big picture
+
+This page walks through the whole system in order, in words only. Each step names the page that holds the details.
+
+1. A server declares its pack sources: every group ships the folder `automodpack/host-modpack/<id>/` in full, and its `from-server` rules pull matching files from the server root. [Building the modpack](../pack-content) explains the sources, and [groups](../groups) explains how one pack splits into parts players pick in the game.
+2. The `generate` command publishes a generation: a head document describing the pack, plus the pack's bytes in the object store. [How a pack is built](pack-pipeline) follows one run from input to download, and [generations](generations) documents the journal, rollback, and patch notes.
+3. The server serves the current generation to connecting clients. The built-in host shares the Minecraft port or opens a dedicated one, a standalone jar hosts without a game server, and a static export serves the pack from any HTTPS file host. [Hosting](hosting) compares the connection modes and ports.
+4. A client verifies the server before anything downloads. A saved pin, a CA-signed certificate that covers the typed address, or a published AMP1 record trusts the connection, and any other first contact asks the player to compare fingerprints. [Security](../security) explains this ladder and what a pin protects.
+5. The client fetches the head document and the journal, then resolves its group selection. The selection decides which parts of the pack this instance installs, and the screen that picks them is described in [groups](../groups).
+6. The client downloads what it lacks. Files matched on Modrinth or CurseForge come from those platforms' own servers, and everything else comes from the pack host. [Client updates](client-updates#where-files-come-from) documents the split.
+7. The downloaded generation materializes as the projection at `automodpack/client/active/`. Editable files also land as real copies in the game directory, where players may change them. [Files on disk](files-on-disk) maps the folders, and [client updates](client-updates#editable-files) explains the editable copies.
+8. The game loads the pack from the projection, and the player's own extra mods in the standard `mods` folder keep working beside it. [Files on disk](files-on-disk) shows which files get live copies in the game directory.
+9. Updates apply at launch or when you join. A launch applies the server's current generation before the game loads, and an in-game join shows a review screen first, with a restart only when the change touches the `mods` folder, the loader, or the game version. [Client updates](client-updates) gives the rules.
+10. Recovery paths sit underneath all of this: the server can roll a publish back, an interrupted update repairs itself, and a player can put the whole instance back to an earlier moment. [Safety nets](safety-nets) lists every layer.
+
+History lives in three places, and the three are independent. The server journal records the published generations, described in [generations](generations). The client's pack history mirrors it, so every generation stays browsable offline, with bytes kept until the local storage is cleaned. The instance timeline records what this one instance had at every step. None of them rewrites the others.

@@ -88,7 +88,9 @@ What the example shows:
 - `options.txt` and everything under `config` in the pack is editable because `editable` says so.
 - `config/ferritecore.mixin.properties` and `config/invisible-radio.json` exist on the server but not in the pack. `editable` marks files that are already in the pack; it does not pull files in.
 
-Editable files keep their copy in the game directory, mods included: a mod matched by `editable`, say `mods/customizable.jar`, materializes in the player's `mods` folder where they can edit or remove it. Mark a mod editable when players are expected to replace it themselves; leave it out and it stays in the projection, untouched.
+Editable files keep their copy in the game directory, mods included: a mod matched by `editable`, say `mods/customizable.jar`, materializes in the player's `mods` folder where they can edit or remove it. Mark a mod editable when players are expected to replace it themselves; leave it out and it stays in the [projection](glossary), untouched.
+
+The `exclude` list in the example is trimmed for readability. The shipped default also excludes hidden files and `*.tmp`, `*.disabled`, and `*.bak` files (`**/.*`, `**/.*/**`, `**/*.{tmp,disabled,bak}`); replacing the default list drops that filtering.
 
 ## Which files reach clients?
 
@@ -110,17 +112,51 @@ One rule worth knowing early: the group directory is included in full, so `exclu
 
 Remove the file from the server, or keep it on the server and add it to `exclude`. On the next update, clients delete their copy. Updates replace files by the same rule: a file that changed on the server is replaced by the pack's new bytes, and the old copy is not kept in the game folder. The full rules are in [client updates](how-it-works/client-updates#deletions-are-measured).
 
+## The editable policy
+
+`editable` marks pack files that players may change. The default list is `options.txt` and `config/**`. The flag decides how a file behaves on the client:
+
+- An editable file is delivered as a real copy in the game directory. An editable mod jar lands in the player's standard `mods` folder and loads from there, so a player can replace or remove it.
+- Player edits never trigger updates. Update checks skip the hash comparison for editable files, so nothing a player changes makes the pack look out of date.
+- A deleted editable file stays deleted. Updates do not bring it back. The deletion is spent when the server changes that file's content or removes the path from the `editable` list: either one delivers the pack's version exactly once, and the player's previous bytes are kept on the instance timeline first.
+- A non-editable file that no longer matches the pack is brought back to the pack's bytes, and the player's bytes are kept on the instance timeline first. A drifted non-editable file that is not a mod is reset on the next launch. A drifted non-editable mod is caught by the update check and replaced through the normal update flow, with a restart.
+
+The first install already counts as a delivery. When a player who already has a file with the same name in the game directory, a tuned `options.txt` for example, installs the pack, the pack's copy replaces that file once, and the player's previous bytes land on the instance timeline before the overwrite. The change shows in the install review like any other file change. The "Keep existing mod files" consent on that screen covers mods only; files like `options.txt` are replaced without their own checkbox. From that moment the editable rules above apply: the delivered file is the player's own, and their edits survive until the server changes the content.
+
+`editable` never pulls a file into the pack, and an `editable` rule that matches no pack file only produces a warning at publish. The client-side mechanics are in [client updates](how-it-works/client-updates#editable-files).
+
+## Default settings and keybinds
+
+To give players default keybinds, settings, or config files, ship the files themselves. Put a prepared `options.txt` into `automodpack/host-modpack/main/`, or into any group folder. `options.txt` is on the default `editable` list. AutoModpack installs the pack's version when the player first gets the pack, and it never re-delivers that file over a player's edits. The pack's version comes again only when the server changes the file's content or removes the path from the `editable` list; in between, players own their edits.
+
+To prepare the file, set the keybinds and settings in a plain Minecraft client, then copy that client's `options.txt` into the group folder. The keybinds are the `key_...` lines in that file, one per key. AutoModpack does not read or change `options.txt`; it delivers it like any other editable file.
+
+Mods that inject default configs do not work here. A mod like Default Options applies its jar-embedded defaults only when the target file is missing, and AutoModpack writes the pack files during prelaunch, before any mod initializes, so the file already exists by then. If such a mod overwrites a pack file later anyway, the `editable` flag decides what happens: a non-editable file is silently reset to the pack's bytes on the next launch, and an editable file keeps the overwrite until the server changes the file. Ship the file itself, not a mod that pretends to ship it.
+
+## Resource packs and shader packs
+
+Files in `resourcepacks/` and `shaderpacks/` ship like every other pack file, and `/automodpack generate` creates both folders in `automodpack/host-modpack/main/` for you.
+
+AutoModpack does not enable delivered packs, and there is no built-in Paxi integration. Vanilla does not turn on a pack just because the file exists. A player enables a resource pack in Options once, and the choice sticks, because their `options.txt` is editable. The choice sticks until the server changes `options.txt`'s content; the server's version then replaces the player's file exactly once.
+
+Two ways to auto-enable resource packs:
+
+1. Ship an `options.txt` that lists the pack under the `resourcePacks` key, and keep the file editable. Vanilla reads that key at startup.
+2. Ship [Paxi](https://modrinth.com/mod/paxi) as a client-side mod in `automodpack/host-modpack/main/mods/`, and put the resource packs in `automodpack/host-modpack/main/config/paxi/resourcepacks/`. Paxi loads that folder automatically.
+
+Shader packs have no auto-enable. The player picks one in the shader mod's own menu.
+
+## Waiting music
+
+Drop an `.ogg` at `automodpack/host-modpack/waiting-music.ogg` and players hear it during downloads. The file must stay under 5 MiB; publish refuses a bigger one. A player turns the music off with the `play-music` setting in the [client config](configuration/client-config).
+
 ## What never ships
 
 - AutoModpack's own jar. `/automodpack generate` never packs it and never publishes its updates: clients follow the AutoModpack version the server runs and pick the matching release up from Modrinth. To update players, update the jar on the server, restart, and clients sync to it on their next connection. The details, including `sync-automodpack-version` and `self-updater`, are in [AutoModpack's own updates](how-it-works/client-updates#automodpacks-own-updates).
 - Mods whose metadata declares them server-side, when `auto-exclude-server-side-mods` is on (default).
-- Empty, hidden, `.tmp`, `.disabled`, and `.bak` files. The default `exclude` rules carry these patterns and can be edited; the `automodpack/` namespace and Windows-reserved device names are always left out and cannot be turned back on.
+- Hidden, `.tmp`, `.disabled`, and `.bak` files. The default `exclude` rules carry these patterns and can be edited; the `automodpack/` namespace and Windows-reserved device names are always left out and cannot be turned back on. Empty files are not filtered out.
 - The paths `saves/`, `screenshots/`, `logs/`, and `automodpack/` can never be claimed by the pack.
 
 ## Groups
 
-Groups split a modpack into parts. `main` is by default the required core; extra groups become optional entries that players pick in the in-game "Group Selection" screen, and the choice sticks across updates. Every group is declared under a category, whose name is the section header the group is listed under. A shader bundle or a platform-specific mod set is a typical use.
-
-The [group settings](configuration/server-config#groups) document every field: display metadata, `required`, `default-selected`, `requires` and `breaks-with` relations, and `compatible-platforms`.
-
-Different content under one path is allowed only between groups that can never be selected together, meaning groups that `breaks-with` each other or groups limited to different `compatible-platforms`. That is how you ship variants, for example a Windows-only file alongside a generic one. When two groups that could be selected together disagree about a path, `/automodpack generate` fails with an error naming the path and both groups, and nothing is published until you separate the paths or make the groups mutually exclusive.
+Groups split a modpack into parts: a required core plus optional bundles that players pick in the in-game "Group Selection" screen, with the choice sticking across updates. Two groups that players could select together cannot ship different content for one path, and `breaks-with` or different `compatible-platforms` is what makes variants legal. The [groups](groups) page covers declaring groups, worked examples, the player-facing screen, and how conflicts resolve.

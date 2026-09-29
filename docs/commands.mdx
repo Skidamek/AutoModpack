@@ -1,6 +1,6 @@
 # Commands
 
- Assume all commands below are prefixed with `/automodpack`, `/amp` is a shorthand for `/automodpack`. Commands run on the server console or in-game with operator permission level 3.
+ Assume all commands below are prefixed with `/automodpack`, `/amp` is a shorthand for `/automodpack`. Only the bare `/automodpack` and `/amp` commands, which print the about text, need no permission. Everything else runs on the server console or in-game with operator permission level 3.
 
 ## Publishing
 
@@ -13,7 +13,7 @@
 - `generate revert <seq> confirm [notes <text...>]` - Publishes the selected old state as a new generation.
 - `generate storage` - Reports how many bytes the journal and the object store hold.
 - `generate export-http [--all] <directory>` - Writes the URL-contract tree (`head`, `journal`, `objects/<sha1>`) as byte-for-byte copies of the hosted files, ready for any static HTTPS host. Objects Modrinth or CurseForge still serve themselves are left out; `--all` keeps every object in the tree. The command reports what was exported, omitted, and unresolvable. Works in every connection mode and never deletes anything from the directory.
-- `generate storage collect confirm` - Deletes every object the current generation does not serve. Older generations stay listed in the journal but can no longer be restored.
+- `generate storage collect confirm` - Deletes the object bytes the current generation does not serve. It keeps every journal entry's policy document and any object another server process sharing the data root still pins. Older generations stay listed in the journal but can no longer be restored.
 
 Patch notes for the next publish can also be written to `automodpack/host-modpack/patch-notes.md`; the file is read and cleared when a generation publishes. Publishing, rollbacks, and storage are explained in [generations](how-it-works/generations).
 
@@ -21,14 +21,14 @@ Patch notes for the next publish can also be written to `automodpack/host-modpac
 
 - `host` - Hosting status.
 - `host start`, `stop`, `restart` - Control the modpack host.
-- `host activity` - Shows modpack request activity since startup: totals, recent transfers, in-flight downloads; hover for per-player stats.
-- `host fingerprint` - Prints the [certificate fingerprint](security#how-clients-verify-a-server) of the modpack host.
+- `host activity` - Shows modpack request activity since startup: totals per player, a bounded list of recent transfers including failed and disconnected ones, in-flight downloads, and the live upload throughput. Everything is in memory and resets when the server restarts.
+- `host fingerprint` - Prints the [certificate fingerprint](security#how-clients-verify-a-server) of the modpack host. The fingerprint is the SHA-256 of the server's certificate, and the same value is logged at startup.
 - `host fingerprint dns <minecraft-hostname>` - Prints a DNSSEC record that lets clients verify a self-signed certificate automatically.
 - `host fingerprint share <minecraft-address>` - Prints a plain and a pinned copyable join address.
-- `host bootstrap pin <origin>` - Writes `automodpack/automodpack-bootstrap.exported.json` with a TLS pin, for distributing to clients.
-- `host bootstrap install <origin> [endpoint] [connection-mode]` - Writes an install export with the published pack, a provisioning secret, and the advertised endpoint. Requires `disable-internal-tls` to be off.
+- `host bootstrap pin <origin> [server-name]` - Writes `automodpack/automodpack-bootstrap.exported.json` with a TLS pin, for distributing to clients. The optional server name adds a vanilla server list entry on the client.
+- `host bootstrap install <origin> [endpoint] [connection-mode] [server-name]` - Writes an install export with the published pack, a provisioning secret, and the advertised endpoint. Omitting `endpoint` uses the advertised endpoint, which needs `advertised-endpoint-host` and `advertised-endpoint-port` set in the server config. The optional server name adds a vanilla server list entry on the client.
 
-Both bootstrap exports contain trust data or a provisioning secret. Treat them like credentials; anyone holding one can provision themselves onto your pack. See [bootstrap files](how-it-works/files-on-disk#bootstrap) for how clients import them.
+Both bootstrap commands refuse to run when `disable-internal-tls` is on. When the endpoint is served by something external, the command fails and names the front-end's certificate as the one to pin instead. The pin export holds only public data: the origin and the fingerprint. The install export contains a provisioning secret, so treat it like a credential; anyone holding one can provision themselves onto your pack. See [bootstrap files](how-it-works/files-on-disk#bootstrap) for how clients import them.
 
 ## Configuration
 

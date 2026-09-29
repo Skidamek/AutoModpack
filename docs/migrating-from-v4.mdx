@@ -1,0 +1,62 @@
+# Upgrading from v4
+
+A version 5 install converts a version 4 config the first time it starts. Pack data from v4 does not carry over, and clients need AutoModpack 5.0.0 or newer.
+
+## What migrates automatically
+
+The config file. On the server, v5 reads `automodpack-server.json` and then `server-config.json` if it finds them. On the client, it reads `automodpack-client.json` and then `client-config.json`. The values land in the new `server.conf` or `client.conf`, and the old JSON file is renamed to end in `.backup`.
+
+The file rules. The v4 `syncedFiles` list becomes the `from-server` list of the default `main` group, and `allowEditsInFiles` becomes that group's `editable` list. Leading slashes are stripped, and `!` rules survive. The migrated `main` group is forced to required and selected by default, so every player keeps receiving the core files.
+
+The connection mode. A v4 setup without magic packets and with an explicit bind port becomes `HTTP`. Every other v4 setup becomes `HOLEPUNCH`, the v5 default. A stored mode of `DIRECT` becomes `HTTP`.
+
+The client settings keep their meaning under new names. For example, `syncLoaderVersion` becomes `sync-versions`. Obsolete v4 options are dropped, and the log names every dropped key.
+
+## What does not migrate
+
+- Old pack data on clients. v5 reads none of it: not `client-mods-list.txt`, not the `automodpack/modpacks/` folder, not the old caches. A v5 client downloads the pack again on its first join.
+- The old certificate and pins. The files under the v4 `.private/` folder are not copied. A server without v5 credentials gets a new self-signed certificate, so every player verifies the server once more on their first v5 join.
+- The v4 `selectedModpack` name. Clients pick up the server's pack on their first join.
+
+## Leftovers from old versions
+
+On the first v5 boot, the log lists what older versions left behind in the `automodpack` folder:
+
+```
+Leftovers from an older AutoModpack are still using X in ...: This version does not read them and deleting them is safe.
+```
+
+Deleting the listed leftovers is safe. v5 never reads them again.
+
+## The version floor
+
+Clients older than 5.0.0 never update themselves to 5.0.0 or newer through the version sync. A client still on v4 cannot follow a v5 server, so hand players the v5 jar during the switch. Update those clients by hand, by putting the v5 jar in their `mods` folder.
+
+Expect one re-download: every player fetches the pack again on their first v5 join. Mods matched on Modrinth or CurseForge come from those platforms instead of your server, and `bandwidth-limit` caps what your server itself sends.
+
+## Upgrade steps
+
+1. Back up the server folder, including `automodpack/`.
+2. Replace the AutoModpack jar in the server's `mods` folder with the v5 jar.
+3. Start the server. The old config becomes `server.conf`, and the log lists every dropped v4 option and every leftover folder. Read `server.conf` once: the `modpack` section is the new home of your old `syncedFiles` rules.
+4. Run `/automodpack generate` to publish the first v5 generation.
+5. Give every player the v5 jar. A client older than 5.0.0 cannot follow the server on its own.
+6. Connect once with a clean client that has only AutoModpack installed. It downloads the pack again in the v5 format and verifies the server's new certificate.
+
+## Commands
+
+| v4 | v5 |
+| --- | --- |
+| `/automodpack host connections` | `/automodpack host activity` |
+| `/automodpack generate` | The same command, now with `preview`, `notes`, `if-content`, `history`, `revert`, `storage`, and `export-http` subcommands |
+| (new) | `/automodpack groups` |
+| (new) | `/automodpack host fingerprint dns` and `/automodpack host fingerprint share` |
+| (new) | `/automodpack host bootstrap pin` and `/automodpack host bootstrap install` |
+
+## What v5 adds
+
+- [Groups](pack-content#groups): split the pack into required and optional parts that players pick in-game.
+- [Generations and rollback](how-it-works/generations): every publish is a numbered generation, and an old one can be republished.
+- [Bootstrap files](how-it-works/files-on-disk#bootstrap): one file on the client sets up trust, address, and pack in a single boot.
+- [Pinned join addresses](security#pinned-join-addresses): a copy-paste address that also verifies the server.
+- Fewer restarts: most updates apply while the game loads. [Client updates](how-it-works/client-updates) lists the changes that still need one.

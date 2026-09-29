@@ -8,7 +8,7 @@ Players need a route from their game to your modpack files. AutoModpack ships a 
 | --- | --- | --- |
 | `HOLEPUNCH` | Serves the pack over your Minecraft server port. | `bind-port` is ignored; HOLEPUNCH always uses your Minecraft server port. |
 | `MAGIC` | Serves the pack over your Minecraft server port. | Serves the pack on `bind-port`. |
-| `HTTP` | This server won't be able to serve modpack, this combination only works when modpack is hosted on a different server using `advertised-endpoint-host/port`. | Serves the pack on `bind-port` as plain HTTPS file semantics. |
+| `HTTP` | This server is not able to serve the modpack. This combination only works when the modpack is hosted on a different server using `advertised-endpoint-host/port`. | Serves the pack on `bind-port` as plain HTTPS file semantics. |
 
 `HOLEPUNCH` is the default and needs no open port beyond Minecraft's. The client sends a Minecraft Login Start whose UUID carries a marker, and the server claims that connection for AutoModpack before vanilla builds a login listener. Unmarked logins reach Minecraft unchanged.
 
@@ -17,6 +17,10 @@ Players need a route from their game to your modpack files. AutoModpack ships a 
 The opening differs per mode, but the wire is the same everywhere: after the opening, every mode serves the same HTTP contract - ordinary GET requests, `Authorization: Bearer` credentials when the pack validates secrets, keep-alive connections, and per-request negotiated compression.
 
 The advertised mode is strict: the client uses the one mode the server advertises and does not fall back to another after a failure.
+
+## Standalone host
+
+AutoModpack can serve the pack without a Minecraft server. The `automodpack-server` jar runs the same host from a plain `automodpack/` folder with its `server.conf`. A fresh standalone config defaults `validate-secrets` to `false` and carries an empty `from-server` list, and it refuses to start without an explicit `bind-port`. It publishes a generation on start, then serves it. This shape pairs well with [HTTP contract export](#http-contract-export) for static hosting.
 
 ## The HTTP contract
 
@@ -34,7 +38,7 @@ Three hosting shapes serve byte-identical bytes; a client cannot tell them apart
 - **An external front-end.** For a Cloudflare quick tunnel: run `cloudflared tunnel --url http://127.0.0.1:<bind-port>`, set `connection-mode` to `HTTP`, `disable-internal-tls` to `true` (the origin hop is plain HTTP), and advertise the tunnel host with `advertised-endpoint-host` plus `advertised-endpoint-port: 443`. The client's SNI follows the endpoint host, so the tunnel's public certificate is what clients see, and their first connection verifies it before anything downloads. To make that verification silent - and to survive the tunnel's certificate rotations - publish the front-end's fingerprint as an [AMP1 record](../security#dnssec-amp1) when you have a DNSSEC domain; without one, share the fingerprint out of band or hand out a [pinned join address](../security#pinned-join-addresses). A plain reverse proxy works the same way, with `accept-proxy-protocol` so the real client address survives the hop.
 - **A static host of an exported tree**, described under [HTTP contract export](#http-contract-export): any web server that can serve files over HTTPS can serve the contract.
 
-The client runs the same download engine on every mode: five connections, each pipelining within a 64 MiB unsettled-bytes window of at most 2048 requests, each file taken in exact 4 MiB ranges with up to one connection pool's depth of ranges in flight, and idle connections stealing the tails of large files. Zero-byte files are created locally and never requested, and a framed `404` fails only the request that got it, so the pipeline keeps flowing.
+The client runs the same download engine on every mode: five connections, each pipelining inside a 16 MiB unsettled-bytes window, with at most 20 unsettled 4 MiB takes in flight across the connection pool, each file taken in exact 4 MiB ranges, and idle connections stealing the tails of large files. Zero-byte files are created locally and never requested, and a framed `404` fails only the request that got it, so the pipeline keeps flowing.
 
 ## TLS
 
@@ -49,6 +53,20 @@ PROXY protocol headers are honored on dedicated `MAGIC` and `HTTP` listeners whi
 ## Reverse proxies and external endpoints
 
 Setting `modpack-host` to `false` turns off every built-in listener. Clients still receive connection information, which can point at a proxy or a separate host. AutoModpack cannot validate that routing from the Minecraft server process, so the endpoint must speak the advertised mode exactly. For `HTTP` this is a supported advertise-only shape: the game server only advertises, and the URL contract is served externally.
+
+## Reading the join logs
+
+A failed join leaves a line in the server log. `<player>` stands for the player name in the lines below.
+
+| Log line | What happened | What to do |
+| --- | --- | --- |
+| `<player> has not installed AutoModpack.` | The player connected with vanilla Minecraft, without the mod. With `require-modpack` on, the kick carries your `nag-message` as the reason. | Nothing, while the player is on their way to installing it. Point them at the [quick start](../quick-start). |
+| `<player> has not installed modpack` | The client has the mod but had not finished installing the pack, so the login ended with the install message. This line also appears with `. Certificate fingerprint: <fp>` appended. | Nothing on its own: every first install and every update passes through it. |
+| `<player> dismissed the certificate verification prompt` | The player closed the certificate screen without accepting or skipping. | The player reconnects and decides. |
+| `<player> refused this server's certificate: ...` | The client held a pin for this address, and the presented certificate did not match it. | If you changed the certificate, hand out new pinned addresses or tell players to re-verify. If you did not, treat it as suspicious and see [certificate mismatch](../security#certificate-mismatch). |
+| `AutoModpack connection failed. Check the advertised endpoint and its configured connection mode.` | The client could not use the advertised pack host, or answered with something the server did not expect. | Read the lines under it: they name the checks for your connection mode, from the bind port to an external front-end. [Connection modes and ports](#connection-modes-and-ports) explains each. |
+
+The last line usually comes with `Server certificate fingerprint: <fp>` and a warning about `advertisedEndpointHost` and `advertisedEndpointPort`. To watch downloads instead of failures, run `host activity` from [commands](../commands#hosting).
 
 ## HTTP contract export
 
@@ -73,4 +91,10 @@ Advertise the bucket's virtual-hosted endpoint (e.g. AWS: `https://<bucket>.s3.<
 
 ## Bandwidth
 
-`bandwidthLimit` caps upload speed per client in MiB/s; `0` disables the cap. Much of the typical download never touches your server in the first place, because clients fetch files from Modrinth and CurseForge where possible, as described in [client updates](client-updates#where-files-come-from).
+`bandwidth-limit` caps the host's upload speed in Mbps (megabits per second). The cap is one limit shared by all clients combined, not per client. `0` disables the cap, and a negative value warns and counts as unlimited. Much of the typical download never touches your server in the first place, because clients fetch files from Modrinth and CurseForge where possible, as described in [client updates](client-updates#where-files-come-from).
+
+The cap also decides how many clients a small uplink can carry, because clients give up on links that drain too slowly. Three limits do that. A download lane that falls below a 4 KiB/s trickle floor eventually fails. A connection with no traffic for 60 seconds is reaped. A write that makes no progress for 90 seconds is treated as a dead peer. For scale, the receipt behind the floor is a 5 Mbps uplink with five connections per client: the 30-client share is about 4.2 KiB/s per lane, just above the floor. Memory per downloader stays bounded. A streamed response travels in 512 KiB writes, and a connection's queued bytes stop at the 512 KiB high watermark. A pool of twenty clients with five connections each queues at most about 50 MiB on top of one 4 MiB chunk per stream.
+
+## When Modrinth or CurseForge are unreachable
+
+Exports resolve pack files against the platforms with one best-effort round per platform, and clients resolve again on their own at download time. Publishing itself contacts no platform. In each resolution round, every file's SHA-1 goes to Modrinth in one batched request, and every CurseForge fingerprint in another. A failed round is not retried: the affected files count as unresolvable, and an export keeps them in the tree. Whatever clients cannot find on the platforms, they download from your host. An unreachable platform costs you upload and breaks nothing. When the CurseForge API key is missing or wrong, the log shows `CurseForge API authorization failed with HTTP 401`.

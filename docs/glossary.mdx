@@ -1,0 +1,32 @@
+# Glossary
+
+When a page uses a word you do not know, look it up here. Three names are canonical: the pack source folder `automodpack/host-modpack/<id>/` is the group directory, the managed pack folder the game loads from is the projection, and the shared per-user store of downloaded bytes is the data root.
+
+- **Advertised endpoint** The host and port that clients dial for modpack downloads. The server advertises it during the login.
+- **AMP1** The DNSSEC-signed DNS record that publishes a server's certificate fingerprint. Clients look it up on a first contact that nothing else vouches for.
+- **Bootstrap file** The one-file client setup at `automodpack/automodpack-bootstrap.json`. The client imports it on first boot and deletes it.
+- **Category** The section header players see in the Group Selection screen. Groups are declared under a category in the server config.
+- **Content token** A SHA-1 over every path, hash, and size in the pack. A new token means the files changed.
+- **Data root** The per-user folder that stores downloaded bytes for a user's Minecraft instances. It normally sits outside the instance, but a dedicated server keeps its store in the instance, and a client falls back to an instance-local store when the shared root is unwritable or on another drive. The locations are listed in [files on disk](how-it-works/files-on-disk#content-store).
+- **Detached** A pack that intentionally does not follow the server, after a restore or Stop syncing. Sync now reattaches it.
+- **Editable, exclude, from-server** The three rule lists each group declares in the server config. `from-server` pulls files from the server root, `exclude` keeps files off clients, and `editable` marks files players may change.
+- **Fingerprint** The SHA-256 of the server's TLS certificate. Players compare it on the verification screen.
+- **Generation** One published state of the pack: a head document plus its content bytes.
+- **Group** One selectable part of the pack: a required core, plus optional bundles players pick in the Group Selection screen.
+- **Group directory** The folder one group ships its files from, `automodpack/host-modpack/<id>/`. The folder name is the group id.
+- **Head document** A generation's metadata: the content token, the ownership ledger, and the full policy.
+- **Instance timeline** The local snapshots of what this Minecraft instance had at each install, update, rollback, repair, and restore. Restores never contact the server.
+- **Journal** The server's append-only history of published generations, at `automodpack/server/journal.jsonl`.
+- **Modpacks list** The screen behind the "Modpacks" button on the multiplayer screen. It lists every pack installed in this instance, with update, switch, repair, and remove actions.
+- **Object store** The content-addressed store of pack bytes, where identical bytes are stored once. The server keeps it at `automodpack/server/data/`, and clients keep it in the data root.
+- **Origin** The address, host and port, that a pack was synced from. The client remembers approved origins per pack and asks before trusting a new one.
+- **Overlay** The client-side record of a player's edits to editable files, at `automodpack/client/overlays/<modpack-id>/`. The overlay shadows the pack version.
+- **Ownership ledger** The head document's cumulative record of every hash and size each managed path has had. It is how a client proves the pack delivered a file before deleting it.
+- **Pack history** The client's mirror of the server journal. Every published generation's metadata stays browsable offline; the bytes of older generations stay only until Clean local storage reclaims them. It is not the instance timeline.
+- **Pin** A saved certificate fingerprint for one server address, enforced on every connection.
+- **Pinned join address** A server address that carries the fingerprint inside it, as `#amp1=<fingerprint>`.
+- **Policy** The pack's full description: name, version metadata, categories, groups, and every file's hash, size, type, and editable flag.
+- **Projection** The materialized current pack at `automodpack/client/active/`, the folder the game loads from.
+- **Publishing** The `generate` step that appends a new generation. The server publishes when the content or the policy changed; when neither changed, it reports `NO_CHANGES`.
+- **Selection** A player's saved choice of groups for one pack, stored per pack in `automodpack/client/selections.json`. The choice survives updates.
+- **Self-update swap** A staged change of AutoModpack's own version, held in `automodpack/self-update.json` until the next boot applies it.

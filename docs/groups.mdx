@@ -1,0 +1,112 @@
+# Groups
+
+A group is one selectable part of the modpack. The pack stays one pack: a required core every player receives, plus optional bundles around it, for example an optional shader bundle, platform-specific mods, or a second variant of the same mod. Players pick their groups in the game, and the choice sticks across updates. One server can therefore offer different setups to different players, and nobody downloads a bundle they did not ask for.
+
+## Declaring a group
+
+Groups live in the `modpack` section of `server.conf`. A category is the section header players see, and the groups under it appear in the order you declare them:
+
+```
+modpack {
+  name: "My pack"
+  General {
+    main {
+      from-server: [mods/*.jar]
+    }
+  }
+  Extras {
+    fancy-shaders {
+      display-name: "Fancy Shaders"
+    }
+  }
+}
+```
+
+Two names matter in this layout. The group id, `main` or `fancy-shaders` here, is a permanent identity: rules refer to it, `requires` and `breaks-with` name it, players' saved selections store it, and the content folder is `automodpack/host-modpack/<id>/`. The `display-name` field is the safe rename players see. Renaming an id strands saved selections and breaks references, so rename through `display-name` instead.
+
+A group's content comes from the same two sources every group has: the folder `automodpack/host-modpack/<id>/` ships in full, and `from-server` pulls matching files from the server root. The `exclude` and `editable` lists are per group and speak the language described in [building the modpack](pack-content).
+
+## Examples
+
+An optional shader bundle. Players who want shaders opt in, and everyone else downloads nothing extra:
+
+```
+Shaders {
+    fancy-shaders {
+        display-name: "Fancy Shaders"
+        description: "Optional shader pack bundle"
+        default-selected: false
+    }
+}
+```
+
+The files for this group live under `automodpack/host-modpack/fancy-shaders/`. Shader packs go into `automodpack/host-modpack/fancy-shaders/shaderpacks/`, and any config the bundle needs goes into a `config` folder next to them.
+
+A platform split. Two groups ship different files for the same path, one per operating system. The disjoint `compatible-platforms` are what make the shared path legal: no platform can select both groups. The `breaks-with` pair is an optional extra that also blocks a player from forcing both on through the platform dropdown:
+
+```
+Extras {
+    window-fix {
+        compatible-platforms: [windows]
+        breaks-with: [mac-fix]
+    }
+    mac-fix {
+        compatible-platforms: [macos]
+        breaks-with: [window-fix]
+    }
+}
+```
+
+The required core. The factory config declares one group, `main`, that every player must take. Its rules pull the server's mods and scripts into the pack and mark the configs as editable:
+
+```
+General {
+    main {
+        required: true
+        default-selected: true
+        from-server: ["mods/*.jar", "kubejs/**", "emotes/*"]
+        exclude: ["**/.*", "**/.*/**", "**/*.{tmp,disabled,bak}", "kubejs/server_scripts/**"]
+        editable: ["options.txt", "config/**"]
+    }
+}
+```
+
+## The fields
+
+A group declaration accepts these fields. The [group reference](configuration/server-config#group-fields) in the server configuration documents them in full.
+
+- `required`: players cannot deselect the group. The factory `main` group sets it.
+- `default-selected`: preselected for players who have not chosen yet. Ignored when `required` is true.
+- `requires`: groups that must be selected alongside this one. The screen selects and locks them.
+- `breaks-with`: groups that cannot be selected alongside this one.
+- `compatible-platforms`: platforms the group is available on. Empty means every platform.
+- `display-name`: the name players see. Blank shows the group id.
+- `description`: a short description shown in the selection screen.
+
+## The Group Selection screen
+
+Players reach the screen from the first install, where the confirmation screen offers "Customize", and later from Modpack Settings under "Pack groups".
+
+The list shows one header per category with a counter of its optional groups, rendered as selected out of optional; required groups stay out of the count. Under each header sits one row per group, and a row carries a status: required groups are gray and locked on, explicitly chosen groups are green, groups a dependency holds are marked "Required by" and locked while something needs them, groups pulled in by a required group show as forced, untouched optional groups are gray, groups the player switched off are yellow, and groups unavailable on this platform or blocked by a conflict are red. The tooltip on a row shows the description, the file count with the total size, `Requires:` and `Conflicts:` lines, and a note when the platform does not match.
+
+Under the platform dropdown at the top runs a summary line with the platform, the number of selected groups, and the download size, with shared files counted once. The dropdown selects the platform: detected desktop systems are marked, and any extra platform a group declares is listed too.
+
+## How choices stay valid
+
+The screen cannot settle into a broken combination:
+
+- Selecting a group with `requires` auto-selects its dependencies and locks them while this group needs them.
+- Selecting a group that conflicts with an active choice turns the losing groups off and shows a message naming the conflict.
+- A saved selection the server no longer allows shows an error instead of applying, and saving stays disabled until the player fixes the combination.
+
+Selections persist per game instance in `automodpack/client/selections.json` and survive updates. A broken combination can never reach your server, so you never troubleshoot a player who enabled two groups that fight each other.
+
+## One path, one content
+
+Two groups that players could select together cannot ship different bytes for the same path. This is the guarantee that two fighting variants of one file can never both reach a player's game. Variants are legal only when the groups can never be selected together, through `breaks-with` or through disjoint `compatible-platforms`. When two groups that could be selected together disagree about a path, `/automodpack generate` refuses and names the path and both groups.
+
+Platform variants are therefore whole groups, not per-file overrides.
+
+## Inspecting groups
+
+Run `/automodpack groups` as an operator for an overview of the categories, groups, flags, file counts, and sizes. Run `/automodpack groups <id>` for one group in detail, including its rule lists and published files.

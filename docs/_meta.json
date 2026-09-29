@@ -7,6 +7,14 @@
     "name": "Building the modpack",
     "icon": null
   },
+  "groups.mdx": {
+    "name": "Groups",
+    "icon": null
+  },
+  "recipes.mdx": {
+    "name": "Recipes",
+    "icon": null
+  },
   "configuration": {
     "name": "Configuration",
     "icon": null
@@ -27,8 +35,20 @@
     "name": "Compatibility",
     "icon": null
   },
+  "migrating-from-v4.mdx": {
+    "name": "Upgrading from v4",
+    "icon": null
+  },
+  "troubleshooting.mdx": {
+    "name": "Troubleshooting",
+    "icon": null
+  },
   "faq.mdx": {
     "name": "FAQ",
+    "icon": null
+  },
+  "glossary.mdx": {
+    "name": "Glossary",
     "icon": null
   }
 }
