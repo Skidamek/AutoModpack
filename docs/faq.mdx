@@ -76,6 +76,9 @@ The downloaded bytes and the saved certificate pins live in a per-user data root
 ### Does AutoModpack update my mods to their latest versions?
 AutoModpack keeps clients identical to the server, and updating the server's mods stays your job.
 
+### My players are stuck on the certificate verification screen.
+That screen is the no-setup default: every player sees it on their first join until the server sets up silent verification. The player-side fix is one paste, and the screen never returns for that player. The server-side fix is one of the silent setups on the [security](security) page; with no domain, `/automodpack host fingerprint share <address>` is the one command that works for every server.
+
 ### The join fails, or the verification screen rejects my fingerprint
 Check the pasted fingerprint for typos, make sure the address matches what the admin shared, and ask the admin whether the certificate changed. Then check `latest.log`; see [where the logs are](#where-are-the-logs).
 

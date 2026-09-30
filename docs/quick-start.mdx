@@ -16,12 +16,9 @@ AutoModpack keeps every player's game in sync with the server's modpack. The sam
    You can also give players your settings and keybinds by placing a prepared `options.txt` in the same folder. A player's game keeps its own `mods` folder for their extra mods; the pack's files live in a managed `automodpack` folder and load from there. [Building the modpack](pack-content) explains how all of this is decided.
 5. Run `/automodpack generate` after changing anything. Commands run in the server console, or in in-game chat as an operator. The server also runs the same generation automatically on every start by default, so a restart through a hosting panel publishes changes too. Players receive the new version on their next connection.
 6. Before inviting anyone, connect once with a clean client that has only AutoModpack installed. If that works, the setup is proven, and any future problem points at pack content.
-7. Tell players how to connect. Two ways work:
+7. Tell players how to connect. With a DNSSEC-signed domain, publish the record printed by `/automodpack host fingerprint dns <hostname>`, and the verification screen never appears at all. Otherwise run `/automodpack host fingerprint share <address>` and hand out the pinned address it prints: the address carries the fingerprint inside it, so verification needs no extra step. If you set up neither, every player verifies on their first join by pasting the fingerprint from `/automodpack host fingerprint`.
 
-   - Give players the plain server address and the fingerprint printed by `/automodpack host fingerprint`. They compare the fingerprints once, on the verification screen, or paste yours into the field there.
-   - Or run `/automodpack host fingerprint share <address>` and hand out the pinned address it prints. A pinned address carries the fingerprint inside it, so verification needs no extra step.
-
-   [Security](security) compares the methods.
+   [Security](security) lists every setup and what it costs.
 
 ## Join as a player
 
