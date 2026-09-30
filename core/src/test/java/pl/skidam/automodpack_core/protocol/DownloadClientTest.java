@@ -280,7 +280,7 @@ class DownloadClientTest {
 	}
 
 	@Test
-	void trustWaitKeepsTransportWarmAndStopsAfterConfiguration(@TempDir Path directory) throws Exception {
+	void trustWaitStaysSilentAndTheParkedLaneSurvivesConfiguration(@TempDir Path directory) throws Exception {
 		KeyPair keyPair = NetUtils.generateKeyPair();
 		X509Certificate certificate = NetUtils.selfSign(keyPair);
 		CompletableFuture<Boolean> decision = new CompletableFuture<>();
@@ -288,26 +288,22 @@ class DownloadClientTest {
 		try (TransferServer server = new TransferServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null);
-			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, null, ignored -> decision, Duration.ofMillis(100));
+			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, null, ignored -> decision);
 
-			long deadline = System.currentTimeMillis() + 5000;
-			while (server.heartbeats() < 2 && System.currentTimeMillis() < deadline)
+			long deadline = System.currentTimeMillis() + 500;
+			while (System.currentTimeMillis() < deadline)
 				Thread.sleep(20);
-			assertTrue(server.heartbeats() >= 2, "the client parked on the trust decision must heartbeat periodically");
+			// The parked candidate asks the peer nothing: its certificate is the one still being judged, so no byte - secret or otherwise - crosses the decision.
+			assertEquals(0, server.heartbeats(), "the parked candidate must stay silent while the player decides");
+			assertTrue(server.requests().isEmpty(), "the parked candidate must send no request while the player decides");
 			assertFalse(clientFuture.isDone());
 
 			decision.complete(true);
 			try (DownloadClient client = clientFuture.get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
 				client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("first"), -1L, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
-				int heartbeatsAtConfiguration = server.heartbeats();
-				// The heartbeat retires with the trust decision: three parked-phase intervals later the connection has heard no straggler heartbeat.
-				deadline = System.currentTimeMillis() + 500;
-				while (System.currentTimeMillis() < deadline)
-					Thread.sleep(20);
-				assertEquals(heartbeatsAtConfiguration, server.heartbeats());
 				assertEquals(List.of("/objects/hash"), server.requests());
 			}
-			assertEquals(1, server.acceptedConnections());
+			assertEquals(1, server.acceptedConnections(), "the live parked lane is handed over, not replaced");
 		}
 	}
 

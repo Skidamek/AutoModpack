@@ -14,11 +14,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.cert.X509Certificate;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.IntConsumer;
@@ -40,8 +40,6 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 class TlsSessionResumptionTest {
 	/** Generous bound for loopback handshakes that complete in milliseconds when warm; cold CI runners have blown past five seconds here. */
 	private static final int AWAIT_SECONDS = 20;
-	/** The keepalive never ticks within a test; the parked ladder is resolved by the completing callback. */
-	private static final Duration NO_HEARTBEATS = Duration.ofHours(1);
 
 	/** Two candidates presenting different self-signed certificates defer into per-socket slots of one shared manager: each validation reads exactly its own certificate and neither poisons the other. */
 	@Test
@@ -64,7 +62,7 @@ class TlsSessionResumptionTest {
 						certificate -> {
 							askedFor.add(certificate);
 							return CompletableFuture.completedFuture(true);
-						}, () -> true, hostHeader(serverA), null));
+						}));
 				assertEquals(serverA.fingerprint(), NetUtils.getFingerprint(askedFor.get(0)), "the ladder judged the first socket's certificate");
 				assertNull(manager.getDeferredCertificate(socketA), "a judged candidate's deferral is spent");
 				assertEquals(serverB.fingerprint(), NetUtils.getFingerprint(manager.getDeferredCertificate(socketB)), "the first validation left the second deferral untouched");
@@ -73,7 +71,7 @@ class TlsSessionResumptionTest {
 						certificate -> {
 							askedFor.add(certificate);
 							return CompletableFuture.completedFuture(true);
-						}, () -> true, hostHeader(serverB), null));
+						}));
 				assertEquals(serverB.fingerprint(), NetUtils.getFingerprint(askedFor.get(1)), "the ladder judged the second socket's certificate");
 				assertNull(manager.getDeferredCertificate(socketB));
 			}
@@ -93,7 +91,7 @@ class TlsSessionResumptionTest {
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, "test-secret", certificate -> {
 				deferred.add(certificate);
 				return CompletableFuture.completedFuture(true);
-			}, NO_HEARTBEATS).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
+			}).get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
 				int takesPerLane = (int) (NetUtils.PIPELINE_WINDOW_BYTES / NetUtils.WIRE_CHUNK_BYTES);
 				server.expectPipeline(takesPerLane + 1);
 				List<CompletableFuture<Path>> downloads = new ArrayList<>();
@@ -131,7 +129,7 @@ class TlsSessionResumptionTest {
 						certificate -> {
 							prompted.add(certificate);
 							return decisionA;
-						}, () -> true, hostHeader(server), null), NO_HEARTBEATS);
+						}));
 				assertEquals(1, prompted.size(), "the first contact reaches the player");
 
 				// The second lane presents the same not-yet-accepted certificate with no deferral of its own - the
@@ -146,7 +144,7 @@ class TlsSessionResumptionTest {
 							certificate -> {
 								prompted.add(certificate);
 								return CompletableFuture.completedFuture(true);
-							}, () -> true, hostHeader(server), null), NO_HEARTBEATS);
+							}));
 					var failureB = assertThrows(ExecutionException.class, judgedB::get, "the deferral-less lane fails closed while the first contact is unjudged");
 					assertFalse(failureB.getCause() instanceof AssertionError, "the deferral-less lane must never reach the player");
 					assertEquals(1, prompted.size(), "only the fresh handshake's certificate reaches the player");
@@ -172,7 +170,7 @@ class TlsSessionResumptionTest {
 				CompletableFuture<Void> judged = CandidateTrustValidation.validate(new CandidateTrustValidation.Candidate(socket, manager, sessionTrust, "127.0.0.1", "127.0.0.1",
 						certificate -> {
 							throw new AssertionError("a pinned mismatch must never reach the player");
-						}, () -> true, hostHeader(server), null), NO_HEARTBEATS);
+						}));
 				var failure = assertThrows(ExecutionException.class, judged::get, "the changed leaf fails the pinned origin");
 				assertTrue(failure.getCause() instanceof CertificatePinMismatchException, "the failure is the pin mismatch, not a prompt: " + failure.getCause());
 				assertNull(manager.getDeferredCertificate(socket), "the deferral is spent by the verdict");
@@ -180,32 +178,44 @@ class TlsSessionResumptionTest {
 		}
 	}
 
-	/** A chunked /head heartbeat must drain its frame so the first real request is not parsed against leftover chunk bytes. */
+	/**
+	 * Nothing is sent to a candidate while the player decides - its peer is exactly the one whose certificate nothing
+	 * vouches for yet - so a lane the server reaped during a slow decision is detected at handoff and replaced by a
+	 * fresh handshake that passes the just-accepted trust without asking again.
+	 */
 	@Test
-	void aChunkedHeadKeepaliveLeavesTheSocketAlignedForTheFirstFetch(@TempDir Path directory) throws Exception {
+	void aLaneReapedWhileThePlayerDecidedIsReplacedAfterAcceptance(@TempDir Path directory) throws Exception {
 		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
-			server.chunkedDocuments.set(true);
-			byte[] head = "keepalive-head-document".getBytes(StandardCharsets.UTF_8);
+			byte[] head = "reaped-lane-head-document".getBytes(StandardCharsets.UTF_8);
 			server.store().put("head", head);
+			CountDownLatch parked = new CountDownLatch(1);
 			CompletableFuture<Boolean> trust = new CompletableFuture<>();
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null);
-			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, "test-secret", ignored -> trust, Duration.ofMillis(50));
+			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, "test-secret", ignored -> {
+				parked.countDown();
+				return trust;
+			});
+			assertTrue(parked.await(AWAIT_SECONDS, TimeUnit.SECONDS), "the candidate must park on the player's decision");
+			// The client can complete its half of the handshake - and park - a moment before the server's accept loop registers the lane.
 			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(AWAIT_SECONDS);
-			while (!server.requests.contains("/head") && System.nanoTime() < deadline) Thread.sleep(10);
-			assertTrue(server.requests.contains("/head"), "the parked heartbeat must have asked for /head before trust completed");
+			while (server.connections.get() < 1 && System.nanoTime() < deadline) Thread.sleep(10);
+			assertEquals(1, server.connections.get(), "exactly the parked lane exists so far");
+
+			server.closeOpenConnections();
 			trust.complete(true);
 			try (DownloadClient client = clientFuture.get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
 				var fetch = client.downloadDocument("head".getBytes(StandardCharsets.UTF_8), directory.resolve("head"), null, (IntConsumer) null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertEquals(directory.resolve("head"), fetch.path());
 				assertArrayEquals(head, Files.readAllBytes(fetch.path()));
 			}
+			assertEquals(2, server.connections.get(), "the acceptance reopened exactly one lane in place of the reaped one");
 		}
 	}
 
 	/** Runs the ladder over one candidate socket and fails the test if the decision does not land. */
 	private static void validate(CandidateTrustValidation.Candidate candidate) throws Exception {
-		CandidateTrustValidation.validate(candidate, NO_HEARTBEATS).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+		CandidateTrustValidation.validate(candidate).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 	}
 
 	private static String hostHeader(ConditionalFetchTest.ContractServer server) {

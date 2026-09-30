@@ -16,7 +16,6 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -24,9 +23,6 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
 import javax.net.ssl.SSLContext;
@@ -36,7 +32,6 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
-import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.Throwables;
 
 /**
@@ -45,19 +40,14 @@ import pl.skidam.automodpack_core.utils.Throwables;
  * leaf fails outright with no recovery short of the player revoking the pin or importing a new pinned join address;
  * a CA chain that covers the typed hostname accepts the leaf and is never stored, ending the ladder before any DNS
  * is spent; a published DNSSEC fingerprint for the typed hostname decides every leaf the CAs did not cover, and is
- * never stored; and whatever remains is the player's explicit decision, heartbeated while the human decides. On
- * acceptance the session trust pins the certificate, so every later handshake on the same SSLContext passes without
- * asking again.
+ * never stored; and whatever remains is the player's explicit decision. On acceptance the session trust pins the
+ * certificate, so every later handshake on the same SSLContext passes without asking again.
  */
 public final class CandidateTrustValidation {
 
-	/** One daemon thread heartbeats every candidate parked on a certificate-trust decision. */
-	private static final ScheduledExecutorService PRE_CONFIGURATION_KEEPALIVE_EXECUTOR = Executors.newSingleThreadScheduledExecutor(
-			new CustomThreadFactoryBuilder().setNameFormat("AutoModpack PreConfigurationKeepalive #%d").setDaemon(true).build());
-
 	/** One transport candidate: its probe socket, the client's shared trust manager holding that socket's deferral, and who may accept the certificate. */
 	public record Candidate(SSLSocket socket, CustomizableTrustManager trustManager, CustomizableTrustManager.SessionTrust sessionTrust, String originHost, String endpointHost,
-			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, BooleanSupplier clientAlive, String hostHeader, String secret) {}
+			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {}
 
 	private CandidateTrustValidation() {}
 
@@ -93,7 +83,7 @@ public final class CandidateTrustValidation {
 	}
 
 	/** Runs the ladder over the candidate; completion means the certificate is pinned into the session trust, and any failure closes the probe socket. */
-	public static CompletableFuture<Void> validate(Candidate candidate, Duration preConfigurationKeepaliveInterval) {
+	public static CompletableFuture<Void> validate(Candidate candidate) {
 		CustomizableTrustManager trustManager = candidate.trustManager();
 		CustomizableTrustManager.SessionTrust sessionTrust = candidate.sessionTrust();
 
@@ -126,7 +116,7 @@ public final class CandidateTrustValidation {
 		CompletableFuture<Void> validation;
 		try {
 			certificate.checkValidity();
-			validation = judge(candidate, certificate, preConfigurationKeepaliveInterval);
+			validation = judge(candidate, certificate);
 		} catch (CertificateException e) {
 			validation = CompletableFuture.failedFuture(new IOException("Untrusted certificate is not valid", e));
 		}
@@ -144,7 +134,7 @@ public final class CandidateTrustValidation {
 	 * DNSSEC fingerprint decides whatever the CAs did not vouch for, the operator's explicit statement about a leaf
 	 * no authority covered; and whatever remains is the player's decision.
 	 */
-	private static CompletableFuture<Void> judge(Candidate candidate, X509Certificate certificate, Duration preConfigurationKeepaliveInterval) {
+	private static CompletableFuture<Void> judge(Candidate candidate, X509Certificate certificate) {
 		if (candidate.sessionTrust().hasConfiguredPin()) {
 			// The leaf already differed from the pin when the handshake deferred it: the mismatch is final.
 			try {
@@ -182,7 +172,7 @@ public final class CandidateTrustValidation {
 				return reject(candidate, new IOException("Invalid DNSSEC AutoModpack fingerprint for " + candidate.originHost() + ": " + misconfigured.reason()));
 			}
 			// No CA vouch and no published fingerprint: a first contact is the player's decision.
-			return requestManualTrust(candidate, certificate, preConfigurationKeepaliveInterval);
+			return requestManualTrust(candidate, certificate);
 		});
 	}
 
@@ -252,7 +242,7 @@ public final class CandidateTrustValidation {
 		return origin.endsWith(remainder) && origin.indexOf('.') == origin.length() - remainder.length() && origin.length() > remainder.length();
 	}
 
-	private static CompletableFuture<Void> requestManualTrust(Candidate candidate, X509Certificate certificate, Duration preConfigurationKeepaliveInterval) {
+	private static CompletableFuture<Void> requestManualTrust(Candidate candidate, X509Certificate certificate) {
 		if (candidate.trustCallback() == null) {
 			CertificateException failure = candidate.trustManager().getDeferredFailure(candidate.socket());
 			return reject(candidate, failure == null ? new IOException("Certificate is not trusted") : failure);
@@ -265,17 +255,7 @@ public final class CandidateTrustValidation {
 			return reject(candidate, new IOException("Certificate trust callback failed", e));
 		}
 
-		PreConfigurationKeepalive keepalive;
-		try {
-			keepalive = new PreConfigurationKeepalive(candidate.socket(), candidate.hostHeader(), candidate.secret(), preConfigurationKeepaliveInterval,
-					PRE_CONFIGURATION_KEEPALIVE_EXECUTOR, candidate.clientAlive());
-		} catch (IOException e) {
-			closeQuietly(candidate.socket());
-			return CompletableFuture.failedFuture(e);
-		}
 		return decision.handle((trusted, error) -> {
-			// The heartbeat must be gone before the connection's own requests start, so a straggler heartbeat record can never misframe the first response.
-			keepalive.retire();
 			if (error != null) {
 				closeQuietly(candidate.socket());
 				Throwable cause = Throwables.unwrap(error);

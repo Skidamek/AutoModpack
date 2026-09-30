@@ -611,6 +611,7 @@ class ConditionalFetchTest {
 		/** When set, a plain 200 response carries this raw Transfer-Encoding value on top of its Content-Length. */
 		final AtomicReference<String> extraTransferEncoding = new AtomicReference<>();
 		final AtomicInteger connections = new AtomicInteger();
+		private final List<SSLSocket> openConnections = new CopyOnWriteArrayList<>();
 		private final AtomicInteger dropNextObjectRequests = new AtomicInteger();
 		final CompletableFuture<String> firstAuthorization = new CompletableFuture<>();
 		final List<String> requests = new CopyOnWriteArrayList<>();
@@ -669,6 +670,11 @@ class ConditionalFetchTest {
 			dropNextObjectRequests.incrementAndGet();
 		}
 
+		/** Closes every live connection: the deterministic stand-in for the server's idle reap of a parked candidate. */
+		void closeOpenConnections() throws IOException {
+			for (SSLSocket socket : openConnections) socket.close();
+		}
+
 		private void acceptConnections() {
 			while (!closed) {
 				try {
@@ -682,6 +688,7 @@ class ConditionalFetchTest {
 		}
 
 		private void serve(SSLSocket socket) {
+			openConnections.add(socket);
 			// Responses serialize on one thread per connection, in read order; the read loop never waits on a response, so pipelined requests are all read the moment they arrive.
 			ExecutorService responder = Executors.newSingleThreadExecutor();
 			try {
@@ -719,6 +726,7 @@ class ConditionalFetchTest {
 				}
 			} catch (Exception ignored) {
 			} finally {
+				openConnections.remove(socket);
 				responder.shutdownNow();
 				try {
 					socket.close();

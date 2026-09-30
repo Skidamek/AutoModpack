@@ -6,12 +6,12 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyStoreException;
 import java.security.cert.X509Certificate;
-import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -73,7 +73,9 @@ public class DownloadClient implements PackTransport {
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
 	private final String secret;
 	private final Function<X509Certificate, CompletableFuture<Boolean>> trustCallback;
-	private final Duration preConfigurationKeepaliveInterval;
+	// True the moment the trust ladder asks the player about this client's candidate: only a parked manual-trust
+	// decision justifies the handoff liveness probe in openConnectionAsync.
+	private final AtomicBoolean parkedWhileDeciding = new AtomicBoolean();
 	private final CustomizableTrustManager.SessionTrust sessionTrust;
 	private final CustomizableTrustManager trustManager;
 	private final SSLContext sslContext;
@@ -108,12 +110,13 @@ public class DownloadClient implements PackTransport {
 
 	private record TlsCandidate(SSLSocket socket, Socket transport) {}
 
-	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, String secret, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback,
-			Duration preConfigurationKeepaliveInterval, TransportRoute route) {
+	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, String secret, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, TransportRoute route) {
 		this.connectionInfo = connectionInfo;
 		this.secret = secret;
-		this.trustCallback = trustCallback;
-		this.preConfigurationKeepaliveInterval = preConfigurationKeepaliveInterval;
+		this.trustCallback = trustCallback == null ? null : certificate -> {
+			parkedWhileDeciding.set(true);
+			return trustCallback.apply(certificate);
+		};
 		this.route = route;
 		this.sessionTrust = new CustomizableTrustManager.SessionTrust(AddressHelpers.formatAddress(connectionInfo.origin), connectionInfo.expectedFingerprint);
 		CustomizableTrustManager manager;
@@ -132,17 +135,11 @@ public class DownloadClient implements PackTransport {
 
 	public static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, String secret,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
-		return createAsync(connectionInfo, secret, trustCallback, PRE_CONFIGURATION_KEEPALIVE_INTERVAL);
-	}
-
-	/** The keepalive interval is injectable so tests can observe heartbeats at a fast cadence; production runs at {@link NetUtils#PRE_CONFIGURATION_KEEPALIVE_INTERVAL}. */
-	static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, String secret,
-			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, Duration preConfigurationKeepaliveInterval) {
 		if (connectionInfo == null || !connectionInfo.isComplete())
 			return CompletableFuture.failedFuture(new IllegalArgumentException("Connection origin or endpoint is missing"));
 
 		return resolveRouteAsync(connectionInfo).thenCompose(route -> {
-			DownloadClient client = new DownloadClient(connectionInfo, secret, trustCallback, preConfigurationKeepaliveInterval, route);
+			DownloadClient client = new DownloadClient(connectionInfo, secret, trustCallback, route);
 			return client.openConnectionAsync().thenApply(connection -> {
 				synchronized (client.poolLock) {
 					client.lanes.add(connection);
@@ -183,19 +180,53 @@ public class DownloadClient implements PackTransport {
 	}
 
 	private CompletableFuture<Connection> openConnectionAsync() {
+		return openConnectionAsync(true);
+	}
+
+	/**
+	 * Opens one validated lane. Nothing is ever sent to a candidate parked on a manual trust decision - its peer is
+	 * exactly the one whose certificate nothing vouches for yet - so a slow decision can outlive the server's idle
+	 * reap or a strict host's patience; the handoff probes such a lane once and replaces it with a fresh handshake
+	 * that passes the trust the decision just established, so the player is never asked twice.
+	 */
+	private CompletableFuture<Connection> openConnectionAsync(boolean retryOnce) {
+		parkedWhileDeciding.set(false);
 		return CompletableFuture.supplyAsync(() -> {
 			try {
 				return openTlsCandidate();
 			} catch (IOException e) {
 				throw new CompletionException(e);
 			}
-		}, NET_EXECUTOR).thenCompose(this::validateCandidate).thenApplyAsync(candidate -> {
+		}, NET_EXECUTOR).thenCompose(this::validateCandidate).thenComposeAsync(candidate -> {
+			if (retryOnce && parkedWhileDeciding.get() && peerClosed(candidate.socket())) {
+				closeQuietly(candidate.socket());
+				return openConnectionAsync(false);
+			}
 			try {
-				return configuredConnection(candidate);
+				return CompletableFuture.completedFuture(configuredConnection(candidate));
 			} catch (IOException e) {
 				throw new CompletionException(e);
 			}
 		}, DownloadClient.NET_EXECUTOR);
+	}
+
+	/**
+	 * Whether the peer's close already reached a socket nobody wrote to: a bounded read answers EOF, an unexpected
+	 * byte, or an error with dead, and a timeout with alive. Nothing was requested while parked, so a live lane owes
+	 * the probe no bytes; the lane configuration sets its own timeout right after either way.
+	 */
+	private static boolean peerClosed(SSLSocket socket) {
+		try {
+			socket.setSoTimeout(500);
+			try {
+				socket.getInputStream().read();
+				return true;
+			} catch (SocketTimeoutException alive) {
+				return false;
+			}
+		} catch (IOException dead) {
+			return true;
+		}
 	}
 
 	private TlsCandidate openTlsCandidate() throws IOException {
@@ -293,7 +324,7 @@ public class DownloadClient implements PackTransport {
 	/** The shared candidate trust ladder; completion means the certificate is pinned into this session's trust. */
 	private CompletableFuture<TlsCandidate> validateCandidate(TlsCandidate candidate) {
 		return CandidateTrustValidation.validate(new CandidateTrustValidation.Candidate(candidate.socket(), trustManager, sessionTrust, connectionInfo.origin.getHostString(),
-				connectionInfo.endpoint.getHostString(), trustCallback, () -> !closed, hostHeader(), secret), preConfigurationKeepaliveInterval).thenApply(ignored -> candidate);
+				connectionInfo.endpoint.getHostString(), trustCallback)).thenApply(ignored -> candidate);
 	}
 
 	/** Turns a validated candidate into a pooled connection, releasing the socket when construction fails. */
