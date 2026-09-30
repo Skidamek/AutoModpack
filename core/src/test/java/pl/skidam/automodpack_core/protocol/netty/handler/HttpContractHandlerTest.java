@@ -120,6 +120,20 @@ class HttpContractHandlerTest {
 		assertFalse(channel.isOpen());
 	}
 
+	/** A declared request body is out of contract: its bytes must never be parsed as the next request head, or a front proxy's response count desynchronizes from ours. */
+	@Test
+	void aRequestDeclaringABodyIsRejectedWithoutParsingItsBytesAsAnotherRequest() throws Exception {
+		fixture();
+		EmbeddedChannel channel = channel();
+
+		String smuggled = request("/head");
+		String body = "POST /head HTTP/1.1\r\nHost: contract.test\r\nContent-Length: " + smuggled.length() + "\r\n\r\n" + smuggled;
+		String response = exchange(channel, body);
+		assertTrue(response.startsWith("HTTP/1.1 400 Bad Request\r\n"), response);
+		assertEquals(1, response.split("HTTP/1.1 ", -1).length - 1, "exactly one response for the body-carrying request");
+		assertFalse(channel.isOpen(), "the rejected request closes the connection");
+	}
+
 	@Test
 	void ifNoneMatchReturnsNotModifiedOnMatchOnly() throws Exception {
 		Fixture fixture = fixture();
@@ -783,7 +797,7 @@ class HttpContractHandlerTest {
 		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(bytes.length), "config", false, hash, null));
 		fields.categories = Map.of("General", Map.of("main", group));
 		ModpackCandidate candidate = new ModpackCandidate(GroupManifestValidator.validate(fields), new TreeMap<>(Map.of(hash, new StagedObject(hash, bytes.length, staged))), new TreeMap<>(), List.of());
-		GenerationStore.Publication publication = store.publish(candidate, "");
+		GenerationStore.Publication publication = store.publish(candidate, "", null);
 		server = new NettyServer();
 		server.replacePaths(publication.hostingPaths());
 		return new Fixture(hash, new String(bytes, StandardCharsets.UTF_8), tempDir.resolve("host-generations").resolve("current-projection.json"),

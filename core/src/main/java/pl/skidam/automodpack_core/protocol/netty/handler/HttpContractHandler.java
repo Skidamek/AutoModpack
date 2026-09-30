@@ -323,7 +323,9 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	/**
 	 * Parses the buffered fields around an already-judged request line. Null means RFC 9112 rejects the block and the
 	 * connection answers 400: an obs-fold continuation, whitespace between a field name and its colon, a second Host
-	 * header, or an HTTP/1.1 request without a Host.
+	 * header, an HTTP/1.1 request without a Host, or a request declaring a body - the contract is bodyless, and a
+	 * declared-but-unread body would leave its bytes buffered as the next request head, desynchronizing any
+	 * HTTP-reframing front end from this parser's response count.
 	 */
 	static RequestHead parseHead(String[] lines, String[] requestLine) {
 		boolean http11 = requestLine[2].equals("HTTP/1.1");
@@ -344,6 +346,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 			if (nameEnd == ' ' || nameEnd == '\t') return null; // whitespace between field name and colon
 			name = name.toLowerCase(Locale.ROOT);
 			String value = line.substring(colon + 1).trim();
+			if (name.equals("content-length") || name.equals("transfer-encoding")) return null; // the contract carries no request body
 			if (name.equals("if-none-match")) ifNoneMatch = value;
 			else if (name.equals("range")) range = value;
 			else if (name.equals("authorization")) authorization = value;
