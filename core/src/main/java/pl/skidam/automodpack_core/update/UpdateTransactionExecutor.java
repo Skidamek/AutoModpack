@@ -445,7 +445,7 @@ public final class UpdateTransactionExecutor {
 		for (Preservation preservation : transaction.plan().preservations()) {
 			Path source = resolve(preservation.root(), preservation.relativePath(), transaction);
 			if (!FileIntegrity.matches(source, preservation.expectedSize(), preservation.expectedHash(), fileCache))
-				throw new IOException("Preserved source changed: " + source);
+				throw new UpdateReplanRequiredException(source, "Preserved source changed: " + source);
 			Path object = context.storage().objectFile(preservation.expectedHash().toLowerCase(Locale.ROOT));
 			VerifiedFileTransfer.copyAtomicImmutable(source, object, preservation.expectedSize(), preservation.expectedHash(), fileCache);
 		}
@@ -457,7 +457,7 @@ public final class UpdateTransactionExecutor {
 			if (conflict.action() != ConflictAction.PRESERVE_LOCAL) continue;
 			Path source = context.storage().gamePath(conflict.sourcePath());
 			if (!FileIntegrity.matches(source, conflict.sourceSize(), conflict.sourceHash(), fileCache))
-				throw new IOException("Conflict source changed: " + source);
+				throw new UpdateReplanRequiredException(source, "Conflict source changed: " + source);
 			Path object = context.storage().objectFile(conflict.sourceHash().toLowerCase(Locale.ROOT));
 			VerifiedFileTransfer.copyAtomicImmutable(source, object, conflict.sourceSize(), conflict.sourceHash(), fileCache);
 		}
@@ -617,10 +617,10 @@ public final class UpdateTransactionExecutor {
 		for (BaselineCapture capture : transaction.plan().baselineCaptures()) {
 			Path source = resolve(capture.root(), capture.relativePath(), transaction);
 			if (capture.absent()) {
-				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Captured path was expected to be absent: " + source);
+				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) throw new UpdateReplanRequiredException(source, "Captured path was expected to be absent: " + source);
 				continue;
 			}
-			if (!FileIntegrity.matches(source, capture.expectedSize(), capture.expectedHash(), fileCache)) throw new IOException("Captured source changed: " + source);
+			if (!FileIntegrity.matches(source, capture.expectedSize(), capture.expectedHash(), fileCache)) throw new UpdateReplanRequiredException(source, "Captured source changed: " + source);
 			Path object = context.storage().objectFile(capture.expectedHash());
 			VerifiedFileTransfer.copyAtomicImmutable(source, object, capture.expectedSize(), capture.expectedHash(), fileCache);
 		}

@@ -390,6 +390,38 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void aChangedBaselineCaptureRequestsAReplanInsteadOfFailingTheRecovery() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		byte[] expectedBytes = "expected-cache-content".getBytes(StandardCharsets.UTF_8);
+		String expectedHash = store(storage, expectedBytes);
+		SelectedModpackTarget target = UpdateTestFixtures.target(storage, "config/durw/cache.db", "config", false, expectedHash, expectedBytes.length);
+		Path live = storage.gameDirectory().resolve("config/durw/cache.db");
+		byte[] plannedBytes = "planned-cache-content".getBytes(StandardCharsets.UTF_8);
+		Files.createDirectories(live.getParent());
+		Files.write(live, plannedBytes);
+		String plannedHash = HashUtils.sha1(plannedBytes);
+		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(
+				new Operation(Root.PROJECTION, "config/durw/cache.db", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null),
+				new Operation(Root.GAME_DIR, "config/durw/cache.db", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, plannedHash)),
+				List.of(new ProjectedFile(Root.PROJECTION, "config/durw/cache.db", true, expectedHash, expectedBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/durw/cache.db", true, expectedHash, expectedBytes.length)),
+				clientConfig(target.manifest().modpackId()), Set.of(), List.of(),
+				List.of(new UpdatePlan.BaselineCapture(Root.GAME_DIR, "config/durw/cache.db", plannedHash, plannedBytes.length, false)),
+				List.of(), List.of(), ChangeSet.empty()).withPlannedSelectedModpackId(target.manifest().modpackId());
+		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, plan, target));
+		// A running mod rewrites its cache file between planning and the next boot's recovery, so the pinned baseline no longer names the live bytes.
+		byte[] rewrittenBytes = "rewritten-by-the-running-mod".getBytes(StandardCharsets.UTF_8);
+		Files.write(live, rewrittenBytes);
+
+		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.executor(storage).recoverLatest();
+
+		assertTrue(execution.replanRequired());
+		assertArrayEquals(rewrittenBytes, Files.readAllBytes(live));
+		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, persistedTransaction(storage).resultStatus);
+		assertTrue(Files.exists(storage.transactionFile()), "the journal stays pending for the replan instead of being retired");
+	}
+
+	@Test
 	void aRebuiltTransactionRetiresAnInterruptedApply() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
 		byte[] earlyBytes = "early-game-file".getBytes(StandardCharsets.UTF_8);
