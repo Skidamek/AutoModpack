@@ -119,7 +119,7 @@ A player who once verified by hand, or joined through a pinned address, holds a 
 
 ### Bootstrap files
 
-A bootstrap file is one-file onboarding: the player drops a single file into the instance's `automodpack/` folder and starts the game once. The import sets up trust, the server address, and the pack in one step. That convenience is why this section is on this page: the file makes two security decisions on the player's behalf, and it is worth knowing exactly which.
+A bootstrap file is one-file onboarding: the player drops the export, renamed to `automodpack-bootstrap.json`, into the instance's `automodpack/` folder and starts the game once. The import sets up trust, the server address, and the pack in one step. That convenience is why this section is on this page: the file makes two security decisions on the player's behalf, and it is worth knowing exactly which.
 
 Two commands write two different files, and they do not carry the same weight:
 
@@ -142,7 +142,7 @@ The honest limits:
 - A leaked install export keeps working until you rotate the secret. Delete `automodpack/credentials/provisioning-secret` on the server to revoke it for running downloads within seconds, and a new secret is generated on the next start. Install exports made before the rotation stop working.
 - The drop-in location is inside `automodpack/`, a path the pack's file list can never include, and a copy sitting at the instance root is ignored with a warning. A modpack cannot place the file there; only you can.
 
-The command syntax is in [commands](commands#hosting), and the complete onboarding walk-through is the [one-file recipe](recipes#onboard-a-player-with-one-file).
+The command syntax is in [commands](commands#hosting).
 
 ## How clients verify a server
 
