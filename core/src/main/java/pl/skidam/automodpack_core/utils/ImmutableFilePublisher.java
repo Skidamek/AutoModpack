@@ -65,13 +65,14 @@ public final class ImmutableFilePublisher {
 			ImmutableFiles.allowOwnerWrite(temporary);
 			FileTrees.forceFile(temporary);
 			validate(existingFileValidator, temporary, null);
-			if (protect) ImmutableFiles.protect(temporary);
-			try {
-				return publishTemporary(temporary, target, existingFileValidator, forceDirectory);
-			} catch (IOException e) {
-				if (linkFailure != null) e.addSuppressed(linkFailure);
-				throw e;
-			}
+			boolean published = publishTemporary(temporary, target, existingFileValidator, forceDirectory);
+			// Protection lands on the published target only after the temporary's link is gone: read-only is a property
+			// of the shared inode, so protecting earlier would make the consumed temporary undeletable on Windows.
+			if (protect && published) ImmutableFiles.protect(target);
+			return published;
+		} catch (IOException e) {
+			if (linkFailure != null) e.addSuppressed(linkFailure);
+			throw e;
 		} finally {
 			Files.deleteIfExists(temporary);
 		}
@@ -91,6 +92,9 @@ public final class ImmutableFilePublisher {
 			} catch (UnsupportedOperationException | FileSystemException linkFailure) {
 				return publishAtomicMoveLocked(temporary, target, parent, existingFileValidator, linkFailure, forceDirectory);
 			}
+			// The link owns the inode now; drop the temporary's directory entry while the inode is still unprotected,
+			// because the caller protects the target right after and read-only would make this deletion fail on Windows.
+			Files.deleteIfExists(temporary);
 			published = true;
 			return true;
 		} finally {
