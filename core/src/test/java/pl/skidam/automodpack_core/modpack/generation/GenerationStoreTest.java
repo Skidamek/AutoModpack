@@ -126,7 +126,7 @@ class GenerationStoreTest {
 		Path track = tempDir.resolve("waiting-music.ogg");
 		Files.write(track, "track-bytes".getBytes(StandardCharsets.UTF_8));
 		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects, track);
-		store.publish(candidate("one", "content-one"), "First");
+		store.publish(candidate("one", "content-one"), "First", null);
 
 		Path object = DataRootResolver.objectFile(objects, sha1("track-bytes"));
 		assertEquals("track-bytes", Files.readString(object, StandardCharsets.UTF_8));
@@ -136,12 +136,12 @@ class GenerationStoreTest {
 		// object against its hash and replaces it instead of advertising bytes the server can never serve.
 		ImmutableFiles.unprotect(object);
 		Files.write(object, "truncated".getBytes(StandardCharsets.UTF_8));
-		store.publish(candidate("two", "content-two"), "Second");
+		store.publish(candidate("two", "content-two"), "Second", null);
 		assertEquals("track-bytes", Files.readString(object, StandardCharsets.UTF_8));
 
 		// A changed track file lands under its own hash at the next publish.
 		Files.write(track, "new-track-bytes".getBytes(StandardCharsets.UTF_8));
-		store.publish(candidate("three", "content-three"), "Third");
+		store.publish(candidate("three", "content-three"), "Third", null);
 		assertEquals("new-track-bytes", Files.readString(DataRootResolver.objectFile(objects, sha1("new-track-bytes")), StandardCharsets.UTF_8));
 		assertTrue(store.hosting().asMap().containsKey(sha1("new-track-bytes")));
 	}
@@ -152,7 +152,7 @@ class GenerationStoreTest {
 		Path track = tempDir.resolve("waiting-music.ogg");
 		Files.write(track, "track-bytes".getBytes(StandardCharsets.UTF_8));
 		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects, track);
-		store.publish(candidate("one", "content-one"), "First");
+		store.publish(candidate("one", "content-one"), "First", null);
 		Files.createDirectories(objects.resolve("ff"));
 		Path orphan = objects.resolve("ff").resolve(sha1("orphan").substring(2));
 		Files.write(orphan, "orphan".getBytes(StandardCharsets.UTF_8));
@@ -238,6 +238,38 @@ class GenerationStoreTest {
 		GenerationStore.Publication fresh = reopened.publish(candidate("one", "content-one"), "After heal", null);
 		assertEquals(1, fresh.entry().seq());
 		assertEquals(root.entry().contentToken(), fresh.entry().contentToken());
+	}
+
+	/** Policy objects are the only store content nothing else reads back, so their address is their verification: divergent bytes under an unchanged name must never become hosting truth. */
+	@Test
+	void tamperedPolicyBytesAreRejectedByRestoreAndArchivedAsideByTheRebuild() throws Exception {
+		Path state = tempDir.resolve("state");
+		Path objects = tempDir.resolve("objects");
+		GenerationStore store = new GenerationStore(state, objects);
+		GenerationStore.Publication root = store.publish(candidate("one", "content-one"), "First", null);
+		store.publish(candidate("two", "content-two"), "Second", null);
+
+		// A same-privilege tamper: a validator-passing document of different bytes under the unchanged address.
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
+		fields.modpackId = "abc1234";
+		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.description = "one";
+		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields("8", "config", false, sha1("tampered"), null));
+		fields.categories = Map.of("General", Map.of("main", group));
+		Path policyObject = DataRootResolver.objectFile(objects, root.entry().policySha1());
+		Files.write(policyObject, ConfigTools.GSON.toJson(fields).getBytes(StandardCharsets.UTF_8));
+
+		// The restore path fails loudly instead of serving the forged document as a new generation.
+		GenerationStore restoring = new GenerationStore(state, objects);
+		assertThrows(IOException.class, () -> restoring.publishRestore(1, "Restore the tampered generation"));
+
+		// The rebuild path archives the store aside and restarts empty, exactly like any other unusable journal content.
+		Files.delete(state.resolve("current-projection.json"));
+		GenerationStore reopened = new GenerationStore(state, objects);
+		assertTrue(reopened.loadCurrent().isEmpty());
+		try (var leftovers = Files.list(state)) {
+			assertTrue(leftovers.anyMatch(path -> path.getFileName().toString().startsWith("journal.jsonl.corrupt-")));
+		}
 	}
 
 	@Test

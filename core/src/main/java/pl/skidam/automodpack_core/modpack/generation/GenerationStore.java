@@ -111,7 +111,7 @@ public final class GenerationStore {
 		if (projected != null) return projected;
 		try {
 			JournalEntry head = journal.head();
-			Current rebuilt = new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), loadPolicy(head.policySha1()), replayLedger(head.seq()),
+			Current rebuilt = new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), verifiedPolicy(head), replayLedger(head.seq()),
 					journal.treeAt(head.seq()), publishWaitingMusicObject(null));
 			writeProjection(rebuilt);
 			return rebuilt;
@@ -163,11 +163,6 @@ public final class GenerationStore {
 	 * metadata-only policy change lands as an empty-changes entry - the journal is the only truth, so the new policy
 	 * must be reachable from it or the next boot rebuilds the old one. True no-change leaves the head untouched.
 	 */
-	/** Publishes without a file cache: no corrupt-object repair happens at promotion. */
-	public Publication publish(ModpackCandidate candidate, String notes) throws IOException {
-		return publish(candidate, notes, null);
-	}
-
 	public Publication publish(ModpackCandidate candidate, String notes, FileCache fileCache) throws IOException {
 		Current current = loadCurrent().orElse(null);
 		GroupManifest manifest = candidate.manifest();
@@ -212,7 +207,7 @@ public final class GenerationStore {
 		JournalEntry target = journal.entryAt(targetSeq);
 		ContentTree targetTree = journal.treeAt(targetSeq);
 		requireStoredObjects(targetTree);
-		GroupManifest manifest = loadPolicy(target.policySha1());
+		GroupManifest manifest = verifiedPolicy(target);
 		OwnershipLedger ledger = OwnershipLedger.materialize(current.ledger(), manifest);
 
 		List<JournalEntry.Change> changes = diffTrees(current.tree(), targetTree);
@@ -298,12 +293,25 @@ public final class GenerationStore {
 		}
 	}
 
+	/**
+	 * The policy of a generation this store is about to make current: its object's address is proven against its bytes and its tree against the journal's content token, so no divergent document can become hosting truth.
+	 */
+	private GroupManifest verifiedPolicy(JournalEntry entry) throws IOException {
+		GroupManifest manifest = loadPolicy(entry.policySha1());
+		if (!ContentTree.fromManifest(manifest).token().equals(entry.contentToken()))
+			throw new Journal.UnusableContentException("Policy document of generation " + entry.seq() + " does not agree with the journal's content token: " + entry.policySha1());
+		return manifest;
+	}
+
 	private GroupManifest loadPolicy(String policySha1) throws IOException {
 		Path object = DataRootResolver.objectFile(objectsDirectory, policySha1);
 		if (!Files.isRegularFile(object)) throw new Journal.UnusableContentException("Policy document is missing from the object store: " + policySha1);
 		try {
-			ModpackJsons.CompleteModpackContentFields fields = ConfigTools.parse(Files.readString(object, StandardCharsets.UTF_8), ModpackJsons.CompleteModpackContentFields.class);
-			return GroupManifestValidator.validate(fields);
+			// The content address is the only verification: unlike every tree object, a policy document is read back
+			// nowhere else, so bytes that no longer hash to their name would otherwise replay into hosting truth.
+			byte[] bytes = Files.readAllBytes(object);
+			if (!HashUtils.sha1(bytes).equalsIgnoreCase(policySha1)) throw new Journal.UnusableContentException("Policy document content does not match its address: " + policySha1);
+			return GroupManifestValidator.validate(ConfigTools.parse(new String(bytes, StandardCharsets.UTF_8), ModpackJsons.CompleteModpackContentFields.class));
 		} catch (RuntimeException e) {
 			throw new Journal.UnusableContentException("Policy document is unusable: " + policySha1, e);
 		}
