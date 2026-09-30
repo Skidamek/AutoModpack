@@ -119,7 +119,7 @@ A player who once verified by hand, or joined through a pinned address, holds a 
 
 ### Bootstrap files
 
-A bootstrap file is one-file onboarding: the player drops the export, renamed to `automodpack-bootstrap.json`, into the instance's `automodpack/` folder and starts the game once. The import sets up trust, the server address, and the pack in one step. That convenience is why this section is on this page: the file makes two security decisions on the player's behalf, and it is worth knowing exactly which.
+A bootstrap file is one-file onboarding: the player drops the export, renamed to `automodpack-bootstrap.json`, into the instance's `automodpack/` folder and starts the game once. The import sets up trust, the server address, and the pack in one step. The import makes two security decisions on the player's behalf: it pins a certificate, and an install export also stores a download credential. The rest of this section says exactly which.
 
 Two commands write two different files, and they do not carry the same weight:
 
