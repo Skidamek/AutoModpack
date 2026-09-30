@@ -70,6 +70,9 @@ jobs:
     with:
       source_sha: ${{ github.sha }}
       artifact_retention_days: 7
+      # A pull request is untrusted input: it may restore the trusted main-branch cache but must never write one
+      # the release path could restore.
+      gradle_cache_read_only: ${{ github.event_name == 'pull_request' }}
 
   gate:
     name: CI Gate

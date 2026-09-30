@@ -12,6 +12,11 @@ on:
         type: number
         required: false
         default: 7
+      gradle_cache_read_only:
+        description: Whether this build may only restore, never write, the Gradle cache - required for untrusted trigger paths sharing this workflow
+        type: boolean
+        required: false
+        default: false
     outputs:
       matrix:
         description: Metadata for the packaged jar
@@ -41,6 +46,7 @@ jobs:
         with:
           add-job-summary: never
           cache-provider: basic
+          cache-read-only: ${{ inputs.gradle_cache_read_only }}
       - name: Build targets
         # -x test: the core suite runs in CI on every push; a release only ships artifacts.
         run: ./gradlew build -x test writeReleaseMatrix --continue
