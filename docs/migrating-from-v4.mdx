@@ -51,13 +51,13 @@ When you update the server to v5, clients do not need a hand from you. On their 
 
 ## What v5 adds
 
-- [Groups](pack-content#groups): split the pack into required and optional parts that players pick in-game, with conflicts resolved on the client.
-- [Generations](how-it-works/generations): every publish is a numbered generation with patch notes; preview a publish, roll one back, and script publishes with `if-content`.
-- [Hosting rework](how-it-works/hosting): the new `HOLEPUNCH` mode carries the pack over the Minecraft connection itself, so servers behind Minecraft-only firewalls, proxies, and hosting panels just work with no setup.
-- [Static export](how-it-works/hosting#http-contract-export): the whole pack is three GET routes, so any static HTTPS host or S3-compatible bucket serves it.
-- [New verification methods](security): published [DNSSEC records](security#dnssec-amp1), [pinned join addresses](security#pinned-join-addresses) that verify in a copy-paste, and [bootstrap files](security#bootstrap-files) for one-file onboarding. Any of them removes the verification screen entirely.
-- [Human-editable configs](configuration/server-config): `server.conf` and `client.conf` replace the old JSON and keep your comments on save, and most settings reload without a restart.
+- [Groups](groups): split the pack into required and optional parts that players pick in-game, with conflicts resolved on the client.
+- [Generations](how-it-works/generations): every publish is a numbered generation with patch notes, preview and can be rolled back into.
+- [Connection modes](how-it-works/hosting): the new `HOLEPUNCH` mode carries the pack over the Minecraft connection itself, so servers behind Minecraft-only firewalls, lan share mods, proxies, and some hostings now just work with no additional setup.
+- [Hosting rework](how-it-works/hosting#http-contract-export): the whole pack is three HTTP GET routes, so any static HTTPS host or S3-compatible bucket can serve it.
+- [New verification methods](security): published [DNSSEC records](security#dnssec-amp1), [pinned join addresses](security#pinned-join-addresses), and [bootstrap files](security#bootstrap-files) for one-file onboarding.
+- [Human-editable configs](configuration/server-config): `server.conf` and `client.conf` replace the old jsons.
 - [Swappable waiting music](pack-content#waiting-music): drop an `.ogg` in the pack sources and players hear it during downloads.
-- [A sharper editable policy](how-it-works/client-updates#editable-files): the v4 editable list grows real rules. Player edits survive updates, and the server replaces an editable file exactly once, when its content actually changes.
-- [More reliable in-place loading](how-it-works/loader-behavior): v4 fell back to force-copying mods into the standard `mods` folder when it could not load them in place, which cost a restart per update. v5 loads more packs straight from the managed projection, so those restarts mostly disappear.
-- [Client-side safety nets](how-it-works/safety-nets): an instance timeline that records every step, offline pack history with restore, and storage repair and cleanup.
+- [A sharper editable policy](how-it-works/client-updates#editable-files): All editable files copy to client root, player edits survive, until modpack modifies them they get backedup and overwritten, after which players can edit them freely again.
+- [More reliable in-place loading](how-it-works/loader-behavior): v4 often falled back to force-copying mods into the standard `mods` folder, which cost a restart per update. v5 loads more mods straight from the managed projection.
+- [Client-side safety nets](how-it-works/safety-nets): an instance timeline that records every step, offline pack history with restore, detachment, storage repair and cleanup.
