@@ -28,7 +28,7 @@ Patch notes for the next publish can also be written to `automodpack/host-modpac
 - `host bootstrap pin <origin> [server-name]` - Writes `automodpack/automodpack-bootstrap.exported.json` with a TLS pin, for distributing to clients. The optional server name adds a vanilla server list entry on the client.
 - `host bootstrap install <origin> [endpoint] [connection-mode] [server-name]` - Writes an install export with the published pack, a provisioning secret, and the advertised endpoint. Omitting `endpoint` uses the advertised endpoint, which needs `advertised-endpoint-host` and `advertised-endpoint-port` set in the server config. The optional server name adds a vanilla server list entry on the client.
 
-Both bootstrap commands refuse to run when `disable-internal-tls` is on. When the endpoint is served by something external, the command fails and names the front-end's certificate as the one to pin instead. The pin export holds only public data: the origin and the fingerprint. The install export contains a provisioning secret, so treat it like a credential; anyone holding one can provision themselves onto your pack. See [bootstrap files](how-it-works/files-on-disk#bootstrap) for how clients import them.
+Both bootstrap commands refuse to run when `disable-internal-tls` is on. When the endpoint is served by something external, the command fails and names the front-end's certificate as the one to pin instead. The pin export holds only public data: the origin and the fingerprint. The install export contains a provisioning secret, so treat it like a credential; anyone holding one can provision themselves onto your pack. See [bootstrap files](security#bootstrap-files) for how clients import them.
 
 ## Configuration
 

@@ -24,7 +24,7 @@ A script or a panel copies new files into the pack sources and publishes them, w
 1. Copy the new files into `automodpack/host-modpack/main/` or your other group directories.
 2. Run `generate preview`. It shows what a publish would change and publishes nothing.
 3. Run `generate if-content <content-token>`. The command publishes only while the pack still matches the token you give it. When someone changed the pack in between, the command reports the mismatch and publishes nothing.
-4. The token is the content token of the generation you last saw, a 40 character SHA-1. Every publish prints it, and `generate history` lists it per entry. In-game, clicking the value copies it. The term is defined in the [glossary](glossary).
+4. The token is the content token of the generation you last saw, a 40 character SHA-1. Every publish prints it, and `generate history` lists it per entry. In-game, clicking the value copies it. The term is explained in [generations](how-it-works/generations).
 5. Optional: set `export-http-directory` in the [server config](configuration/server-config#network-and-hosting) to write a static copy of the pack after every publish. The automatic export runs only when `validate-secrets` is off, since a public mirror cannot enforce download secrets; with it on, the refusal is logged after each publish.
 
 [Generations](how-it-works/generations) explains publishing and tokens, and [HTTP contract export](how-it-works/hosting#http-contract-export) explains the static copy.
@@ -50,7 +50,7 @@ You need the built-in TLS on: both bootstrap commands refuse to run when `disabl
 2. Send that file to the player through a channel you trust. It carries a provisioning secret, so treat it like a credential. Anyone holding one can provision themselves onto your pack. Deleting `automodpack/credentials/provisioning-secret` on the server revokes it.
 3. The player installs AutoModpack, drops the file at `automodpack/automodpack-bootstrap.json` inside the instance folder, and starts the game. The import installs the pack and boots straight into it, without the usual first-install review stop.
 
-The import is one-shot: the client deletes the file after reading it. The details are in [bootstrap files](how-it-works/files-on-disk#bootstrap), and the security weight of each export in [bootstrap files](security#bootstrap-files) on the security page.
+The import is one-shot: the client deletes the file after reading it. The security weight of each export is in [bootstrap files](security#bootstrap-files) on the security page.
 
 ## Move the server to a new address or host
 

@@ -6,38 +6,26 @@ AutoModpack keeps every player's game in sync with the server's modpack. The sam
 
 1. Back up the server folder first. A backup turns any mistake into a rollback.
 2. Download the newest release of AutoModpack from [Modrinth](https://modrinth.com/mod/automodpack) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack). The release ships one jar that works on every supported Minecraft version and loader.
-3. Put the jar in the server's `mods` folder and start the server once. AutoModpack creates an `automodpack` folder in the server root, writes the [server config](configuration/server-config) `server.conf`, and publishes the first [generation](glossary) of the pack. The pack source folder `automodpack/host-modpack/main/` comes with `resourcepacks/` and `shaderpacks/` folders ready to fill. If you run the server on a hosting provider, see [the FAQ](faq#does-it-work-on-a-hosting-provider).
+3. Put the jar in the server's `mods` folder and start the server once. AutoModpack creates an `automodpack` folder in the server root, writes its `server.conf`, and publishes the first generation of the pack. The pack source folder `automodpack/host-modpack/main/` comes with `resourcepacks/` and `shaderpacks/` folders ready to fill.
 4. Everything under `automodpack/host-modpack/main/` ships with the pack, even files the server itself has no use for. That is where client-only mods and configs go:
 
    ```
    automodpack/host-modpack/main/mods/sodium-extra.jar
    ```
 
-   You can also give players your settings and keybinds by placing a prepared `options.txt` in the same folder. A player's game keeps its own `mods` folder for their extra mods; the pack's files live in a managed `automodpack` folder and load from there. [Building the modpack](pack-content) explains how all of this is decided.
+   You can also give players your settings and keybinds by placing a prepared `options.txt` in the same folder. A player's game keeps its own `mods` folder for their extra mods; the pack's files live in a managed `automodpack` folder and load from there.
 5. Run `/automodpack generate` after changing anything. Commands run in the server console, or in in-game chat as an operator. The server also runs the same generation automatically on every start by default, so a restart through a hosting panel publishes changes too. Players receive the new version on their next connection.
 6. Before inviting anyone, connect once with a clean client that has only AutoModpack installed. If that works, the setup is proven, and any future problem points at pack content.
-7. Tell players how to connect. With a DNSSEC-signed domain, publish the record printed by `/automodpack host fingerprint dns <hostname>`, and the verification screen never appears at all. Otherwise run `/automodpack host fingerprint share <address>` and hand out the pinned address it prints: the address carries the fingerprint inside it, so verification needs no extra step. If you set up neither, every player verifies on their first join by pasting the fingerprint from `/automodpack host fingerprint`.
-
-   [Security](security) lists every setup and what it costs.
+7. Tell players how to connect. With a DNSSEC-signed domain, publish the record printed by `/automodpack host fingerprint dns <hostname>`, and the verification screen never appears at all. Otherwise run `/automodpack host fingerprint share <address>` and hand out the pinned address it prints: the address carries the fingerprint inside it, so verification needs no extra step. If you set up neither, every player verifies on their first join by pasting the fingerprint from `/automodpack host fingerprint`. [Security](security) lists every setup and what it costs.
 
 ## Join as a player
 
 [For players](players) is the full walk-through of every screen a player sees; this section is the short version.
 
 1. Put the same AutoModpack jar in your instance's `mods` folder. One jar covers every Minecraft version and loader. Back up anything valuable in the instance first.
-2. Add the server and join it as usual. Before anything downloads, the mod checks that the server is who it claims to be. The certificate verification screen shows the server's fingerprint. If the admin gave you a fingerprint, compare it with the one on the screen, or paste it into the field on the screen. If the admin gave you a pinned address, this step is already done. You can skip the check; the screen marks skipping as the risky choice. [Security](security) explains what this protects.
+2. Add the server and join it as usual. Before anything downloads, the mod checks that the server is who it claims to be: if the admin gave you a fingerprint, compare or paste it on the verification screen; if the admin gave you a pinned address, the check happens by itself. You can skip the check, and the screen marks skipping as the risky choice.
 3. Confirm the install. The screen shows how many mod files were matched on Modrinth or CurseForge. Jars that matched on neither are listed, and starting the download needs an explicit risk confirmation for them. "Customize" opens the group list, where you pick optional parts of the pack.
-4. When a change needs a restart, the mod closes the game and you start it again to load the change. In-game, the mod asks first, and you can decline and return to the game; you may see that question even for a small change, like one to a config. From then on the mod keeps you in sync: updates apply at launch or when you join, and a restart is only needed when the change touches the `mods` folder, the loader, or the game version. [Client updates](how-it-works/client-updates) explains when.
-
-## Where to go next
-
-- [Building the modpack](pack-content): file rules, editable files, default keybinds and settings.
-- [Groups](groups): optional parts of the pack, and how players pick them.
-- [How a pack is built](how-it-works/pack-pipeline): what `generate` reads, checks, and publishes.
-- [Server configuration](configuration/server-config): every server setting.
-- [Commands](commands): publishing, hosting, certificates, rollbacks.
-- [Security](security): how clients verify a server, and how downloads are authorized.
-- [FAQ](faq): common questions and troubleshooting.
+4. When a change needs a restart, the mod closes the game and you start it again to load it. From then on the mod keeps you in sync: updates apply at launch or when you join, and a restart is only needed when the change touches the `mods` folder, the loader, or the game version.
 
 ## A message for your friends
 
@@ -50,5 +38,3 @@ We play on a modded server. Install AutoModpack from Modrinth (https://modrinth.
 
 The address carries the server's fingerprint, so the first connection verifies itself.
 ```
-
-Friends who want every screen explained can follow [For players](players) instead.

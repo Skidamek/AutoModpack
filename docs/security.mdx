@@ -130,7 +130,7 @@ What the import changes on the client:
 
 - Trust. The import saves the file's fingerprint as a pin for the origin, the same kind of pin a player accepts by hand on the verification screen. The verification ladder below then applies with no exception: the pin is law on every later connection, it shows on the same Certificate pin screen, and it is removed the same way. The import does not skip verification. It performs it in advance.
 - Authorization. An install export also stores the provisioning secret, so the client's download requests pass the gate in [download authorization](#download-authorization) without a login-issued secret.
-- Setup. The pack installs on that first boot, without the usual first-install review when every mod jar is listed on Modrinth or CurseForge, and the optional server name becomes an entry in the vanilla server list. The import is one-shot: the file is deleted after reading.
+- Setup. The pack installs on that first boot, without the usual first-install review when every mod jar is listed on Modrinth or CurseForge, and the optional server name becomes an entry in the vanilla server list. The import is one-shot: the file is deleted after reading. The export is never imported by the instance that wrote it, so running the command on your own server does not reroute that instance.
 
 The .mrpack recipe: build an instance whose `mods` folder contains only AutoModpack and place the install export at `automodpack/automodpack-bootstrap.json` inside the instance, then ship the instance. A player imports it once in their launcher and is set up: server entry, trust, and pack, with every later update arriving on its own.
 
@@ -142,7 +142,7 @@ The honest limits:
 - A leaked install export keeps working until you rotate the secret. Delete `automodpack/credentials/provisioning-secret` on the server to revoke it for running downloads within seconds, and a new secret is generated on the next start. Install exports made before the rotation stop working.
 - The drop-in location is inside `automodpack/`, a path the pack's file list can never include, and a copy sitting at the instance root is ignored with a warning. A modpack cannot place the file there; only you can.
 
-The command syntax is in [commands](commands#hosting), the mechanics of the export and the import are in [bootstrap files](how-it-works/files-on-disk#bootstrap), and the complete onboarding walk-through is the [one-file recipe](recipes#onboard-a-player-with-one-file).
+The command syntax is in [commands](commands#hosting), and the complete onboarding walk-through is the [one-file recipe](recipes#onboard-a-player-with-one-file).
 
 ## How clients verify a server
 

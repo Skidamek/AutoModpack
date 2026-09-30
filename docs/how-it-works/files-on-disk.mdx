@@ -2,18 +2,6 @@
 
 AutoModpack keeps its files in an `automodpack/` folder inside the game directory: the server root for a server, the instance folder for a client. This page writes that folder as `~/automodpack/`.
 
-## Bootstrap
-
-Bootstrap is a one-file setup for a private server. It needs AutoModpack installed and a single file given to the client. On the first client boot, AutoModpack imports the file, installs the modpack, boots straight into it, and keeps it in sync.
-
-The one-shot client drop-in is `~/automodpack/automodpack-bootstrap.json`. Put a copy there, start the game, and AutoModpack imports it and deletes it. AutoModpack must already be installed. The file lives inside `automodpack/` because a pack can never write there; the same file name at the instance root is ignored with a warning. If the file includes `serverName`, the import also creates the entry in the vanilla server list.
-
-`/automodpack host bootstrap pin <origin> [server-name]` writes `~/automodpack/automodpack-bootstrap.exported.json` with the origin and the fingerprint. `/automodpack host bootstrap install <origin> [endpoint] [connection-mode] [server-name]` writes an install export that adds the published pack id, the endpoint, the connection mode, and a provisioning secret. On either command, the optional `server-name` becomes the entry in the player's vanilla server list. Both commands need the built-in TLS on, so `disable-internal-tls` must be off, and installing without an `endpoint` argument takes the advertised endpoint from the server config, which needs `advertised-endpoint-host` and `advertised-endpoint-port` set.
-
-Copy the export to clients as `automodpack-bootstrap.json`. Keep the fingerprint inside it: an import without a fingerprint trusts nothing on its own, and on a server with no CA certificate or AMP1 record the boot-time fetch fails closed instead of prompting. The export is never imported by the instance that wrote it, so running the command on a logical server does not reroute the same instance. An install export contains a provisioning secret, so treat it like a credential; the security weight of both exports is in [bootstrap files](../security#bootstrap-files).
-
-Deleting `automodpack/credentials/provisioning-secret` revokes the provisioning secret for running downloads within seconds. A new secret is generated on the next server start.
-
 ## You edit these
 
 | Path | Role |

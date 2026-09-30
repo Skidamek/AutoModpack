@@ -88,7 +88,7 @@ What the example shows:
 - `options.txt` and everything under `config` in the pack is editable because `editable` says so.
 - `config/ferritecore.mixin.properties` and `config/invisible-radio.json` exist on the server but not in the pack. `editable` marks files that are already in the pack; it does not pull files in.
 
-Editable files keep their copy in the game directory, mods included: a mod matched by `editable`, say `mods/customizable.jar`, materializes in the player's `mods` folder where they can edit or remove it. Mark a mod editable when players are expected to replace it themselves; leave it out and it stays in the [projection](glossary), untouched.
+Editable files keep their copy in the game directory, mods included: a mod matched by `editable`, say `mods/customizable.jar`, materializes in the player's `mods` folder where they can edit or remove it. Mark a mod editable when players are expected to replace it themselves; leave it out and it stays in the [projection](how-it-works/files-on-disk#the-projection), untouched.
 
 The `exclude` list in the example is trimmed for readability. The shipped default also excludes hidden files and `*.tmp`, `*.disabled`, and `*.bak` files (`**/.*`, `**/.*/**`, `**/*.{tmp,disabled,bak}`); replacing the default list drops that filtering.
 
