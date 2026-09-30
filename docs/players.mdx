@@ -14,9 +14,9 @@ The download runs on a progress screen, and a music button there mutes the waiti
 
 ## Restarts
 
-With the default settings, every launch fetches the server's current generation and applies it before the game loads anything, and joining applies what changed since your last visit. Changes that only touch the managed pack folder need no restart: configs land on disk, and mods load from the managed folder.
+Every launch applies the server's latest update before the game loads anything, so what loads is already fresh: no restart, no prompt. Only a change to the loader or game version, or files that must land in your standard `mods` folder, forces one even there.
 
-A restart is only needed when the change touches the mods folder, the loader, or the game version. In-game the mod asks first, and you can decline and keep playing. The review before an update tells you whether a restart is expected, and the question names the reasons when one is. When the mod cannot switch your launcher to the version the server publishes, it tells you the version to set in the launcher yourself before the next start. If a mod changed on disk after the game loaded it, a "Restart might fix this" toast says that restarting and joining again is the thing to try.
+In-game it depends on what changed. Mod loaders cannot hot-swap mods, and AutoModpack can only alter loading before the game starts, so any change that touches mods needs a restart to load; the mod asks first, and you can decline and keep playing on the old mods until the next launch. Changes to configs and other files apply where they stand, and the restart they offer is optional. The review before an update tells you whether a restart is expected, and the question names the reasons when one is. When the mod cannot switch your launcher to the version the server publishes, it tells you the version to set in the launcher yourself before the next start. If a mod changed on disk after the game loaded it, a "Restart might fix this" toast says that restarting and joining again is the thing to try.
 
 ## Your own mods stay yours
 

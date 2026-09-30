@@ -59,5 +59,5 @@ When you update the server to v5, clients do not need a hand from you. On their 
 - [Human-editable configs](configuration/server-config): `server.conf` and `client.conf` replace the old JSON and keep your comments on save, and most settings reload without a restart.
 - [Swappable waiting music](pack-content#waiting-music): drop an `.ogg` in the pack sources and players hear it during downloads.
 - [A sharper editable policy](how-it-works/client-updates#editable-files): the v4 editable list grows real rules. Player edits survive updates, and the server replaces an editable file exactly once, when its content actually changes.
-- [More reliable in-place loading](how-it-works/loader-behavior): pack mods load from a managed projection outside your `mods` folder; the loader integration is reworked, so packs that failed to load under v4 now work.
+- [More reliable in-place loading](how-it-works/loader-behavior): v4 fell back to force-copying mods into the standard `mods` folder when it could not load them in place, which cost a restart per update. v5 loads more packs straight from the managed projection, so those restarts mostly disappear.
 - [Client-side safety nets](how-it-works/safety-nets): an instance timeline that records every step, offline pack history with restore, and storage repair and cleanup.
