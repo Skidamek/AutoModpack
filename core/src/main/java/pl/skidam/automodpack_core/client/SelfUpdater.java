@@ -16,6 +16,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.platforms.PlatformCache;
+import pl.skidam.automodpack_core.screen.PackIdentity;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
@@ -196,7 +197,7 @@ public class SelfUpdater {
 				// No transport owns a self-update download: end any session a previous in-process pack download
 				// left behind, or the audio layer replays the previous server's track over this screen.
 				WaitingMusic.endRun();
-				ScreenManager.download(downloadManager, "AutoModpack " + automodpack.fileVersion());
+				ScreenManager.download(downloadManager, PackIdentity.of("AutoModpack " + automodpack.fileVersion(), "", ""));
 				downloadManager.download(targetJar, automodpack.SHA1Hash(), null, ModpackContentType.MOD,
 						List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
 						() -> LOGGER.info("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));

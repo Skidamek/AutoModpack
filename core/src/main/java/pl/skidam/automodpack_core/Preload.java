@@ -46,7 +46,7 @@ public class Preload {
 				serverConfig = ConfigUtils.loadOrCreateServerConfig();
 			}
 			updateAll();
-			LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
+			LOGGER.info("AutoModpack prelaunched in " + (System.currentTimeMillis() - start) + "ms");
 		} catch (Exception e) {
 			e.printStackTrace();
 			throw new RuntimeException(e);

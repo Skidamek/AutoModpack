@@ -24,12 +24,12 @@ public final class ScreenManager {
 		instance = Objects.requireNonNull(screenService, "screenService");
 	}
 
-	public static void download(DownloadView download, String modpackName) {
-		instance.download(download, modpackName);
+	public static void download(DownloadView download, PackIdentity pack) {
+		instance.download(download, pack);
 	}
 
-	public static void download(DownloadView download, String modpackName, Runnable onCancel) {
-		instance.download(download, modpackName, onCancel);
+	public static void download(DownloadView download, PackIdentity pack, Runnable onCancel) {
+		instance.download(download, pack, onCancel);
 	}
 
 	public static void changelog(Changelogs changelogs) {

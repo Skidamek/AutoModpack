@@ -162,6 +162,9 @@ public record GenerationDiff(
 		List<String> modified = new ArrayList<>();
 		if (!Objects.equals(parent.modpackId(), child.modpackId())) modified.add("modpackId");
 		if (!Objects.equals(parent.modpackName(), child.modpackName())) modified.add("modpackName");
+		if (!Objects.equals(parent.description(), child.description())) modified.add("description");
+		if (!Objects.equals(parent.flavor(), child.flavor())) modified.add("flavor");
+		if (!Objects.equals(parent.accent(), child.accent())) modified.add("accent");
 		if (!Objects.equals(parent.automodpackVersion(), child.automodpackVersion())) modified.add("automodpackVersion");
 		if (!Objects.equals(parent.loader(), child.loader())) modified.add("loader");
 		if (!Objects.equals(parent.loaderVersion(), child.loaderVersion())) modified.add("loaderVersion");

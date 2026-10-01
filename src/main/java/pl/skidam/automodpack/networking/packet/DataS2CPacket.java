@@ -74,7 +74,7 @@ public class DataS2CPacket {
 				LOGGER.info("{} cancelled the join during the optional modpack offer", GameHelpers.getPlayerName(profile));
 				disconnect(handler, VersionedText.literal("[AutoModpack] Join cancelled."));
 			} else {
-				disconnect(handler, VersionedText.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!"));
+				disconnect(handler, VersionedText.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs"));
 
 				LOGGER.error("AutoModpack connection failed. Check the advertised endpoint and its configured connection mode.");
 

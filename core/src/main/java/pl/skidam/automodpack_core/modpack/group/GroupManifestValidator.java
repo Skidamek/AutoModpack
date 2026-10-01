@@ -8,6 +8,7 @@ import java.util.regex.Pattern;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.screen.PackIdentity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.OsPaths;
 
@@ -17,6 +18,9 @@ public final class GroupManifestValidator {
 	private static final Pattern CONTROL_CHARACTER = Pattern.compile("\\p{Cntrl}");
 	// Deliberately matches the group ID cap: both name things a player browses in the same UI rows.
 	private static final int CATEGORY_NAME_MAX = 64;
+	// Display-string tripwires for the pack's voice: past these the consent screen scrolls for no good reason.
+	public static final int DESCRIPTION_MAX = 256;
+	public static final int FLAVOR_MAX = 120;
 
 	private GroupManifestValidator() {}
 
@@ -58,10 +62,11 @@ public final class GroupManifestValidator {
 
 		validateReferences(groups, errors);
 		validateCycles(groups, errors);
+		validatePackVoice(fields, errors);
 
 		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
-		GroupManifest manifest = new GroupManifest(fields.modpackId, value(fields.modpackName), value(fields.automodpackVersion), value(fields.loader),
-				value(fields.loaderVersion), value(fields.mcVersion), groups);
+		GroupManifest manifest = new GroupManifest(fields.modpackId, value(fields.modpackName), value(fields.description), value(fields.flavor), value(fields.accent),
+				value(fields.automodpackVersion), value(fields.loader), value(fields.loaderVersion), value(fields.mcVersion), groups);
 		PairMemo pairs = new PairMemo(manifest);
 		validatePlatformPaths(manifest, errors, pairs);
 		validateDefaultAndIndividualSelections(manifest, errors);
@@ -386,6 +391,16 @@ public final class GroupManifestValidator {
 		String first = seenNames.putIfAbsent(raw.toLowerCase(Locale.ROOT), raw);
 		if (first != null) errors.add("Category '" + raw + "' duplicates category '" + first + "'");
 		return raw;
+	}
+
+	/**
+	 * The pack's voice is player-facing display text served from durable state, so blank-or-hex accent and the length
+	 * caps hold here too: garbage must fail the parse loudly instead of reaching a screen.
+	 */
+	private static void validatePackVoice(ModpackJsons.CompleteModpackContentFields fields, List<String> errors) {
+		if (!PackIdentity.isValidAccent(fields.accent)) errors.add("Invalid modpack accent: it must be blank or a hex color like 1BC9E8 or #1bc9e8");
+		if (fields.description != null && fields.description.length() > DESCRIPTION_MAX) errors.add("Modpack description is longer than " + DESCRIPTION_MAX + " characters");
+		if (fields.flavor != null && fields.flavor.length() > FLAVOR_MAX) errors.add("Modpack flavor is longer than " + FLAVOR_MAX + " characters");
 	}
 
 	private static String value(String value) {

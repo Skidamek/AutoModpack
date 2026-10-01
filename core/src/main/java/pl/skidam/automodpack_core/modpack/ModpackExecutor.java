@@ -323,7 +323,8 @@ public class ModpackExecutor {
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpack.name, AM_VERSION,
 					advertiseVersions ? LOADER : null, advertiseVersions ? LOADER_VERSION : null, advertiseVersions ? MC_VERSION : null, serverRoot, groupRoot,
 					serverConfig.modpack.categories, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()),
-					creationExecutor, generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects);
+					creationExecutor, generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects, serverConfig.modpack.description.trim(),
+					serverConfig.modpack.flavor.trim(), serverConfig.modpack.accent.trim());
 			ModpackCandidate candidate = candidateScan.scan(request);
 			for (ExcludedCandidate exclusion : candidate.exclusions())
 				LOGGER.info("Excluded from the modpack: {}/{} - {} ({})", exclusion.source().groupId(), exclusion.source().logicalPath(),

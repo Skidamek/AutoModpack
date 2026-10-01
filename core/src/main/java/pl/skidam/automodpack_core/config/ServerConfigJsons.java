@@ -37,9 +37,9 @@ public class ServerConfigJsons {
 		@SerializedName("nag-un-modded-clients")
 		public boolean nagUnModdedClients = true;
 		@SerializedName("nag-message")
-		public String nagMessage = "Install the AutoModpack mod to get this server's modpack!";
+		public String nagMessage = "This server plays with a modpack. Install the AutoModpack mod to sync it.";
 		@SerializedName("nag-clickable-message")
-		public String nagClickableMessage = "Click here to get the AutoModpack!";
+		public String nagClickableMessage = "Get the modpack";
 		@SerializedName("nag-clickable-link")
 		public String nagClickableLink = "https://modrinth.com/project/automodpack";
 		@SerializedName("bind-address")
@@ -105,14 +105,19 @@ public class ServerConfigJsons {
 	}
 
 	/**
-	 * The pack section: the reserved {@code name} key is the pack's display name, every other member is a category of
-	 * groups. The reserved key is what makes this a typed object instead of a bare map - a {@code name} member that is
-	 * not a string fails the parse with a clear message instead of being silently swallowed as an unread category.
+	 * The pack section: the reserved {@code name}, {@code description}, {@code flavor} and {@code accent} keys are the
+	 * pack's voice, every other member is a category of groups. The reserved keys are what make this a typed object
+	 * instead of a bare map - a reserved member that is not a string fails the parse with a clear message instead of
+	 * being silently swallowed as an unread category.
 	 */
 	public static class ModpackFields {
 		public String name = "";
+		public String description = "";
+		public String flavor = "";
+		public String accent = "";
 		public Map<String, Map<String, GroupDeclaration>> categories = new LinkedHashMap<>();
 
+		private static final Set<String> RESERVED = Set.of("name", "description", "flavor", "accent");
 		private static final Type GROUPS_TYPE = new TypeToken<Map<String, GroupDeclaration>>() {
 		}.getType();
 
@@ -128,12 +133,15 @@ public class ServerConfigJsons {
 			return fields;
 		}
 
-		/** Serializes {@code name} plus every category into one flat object and reads the same shape back. */
+		/** Serializes the reserved pack keys plus every category into one flat object and reads the same shape back. */
 		public static final class Adapter implements JsonSerializer<ModpackFields>, JsonDeserializer<ModpackFields>, ConfigTools.UnknownKeyScanner {
 			@Override
 			public JsonElement serialize(ModpackFields src, Type type, JsonSerializationContext context) {
 				JsonObject object = new JsonObject();
 				object.addProperty("name", src.name);
+				object.addProperty("description", src.description);
+				object.addProperty("flavor", src.flavor);
+				object.addProperty("accent", src.accent);
 				for (var entry : src.categories.entrySet()) object.add(entry.getKey(), context.serialize(entry.getValue()));
 				return object;
 			}
@@ -143,21 +151,27 @@ public class ServerConfigJsons {
 				if (json == null || !json.isJsonObject()) throw new JsonParseException("modpack must hold the pack name and its categories: modpack { name: \"\", <category> { <group> { ... } } }");
 				ModpackFields fields = new ModpackFields();
 				for (var entry : json.getAsJsonObject().entrySet()) {
-					if (entry.getKey().equals("name")) {
-						if (entry.getValue() == null || !entry.getValue().isJsonPrimitive() || !entry.getValue().getAsJsonPrimitive().isString())
-							throw new JsonParseException("modpack.name must be a string; the name key is reserved and cannot be a category");
-						fields.name = entry.getValue().getAsString();
-					} else {
-						fields.categories.put(entry.getKey(), context.deserialize(entry.getValue(), GROUPS_TYPE));
+					switch (entry.getKey()) {
+						case "name" -> fields.name = reservedString("name", entry.getValue());
+						case "description" -> fields.description = reservedString("description", entry.getValue());
+						case "flavor" -> fields.flavor = reservedString("flavor", entry.getValue());
+						case "accent" -> fields.accent = reservedString("accent", entry.getValue());
+						default -> fields.categories.put(entry.getKey(), context.deserialize(entry.getValue(), GROUPS_TYPE));
 					}
 				}
 				return fields;
 			}
 
+			private static String reservedString(String key, JsonElement value) {
+				if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString())
+					throw new JsonParseException("modpack." + key + " must be a string; the " + key + " key is reserved and cannot be a category");
+				return value.getAsString();
+			}
+
 			@Override
 			public void collectUnknownKeys(JsonElement element, String prefix, List<String> unknown) {
 				for (var entry : element.getAsJsonObject().entrySet()) {
-					if (entry.getKey().equals("name")) continue;
+					if (RESERVED.contains(entry.getKey())) continue;
 					String categoryPath = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
 					ConfigTools.collectUnknownKeys(entry.getValue(), GROUPS_TYPE, categoryPath, unknown);
 				}

@@ -26,6 +26,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.screen.DownloadView;
 import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.PackIdentity;
 import pl.skidam.automodpack_core.screen.PreviewPayload;
 import pl.skidam.automodpack_core.screen.ReviewActions;
 import pl.skidam.automodpack_core.screen.ReviewPayload;
@@ -191,7 +192,7 @@ class ReviewSessionTest {
 		}
 
 		@Override
-		public void download(DownloadView download, String modpackName, Runnable onCancel) {
+		public void download(DownloadView download, PackIdentity pack, Runnable onCancel) {
 			show(Kind.DOWNLOAD);
 			waitOpen = true;
 		}

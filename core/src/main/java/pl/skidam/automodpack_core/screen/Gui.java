@@ -45,7 +45,7 @@ public class Gui {
 		Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
 		frame.getContentPane().setBackground(new ColorUIResource(22, 27, 34));
 
-		JLabel RestartText = new JLabel("Restart your game!");
+		JLabel RestartText = new JLabel("Restart your game");
 		RestartText.setBounds(0, 10, 400, 32);
 		RestartText.setFont(new Font("Segoe UI", Font.PLAIN, 24));
 		RestartText.setForeground(Color.green);

@@ -18,6 +18,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack_core.screen.DownloadView;
+import pl.skidam.automodpack_core.screen.PackIdentity;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 
@@ -26,9 +27,13 @@ public class DownloadScreen extends VersionedScreen {
 	private static final Identifier PROGRESS_BAR_FULL_TEXTURE = Common.id("textures/gui/sprites/green_progress.png");
 	private static final int PROGRESS_BAR_WIDTH = 182;
 	private static final int PROGRESS_BAR_HEIGHT = 5;
+	// The dominant green sampled from the un-desaturated progress sprites (29, 236, 0); the default tint reproduces them.
+	private static final int DEFAULT_ACCENT_GREEN = 0x1DEC00;
 
 	private final DownloadView download;
 	private final String header;
+	private final String flavor;
+	private final int accentColor;
 	private final Runnable onCancel;
 
 	private final long startedAtNanos = System.nanoTime();
@@ -45,10 +50,12 @@ public class DownloadScreen extends VersionedScreen {
 	private long lastTextUpdate = 0;
 	private static final long TEXT_UPDATE_INTERVAL = 100; // Update strings 10x per second
 
-	public DownloadScreen(DownloadView download, String header, Runnable onCancel) {
+	public DownloadScreen(DownloadView download, PackIdentity pack, Runnable onCancel) {
 		super(VersionedText.text("automodpack.download.title"));
 		this.download = download;
-		this.header = header;
+		this.header = pack.name();
+		this.flavor = pack.flavor();
+		this.accentColor = pack.accentColor();
 		this.onCancel = onCancel;
 	}
 
@@ -99,7 +106,7 @@ public class DownloadScreen extends VersionedScreen {
 	}
 
 	private Component getStage() {
-		return VersionedText.literal(cachedStage);
+		return VersionedText.text("automodpack.download.stage", cachedStage);
 	}
 
 	private Component getPercentage() {
@@ -129,7 +136,7 @@ public class DownloadScreen extends VersionedScreen {
 	}
 
 	private void drawDownloadingFiles(VersionedMatrices matrices) {
-		int y = this.height / 2 - 94;
+		int y = this.height / 2 - 85;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.download.downloading").withStyle(ChatFormatting.BOLD), this.width / 2, y, TextColors.WHITE);
 		int currentY = y + 14;
 		for (String fileName : download.downloadingFileNames()) {
@@ -145,6 +152,9 @@ public class DownloadScreen extends VersionedScreen {
 		if (download != null && download.isRunning()) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header, panelWidth(310))).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 110,
 					TextColors.WHITE);
+			if (!flavor.isBlank())
+				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, flavor, panelWidth(310))).withStyle(ChatFormatting.GRAY), this.width / 2, this.height / 2 - 96,
+						TextColors.GRAY);
 			if (downloadsInProgress()) drawDownloadingFiles(matrices);
 			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getStage(), this.width / 2, this.height / 2 - 20, TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalETA(), this.width / 2, this.height / 2 - 4, TextColors.WHITE);
@@ -154,13 +164,14 @@ public class DownloadScreen extends VersionedScreen {
 			int barY = this.height / 2 + 8;
 			float barDrawX = (this.width - PROGRESS_BAR_WIDTH * scaleBar) / 2.0F / scaleBar;
 			float barDrawY = barY / scaleBar;
+			int tint = 0xFF000000 | (accentColor != 0 ? accentColor : DEFAULT_ACCENT_GREEN);
 
 			matrices.pushPose();
 			matrices.scale(scaleBar, scaleBar, scaleBar);
 			drawTexture(PROGRESS_BAR_EMPTY_TEXTURE, matrices, Math.round(barDrawX), Math.round(barDrawY), 0, 0, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH,
-					PROGRESS_BAR_HEIGHT);
+					PROGRESS_BAR_HEIGHT, tint);
 			drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, Math.round(barDrawX), Math.round(barDrawY), 0, 0, Math.min(barFilledWidth, PROGRESS_BAR_WIDTH), PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH,
-					PROGRESS_BAR_HEIGHT);
+					PROGRESS_BAR_HEIGHT, tint);
 			matrices.popPose();
 
 			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalDownloadSpeed(), this.width / 2, this.height / 2 + 24, TextColors.WHITE);

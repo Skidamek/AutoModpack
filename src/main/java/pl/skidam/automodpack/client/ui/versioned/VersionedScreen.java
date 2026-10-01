@@ -45,15 +45,17 @@ import net.minecraft.client.renderer.RenderPipelines;
 import java.util.function.Function;
 *//*?}*/
 
-/*? if <1.20 {*/
-/*import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.gui.GuiComponent;
-*//*?} elif >=26.1 {*/
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-/*?} else {*/
-/*import net.minecraft.client.gui.GuiGraphics;
-*//*?}*/
+	/*? if <1.21.5 {*/
+	/*import com.mojang.blaze3d.systems.RenderSystem;
+	*//*?}*/
+	/*? if <1.20 {*/
+	/*import com.mojang.blaze3d.vertex.PoseStack;
+	import net.minecraft.client.gui.GuiComponent;
+	*//*?} elif >=26.1 {*/
+	import net.minecraft.client.gui.GuiGraphicsExtractor;
+	/*?} else {*/
+	/*import net.minecraft.client.gui.GuiGraphics;
+	*//*?}*/
 
 import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack.client.ClientTextures;
@@ -717,6 +719,24 @@ public class VersionedScreen extends Screen {
 		*//*?}*/
 	}
 	/*?}*/
+
+	/** Tinted texture draw: the sprite is multiplied by the ARGB color, and any shader color is reset before returning. */
+	public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight, int color) {
+		ClientTextures.ensureRegistered();
+		/*? if >=1.21.6 {*/
+		matrices.getContext().blit(RenderPipelines.GUI_TEXTURED, textureID, x, y, u, v, width, height, textureWidth, textureHeight, color);
+		/*?} elif >=1.21.5 {*/
+		/*Function<Identifier, RenderType> renderTypes = RenderType::guiTextured;
+		matrices.getContext().blit(renderTypes, textureID, x, y, u, v, width, height, textureWidth, textureHeight, color);
+		*//*?} else {*/
+		/*RenderSystem.setShaderColor((color >> 16 & 0xFF) / 255.0F, (color >> 8 & 0xFF) / 255.0F, (color & 0xFF) / 255.0F, (color >>> 24 & 0xFF) / 255.0F);
+		try {
+			drawTexture(textureID, matrices, x, y, u, v, width, height, textureWidth, textureHeight);
+		} finally {
+			RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+		}
+		*//*?}*/
+	}
 
 	/*? if >= 1.21.9 {*/
 	@Override

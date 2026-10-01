@@ -102,7 +102,7 @@ class UpdatePreviewTest {
 		UpdatePreview preview = UpdatePreview.create(plan(target, Map.of()), null, UpdatePreview.Mode.UPDATE);
 		GroupManifest.Group feature = new GroupManifest.Group("Main feature", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/example.jar", new GroupManifest.GroupFile(9, "mod", false, TARGET_HASH, "0"))));
-		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("main", feature)));
+		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", "", "", "", new TreeMap<>(Map.of("main", feature)));
 
 		UpdatePreview named = preview.withFeatureManifest(manifest);
 
@@ -118,7 +118,7 @@ class UpdatePreviewTest {
 		UpdatePreview preview = UpdatePreview.create(plan(target, Map.of()), null, UpdatePreview.Mode.UPDATE);
 		GroupManifest.Group feature = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/example.jar", new GroupManifest.GroupFile(9, "mod", false, TARGET_HASH, "0"))));
-		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("main", feature)));
+		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", "", "", "", new TreeMap<>(Map.of("main", feature)));
 
 		UpdatePreview named = preview.withFeatureManifest(manifest);
 

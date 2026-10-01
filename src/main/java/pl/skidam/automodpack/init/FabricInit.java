@@ -28,7 +28,7 @@ public class FabricInit {
 			new AudioManager();
 		}
 
-		LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
+		LOGGER.info("AutoModpack launched in " + (System.currentTimeMillis() - start) + "ms");
 	}
 }
 /*?}*/

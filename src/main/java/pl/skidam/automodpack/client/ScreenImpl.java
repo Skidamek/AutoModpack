@@ -13,6 +13,7 @@ import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.SessionUpdateState;
 import pl.skidam.automodpack_core.screen.PreviewPayload;
+import pl.skidam.automodpack_core.screen.PackIdentity;
 import pl.skidam.automodpack_core.screen.ReviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenService;
 import pl.skidam.automodpack_core.screen.FailureDestination;
@@ -52,16 +53,16 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public void download(DownloadView download, String modpackName) {
-		download(download, modpackName, null);
+	public void download(DownloadView download, PackIdentity pack) {
+		download(download, pack, null);
 	}
 
 	@Override
-	public void download(DownloadView download, String modpackName, Runnable onCancel) {
+	public void download(DownloadView download, PackIdentity pack, Runnable onCancel) {
 		long token = Screens.beginWait();
 		executeOnClient(() -> {
 			if (!Screens.waitIsCurrent(token)) return;
-			Screens.download(download, modpackName, onCancel);
+			Screens.download(download, pack, onCancel);
 		});
 	}
 
@@ -279,8 +280,8 @@ public class ScreenImpl implements ScreenService {
 			return parent == null || parent instanceof ConnectScreen ? multiplayerScreen() : parent;
 		}
 
-		public static void download(DownloadView download, String modpackName, Runnable onCancel) {
-			Screens.setScreen(new DownloadScreen(download, modpackName, () -> {
+		public static void download(DownloadView download, PackIdentity pack, Runnable onCancel) {
+			Screens.setScreen(new DownloadScreen(download, pack, () -> {
 				if (onCancel != null) onCancel.run();
 				restoreIfWaiting();
 			}));

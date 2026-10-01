@@ -29,6 +29,7 @@ import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.PackIdentity;
 import pl.skidam.automodpack_core.screen.PreviewPayload;
 import pl.skidam.automodpack_core.screen.ReviewActions;
 import pl.skidam.automodpack_core.screen.ScreenManager;
@@ -91,6 +92,10 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private String getModpackName() {
 		return serverModpackContent.modpackName;
+	}
+
+	private PackIdentity getPackIdentity() {
+		return PackIdentity.of(getModpackName(), serverModpackContent.flavor, serverModpackContent.accent);
 	}
 
 	SelectedModpackTarget getSelectedTarget() {
@@ -234,7 +239,7 @@ public class ModpackUpdater implements AutoCloseable {
 		this.transport = transport;
 		AtomicBoolean playerCancelled = new AtomicBoolean();
 		this.objectAcquisition = new ModpackObjectAcquisition(this.storage, this.platformCache, this.sourceCatalogue, this.planBuilder, this.connectionInfo, this.transport,
-				playerCancelled, this::getModpackName, this::cancelFromPlayer, selectedTarget == null ? "" : selectedTarget.document().waitingMusicSha1());
+				playerCancelled, this::getPackIdentity, this::cancelFromPlayer, selectedTarget == null ? "" : selectedTarget.document().waitingMusicSha1());
 		this.review = new ReviewSession(this, this.storage, this.sourceCatalogue, playerCancelled);
 		this.lifecycle = new LifecycleFlow(this, this.storage, this.planBuilder, this.changelogs);
 	}

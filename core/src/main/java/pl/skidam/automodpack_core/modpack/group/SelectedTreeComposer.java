@@ -37,6 +37,9 @@ public final class SelectedTreeComposer {
 		ModpackJsons.ModpackContentFields target = new ModpackJsons.ModpackContentFields(selectedFiles);
 		target.modpackId = manifest.modpackId();
 		target.modpackName = manifest.modpackName();
+		target.description = manifest.description();
+		target.flavor = manifest.flavor();
+		target.accent = manifest.accent();
 		target.automodpackVersion = manifest.automodpackVersion();
 		target.loader = manifest.loader();
 		target.loaderVersion = manifest.loaderVersion();

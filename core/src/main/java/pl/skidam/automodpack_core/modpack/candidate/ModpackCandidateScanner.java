@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
+import pl.skidam.automodpack_core.screen.PackIdentity;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public final class ModpackCandidateScanner {
@@ -23,6 +24,12 @@ public final class ModpackCandidateScanner {
 	public ModpackCandidate scan(Request request) throws CandidateBuildException {
 		Objects.requireNonNull(request);
 		if (request.modpack() == null || request.modpack().isEmpty()) throw new CandidateBuildException("No groups are configured");
+		if (request.modpackDescription() != null && request.modpackDescription().length() > GroupManifestValidator.DESCRIPTION_MAX)
+			throw new CandidateBuildException("modpack.description is longer than " + GroupManifestValidator.DESCRIPTION_MAX + " characters; shorten the pack description");
+		if (request.modpackFlavor() != null && request.modpackFlavor().length() > GroupManifestValidator.FLAVOR_MAX)
+			throw new CandidateBuildException("modpack.flavor is longer than " + GroupManifestValidator.FLAVOR_MAX + " characters; shorten the flavor line");
+		if (!PackIdentity.isValidAccent(request.modpackAccent()))
+			throw new CandidateBuildException("modpack.accent must be blank or a hex color like 1BC9E8 or #1bc9e8");
 		Map<String, ServerConfigJsons.GroupDeclaration> declarations = new LinkedHashMap<>();
 		Map<String, String> categoryByGroup = new LinkedHashMap<>();
 		Map<String, GroupRules> rulesByGroup = new LinkedHashMap<>();
@@ -143,6 +150,9 @@ public final class ModpackCandidateScanner {
 			ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 			fields.modpackId = request.modpackId();
 			fields.modpackName = request.modpackName();
+			fields.description = request.modpackDescription();
+			fields.flavor = request.modpackFlavor();
+			fields.accent = request.modpackAccent();
 			fields.automodpackVersion = request.automodpackVersion();
 			fields.loader = request.loader();
 			fields.loaderVersion = request.loaderVersion();
@@ -378,7 +388,10 @@ public final class ModpackCandidateScanner {
 			Path objectStoreDirectory,
 			FileCache fileCache,
 			ModFileCache modFileCache,
-			boolean materializeMissingObjects) {
+			boolean materializeMissingObjects,
+			String modpackDescription,
+			String modpackFlavor,
+			String modpackAccent) {
 		public Request {
 			serverRoot = serverRoot.toAbsolutePath().normalize();
 			groupRoot = groupRoot.toAbsolutePath().normalize();

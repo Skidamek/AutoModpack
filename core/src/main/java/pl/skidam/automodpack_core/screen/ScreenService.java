@@ -9,11 +9,11 @@ import pl.skidam.automodpack_core.client.UpdateType;
 
 public interface ScreenService {
 
-	default void download(DownloadView download, String modpackName) {}
+	default void download(DownloadView download, PackIdentity pack) {}
 
 	/** Shows the download screen; {@code onCancel} is the same player-cancel seam the preparing screen uses. */
-	default void download(DownloadView download, String modpackName, Runnable onCancel) {
-		download(download, modpackName);
+	default void download(DownloadView download, PackIdentity pack, Runnable onCancel) {
+		download(download, pack);
 	}
 
 	default void changelog(Changelogs changelogs) {}

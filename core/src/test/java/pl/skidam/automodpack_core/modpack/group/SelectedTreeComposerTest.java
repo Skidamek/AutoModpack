@@ -85,7 +85,7 @@ class SelectedTreeComposerTest {
 	}
 
 	private static GroupManifest manifest(Map<String, GroupManifest.Group> groups) {
-		return new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(groups));
+		return new GroupManifest("abc1234", "", "", "", "", "", "", "", "", new TreeMap<>(groups));
 	}
 
 	private static GroupManifest.Group group(GroupManifest.GroupFile file) {

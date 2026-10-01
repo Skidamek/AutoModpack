@@ -48,7 +48,7 @@ public final class BootRecovery {
 	private void loadClientConfig() {
 		long startTime = System.currentTimeMillis();
 		clientConfig = ReconfConfigs.readOrCreate(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
-		if (clientConfig == null) throw new RuntimeException("Failed to load config!");
+		if (clientConfig == null) throw new RuntimeException("Failed to load config");
 		LOGGER.info("Loaded config! took {}ms", System.currentTimeMillis() - startTime);
 	}
 

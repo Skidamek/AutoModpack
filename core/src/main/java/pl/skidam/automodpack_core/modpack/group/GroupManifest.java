@@ -12,12 +12,18 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 public record GroupManifest(
 		String modpackId,
 		String modpackName,
+		String description,
+		String flavor,
+		String accent,
 		String automodpackVersion,
 		String loader,
 		String loaderVersion,
 		String mcVersion,
 		Map<String, Group> groups) {
 	public GroupManifest {
+		description = description == null ? "" : description;
+		flavor = flavor == null ? "" : flavor;
+		accent = accent == null ? "" : accent;
 		groups = immutableMap(groups);
 	}
 
@@ -32,6 +38,9 @@ public record GroupManifest(
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = modpackId;
 		fields.modpackName = modpackName;
+		fields.description = description;
+		fields.flavor = flavor;
+		fields.accent = accent;
 		fields.automodpackVersion = automodpackVersion;
 		fields.loader = loader;
 		fields.loaderVersion = loaderVersion;

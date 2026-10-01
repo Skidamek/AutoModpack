@@ -453,10 +453,10 @@ public class Commands {
 		Util.backgroundExecutor().execute(() -> {
 			var reloaded = ConfigUtils.reloadServerConfig();
 			if (reloaded.isEmpty()) {
-				send(context, "Error while reloading config file!", ChatFormatting.RED, true);
+				send(context, "Error while reloading config file", ChatFormatting.RED, true);
 				return;
 			}
-			send(context, "AutoModpack server config reloaded!", ChatFormatting.GREEN, true);
+			send(context, "AutoModpack server config reloaded", ChatFormatting.GREEN, true);
 			if (reloaded.get().connectionSettingsChanged())
 				send(context, "Connection settings changed. Run /automodpack host restart to apply them.", ChatFormatting.YELLOW, false);
 		});
@@ -467,7 +467,7 @@ public class Commands {
 	private static int startModpackHost(CommandContext<CommandSourceStack> context) {
 		Util.backgroundExecutor().execute(() -> {
 			if (hostServer.isRunning()) {
-				send(context, "Modpack hosting is already running!", ChatFormatting.RED, false);
+				send(context, "Modpack hosting is already running", ChatFormatting.RED, false);
 				return;
 			}
 
@@ -484,11 +484,11 @@ public class Commands {
 			boolean wasRunning = hostServer.isRunning();
 			if (wasRunning) send(context, "Stopping modpack hosting...", ChatFormatting.RED, true);
 			if (!hostServer.stop()) {
-				send(context, "Couldn't stop server!", ChatFormatting.RED, true);
+				send(context, "Could not stop the hosting server", ChatFormatting.RED, true);
 			} else if (wasRunning) {
-				send(context, "Modpack hosting stopped!", ChatFormatting.RED, true);
+				send(context, "Modpack hosting stopped", ChatFormatting.RED, true);
 			} else {
-				send(context, "Modpack hosting is not running!", ChatFormatting.RED, false);
+				send(context, "Modpack hosting is not running", ChatFormatting.RED, false);
 			}
 		});
 
@@ -499,7 +499,7 @@ public class Commands {
 		Util.backgroundExecutor().execute(() -> {
 			send(context, "Restarting modpack hosting...", ChatFormatting.YELLOW, true);
 			if (!hostServer.stop()) {
-				send(context, "Couldn't restart server!", ChatFormatting.RED, true);
+				send(context, "Could not restart the hosting server", ChatFormatting.RED, true);
 				return;
 			}
 
@@ -513,14 +513,14 @@ public class Commands {
 	private static void reportHostStart(CommandContext<CommandSourceStack> context, String action) {
 		if (hostServer.isRunning()) {
 			if (serverConfig.connectionMode == ModpackConnectionMode.HTTP)
-				send(context, "Modpack hosting " + action + "!", ChatFormatting.GREEN, "HTTP contract over HTTPS on port " + serverConfig.bindPort, ChatFormatting.WHITE, true);
-			else send(context, "Modpack hosting " + action + "!", ChatFormatting.GREEN, true);
+				send(context, "Modpack hosting " + action, ChatFormatting.GREEN, "HTTP contract over HTTPS on port " + serverConfig.bindPort, ChatFormatting.WHITE, true);
+			else send(context, "Modpack hosting " + action, ChatFormatting.GREEN, true);
 		} else if (!serverConfig.modpackHost) {
 			send(context, "Built-in modpack hosting is disabled by modpackHost.", ChatFormatting.YELLOW, false);
 		} else if (serverConfig.connectionMode == ModpackConnectionMode.HTTP && serverConfig.bindPort == -1) {
 			send(context, "HTTP with bindPort -1 is only advertised; the URL contract must be served externally over HTTPS.", ChatFormatting.YELLOW, false);
 		} else {
-			send(context, "Couldn't start server!", ChatFormatting.RED, true);
+			send(context, "Could not start the hosting server", ChatFormatting.RED, true);
 		}
 	}
 

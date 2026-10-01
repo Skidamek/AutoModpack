@@ -75,6 +75,23 @@ class GenerationDiffTest {
 		assertEquals(new GenerationDiff.Summary(0, 1, 0, 0, 0), diff.summary());
 	}
 
+	@Test
+	void reportsPackVoiceChangesAsModifiedPackMetadata() {
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
+		fields.modpackId = "abc1234";
+		fields.modpackName = "Pack";
+		fields.categories = Map.of("General", Map.of("main", new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields()));
+		GroupManifest parent = GroupManifestValidator.validate(fields);
+		fields.description = "new description";
+		fields.flavor = "new flavor";
+		fields.accent = "1BC9E8";
+		GroupManifest child = GroupManifestValidator.validate(fields);
+
+		GenerationDiff diff = GenerationDiff.between(parent, child);
+
+		assertEquals(List.of("accent", "description", "flavor"), diff.packMetadata().modified());
+	}
+
 	private static GroupManifest categorizedManifest(String category) {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";

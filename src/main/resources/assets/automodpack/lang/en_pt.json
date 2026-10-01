@@ -116,6 +116,7 @@
   "automodpack.browser.copyHashTooltip": "Click to copy this here file's SHA-1 hash.",
   "automodpack.download.calculating": "Plottin' the course...",
   "automodpack.download.eta": "Time to port: %s",
+  "automodpack.download.stage": "Files hauled: %s",
   "automodpack.download.downloading": "Haulin' in:",
   "automodpack.error": "Somethin' went astern!",
   "automodpack.error.openLogs": "Open the log",

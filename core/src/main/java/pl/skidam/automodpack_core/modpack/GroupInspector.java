@@ -23,6 +23,11 @@ public final class GroupInspector {
 	public static List<String> overview(Map<String, Map<String, ServerConfigJsons.GroupDeclaration>> modpack, GroupManifest published) {
 		Map<String, GroupManifest.Group> publishedGroups = publishedGroups(published);
 		List<String> lines = new ArrayList<>();
+		if (published != null) {
+			addField(lines, "Description", published.description());
+			addField(lines, "Flavor", published.flavor());
+			addField(lines, "Accent", published.accent());
+		}
 		int groupCount = 0;
 		for (var category : modpack.entrySet()) {
 			lines.add(category.getKey() + ":");

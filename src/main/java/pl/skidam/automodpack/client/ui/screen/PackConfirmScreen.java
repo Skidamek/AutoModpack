@@ -416,8 +416,14 @@ public final class PackConfirmScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		String name = target().manifest().modpackName().isBlank() ? "AutoModpack" : target().manifest().modpackName();
+		// The pack's own name leads; when the operator left it blank, the server address stands in for it.
+		String name = target().manifest().modpackName();
+		if (name.isBlank()) name = !originDisplay.isBlank() ? originDisplay : target().flatTarget().modpackId;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, panelWidth(BODY))).withStyle(ChatFormatting.WHITE), this.width / 2, 14, TextColors.WHITE);
+		String description = target().manifest().description();
+		if (!description.isBlank())
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, description, panelWidth(BODY))).withStyle(ChatFormatting.GRAY), this.width / 2, 24,
+					TextColors.GRAY);
 		// The disabled primary needs its reason on screen: the countdown while the risk read runs, the checkbox after it.
 		if (!finished && !unverifiedPaths.isEmpty() && !acknowledged) {
 			// The reason travels with the risk box: under it in the centered assembly, above it when pinned.

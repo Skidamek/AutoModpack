@@ -3,7 +3,7 @@
   "id": "automodpack",
   "version": "${version}",
   "name": "AutoModpack",
-  "description": "",
+  "description": "The AutoModpack bootstrap jar: it stages the real mod before the game loads.",
   "authors": ["Skidam"],
   "icon": "icon.png",
   "contact": {},

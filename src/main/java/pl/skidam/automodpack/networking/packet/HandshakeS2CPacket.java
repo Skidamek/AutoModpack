@@ -89,7 +89,7 @@ public class HandshakeS2CPacket {
 		}
 
 		if (!GameHelpers.isPlayerAuthorized(connection.getRemoteAddress(), GameHelpers.getPlayerUUID(profile), playerName)) {
-			Component reason = VersionedText.literal("You are not authorized to join this server!");
+			Component reason = VersionedText.literal("You are not authorized to join this server");
 			connection.send(new ClientboundLoginDisconnectPacket(reason));
 			connection.disconnect(reason);
 			return;

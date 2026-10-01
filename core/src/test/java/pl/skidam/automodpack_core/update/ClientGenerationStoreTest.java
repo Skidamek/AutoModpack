@@ -203,7 +203,7 @@ class ClientGenerationStoreTest {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
 		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
-		GroupManifest manifest = new GroupManifest(modpackId, "Test republished", "", "", "", "", new TreeMap<>(Map.of("main", group)));
+		GroupManifest manifest = new GroupManifest(modpackId, "Test republished", "", "", "", "", "", "", "", new TreeMap<>(Map.of("main", group)));
 		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, null);
 	}
 
@@ -530,7 +530,7 @@ class ClientGenerationStoreTest {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
 		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
-		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group)));
+		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", "", "", "", new TreeMap<>(Map.of("main", group)));
 		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, null);
 	}
 
@@ -538,7 +538,7 @@ class ClientGenerationStoreTest {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
 		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
-		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group)));
+		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", "", "", "", new TreeMap<>(Map.of("main", group)));
 		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, parent.ownershipLedger());
 	}
 

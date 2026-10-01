@@ -11,6 +11,9 @@ public class ModpackJsons {
 	public static class CompleteModpackContentFields {
 		public String modpackId = "";
 		public String modpackName = "";
+		public String description = "";
+		public String flavor = "";
+		public String accent = "";
 		public String automodpackVersion = "";
 		public String loader = "";
 		public String loaderVersion = "";
@@ -51,6 +54,9 @@ public class ModpackJsons {
 	public static class ModpackContentFields {
 		public String modpackId = "";
 		public String modpackName = "";
+		public String description = "";
+		public String flavor = "";
+		public String accent = "";
 		public String automodpackVersion = "";
 		public String loader = "";
 		public String loaderVersion = "";

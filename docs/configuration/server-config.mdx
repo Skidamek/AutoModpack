@@ -22,7 +22,16 @@ Apply changes with `/automodpack config reload` or a restart. When the reload ch
 
 ## Groups
 
-The `modpack` section holds the pack: `modpack.name` is the display name players see, and the categories follow it, each mapping category name, then group id, then the declaration. The factory config contains one category, `General`, holding a single group `main`, which is required and selected by default. Extra groups become optional parts that players pick in the in-game "Group Selection" screen, listed under their categories. Group content comes from two sources: the directory `automodpack/host-modpack/<id>/` is included in full, and `from-server` pulls in files from the server root. The full picture is in [building the modpack](../pack-content).
+The `modpack` section holds the pack: `modpack.name` is the display name players see, a few reserved keys carry the pack's voice (below), and the categories follow, each mapping category name, then group id, then the declaration. The factory config contains one category, `General`, holding a single group `main`, which is required and selected by default. Extra groups become optional parts that players pick in the in-game "Group Selection" screen, listed under their categories. Group content comes from two sources: the directory `automodpack/host-modpack/<id>/` is included in full, and `from-server` pulls in files from the server root. The full picture is in [building the modpack](../pack-content).
+
+The reserved keys are how the pack speaks to players on their first-connect screen and while it downloads. They travel with the pack: changing one and regenerating counts as a pack change for every client. The description is capped at 256 characters, the flavor line at 120, and the accent must be blank or a hex color; a violation fails the generation with the reason in the log.
+
+| Setting | Default | Description |
+|---|---|---|
+| `modpack.name` | `""` | The pack's display name; the heading of the consent screen and the download screen. When blank, the server address stands in. |
+| `modpack.description` | `""` | One short paragraph about the pack, shown under its name on the consent screen. |
+| `modpack.flavor` | `""` | One short line shown under the pack name while the client downloads it. |
+| `modpack.accent` | `""` | Hex color like `1BC9E8` or `#1bc9e8` tinting the download progress bar. Blank keeps the default green. |
 
 Both keys are identities, so treat them as permanent. The group id is the slug used by `requires` and `breaks-with`, by players' saved selections, and as the folder name under `automodpack/host-modpack/<id>/`; renaming it strands saved selections, breaks references from other groups, and requires renaming the folder. Renaming a category strands players' saved category choices. `display-name` is the always-safe rename, so keep anything volatile (versions, dates) out of ids and category names. A group with a blank `display-name` shows its id instead.
 
@@ -96,6 +105,6 @@ With `require-modpack` off, players who join without AutoModpack stay in the gam
 | Setting | Default | Description |
 |---|---|---|
 | `nag-un-modded-clients` | `true` | Shows a chat message to players without the mod. |
-| `nag-message` | `Install the AutoModpack mod to get this server's modpack!` | The message text. |
-| `nag-clickable-message` | `Click here to get the AutoModpack!` | The clickable link text. |
+| `nag-message` | `This server plays with a modpack. Install the AutoModpack mod to sync it.` | The message text. |
+| `nag-clickable-message` | `Get the modpack` | The clickable link text. |
 | `nag-clickable-link` | AutoModpack on Modrinth | The URL opened on click. |

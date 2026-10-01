@@ -16,11 +16,11 @@ public class ReLauncher {
 	private final Changelogs changelogs;
 
 	public ReLauncher(UpdateType updateType) {
-		this(updateType, null, "Successfully updated AutoModpack!");
+		this(updateType, null, "AutoModpack updated to the server version");
 	}
 
 	public ReLauncher(UpdateType updateType, Changelogs changelogs) {
-		this(updateType, changelogs, "Successfully updated the modpack!");
+		this(updateType, changelogs, "Modpack updated");
 	}
 
 	public ReLauncher(UpdateType updateType, Changelogs changelogs, String updateMessage) {
@@ -56,7 +56,7 @@ public class ReLauncher {
 			Runtime.getRuntime().addShutdownHook(shutdownHook);
 
 			if (isHeadless) {
-				LOGGER.info("Please restart the game to apply updates!");
+				LOGGER.info("Restart the game to apply the updates");
 			} else {
 				semaphore = ScreenManager.preloadRestart(updateMessage);
 			}
@@ -82,7 +82,7 @@ public class ReLauncher {
 	}
 
 	private void handleServerRestart(Runnable[] callbacks) {
-		LOGGER.info("Please restart the server to apply updates!");
+		LOGGER.info("Restart the server to apply the updates");
 		runCallbacks(callbacks);
 		System.exit(0);
 	}

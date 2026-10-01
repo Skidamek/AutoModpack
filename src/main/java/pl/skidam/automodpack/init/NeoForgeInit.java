@@ -36,7 +36,7 @@ public class NeoForgeInit {
 		}
 
 
-		LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
+		LOGGER.info("AutoModpack launched in " + (System.currentTimeMillis() - start) + "ms");
 	}
 
 /^? if >1.20.5 {^/

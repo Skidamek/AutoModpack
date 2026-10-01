@@ -414,6 +414,51 @@ class GroupManifestValidatorTest {
 		assertTrue(failure.getMessage().contains("android"), failure.getMessage());
 	}
 
+	@Test
+	void acceptsAndRoundTripsPackVoiceFields() {
+		var fields = catalogue();
+		fields.modpackName = "Voice";
+		fields.description = "One paragraph about the pack";
+		fields.flavor = "One short line";
+		fields.accent = "#1BC9E8";
+		fields.categories = linkedCategories("General", linkedGroups("main", group(file("a"))));
+
+		GroupManifest manifest = GroupManifestValidator.validate(fields);
+
+		assertEquals("One paragraph about the pack", manifest.description());
+		assertEquals("One short line", manifest.flavor());
+		assertEquals("#1BC9E8", manifest.accent());
+		assertEquals(ConfigTools.GSON.toJson(manifest.toFields()), ConfigTools.GSON.toJson(GroupManifestValidator.validate(manifest.toFields()).toFields()));
+	}
+
+	@Test
+	void acceptsHexAccentWithAndWithoutHashPrefix() {
+		for (String accent : List.of("", "   ", "1BC9E8", "1bc9e8", "#1BC9E8")) {
+			var fields = catalogue();
+			fields.accent = accent;
+			fields.categories = linkedCategories("General", linkedGroups("main", group(file("a"))));
+			assertDoesNotThrow(() -> GroupManifestValidator.validate(fields), accent);
+		}
+	}
+
+	@Test
+	void rejectsInvalidAccentAndOverlongPackVoice() {
+		var badAccent = catalogue();
+		badAccent.accent = "lime";
+		badAccent.categories = linkedCategories("General", linkedGroups("main", group(file("a"))));
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(badAccent));
+
+		var overlongDescription = catalogue();
+		overlongDescription.description = "x".repeat(257);
+		overlongDescription.categories = linkedCategories("General", linkedGroups("main", group(file("a"))));
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(overlongDescription));
+
+		var overlongFlavor = catalogue();
+		overlongFlavor.flavor = "x".repeat(121);
+		overlongFlavor.categories = linkedCategories("General", linkedGroups("main", group(file("a"))));
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(overlongFlavor));
+	}
+
 	private static ModpackJsons.CompleteModpackContentFields catalogue() {
 		var fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";

@@ -9,6 +9,6 @@ displayName = "AutoModpack"
 displayURL = "https://modrinth.com/mod/automodpack"
 authors = "Skidam"
 description = '''
-
+The AutoModpack bootstrap jar: it stages the real mod before the game loads.
 '''
 logoFile = "icon.png"

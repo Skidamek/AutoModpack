@@ -32,7 +32,7 @@ public class Server {
 		StorageLeftovers.warnAbout(GameDirectory.current().resolve(StoragePaths.AUTOMODPACK_DIR));
 
 		if (serverConfig.bindPort == -1) {
-			LOGGER.error("Host port not set in config!");
+			LOGGER.error("Host port not set in config");
 			return;
 		}
 
@@ -40,7 +40,7 @@ public class Server {
 		var generation = modpackExecutor.publish();
 
 		if (generation instanceof ModpackExecutor.Published || generation instanceof ModpackExecutor.NoChanges) {
-			LOGGER.info("Modpack generation completed!");
+			LOGGER.info("Modpack generation completed");
 		} else if (generation instanceof ModpackExecutor.PublishResult.NothingToPublish nothing) {
 			// A host with nothing to host has no world to keep running for, and exiting 0 reads as a clean shutdown to
 			// whatever supervises it. Say why and leave non-zero.

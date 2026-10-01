@@ -25,6 +25,7 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.platforms.FetchManager;
 import pl.skidam.automodpack_core.platforms.PlatformCache;
 import pl.skidam.automodpack_core.protocol.PackTransport;
+import pl.skidam.automodpack_core.screen.PackIdentity;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
@@ -42,7 +43,7 @@ final class ModpackObjectAcquisition {
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
 	private final PackTransport transport;
 	private final AtomicBoolean playerCancelled;
-	private final Supplier<String> modpackName;
+	private final Supplier<PackIdentity> packIdentity;
 	private final Runnable onPlayerCancel;
 	private final String waitingMusicSha1;
 	private final Set<String> reservedObjectHashes = new TreeSet<>();
@@ -51,7 +52,7 @@ final class ModpackObjectAcquisition {
 	private DownloadManager downloadManager;
 
 	ModpackObjectAcquisition(ClientStorage storage, PlatformCache platformCache, SourceCatalogue sourceCatalogue, ClientUpdatePlanBuilder planBuilder,
-			ConnectionJsons.ConnectionInfo connectionInfo, PackTransport transport, AtomicBoolean playerCancelled, Supplier<String> modpackName, Runnable onPlayerCancel,
+			ConnectionJsons.ConnectionInfo connectionInfo, PackTransport transport, AtomicBoolean playerCancelled, Supplier<PackIdentity> packIdentity, Runnable onPlayerCancel,
 			String waitingMusicSha1) {
 		this.storage = storage;
 		this.platformCache = platformCache;
@@ -60,7 +61,7 @@ final class ModpackObjectAcquisition {
 		this.connectionInfo = connectionInfo;
 		this.transport = transport;
 		this.playerCancelled = playerCancelled;
-		this.modpackName = modpackName;
+		this.packIdentity = packIdentity;
 		this.onPlayerCancel = onPlayerCancel;
 		this.waitingMusicSha1 = waitingMusicSha1;
 	}
@@ -150,7 +151,7 @@ final class ModpackObjectAcquisition {
 		}
 
 		downloadManager = new DownloadManager(totalBytes, storage.dataLocation().layout(), platformCache);
-		if (playerFacing) ScreenManager.download(downloadManager, modpackName.get(), onPlayerCancel);
+		if (playerFacing) ScreenManager.download(downloadManager, packIdentity.get(), onPlayerCancel);
 		downloadManager.attachTransport(transport);
 		for (var serverItem : files) {
 			Path downloadFile = storage.activePath(serverItem.file);
