@@ -52,7 +52,7 @@ public final class GroupManifestValidator {
 				Set<String> requires = validateIds("Group '" + id + "' requires", group.requires, errors);
 				Set<ClientPlatform> platforms = validatePlatforms(id, group.compatiblePlatforms, errors);
 				Map<String, GroupManifest.GroupFile> files = validateFiles(id, group.files, errors);
-				groups.put(id, new GroupManifest.Group(group.displayName, group.description, category, group.required, group.defaultSelected, breaksWith, requires, platforms, files));
+				groups.put(id, new GroupManifest.Group(group.displayName, group.description, category, GroupSelectionMode.of(group.required, group.defaultSelected), breaksWith, requires, platforms, files));
 			}
 		}
 

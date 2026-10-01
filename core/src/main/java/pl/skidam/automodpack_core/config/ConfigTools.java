@@ -403,6 +403,33 @@ public final class ConfigTools {
 		}
 	}
 
+	/** Matches one enum constant by name or {@code @SerializedName}, ignoring case but not membership; unknown names throw. */
+	public static <E extends Enum<E>> E enumConstant(Class<E> type, String name) {
+		try {
+			return Enum.valueOf(type, name);
+		} catch (IllegalArgumentException exactMiss) {
+			for (E constant : type.getEnumConstants()) {
+				if (constant.name().equalsIgnoreCase(name)) return constant;
+				SerializedName serializedName = serializedAnnotation(type, constant.name());
+				if (serializedName != null && (serializedName.value().equalsIgnoreCase(name) || containsIgnoreCase(serializedName.alternate(), name))) return constant;
+			}
+			throw new IllegalArgumentException("Unknown " + type.getSimpleName() + " value '" + name + "'");
+		}
+	}
+
+	private static SerializedName serializedAnnotation(Class<?> type, String constantName) {
+		try {
+			return type.getField(constantName).getAnnotation(SerializedName.class);
+		} catch (NoSuchFieldException e) {
+			return null;
+		}
+	}
+
+	private static boolean containsIgnoreCase(String[] values, String name) {
+		for (String value : values) if (value.equalsIgnoreCase(name)) return true;
+		return false;
+	}
+
 	/** Refuses unknown enum names with a clear error instead of silently yielding null elements inside persisted state. */
 	public static final class StrictEnumTypeAdapter implements JsonDeserializer<Enum<?>> {
 		@Override
@@ -412,8 +439,12 @@ public final class ConfigTools {
 			String name = json.getAsString();
 			try {
 				return Enum.valueOf((Class<? extends Enum>) type, name);
-			} catch (IllegalArgumentException e) {
-				throw new JsonParseException("Unknown " + ((Class<?>) type).getSimpleName() + " value '" + name + "'", e);
+			} catch (IllegalArgumentException exactMiss) {
+				try {
+					return enumConstant((Class<? extends Enum>) type, name);
+				} catch (IllegalArgumentException e) {
+					throw new JsonParseException("Unknown " + ((Class<?>) type).getSimpleName() + " value '" + name + "'", e);
+				}
 			}
 		}
 	}

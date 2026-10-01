@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 
 /** Operator-facing text views of the group model: the config declarations plus whatever generation is published. */
@@ -47,7 +48,7 @@ public final class GroupInspector {
 			addField(lines, "Category", publishedGroup.category());
 			addField(lines, "Display name", publishedGroup.displayName());
 			addField(lines, "Description", publishedGroup.description());
-			lines.add("Flags: " + flags(publishedGroup.required(), publishedGroup.defaultSelected()));
+			lines.add("Flags: " + flags(publishedGroup.selection()));
 			addJoined(lines, "Platforms", platforms(publishedGroup));
 			addJoined(lines, "Requires", publishedGroup.requires());
 			addJoined(lines, "Breaks with", publishedGroup.breaksWith());
@@ -56,7 +57,7 @@ public final class GroupInspector {
 			ServerConfigJsons.GroupDeclaration declaration = declared.getValue();
 			addField(lines, "Display name", declaration.displayName);
 			addField(lines, "Description", declaration.description);
-			lines.add("Flags: " + flags(declaration.required, declaration.defaultSelected));
+			lines.add("Flags: " + flags(declaration.selection));
 			addJoined(lines, "Platforms", declaration.compatiblePlatforms);
 			addJoined(lines, "Requires", declaration.requires);
 			addJoined(lines, "Breaks with", declaration.breaksWith);
@@ -72,8 +73,8 @@ public final class GroupInspector {
 	private static String summaryLine(String groupId, ServerConfigJsons.GroupDeclaration declaration, GroupManifest.Group published) {
 		StringBuilder line = new StringBuilder(groupId);
 		if (!declaration.displayName.isBlank()) line.append(" - ").append(declaration.displayName);
-		if (declaration.required) line.append(" [required]");
-		if (declaration.defaultSelected) line.append(" [default]");
+		if (declaration.selection == GroupSelectionMode.REQUIRED) line.append(" [required]");
+		if (declaration.selection == GroupSelectionMode.RECOMMENDED) line.append(" [recommended]");
 		if (!declaration.compatiblePlatforms.isEmpty()) line.append(" [").append(joined(declaration.compatiblePlatforms)).append("]");
 		if (published == null) line.append(" (not published yet)");
 		else line.append(" ").append(published.files().size()).append(" files, ").append(ByteFormat.formatSize(totalSize(published)));
@@ -117,10 +118,9 @@ public final class GroupInspector {
 		return total;
 	}
 
-	private static String flags(boolean required, boolean defaultSelected) {
-		if (required && defaultSelected) return "required, default selected";
-		if (required) return "required";
-		if (defaultSelected) return "default selected";
+	private static String flags(GroupSelectionMode selection) {
+		if (selection == GroupSelectionMode.REQUIRED) return "required";
+		if (selection == GroupSelectionMode.RECOMMENDED) return "recommended";
 		return "none";
 	}
 

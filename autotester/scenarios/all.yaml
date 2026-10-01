@@ -1310,15 +1310,14 @@ topology:
             main:
               displayName: Core
               description: Required core files
-              required: true
-              defaultSelected: true
+              selection: REQUIRED
               editable: ["/config/pack-shared-editable.txt"]
               from-server: ["/config/amp-autotest-alpha.txt", "/config/amp-autotest-beta.json", "/config/amp-autotest-gamma.cfg", "/config/amp-autotest-baseline.json", "/config/amp-autotest-delta.txt", "/config/amp-autotest-marker.json", "/config/pack-a-only.txt", "/config/pack-shared-editable.txt", "/mods/amp-autotest-removed.jar"]
           Visuals:
             visual:
               displayName: Visuals
               description: Default client visuals
-              defaultSelected: true
+              selection: RECOMMENDED
               requires: [main]
               from-server: ["/config/amp-autotest-visual.txt"]
           Extras:

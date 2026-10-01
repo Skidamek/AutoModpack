@@ -17,6 +17,7 @@ import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,7 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.annotations.SerializedName;
 
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.OsPaths;
 import pl.skidam.reconf.Comments;
@@ -63,6 +65,9 @@ public final class ReconfConfigs {
 	}
 
 	private static final String BANNER = "AutoModpack configuration. Docs: https://moddedmc.wiki/en/project/automodpack/docs";
+
+	/** The boolean pair the {@code selection} enum replaced on the human surface; only these two keys migrate. */
+	private static final List<String> LEGACY_GROUP_SELECTION_KEYS = List.of("required", "default-selected");
 
 	/** Reads one human config; empty when neither it nor a JSON predecessor exists, {@link ConfigTools.ConfigParseException} with position when it is corrupt. */
 	public static <T> Optional<T> read(Path path, Class<T> type) {
@@ -106,6 +111,7 @@ public final class ReconfConfigs {
 		setArrays(document, tree, document.tree(), ConfigPath.root());
 		ensureDeclared(document, type, defaults.get());
 		ensureGroupListComments(document, model);
+		removeLegacyGroupSelection(document, path);
 		OsPaths.requirePublishableConfig(path);
 		DurableFiles.writeAtomic(path, document.text());
 	}
@@ -150,10 +156,100 @@ public final class ReconfConfigs {
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Failed to read configuration " + path.toAbsolutePath().normalize(), e);
 		}
-		String json = parseJson(path, bytes);
+		Document document = parseDocument(path, bytes);
+		if (type == ServerConfigJsons.ServerConfigFieldsV3.class) {
+			GroupSelectionMigration migration = migrateGroupSelection(document);
+			if (migration != null) return readMigratedGroupSelection(path, document, migration, type);
+		}
+		String json = ConfigTools.GSON.toJson(toJsonObject(document.tree()));
 		List<String> unknown = ConfigTools.unknownKeys(json, type);
 		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
 		return ConfigTools.parse(json, type);
+	}
+
+	/** The migrated Gson tree plus the document paths whose legacy members must leave the file. */
+	private record GroupSelectionMigration(JsonObject json, List<ConfigPath> removals) {}
+
+	/**
+	 * The one-shot conf-to-conf migration of the rc.1 group flags: any {@code modpack.<category>.<group>} holding the
+	 * legacy {@code required}/{@code default-selected} pair gets one {@code selection} value in the json handed to the
+	 * model parse, so the legacy keys never warn as unknown. Null when nothing needed migrating, so a current file is
+	 * a no-op with no log and no write.
+	 */
+	private static GroupSelectionMigration migrateGroupSelection(Document document) {
+		JsonElement tree = toJsonObject(document.tree());
+		if (!(tree instanceof JsonObject root)) return null;
+		JsonElement modpack = root.get("modpack");
+		if (!(modpack instanceof JsonObject modpackObject)) return null;
+		List<ConfigPath> removals = new ArrayList<>();
+		boolean changed = false;
+		for (var category : modpackObject.entrySet()) {
+			if (category.getKey().equals("name") || !(category.getValue() instanceof JsonObject categoryObject)) continue;
+			for (var group : categoryObject.entrySet()) {
+				if (!(group.getValue() instanceof JsonObject groupObject)) continue;
+				changed |= migrateGroupSelection(category.getKey(), group.getKey(), groupObject, ConfigPath.of("modpack", category.getKey(), group.getKey()), removals);
+			}
+		}
+		return changed ? new GroupSelectionMigration(root, removals) : null;
+	}
+
+	private static boolean migrateGroupSelection(String category, String group, JsonObject declaration, ConfigPath groupPath, List<ConfigPath> removals) {
+		boolean required = false;
+		boolean defaultSelected = false;
+		boolean present = false;
+		for (String key : LEGACY_GROUP_SELECTION_KEYS) {
+			if (!declaration.has(key)) continue;
+			JsonElement value = declaration.get(key);
+			if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean())
+				throw new ConfigTools.ConfigParseException("Group '" + group + "' in category '" + category + "' has a non-boolean " + key + " value; fix or remove it and retry");
+			if (key.equals("required")) required = value.getAsBoolean();
+			else defaultSelected = value.getAsBoolean();
+			removals.add(groupPath.appended(key));
+			present = true;
+		}
+		if (!present) return false;
+		declaration.remove("required");
+		declaration.remove("default-selected");
+		if (!declaration.has("selection")) declaration.addProperty("selection", GroupSelectionMode.of(required, defaultSelected).name());
+		return true;
+	}
+
+	/** Parses the migrated json first, so a file that fails the model parse is never rewritten, then drops the legacy members and writes the reconciled document atomically. */
+	private static <T> T readMigratedGroupSelection(Path path, Document document, GroupSelectionMigration migration, Class<T> type) {
+		String json = ConfigTools.GSON.toJson(migration.json());
+		List<String> unknown = ConfigTools.unknownKeys(json, type);
+		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
+		T model = ConfigTools.parse(json, type);
+		for (ConfigPath removal : migration.removals()) document.remove(removal);
+		ensureGroupListComments(document, model);
+		try {
+			OsPaths.requirePublishableConfig(path);
+			DurableFiles.writeAtomic(path, document.text());
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to migrate configuration " + path.toAbsolutePath().normalize(), e);
+		}
+		LOGGER.info("Migrated group selection flags to 'selection' in {}", path.getFileName());
+		return model;
+	}
+
+	/**
+	 * Removes any legacy group selection flags a hand edit reintroduced, so they cannot outlive the next save - saying so, because the same edit through the read path is migrated instead; only these two keys under
+	 * modpack groups, never a generic model-diff deletion.
+	 */
+	private static void removeLegacyGroupSelection(Document document, Path path) {
+		Value.Obj root = document.tree();
+		if (!(root.members.get("modpack") instanceof Value.Obj modpackObject)) return;
+		for (var category : modpackObject.members.entrySet()) {
+			if (category.getKey().equals("name") || !(category.getValue() instanceof Value.Obj categoryObject)) continue;
+			for (var group : categoryObject.members.entrySet()) {
+				if (!(group.getValue() instanceof Value.Obj groupObject)) continue;
+				for (String key : LEGACY_GROUP_SELECTION_KEYS)
+					if (groupObject.members.containsKey(key)) {
+						document.remove(ConfigPath.of("modpack", category.getKey(), group.getKey(), key));
+						LOGGER.warn("{}: removed the legacy group selection key '{}' from group '{}'; write 'selection' instead, or the value is lost", path.getFileName(), key, group.getKey());
+					}
+			}
+		}
 	}
 
 	private static <T> T migrateJson(Path canonical, Path jsonSource, Class<T> type) {
@@ -300,16 +396,14 @@ public final class ReconfConfigs {
 		return (Value.Obj) toJsonValue(object);
 	}
 
-	/** The reconf document as Gson-model JSON: the string path of {@link ConfigTools} (strict stream reader) does the binding. */
-	private static String parseJson(Path path, byte[] bytes) {
+	private static Document parseDocument(Path path, byte[] bytes) {
 		ParseResult result = Reconf.parse(bytes);
 		if (!result.isOk()) {
 			ParseError error = result.error();
 			throw new ConfigTools.ConfigParseException("Invalid configuration " + path.getFileName() + " at line " + error.line() + ":" + error.column() + " ("
 					+ error.kind() + "): " + error.message());
 		}
-		Value tree = result.document().tree();
-		return ConfigTools.GSON.toJson(toJsonObject((Value.Obj) tree));
+		return result.document();
 	}
 
 	// The bridge (RECONF-SPEC §13): reconf tree <-> Gson tree. Numbers travel as their exact literal text in both directions.

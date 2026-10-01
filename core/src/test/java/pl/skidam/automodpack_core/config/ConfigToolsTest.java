@@ -11,6 +11,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
@@ -132,6 +133,16 @@ class ConfigToolsTest {
 		EnumHolder holder = ConfigTools.parse("{\"reasons\":[\"SELECTED_MODPACK\",\"CHANGED_GROUP_SELECTION\"]}", EnumHolder.class);
 
 		assertEquals(List.of(UpdatePlan.RestartReason.SELECTED_MODPACK, UpdatePlan.RestartReason.CHANGED_GROUP_SELECTION), holder.reasons);
+	}
+
+	@Test
+	void enumNamesParseInAnyCaseButNotBeyondMembership() {
+		assertEquals(ModpackConnectionMode.HOLEPUNCH, ConfigTools.parse("{\"connection-mode\": \"holepunch\"}", ServerConfigJsons.ServerConfigFieldsV3.class).connectionMode);
+		assertEquals(ModpackConnectionMode.HOLEPUNCH, ConfigTools.parse("{\"connection-mode\": \"Holepunch\"}", ServerConfigJsons.ServerConfigFieldsV3.class).connectionMode);
+		assertEquals(GroupSelectionMode.RECOMMENDED,
+				ConfigTools.parse("{\"selection\": \"Recommended\"}", ServerConfigJsons.GroupDeclaration.class).selection);
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"connection-mode\": \"holepunchs\"}", ServerConfigJsons.ServerConfigFieldsV3.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"selection\": \"recommnded\"}", ServerConfigJsons.GroupDeclaration.class));
 	}
 
 	@Test

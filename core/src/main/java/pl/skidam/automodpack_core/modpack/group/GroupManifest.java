@@ -43,8 +43,8 @@ public record GroupManifest(
 			ModpackJsons.CompleteModpackContentFields.ModpackGroupFields serialized = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 			serialized.displayName = group.displayName();
 			serialized.description = group.description();
-			serialized.required = group.required();
-			serialized.defaultSelected = group.defaultSelected();
+			serialized.required = group.selection().policyRequired();
+			serialized.defaultSelected = group.selection().policyDefaultSelected();
 			serialized.breaksWith = new LinkedHashSet<>(group.breaksWith());
 			serialized.requires = new LinkedHashSet<>(group.requires());
 			serialized.compatiblePlatforms = group.compatiblePlatforms().stream().map(ClientPlatform::id)
@@ -86,8 +86,7 @@ public record GroupManifest(
 			String displayName,
 			String description,
 			String category,
-			boolean required,
-			boolean defaultSelected,
+			GroupSelectionMode selection,
 			Set<String> breaksWith,
 			Set<String> requires,
 			Set<ClientPlatform> compatiblePlatforms,
@@ -96,10 +95,19 @@ public record GroupManifest(
 			displayName = displayName == null ? "" : displayName;
 			description = description == null ? "" : description;
 			category = category == null ? "" : category;
+			selection = selection == null ? GroupSelectionMode.OPTIONAL : selection;
 			breaksWith = immutableSet(breaksWith);
 			requires = immutableSet(requires);
 			compatiblePlatforms = immutablePlatforms(compatiblePlatforms);
 			files = immutableMap(files);
+		}
+
+		public boolean required() {
+			return selection.policyRequired();
+		}
+
+		public boolean defaultSelected() {
+			return selection.policyDefaultSelected();
 		}
 
 		/** Platform-agnostic groups support everything; platform-specific ones need a matching detected or chosen platform. */
@@ -109,9 +117,8 @@ public record GroupManifest(
 
 		public boolean hasSameMetadata(Group other) {
 			return other != null && Objects.equals(displayName, other.displayName) && Objects.equals(description, other.description)
-					&& Objects.equals(category, other.category) && required == other.required
-					&& defaultSelected == other.defaultSelected && Objects.equals(breaksWith, other.breaksWith) && Objects.equals(requires, other.requires)
-					&& Objects.equals(compatiblePlatforms, other.compatiblePlatforms);
+					&& Objects.equals(category, other.category) && selection == other.selection && Objects.equals(breaksWith, other.breaksWith)
+					&& Objects.equals(requires, other.requires) && Objects.equals(compatiblePlatforms, other.compatiblePlatforms);
 		}
 	}
 	public record GroupFile(long size, String type, boolean editable, String sha1, String murmur) {

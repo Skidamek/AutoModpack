@@ -18,6 +18,7 @@ import com.google.gson.JsonSerializer;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class ServerConfigJsons {
@@ -96,8 +97,7 @@ public class ServerConfigJsons {
 	private static GroupDeclaration mainGroupDeclaration() {
 		GroupDeclaration declaration = new GroupDeclaration();
 		declaration.description = "Core modpack files";
-		declaration.required = true;
-		declaration.defaultSelected = true;
+		declaration.selection = GroupSelectionMode.REQUIRED;
 		declaration.fromServer = new LinkedHashSet<>(FACTORY_FROM_SERVER);
 		declaration.exclude = new LinkedHashSet<>(FACTORY_EXCLUDE);
 		declaration.editable = new LinkedHashSet<>(FACTORY_EDITABLE);
@@ -169,10 +169,8 @@ public class ServerConfigJsons {
 		@SerializedName("display-name")
 		public String displayName = "";
 		public String description = "";
-
-		public boolean required = false;
-		@SerializedName("default-selected")
-		public boolean defaultSelected = false;
+		@ReconfConfigs.Comment("REQUIRED is always installed. RECOMMENDED is pre-selected, players can opt out. OPTIONAL starts unchecked.")
+		public GroupSelectionMode selection = GroupSelectionMode.OPTIONAL;
 
 		@SerializedName("breaks-with")
 		public Set<String> breaksWith = Set.of();

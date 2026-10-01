@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -12,6 +13,9 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.google.gson.JsonParser;
+
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 class HumanConfigMigrationTest {
@@ -49,8 +53,7 @@ class HumanConfigMigrationTest {
 		assertEquals(ModpackConnectionMode.HOLEPUNCH, config.connectionMode);
 		assertTrue(config.modpack.categories.get("General").get("main").exclude.contains("**/.*"));
 		assertFalse(config.modpack.categories.get("General").get("main").exclude.contains("kubejs/server_scripts/**"));
-		assertTrue(config.modpack.categories.get("General").get("main").required, "the migrated core group must stay required");
-		assertTrue(config.modpack.categories.get("General").get("main").defaultSelected, "the migrated core group must stay default-selected");
+		assertEquals(GroupSelectionMode.REQUIRED, config.modpack.categories.get("General").get("main").selection, "the migrated core group must stay required");
 		assertTrue(Files.isRegularFile(conf));
 		assertTrue(Files.isRegularFile(dir.resolve("automodpack-server.json.backup")));
 		assertFalse(Files.exists(json));
@@ -105,5 +108,41 @@ class HumanConfigMigrationTest {
 		assertTrue(Files.isRegularFile(conf));
 		assertTrue(Files.isRegularFile(dir.resolve("automodpack-client.json.backup")));
 		assertFalse(Files.exists(dir.resolve("client").resolve("selected.json")));
+	}
+
+	@Test
+	void legacyGroupBooleansMapOntoTheSelectionEnum() {
+		assertEquals(GroupSelectionMode.REQUIRED, selectionOf(mappedGroup("\"required\": true, \"default-selected\": true")), "(true, true) is the required core group");
+		assertEquals(GroupSelectionMode.REQUIRED, selectionOf(mappedGroup("\"required\": true, \"default-selected\": false")), "a required group stays required regardless of its other flag");
+		assertEquals(GroupSelectionMode.REQUIRED, selectionOf(mappedGroup("\"required\": true")), "required alone still wins over a missing flag");
+		assertEquals(GroupSelectionMode.RECOMMENDED, selectionOf(mappedGroup("\"defaultSelected\": true")));
+		assertEquals(GroupSelectionMode.OPTIONAL, selectionOf(mappedGroup("\"required\": false, \"default-selected\": false")));
+		assertEquals(GroupSelectionMode.OPTIONAL, selectionOf(mappedGroup("\"displayName\": \"Extra\"")), "a group without the pair starts unchecked");
+	}
+
+	@Test
+	void selectionValuesParseInAnyCaseAndWinOverTheLegacyPair() {
+		assertEquals(GroupSelectionMode.RECOMMENDED, selectionOf(mappedGroup("\"selection\": \"recommended\"")));
+		assertEquals(GroupSelectionMode.OPTIONAL, selectionOf(mappedGroup("\"selection\": \"OPTIONAL\", \"required\": true, \"default-selected\": true")), "selection wins over the legacy pair");
+	}
+
+	@Test
+	void unknownSelectionValueFailsLoudly() {
+		assertThrows(ConfigTools.ConfigParseException.class, () -> selectionOf(mappedGroup("\"selection\": \"recommnded\"")));
+	}
+
+	@Test
+	void nonStringSelectionAndNonBooleanLegacyFlagsFailLoudly() {
+		assertThrows(ConfigTools.ConfigParseException.class, () -> selectionOf(mappedGroup("\"selection\": null")));
+		assertThrows(ConfigTools.ConfigParseException.class, () -> selectionOf(mappedGroup("\"selection\": {}")));
+		assertThrows(ConfigTools.ConfigParseException.class, () -> selectionOf(mappedGroup("\"required\": \"yes\"")), "\"yes\" must not silently read as false and drop a required group");
+	}
+
+	private static ServerConfigJsons.ServerConfigFieldsV3 mappedGroup(String members) {
+		return HumanConfigMigration.mapServer(JsonParser.parseString("{\"modpack\": {\"General\": {\"main\": {" + members + "}}}}").getAsJsonObject());
+	}
+
+	private static GroupSelectionMode selectionOf(ServerConfigJsons.ServerConfigFieldsV3 config) {
+		return config.modpack.categories.get("General").get("main").selection;
 	}
 }

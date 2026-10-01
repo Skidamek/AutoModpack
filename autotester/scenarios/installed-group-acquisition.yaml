@@ -98,8 +98,7 @@ topology:
           General:
             main:
               displayName: Core
-              required: true
-              defaultSelected: true
+              selection: REQUIRED
               from-server: ["/config/amp-installed-base.txt"]
             optional:
               displayName: Optional Feature

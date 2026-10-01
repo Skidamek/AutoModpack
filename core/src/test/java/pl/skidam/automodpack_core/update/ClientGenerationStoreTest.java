@@ -34,6 +34,7 @@ import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
@@ -200,7 +201,7 @@ class ClientGenerationStoreTest {
 
 	private static PackDocument republished(String modpackId, String hash, long size, Instant createdAt) {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "", "General", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
 		GroupManifest manifest = new GroupManifest(modpackId, "Test republished", "", "", "", "", new TreeMap<>(Map.of("main", group)));
 		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, null);
@@ -527,7 +528,7 @@ class ClientGenerationStoreTest {
 
 	private static PackDocument document(String modpackId, String hash, long size, Instant createdAt) {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "", "General", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
 		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group)));
 		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, null);
@@ -535,7 +536,7 @@ class ClientGenerationStoreTest {
 
 	private static PackDocument document(String modpackId, String hash, long size, Instant createdAt, PackDocument parent) {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "", "General", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
 		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group)));
 		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, parent.ownershipLedger());

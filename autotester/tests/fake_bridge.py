@@ -913,6 +913,10 @@ class FakeBridge:
             manifest_group = manifest_categories.setdefault(str(category), {})
             for group_id, declaration in groups.items():
                 group = dict(declaration)
+                if "selection" in group:
+                    mode = str(group.pop("selection")).upper()
+                    group["required"] = mode == "REQUIRED"
+                    group["defaultSelected"] = mode in ("REQUIRED", "RECOMMENDED")
                 group.setdefault("required", False)
                 group.setdefault("defaultSelected", False)
                 group.setdefault("breaksWith", [])

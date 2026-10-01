@@ -10,7 +10,7 @@ public final class GroupSelectionResolver {
 		Set<String> requestedGroups = new TreeSet<>();
 		for (var entry : manifest.groups().entrySet()) {
 			GroupManifest.Group group = entry.getValue();
-			if (group.defaultSelected() && !group.required()) requestedGroups.add(entry.getKey());
+			if (group.selection() == GroupSelectionMode.RECOMMENDED) requestedGroups.add(entry.getKey());
 		}
 		return new SelectionIntent(requestedGroups);
 	}

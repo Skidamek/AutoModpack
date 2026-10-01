@@ -152,8 +152,8 @@ public final class ModpackCandidateScanner {
 				ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 				group.displayName = declaration.displayName;
 				group.description = declaration.description;
-				group.required = declaration.required;
-				group.defaultSelected = declaration.defaultSelected;
+				group.required = declaration.selection.policyRequired();
+				group.defaultSelected = declaration.selection.policyDefaultSelected();
 				group.breaksWith = sortedSet(declaration.breaksWith);
 				group.requires = sortedSet(declaration.requires);
 				group.compatiblePlatforms = sortedSet(declaration.compatiblePlatforms);

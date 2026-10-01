@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.platforms.PlatformCache;
@@ -81,7 +82,7 @@ class PlatformReferencesTest {
 
 	private static ChangeSet catalogue() {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(1, "mod", false, SHA1, null);
-		GroupManifest.Group group = new GroupManifest.Group("Main", "", "General", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/example.jar", file)));
+		GroupManifest.Group group = new GroupManifest.Group("Main", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/example.jar", file)));
 		return ChangeSet.catalogue(new GroupManifest("pack", "Pack", "1", "fabric", "1", "1.21", new TreeMap<>(Map.of("main", group))));
 	}
 }

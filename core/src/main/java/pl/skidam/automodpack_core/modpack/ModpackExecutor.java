@@ -36,6 +36,7 @@ import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.platforms.PlatformSourceLookup;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -357,21 +358,21 @@ public class ModpackExecutor {
 		if (manifest.groups().values().stream().allMatch(group -> group.files().isEmpty()))
 			return new PackAbsence(Kind.NOTHING_FOUND, "Nothing to sync: the published generation holds no files for any of the " + manifest.groups().size()
 					+ " configured groups (" + String.join(", ", manifest.groups().keySet()) + ").");
-		if (manifest.groups().values().stream().noneMatch(group -> (group.required() || group.defaultSelected()) && !group.files().isEmpty()))
+		if (manifest.groups().values().stream().noneMatch(group -> group.selection() != GroupSelectionMode.OPTIONAL && !group.files().isEmpty()))
 			return new PackAbsence(Kind.NOTHING_SELECTED, "Nothing to sync: the modpack holds " + fileCount(manifest)
-					+ " files, but no group that is required or selected by default carries any of them. Mark a group that carries files required or selected by default.");
+					+ " files, but no group that is required or recommended carries any of them. Mark a group that carries files required or recommended.");
 		return null;
 	}
 
 	/**
-	 * A group that is required or selected by default and carries no files is dead configuration: every default client
+	 * A group that is required or recommended and carries no files is dead configuration: every default client
 	 * is handed it and receives nothing through it. It is a receipt, not a refusal, because the operator may be
 	 * mid-edit and other groups may still carry the pack.
 	 */
 	private static void warnUnusableSelectedGroups(GroupManifest manifest) {
 		for (var entry : manifest.groups().entrySet())
-			if (entry.getValue().files().isEmpty() && (entry.getValue().required() || entry.getValue().defaultSelected()))
-				LOGGER.warn("Group '{}' is required or selected by default but carries no files; a default client receives nothing through it", entry.getKey());
+			if (entry.getValue().files().isEmpty() && entry.getValue().selection() != GroupSelectionMode.OPTIONAL)
+				LOGGER.warn("Group '{}' is required or recommended but carries no files; a default client receives nothing through it", entry.getKey());
 	}
 
 	private static int fileCount(GroupManifest manifest) {
