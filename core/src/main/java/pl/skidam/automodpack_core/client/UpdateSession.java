@@ -11,7 +11,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.atomic.AtomicReference;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
@@ -35,13 +34,12 @@ import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.JournalMirror;
 import pl.skidam.automodpack_core.update.ReviewedUpdatePlan;
-import pl.skidam.automodpack_core.update.UpdateDeferredException;
+import pl.skidam.automodpack_core.update.UpdateCommit;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateReviewPolicy;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
-import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
@@ -212,28 +210,16 @@ final class UpdateSession implements UpdateAttempt {
 	/**
 	 * The one commit of the reviewed plan: changelogs, then the transactional commit with its restart decision. The
 	 * confirm is the consent moment, so the commit begins by recording the desire it was approved under; an executing
-	 * plan is a durable fact, so it then seals the review; the executor's own validation and the outcome-checked
-	 * replan carry every drift decision from here.
+	 * plan is a durable fact, so it then seals the review; the commit engine's own validation and replan budget carry
+	 * every drift decision from here.
 	 */
 	@Override
 	public RestartDecision.ApplyResult commit() throws Exception {
 		recordChangelogs(prepared());
 		new ClientSelectionStore(storage.selectionFile()).put(target.manifest().modpackId(), target.selection().intent());
 		review().beginExecution();
-		AtomicReference<ClientUpdatePlanBuilder.PreparedPlan> applied = new AtomicReference<>(prepared());
-		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(storage).commitWithReplan(
-				() -> commitPlanObjects(applied.get()),
-				failedExecution -> {
-					ClientUpdatePlanBuilder.PreparedPlan replanned = replanFromMutableInputs(applied.get(), failedExecution);
-					applied.set(replanned);
-					return commitPlanObjects(replanned);
-				});
-		if (!execution.success()) {
-			if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
-			throw new UpdateDeferredException(execution.transaction().transactionId, execution.blockedPath(), execution.message());
-		}
+		UpdatePlan plan = new UpdateCommit(storage).commit(() -> commitPlanObjects(prepared()), cause -> commitPlanObjects(replanFromMutableInputs(prepared(), cause)));
 		review().complete();
-		UpdatePlan plan = applied.get().plan();
 		this.appliedPlan = plan;
 		try {
 			cleanupOverlayState(plan, target.manifest().modpackId());
@@ -282,14 +268,14 @@ final class UpdateSession implements UpdateAttempt {
 		LOGGER.info("Prepared update changes: {} changed, {} removed", changelogs.changedFiles().size(), changelogs.removedFiles().size());
 	}
 
-	private UpdateTransactionExecutor.Execution commitPlanObjects(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
+	private UpdateCommit.Built commitPlanObjects(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
 		// A retried commit re-reads the journal on purpose: the plan's ownership proofs ride on the ledger it recorded,
 		// so where the plan's bytes are read from is the only thing this observation decides.
 		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 			planBuilder.preparePlanObjects(prepared.plan(), target.flatTarget(), ClientProjectionView.observe(storage), cache);
 			UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.plannedAgainst());
 			transaction.stateKind = stateKind == null ? "" : stateKind.name();
-			return UpdateTransactionSupport.executor(storage).commit(transaction, target);
+			return new UpdateCommit.Built(transaction, target);
 		}
 	}
 
@@ -303,8 +289,7 @@ final class UpdateSession implements UpdateAttempt {
 	}
 
 	/** Rebuilds the reviewed plan from the mutable inputs after a replan-required commit, and rechecks it against the player's review. */
-	private ClientUpdatePlanBuilder.PreparedPlan replanFromMutableInputs(ClientUpdatePlanBuilder.PreparedPlan prepared,
-			UpdateTransactionExecutor.Execution failedExecution) throws IOException {
+	private ClientUpdatePlanBuilder.PreparedPlan replanFromMutableInputs(ClientUpdatePlanBuilder.PreparedPlan prepared, UpdateCommit.Cause cause) throws IOException {
 		ensureSelectedModpackUnchanged(prepared);
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			ClientProjectionView projectionView = ClientProjectionView.observe(storage);
@@ -313,8 +298,8 @@ final class UpdateSession implements UpdateAttempt {
 			try {
 				review().requireCompatible(replanned.plan());
 			} catch (IllegalStateException e) {
-				LOGGER.error("The rebuilt update plan no longer matches the reviewed outcome; the first apply failed with: {}", failedExecution.message(), e);
-				throw new UpdateReplanRequiredException(failedExecution.blockedPath(), "Mutable input changed the reviewed update consequences", e);
+				LOGGER.error("The rebuilt update plan no longer matches the reviewed outcome; the first apply failed with: {}", cause.message(), e);
+				throw new UpdateReplanRequiredException(cause.blockedPath(), "Mutable input changed the reviewed update consequences", e);
 			}
 			recordChangelogs(replanned);
 			return replanned;
@@ -343,8 +328,8 @@ final class UpdateSession implements UpdateAttempt {
 		return ClientProjectionView.observe(storage).target();
 	}
 
-	/** Rebuilds a pending update from current mutable inputs and commits it when the approved outcome still holds. */
-	static UpdateTransactionExecutor.Execution resume(ClientStorage storage, UpdateTransaction pending, ModpackLoaderService modpackLoader, String loaderType) throws Exception {
+	/** Rebuilds a pending update from current mutable inputs, refusing when the approved outcome no longer holds; the commit engine applies what this returns. */
+	static UpdateCommit.Built rebuildPending(ClientStorage storage, UpdateTransaction pending, ModpackLoaderService modpackLoader, String loaderType) throws Exception {
 		ClientUpdatePlanBuilder builder = new ClientUpdatePlanBuilder(storage, modpackLoader, loaderType);
 		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
@@ -359,7 +344,7 @@ final class UpdateSession implements UpdateAttempt {
 			// The rebuilt transaction must keep the pending one's state-history story, or a resumed rollback lands mislabeled.
 			UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.plannedAgainst());
 			transaction.stateKind = pending.stateKind;
-			return UpdateTransactionSupport.executor(storage).commit(transaction, target);
+			return new UpdateCommit.Built(transaction, target);
 		}
 	}
 

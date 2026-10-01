@@ -8,9 +8,9 @@ import java.nio.file.Path;
 
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.UpdateCommit;
 import pl.skidam.automodpack_core.update.UpdateLoopDetector;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
-import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 
 /**
  * The blocked-transaction recovery policy, shared by the game process, the helper process, and boot: how long the
@@ -50,58 +50,58 @@ public final class UpdateRecovery {
 	}
 
 	/** One failed recovery attempt of a pending transaction and the policy's verdict on it. */
-	public record RecoveryAttempt(UpdateTransactionExecutor.Execution execution, UpdateTransaction deferred, boolean reverted) {}
+	public record RecoveryAttempt(UpdateCommit.Outcome outcome, UpdateTransaction deferred, boolean reverted) {}
 
 	/** One bounded recovery attempt against the pending transaction; IOException propagates to the caller's quarantine handling. */
 	@FunctionalInterface
 	public interface RecoveryRetry {
-		UpdateTransactionExecutor.Execution recoverLatest() throws IOException;
+		UpdateCommit.Outcome recover() throws IOException;
 	}
 
 	/**
 	 * The verdict on a failed recovery of a pending transaction: wait out a running helper and retry recovery once;
 	 * otherwise evaluate the deferred-restart guard and either revert to the last finalized generation ({@code reverted},
 	 * boot proceeds without the update) or launch a fresh helper and leave the deferral to the caller, which restarts
-	 * with {@link #deferredPopupMessage}. The returned execution and transaction are the ones the caller finishes with.
+	 * with {@link #deferredPopupMessage}. The returned outcome and transaction are the ones the caller finishes with.
 	 */
-	public static RecoveryAttempt blockedRecovery(ClientStorage storage, UpdateTransaction deferred, UpdateTransactionExecutor.Execution execution, RecoveryRetry recoverLatest)
-			throws IOException {
+	public static RecoveryAttempt blockedRecovery(ClientStorage storage, UpdateTransaction deferred, UpdateCommit.Outcome outcome, RecoveryRetry recover) throws IOException {
 		if (DetachedUpdateHelper.awaitRunningHelper()) {
 			LOGGER.info("The detached update helper finished; retrying recovery of transaction {}", deferred.transactionId);
-			execution = recoverLatest.recoverLatest();
-			deferred = execution.transaction() == null ? deferred : execution.transaction();
-			if (execution.success()) {
+			outcome = recover.recover();
+			deferred = outcome instanceof UpdateCommit.Blocked blocked ? blocked.transaction() : deferred;
+			if (outcome instanceof UpdateCommit.Applied || outcome instanceof UpdateCommit.Idle) {
 				DetachedUpdateHelper.mirrorRecentRuns();
-				return new RecoveryAttempt(execution, deferred, false);
+				return new RecoveryAttempt(outcome, deferred, false);
 			}
 		}
-		if (execution.replanRequired()) {
+		if (outcome instanceof UpdateCommit.ReplanRequired replan) {
 			// The pending plan no longer means what the player approved, and no restart can re-approve it - only the
 			// next sync's fresh review can - so the revert is immediate instead of deferred-restart counted.
-			Path stuckJournal = UpdateTransactionSupport.executor(storage).abandonStuckPublication(deferred);
+			Path stuckJournal = new UpdateCommit(storage).abandonStuckPublication(deferred);
 			clearDeferredGuard(storage);
 			LOGGER.error("The pending update {} needs a fresh review a restart cannot give ({}); kept the last finalized generation and retired the transaction to {}", deferred.transactionId,
-					execution.message(), stuckJournal == null ? "its already-retired journal" : stuckJournal.toAbsolutePath().normalize());
-			return new RecoveryAttempt(execution, deferred, true);
+					replan.message(), stuckJournal == null ? "its already-retired journal" : stuckJournal.toAbsolutePath().normalize());
+			return new RecoveryAttempt(outcome, deferred, true);
 		}
 		UpdateLoopDetector.Outcome loop = deferredGuard(storage).evaluateAndRecord(deferred.transactionId);
-		logDeferredRecovery(storage, deferred, execution, loop);
+		logDeferredRecovery(storage, deferred, outcome, loop);
 		if (loop.decision() == UpdateLoopDetector.Decision.SUPPRESS) {
-			Path stuckJournal = UpdateTransactionSupport.executor(storage).abandonStuckPublication(deferred);
+			Path stuckJournal = new UpdateCommit(storage).abandonStuckPublication(deferred);
 			clearDeferredGuard(storage);
 			LOGGER.error("The same update transaction {} failed after {} deferred restarts; kept the last finalized generation and retired the transaction to {}", deferred.transactionId,
 					loop.restarts(), stuckJournal == null ? "its already-retired journal" : stuckJournal.toAbsolutePath().normalize());
 			LOGGER.error("If the update keeps failing, send that file together with {} and the latest log", GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());
-			return new RecoveryAttempt(execution, deferred, true);
+			return new RecoveryAttempt(outcome, deferred, true);
 		}
 		DetachedUpdateHelper.launch();
-		return new RecoveryAttempt(execution, deferred, false);
+		return new RecoveryAttempt(outcome, deferred, false);
 	}
 
-	private static void logDeferredRecovery(ClientStorage storage, UpdateTransaction transaction, UpdateTransactionExecutor.Execution execution, UpdateLoopDetector.Outcome loop) {
+	private static void logDeferredRecovery(ClientStorage storage, UpdateTransaction transaction, UpdateCommit.Outcome outcome, UpdateLoopDetector.Outcome loop) {
 		LOGGER.error("The pending modpack update did not finish: transaction {} (purpose {}, phase {}) ended with status {}", transaction.transactionId, transaction.purpose, transaction.phase,
-				execution.status());
-		LOGGER.error("Blocked operation {}, blocked path {}, message {}", execution.operation(), execution.blockedPath(), execution.message());
+				outcome.status());
+		if (outcome instanceof UpdateCommit.Blocked blocked)
+			LOGGER.error("Blocked operation {}, blocked path {}, message {}", blocked.operation(), blocked.blockedPath(), blocked.message());
 		LOGGER.error("Journal-recorded result: status {}, operation {}, path {}, message {}", transaction.resultStatus, transaction.resultOperation, transaction.resultPath, transaction.resultMessage);
 		LOGGER.error("The full transaction journal is at {}", storage.transactionFile().toAbsolutePath().normalize());
 		LOGGER.error("The detached helper's own log, with its per-attempt recovery failures, is at {}", GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());

@@ -24,7 +24,7 @@ import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.SelfUpdateSwap;
-import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
+import pl.skidam.automodpack_core.update.UpdateCommit;
 import pl.skidam.automodpack_core.utils.JarUtils;
 
 public final class UpdateHelperMain {
@@ -87,24 +87,25 @@ public final class UpdateHelperMain {
 				try {
 					if (!waitForGameExit(parentPid)) return 1;
 
-					UpdateTransactionExecutor executor = UpdateTransactionSupport.executor(ClientStorage.open(gameDirectory));
+					UpdateCommit commits = new UpdateCommit(ClientStorage.open(gameDirectory));
 					long backoff = UpdateRecovery.INITIAL_BACKOFF_MILLIS;
 					for (int attempt = 1;; attempt++) {
 						boolean selfUpdateRecovered = recoverSelfUpdate(gameDirectory, dataLocation);
-						UpdateTransactionExecutor.Execution execution = executor.recoverLatest();
-						if (execution.success() && selfUpdateRecovered) {
+						UpdateCommit.Outcome outcome = commits.run(new UpdateCommit.Recover(null));
+						boolean done = outcome instanceof UpdateCommit.Applied || outcome instanceof UpdateCommit.Idle;
+						if (done && selfUpdateRecovered) {
 							log("Pending update transaction recovered on attempt " + attempt);
 							return 0;
 						}
-						if (!execution.success()) {
-							log("Update recovery attempt " + attempt + " failed: status " + execution.status() + ", operation " + execution.operation() + ", blocked path "
-									+ execution.blockedPath() + ", message " + execution.message());
-						} else {
+						if (!done && outcome instanceof UpdateCommit.Blocked blocked) {
+							log("Update recovery attempt " + attempt + " failed: status " + blocked.status() + ", operation " + blocked.operation() + ", blocked path "
+									+ blocked.blockedPath() + ", message " + blocked.message());
+						} else if (done) {
 							// A pending swap record left behind would name an object the next boot's recovery still needs;
 							// exiting success here would drop it on the floor.
 							log("Update transaction recovered on attempt " + attempt + ", but the self-update swap is still pending");
 						}
-						if (execution.replanRequired() || attempt >= UpdateRecovery.MAX_ATTEMPTS) {
+						if (outcome instanceof UpdateCommit.ReplanRequired || attempt >= UpdateRecovery.MAX_ATTEMPTS) {
 							log("Update helper gave up; the transaction stays pending and the next game launch will retry it");
 							return 1;
 						}

@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -40,7 +41,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
-class UpdateTransactionExecutorTest {
+class UpdateCommitTest {
 	@TempDir
 	Path temporaryDirectory;
 
@@ -55,9 +56,9 @@ class UpdateTransactionExecutorTest {
 				List.of(new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, hash, bytes.length)));
 
-		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.commit(storage, plan, target);
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commit(storage, plan, target);
 
-		assertTrue(execution.success());
+		assertTrue(execution instanceof UpdateCommit.Applied);
 		assertTrue(FileIntegrity.matches(projectionFile, bytes.length, hash));
 		assertVerifiedObjectProjection(storage.objectFile(hash), projectionFile, bytes.length, hash);
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
@@ -78,7 +79,7 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan install = UpdateTestFixtures.plan(installed, clientConfig(installed.manifest().modpackId()),
 				List.of(new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, hash, bytes.length)));
-		assertTrue(UpdateTestFixtures.commit(storage, install, installed).success());
+		assertTrue(UpdateTestFixtures.commit(storage, install, installed) instanceof UpdateCommit.Applied);
 
 		// The server reorganized the policy without touching the served bytes: same content token, new policy document.
 		GroupManifest reorganized = GroupManifestValidator.validate(reorganizedFields(hash, bytes.length));
@@ -88,9 +89,9 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan plan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, hash, bytes.length)));
 
-		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.commit(storage, plan, target);
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commit(storage, plan, target);
 
-		assertTrue(execution.success());
+		assertTrue(execution instanceof UpdateCommit.Applied);
 		assertNotEquals(installed.document().policySha1(), target.document().policySha1());
 		assertEquals(target.packTarget().contentToken(), storage.readActiveState().contentToken);
 	}
@@ -104,7 +105,7 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan install = UpdateTestFixtures.plan(installed, clientConfig(installed.manifest().modpackId()),
 				List.of(new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, hash, bytes.length)));
-		assertTrue(UpdateTestFixtures.commit(storage, install, installed).success());
+		assertTrue(UpdateTestFixtures.commit(storage, install, installed) instanceof UpdateCommit.Applied);
 
 		// The mirror only witnessed the generation the old policy came with; the head advanced the policy without a journal sync.
 		GroupManifest advanced = GroupManifestValidator.validate(reorganizedFields(hash, bytes.length));
@@ -115,9 +116,9 @@ class UpdateTransactionExecutorTest {
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, hash, bytes.length)));
 		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, plan, target));
 
-		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.executor(storage).recoverLatest();
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null));
 
-		assertTrue(execution.success());
+		assertTrue(execution instanceof UpdateCommit.Applied);
 		assertEquals(target.packTarget().contentToken(), storage.readActiveState().contentToken);
 	}
 
@@ -138,7 +139,7 @@ class UpdateTransactionExecutorTest {
 				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.FIXED_NESTED_MODS), List.of(), List.of(), List.of(), List.of(generated), ChangeSet.empty())
 				.withPlannedSelectedModpackId(target.manifest().modpackId());
 
-		assertTrue(UpdateTestFixtures.commit(storage, plan, target).success());
+		assertTrue(UpdateTestFixtures.commit(storage, plan, target) instanceof UpdateCommit.Applied);
 
 		GeneratedCopyState state = GeneratedCopyState.read(storage, target.manifest().modpackId(), target.packTarget().contentToken(),
 				UpdateTransaction.digest(target.selection().intent()));
@@ -164,9 +165,9 @@ class UpdateTransactionExecutorTest {
 				.withPlannedSelectedModpackId(target.manifest().modpackId());
 		Files.createDirectories(storage.modsDirectory().resolve("nested.jar"));
 
-		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.commit(storage, plan, target);
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commit(storage, plan, target);
 
-		assertTrue(execution.replanRequired());
+		assertTrue(execution instanceof UpdateCommit.ReplanRequired);
 		GeneratedCopyState state = GeneratedCopyState.read(storage, target.manifest().modpackId(), target.packTarget().contentToken(),
 				UpdateTransaction.digest(target.selection().intent()));
 		assertEquals(List.of(new GeneratedCopyState.Entry("mods/nested.jar", nestedHash, nestedBytes.length)), state.entries());
@@ -199,9 +200,9 @@ class UpdateTransactionExecutorTest {
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of(),
 				ChangeSet.empty()).withPlannedSelectedModpackId(target.manifest().modpackId());
 
-		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.commit(storage, plan, target);
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commit(storage, plan, target);
 
-		assertTrue(execution.success());
+		assertTrue(execution instanceof UpdateCommit.Applied);
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/existing.jar"), bytes.length, hash));
 		assertTrue(Files.exists(storage.objectFile(hash)), "the instance snapshot pins projection bytes in CAS");
 		assertEquals(target.packTarget().contentToken(), storage.readActiveState().contentToken);
@@ -222,9 +223,9 @@ class UpdateTransactionExecutorTest {
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of(),
 				ChangeSet.empty()).withPlannedSelectedModpackId(target.manifest().modpackId());
 
-		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.commit(storage, plan, target);
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commit(storage, plan, target);
 
-		assertTrue(execution.success());
+		assertTrue(execution instanceof UpdateCommit.Applied);
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/existing.jar"), bytes.length, hash));
 		assertFalse(Files.exists(stray));
 		assertEquals(target.packTarget().contentToken(), storage.readActiveState().contentToken);
@@ -236,10 +237,10 @@ class UpdateTransactionExecutorTest {
 		byte[] oldBytes = "old-projection".getBytes(StandardCharsets.UTF_8);
 		String oldHash = store(storage, oldBytes);
 		SelectedModpackTarget oldTarget = UpdateTestFixtures.target(storage, "mods/old.jar", "mod", false, oldHash, oldBytes.length);
-		UpdateTransactionExecutor executor = UpdateTestFixtures.executor(storage);
+		UpdateCommit commits = UpdateTestFixtures.commits(storage);
 		assertTrue(UpdateTestFixtures.commit(storage, UpdateTestFixtures.plan(oldTarget, clientConfig(oldTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/old.jar", OperationType.INSTALL_OBJECT, oldHash, oldBytes.length, null)),
-				List.of(new ProjectedFile(Root.PROJECTION, "mods/old.jar", true, oldHash, oldBytes.length))), oldTarget).success());
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/old.jar", true, oldHash, oldBytes.length))), oldTarget) instanceof UpdateCommit.Applied);
 
 		byte[] newBytes = "new-projection".getBytes(StandardCharsets.UTF_8);
 		String newHash = store(storage, newBytes);
@@ -257,7 +258,7 @@ class UpdateTransactionExecutorTest {
 		Files.createDirectories(storage.activeDirectory().resolve("mods"));
 		Files.writeString(storage.activePath("mods/partial.jar"), "partial", StandardCharsets.UTF_8);
 
-		assertTrue(executor.recoverLatest().success());
+		assertTrue(commits.run(new UpdateCommit.Recover(null)) instanceof UpdateCommit.Applied);
 
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/new.jar"), newBytes.length, newHash));
 		assertFalse(Files.exists(storage.activePath("mods/partial.jar")));
@@ -271,10 +272,10 @@ class UpdateTransactionExecutorTest {
 		byte[] oldBytes = "old-projection".getBytes(StandardCharsets.UTF_8);
 		String oldHash = store(storage, oldBytes);
 		SelectedModpackTarget oldTarget = UpdateTestFixtures.target(storage, "mods/old.jar", "mod", false, oldHash, oldBytes.length);
-		UpdateTransactionExecutor executor = UpdateTestFixtures.executor(storage);
+		UpdateCommit commits = UpdateTestFixtures.commits(storage);
 		assertTrue(UpdateTestFixtures.commit(storage, UpdateTestFixtures.plan(oldTarget, clientConfig(oldTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/old.jar", OperationType.INSTALL_OBJECT, oldHash, oldBytes.length, null)),
-				List.of(new ProjectedFile(Root.PROJECTION, "mods/old.jar", true, oldHash, oldBytes.length))), oldTarget).success());
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/old.jar", true, oldHash, oldBytes.length))), oldTarget) instanceof UpdateCommit.Applied);
 
 		byte[] newBytes = "new-projection".getBytes(StandardCharsets.UTF_8);
 		String newHash = store(storage, newBytes);
@@ -290,7 +291,7 @@ class UpdateTransactionExecutorTest {
 		Files.createDirectories(storage.incomingDirectory());
 		Files.writeString(storage.incomingDirectory().resolve("stale.txt"), "stale", StandardCharsets.UTF_8);
 
-		Path stuckJournal = executor.abandonStuckPublication(transaction);
+		Path stuckJournal = commits.abandonStuckPublication(transaction);
 
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/old.jar"), oldBytes.length, oldHash));
 		assertFalse(Files.exists(storage.activePath("mods/partial.jar")));
@@ -307,10 +308,10 @@ class UpdateTransactionExecutorTest {
 		byte[] oldBytes = "old-projection".getBytes(StandardCharsets.UTF_8);
 		String oldHash = store(storage, oldBytes);
 		SelectedModpackTarget oldTarget = UpdateTestFixtures.target(storage, "mods/old.jar", "mod", false, oldHash, oldBytes.length);
-		UpdateTransactionExecutor executor = UpdateTestFixtures.executor(storage);
+		UpdateCommit commits = UpdateTestFixtures.commits(storage);
 		assertTrue(UpdateTestFixtures.commit(storage, UpdateTestFixtures.plan(oldTarget, clientConfig(oldTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/old.jar", OperationType.INSTALL_OBJECT, oldHash, oldBytes.length, null)),
-				List.of(new ProjectedFile(Root.PROJECTION, "mods/old.jar", true, oldHash, oldBytes.length))), oldTarget).success());
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/old.jar", true, oldHash, oldBytes.length))), oldTarget) instanceof UpdateCommit.Applied);
 
 		byte[] newBytes = "new-projection".getBytes(StandardCharsets.UTF_8);
 		String newHash = store(storage, newBytes);
@@ -325,7 +326,7 @@ class UpdateTransactionExecutorTest {
 		Files.write(storage.activePath("mods/new.jar"), newBytes);
 		storage.writeActiveState(newTarget.manifest().modpackId(), newTarget.packTarget().contentToken(), newTarget.document().ownershipLedger().toFields());
 
-		executor.abandonStuckPublication(transaction);
+		commits.abandonStuckPublication(transaction);
 
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/new.jar"), newBytes.length, newHash));
 		assertFalse(Files.exists(storage.backupDirectory()));
@@ -343,7 +344,7 @@ class UpdateTransactionExecutorTest {
 
 		// Boot recovery with no usable journal sweeps them: left in place, the directories read as a publication
 		// already started and the next update's live operations are silently skipped over a successful verdict.
-		UpdateTransactionExecutor.sweepUnpinnedPublicationDirectories(storage);
+		UpdateCommit.sweepUnpinnedPublicationDirectories(storage);
 		assertFalse(Files.exists(storage.incomingDirectory()));
 		assertFalse(Files.exists(storage.backupDirectory()));
 
@@ -356,9 +357,9 @@ class UpdateTransactionExecutorTest {
 				List.of(new ProjectedFile(Root.PROJECTION, "config/applied.json", true, hash, bytes.length),
 						new ProjectedFile(Root.GAME_DIR, "config/applied.json", true, hash, bytes.length)));
 
-		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.commit(storage, plan, target);
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commit(storage, plan, target);
 
-		assertTrue(execution.success());
+		assertTrue(execution instanceof UpdateCommit.Applied);
 		assertArrayEquals(bytes, Files.readAllBytes(storage.gameDirectory().resolve("config/applied.json")));
 	}
 
@@ -380,9 +381,9 @@ class UpdateTransactionExecutorTest {
 		Files.write(live, newerBytes);
 		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
 
-		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.executor(storage).recoverLatest();
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null));
 
-		assertTrue(execution.replanRequired());
+		assertTrue(execution instanceof UpdateCommit.ReplanRequired);
 		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, execution.status());
 		assertArrayEquals(newerBytes, Files.readAllBytes(live));
 		assertEquals(UpdateTransaction.Phase.DEFERRED, persistedTransaction(storage).phase);
@@ -413,9 +414,9 @@ class UpdateTransactionExecutorTest {
 		byte[] rewrittenBytes = "rewritten-by-the-running-mod".getBytes(StandardCharsets.UTF_8);
 		Files.write(live, rewrittenBytes);
 
-		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.executor(storage).recoverLatest();
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null));
 
-		assertTrue(execution.replanRequired());
+		assertTrue(execution instanceof UpdateCommit.ReplanRequired);
 		assertArrayEquals(rewrittenBytes, Files.readAllBytes(live));
 		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, persistedTransaction(storage).resultStatus);
 		assertTrue(Files.exists(storage.transactionFile()), "the journal stays pending for the replan instead of being retired");
@@ -445,9 +446,9 @@ class UpdateTransactionExecutorTest {
 						new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "config/early.txt", true, earlyHash, earlyBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
-		UpdateTransactionExecutor.Execution first = UpdateTestFixtures.executor(storage).commit(UpdateTestFixtures.createTransaction(storage, interruptedPlan, target));
+		UpdateCommit.Outcome first = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Fresh(() -> UpdateCommit.Built.of(UpdateTestFixtures.createTransaction(storage, interruptedPlan, target)), null));
 
-		assertTrue(first.replanRequired());
+		assertTrue(first instanceof UpdateCommit.ReplanRequired);
 		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, persistedTransaction(storage).resultStatus);
 		assertArrayEquals(earlyBytes, Files.readAllBytes(storage.gameDirectory().resolve("config/early.txt")));
 		assertArrayEquals(playerBytes, Files.readAllBytes(drifted));
@@ -462,10 +463,170 @@ class UpdateTransactionExecutorTest {
 						new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "config/early.txt", true, earlyHash, earlyBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
-		UpdateTransactionExecutor.Execution second = UpdateTestFixtures.executor(storage).commit(UpdateTestFixtures.createTransaction(storage, rebuiltPlan, target));
+		UpdateCommit.Outcome second = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Fresh(() -> UpdateCommit.Built.of(UpdateTestFixtures.createTransaction(storage, rebuiltPlan, target)), null));
 
-		assertTrue(second.success());
+		assertTrue(second instanceof UpdateCommit.Applied);
 		assertArrayEquals(earlyBytes, Files.readAllBytes(storage.gameDirectory().resolve("config/early.txt")));
+		assertArrayEquals(expectedBytes, Files.readAllBytes(drifted));
+		assertFalse(Files.exists(storage.transactionFile()));
+		assertEquals(target.packTarget().contentToken(), storage.readActiveState().contentToken);
+	}
+
+	@Test
+	void theReviewedCommitDoorRebuildsOnceAndReturnsThePlanThatApplied() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		byte[] earlyBytes = "early-game-file".getBytes(StandardCharsets.UTF_8);
+		String earlyHash = store(storage, earlyBytes);
+		byte[] expectedBytes = "expected-game-file".getBytes(StandardCharsets.UTF_8);
+		String expectedHash = store(storage, expectedBytes);
+		SelectedModpackTarget target = twoFileTarget(storage, "config/early.txt", "config/replanned.json", earlyHash, earlyBytes.length, expectedHash, expectedBytes.length);
+		Path drifted = storage.gameDirectory().resolve("config/replanned.json");
+		Files.createDirectories(drifted.getParent());
+		byte[] playerBytes = "newer-player-file".getBytes(StandardCharsets.UTF_8);
+		Files.write(drifted, playerBytes);
+		String playerHash = HashUtils.sha1(playerBytes);
+		UpdatePlan interruptedPlan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.GAME_DIR, "config/early.txt", OperationType.INSTALL_OBJECT, earlyHash, earlyBytes.length, null),
+				new Operation(Root.GAME_DIR, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null),
+				new Operation(Root.PROJECTION, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null))
+				.stream().sorted(Operation.ORDER).toList(),
+				List.of(new ProjectedFile(Root.PROJECTION, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
+		UpdatePlan rebuiltPlan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.GAME_DIR, "config/early.txt", OperationType.INSTALL_OBJECT, earlyHash, earlyBytes.length, earlyHash),
+				new Operation(Root.GAME_DIR, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, playerHash),
+				new Operation(Root.PROJECTION, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null))
+				.stream().sorted(Operation.ORDER).toList(),
+				List.of(new ProjectedFile(Root.PROJECTION, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
+		UpdateCommit commits = UpdateTestFixtures.commits(storage);
+
+		UpdatePlan applied = commits.commit(() -> UpdateCommit.Built.of(UpdateTestFixtures.createTransaction(storage, interruptedPlan, target)),
+				cause -> UpdateCommit.Built.of(UpdateTestFixtures.createTransaction(storage, rebuiltPlan, target)));
+
+		assertEquals(rebuiltPlan, applied);
+		assertArrayEquals(expectedBytes, Files.readAllBytes(drifted));
+		assertFalse(Files.exists(storage.transactionFile()));
+	}
+
+	@Test
+	void aSecondReplanRequiredPastTheRebuildIsTerminalOnTheReviewedDoor() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		byte[] earlyBytes = "early-game-file".getBytes(StandardCharsets.UTF_8);
+		String earlyHash = store(storage, earlyBytes);
+		byte[] expectedBytes = "expected-game-file".getBytes(StandardCharsets.UTF_8);
+		String expectedHash = store(storage, expectedBytes);
+		SelectedModpackTarget target = twoFileTarget(storage, "config/early.txt", "config/replanned.json", earlyHash, earlyBytes.length, expectedHash, expectedBytes.length);
+		Path drifted = storage.gameDirectory().resolve("config/replanned.json");
+		Files.createDirectories(drifted.getParent());
+		Files.write(drifted, "newer-player-file".getBytes(StandardCharsets.UTF_8));
+		UpdatePlan interruptedPlan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.GAME_DIR, "config/early.txt", OperationType.INSTALL_OBJECT, earlyHash, earlyBytes.length, null),
+				new Operation(Root.GAME_DIR, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null),
+				new Operation(Root.PROJECTION, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null))
+				.stream().sorted(Operation.ORDER).toList(),
+				List.of(new ProjectedFile(Root.PROJECTION, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
+		UpdateCommit commits = UpdateTestFixtures.commits(storage);
+
+		// The rebuild still names a world the live tree disagrees with, so the budget is spent and the second verdict is terminal.
+		assertThrows(UpdateReplanRequiredException.class, () -> commits.commit(() -> UpdateCommit.Built.of(UpdateTestFixtures.createTransaction(storage, interruptedPlan, target)),
+				cause -> UpdateCommit.Built.of(UpdateTestFixtures.createTransaction(storage, interruptedPlan, target))));
+
+		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, persistedTransaction(storage).resultStatus);
+		assertTrue(Files.exists(storage.transactionFile()), "The terminal replan leaves the journal pending for the next review");
+	}
+
+	@Test
+	void aRefusingRecoveryRebuildIsTerminalWithoutASecondRebuild() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		byte[] bytes = "refused-rebuild-object".getBytes(StandardCharsets.UTF_8);
+		String hash = store(storage, bytes);
+		SelectedModpackTarget target = UpdateTestFixtures.target(storage, "mods/refused.jar", "mod", false, hash, bytes.length);
+		UpdatePlan plan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/refused.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/refused.jar", true, hash, bytes.length)));
+		UpdateTransaction pending = UpdateTestFixtures.createTransaction(storage, plan, target);
+		// The configuration moved after planning, so recovery must rebuild before it can replay.
+		ClientConfigJsons.ClientConfigFieldsV3 newer = new ClientConfigJsons.ClientConfigFieldsV3(pending.expectedClientConfig);
+		newer.playMusic = false;
+		ReconfConfigs.save(storage.clientConfigFile(), newer, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		ConfigTools.writeAtomic(storage.transactionFile(), pending);
+		UpdateCommit commits = UpdateTestFixtures.commits(storage);
+		AtomicInteger rebuilds = new AtomicInteger();
+
+		UpdateCommit.Outcome outcome = commits.run(new UpdateCommit.Recover(cause -> {
+			rebuilds.incrementAndGet();
+			throw new UpdateReplanRequiredException(cause.blockedPath(), "Mutable inputs changed the pending update outcome; a new review is required");
+		}));
+
+		assertTrue(outcome instanceof UpdateCommit.ReplanRequired);
+		assertEquals(1, rebuilds.get(), "The rebuild's own refusal is terminal; no second rebuild may follow it");
+		assertTrue(Files.exists(storage.transactionFile()), "The journal stays pending for the next fresh review");
+	}
+
+	@Test
+	void theRecoveryDoorRebuildsAtTheDriftTriggerAndOncePastTheRebuild() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		byte[] earlyBytes = "early-game-file".getBytes(StandardCharsets.UTF_8);
+		String earlyHash = store(storage, earlyBytes);
+		byte[] expectedBytes = "expected-game-file".getBytes(StandardCharsets.UTF_8);
+		String expectedHash = store(storage, expectedBytes);
+		SelectedModpackTarget target = twoFileTarget(storage, "config/early.txt", "config/replanned.json", earlyHash, earlyBytes.length, expectedHash, expectedBytes.length);
+		Path drifted = storage.gameDirectory().resolve("config/replanned.json");
+		Files.createDirectories(drifted.getParent());
+		byte[] playerBytes = "newer-player-file".getBytes(StandardCharsets.UTF_8);
+		Files.write(drifted, playerBytes);
+		String playerHash = HashUtils.sha1(playerBytes);
+		UpdatePlan pendingPlan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.GAME_DIR, "config/early.txt", OperationType.INSTALL_OBJECT, earlyHash, earlyBytes.length, null),
+				new Operation(Root.GAME_DIR, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null),
+				new Operation(Root.PROJECTION, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null))
+				.stream().sorted(Operation.ORDER).toList(),
+				List.of(new ProjectedFile(Root.PROJECTION, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
+		UpdatePlan stillDriftedPlan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.GAME_DIR, "config/early.txt", OperationType.INSTALL_OBJECT, earlyHash, earlyBytes.length, null),
+				new Operation(Root.GAME_DIR, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null),
+				new Operation(Root.PROJECTION, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null))
+				.stream().sorted(Operation.ORDER).toList(),
+				List.of(new ProjectedFile(Root.PROJECTION, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
+		UpdatePlan settledPlan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.GAME_DIR, "config/early.txt", OperationType.INSTALL_OBJECT, earlyHash, earlyBytes.length, null),
+				new Operation(Root.GAME_DIR, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, playerHash),
+				new Operation(Root.PROJECTION, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null))
+				.stream().sorted(Operation.ORDER).toList(),
+				List.of(new ProjectedFile(Root.PROJECTION, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
+		// The pending journal drifted its configuration after planning, so the recovery rebuilds before it replays.
+		UpdateTransaction pending = UpdateTestFixtures.createTransaction(storage, pendingPlan, target);
+		ClientConfigJsons.ClientConfigFieldsV3 newer = new ClientConfigJsons.ClientConfigFieldsV3(pending.expectedClientConfig);
+		newer.playMusic = false;
+		ReconfConfigs.save(storage.clientConfigFile(), newer, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		ConfigTools.writeAtomic(storage.transactionFile(), pending);
+		UpdateCommit commits = UpdateTestFixtures.commits(storage);
+		AtomicInteger rebuilds = new AtomicInteger();
+
+		UpdateCommit.Outcome outcome = commits.run(new UpdateCommit.Recover(cause -> {
+			UpdatePlan plan = rebuilds.incrementAndGet() == 1 ? stillDriftedPlan : settledPlan;
+			return UpdateCommit.Built.of(UpdateTestFixtures.createTransaction(storage, plan, target));
+		}));
+
+		assertTrue(outcome instanceof UpdateCommit.Applied);
+		assertEquals(2, rebuilds.get(), "The drift trigger rebuilds once, and the replan-required apply gets exactly one more");
 		assertArrayEquals(expectedBytes, Files.readAllBytes(drifted));
 		assertFalse(Files.exists(storage.transactionFile()));
 		assertEquals(target.packTarget().contentToken(), storage.readActiveState().contentToken);
@@ -487,9 +648,9 @@ class UpdateTransactionExecutorTest {
 		newer.playMusic = false;
 		ReconfConfigs.save(storage.clientConfigFile(), newer, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 
-		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.executor(storage).commit(transaction);
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Fresh(() -> UpdateCommit.Built.of(transaction), null));
 
-		assertTrue(execution.replanRequired());
+		assertTrue(execution instanceof UpdateCommit.ReplanRequired);
 		assertFalse(ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().playMusic);
 		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, persistedTransaction(storage).resultStatus);
 	}
@@ -502,7 +663,7 @@ class UpdateTransactionExecutorTest {
 		SelectedModpackTarget installed = UpdateTestFixtures.target(storage, "mods/mailbox-old.jar", "mod", false, oldHash, oldBytes.length);
 		assertTrue(UpdateTestFixtures.commit(storage, UpdateTestFixtures.plan(installed, clientConfig(installed.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/mailbox-old.jar", OperationType.INSTALL_OBJECT, oldHash, oldBytes.length, null)),
-				List.of(new ProjectedFile(Root.PROJECTION, "mods/mailbox-old.jar", true, oldHash, oldBytes.length))), installed).success());
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/mailbox-old.jar", true, oldHash, oldBytes.length))), installed) instanceof UpdateCommit.Applied);
 
 		byte[] deferredBytes = "mailbox-deferred".getBytes(StandardCharsets.UTF_8);
 		String deferredHash = store(storage, deferredBytes);
@@ -537,7 +698,7 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.PROJECTION, "mods/mailbox-latest.jar", OperationType.INSTALL_OBJECT, latestHash, latestBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/mailbox-latest.jar", true, latestHash, latestBytes.length)));
 
-		assertTrue(UpdateTestFixtures.commit(storage, latestPlan, latestTarget).success());
+		assertTrue(UpdateTestFixtures.commit(storage, latestPlan, latestTarget) instanceof UpdateCommit.Applied);
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/mailbox-latest.jar"), latestBytes.length, latestHash));
 		assertFalse(Files.exists(storage.activePath("mods/mailbox-deferred.jar")));
 		assertFalse(Files.exists(storage.incomingDirectory().resolve("stale.txt")));
@@ -580,7 +741,7 @@ class UpdateTransactionExecutorTest {
 		SelectedModpackTarget liveTarget = UpdateTestFixtures.target(storage, "mods/observed.jar", "mod", false, liveHash, liveBytes.length);
 		assertTrue(UpdateTestFixtures.commit(storage, UpdateTestFixtures.plan(liveTarget, clientConfig(liveTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/observed.jar", OperationType.INSTALL_OBJECT, liveHash, liveBytes.length, null)),
-				List.of(new ProjectedFile(Root.PROJECTION, "mods/observed.jar", true, liveHash, liveBytes.length))), liveTarget).success());
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/observed.jar", true, liveHash, liveBytes.length))), liveTarget) instanceof UpdateCommit.Applied);
 
 		byte[] stagedBytes = "staged-after-observation".getBytes(StandardCharsets.UTF_8);
 		String stagedHash = store(storage, stagedBytes);
@@ -621,9 +782,9 @@ class UpdateTransactionExecutorTest {
 				List.of(new UpdatePlan.ModInfo("mods/server-sodium.jar", serverHash, serverBytes.length, "1.0.0", Set.of("sodium"), Set.of())),
 				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, "1.0.0", Set.of("sodium"), Set.of())), List.of(), List.of(), null,
 				clientConfig(target.manifest().modpackId())));
-		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.commit(storage, plan, target);
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commit(storage, plan, target);
 
-		assertTrue(execution.success());
+		assertTrue(execution instanceof UpdateCommit.Applied);
 		assertFalse(Files.exists(local));
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/server-sodium.jar"), serverBytes.length, serverHash));
 		assertTrue(FileIntegrity.matches(storage.objectFile(localHash), localBytes.length, localHash));
@@ -644,7 +805,7 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				clientConfig(target.manifest().modpackId()), Map.of("mods/shared.jar", localState)));
 
-		assertTrue(UpdateTestFixtures.commit(storage, plan, target).success());
+		assertTrue(UpdateTestFixtures.commit(storage, plan, target) instanceof UpdateCommit.Applied);
 
 		assertTrue(FileIntegrity.matches(local, serverBytes.length, serverHash));
 		assertTrue(FileIntegrity.matches(storage.objectFile(localHash), localBytes.length, localHash));
@@ -663,7 +824,7 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.PROJECTION, "mods/keep.jar", OperationType.INSTALL_OBJECT, keepHash, keepBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/gone.jar", true, goneHash, goneBytes.length),
 						new ProjectedFile(Root.PROJECTION, "mods/keep.jar", true, keepHash, keepBytes.length)));
-		assertTrue(UpdateTestFixtures.commit(storage, installedPlan, installed).success());
+		assertTrue(UpdateTestFixtures.commit(storage, installedPlan, installed) instanceof UpdateCommit.Applied);
 
 		// The next generation no longer ships gone.jar; the planner plans its removal from the projection.
 		SelectedModpackTarget next = nextTarget(storage, installed, "mods/keep.jar", keepHash, keepBytes.length, Instant.now());
@@ -696,7 +857,7 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan installedPlan = UpdateTestFixtures.plan(installed, clientConfig(installed.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/keep.jar", OperationType.INSTALL_OBJECT, keepHash, keepBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/keep.jar", true, keepHash, keepBytes.length)));
-		assertTrue(UpdateTestFixtures.commit(storage, installedPlan, installed).success());
+		assertTrue(UpdateTestFixtures.commit(storage, installedPlan, installed) instanceof UpdateCommit.Applied);
 
 		// gone.jar is extra projection: not on the installed or next manifest, so only the first plan carries its absent row.
 		Files.write(storage.activePath("mods/gone.jar"), goneBytes);
@@ -730,7 +891,7 @@ class UpdateTransactionExecutorTest {
 		Files.writeString(storage.transactionFile(), "active", StandardCharsets.UTF_8);
 
 		// An unparseable pending transaction is evidence, not a blocker: it is set aside and the fresh plan proceeds.
-		assertTrue(UpdateTestFixtures.commit(storage, plan, target).success());
+		assertTrue(UpdateTestFixtures.commit(storage, plan, target) instanceof UpdateCommit.Applied);
 		try (var leftovers = Files.list(storage.transactionFile().getParent())) {
 			assertTrue(leftovers.anyMatch(path -> path.getFileName().toString().startsWith("update-transaction.json.corrupt-")));
 		}
@@ -768,11 +929,11 @@ class UpdateTransactionExecutorTest {
 				new ProjectedFile(Root.OVERLAY, "config/settings.json", true, editedHash, editedBytes.length),
 				new ProjectedFile(Root.GAME_DIR, "config/settings.json", true, editedHash, editedBytes.length));
 
-		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.commit(storage, UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), operations, finalState), target);
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commit(storage, UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), operations, finalState), target);
 
 		Path overlay = storage.overlayFile(target.manifest().modpackId(), "config/settings.json");
 		Path live = storage.gameDirectory().resolve("config/settings.json");
-		assertTrue(execution.success());
+		assertTrue(execution instanceof UpdateCommit.Applied);
 		assertTrue(FileIntegrity.matches(overlay, editedBytes.length, editedHash));
 		assertFalse(Files.isSameFile(storage.objectFile(editedHash), live));
 		assertArrayEquals(editedBytes, Files.readAllBytes(live));
@@ -795,7 +956,7 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.GAME_DIR, restoredPath, OperationType.INSTALL_OBJECT, serverHash, serverBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, restoredPath, true, serverHash, serverBytes.length),
 						new ProjectedFile(Root.GAME_DIR, restoredPath, true, serverHash, serverBytes.length)));
-		assertTrue(UpdateTestFixtures.commit(storage, installedPlan, installed).success());
+		assertTrue(UpdateTestFixtures.commit(storage, installedPlan, installed) instanceof UpdateCommit.Applied);
 		Files.delete(storage.objectFile(serverHash));
 
 		Map<String, InstanceTree.TrackedFile> baseline = Map.of(restoredPath, new InstanceTree.TrackedFile(Root.GAME_DIR, "", restoredPath, baselineHash, baselineBytes.length));
@@ -815,7 +976,7 @@ class UpdateTransactionExecutorTest {
 		assertEquals(List.of(new UpdatePlan.Preservation(Root.GAME_DIR, restoredPath, serverHash, serverBytes.length)), switchPlan.preservations());
 		assertTrue(switchPlan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals(restoredPath)
 				&& file.present() && baselineHash.equals(file.expectedHash())));
-		assertTrue(UpdateTestFixtures.commit(storage, switchPlan, target).success());
+		assertTrue(UpdateTestFixtures.commit(storage, switchPlan, target) instanceof UpdateCommit.Applied);
 		assertArrayEquals(baselineBytes, Files.readAllBytes(storage.gameDirectory().resolve(restoredPath)));
 		assertTrue(FileIntegrity.matches(storage.objectFile(serverHash), serverBytes.length, serverHash));
 	}
@@ -829,7 +990,7 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan install = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()),
 				List.of(new Operation(Root.PROJECTION, "mods/remove.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/remove.jar", true, hash, bytes.length)));
-		UpdateTransactionExecutor executor = UpdateTestFixtures.executor(storage);
+		UpdateCommit commits = UpdateTestFixtures.commits(storage);
 		UpdateTestFixtures.commit(storage, install, target);
 		Path live = storage.gameDirectory().resolve("mods/remove.jar");
 		Files.write(live, bytes);
@@ -858,7 +1019,7 @@ class UpdateTransactionExecutorTest {
 		new ClientSelectionStore(storage.selectionFile()).remove(target.manifest().modpackId());
 		Files.delete(storage.objectFile(hash));
 
-		assertTrue(executor.commit(transaction).success());
+		assertTrue(commits.run(new UpdateCommit.Fresh(() -> UpdateCommit.Built.of(transaction), null)) instanceof UpdateCommit.Applied);
 		assertFalse(Files.exists(live));
 		assertFalse(Files.exists(generatedLive));
 		assertFalse(Files.exists(storage.generatedCopiesFile(target.manifest().modpackId(), target.packTarget().contentToken(), UpdateTransaction.digest(expected))));
@@ -879,7 +1040,7 @@ class UpdateTransactionExecutorTest {
 		String hash = store(storage, bytes);
 		String managedPath = "config/empty/deactivate.txt";
 		SelectedModpackTarget target = UpdateTestFixtures.target(storage, managedPath, "config", false, hash, bytes.length);
-		UpdateTransactionExecutor executor = UpdateTestFixtures.executor(storage);
+		UpdateCommit commits = UpdateTestFixtures.commits(storage);
 		UpdateTestFixtures.commit(storage, UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()),
 				List.of(new Operation(Root.PROJECTION, managedPath, OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, managedPath, true, hash, bytes.length))), target);
@@ -901,8 +1062,8 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan deactivation = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(target.flatTarget(), baseline, files, Set.of(), generatedCopies,
 				new ClientConfigJsons.ClientConfigFieldsV3()));
 
-		assertTrue(executor.commit(UpdateTransaction.createDeactivation(deactivation, ClientPlatform.LINUX, expected,
-				storage.overlayDigest(target.manifest().modpackId()), new PlannedAgainst(clientConfig(target.manifest().modpackId()), "", target.flatTarget().ownershipLedger))).success());
+		assertTrue(commits.run(new UpdateCommit.Fresh(() -> UpdateCommit.Built.of(UpdateTransaction.createDeactivation(deactivation, ClientPlatform.LINUX, expected,
+				storage.overlayDigest(target.manifest().modpackId()), new PlannedAgainst(clientConfig(target.manifest().modpackId()), "", target.flatTarget().ownershipLedger))), null)) instanceof UpdateCommit.Applied);
 
 		assertFalse(Files.exists(live));
 		assertFalse(Files.exists(live.getParent()));
@@ -919,9 +1080,9 @@ class UpdateTransactionExecutorTest {
 	void treatsAccessDeniedAsARecoverableStorageLockOnlyWhereItMeansOne() {
 		// On Windows a denied delete is how an open handle reports a sharing violation; on other kernels it is a
 		// plain permission problem - a permanent failure, not a lock the update should defer behind.
-		assertTrue(UpdateTransactionExecutor.isLockFailure(new AccessDeniedException("active", "backup", null), true));
-		assertFalse(UpdateTransactionExecutor.isLockFailure(new AccessDeniedException("active", "backup", null), false));
-		assertTrue(UpdateTransactionExecutor.isLockFailure(new FileSystemException("active", "backup", "being used by another process"), false));
+		assertTrue(UpdateCommit.isLockFailure(new AccessDeniedException("active", "backup", null), true));
+		assertFalse(UpdateCommit.isLockFailure(new AccessDeniedException("active", "backup", null), false));
+		assertTrue(UpdateCommit.isLockFailure(new FileSystemException("active", "backup", "being used by another process"), false));
 	}
 
 	private static ModpackJsons.CompleteModpackContentFields reorganizedFields(String hash, long size) {

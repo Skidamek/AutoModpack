@@ -75,7 +75,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * </p>
  *
  * <p>
- * The only other durable client mutation point is UpdateTransactionExecutor committing the reviewed plan (plus the
+ * The only other durable client mutation point is UpdateCommit applying the reviewed plan (plus the
  * state history and CAS helpers it drives under the mutation lock).
  * </p>
  */

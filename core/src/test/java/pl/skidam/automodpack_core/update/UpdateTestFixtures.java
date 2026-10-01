@@ -33,12 +33,12 @@ final class UpdateTestFixtures {
 		return storage;
 	}
 
-	static UpdateTransactionExecutor executor(ClientStorage storage) {
-		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(storage, null));
+	static UpdateCommit commits(ClientStorage storage) {
+		return new UpdateCommit(storage);
 	}
 
-	static UpdateTransactionExecutor.Execution commit(ClientStorage storage, UpdatePlan plan, SelectedModpackTarget target) throws IOException {
-		return executor(storage).commit(createTransaction(storage, plan, target), target);
+	static UpdateCommit.Outcome commit(ClientStorage storage, UpdatePlan plan, SelectedModpackTarget target) throws IOException {
+		return commits(storage).run(new UpdateCommit.Fresh(() -> new UpdateCommit.Built(createTransaction(storage, plan, target), target), null));
 	}
 
 	static UpdatePlan plan(SelectedModpackTarget target, ClientConfigJsons.ClientConfigFieldsV3 config, List<Operation> operations, List<ProjectedFile> finalState) {

@@ -12,12 +12,11 @@ import pl.skidam.automodpack_core.config.BootstrapInstaller;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
-import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.UpdateCommit;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
-import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 
 /**
@@ -69,7 +68,7 @@ public final class BootRecovery {
 	private void recoverPendingTransaction() throws IOException {
 		if (!Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) {
 			UpdateRecovery.clearDeferredGuard(storage);
-			UpdateTransactionExecutor.sweepUnpinnedPublicationDirectories(storage);
+			UpdateCommit.sweepUnpinnedPublicationDirectories(storage);
 			return;
 		}
 
@@ -77,7 +76,7 @@ public final class BootRecovery {
 		UpdateTransaction transaction = UpdateTransaction.read(storage.transactionFile());
 		if (transaction == null) {
 			UpdateRecovery.clearDeferredGuard(storage);
-			UpdateTransactionExecutor.sweepUnpinnedPublicationDirectories(storage);
+			UpdateCommit.sweepUnpinnedPublicationDirectories(storage);
 			return;
 		}
 
@@ -85,13 +84,9 @@ public final class BootRecovery {
 				transaction.phase, transaction.resultStatus, transaction.resultOperation, transaction.resultPath, transaction.resultMessage);
 
 		try {
-			UpdateTransactionExecutor executor = UpdateTransactionSupport.executor(storage);
-			UpdateTransactionExecutor.Execution execution = executor.commitWithReplan(
-					() -> recoverPendingExecution(executor, transaction),
-					failedExecution -> replanPendingExecution(transaction, failedExecution));
-			finishPendingRecovery(execution, transaction);
-		} catch (UpdateReplanRequiredException e) {
-			finishPendingRecovery(new UpdateTransactionExecutor.Execution(UpdateTransaction.Status.REPLAN_REQUIRED, transaction, null, e.changedPath(), e.getMessage(), null), transaction);
+			UpdateCommit commits = new UpdateCommit(storage);
+			UpdateCommit.Outcome outcome = commits.run(new UpdateCommit.Recover(failure -> rebuildPending(failure.transaction())));
+			finishPendingRecovery(outcome, transaction, commits);
 		} catch (UpdateDeferredException e) {
 			// The deferred restart owns this transaction now: ReLauncher exits the process in every preload path, so
 			// reaching this arm means that contract broke. Rethrow rather than let the quarantine below undo a
@@ -100,36 +95,15 @@ public final class BootRecovery {
 		} catch (IOException | RuntimeException e) {
 			// Retiring a mid-apply journal without restoring the last good tree would let the next boot sweep backup/, the only full copy of it.
 			// A detached helper from a deferred restart may still be retrying; the aside makes its next attempt see nothing pending, so the race converges.
-			UpdateTransactionSupport.executor(storage).revertUnfinalizedPublication(transaction);
+			new UpdateCommit(storage).revertUnfinalizedPublication(transaction);
 			DurableFiles.setAside(storage.transactionFile(), "Persisted update transaction", e);
 		}
 	}
 
-	/** The preload recovery policy: a pending update replans proactively on pre-commit drift, and drift found after a successful recovery forces one replan whose replan-required result is terminal. */
-	private UpdateTransactionExecutor.Execution recoverPendingExecution(UpdateTransactionExecutor executor, UpdateTransaction transaction) throws IOException {
-		if (executor.hasMutableInputDrift(transaction) && !ClientProjectionView.publicationStarted(storage, transaction)) return replanPendingTransaction(transaction);
-		UpdateTransactionExecutor.Execution execution;
+	/** The boot rebuild policy: a pending transaction is rebuilt from what the player now wants; a rebuild failure is terminal, never a crash. */
+	private UpdateCommit.Built rebuildPending(UpdateTransaction pending) throws IOException {
 		try {
-			execution = executor.recoverLatest();
-		} catch (UpdateReplanRequiredException e) {
-			return replanPendingTransaction(transaction);
-		}
-		if (execution.success() && executor.hasMutableInputDrift(transaction)) {
-			execution = replanPendingTransaction(transaction);
-			if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), "Pending update still requires a fresh plan");
-		}
-		return execution;
-	}
-
-	private UpdateTransactionExecutor.Execution replanPendingExecution(UpdateTransaction transaction, UpdateTransactionExecutor.Execution failedExecution) throws IOException {
-		UpdateTransactionExecutor.Execution execution = replanPendingTransaction(failedExecution.transaction() == null ? transaction : failedExecution.transaction());
-		if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), "Pending update still requires a fresh plan");
-		return execution;
-	}
-
-	private UpdateTransactionExecutor.Execution replanPendingTransaction(UpdateTransaction transaction) throws IOException {
-		try {
-			return UpdateAttempt.resume(storage, transaction, MODPACK_LOADER, LOADER);
+			return UpdateAttempt.pendingRebuild(storage, pending, MODPACK_LOADER, LOADER);
 		} catch (UpdateReplanRequiredException e) {
 			throw e;
 		} catch (IOException e) {
@@ -137,19 +111,22 @@ public final class BootRecovery {
 		}
 	}
 
-	private void finishPendingRecovery(UpdateTransactionExecutor.Execution execution, UpdateTransaction original) throws IOException {
-		UpdateTransaction deferred = execution.transaction() == null ? original : execution.transaction();
-		if (!execution.success()) {
-			UpdateRecovery.RecoveryAttempt attempt = UpdateRecovery.blockedRecovery(storage, deferred, execution, () -> UpdateTransactionSupport.executor(storage).recoverLatest());
-			execution = attempt.execution();
+	private void finishPendingRecovery(UpdateCommit.Outcome outcome, UpdateTransaction original, UpdateCommit commits) throws IOException {
+		UpdateTransaction deferred = outcome instanceof UpdateCommit.Blocked blocked ? blocked.transaction() : original;
+		boolean done = outcome instanceof UpdateCommit.Applied || outcome instanceof UpdateCommit.Idle;
+		if (!done) {
+			UpdateRecovery.RecoveryAttempt attempt = UpdateRecovery.blockedRecovery(storage, deferred, outcome, () -> commits.run(new UpdateCommit.Recover(null)));
+			outcome = attempt.outcome();
 			deferred = attempt.deferred();
+			done = outcome instanceof UpdateCommit.Applied || outcome instanceof UpdateCommit.Idle;
 			if (attempt.reverted()) {
 				rolledBackStuckUpdate = true;
 				return;
 			}
-			if (!execution.success()) {
-				new ReLauncher(UpdateType.UPDATE, null, UpdateRecovery.deferredPopupMessage(execution.held())).restart(true);
-				throw new UpdateDeferredException(deferred.transactionId, execution.blockedPath(), execution.message());
+			if (!done && outcome instanceof UpdateCommit.Blocked blocked) {
+				String held = blocked instanceof UpdateCommit.Deferred deferral ? deferral.held() : null;
+				new ReLauncher(UpdateType.UPDATE, null, UpdateRecovery.deferredPopupMessage(held)).restart(true);
+				throw new UpdateDeferredException(deferred.transactionId, blocked.blockedPath(), blocked.message());
 			}
 		}
 		UpdateRecovery.clearDeferredGuard(storage);

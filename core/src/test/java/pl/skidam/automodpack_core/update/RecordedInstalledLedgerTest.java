@@ -41,7 +41,7 @@ class RecordedInstalledLedgerTest {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
 		StagedReplacement replacement = stagedReplacement(storage);
 
-		assertTrue(UpdateTestFixtures.commit(storage, replacement.plan(), replacement.target()).success());
+		assertTrue(UpdateTestFixtures.commit(storage, replacement.plan(), replacement.target()) instanceof UpdateCommit.Applied);
 		assertLedgerCleanupApplied(storage, replacement);
 	}
 
@@ -55,9 +55,9 @@ class RecordedInstalledLedgerTest {
 		ConfigTools.writeAtomic(storage.transactionFile(), replacement.transaction());
 		assertNull(storage.readActiveState());
 
-		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.executor(storage).recoverLatest();
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null));
 
-		assertTrue(execution.success());
+		assertTrue(execution instanceof UpdateCommit.Applied);
 		assertLedgerCleanupApplied(storage, replacement);
 		assertFalse(Files.exists(storage.transactionFile()));
 	}
@@ -72,9 +72,9 @@ class RecordedInstalledLedgerTest {
 		Files.delete(storage.transactionFile());
 		assertNull(UpdateTransaction.read(storage.transactionFile()));
 
-		UpdateTransactionExecutor.Execution execution = UpdateTestFixtures.executor(storage).commit(replacement.transaction(), replacement.target());
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Fresh(() -> new UpdateCommit.Built(replacement.transaction(), replacement.target()), null));
 
-		assertTrue(execution.success());
+		assertTrue(execution instanceof UpdateCommit.Applied);
 		assertLedgerCleanupApplied(storage, replacement);
 		assertEquals(replacement.target().packTarget().contentToken(), storage.readActiveState().contentToken);
 	}
