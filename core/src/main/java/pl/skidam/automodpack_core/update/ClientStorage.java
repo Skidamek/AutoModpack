@@ -285,10 +285,6 @@ public final class ClientStorage {
 		return fields.modpackId;
 	}
 
-	public boolean hasSelectedModpack() {
-		return !selectedModpackId().isBlank();
-	}
-
 	public void writeSelectedModpackId(String modpackId) throws IOException {
 		ClientConfigJsons.SelectedModpackFields fields = new ClientConfigJsons.SelectedModpackFields();
 		fields.modpackId = modpackId == null ? "" : modpackId;
@@ -326,10 +322,6 @@ public final class ClientStorage {
 
 	public Path historyDirectory() {
 		return historyDirectory;
-	}
-
-	public Path stateHistoryDirectory() {
-		return stateHistoryDirectory;
 	}
 
 	/** The instance timeline journal: one small line per snapshot. */
