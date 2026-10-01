@@ -14,6 +14,7 @@ import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public final class ModpackCandidateScanner {
@@ -161,7 +162,7 @@ public final class ModpackCandidateScanner {
 				categories.computeIfAbsent(categoryByGroup.get(entry.getKey()), ignored -> new LinkedHashMap<>()).put(entry.getKey(), group);
 			}
 			fields.categories = categories;
-			warnUnmatchedEditableRules(declarations, filesByGroup);
+			auditEditableRules(declarations, filesByGroup);
 			GroupManifest manifest = GroupManifestValidator.validate(fields);
 			return new ModpackCandidate(manifest, new TreeMap<>(objects), new TreeMap<>(provenance), exclusions);
 		} catch (Exception e) {
@@ -202,21 +203,28 @@ public final class ModpackCandidateScanner {
 				compileRuleSet(declaration.editable, groupId, "editable"));
 	}
 
-	private static void warnUnmatchedEditableRules(Map<String, ServerConfigJsons.GroupDeclaration> declarations,
+	/** Warns about editable rules that match no pack files, and about rules matching active mods, which load from the standard mods folder instead of the projection. */
+	private static void auditEditableRules(Map<String, ServerConfigJsons.GroupDeclaration> declarations,
 			Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields>> filesByGroup) {
 		for (var entry : declarations.entrySet()) {
 			Set<String> rules = entry.getValue().editable;
 			if (rules == null || rules.isEmpty()) continue;
-			Set<String> paths = filesByGroup.getOrDefault(entry.getKey(), Map.of()).keySet();
+			Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = filesByGroup.getOrDefault(entry.getKey(), Map.of());
 			for (String rule : rules) {
 				if (rule == null || rule.startsWith("!")) continue;
 				PathRuleSet matcher = new PathRuleSet(List.of(rule));
 				boolean matched = false;
-				for (String path : paths) if (matcher.matches(path)) {
+				long matchedMods = 0;
+				for (var file : files.entrySet()) if (matcher.matches(file.getKey())) {
 					matched = true;
-					break;
+					if (ModpackPathPolicy.isActiveMod(file.getKey(), file.getValue().type)) matchedMods++;
 				}
 				if (!matched) LOGGER.warn("editable rule '{}' in group '{}' matched no pack files", rule, entry.getKey());
+				else
+					if (matchedMods > 0)
+						LOGGER.warn(
+								"editable rule '{}' in group '{}' matches {} active mod(s), which will load from the standard mods folder instead of the modpack projection. Not recommended: such mods need a restart to update and fall outside in-place mod management. Use this only for mods that break when loaded in place.",
+								rule, entry.getKey(), matchedMods);
 			}
 		}
 	}
