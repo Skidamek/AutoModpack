@@ -186,25 +186,4 @@ A static host of an exported contract tree cannot check any header, so it is pub
 
 A standalone host process (running outside a Minecraft server) has no login to issue secrets, so a fresh standalone configuration defaults `validate-secrets` to `false` and holds a provisioning secret in `automodpack/credentials/provisioning-secret` for bootstrap installs instead. Both settings are described in the [server config](configuration/server-config#network-and-hosting), and the security side of bootstrap files is in [bootstrap files](#bootstrap-files).
 
-## What AutoModpack runs and contacts
-
-The mod runs one process, the game itself, plus two small helpers:
-
-- A detached helper JVM that finishes a staged update after the game closes. It exists because the running game locks its own files, notably on Windows.
-- A small dialog JVM that shows a restart message on the screen when an update ends the game.
-
-The mod never relaunches the game. It closes it, and the player starts it again. The AutoModpack self-update is a jar swap staged on disk and applied at that restart.
-
-On the network, AutoModpack talks to these endpoints and no others:
-
-| Endpoint | When |
-| --- | --- |
-| `api.modrinth.com` | File lookups by hash, and AutoModpack's own updates. Matched files download from `cdn.modrinth.com`. |
-| `api.curseforge.com` | File lookups by fingerprint. Matched files download from CurseForge's CDN at `edge.forgecdn.net`. |
-| `meta.prismlauncher.org` | Only when a launcher version switch must check that the target game or loader version exists. |
-| `cloudflare-dns.com` and `dns.quad9.net` | Only to resolve and validate the DNSSEC AMP1 record, over DNS-over-HTTPS. |
-| The pack host | Modpack downloads. |
-
-There is no telemetry. The requests on this list are all of the mod's own outbound traffic.
-
 The direct answer to "can a server run code on my PC": AutoModpack inspects downloaded jars without loading them as code. It reads the jar entries and their metadata. The game's mod loader then loads the pack's mods at launch, exactly like mods the player installed by hand. So a server can give you mods, and those mods run. Only join servers you trust.
