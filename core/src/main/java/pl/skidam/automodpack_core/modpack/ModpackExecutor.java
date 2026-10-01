@@ -1,17 +1,23 @@
 package pl.skidam.automodpack_core.modpack;
 
 import static pl.skidam.automodpack_core.Constants.*;
-import static pl.skidam.automodpack_core.storage.StoragePaths.*;
+import static pl.skidam.automodpack_core.storage.StoragePaths.HOST_MODPACK_DIR;
+import static pl.skidam.automodpack_core.storage.StoragePaths.PATCH_NOTES_FILE;
+import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_DIR;
+import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_STAGING_DIR;
+import static pl.skidam.automodpack_core.storage.StoragePaths.WAITING_MUSIC_FILE;
 
 import java.io.IOException;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.TreeMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.Supplier;
 
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
@@ -41,8 +47,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public class ModpackExecutor {
 	private final ThreadPoolExecutor creationExecutor;
-	private final AtomicBoolean scanActive = new AtomicBoolean();
-	private final AtomicBoolean publicationActive = new AtomicBoolean();
+	private final OperationLocks locks = new OperationLocks();
 	private final Path serverRoot;
 	private final Path groupRoot;
 	private final Path generationRoot;
@@ -52,7 +57,7 @@ public class ModpackExecutor {
 	private final CandidateScan candidateScan;
 	private final HostingBinder hostingBinder;
 	private final Supplier<ServerConfigJsons.ServerConfigFieldsV3> config;
-	private final PlatformSourceLookup platformSourceLookup;
+	private final HttpExporter httpExporter;
 	private volatile PackAbsence packAbsence;
 
 	public ModpackExecutor() {
@@ -71,11 +76,6 @@ public class ModpackExecutor {
 				platformSourceLookup));
 	}
 
-	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, DataRootResolver.Location dataLocation, CandidateScan candidateScan,
-			ThreadPoolExecutor creationExecutor) {
-		this(serverRoot, groupRoot, generationRoot, new Deps(new GenerationStore(generationRoot, dataLocation.layout().objectsDirectory(), dataLocation), candidateScan, creationExecutor));
-	}
-
 	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, Deps deps) {
 		this.serverRoot = serverRoot.toAbsolutePath().normalize();
 		this.groupRoot = groupRoot.toAbsolutePath().normalize();
@@ -87,7 +87,7 @@ public class ModpackExecutor {
 		this.creationExecutor = Objects.requireNonNull(deps.creationExecutor());
 		this.hostingBinder = Objects.requireNonNull(deps.hostingBinder());
 		this.config = Objects.requireNonNull(deps.config());
-		this.platformSourceLookup = Objects.requireNonNull(deps.platformSourceLookup());
+		this.httpExporter = new HttpExporter(this.generationStore, this.serverRoot, this.config, Objects.requireNonNull(deps.platformSourceLookup()), this.locks);
 	}
 
 	/** One executor's collaborators; production fills them from the roots, tests swap any of them. */
@@ -121,9 +121,8 @@ public class ModpackExecutor {
 	}
 
 	public PreviewResult preview(String inlineNotes) {
-		OperationLease operation = acquire(false);
-		if (operation == null) return new PreviewResult.Rejected("Another modpack operation is already in progress", null);
-		try (operation) {
+		try (OperationLocks.Lease operation = locks.acquire(false)) {
+			if (operation == null) return new Rejected("Another modpack operation is already in progress", null);
 			GenerationStore.Current current = generationStore.loadCurrent().orElse(null);
 			try (ModpackCandidate candidate = buildCandidate(current, false)) {
 				warnUnusableSelectedGroups(candidate.manifest());
@@ -135,7 +134,7 @@ public class ModpackExecutor {
 			}
 		} catch (Exception e) {
 			LOGGER.error("Failed to preview modpack generation", e);
-			return new PreviewResult.Rejected(Throwables.detail(e), e);
+			return new Rejected(Throwables.detail(e), e);
 		}
 	}
 
@@ -153,21 +152,20 @@ public class ModpackExecutor {
 
 	public PublishResult publishIfContent(String expectedContentToken, String inlineNotes) {
 		if (!HashUtils.isCanonicalSha1(expectedContentToken))
-			return new PublishResult.Rejected("Guard token must be a canonical 40-character lowercase SHA-1", null);
+			return new Rejected("Guard token must be a canonical 40-character lowercase SHA-1", null);
 		return publishInternal(expectedContentToken, inlineNotes);
 	}
 
 	public RevertResult revert(long targetSeq, String inlineNotes) {
-		if (targetSeq < 1) return new RevertResult.Rejected("Rollback target must be a positive journal sequence", null);
-		OperationLease operation = acquire(true);
-		if (operation == null) return new RevertResult.Rejected("Another modpack operation is already in progress", null);
-		try (operation) {
+		if (targetSeq < 1) return new Rejected("Rollback target must be a positive journal sequence", null);
+		try (OperationLocks.Lease operation = locks.acquire(true)) {
+			if (operation == null) return new Rejected("Another modpack operation is already in progress", null);
 			return bindHosting(revertLocked(targetSeq, inlineNotes));
 		} catch (IllegalArgumentException e) {
-			return new RevertResult.Rejected(e.getMessage() == null ? "Invalid rollback target" : e.getMessage(), e);
+			return new Rejected(e.getMessage() == null ? "Invalid rollback target" : e.getMessage(), e);
 		} catch (Exception e) {
 			LOGGER.error("Failed to publish modpack revert", e);
-			return new RevertResult.Rejected(Throwables.detail(e), e);
+			return new Rejected(Throwables.detail(e), e);
 		}
 	}
 
@@ -191,144 +189,12 @@ public class ModpackExecutor {
 		return generationStore.history(limit);
 	}
 
-	/**
-	 * Writes the URL-contract tree (head, journal, objects/&lt;sha1&gt;) as byte-for-byte copies of the hosted files, ready for
-	 * any static HTTPS host. Objects the platforms still serve themselves are pruned unless {@code includeAll} or
-	 * {@code exportHttpIncludeAll} keeps them as the host-side backstop; the returned receipt carries the counts. Nothing
-	 * already in the target directory is ever deleted, so stale objects from old generations may accumulate there; the
-	 * operator owns the directory. Orthogonal to hosting: works in every connection mode.
-	 */
-	public ExportHttpResult exportHttp(Path targetDirectory) throws IOException {
+	public HttpExporter.Result exportHttp(Path targetDirectory) throws IOException {
 		return exportHttp(targetDirectory, false);
 	}
 
-	public ExportHttpResult exportHttp(Path targetDirectory, boolean includeAll) throws IOException {
-		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
-		if (serverConfig != null && serverConfig.validateSecrets)
-			return new ExportHttpResult.Rejected("The pack validates download secrets, which a public mirror cannot enforce");
-		Path target = (targetDirectory.isAbsolute() ? targetDirectory : serverRoot.resolve(targetDirectory)).normalize();
-		boolean exportEverything = includeAll || serverConfig != null && serverConfig.exportHttpIncludeAll;
-		// The platform round-trip hashes every object and can spend seconds on the network, so the manual export
-		// resolves it off the lease: holding the publication lease that long would reject concurrent publishes for
-		// no correctness gain. Each attempt re-verifies under the lease that the resolved snapshot is still the live
-		// generation - a publish that slipped in costs a re-resolve - and a second lost race falls back to the
-		// fully-leased export, which cannot lose.
-		for (int attempt = 0; attempt < 2; attempt++) {
-			GenerationHosting hosting = generationStore.hosting();
-			Map<String, Long> platformServed = resolvePlatformServed(hosting, exportEverything);
-			OperationLease operation = acquire(false);
-			if (operation == null) return new ExportHttpResult.Rejected("Another modpack operation is already in progress");
-			try (operation) {
-				if (generationStore.hosting().asMap().equals(hosting.asMap()))
-					return exportCopied(target, exportEverything, hosting, platformServed);
-			}
-		}
-		OperationLease operation = acquire(false);
-		if (operation == null) return new ExportHttpResult.Rejected("Another modpack operation is already in progress");
-		try (operation) {
-			GenerationHosting hosting = generationStore.hosting();
-			return exportCopied(target, exportEverything, hosting, resolvePlatformServed(hosting, exportEverything));
-		}
-	}
-
-	/** Requires the caller to hold an operation lease: the journal is appended in place during a publish, so a lease-free export can copy a torn one. */
-	private ExportHttpResult exportHttpLeased(Path targetDirectory, boolean includeAll, GenerationHosting hosting) throws IOException {
-		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
-		if (serverConfig != null && serverConfig.validateSecrets)
-			return new ExportHttpResult.Rejected("The pack validates download secrets, which a public mirror cannot enforce");
-		Path target = (targetDirectory.isAbsolute() ? targetDirectory : serverRoot.resolve(targetDirectory)).normalize();
-		boolean exportEverything = includeAll || serverConfig != null && serverConfig.exportHttpIncludeAll;
-		// The auto-export runs inside the publication lease over the hosting snapshot the publication already built,
-		// where nothing can slip in mid-export: the resolve may simply run where it is, and the copy sees one
-		// consistent generation.
-		return exportCopied(target, exportEverything, hosting, resolvePlatformServed(hosting, exportEverything));
-	}
-
-	/**
-	 * The platform's served sizes for the snapshot's objects, asked with {@code exportEverything} as the off switch;
-	 * a failed round-trip exports every object.
-	 */
-	private Map<String, Long> resolvePlatformServed(GenerationHosting hosting, boolean exportEverything) throws IOException {
-		Map<String, Path> objects = new TreeMap<>();
-		for (String key : hosting.asMap().keySet()) {
-			if (isReservedDocument(key)) continue;
-			if (!HashUtils.isSha1(key)) throw new IOException("Unexpected hosting key in the generation store: " + key);
-			objects.put(HashUtils.normalizeSha1(key), hosting.get(key));
-		}
-		if (exportEverything || objects.isEmpty()) return Map.of();
-		List<PlatformSourceLookup.Query> queries = new ArrayList<>();
-		for (Map.Entry<String, Path> object : objects.entrySet())
-			queries.add(new PlatformSourceLookup.Query(object.getKey(), Files.size(object.getValue()), object.getValue()));
-		try {
-			Map<String, Long> resolved = platformSourceLookup.platformSizes(queries);
-			return resolved != null ? resolved : Map.of();
-		} catch (RuntimeException e) {
-			LOGGER.warn("Platform source resolution failed; exporting every object", e);
-			return Map.of();
-		}
-	}
-
-	/** Copies the snapshot's tree into the target: objects first, then journal, then the head - the commit pointer lands last. */
-	private ExportHttpResult exportCopied(Path target, boolean exportEverything, GenerationHosting hosting, Map<String, Long> platformServed) throws IOException {
-		int written = 0, omitted = 0, unresolvable = 0;
-		for (Map.Entry<String, Path> entry : hosting.asMap().entrySet()) {
-			String key = entry.getKey();
-			// The reserved documents are written after every object, in Phase-A order below: a tree published by a
-			// copy tool (aws s3 sync, rclone) serves its keys in write order, and the head is the commit pointer.
-			if (isReservedDocument(key)) continue;
-			Path destination;
-			{
-				String sha1 = HashUtils.normalizeSha1(key);
-				Long served = platformServed.get(sha1);
-				if (served != null && served.longValue() == Files.size(entry.getValue())) {
-					omitted++;
-					continue;
-				}
-				if (!exportEverything) unresolvable++;
-				destination = target.resolve("objects").resolve(sha1);
-			}
-			Files.createDirectories(destination.getParent());
-			// Objects are immutable and named by their hash, so an already-present file of any size is the same
-			// bytes and the copy is skipped.
-			if (Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) && Files.size(destination) == Files.size(entry.getValue())) {
-				written++;
-				continue;
-			}
-			copyAtomically(entry.getValue(), destination);
-			written++;
-		}
-		// Documents land after every object, journal before head. They are the opposite of objects: fixed-shape
-		// bodies whose bytes change while their size stays, the one file whose freshness the mirror exists to
-		// serve, so they are re-exported unconditionally - and a bucket synced with aws s3 sync or rclone serves
-		// its keys in write order, so a client can never see the new head beside the old journal - the head is
-		// the commit pointer of the whole tree and lands last.
-		for (String key : new String[]{GenerationHosting.JOURNAL_KEY, GenerationHosting.HEAD_DOCUMENT_KEY}) {
-			Path source = hosting.get(key);
-			if (source == null) continue;
-			copyAtomically(source, target.resolve(key));
-			written++;
-		}
-		return new ExportHttpResult.Exported(written, omitted, unresolvable);
-	}
-
-	/** Publishes one exported file through a same-directory temporary and an atomic move, so a static host never serves a half-written copy. */
-	private static void copyAtomically(Path source, Path destination) throws IOException {
-		Path temporary = Files.createTempFile(destination.getParent(), ".export-", null);
-		try {
-			Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
-			try {
-				Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-			} catch (AtomicMoveNotSupportedException e) {
-				Files.move(temporary, destination, StandardCopyOption.REPLACE_EXISTING);
-			}
-		} finally {
-			Files.deleteIfExists(temporary);
-		}
-	}
-
-	/** head/journal: served beside the content-addressed objects, exported to the target root, never pruned. The waiting track is an object like any other. */
-	private static boolean isReservedDocument(String key) {
-		return key.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || key.equals(GenerationHosting.JOURNAL_KEY);
+	public HttpExporter.Result exportHttp(Path targetDirectory, boolean includeAll) throws IOException {
+		return httpExporter.export(targetDirectory, includeAll);
 	}
 
 	public GenerationStore.StorageReport storageReport() throws IOException {
@@ -336,23 +202,21 @@ public class ModpackExecutor {
 	}
 
 	public GenerationStore.CollectionSummary collectUnreachableObjects() throws IOException {
-		OperationLease operation = acquire(true);
-		if (operation == null) throw new IOException("Another modpack operation is already in progress");
-		try (operation) {
+		try (OperationLocks.Lease operation = locks.acquire(true)) {
+			if (operation == null) throw new IOException("Another modpack operation is already in progress");
 			return generationStore.collectUnreachable();
 		}
 	}
 
 	private PublishResult publishInternal(String expectedContentToken, String inlineNotes) {
-		OperationLease operation = acquire(true);
-		if (operation == null) return new PublishResult.Rejected("Another modpack operation is already in progress", null);
-		try (operation) {
+		try (OperationLocks.Lease operation = locks.acquire(true)) {
+			if (operation == null) return new Rejected("Another modpack operation is already in progress", null);
 			PublishResult result = bindHosting(publishLocked(expectedContentToken, inlineNotes));
 			if (result instanceof PublishResult.NothingToPublish nothing) packAbsence = nothing.absence();
 			return result;
 		} catch (Exception e) {
 			LOGGER.error("Failed to publish modpack generation", e);
-			return new PublishResult.Rejected(Throwables.detail(e), e);
+			return new Rejected(Throwables.detail(e), e);
 		}
 	}
 
@@ -362,7 +226,7 @@ public class ModpackExecutor {
 		try {
 			GenerationStore.Current current = generationStore.loadCurrent().orElse(null);
 			if (expectedContentToken != null && current == null)
-				return new PublishResult.Rejected("A state guard is unavailable before the root generation is published", null);
+				return new Rejected("A state guard is unavailable before the root generation is published", null);
 			try (FileCache fileCache = FileCache.open(dataLayout.fileCacheDirectory());
 					ModpackCandidate candidate = buildCandidate(current, true, fileCache)) {
 				warnUnusableSelectedGroups(candidate.manifest());
@@ -372,7 +236,7 @@ public class ModpackExecutor {
 				String token = ContentTree.tokenOf(candidate.manifest());
 				CandidateState candidateState = candidateState(current, candidate, token, diff, Optional.empty());
 				if (expectedContentToken != null && !expectedContentToken.equals(token))
-					return new PublishResult.Rejected("Fresh candidate content does not match the requested guard", null);
+					return new Rejected("Fresh candidate content does not match the requested guard", null);
 
 				GenerationPatchNotes.Resolution notes = GenerationPatchNotes.resolve(inlineNotes, patchNotesFile);
 				publication = generationStore.publish(candidate, notes.text(), fileCache);
@@ -392,9 +256,8 @@ public class ModpackExecutor {
 	}
 
 	public LoadResult loadLast() {
-		OperationLease operation = acquire(false);
-		if (operation == null) return new LoadResult.Rejected("Another modpack operation is already in progress", null);
-		try (operation) {
+		try (OperationLocks.Lease operation = locks.acquire(false)) {
+			if (operation == null) return new Rejected("Another modpack operation is already in progress", null);
 			GenerationStore.Current current = generationStore.loadCurrent().orElse(null);
 			if (current == null) {
 				PackAbsence absence = new PackAbsence(Kind.NEVER_PUBLISHED, "No modpack has been published yet. Run /automodpack generate, or leave generate-modpack-on-start enabled to publish one at startup.");
@@ -409,7 +272,7 @@ public class ModpackExecutor {
 			return loaded;
 		} catch (Exception e) {
 			LOGGER.error("Failed to load the current modpack generation", e);
-			return new LoadResult.Rejected(Throwables.detail(e), e);
+			return new Rejected(Throwables.detail(e), e);
 		}
 	}
 
@@ -450,6 +313,7 @@ public class ModpackExecutor {
 	private ModpackCandidate buildCandidate(GenerationStore.Current previous, boolean materializeMissingObjects, FileCache fileCache) throws IOException, CandidateBuildException {
 		validateConfiguration();
 		prepareDirectories();
+		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
 		String modpackId = previous == null ? ModpackId.generate() : ModpackId.requireValid(previous.manifest().modpackId());
 		try (ModFileCache modFileCache = ModFileCache.open(dataLayout.modCacheDirectory())) {
 			// Unadvertised versions leave the manifest fields empty, so clients see a files-only pack instead of a
@@ -516,32 +380,6 @@ public class ModpackExecutor {
 		return files;
 	}
 
-	private OperationLease acquire(boolean publication) {
-		if (!scanActive.compareAndSet(false, true)) return null;
-		if (publication && !publicationActive.compareAndSet(false, true)) {
-			scanActive.set(false);
-			return null;
-		}
-		return new OperationLease(publication);
-	}
-
-	private final class OperationLease implements AutoCloseable {
-		private final boolean publication;
-		private boolean closed;
-
-		private OperationLease(boolean publication) {
-			this.publication = publication;
-		}
-
-		@Override
-		public void close() {
-			if (closed) return;
-			closed = true;
-			if (publication) publicationActive.set(false);
-			scanActive.set(false);
-		}
-	}
-
 	/**
 	 * Hosting follows the committed generation of every outcome that carries one, bound once here inside the operation lease instead of remembered per code path; a failed swap is reported on the committed outcome, never
 	 * as a rejection of a durable commit. Binding a generation is also what clears the pack absence: a bound host has something to serve.
@@ -568,9 +406,9 @@ public class ModpackExecutor {
 		String directory = serverConfig == null || serverConfig.exportHttpDirectory == null ? "" : serverConfig.exportHttpDirectory.trim();
 		if (directory.isEmpty()) return;
 		try {
-			ExportHttpResult result = exportHttpLeased(Path.of(directory), false, hosting);
-			if (result instanceof ExportHttpResult.Exported exported) LOGGER.info(exported.receipt(directory));
-			else if (result instanceof ExportHttpResult.Rejected refused) LOGGER.warn("Refused to export the HTTP contract tree to {}: {}", directory, refused.detail());
+			HttpExporter.Result result = httpExporter.exportLeased(Path.of(directory), false, hosting);
+			if (result instanceof HttpExporter.Result.Exported exported) LOGGER.info(exported.receipt(directory));
+			else if (result instanceof HttpExporter.Result.Rejected refused) LOGGER.warn("Refused to export the HTTP contract tree to {}: {}", directory, refused.detail());
 		} catch (Exception e) {
 			LOGGER.error("Failed to export the HTTP contract tree to {}", directory, e);
 		}
@@ -588,7 +426,8 @@ public class ModpackExecutor {
 		}
 	}
 
-	private static void validateConfiguration() throws CandidateBuildException {
+	private void validateConfiguration() throws CandidateBuildException {
+		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
 		if (serverConfig == null || serverConfig.modpack.categories.isEmpty())
 			throw new CandidateBuildException("Server group configuration is missing");
 		for (var categoryEntry : serverConfig.modpack.categories.entrySet()) {
@@ -606,6 +445,7 @@ public class ModpackExecutor {
 	}
 
 	private void prepareDirectories() throws IOException, CandidateBuildException {
+		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
 		Map<String, Path> groupDirectories = new TreeMap<>();
 		for (var categoryEntry : serverConfig.modpack.categories.entrySet()) {
 			if (categoryEntry.getValue() == null) continue;
@@ -629,7 +469,7 @@ public class ModpackExecutor {
 	}
 
 	public boolean isGenerating() {
-		return publicationActive.get();
+		return locks.isPublishing();
 	}
 
 	public void stop() {
@@ -673,15 +513,14 @@ public class ModpackExecutor {
 		}
 	}
 
-	public sealed interface PreviewResult permits PreviewReady, PreviewResult.Rejected {
-
-		/** The preview produced no generation; the detail explains the refusal or failure. */
-		record Rejected(String detail, Throwable cause) implements PreviewResult {
-			public Rejected {
-				detail = Objects.requireNonNull(detail);
-			}
+	/** The operation produced no generation; the detail explains the refusal or failure. Shared by every operation's outcome. */
+	public record Rejected(String detail, Throwable cause) implements PreviewResult, RevertResult, PublishResult, LoadResult {
+		public Rejected {
+			detail = Objects.requireNonNull(detail);
 		}
 	}
+
+	public sealed interface PreviewResult permits PreviewReady, Rejected {}
 
 	/**
 	 * A ready preview, carrying the absence that would refuse its publication. The preview still answers "what would
@@ -695,15 +534,7 @@ public class ModpackExecutor {
 		}
 	}
 
-	public sealed interface RevertResult extends HostingOutcome permits Reverted, RevertResult.Rejected {
-
-		/** The revert produced no generation; the detail explains the refusal or failure. */
-		record Rejected(String detail, Throwable cause) implements RevertResult {
-			public Rejected {
-				detail = Objects.requireNonNull(detail);
-			}
-		}
-	}
+	public sealed interface RevertResult extends HostingOutcome permits Reverted, Rejected {}
 
 	public record Reverted(PackDocument current, long targetSeq, List<String> warnings, GenerationHosting hosting, Throwable hostingSwapFailure) implements RevertResult, CommittedOutcome {
 		public Reverted {
@@ -723,7 +554,7 @@ public class ModpackExecutor {
 		}
 	}
 
-	public sealed interface PublishResult extends HostingOutcome permits Published, NoChanges, PublishResult.NothingToPublish, PublishResult.Rejected {
+	public sealed interface PublishResult extends HostingOutcome permits Published, NoChanges, PublishResult.NothingToPublish, Rejected {
 
 		/**
 		 * The candidate was a truthful scan of the server and must not be published; the absence says which way, in
@@ -732,13 +563,6 @@ public class ModpackExecutor {
 		record NothingToPublish(PackAbsence absence) implements PublishResult {
 			public NothingToPublish {
 				absence = Objects.requireNonNull(absence, "absence");
-			}
-		}
-
-		/** The publication produced no generation; the detail explains the refusal or failure. */
-		record Rejected(String detail, Throwable cause) implements PublishResult {
-			public Rejected {
-				detail = Objects.requireNonNull(detail);
 			}
 		}
 	}
@@ -785,42 +609,12 @@ public class ModpackExecutor {
 		}
 	}
 
-	public sealed interface LoadResult extends HostingOutcome permits Loaded, LoadResult.NothingPublished, LoadResult.Rejected {
+	public sealed interface LoadResult extends HostingOutcome permits Loaded, LoadResult.NothingPublished, Rejected {
 
 		/** No generation was ever published, which is the same state a refused publication leaves behind. */
 		record NothingPublished(PackAbsence absence) implements LoadResult {
 			public NothingPublished {
 				absence = Objects.requireNonNull(absence, "absence");
-			}
-		}
-
-		/** The load produced no generation; the detail explains the refusal or failure. */
-		record Rejected(String detail, Throwable cause) implements LoadResult {
-			public Rejected {
-				detail = Objects.requireNonNull(detail);
-			}
-		}
-	}
-
-	public sealed interface ExportHttpResult permits ExportHttpResult.Exported, ExportHttpResult.Rejected {
-
-		record Exported(int exportedCount, int omittedCount, int unresolvableCount) implements ExportHttpResult {
-			public Exported {
-				if (exportedCount < 0 || omittedCount < 0 || unresolvableCount < 0) throw new IllegalArgumentException("Negative export count");
-			}
-
-			public String receipt(String directory) {
-				String breakdown = omittedCount == 0 && unresolvableCount == 0
-						? ""
-						: " (" + omittedCount + " objects omitted: served by Modrinth/CurseForge; " + unresolvableCount + " unresolvable → included)";
-				return "Exported " + exportedCount + " files to " + directory + breakdown;
-			}
-		}
-
-		/** The export produced no tree; the detail explains the refusal. */
-		record Rejected(String detail) implements ExportHttpResult {
-			public Rejected {
-				detail = Objects.requireNonNull(detail);
 			}
 		}
 	}

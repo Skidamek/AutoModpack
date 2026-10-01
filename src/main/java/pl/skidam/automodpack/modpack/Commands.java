@@ -17,6 +17,7 @@ import pl.skidam.automodpack_core.auth.ServerAddressPin;
 import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.GroupInspector;
+import pl.skidam.automodpack_core.modpack.HttpExporter;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
@@ -574,7 +575,7 @@ public class Commands {
 			reportGenerationDetails(context, ready.state(), true, false);
 			ready.absence().ifPresent(absence -> send(context, "PUBLISHING THIS WOULD BE REFUSED: " + absence.detail(), ChatFormatting.YELLOW, false));
 			if (ready.state().parent().isEmpty()) send(context, "Guarded publication is unavailable until an unguarded root publication exists", ChatFormatting.YELLOW, false);
-		} else if (result instanceof ModpackExecutor.PreviewResult.Rejected rejected) {
+		} else if (result instanceof ModpackExecutor.Rejected rejected) {
 			send(context, "PREVIEW FAILED: " + rejected.detail(), ChatFormatting.RED, false);
 		}
 	}
@@ -592,7 +593,7 @@ public class Commands {
 			reportHostingFailure(context, noChanges.hostingFailure());
 		} else if (result instanceof ModpackExecutor.PublishResult.NothingToPublish nothing) {
 			send(context, "FAILED: " + nothing.absence().detail(), ChatFormatting.RED, true);
-		} else if (result instanceof ModpackExecutor.PublishResult.Rejected rejected) {
+		} else if (result instanceof ModpackExecutor.Rejected rejected) {
 			send(context, "FAILED: " + rejected.detail(), ChatFormatting.RED, true);
 		}
 	}
@@ -633,7 +634,7 @@ public class Commands {
 						ChatFormatting.WHITE, true);
 				reverted.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, true));
 				reportHostingFailure(context, reverted.hostingFailure());
-			} else if (result instanceof ModpackExecutor.RevertResult.Rejected rejected) {
+			} else if (result instanceof ModpackExecutor.Rejected rejected) {
 				send(context, "FAILED: " + rejected.detail(), ChatFormatting.RED, true);
 			}
 		});
@@ -696,10 +697,10 @@ public class Commands {
 		Util.backgroundExecutor().execute(() -> {
 			send(context, "Exporting the HTTP contract tree...", ChatFormatting.YELLOW, true);
 			try {
-				ModpackExecutor.ExportHttpResult result = modpackExecutor.exportHttp(Path.of(directory), includeAll);
-				if (result instanceof ModpackExecutor.ExportHttpResult.Exported exported) {
+				HttpExporter.Result result = modpackExecutor.exportHttp(Path.of(directory), includeAll);
+				if (result instanceof HttpExporter.Result.Exported exported) {
 					send(context, exported.receipt(directory), ChatFormatting.GREEN, true);
-				} else if (result instanceof ModpackExecutor.ExportHttpResult.Rejected refused) {
+				} else if (result instanceof HttpExporter.Result.Rejected refused) {
 					send(context, "FAILED: " + refused.detail(), ChatFormatting.RED, true);
 				}
 			} catch (IOException e) {

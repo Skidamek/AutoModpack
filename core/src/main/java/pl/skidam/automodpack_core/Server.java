@@ -46,7 +46,7 @@ public class Server {
 			// whatever supervises it. Say why and leave non-zero.
 			LOGGER.error("This host has no modpack to serve: {}", nothing.absence().detail());
 			System.exit(1);
-		} else if (generation instanceof ModpackExecutor.PublishResult.Rejected rejected) {
+		} else if (generation instanceof ModpackExecutor.Rejected rejected) {
 			LOGGER.error("Failed to generate modpack: {}", rejected.detail(), rejected.cause());
 		}
 
