@@ -18,7 +18,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 /*?}*/
 
 /** Nested list of unverified jar paths with their sizes for the unverified confirm screen. */
-public final class UnverifiedJarList extends ChromelessList<UnverifiedJarList.Entry> {
+public final class UnverifiedJarList extends UniformList<UnverifiedJarList.Entry> {
 	public static final int ROW_HEIGHT = 12;
 
 	/** One unverified file: its path as shipped by the pack and its size, 0 when unknown. */
@@ -50,6 +50,8 @@ public final class UnverifiedJarList extends ChromelessList<UnverifiedJarList.En
 		@Override
 		protected void versionedRender(VersionedMatrices matrices, int x, int y, int width, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 			boolean selected = UnverifiedJarList.this.getSelected() == this;
+			// The selected row wears the shared selection chrome; a hovered unselected row gets a dark wash while the pointer is on it.
+			if (!selected && hovered) ListChrome.drawHover(matrices, x, y, width, ROW_HEIGHT);
 			String sizeText = file.size() > 0 ? UiFormat.formatSize(file.size()) : "";
 			int sizeWidth = sizeText.isEmpty() ? 0 : minecraft.font.width(sizeText);
 			String label = VersionedScreen.truncateToWidth(minecraft.font, file.path(), Math.max(1, width - sizeWidth - 6));

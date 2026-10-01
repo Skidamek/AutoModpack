@@ -29,11 +29,8 @@ import net.minecraft.client.input.MouseButtonEvent;
 /*?}*/
 
 /** A native selection list for the shared tree/list change projection. */
-public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidget.Entry> {
+public final class ChangeBrowserWidget extends UniformList<ChangeBrowserWidget.Entry> {
 	private static final int ROW_HEIGHT = 30;
-	/** The hovered wash reads as "you can click this"; the selected wash is the stronger one that stays. */
-	private static final int HOVER_COLOR = 0x20FFFFFF;
-	private static final int SELECTED_COLOR = 0x40FFFFFF;
 	private static final int BADGE_SPACING = 4;
 	private static final int BADGE_MARGIN = 6;
 	private static final int BADGE_MODRINTH_COLOR = 0xFF00AF5C;
@@ -126,10 +123,8 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 
 		@Override
 		protected void versionedRender(VersionedMatrices matrices, int x, int y, int width, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			// The vanilla selection outline is chrome we strip, so the rows carry their own state washes.
-			boolean selected = getSelected() == this;
-			if (selected) matrices.fill(x, y, x + width, y + ROW_HEIGHT, SELECTED_COLOR);
-			else if (hovered) matrices.fill(x, y, x + width, y + ROW_HEIGHT, HOVER_COLOR);
+			// The selected row wears the shared selection chrome; a hovered unselected row gets a dark wash while the pointer is on it.
+			if (getSelected() != this && hovered) ListChrome.drawHover(matrices, x, y, width, ROW_HEIGHT);
 			int indent = Math.min(72, row.depth() * 12);
 			int badgeWidth = 0;
 			for (Badge badge : badges) badgeWidth += minecraft.font.width(badge.text()) + BADGE_SPACING;

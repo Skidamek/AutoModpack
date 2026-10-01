@@ -20,14 +20,11 @@ import net.minecraft.client.input.MouseButtonEvent;
 /*?}*/
 
 /** One scrollable vanilla list of pre-styled text rows; screens own the content, this owns scrolling, hit-testing and row picks. */
-public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> implements RowViewport {
+public final class RowListWidget extends UniformList<RowListWidget.RowEntry> implements RowViewport {
 	public static final int LINE_STEP = 10;
 	private static final int TEXT_MARGIN = 6;
 	/** Left-side space a checkbox row reserves for the box, so screen-side pre-wrapping clears it. */
 	public static final int CHECKBOX_RESERVE = CheckboxWidget.BOX_SIZE + CheckboxWidget.TEXT_SPACING;
-	/** The hovered-row wash reads as "you can click this"; the selected wash is the stronger one that stays. */
-	private static final int HOVER_COLOR = 0x40FFFFFF;
-	private static final int SELECTED_COLOR = 0x60FFFFFF;
 	/** Vanilla's double-click window; only lists built with a double-pick consumer can ever see a second click land. */
 	private static final long DOUBLE_PICK_MILLIS = 250;
 	private final IntConsumer rowPicked;
@@ -66,7 +63,7 @@ public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> 
 		for (Row row : Objects.requireNonNull(rows, "rows")) this.addEntry(new RowEntry(row));
 	}
 
-	public final class RowEntry extends ChromelessList.Row<RowEntry> {
+	public final class RowEntry extends UniformList.Row<RowEntry> {
 		private final Row row;
 
 		private RowEntry(Row row) {
@@ -100,9 +97,8 @@ public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> 
 			// A checkbox row mirrors CheckboxWidget's own geometry from the row's left edge, so every checkbox
 			// on the screen starts on the same x; plain rows keep their centered text.
 			int textY = y + Math.max(0, (rowHeight() - lines * LINE_STEP) / 2) + 1;
-			// Washes carry the row state: the selected row stays washed, a hovered row washes while the pointer is on it.
-			if (getSelected() == this) matrices.fill(x, y, x + width, y + rowHeight(), SELECTED_COLOR);
-			else if (hovered) matrices.fill(x, y, x + width, y + rowHeight(), HOVER_COLOR);
+			// The selected row wears the shared selection chrome; a hovered unselected row gets a dark wash while the pointer is on it.
+			if (getSelected() != this && hovered) ListChrome.drawHover(matrices, x, y, width, rowHeight());
 			if (checkboxRow) CheckboxWidget.drawBox(matrices, x, y + Math.max(0, (rowHeight() - CheckboxWidget.BOX_SIZE) / 2), row.state());
 			for (MutableComponent line : row.lines()) {
 				MutableComponent drawn = line;
