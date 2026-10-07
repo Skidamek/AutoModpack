@@ -600,6 +600,14 @@ public class DownloadManager implements DownloadView {
 		return downloadedCount.get() + "/" + totalFilesAdded;
 	}
 
+	public long getDownloadedBytes() {
+		return totalBytesDownloaded.get();
+	}
+
+	public long getTotalBytes() {
+		return totalBytesToDownload.get();
+	}
+
 	public boolean isRunning() {
 		return !downloadExecutor.isShutdown();
 	}

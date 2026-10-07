@@ -20,6 +20,7 @@ import net.neoforged.neoforgespi.locating.ModFileDiscoveryAttributes;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.Preload;
+import pl.skidam.automodpack_core.client.LaunchProgress;
 import pl.skidam.automodpack_core.loader.ConnectorFallback;
 import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.GenerationProbes;
@@ -68,9 +69,24 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 		// Run our own update/reconcile step first: it decides what this launch loads, and the
 		// early-service hosting below hosts only jars from that decision. Preload failures must crash
 		// the launch; swallowing them would boot without the pack.
-		ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
-		new Preload(new LoaderManager(), new ModpackLoader());
-		progress.complete();
+		ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 1000);
+		LaunchProgress.attach(new LaunchProgress.Display() {
+			@Override
+			public void update(String label, int permille) {
+				progress.label(label);
+				progress.setAbsolute(Math.max(0, permille));
+			}
+
+			@Override
+			public void close() {
+				progress.complete();
+			}
+		});
+		try {
+			new Preload(new LoaderManager(), new ModpackLoader());
+		} finally {
+			LaunchProgress.detach();
+		}
 
 		try {
 			// Early-service hosting serves the client's active projection; a dedicated server has none.

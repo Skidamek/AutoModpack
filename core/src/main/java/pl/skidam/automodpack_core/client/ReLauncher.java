@@ -57,6 +57,9 @@ public class ReLauncher {
 
 			if (isHeadless) {
 				LOGGER.info("Please restart the game to apply updates!");
+				// Headless means no Swing restart window; the early loading screen (when a loader attached one) is the only
+				// place the player can read why the game is about to close.
+				LaunchProgress.holdFinalMessage("modpack updated - the game will close, launch it again to play");
 			} else {
 				semaphore = ScreenManager.preloadRestart(updateMessage);
 			}

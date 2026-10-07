@@ -110,6 +110,7 @@ final class ModpackObjectAcquisition {
 		requireTransferSession();
 		long start = System.currentTimeMillis();
 		long totalBytes = ModpackUtils.remainingUncachedBytes(missing, storage);
+		if (!playerFacing) LaunchProgress.stage("finding download sources for " + missing.size() + " files");
 		if (playerFacing) WaitingMusic.start(transport, storage, waitingMusicSha1);
 		FetchManager fetchManager = sourceCatalogue.sourceFetch(missing);
 		try {
@@ -151,6 +152,7 @@ final class ModpackObjectAcquisition {
 
 		downloadManager = new DownloadManager(totalBytes, storage.dataLocation().layout(), platformCache);
 		if (playerFacing) ScreenManager.download(downloadManager, modpackName.get(), onPlayerCancel);
+		else LaunchProgress.downloading(downloadManager);
 		downloadManager.attachTransport(transport);
 		for (var serverItem : files) {
 			Path downloadFile = storage.activePath(serverItem.file);
@@ -163,7 +165,11 @@ final class ModpackObjectAcquisition {
 			downloadManager.download(downloadFile, serverItem.sha1, serverItem.murmur, serverItem.type, sources, serverItem.size, () -> {}, failureCallback);
 		}
 
-		downloadManager.joinAll();
+		try {
+			downloadManager.joinAll();
+		} finally {
+			if (!playerFacing) LaunchProgress.downloading(null);
+		}
 		LOGGER.info("Finished downloading files in {}ms", System.currentTimeMillis() - startFetching);
 		if (downloadManager.isCancelled()) {
 			LOGGER.info("Download canceled");
