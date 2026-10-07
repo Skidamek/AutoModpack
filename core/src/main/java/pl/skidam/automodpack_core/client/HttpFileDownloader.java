@@ -16,6 +16,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.IntConsumer;
 
 import org.apache.logging.log4j.LogManager;
@@ -28,6 +29,7 @@ import pl.skidam.automodpack_core.protocol.WireCodec;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.HttpClientPool;
+import pl.skidam.automodpack_core.utils.RateFuse;
 
 public class HttpFileDownloader {
 
@@ -43,15 +45,24 @@ public class HttpFileDownloader {
 	// response head only; tripping closes the body stream under its blocked reader, the read throws, and the platform
 	// retry ladder recovers the attempt from the stored partial.
 	private static final Duration BODY_STALL_TIMEOUT = NetUtils.TRANSFER_WRITE_STALL_TIMEOUT;
-	// The fuse ticks six times inside its window, so a stall trips at most one tick past the 90 s line.
+	// The watchdog's own cadence: the stall fuse reads it as "no progress since the last tick" and the trickle fuse as
+	// its window length, so one tick measures exactly one rate window.
 	private static final long STALL_FUSE_TICK_SECONDS = 15;
+	// The rate window beside the stall tripwire is the watchdog's own tick, so one tick measures exactly one window. The
+	// floor is the codebase's one canonical trickle floor (TAKE_RATE_FLOOR_BYTES_PER_SECOND, receipted on NetUtils), used by
+	// both transports' fuses so there is a single number to reason about; as a per-body tripwire it sits far under anything
+	// healthy - the slowest plausible client link, 1 Mbps split across this run's PLATFORM_WORKERS bodies, still averages
+	// ~25 KB/s per body - so only a genuinely stalled or dripping body ever reaches it. Two consecutive windows under it
+	// corroborate a trickle: at 4 KiB/s one 15 s window still carries ~60 KB of sample, 8x the read granularity, so read
+	// timing cannot fake a slow body.
+	private static final int CORROBORATING_WINDOWS = 2;
 
 	/** The one daemon checker for every in-flight platform body; it lives as long as the JVM, like NET_EXECUTOR. */
 	private static final ScheduledExecutorService BODY_STALL_WATCHDOG = Executors.newSingleThreadScheduledExecutor(
 			new CustomThreadFactoryBuilder().setNameFormat("AutoModpackBodyStallFuse").setDaemon(true).build());
 
 	/**
-	 * Downloads a file from a URL to a target path using HTTP/2 if available.
+	 * Downloads a file from a URL to a target path using HTTP/2 if available, with the client-side fuses armed.
 	 * Blocks the calling thread (designed for use in Worker Threads).
 	 *
 	 * @param fileSize
@@ -60,14 +71,18 @@ public class HttpFileDownloader {
 	 *            The first missing object byte; bytes before it already sit in finished tiles.
 	 * @param progressAction
 	 *            A callback to report bytes read (for bandwidth tracking).
-	 * @throws IOException
-	 *             If network or IO fails.
+	 * @param rateFuseFloorBytesPerSecond
+	 *            The trickle fuse floor over pre-decode body bytes; 0 keeps it off. Arm it only when a reroute exists
+	 *            behind the burned attempt.
+	 * @param control
+	 *            The external cancel handle this attempt attaches its body to; null when nobody cancels in flight.
 	 * @throws StaleRangeException
 	 *             If the stored partial cannot serve as the resume prefix (the server cannot answer from the offset).
-	 * @throws InterruptedException
-	 *             If the download is cancelled.
+	 * @throws ReroutedAttemptException
+	 *             If somebody cancelled the attempt: the rescue's own verdict, not a failure of the source.
 	 */
-	public void download(DownloadSource source, Path target, long fileSize, long offset, IntConsumer progressAction) throws IOException, InterruptedException {
+	public void download(DownloadSource source, Path target, long fileSize, long offset, IntConsumer progressAction, long rateFuseFloorBytesPerSecond, AttemptControl control)
+			throws IOException, InterruptedException {
 		URI uri;
 		try {
 			uri = URI.create(source.url());
@@ -78,7 +93,8 @@ public class HttpFileDownloader {
 		boolean authenticate = isAuthenticatedCurseForgeTarget(source, uri);
 		// The key-carrying request must never follow a redirect (DIRECT), so the explicit dance below re-sends it
 		// without the key; every other source follows redirects in the pool like it always has.
-		HttpResponse<InputStream> response = send(source, uri, authenticate, offset, authenticate ? HttpClientPool.direct() : HttpClientPool.redirects(), target);
+		long stopAt = PartialResume.stopBefore(target, offset, fileSize);
+		HttpResponse<InputStream> response = send(source, uri, authenticate, offset, stopAt, fileSize, authenticate ? HttpClientPool.direct() : HttpClientPool.redirects(), target);
 
 		if (authenticate && response.statusCode() >= 300 && response.statusCode() < 400) {
 			try (InputStream ignored = response.body()) {
@@ -90,7 +106,7 @@ public class HttpFileDownloader {
 				}
 				if (!"https".equalsIgnoreCase(uri.getScheme())) throw new IOException("Refusing CurseForge HTTPS downgrade redirect");
 			}
-			response = send(source, uri, false, offset, HttpClientPool.redirects(), target);
+			response = send(source, uri, false, offset, stopAt, fileSize, HttpClientPool.redirects(), target);
 		}
 
 		int statusCode = response.statusCode();
@@ -119,11 +135,16 @@ public class HttpFileDownloader {
 
 		try (InputStream rawIn = response.body()) {
 			AtomicLong lastProgressNanos = new AtomicLong(System.nanoTime());
-			ScheduledFuture<?> stallFuse = armBodyStallFuse(rawIn, lastProgressNanos, target.getFileName());
-			try (InputStream in = codec == null ? rawIn : codec.unwrap(rawIn);
-					OutputStream out = PartialResume.writer(target, fileSize, writeOffset)) {
+			RateFuse trickleFuse = new RateFuse(rateFuseFloorBytesPerSecond, TimeUnit.SECONDS.toNanos(STALL_FUSE_TICK_SECONDS), CORROBORATING_WINDOWS, System::nanoTime, () -> {
+				LOGGER.warn("The platform download body of {} stayed under the {} B/s trickle floor across two windows; closing it for the retry ladder", target.getFileName(), rateFuseFloorBytesPerSecond);
+				NetUtils.closeQuietly(rawIn);
+			});
+			ScheduledFuture<?> stallFuse = armBodyStallFuse(rawIn, lastProgressNanos, trickleFuse, target.getFileName());
+			if (control != null) control.attach(rawIn);
+			long written = writeOffset;
+			WireByteCounter counted = new WireByteCounter(rawIn, trickleFuse::onBytes);
+			try (InputStream in = codec == null ? counted : codec.unwrap(counted); OutputStream out = PartialResume.writer(target, fileSize, writeOffset)) {
 				byte[] buffer = READ_BUFFERS.get();
-				long written = writeOffset;
 				int bytesRead;
 				while ((bytesRead = in.read(buffer)) != -1) {
 					if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
@@ -132,31 +153,40 @@ public class HttpFileDownloader {
 					lastProgressNanos.set(System.nanoTime());
 					if (progressAction != null) progressAction.accept(bytesRead);
 				}
-				if (written < fileSize) throw new IOException("Platform body ended at " + written + " of " + fileSize + " bytes for " + target.getFileName());
+			} catch (IOException e) {
+				// A cancelled body reads as a closed stream: the rescue's verdict, never the remote source's.
+				if (control != null && control.cancelled()) throw new ReroutedAttemptException(source.url());
+				throw e;
 			} finally {
 				stallFuse.cancel(false);
 			}
+			if (control != null && control.cancelled()) throw new ReroutedAttemptException(source.url());
+			long expectedEnd = Math.min(stopAt, fileSize);
+			if (written < expectedEnd) throw new IOException("Platform body ended at " + written + " of " + expectedEnd + " bytes for " + target.getFileName());
 		}
 	}
 
-	/** The per-download body fuse: zero bytes for BODY_STALL_TIMEOUT closes the body stream under its blocked reader. */
-	private static ScheduledFuture<?> armBodyStallFuse(InputStream body, AtomicLong lastProgressNanos, Object fileName) {
+	/**
+	 * The per-download body fuse: zero bytes for BODY_STALL_TIMEOUT closes the body stream under its blocked reader, and
+	 * the trickle fuse beside it closes it the same way once the body drained under its floor for CORROBORATING_WINDOWS
+	 * windows. Pure-zero stretches stay owned by the stall fuse.
+	 */
+	private static ScheduledFuture<?> armBodyStallFuse(InputStream body, AtomicLong lastProgressNanos, RateFuse trickleFuse, Object fileName) {
 		return BODY_STALL_WATCHDOG.scheduleWithFixedDelay(() -> {
-			if (System.nanoTime() - lastProgressNanos.get() < BODY_STALL_TIMEOUT.toNanos()) return;
-			LOGGER.warn("The platform download body of {} delivered no bytes for {} s; closing it for the retry ladder", fileName, BODY_STALL_TIMEOUT.toSeconds());
-			try {
-				body.close();
-			} catch (IOException ignored) {
+			if (System.nanoTime() - lastProgressNanos.get() < BODY_STALL_TIMEOUT.toNanos()) {
+				trickleFuse.tick();
+				return;
 			}
+			LOGGER.warn("The platform download body of {} delivered no bytes for {} s; closing it for the retry ladder", fileName, BODY_STALL_TIMEOUT.toSeconds());
+			NetUtils.closeQuietly(body);
 		}, STALL_FUSE_TICK_SECONDS, STALL_FUSE_TICK_SECONDS, TimeUnit.SECONDS);
 	}
 
-	private HttpResponse<InputStream> send(DownloadSource source, URI uri, boolean authenticate, long offset, HttpClient client, Path target)
-			throws IOException, InterruptedException {
+	private HttpResponse<InputStream> send(DownloadSource source, URI uri, boolean authenticate, long offset, long stopAt, long fileSize, HttpClient client, Path target) throws IOException, InterruptedException {
 		HttpRequest.Builder request = HttpRequest.newBuilder().uri(uri).header("User-Agent", NetUtils.USER_AGENT)
 				.header("Accept-Encoding", WireCodec.offeredEncodings()).timeout(NetUtils.NETWORK_TIMEOUT).GET();
 		if (authenticate) request.header("x-api-key", summonKey());
-		if (offset > 0) request.header("Range", "bytes=" + offset + "-");
+		if (offset > 0 || stopAt < fileSize) request.header("Range", "bytes=" + offset + "-" + (stopAt < fileSize ? stopAt - 1 : ""));
 
 		try {
 			HttpResponse<InputStream> response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
@@ -173,6 +203,62 @@ public class HttpFileDownloader {
 	private static boolean isAuthenticatedCurseForgeTarget(DownloadSource source, URI uri) {
 		return source.provider() == DownloadSource.Provider.CURSEFORGE && "https".equalsIgnoreCase(uri.getScheme()) && CDN_HOST.equalsIgnoreCase(uri.getHost())
 				&& uri.getUserInfo() == null && (uri.getPort() == -1 || uri.getPort() == 443);
+	}
+
+	/** Hands the fuse the body's pre-decode byte count, so it judges the wire and not the decompressor's output. */
+	private static final class WireByteCounter extends FilterInputStream {
+		private final IntConsumer onBytes;
+
+		WireByteCounter(InputStream in, IntConsumer onBytes) {
+			super(in);
+			this.onBytes = onBytes;
+		}
+
+		@Override
+		public int read() throws IOException {
+			int read = super.read();
+			if (read != -1) onBytes.accept(1);
+			return read;
+		}
+
+		@Override
+		public int read(byte[] buffer, int byteOffset, int byteLength) throws IOException {
+			int read = super.read(buffer, byteOffset, byteLength);
+			if (read != -1) onBytes.accept(read);
+			return read;
+		}
+	}
+
+	/** A handle on the in-flight attempt's body: attached by the downloader, cancelled from outside to close the body under its blocked reader. */
+	public static final class AttemptControl {
+		private final AtomicReference<InputStream> body = new AtomicReference<>();
+		// Latched so a cancel racing the body open is not lost: whoever comes second closes. Without it a gate cancel
+		// landing before attach() is a no-op and that attempt crawls on, unrescued and unflagged.
+		private volatile boolean cancelled;
+
+		private void attach(InputStream body) {
+			this.body.set(body);
+			if (cancelled) NetUtils.closeQuietly(body);
+		}
+
+		/** True once somebody cancelled this attempt, so the closed stream reads as a reroute instead of a remote failure. */
+		public boolean cancelled() {
+			return cancelled;
+		}
+
+		/** Closes the attached body; the blocked read throws and the attempt ends as a reroute, never as a remote failure. */
+		public void cancel() {
+			cancelled = true;
+			InputStream body = this.body.get();
+			if (body != null) NetUtils.closeQuietly(body);
+		}
+	}
+
+	/** The rescue moved this attempt off its platform domain on purpose: no failure, so nothing is charged against it. */
+	public static class ReroutedAttemptException extends IOException {
+		public ReroutedAttemptException(String url) {
+			super("Platform download of " + url + " was cancelled for a faster route");
+		}
 	}
 
 	public static class HttpStatusException extends IOException {

@@ -18,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.IntConsumer;
 
 import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -34,6 +35,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * (`cloudflared tunnel --url http://localhost:8000`). Requires outbound internet and the cloudflared binary;
  * skipped (not failed) when either is missing, so CI stays hermetic.
  */
+@Tag("live")
 class CloudflaredTunnelLiveTest {
 	private static final int AWAIT_SECONDS = 60;
 

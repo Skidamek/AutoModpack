@@ -65,7 +65,7 @@ class DownloadObjectTest {
 			try (DownloadClient client = client(server, "test-secret")) {
 				Path destination = directory.resolve("object");
 				Files.createDirectories(destination);
-				Files.write(PartialResume.sliceFile(destination, 0), Arrays.copyOf(object, 100_000));
+				Files.write(PartialResume.sliceTemp(destination, 0), Arrays.copyOf(object, 100_000));
 				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 				assertArrayEquals(object, assembledBytes(destination, object.length));
 				assertEquals(1, server.ranges.size());
@@ -183,7 +183,7 @@ class DownloadObjectTest {
 				Path destination = directory.resolve("object");
 				var thrown = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertInstanceOf(RangeIgnoredException.class, rootCause(thrown));
-				assertTrue(client.rangeIgnoredHost, "the capability flag is set for the whole client");
+				assertTrue(client.session.rangeIgnoredHost(), "the capability flag is set for the whole client");
 
 				// The manager requeues the task; under the flag it skips tiling and rides one open-ended take.
 				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
@@ -205,7 +205,7 @@ class DownloadObjectTest {
 				Path destination = directory.resolve("object");
 				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertArrayEquals(object, assembledBytes(destination, object.length));
-				assertFalse(client.rangeIgnoredHost, "an honest-length 200 is not a range-ignoring verdict");
+				assertFalse(client.session.rangeIgnoredHost(), "an honest-length 200 is not a range-ignoring verdict");
 			}
 			assertEquals(1, server.requests.size(), "the whole file rode one take, no tiling");
 			assertTrue(server.ranges.isEmpty(), "the server never answered a range");
@@ -225,7 +225,7 @@ class DownloadObjectTest {
 				Path destination = directory.resolve("object");
 				var thrown = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertInstanceOf(RangeIgnoredException.class, rootCause(thrown));
-				assertTrue(client.rangeIgnoredHost, "the close-framed verdict degrades the whole client");
+				assertTrue(client.session.rangeIgnoredHost(), "the close-framed verdict degrades the whole client");
 
 				// The manager requeues the task; under the flag it skips tiling and rides one open-ended take.
 				assertEquals(destination, client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
@@ -248,7 +248,7 @@ class DownloadObjectTest {
 				Path destination = directory.resolve("object");
 				var thrown = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertInstanceOf(RangeIgnoredException.class, rootCause(thrown));
-				assertTrue(client.rangeIgnoredHost, "the chunked verdict degrades the whole client");
+				assertTrue(client.session.rangeIgnoredHost(), "the chunked verdict degrades the whole client");
 				assertTrue(PartialResume.remaining(destination, object.length).stream().anyMatch(range -> range[0] == 0), "the body was never consumed into a finished slice");
 
 				// The manager requeues the task; under the flag it skips tiling and rides one open-ended take.

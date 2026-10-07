@@ -8,9 +8,9 @@ import java.nio.file.*;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.loader.FileInspection;
+import pl.skidam.automodpack_core.loader.ModEnvironment;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
-import pl.skidam.automodpack_core.modpack.group.ModEnvironment;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -127,7 +127,7 @@ public final class StableSourceSnapshotter {
 	 */
 	private static boolean isSelfFile(Path source, FileInspection.Inspection inspection) {
 		FileInspection.Mod mod = inspection.metadata();
-		String modId = mod != null && mod.id() != null ? mod.id() : inspection.mod() ? FileInspection.getModID(source) : null;
+		String modId = mod == null ? null : mod.id();
 		return MOD_ID.equals(modId) || (MOD_ID + "_bootstrap").equals(modId) || (MOD_ID + "-bootstrap").equals(modId) || (MOD_ID + "_mod").equals(modId);
 	}
 

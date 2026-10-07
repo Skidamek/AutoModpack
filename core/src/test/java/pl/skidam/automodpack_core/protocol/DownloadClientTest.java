@@ -74,25 +74,25 @@ class DownloadClientTest {
 	/** The trickle fuse budget: a 4 MiB slice drains inside the rate floor (exactly 1024 s), a tiny slice never sits under the 90 s stall window. */
 	@Test
 	void takeBudgetSizesBySliceWithAStallFloor() {
-		assertEquals(90_000_000_000L, DownloadClient.ObjectTransfer.takeBudgetNanos(1));
-		assertEquals(1_024_000_000_000L, DownloadClient.ObjectTransfer.takeBudgetNanos(4L * 1024 * 1024));
+		assertEquals(90_000_000_000L, ObjectTransfer.takeBudgetNanos(1));
+		assertEquals(1_024_000_000_000L, ObjectTransfer.takeBudgetNanos(4L * 1024 * 1024));
 	}
 
 	/** Throttled retries wait out the provider's window (clamped by the wire) or a bounded jittered default; plain failures retry immediately. */
 	@Test
 	void throttledRetryDelayHonorsRetryAfterAndJittersTheFallback() {
-		assertEquals(1000, DownloadClient.ObjectTransfer.retryDelayMillis(new HostThrottleException(503, 1000)));
-		long fallback = DownloadClient.ObjectTransfer.retryDelayMillis(new HostThrottleException(429, -1));
+		assertEquals(1000, ObjectTransfer.retryDelayMillis(new HostThrottleException(503, 1000)));
+		long fallback = ObjectTransfer.retryDelayMillis(new HostThrottleException(429, -1));
 		assertTrue(fallback >= 1000 && fallback < 2000, "the jittered default must stay in its bounded band: " + fallback);
-		assertEquals(0, DownloadClient.ObjectTransfer.retryDelayMillis(new IOException("a lane death retries at once")));
+		assertEquals(0, ObjectTransfer.retryDelayMillis(new IOException("a lane death retries at once")));
 	}
 
 	/** A wire failure halves the in-flight bound down to one take per lane; the retry path has to call this, the settle path never sees a retried take. */
 	@Test
 	void outstandingCapHalvesOnWireFailureDownToOneTakePerLane() {
-		assertEquals(40, DownloadClient.ObjectTransfer.reduceOutstandingCap(80));
-		assertEquals(DownloadClient.LANES, DownloadClient.ObjectTransfer.reduceOutstandingCap(DownloadClient.LANES));
-		assertEquals(DownloadClient.LANES, DownloadClient.ObjectTransfer.reduceOutstandingCap(DownloadClient.LANES + 1));
+		assertEquals(40, ObjectTransfer.reduceOutstandingCap(80));
+		assertEquals(DownloadClient.LANES, ObjectTransfer.reduceOutstandingCap(DownloadClient.LANES));
+		assertEquals(DownloadClient.LANES, ObjectTransfer.reduceOutstandingCap(DownloadClient.LANES + 1));
 	}
 
 	@Test

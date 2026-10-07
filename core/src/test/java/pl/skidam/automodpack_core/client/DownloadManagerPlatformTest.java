@@ -32,6 +32,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
+import pl.skidam.automodpack_core.loader.FileInspection;
+import pl.skidam.automodpack_core.platforms.FetchManager;
 import pl.skidam.automodpack_core.platforms.PlatformCache;
 import pl.skidam.automodpack_core.protocol.DocumentFetch;
 import pl.skidam.automodpack_core.protocol.NetUtils;
@@ -192,6 +194,30 @@ class DownloadManagerPlatformTest {
 		Path stored = downloadViaPlatform(name, name, "/good/" + name, transport);
 		assertArrayEquals(expected, Files.readAllBytes(stored));
 		assertEquals(List.of(), transport.fetches, "the host wire must stay idle while the platform serves");
+	}
+
+	@Test
+	void refreshedPlatformMetadataReplacesAnImmutableSourceSnapshot() {
+		List<DownloadSource> original = List.of(new DownloadSource("https://dead.example/old.jar", DownloadSource.Provider.MODRINTH));
+		DownloadSource refreshed = new DownloadSource("https://cdn.example/new.jar", DownloadSource.Provider.CURSEFORGE);
+		PlatformAttempt attempt = new PlatformAttempt(new HttpFileDownloader(), new FetchManager(List.of(), null) {
+			@Override
+			public boolean markDeadPlatformLink(String sha1, String murmur, String fileType) {
+				return true;
+			}
+
+			@Override
+			public List<DownloadSource> awaitMetadataRefetch(String sha1) {
+				return List.of(refreshed);
+			}
+		});
+		QueuedDownload task = new QueuedDownload(new FileInspection.HashPathPair("a".repeat(40), Path.of("mod.jar")), Path.of("mod.jar"), original, null, "mods", 1, 0,
+				() -> {}, category -> {});
+		task.needsMetadataRefetch = true;
+
+		assertDoesNotThrow(() -> attempt.refreshDeadLinkSources("a".repeat(40), task));
+		assertEquals(List.of(refreshed), task.sources);
+		assertEquals(List.of("cdn.example"), task.domains);
 	}
 
 	@Test
@@ -373,7 +399,7 @@ class DownloadManagerPlatformTest {
 		assertResumesBehindThePartial(RESUME_REQUESTS.get(1).range(), expected.length * 4 / 10);
 	}
 
-	/** A 416 verdict deletes the partial: the host fallback receives a clean, empty temp instead of the stale prefix. */
+	/** A half-written tile is a temp, and a temp is never a resume point, so the retry starts from zero without a Range. */
 	@Test
 	void aStalePartialIsDeletedAndTheNextAttemptStartsClean() throws Exception {
 		byte[] expected = CONTENTS.get("resume.bin");
@@ -383,7 +409,7 @@ class DownloadManagerPlatformTest {
 		assertArrayEquals(expected, Files.readAllBytes(stored));
 		assertEquals(2, RESUME_REQUESTS.size());
 		assertResumesBehindThePartial(RESUME_REQUESTS.get(1).range(), expected.length * 4 / 10);
-		assertEquals(List.of(0L), transport.resumeOffsets, "the 416 must have deleted the stale partial: the host wire resumes from zero");
+		assertEquals(List.of(0L), transport.resumeOffsets, "a 416 drops the fill, so the host wire sees no prefix");
 	}
 
 	/** How much of the flushed prefix survives the abrupt close is up to the transport, so the retry's resume offset only has to sit inside it. */

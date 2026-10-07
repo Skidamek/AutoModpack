@@ -265,7 +265,7 @@ public final class CandidateTrustValidation {
 			if (!trusted) {
 				candidate.socket().getSession().invalidate();
 				closeQuietly(candidate.socket());
-				throw new CompletionException(new IOException("User rejected certificate"));
+				throw new CompletionException(new UserRejectedCertificateException());
 			}
 			try {
 				candidate.sessionTrust().accept(certificate);

@@ -10,11 +10,11 @@ import java.util.concurrent.*;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.loader.ModEnvironment;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.modpack.group.ModEnvironment;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.platforms.PlatformSideVerdicts;
@@ -168,8 +168,8 @@ public final class ModpackCandidateScanner {
 				ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 				group.displayName = declaration.displayName;
 				group.description = declaration.description;
-				group.required = declaration.selection.policyRequired();
-				group.defaultSelected = declaration.selection.policyDefaultSelected();
+				group.required = declaration.selection.alwaysInstalled();
+				group.defaultSelected = declaration.selection.arrivesSelected();
 				group.breaksWith = sortedSet(declaration.breaksWith);
 				group.requires = sortedSet(declaration.requires);
 				group.compatiblePlatforms = sortedSet(declaration.compatiblePlatforms);

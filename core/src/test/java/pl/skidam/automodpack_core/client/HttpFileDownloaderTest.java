@@ -56,7 +56,7 @@ class HttpFileDownloaderTest {
 	void aShorterThanAdvertisedBodyFailsAsARemoteError(@TempDir Path directory) throws Exception {
 		Path destination = directory.resolve("object");
 		DownloadSource source = new DownloadSource("http://127.0.0.1:" + server.getAddress().getPort() + "/short", DownloadSource.Provider.MODRINTH);
-		IOException thrown = assertThrows(IOException.class, () -> new HttpFileDownloader().download(source, destination, FULL.length, 0, null));
+		IOException thrown = assertThrows(IOException.class, () -> new HttpFileDownloader().download(source, destination, FULL.length, 0, null, 0, null));
 		assertTrue(thrown.getMessage().contains("ended at"), thrown.getMessage());
 		assertFalse(PartialResume.complete(destination, FULL.length), "the short body must not look complete");
 	}

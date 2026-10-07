@@ -143,7 +143,7 @@ final class ClientUpdatePlanBuilder {
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(input.target(), installed, selection, projection,
 				previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies(), cache, overlaySnapshots);
 		if (input.prepareObjects()) populateStoreFromProjection(input.target(), projection, cache);
-		Set<String> forceCopyServices = getForceCopyMods(input.target(), cache, modCache, projection).stream().map(LogicalPath::normalize).collect(Collectors.toSet());
+		Set<String> forceCopyServices = getForceCopyMods(input.target(), cache, modCache, projection);
 		List<UpdatePlan.ModInfo> targetMods = inspectTargetMods(input.target(), cache, modCache, projection);
 		List<NestedConflicts.StandardRoot> standardRoots = inspectStandardRoots(cache, modCache);
 		List<UpdatePlan.ModInfo> standardMods = new ArrayList<>();
@@ -594,21 +594,6 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	private Set<String> getForceCopyMods(ModpackJsons.ModpackContentFields modpackContentFields, FileCache cache, ModFileCache modCache, ClientProjectionView.Snapshot projection) {
-		Set<String> forceCopyServices = modpackLoader.forceCopyServices();
-		if (forceCopyServices.isEmpty()) return Set.of();
-		Set<String> forceCopyMods = new HashSet<>();
-		for (ModpackJsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
-			if (!ModpackPathPolicy.isActiveMod(LogicalPath.normalize(item.file), item.type)) continue;
-			Path modPath = resolvedObject(item, projection, cache);
-			if (modPath == null) continue;
-			FileInspection.Mod mod = modCache.getModOrNull(modPath, item.sha1, cache);
-			if (mod != null) {
-				if (!Collections.disjoint(mod.services(), forceCopyServices)) forceCopyMods.add(item.file);
-				continue;
-			}
-			// A service-only jar has no mod metadata, so the inspection above misses it; its services are the only identity to check.
-			if (!FileInspection.getServices(modPath, forceCopyServices).isEmpty()) forceCopyMods.add(item.file);
-		}
-		return forceCopyMods;
+		return ForceCopyPaths.ofActiveMods(modpackContentFields.list, modpackLoader.forceCopyServices(), item -> resolvedObject(item, projection, cache), modCache, cache);
 	}
 }

@@ -45,6 +45,7 @@ import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.Timeout;
@@ -67,6 +68,9 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Timeout(value = 600, unit = TimeUnit.SECONDS)
+// A benchmark harness, not a unit test: minutes of real sockets, thousands of transfers and injected chaos. Excluded from
+// the ordinary suite so it stays a gate you can run on purpose rather than something every build pays for.
+@Tag("bench")
 class ThermoStressBenchTest {
 
 	private static final int BIG_BYTES = 4 * 1024 * 1024;

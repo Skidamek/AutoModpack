@@ -9,7 +9,6 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import pl.skidam.automodpack_core.modpack.group.ModEnvironment;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -59,14 +58,14 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 	public FileInspection.Inspection inspect(Path path, String knownSha1, FileCache cache) throws IOException {
 		Path absPath = path.toAbsolutePath().normalize();
 		String hash = contentHash(absPath, knownSha1, cache);
-		if (hash == null) return new FileInspection.Inspection(false, null);
+		if (hash == null) return new FileInspection.Inspection(false, null, Set.of());
 
 		synchronized (lock(hash)) {
 			ModRecord cached = readRecord(hash, ModRecord.class);
 			if (cached != null) return cached.at(absPath);
 
 			hash = contentHash(absPath, knownSha1, cache);
-			if (hash == null) return new FileInspection.Inspection(false, null);
+			if (hash == null) return new FileInspection.Inspection(false, null, Set.of());
 			cached = readRecord(hash, ModRecord.class);
 			if (cached != null) return cached.at(absPath);
 
@@ -86,10 +85,10 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		return hash == null ? null : hash.toLowerCase(Locale.ROOT);
 	}
 
-	/** Metadata without a readable side, and a record from before the is-mod verdict existed, are both rebuilt rather than answered. */
+	/** Metadata without a readable side, a record from before the is-mod verdict, and a record from before services were stored, are rebuilt rather than answered. */
 	@Override
 	protected boolean validate(ModRecord record, String key) {
-		return record != null && key.equalsIgnoreCase(record.hash) && (record.id == null || (record.isMod && environmentOf(record.environment) != null));
+		return record != null && key.equalsIgnoreCase(record.hash) && record.services != null && (record.id == null || (record.isMod && environmentOf(record.environment) != null));
 	}
 
 	@Override
@@ -113,24 +112,24 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		private ModRecord(String contentHash, FileInspection.Inspection inspection) {
 			hash = contentHash;
 			isMod = inspection.mod();
+			services = inspection.services();
 			FileInspection.Mod mod = inspection.metadata();
 			if (mod == null) return;
 			IDs = mod.IDs();
 			version = mod.version();
 			deps = mod.deps();
-			nestedMods = mod.nestedMods().stream().map(nested -> new ModRecord(mod.hash(), new FileInspection.Inspection(true, nested))).collect(Collectors.toSet());
+			nestedMods = mod.nestedMods().stream().map(nested -> new ModRecord(mod.hash(), new FileInspection.Inspection(true, nested, Set.of()))).collect(Collectors.toSet());
 			id = mod.id();
-			services = mod.services();
 			environment = mod.environment().name();
 		}
 
 		private FileInspection.Inspection at(Path path) {
-			if (id == null) return new FileInspection.Inspection(isMod, null);
+			Set<String> shipped = services == null ? Set.of() : services;
+			if (id == null) return new FileInspection.Inspection(isMod, null, shipped);
 			Set<String> modIds = IDs == null ? Set.of() : IDs;
 			Set<String> modDeps = deps == null ? Set.of() : deps;
-			Set<String> modServices = services == null ? Set.of() : services;
 			Set<FileInspection.Mod> nested = nestedMods == null ? Set.of() : nestedMods.stream().map(record -> record.at(null).metadata()).collect(Collectors.toSet());
-			return new FileInspection.Inspection(true, new FileInspection.Mod(modIds, hash, version, path, modDeps, nested, id, modServices, environmentOf(environment)));
+			return new FileInspection.Inspection(true, new FileInspection.Mod(modIds, hash, version, path, modDeps, nested, id, environmentOf(environment)), shipped);
 		}
 	}
 

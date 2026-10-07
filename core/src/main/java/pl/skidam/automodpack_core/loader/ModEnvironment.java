@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.modpack.group;
+package pl.skidam.automodpack_core.loader;
 
 import java.util.Locale;
 

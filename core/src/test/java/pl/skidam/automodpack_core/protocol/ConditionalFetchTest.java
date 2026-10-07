@@ -297,7 +297,7 @@ class ConditionalFetchTest {
 
 			Path partial = directory.resolve("partial");
 			Files.createDirectories(partial);
-			Files.write(PartialResume.sliceFile(partial, 0), Arrays.copyOf(object, 100_000));
+			Files.write(PartialResume.sliceTemp(partial, 0), Arrays.copyOf(object, 100_000));
 
 			try (DownloadClient client = client(server, "test-secret")) {
 				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), partial, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
@@ -350,14 +350,14 @@ class ConditionalFetchTest {
 
 			Path destination = directory.resolve("partial");
 			Files.createDirectories(destination);
-			Files.write(PartialResume.sliceFile(destination, 0), new byte[32]);
+			Files.write(PartialResume.sliceTemp(destination, 0), new byte[32]);
 
 			try (DownloadClient client = client(server, "test-secret")) {
 				var future = client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, 64, null);
 				assertThrows(ExecutionException.class, () -> future.get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertInstanceOf(StaleRangeException.class, rootCause(future));
 			}
-			assertEquals(32, Files.size(PartialResume.sliceFile(destination, 0)), "a failure with only an append-at-end write keeps the valid resume prefix");
+			assertEquals(32, Files.size(PartialResume.sliceTemp(destination, 0)), "a failure with only an append-at-end write keeps the valid resume prefix");
 		}
 	}
 
@@ -370,7 +370,7 @@ class ConditionalFetchTest {
 			server.store.put(sha1, object);
 			Path partial = directory.resolve("partial");
 			Files.createDirectories(partial);
-			Files.write(PartialResume.sliceFile(partial, 0), Arrays.copyOf(object, 100_000));
+			Files.write(PartialResume.sliceTemp(partial, 0), Arrays.copyOf(object, 100_000));
 			server.lieAboutResumeStart.set(true);
 
 			try (DownloadClient client = client(server, "test-secret")) {

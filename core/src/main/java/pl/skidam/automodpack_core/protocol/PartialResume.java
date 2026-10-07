@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.protocol;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.DirectoryStream;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -13,17 +14,25 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.DeletionReceipt;
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /**
- * Incomplete objects live as a directory of finished slices: {@code staging/<sha1>/<offset>} is the bytes of that
- * 4 MiB tile. A short file is a prefix of its tile and the next take resumes behind it. Coverage is the directory
- * listing; promotion concatenates in offset order and hashes the whole.
+ * Incomplete objects live as a directory of slices: {@code staging/<sha1>/<offset>} is one whole 4 MiB tile.
+ *
+ * <p>
+ * A tile being written is at {@code <offset>.tmp} and only takes its final name once every one of its bytes is on disk,
+ * so a slice at its final name is whole and nothing else. Every reader below follows from that one fact: coverage is the
+ * directory listing of final names, promotion concatenates them in offset order, and two writers on one object never
+ * have to agree about how far along the other one is. Contention on a tile is settled by the rename, since the first
+ * writer to finish moves its temp onto the name and the second finds the name taken.
  */
 public final class PartialResume {
 
 	private static final Logger LOGGER = LogManager.getLogger();
+
+	private static final String HOST_SUFFIX = ".host" + DurableFiles.TEMPORARY_SUFFIX;
 
 	private PartialResume() {}
 
@@ -56,6 +65,19 @@ public final class PartialResume {
 		return directory.resolve(Long.toString(sliceStart));
 	}
 
+	/** Where a tile is written while it is still filling. Readers ignore these; only a writer adopts one. */
+	public static Path sliceTemp(Path directory, long sliceStart) {
+		return directory.resolve(Long.toString(sliceStart) + DurableFiles.TEMPORARY_SUFFIX);
+	}
+
+	/**
+	 * A host take's own temp for the same tile. It is separate from the platform's so the two never hold two writers on one
+	 * file: both write the same bytes, and the rename decides which copy is kept, so they cannot disagree about content.
+	 */
+	public static Path sliceHostTemp(Path directory, long sliceStart) {
+		return directory.resolve(Long.toString(sliceStart) + HOST_SUFFIX);
+	}
+
 	public static long sliceStart(long offset) {
 		return offset / NetUtils.WIRE_CHUNK_BYTES * (long) NetUtils.WIRE_CHUNK_BYTES;
 	}
@@ -64,19 +86,69 @@ public final class PartialResume {
 		return Math.min(NetUtils.WIRE_CHUNK_BYTES, fileSize - sliceStart);
 	}
 
-	/** Bytes already stored for this tile: 0 if missing or past the expected end (the junk file is deleted). */
+	/**
+	 * Whether this tile is whole, as its whole length or as nothing. A slice at its final name is only ever named by a
+	 * completed write, so a size that does not match exactly is something else and is discarded rather than read as progress.
+	 */
 	public static long presentLength(Path slice, long expected) throws IOException {
 		if (!Files.isRegularFile(slice)) return 0;
-		long size = Files.size(slice);
-		if (size <= expected) return size;
-		LOGGER.warn("Stored slice {} is past its {} byte tile; discarding it", slice.getFileName(), expected);
+		if (Files.size(slice) == expected) return expected;
+		LOGGER.warn("Stored slice {} is not a whole {} byte tile; discarding it", slice.getFileName(), expected);
 		Files.deleteIfExists(slice);
 		return 0;
 	}
 
 	/**
-	 * Remaining wire ranges as {@code [absStart, absEnd]} inclusive, lowest tile first. A short tile contributes a
-	 * range that starts behind its prefix.
+	 * Moves a finished temp onto its tile name and reports whether it won. Losing means another writer got there first, and
+	 * the loser's bytes are the same bytes, so the tile is already correct and the copy is dropped.
+	 */
+	public static boolean promoteSlice(Path directory, long sliceStart, long fileSize) throws IOException {
+		Path tile = sliceFile(directory, sliceStart);
+		if (Files.isRegularFile(tile)) return false;
+		// Only a full tile is ever named, so a cut-short take stays a temp and no reader mistakes it for progress.
+		Path temp = null;
+		for (Path candidate : List.of(sliceTemp(directory, sliceStart), sliceHostTemp(directory, sliceStart))) {
+			if (Files.isRegularFile(candidate) && Files.size(candidate) == sliceLength(sliceStart, fileSize)) {
+				temp = candidate;
+				break;
+			}
+		}
+		if (temp == null) return false;
+		try {
+			Files.move(temp, tile);
+			return true;
+		} catch (FileAlreadyExistsException lost) {
+			discard(temp);
+			return false;
+		}
+	}
+
+	private static void discard(Path temp) {
+		try {
+			Files.deleteIfExists(temp);
+		} catch (IOException ignored) {
+		}
+	}
+
+	/**
+	 * Bytes already in a tile that is still filling, which is a resume point but not progress: it is counted here and never
+	 * by {@link #presentBytes}, so an interrupted transfer continues where it stopped without the total ever claiming twice.
+	 */
+	public static long inProgressLength(Path temp, long expected) throws IOException {
+		if (!Files.isRegularFile(temp)) return 0;
+		long size = Files.size(temp);
+		return size < expected ? size : expected;
+	}
+
+	/** How far into its tile a writer starts: behind a whole tile nothing, behind a filling one its bytes. */
+	public static long resumeOffset(Path directory, long sliceStart, long fileSize) throws IOException {
+		long expected = sliceLength(sliceStart, fileSize);
+		return Math.max(presentLength(sliceFile(directory, sliceStart), expected), inProgressLength(sliceTemp(directory, sliceStart), expected));
+	}
+
+	/**
+	 * Remaining wire ranges as {@code [absStart, absEnd]} inclusive, lowest tile first. A tile somebody else filled whole
+	 * is skipped, and one still filling contributes a range that starts behind the bytes already on disk.
 	 */
 	public static List<long[]> remaining(Path directory, long fileSize) throws IOException {
 		List<long[]> work = new ArrayList<>();
@@ -84,8 +156,9 @@ public final class PartialResume {
 		Files.createDirectories(directory);
 		for (long start = 0; start < fileSize; start += NetUtils.WIRE_CHUNK_BYTES) {
 			long expected = sliceLength(start, fileSize);
-			long present = presentLength(sliceFile(directory, start), expected);
-			if (present < expected) work.add(new long[]{start + present, start + expected - 1});
+			if (presentLength(sliceFile(directory, start), expected) >= expected) continue;
+			long from = resumeOffset(directory, start, fileSize);
+			if (from < expected) work.add(new long[]{start + from, start + expected - 1});
 		}
 		return work;
 	}
@@ -106,6 +179,17 @@ public final class PartialResume {
 
 	public static boolean complete(Path directory, long fileSize) throws IOException {
 		return remaining(directory, fileSize).isEmpty();
+	}
+
+	/**
+	 * Where a downloader writing from {@code offset} should stop: the start of the first whole tile ahead of it, or the
+	 * end of the object when there is none. Stopping there is what keeps one side from re-fetching tiles the other filled,
+	 * and it only costs a request when there is actually a whole tile to step over.
+	 */
+	public static long stopBefore(Path directory, long offset, long fileSize) throws IOException {
+		for (long start = sliceStart(offset) + NetUtils.WIRE_CHUNK_BYTES; start < fileSize; start += NetUtils.WIRE_CHUNK_BYTES)
+			if (presentLength(sliceFile(directory, start), sliceLength(start, fileSize)) >= sliceLength(start, fileSize)) return start;
+		return fileSize;
 	}
 
 	/** The first missing object byte, or {@code fileSize} when every tile is present. */
@@ -191,6 +275,7 @@ public final class PartialResume {
 		private final long fileSize;
 		private long pos;
 		private OutputStream current;
+		private long currentStart;
 		private long currentEnd;
 
 		SliceWriter(Path directory, long fileSize, long absStart) {
@@ -207,8 +292,9 @@ public final class PartialResume {
 		@Override
 		public void write(byte[] bytes, int offset, int length) throws IOException {
 			while (length > 0) {
-				if (pos >= fileSize) throw new IOException("Slice writer passed the object end");
+				if (pos >= fileSize) return;
 				if (current == null) open();
+				if (current == null) return;
 				int n = (int) Math.min(length, currentEnd - pos);
 				current.write(bytes, offset, n);
 				pos += n;
@@ -218,24 +304,38 @@ public final class PartialResume {
 			}
 		}
 
+		/**
+		 * Opens the tile this position falls in. A tile somebody else already finished whole is stepped over rather than
+		 * rewritten, which is what lets the platform and the host fill one object from opposite ends: whichever way the
+		 * bytes arrive, the tile exists once and both writers move past it.
+		 */
 		private void open() throws IOException {
-			long start = sliceStart(pos);
-			Path slice = sliceFile(directory, start);
-			long expected = sliceLength(start, fileSize);
-			long present = presentLength(slice, expected);
-			if (pos != start + present) throw new IOException("Slice writer is not aligned with stored prefix at " + pos);
-			current = present > 0 ? LocalFileWriter.openAt(slice, present) : LocalFileWriter.open(slice);
-			currentEnd = start + expected;
+			while (pos < fileSize) {
+				long start = sliceStart(pos);
+				long expected = sliceLength(start, fileSize);
+				if (presentLength(sliceFile(directory, start), expected) >= expected) {
+					pos = start + expected;
+					continue;
+				}
+				Path temp = sliceTemp(directory, start);
+				long have = inProgressLength(temp, expected);
+				current = have > 0 ? LocalFileWriter.openAt(temp, have) : LocalFileWriter.open(temp);
+				currentStart = start;
+				currentEnd = start + expected;
+				return;
+			}
 		}
 
+		/** A tile that filled completely is named; one cut short stays a temp and is picked up or dropped on the next open. */
 		private void closeCurrent() throws IOException {
 			current.close();
 			current = null;
+			promoteSlice(directory, currentStart, fileSize);
 		}
 
 		@Override
 		public void close() throws IOException {
-			if (current != null) closeCurrent();
+			if (current != null) current.close();
 		}
 	}
 }

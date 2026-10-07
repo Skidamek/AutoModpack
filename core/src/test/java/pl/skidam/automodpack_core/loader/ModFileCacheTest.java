@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import java.util.stream.Stream;
@@ -86,6 +87,7 @@ class ModFileCacheTest {
 
 			assertTrue(cached.mod(), "a persisted service-only jar still reads as a mod");
 			assertNull(cached.metadata());
+			assertTrue(cached.providesAny(Set.of(LoaderServicePaths.FORGE_MOD_LOCATOR)), "the services that jar ships are the cached identity");
 		}
 	}
 

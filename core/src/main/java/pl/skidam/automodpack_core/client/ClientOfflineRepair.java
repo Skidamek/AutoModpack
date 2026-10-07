@@ -4,17 +4,12 @@ import static pl.skidam.automodpack_core.Constants.THIS_MOD_JAR;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Collections;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeSet;
 
-import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
-import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -66,21 +61,9 @@ public final class ClientOfflineRepair {
 	}
 
 	private Set<String> forceCopyPaths(SelectedModpackTarget target) throws IOException {
-		Set<String> services = loader.forceCopyServices();
-		if (services.isEmpty()) return Set.of();
-		TreeSet<String> paths = new TreeSet<>();
-		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); ModFileCache modCache = ModFileCache.open(storage.modCacheDirectory())) {
-			for (var item : target.flatTarget().list.stream().filter(value -> ModpackPathPolicy.isActiveMod(LogicalPath.normalize(value.file), value.type)).toList()) {
-				long size = item.size;
-				Path source = verifiedSource(item.file, size, item.sha1, cache);
-				if (source == null) continue;
-				FileInspection.Mod mod = modCache.getModOrNull(source, item.sha1, cache);
-				// A service-only jar has no mod metadata, so the inspection above misses it; its services are the only identity to check.
-				boolean forceCopy = mod != null ? !Collections.disjoint(mod.services(), services) : !FileInspection.getServices(source, services).isEmpty();
-				if (forceCopy) paths.add(LogicalPath.normalize(item.file));
-			}
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); ModFileCache mods = ModFileCache.open(storage.modCacheDirectory())) {
+			return ForceCopyPaths.ofActiveMods(target.flatTarget().list, loader.forceCopyServices(), item -> verifiedSource(item.file, item.size, item.sha1, cache), mods, cache);
 		}
-		return Set.copyOf(paths);
 	}
 
 	private Path verifiedSource(String logicalPath, long size, String hash, FileCache cache) {

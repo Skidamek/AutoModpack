@@ -17,7 +17,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import pl.skidam.automodpack_core.Constants;
-import pl.skidam.automodpack_core.modpack.group.ModEnvironment;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.MiniToml;
@@ -33,30 +32,44 @@ public class FileInspection {
 
 	public record HashPathPair(String hash, Path path) {}
 
-	/** Whether the file is a mod jar at all and the metadata when there is any: a service-only jar is a mod whose metadata is absent, a fact a null {@link Mod} alone cannot carry. */
-	public record Inspection(boolean mod, Mod metadata) {
+	/**
+	 * Whether the file is a mod jar at all, the metadata when there is any, and the loader-service files this jar actually
+	 * ships. A service-only jar is a mod whose metadata is absent; {@code services} is that jar's identity. Incomplete
+	 * metadata with no services is not a mod.
+	 */
+	public record Inspection(boolean mod, Mod metadata, Set<String> services) {
+		public Inspection {
+			services = services == null || services.isEmpty() ? Set.of() : Set.copyOf(services);
+		}
+
+		public Inspection(boolean mod, Mod metadata) {
+			this(mod, metadata, Set.of());
+		}
+
 		/** The side this file's own metadata declares; a jar that ships no readable metadata declares none. */
 		public ModEnvironment environment() {
 			return metadata == null ? ModEnvironment.UNKNOWN : metadata.environment();
 		}
+
+		/** Whether this jar ships any of the named services. The wanted set is the caller's question, not a catalog this inspection stores. */
+		public boolean providesAny(Set<String> wanted) {
+			if (wanted == null || wanted.isEmpty() || services.isEmpty()) return false;
+			for (String service : services) if (wanted.contains(service)) return true;
+			return false;
+		}
 	}
 
-	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, Set<String> services, ModEnvironment environment) {
+	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, ModEnvironment environment) {
 		public Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods) {
-			this(IDs, hash, version, path, deps, nestedMods, null, Set.of(), ModEnvironment.UNIVERSAL);
-		}
-
-		public Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, Set<String> services) {
-			this(IDs, hash, version, path, deps, nestedMods, id, services, ModEnvironment.UNIVERSAL);
+			this(IDs, hash, version, path, deps, nestedMods, null, ModEnvironment.UNIVERSAL);
 		}
 
 		public Mod {
-			services = services == null ? Set.of() : Set.copyOf(services);
 			environment = environment == null ? ModEnvironment.UNIVERSAL : environment;
 		}
 
 		public Mod at(Path newPath) {
-			return new Mod(IDs, hash, version, newPath, deps, nestedMods, id, services, environment);
+			return new Mod(IDs, hash, version, newPath, deps, nestedMods, id, environment);
 		}
 	}
 
@@ -68,20 +81,22 @@ public class FileInspection {
 
 	/** One open answers both facts about the file, so a jar is never mounted once per question. */
 	public static Inspection inspect(Path file, FileCache cache) {
-		if (isJarInvalid(file)) return new Inspection(false, null);
+		if (isJarInvalid(file)) return new Inspection(false, null, Set.of());
 
 		String hash = FileIntegrity.identityHash(file, cache);
 		if (hash == null) {
 			LOGGER.error("Failed to get hash for file: {}", file);
-			return new Inspection(false, null);
+			return new Inspection(false, null, Set.of());
 		}
 
 		try (FileSystem fs = FileSystems.newFileSystem(file)) {
 			ModMetadata meta = getModMetadata(fs);
-			return meta == null ? new Inspection(hasSpecificServices(fs), null) : new Inspection(true, completeMod(fs, meta, hash, file));
+			Set<String> services = getServices(fs, LoaderServicePaths.ALL_SERVICES);
+			Mod metadata = meta == null ? null : completeMod(fs, meta, hash, file);
+			return new Inspection(metadata != null || !services.isEmpty(), metadata, services);
 		} catch (IOException e) {
 			LOGGER.debug("Failed to inspect mod file: {}", file);
-			return new Inspection(false, null);
+			return new Inspection(false, null, Set.of());
 		}
 	}
 
@@ -93,7 +108,7 @@ public class FileInspection {
 		}
 		Set<String> ids = new HashSet<>(meta.provides());
 		ids.add(meta.modId());
-		return new Mod(ids, hash, meta.version(), file, meta.deps(), scanForNestedMods(fs, meta.declaredJars()), meta.modId(), Set.copyOf(getServices(fs, LoaderServicePaths.ALL_SERVICES)), meta.environment());
+		return new Mod(ids, hash, meta.version(), file, meta.deps(), scanForNestedMods(fs, meta.declaredJars()), meta.modId(), meta.environment());
 	}
 
 	/** Whether the file is a mod or an early-service jar, with no cache and no metadata: for loader call sites that only need the yes. */
@@ -242,7 +257,7 @@ public class FileInspection {
 			Set<String> declaredJars = metadata.declaredJars();
 			Set<Mod> nestedMods = nestedChildren.entrySet().stream().filter(child -> declaredJars.contains(child.getKey())).map(Map.Entry::getValue).collect(Collectors.toSet());
 			// Investigate if we need hash or not
-			return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedMods, metadata.modId(), Set.of(), metadata.environment());
+			return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedMods, metadata.modId(), metadata.environment());
 		}
 		return null;
 	}

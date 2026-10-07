@@ -66,7 +66,12 @@ tasks.withType<JavaCompile> {
 }
 
 tasks.named<Test>("test") {
-	useJUnitPlatform()
+	useJUnitPlatform {
+		// Neither of these decides anything about the code. One needs minutes and real sockets to measure, the other needs
+		// outbound internet and the cloudflared binary. Run them with -Pinclude.bench or -Pinclude.live when you want them.
+		if (!providers.gradleProperty("include.bench").isPresent) excludeTags("bench")
+		if (!providers.gradleProperty("include.live").isPresent) excludeTags("live")
+	}
 	testLogging {
 		exceptionFormat = TestExceptionFormat.FULL
 	}

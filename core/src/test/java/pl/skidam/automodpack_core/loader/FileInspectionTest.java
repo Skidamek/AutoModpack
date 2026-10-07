@@ -17,7 +17,6 @@ import java.util.zip.ZipOutputStream;
 
 import org.junit.jupiter.api.Test;
 
-import pl.skidam.automodpack_core.modpack.group.ModEnvironment;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -162,6 +161,22 @@ class FileInspectionTest {
 			assertTrue(inspection.mod());
 			assertNull(inspection.metadata());
 			assertEquals(ModEnvironment.UNKNOWN, inspection.environment());
+			assertTrue(inspection.providesAny(Set.of(LoaderServicePaths.FORGE_MOD_LOCATOR)));
+		} finally {
+			Files.deleteIfExists(jar);
+		}
+	}
+
+	@Test
+	void incompleteMetadataWithoutServicesIsNotAMod() throws IOException {
+		Path jar = Files.createTempDirectory("incomplete-").resolve("broken.jar");
+
+		try {
+			Files.write(jar, jar(Map.of("fabric.mod.json", "{\"version\": \"1.0.0\"}".getBytes(StandardCharsets.UTF_8))));
+			FileInspection.Inspection inspection = inspection(jar);
+
+			assertFalse(inspection.mod());
+			assertNull(inspection.metadata());
 		} finally {
 			Files.deleteIfExists(jar);
 		}
