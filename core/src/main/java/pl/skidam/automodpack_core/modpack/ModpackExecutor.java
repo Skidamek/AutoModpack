@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.modpack.PackAbsence.Kind;
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
@@ -455,9 +456,15 @@ public class ModpackExecutor {
 			// Unadvertised versions leave the manifest fields empty, so clients see a files-only pack instead of a
 			// pack whose versions they must switch to.
 			boolean advertiseVersions = serverConfig.advertiseVersionsToSync;
+			// A client hosting its world to LAN loads every "server-side" mod itself, and Forge's login handshake
+			// rejects any joiner whose mod list differs ("mismatched mod list"). Those mods must ship to joiners.
+			boolean clientHost = LOADER_MANAGER != null && LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT;
+			boolean excludeServerSideMods = serverConfig.autoExcludeServerSideMods && !clientHost;
+			if (serverConfig.autoExcludeServerSideMods && clientHost)
+				LOGGER.info("Client-hosted pack: keeping server-side mods in the pack because LAN joiners must match the host's mod list");
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpack.name, AM_VERSION,
 					advertiseVersions ? LOADER : null, advertiseVersions ? LOADER_VERSION : null, advertiseVersions ? MC_VERSION : null, serverRoot, groupRoot,
-					serverConfig.modpack.categories, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()),
+					serverConfig.modpack.categories, excludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()),
 					creationExecutor, generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects);
 			ModpackCandidate candidate = candidateScan.scan(request);
 			for (ExcludedCandidate exclusion : candidate.exclusions())
