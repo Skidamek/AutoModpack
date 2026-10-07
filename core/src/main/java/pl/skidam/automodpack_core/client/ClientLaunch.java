@@ -96,8 +96,10 @@ public final class ClientLaunch {
 
 	private void syncFromServer(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) throws Exception {
 		String followId = storage.selectedModpackId();
+		LaunchProgress.stage("checking " + AddressHelpers.formatAddress(connectionInfo.origin) + " for modpack updates");
 		var manifestResult = ManifestFetcher.requestServerModpackContent(storage, connectionInfo, secret, false, followId);
 		if (!manifestResult.successful()) {
+			LaunchProgress.stage("modpack server unreachable, starting with the installed pack");
 			// An unreachable server is a normal boot condition, not a failure: the installed pack keeps working and the
 			// next launch with the server up catches up. One calm line says so; the cause stays at debug.
 			LOGGER.info("Modpack server {} is unreachable; continuing with the local state without a sync", AddressHelpers.formatAddress(connectionInfo.origin));

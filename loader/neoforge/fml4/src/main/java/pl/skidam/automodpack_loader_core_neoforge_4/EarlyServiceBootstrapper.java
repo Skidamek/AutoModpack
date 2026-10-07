@@ -3,16 +3,16 @@ package pl.skidam.automodpack_loader_core_neoforge_4;
 import java.nio.file.Path;
 import java.util.List;
 
-import net.neoforged.fml.loading.progress.ProgressMeter;
-import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.Preload;
+import pl.skidam.automodpack_core.client.LaunchProgress;
 import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.GenerationProbes;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.TargetId;
+import pl.skidam.automodpack_loader_core_modlauncher.EarlyProgressDisplay;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
 import pl.skidam.automodpack_loader_core_neoforge_4.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core_neoforge_4.mods.ModpackLoader;
@@ -54,9 +54,12 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 		// Run our own update/reconcile step first: it decides what this launch loads, and the
 		// early-service hosting below hosts only jars from that decision. Preload failures must crash
 		// the launch; swallowing them would boot without the pack.
-		ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
-		new Preload(new LoaderManager(), new ModpackLoader());
-		progress.complete();
+		LaunchProgress.attach(EarlyProgressDisplay.create(EarlyServiceBootstrapper.class.getClassLoader()));
+		try {
+			new Preload(new LoaderManager(), new ModpackLoader());
+		} finally {
+			LaunchProgress.detach();
+		}
 
 		try {
 			// Early-service hosting serves the client's active projection; a dedicated server has none.

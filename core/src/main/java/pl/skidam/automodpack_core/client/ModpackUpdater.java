@@ -396,6 +396,7 @@ public class ModpackUpdater implements AutoCloseable {
 			return;
 		}
 		long start = System.currentTimeMillis();
+		LaunchProgress.stage("preparing modpack update");
 		sourceCatalogue.startSourceFetch();
 		UpdateSession launch = beginUpdateAttempt();
 		launch.prepare(false, false);
@@ -414,7 +415,9 @@ public class ModpackUpdater implements AutoCloseable {
 			return;
 		}
 		launch.approve();
+		LaunchProgress.stage("applying modpack update");
 		ApplyResult applyResult = commitFlow(launch);
+		LaunchProgress.stage("modpack update applied");
 		LOGGER.info("Launch apply completed; restart demand: {} Took: {}ms", RestartPolicy.atPreload(applyResult.restartReasons()), System.currentTimeMillis() - start);
 		finishLaunchApply(applyResult);
 	}

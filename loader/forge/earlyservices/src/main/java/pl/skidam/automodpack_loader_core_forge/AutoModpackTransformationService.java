@@ -10,11 +10,13 @@ import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
 
 import pl.skidam.automodpack_core.Preload;
+import pl.skidam.automodpack_core.client.LaunchProgress;
 import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.GenerationProbes;
 import pl.skidam.automodpack_core.loader.TargetId;
 import pl.skidam.automodpack_loader_core_forge.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core_forge.mods.ModpackLoader;
+import pl.skidam.automodpack_loader_core_modlauncher.EarlyProgressDisplay;
 import pl.skidam.automodpack_loader_core_modlauncher.ModLauncherEarlyServiceBridge;
 import pl.skidam.automodpack_loader_core_modlauncher.ModuleClassLoaderAccess;
 
@@ -66,7 +68,13 @@ public class AutoModpackTransformationService implements ITransformationService 
 
 		TargetId.id("forge", EarlyLaunchEnvironment.MC_VERSION);
 
-		new Preload(new LoaderManager(), new ModpackLoader());
+		// Forge 1.20.1+ has an early loading window; the launch update can take minutes, so show what it is doing.
+		LaunchProgress.attach(EarlyProgressDisplay.create(AutoModpackTransformationService.class.getClassLoader()));
+		try {
+			new Preload(new LoaderManager(), new ModpackLoader());
+		} finally {
+			LaunchProgress.detach();
+		}
 		EarlyServiceLayer.bootstrap();
 		ModLauncherEarlyServiceBridge.forEachTransformationService("onLoad", service -> service.onLoad(env, otherServices));
 	}
