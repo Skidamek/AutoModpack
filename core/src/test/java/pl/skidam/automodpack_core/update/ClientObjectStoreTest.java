@@ -27,6 +27,7 @@ import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.ExpectedSizes;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.utils.FileTrees;
@@ -317,7 +318,7 @@ class ClientObjectStoreTest {
 
 	private static GroupManifest manifest(String modpackId, String hash, long size) {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "", "General", true, false, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/test.jar", file)));
+		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/test.jar", file)));
 		return new GroupManifest(modpackId, "", "", "", "", "", new TreeMap<>(Map.of("main", group)));
 	}
 }

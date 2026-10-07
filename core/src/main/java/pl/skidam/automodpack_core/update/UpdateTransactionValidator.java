@@ -43,7 +43,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Every structural and precondition check a persisted transaction must pass before its plan may mutate live state. */
-public final class UpdateTransactionValidator {
+final class UpdateTransactionValidator {
 	private final ClientStorage storage;
 
 	UpdateTransactionValidator(ClientStorage storage) {

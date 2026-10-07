@@ -54,6 +54,7 @@ public final class ClientStorage {
 	private final Path objectsDirectory;
 	private final Path overlaysDirectory;
 	private final Path generatedCopiesDirectory;
+	private final Path generatedCopiesFile;
 	private final Path activeDirectory;
 	private final Path incomingDirectory;
 	private final Path backupDirectory;
@@ -88,6 +89,7 @@ public final class ClientStorage {
 		this.objectsDirectory = dataLayout.objectsDirectory();
 		this.overlaysDirectory = this.gameDirectory.resolve(CLIENT_OVERLAYS_DIR).normalize();
 		this.generatedCopiesDirectory = this.gameDirectory.resolve(CLIENT_GENERATED_COPIES_DIR).normalize();
+		this.generatedCopiesFile = this.gameDirectory.resolve(CLIENT_GENERATED_COPIES_FILE).normalize();
 		this.activeDirectory = this.gameDirectory.resolve(CLIENT_ACTIVE_DIR).normalize();
 		this.incomingDirectory = this.gameDirectory.resolve(CLIENT_INCOMING_DIR).normalize();
 		this.backupDirectory = this.gameDirectory.resolve(CLIENT_BACKUP_DIR).normalize();
@@ -183,22 +185,17 @@ public final class ClientStorage {
 		return generatedCopiesDirectory;
 	}
 
-	public Path generatedCopiesFile(String modpackId, String contentToken, String selectionDigest) {
+	public Path generatedCopiesFile() {
+		return generatedCopiesFile;
+	}
+
+	/** rc.1/rc.2 per-identity path; {@link GeneratedCopyState#migrateLegacyTree} imports these into {@link #generatedCopiesFile()} once, at initialization. */
+	public Path legacyGeneratedCopiesFile(String modpackId, String contentToken, String selectionDigest) {
 		Path packRoot = generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
 		Path generationRoot = packRoot.resolve(HashUtils.requireDigest(contentToken, "generation ID")).normalize();
 		Path file = generationRoot.resolve(HashUtils.requireDigest(selectionDigest, "generated-copy selection digest") + ".json").normalize();
 		if (!file.startsWith(generationRoot)) throw new IllegalArgumentException("Generated-copy state escaped its generation root");
 		return file;
-	}
-
-	public Path generatedCopiesGenerationDirectory(String modpackId, String contentToken) {
-		Path root = generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).resolve(HashUtils.requireDigest(contentToken, "generation ID")).normalize();
-		if (!root.startsWith(generatedCopiesDirectory)) throw new IllegalArgumentException("Generated-copy state escaped its root");
-		return root;
-	}
-
-	public Path generatedCopiesPackDirectory(String modpackId) {
-		return generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
 	}
 
 	public Path activeDirectory() {
@@ -285,10 +282,6 @@ public final class ClientStorage {
 		return fields.modpackId;
 	}
 
-	public boolean hasSelectedModpack() {
-		return !selectedModpackId().isBlank();
-	}
-
 	public void writeSelectedModpackId(String modpackId) throws IOException {
 		ClientConfigJsons.SelectedModpackFields fields = new ClientConfigJsons.SelectedModpackFields();
 		fields.modpackId = modpackId == null ? "" : modpackId;
@@ -326,10 +319,6 @@ public final class ClientStorage {
 
 	public Path historyDirectory() {
 		return historyDirectory;
-	}
-
-	public Path stateHistoryDirectory() {
-		return stateHistoryDirectory;
 	}
 
 	/** The instance timeline journal: one small line per snapshot. */
@@ -457,7 +446,7 @@ public final class ClientStorage {
 		return ClientOverlaySnapshot.capture(this, modpackId, cache);
 	}
 
-	/** Creates the complete client storage layout during application bootstrap. */
+	/** Creates the complete client storage layout during application bootstrap, and imports the one legacy layout that predates it. */
 	private void initialize() throws IOException {
 		FileTrees.createManagedDirectory(clientDirectory, "client state root");
 		FileTrees.createManagedDirectory(objectsDirectory, "client object store");
@@ -466,11 +455,13 @@ public final class ClientStorage {
 		FileTrees.createManagedDirectory(platformCacheDirectory, "platform cache");
 		FileTrees.createManagedDirectory(packsDirectory, "shared pack state");
 		FileTrees.createManagedDirectory(overlaysDirectory, "client overlays");
-		FileTrees.createManagedDirectory(generatedCopiesDirectory, "client generated-copy state");
 		FileTrees.createManagedDirectory(stagingDirectory(), "shared publication staging");
 		FileTrees.createManagedDirectory(historyDirectory, "client journal mirrors");
 		FileTrees.createManagedDirectory(stateHistoryDirectory, "client state history");
 		FileTrees.createManagedDirectory(stateHistoryTreesDirectory(), "instance trees");
+		// The only place a durable migration runs, under the mutation lock: a reader that rewrote state made every
+		// unlocked caller a writer, and two processes racing the index dropped each other's entries.
+		GeneratedCopyState.migrateLegacyTree(this);
 	}
 
 	/**
@@ -607,7 +598,7 @@ public final class ClientStorage {
 	private void validateLayout() {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
-		validateWithin(clientDirectory, overlaysDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory,
+		validateWithin(clientDirectory, overlaysDirectory, generatedCopiesDirectory, generatedCopiesFile, activeDirectory, incomingDirectory, backupDirectory,
 				historyDirectory, stateHistoryDirectory, stateHistoryTreesDirectory(), stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, selectedModpackFile, restartLoopStateFile,
 				stuckTransactionStateFile,
 				modpackContentTempFile,

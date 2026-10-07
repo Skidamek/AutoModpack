@@ -3,6 +3,11 @@ package pl.skidam.automodpack_core.config;
 import java.util.List;
 
 public class ClientStorageJsons {
+	public static class ClientGeneratedCopiesIndexFields {
+		public int schemaVersion = 1;
+		public List<ClientGeneratedCopiesFields> states = List.of();
+	}
+
 	public static class ClientGeneratedCopiesFields {
 		public int schemaVersion = 1;
 		public String modpackId = "";

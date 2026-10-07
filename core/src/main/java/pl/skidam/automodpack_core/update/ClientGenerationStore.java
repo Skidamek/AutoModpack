@@ -281,7 +281,7 @@ public final class ClientGenerationStore {
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
 		if (activeState != null && normalizedModpackId.equals(activeState.modpackId)) throw new IOException("Cannot forget the active modpack");
 		new ClientSelectionStore(storage.selectionFile()).remove(normalizedModpackId);
-		FileTrees.delete(storage.generatedCopiesPackDirectory(normalizedModpackId));
+		GeneratedCopyState.removePack(storage, normalizedModpackId);
 		storage.clearOverlay(normalizedModpackId);
 		FileTrees.delete(storage.historyPackDirectory(normalizedModpackId));
 		FileTrees.delete(storage.connectionDirectory(normalizedModpackId));
@@ -355,18 +355,7 @@ public final class ClientGenerationStore {
 
 	/** Deletes the generated-copy state of trimmed generations; it pins objects and only serves generations the compaction no longer keeps. */
 	private void removeGeneratedCopies(String modpackId, Set<String> keptTokens) throws IOException {
-		Path packRoot = storage.generatedCopiesPackDirectory(modpackId);
-		if (!Files.exists(packRoot, LinkOption.NOFOLLOW_LINKS)) return;
-		FileTrees.requireDirectory(packRoot, "client generated-copy state");
-		try (Stream<Path> generations = Files.list(packRoot)) {
-			for (Path generation : generations.toList()) {
-				FileTrees.requireNoSymbolicLink(generation, "client generated-copy state");
-				if (!Files.isDirectory(generation, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + generation);
-				String token = generation.getFileName().toString();
-				if (!HashUtils.isCanonicalSha1(token)) throw new IOException("Client generated-copy directory is not canonical: " + token);
-				if (!keptTokens.contains(token)) FileTrees.delete(generation);
-			}
-		}
+		GeneratedCopyState.retainPackGenerations(storage, modpackId, keptTokens);
 	}
 
 	private CompactionReceipt writeCompactionReceipt(String modpackId, long boundarySeq, ClientObjectStore.CollectionResult collection) throws IOException {

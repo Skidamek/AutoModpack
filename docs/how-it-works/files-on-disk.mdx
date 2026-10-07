@@ -20,7 +20,7 @@ The one-shot client drop-in is `~/automodpack/automodpack-bootstrap.json`. Put a
 | `automodpack-bootstrap.exported.json` | Written by `/automodpack host bootstrap`, for copying to clients |
 | `host-modpack/<group>/` | Pack files the server itself does not need; the folder name is the group id, and `main` is the default group |
 | `host-modpack/patch-notes.md` | Notes for the next published generation; cleared when it publishes |
-| `host-modpack/waiting-music.ogg` | Optional custom waiting track; published into the object store and served like any other pack file |
+| `host-modpack/waiting-music.ogg` | Optional custom waiting track. Publish it with `/automodpack generate` (or a start with `generate-modpack-on-start`). Clients stream it during downloads and can play the advertised track from pack details |
 | `credentials/certificate.crt` | TLS certificate chain |
 | `credentials/private-key.pem` | TLS private key, PKCS#8 PEM |
 | `credentials/provisioning-secret` | Bootstrap provisioning secret; keep this folder out of support dumps |
@@ -49,10 +49,15 @@ Do not edit those manually!
 | `history/<modpack-id>/` | The journal mirror for one pack, so pack history works offline |
 | `state-history/` | Instance timeline journal and per-instance tree documents |
 | `overlays/<modpack-id>/` | Player edits that survive generation switches |
-| `generated-copies/`, `incoming/`, `backup/` | Update, repair, and loader-copy working state |
+| `generated-copies.json` | Which nested dependency copies the installed generation runs |
+| `incoming/`, `backup/` | Update and repair working state |
 | `selected.json`, `active-state.json`, `selections.json`, `restart-state.json`, `update-transaction.json`, `repair.json` | Follow pointer (`modpackId`), installed generation, and in-flight work |
 
 `automodpack/helper/`, outside `client/`, is where detached update and repair helpers log their runs.
+
+`generated-copies.json` holds one record per installed generation, so switching between group selections never makes it grow. It is machine state: leave it alone. A file that cannot be parsed is renamed to `generated-copies.json.corrupt-<random>` next to itself, so the broken content stays for a bug report, and the record of the installed generation is rebuilt from the installed pack on the next launch. Nothing else on disk is touched.
+
+The rc.1 and rc.2 builds kept one small file per pack, generation and selection under `client/generated-copies/`. The first launch with a current build imports that whole tree into `generated-copies.json` and deletes it, directories included. A file in it that cannot be parsed stays where it was under its `corrupt-` name, as evidence. The import runs once, before any update work, and needs nothing from you.
 
 ## Content store
 

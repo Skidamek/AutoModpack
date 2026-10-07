@@ -7,14 +7,15 @@ import pl.skidam.automodpack_core.client.RestartDecision.ApplyResult;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.UpdateCommit;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
-import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 
 /**
  * One player-reviewed mutation of client pack state. Prepare and preview live on the adapter that knows the inputs;
- * this seam is the review and the one commit. Consent is captured exactly once, by the adapter action that carries the
- * player's decision: it calls {@link #approve}, and {@link #commit} refuses an unapproved plan. Boot recovery of a
- * pending transaction is {@link #resume}, not a third owner.
+ * this seam is the review and the one commit. Consent is captured exactly once, by the adapter action that carries
+ * the player's decision: it calls {@link #approve}, and {@link #commit} refuses an unapproved plan. Boot recovery of a
+ * pending transaction is {@link #pendingRebuild}, not a third owner: it rebuilds the transaction and hands it back for
+ * the commit engine to apply.
  */
 public interface UpdateAttempt {
 	void approve();
@@ -28,7 +29,8 @@ public interface UpdateAttempt {
 	/** The config document this attempt's committed plan carries; refuses an attempt that has not committed. */
 	ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig();
 
-	static UpdateTransactionExecutor.Execution resume(ClientStorage storage, UpdateTransaction pending, ModpackLoaderService modpackLoader, String loaderType)
+	/** Rebuilds a pending transaction from current mutable inputs, refusing when the outcome no longer matches what was approved. */
+	static UpdateCommit.Built pendingRebuild(ClientStorage storage, UpdateTransaction pending, ModpackLoaderService modpackLoader, String loaderType)
 			throws IOException {
 		Objects.requireNonNull(storage, "storage");
 		Objects.requireNonNull(pending, "pending");
@@ -36,8 +38,8 @@ public interface UpdateAttempt {
 		Objects.requireNonNull(loaderType, "loader type");
 		try {
 			return switch (pending.purpose) {
-				case MODPACK_UPDATE -> UpdateSession.resume(storage, pending, modpackLoader, loaderType);
-				case MODPACK_REMOVAL, MODPACK_DEACTIVATION -> RemovalAttempt.resume(storage, pending, modpackLoader, loaderType);
+				case MODPACK_UPDATE -> UpdateSession.rebuildPending(storage, pending, modpackLoader, loaderType);
+				case MODPACK_REMOVAL, MODPACK_DEACTIVATION -> RemovalAttempt.rebuildPending(storage, pending, modpackLoader, loaderType);
 			};
 		} catch (IOException e) {
 			throw e;

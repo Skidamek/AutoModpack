@@ -26,7 +26,7 @@ class BootRecoveryTest {
 		BootRecovery.BootDecision decision = new BootRecovery(storage).recover();
 
 		assertNotNull(decision.clientConfig());
-		assertFalse(storage.hasSelectedModpack());
+		assertTrue(storage.selectedModpackId().isBlank());
 		assertFalse(decision.trustedBootstrapApply());
 		assertFalse(decision.rolledBackStuckUpdate());
 		assertFalse(Files.exists(guardFile));

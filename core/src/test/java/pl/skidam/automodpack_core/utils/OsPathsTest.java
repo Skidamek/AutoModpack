@@ -6,10 +6,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import pl.skidam.automodpack_core.storage.StoragePaths;
 
 class OsPathsTest {
 	@TempDir
@@ -68,5 +73,42 @@ class OsPathsTest {
 	void currentOsAcceptsAShortManagedPath() {
 		assertDoesNotThrow(() -> OsPaths.requirePublishableFile(tempDir.resolve("mods/example.jar")));
 		assertDoesNotThrow(() -> OsPaths.requirePublishableDirectory(tempDir.resolve("automodpack/client")));
+	}
+
+	@Test
+	void automodpackOwnedInstanceSuffixesFitClassicWindowsBudget() throws ReflectiveOperationException {
+		String issuePrefix = "C:\\Users\\USER1\\AppData\\Roaming\\PrismLauncher\\instances\\My Modded Server Season 1\\minecraft";
+		String longPrefix = "C:\\Users\\" + "u".repeat(20) + "\\AppData\\Roaming\\PrismLauncher\\instances\\" + "i".repeat(40) + "\\minecraft";
+		assertEquals(120, longPrefix.length());
+		List<Path> suffixes = automodpackOwnedInstanceSuffixes();
+		assertTrue(suffixes.size() > 20, "The declared layout is what is measured, not the list someone remembered");
+		for (String prefix : List.of(issuePrefix, longPrefix)) {
+			for (Path suffix : suffixes) {
+				String nativePath = prefix + "\\" + suffix.toString().replace('/', '\\');
+				int published = nativePath.length() + OsPaths.CONFIG_TEMP_OVERHEAD;
+				assertTrue(published <= OsPaths.WINDOWS_USABLE_PATH, nativePath + " publishes at " + published);
+			}
+		}
+	}
+
+	/**
+	 * Every {@link StoragePaths} constant, so a new path is measured the day it lands, plus the composite names the layout
+	 * derives per pack or per file: a hand-kept list only covers the paths someone remembered to add.
+	 */
+	private static List<Path> automodpackOwnedInstanceSuffixes() throws ReflectiveOperationException {
+		List<Path> suffixes = new ArrayList<>();
+		for (Field field : StoragePaths.class.getFields())
+			if (field.getType() == Path.class) suffixes.add((Path) field.get(null));
+		String pack = "abcdefg";
+		suffixes.add(StoragePaths.CLIENT_HISTORY_DIR.resolve(pack).resolve("journal.jsonl"));
+		suffixes.add(StoragePaths.CLIENT_HISTORY_DIR.resolve(pack).resolve("head.json"));
+		suffixes.add(StoragePaths.CLIENT_HISTORY_DIR.resolve(pack).resolve("compaction.json"));
+		suffixes.add(StoragePaths.CLIENT_OVERLAYS_DIR.resolve(pack + ".json"));
+		suffixes.add(StoragePaths.CLIENT_STATE_HISTORY_DIR.resolve("journal.jsonl"));
+		suffixes.add(StoragePaths.CLIENT_STATE_HISTORY_DIR.resolve("trees").resolve("0".repeat(40)));
+		suffixes.add(StoragePaths.CLIENT_IMPL_CACHE_DIR.resolve("1.21.11-neoforge.jar"));
+		suffixes.add(StoragePaths.SERVER_IMPL_CACHE_DIR.resolve("1.21.11-neoforge.jar"));
+		suffixes.add(StoragePaths.CLIENT_DATA_DIR.resolve("known-hosts.json"));
+		return suffixes;
 	}
 }

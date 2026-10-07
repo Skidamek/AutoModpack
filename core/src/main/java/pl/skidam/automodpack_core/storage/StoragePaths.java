@@ -16,6 +16,7 @@ public final class StoragePaths {
 	public static final Path CLIENT_DIR = AUTOMODPACK_DIR.resolve("client");
 	public static final Path CLIENT_OVERLAYS_DIR = CLIENT_DIR.resolve("overlays");
 	public static final Path CLIENT_GENERATED_COPIES_DIR = CLIENT_DIR.resolve("generated-copies");
+	public static final Path CLIENT_GENERATED_COPIES_FILE = CLIENT_DIR.resolve("generated-copies.json");
 	public static final Path CLIENT_ACTIVE_DIR = CLIENT_DIR.resolve("active");
 	public static final Path CLIENT_INCOMING_DIR = CLIENT_DIR.resolve("incoming");
 	public static final Path CLIENT_BACKUP_DIR = CLIENT_DIR.resolve("backup");

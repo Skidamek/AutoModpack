@@ -38,7 +38,7 @@ class ModpackUpdateCheckTest {
 				new Operation(Root.GAME_DIR, "config/durw/cache.db", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "config/durw/cache.db", true, hash, bytes.length),
 						new ProjectedFile(Root.GAME_DIR, "config/durw/cache.db", true, hash, bytes.length)));
-		assertTrue(UpdateTestFixtures.commit(storage, plan, target).success());
+		assertTrue(UpdateTestFixtures.commit(storage, plan, target) instanceof UpdateCommit.Applied);
 		ModpackJsons.ModpackContentFields serverContent = target.flatTarget();
 
 		// A running mod rewrites the game-dir copy between sessions; the join verdict must not see it as an update.

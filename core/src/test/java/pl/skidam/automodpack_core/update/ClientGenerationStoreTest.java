@@ -34,6 +34,7 @@ import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
@@ -200,7 +201,7 @@ class ClientGenerationStoreTest {
 
 	private static PackDocument republished(String modpackId, String hash, long size, Instant createdAt) {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "", "General", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
 		GroupManifest manifest = new GroupManifest(modpackId, "Test republished", "", "", "", "", new TreeMap<>(Map.of("main", group)));
 		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, null);
@@ -412,8 +413,9 @@ class ClientGenerationStoreTest {
 		assertTrue(Files.exists(storage.objectFile(first.policySha1())) && Files.exists(storage.objectFile(second.policySha1())) && Files.exists(storage.objectFile(third.policySha1())),
 				"every policy document stays");
 		assertTrue(Files.exists(storage.objectFile(overlayHash)), "overlay pins stay");
-		assertTrue(Files.exists(storage.generatedCopiesFile(FIRST_PACK, third.contentToken(), selectionDigest)), "kept generations keep their generated-copy state");
-		assertFalse(Files.exists(storage.generatedCopiesFile(FIRST_PACK, second.contentToken(), selectionDigest)), "trimmed generations lose their generated-copy state");
+		assertTrue(GeneratedCopyState.loadAll(storage).stream().anyMatch(state -> state.contentToken().equals(third.contentToken()) && state.selectionDigest().equals(selectionDigest)),
+				"kept generations keep their generated-copy state");
+		assertTrue(GeneratedCopyState.loadAll(storage).stream().noneMatch(state -> state.contentToken().equals(second.contentToken())), "trimmed generations lose their generated-copy state");
 		assertFalse(Files.exists(storage.objectFile(secondHash)), "a trimmed generation's content is reclaimed");
 		assertFalse(Files.exists(storage.objectFile(orphanHash)), "unreferenced objects are reclaimed too");
 		assertEquals(2, result.collection().deletedObjectCount());
@@ -527,7 +529,7 @@ class ClientGenerationStoreTest {
 
 	private static PackDocument document(String modpackId, String hash, long size, Instant createdAt) {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "", "General", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
 		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group)));
 		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, null);
@@ -535,7 +537,7 @@ class ClientGenerationStoreTest {
 
 	private static PackDocument document(String modpackId, String hash, long size, Instant createdAt, PackDocument parent) {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "", "General", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
 		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group)));
 		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, parent.ownershipLedger());

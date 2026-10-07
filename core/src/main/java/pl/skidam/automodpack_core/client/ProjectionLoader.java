@@ -9,9 +9,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -102,27 +100,38 @@ final class ProjectionLoader {
 			LOGGER.error("Failed to list standard mods directory", e);
 		}
 
-		Set<String> activeModPaths = Optional.ofNullable(storedTarget.get()).map(target -> target.list.stream()
-				.filter(item -> ModpackPathPolicy.isActiveMod(item.file, item.type)).map(item -> LogicalPath.normalize(item.file)).collect(Collectors.toSet())).orElseGet(Set::of);
+		Set<String> activeModPaths = new HashSet<>();
+		Set<String> editableActiveModPaths = new HashSet<>();
+		ModpackJsons.ModpackContentFields target = storedTarget.get();
+		if (target != null && target.list != null) for (var item : target.list) {
+			if (!ModpackPathPolicy.isActiveMod(item.file, item.type)) continue;
+			String path = LogicalPath.normalize(item.file);
+			activeModPaths.add(path);
+			if (item.editable) editableActiveModPaths.add(path);
+		}
 		List<String> pinnedModIds = clientConfig == null || clientConfig.pinnedModIds == null ? List.of() : clientConfig.pinnedModIds;
 		Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT).toAbsolutePath().normalize();
+		Set<String> liveModPaths = new HashSet<>();
 		List<ModpackLoadSelection.Jar> projectionJars = new ArrayList<>();
 		if (Files.isDirectory(activeModsDirectory, LinkOption.NOFOLLOW_LINKS)) {
 			try (Stream<Path> activeMods = Files.walk(activeModsDirectory)) {
 				for (Path path : activeMods.filter(JarUtils::isRegularJar).toList()) {
 					String relative = activeModLogicalPath(activeModsDirectory, path);
 					if (relative == null || !activeModPaths.contains(relative)) continue;
+					if (Files.isRegularFile(storage.gamePath(relative), LinkOption.NOFOLLOW_LINKS)) liveModPaths.add(relative);
 					Path jar = storage.activePath(relative);
 					String hash = cache.getHashOrNull(jar);
 					FileInspection.Mod inspected = modCache.getModOrNull(jar, cache);
-					projectionJars.add(new ModpackLoadSelection.Jar(jar, hash, inspected == null ? Set.of() : inspected.IDs()));
+					projectionJars.add(new ModpackLoadSelection.Jar(jar, relative, hash, editableActiveModPaths.contains(relative), inspected == null ? Set.of() : inspected.IDs()));
 				}
 			} catch (IOException e) {
 				LOGGER.error("Failed to list modpack mods directory", e);
 			}
 		}
 
-		List<Path> modpackMods = ModpackLoadSelection.select(projectionJars, liveHashes, liveJarIds, pinnedModIds);
+		List<Path> modpackMods = ModpackLoadSelection.select(projectionJars, liveModPaths, liveHashes, liveJarIds, pinnedModIds);
+		long editableMods = projectionJars.stream().filter(ModpackLoadSelection.Jar::editable).count();
+		if (editableMods > 0) LOGGER.info("{} editable mod(s) of this modpack load from the standard mods folder", editableMods);
 		Set<String> protectedIds = PinnedMods.protectedIds(pinnedModIds, liveJarIds);
 		for (ModpackLoadSelection.Jar jar : projectionJars) {
 			if (modpackMods.contains(jar.path())) continue;

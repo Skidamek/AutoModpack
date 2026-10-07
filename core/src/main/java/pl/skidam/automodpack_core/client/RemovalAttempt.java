@@ -18,10 +18,10 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.ReviewedUpdatePlan;
+import pl.skidam.automodpack_core.update.UpdateCommit;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
-import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 
 /** One player-reviewed removal or deactivation: prepare, review, commit. Restart is the updater's. */
 final class RemovalAttempt implements UpdateAttempt {
@@ -82,9 +82,9 @@ final class RemovalAttempt implements UpdateAttempt {
 		review.beginExecution();
 		boolean remove = kind == Kind.REMOVAL;
 		UpdatePreview applied = removalPreview(prepared, remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION);
-		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(storage).commit(transactionOf(prepared, kind, storage.overlayDigest(prepared.installed().modpackId)));
-		if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
-		if (!execution.success()) throw new IOException(remove ? "Modpack removal did not complete" : "Modpack deactivation did not complete");
+		UpdateCommit.Outcome outcome = new UpdateCommit(storage).run(new UpdateCommit.Fresh(() -> UpdateCommit.Built.of(transactionOf(prepared, kind, storage.overlayDigest(prepared.installed().modpackId))), null));
+		if (outcome instanceof UpdateCommit.ReplanRequired replan) throw new UpdateReplanRequiredException(replan.blockedPath(), replan.message());
+		if (!(outcome instanceof UpdateCommit.Applied)) throw new IOException(remove ? "Modpack removal did not complete" : "Modpack deactivation did not complete");
 		review.complete();
 		if (remove) {
 			try {
@@ -99,14 +99,15 @@ final class RemovalAttempt implements UpdateAttempt {
 		return applyResult;
 	}
 
-	static UpdateTransactionExecutor.Execution resume(ClientStorage storage, UpdateTransaction pending, ModpackLoaderService modpackLoader, String loaderType) throws Exception {
+	/** Rebuilds a pending removal from current mutable inputs, refusing when the approved outcome no longer holds; the commit engine applies what this returns. */
+	static UpdateCommit.Built rebuildPending(ClientStorage storage, UpdateTransaction pending, ModpackLoaderService modpackLoader, String loaderType) throws Exception {
 		ClientUpdatePlanBuilder builder = new ClientUpdatePlanBuilder(storage, modpackLoader, loaderType);
 		ClientUpdatePlanBuilder.RemovalPreparation preparation = builder.prepareRemoval();
 		Kind kind = pending.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL ? Kind.REMOVAL : Kind.DEACTIVATION;
 		UpdateTransaction transaction = transactionOf(preparation, kind, storage.overlayDigest(preparation.installed().modpackId));
 		if (!ReviewedUpdatePlan.outcomeCompatible(pending.plan(), preparation.plan()))
 			throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending removal outcome; a new review is required");
-		return UpdateTransactionSupport.executor(storage).commit(transaction);
+		return UpdateCommit.Built.of(transaction);
 	}
 
 	private static UpdateTransaction transactionOf(ClientUpdatePlanBuilder.RemovalPreparation preparation, Kind kind, String overlayDigest) {

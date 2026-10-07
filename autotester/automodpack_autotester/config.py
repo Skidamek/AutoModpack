@@ -41,6 +41,7 @@ CLIENT_GENERATION_STATE_PATHS = (
     "overlays",
     "baselines",
     "generated-copies",
+    "generated-copies.json",
     "active",
     "incoming",
     "backup",

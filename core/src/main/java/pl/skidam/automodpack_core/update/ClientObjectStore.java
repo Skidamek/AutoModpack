@@ -356,15 +356,8 @@ public final class ClientObjectStore {
 	}
 
 	private static void collectGeneratedCopies(ClientStorage storage, ExpectedSizes retained) throws IOException {
-		for (Path path : generatedCopyFiles(storage)) {
-			Path generationDirectory = path.getParent();
-			Path packDirectory = generationDirectory.getParent();
-			String modpackId = packDirectory.getFileName().toString();
-			String contentToken = generationDirectory.getFileName().toString();
-			String selectionDigest = path.getFileName().toString().substring(0, HashUtils.SHA1_HEX_LENGTH);
-			GeneratedCopyState state = GeneratedCopyState.read(storage, modpackId, contentToken, selectionDigest);
+		for (GeneratedCopyState state : GeneratedCopyState.loadAll(storage))
 			for (GeneratedCopyState.Entry entry : state.entries()) retained.optional(entry.sha1(), entry.size(), "generated-copy state");
-		}
 	}
 
 	private static void collectTransaction(ClientStorage storage, ExpectedSizes retained) throws IOException {
@@ -474,45 +467,6 @@ public final class ClientObjectStore {
 			}
 			return List.copyOf(result);
 		}
-	}
-
-	private static List<Path> generatedCopyFiles(ClientStorage storage) throws IOException {
-		Path root = storage.generatedCopiesDirectory();
-		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
-		FileTrees.requireDirectory(root, "client generated-copy state");
-		List<Path> result = new ArrayList<>();
-		try (Stream<Path> packs = Files.list(root)) {
-			for (Path pack : packs.toList()) {
-				FileTrees.requireNoSymbolicLink(pack, "client generated-copy state");
-				if (!Files.isDirectory(pack, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + pack);
-				requireModpackId(pack.getFileName().toString(), "client generated-copy directory");
-				try (Stream<Path> generations = Files.list(pack)) {
-					for (Path generation : generations.toList()) {
-						FileTrees.requireNoSymbolicLink(generation, "client generated-copy state");
-						if (!Files.isDirectory(generation, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + generation);
-						String contentToken = generation.getFileName().toString();
-						if (!HashUtils.isCanonicalSha1(contentToken))
-							throw new IOException("Client generated-copy directory is not canonical: " + contentToken);
-						try (Stream<Path> states = Files.list(generation)) {
-							for (Path state : states.toList()) {
-								FileTrees.requireNoSymbolicLink(state, "client generated-copy state");
-								String name = state.getFileName().toString();
-								if (name.endsWith(DurableFiles.TEMPORARY_SUFFIX) || name.contains(DurableFiles.CORRUPT_ASIDE_MARKER)) {
-									// A crash leftover or set-aside evidence never pins objects; loud, but never worth a boot.
-									LOGGER.warn("Skipping {} in the client generated-copy state", name);
-									continue;
-								}
-								if (!Files.isRegularFile(state, LinkOption.NOFOLLOW_LINKS) || name.length() != HashUtils.SHA1_HEX_LENGTH + ".json".length() || !name.endsWith(".json")
-										|| !HashUtils.isCanonicalSha1(name.substring(0, HashUtils.SHA1_HEX_LENGTH)))
-									throw new IOException("Client generated-copy state contains an unsupported entry: " + state);
-								result.add(state);
-							}
-						}
-					}
-				}
-			}
-		}
-		return List.copyOf(result);
 	}
 
 	private static ObjectStoreMaintenance.FileTotals fileTotals(List<Path> paths) throws IOException {
