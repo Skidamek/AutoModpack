@@ -21,8 +21,8 @@ public class ModpackJsons {
 		public static class ModpackGroupFields {
 			public String displayName = "";
 			public String description = "";
-			public boolean required;
-			public boolean defaultSelected;
+			public Boolean required;
+			public Boolean defaultSelected;
 			public Set<String> breaksWith = Set.of();
 			public Set<String> requires = Set.of();
 			public Set<String> compatiblePlatforms = Set.of();

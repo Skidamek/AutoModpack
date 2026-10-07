@@ -134,7 +134,7 @@ final class PackConfirmCopy {
 	}
 
 	static boolean canCustomize(GroupManifest manifest) {
-		return manifest.groups().values().stream().anyMatch(group -> !group.required());
+		return manifest.groups().values().stream().anyMatch(group -> !group.alwaysInstalled());
 	}
 
 	static Component leftoverLabel(int count) {

@@ -4,7 +4,7 @@
 
 ## Publishing
 
-- `generate` - Publishes a new generation when the content changed. Unchanged content publishes nothing.
+- `generate` - Publishes a new generation when the pack files or rules changed. A changed `waiting-music.ogg` is published too, even when the pack content is otherwise the same.
 - `generate notes <text...>` - Publishes a generation with patch notes.
 - `generate preview [notes <text...>]` - Builds the next generation and reports what would change, without publishing.
 - `generate if-content <content-token> [notes <text...>]` - Publishes only while the content still matches the given token, so a scripted publish cannot race a manual change.

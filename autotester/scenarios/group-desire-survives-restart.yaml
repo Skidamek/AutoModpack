@@ -118,12 +118,11 @@ topology:
           General:
             main:
               displayName: Core
-              required: true
-              defaultSelected: true
+              selection: REQUIRED
               from-server: ["/config/amp-group-base.txt"]
             optional:
               displayName: Optional Feature
-              defaultSelected: true
+              selection: RECOMMENDED
               from-server: ["/config/amp-group-optional.txt"]
 
 serverFiles:

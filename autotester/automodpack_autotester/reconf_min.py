@@ -1,6 +1,6 @@
 """Minimal reader for canonical reconf files (the subset automodpack writes):
-`key: value` members, `#` comments, nested braced blocks, inline arrays,
-quoted strings and bare scalars. Sufficient for config assertions; not a parser."""
+`key: value` members, `#` comments, nested braced blocks (`key {` and `key: {`),
+inline arrays, quoted strings and bare scalars. Sufficient for config assertions; not a parser."""
 
 import json
 
@@ -113,7 +113,11 @@ def read_reconf(path):
             continue
         key, separator, value = line.partition(":")
         if not separator:
-            raise ValueError(f"malformed reconf member: {raw!r}")
+            if line.endswith("{"):
+                key = line[:-1].strip()
+                value = "{"
+            else:
+                raise ValueError(f"malformed reconf member: {raw!r}")
         key = _scalar(key.strip())
         value = value.strip()
         if value == "{":

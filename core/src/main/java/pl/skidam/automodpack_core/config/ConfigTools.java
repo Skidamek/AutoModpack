@@ -403,7 +403,28 @@ public final class ConfigTools {
 		}
 	}
 
-	/** Refuses unknown enum names with a clear error instead of silently yielding null elements inside persisted state. */
+	/**
+	 * Matches one enum constant by name or {@code @SerializedName}, ignoring case but not membership; unknown names fail the parse. A human types configs by hand, so case never decides membership - it only forgives it.
+	 */
+	public static <E extends Enum<E>> E enumConstant(Class<E> type, String name) {
+		try {
+			return Enum.valueOf(type, name);
+		} catch (IllegalArgumentException exactMiss) {
+			for (E constant : type.getEnumConstants()) {
+				if (constant.name().equalsIgnoreCase(name)) return constant;
+				SerializedName serializedName = serializedAnnotation(type, constant.name());
+				if (serializedName != null && (serializedName.value().equalsIgnoreCase(name) || containsIgnoreCase(serializedName.alternate(), name))) return constant;
+			}
+			throw new ConfigParseException("Unknown " + type.getSimpleName() + " value '" + name + "'");
+		}
+	}
+
+	/**
+	 * One enum constant of a durable document, by exact name. A state document reading "holepunch" where it wrote
+	 * "HOLEPUNCH" is corrupt, and this adapter is the tripwire that says so: refusing loudly is the whole point, so it
+	 * refuses instead of guessing, and it reports the failure as the parse error it is rather than leaving every caller
+	 * to wrap an IllegalArgumentException.
+	 */
 	public static final class StrictEnumTypeAdapter implements JsonDeserializer<Enum<?>> {
 		@Override
 		@SuppressWarnings({"unchecked", "rawtypes"})
@@ -412,10 +433,31 @@ public final class ConfigTools {
 			String name = json.getAsString();
 			try {
 				return Enum.valueOf((Class<? extends Enum>) type, name);
-			} catch (IllegalArgumentException e) {
-				throw new JsonParseException("Unknown " + ((Class<?>) type).getSimpleName() + " value '" + name + "'", e);
+			} catch (IllegalArgumentException unknown) {
+				throw new JsonParseException("Unknown " + ((Class<?>) type).getSimpleName() + " value '" + name + "'", unknown);
 			}
 		}
+	}
+
+	/** A flag that must be a real boolean: Gson's lenient getAsBoolean reads "yes" as false, which would silently drop a setting the operator wrote. */
+	public static boolean strictBoolean(JsonObject json, String key, String context) {
+		JsonElement element = json.get(key);
+		if (element == null) return false;
+		if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isBoolean()) throw new ConfigParseException(context + " must have a boolean '" + key + "', got " + element);
+		return element.getAsBoolean();
+	}
+
+	private static SerializedName serializedAnnotation(Class<?> type, String constantName) {
+		try {
+			return type.getField(constantName).getAnnotation(SerializedName.class);
+		} catch (NoSuchFieldException e) {
+			return null;
+		}
+	}
+
+	private static boolean containsIgnoreCase(String[] values, String name) {
+		for (String value : values) if (value.equalsIgnoreCase(name)) return true;
+		return false;
 	}
 
 	public static class ConfigException extends RuntimeException {

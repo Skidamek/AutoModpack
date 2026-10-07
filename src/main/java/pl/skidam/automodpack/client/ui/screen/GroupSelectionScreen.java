@@ -243,7 +243,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 	}
 
 	private boolean canToggle(String groupId, GroupManifest.Group group) {
-		if (group.required()) return false;
+		if (group.alwaysInstalled()) return false;
 		GroupResolution explanation = resolution.resolution(groupId);
 		if (explanation == null) return group.supports(effectivePlatform());
 		if (explanation.selected() && (resolution.requiredGroups().contains(groupId) || resolution.forcedGroups().contains(groupId)
@@ -276,7 +276,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 	private void toggle(String groupId) {
 		GroupManifest.Group group = groups.get(groupId);
 		if (group == null) return;
-		if (group.required()) return;
+		if (group.alwaysInstalled()) return;
 		SelectionIntent previous = currentIntent();
 		SelectionIntent next = GroupSelectionResolver.prefer(manifest, previous, groupId, effectivePlatform()).withPlatform(override());
 		Set<String> preferred = resolution.selectedGroups().contains(groupId) ? Set.of() : Set.of(groupId);
@@ -324,7 +324,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 
 	private Set<String> categoryGroups(String category) {
 		Set<String> result = new TreeSet<>();
-		for (var entry : groups.entrySet()) if (category.equals(entry.getValue().category()) && !entry.getValue().required() && entry.getValue().supports(effectivePlatform())) result.add(entry.getKey());
+		for (var entry : groups.entrySet()) if (category.equals(entry.getValue().category()) && !entry.getValue().alwaysInstalled() && entry.getValue().supports(effectivePlatform())) result.add(entry.getKey());
 		return Set.copyOf(result);
 	}
 
@@ -415,11 +415,11 @@ public class GroupSelectionScreen extends VersionedScreen {
 	}
 
 	private long optionalGroupCount(String category) {
-		return groups.values().stream().filter(group -> category.equals(group.category()) && !group.required()).count();
+		return groups.values().stream().filter(group -> category.equals(group.category()) && !group.alwaysInstalled()).count();
 	}
 
 	private long selectedOptionalGroupCount(String category) {
-		return groups.entrySet().stream().filter(entry -> category.equals(entry.getValue().category()) && !entry.getValue().required() && resolution.selectedGroups().contains(entry.getKey())).count();
+		return groups.entrySet().stream().filter(entry -> category.equals(entry.getValue().category()) && !entry.getValue().alwaysInstalled() && resolution.selectedGroups().contains(entry.getKey())).count();
 	}
 
 	/** The group's metadata and the resolver explanation, shown on hover. */
@@ -435,8 +435,8 @@ public class GroupSelectionScreen extends VersionedScreen {
 		if (explanation != null) appendTooltipLine(tooltip, resolutionText(explanation));
 		appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.category", group.category()));
 		// The resolution text already carries "Required: always included" whenever it exists; only fall back to it here.
-		if (group.required() && explanation == null) appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.requiredAlways"));
-		if (group.defaultSelected()) appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.defaultSelected"));
+		if (group.alwaysInstalled() && explanation == null) appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.requiredAlways"));
+		if (group.arrivesSelected()) appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.defaultSelected"));
 		if (resolution.forcedGroups().contains(groupId)) appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.forced"));
 		if (!group.requires().isEmpty()) appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.requires", names(group.requires())));
 		if (!group.breaksWith().isEmpty()) appendTooltipLine(tooltip, VersionedText.str("automodpack.selection.conflicts", names(group.breaksWith())));
@@ -487,7 +487,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 
 	/** The color is the load-bearing row state; the wording lives in the status word and the hover tooltip. */
 	private ChatFormatting rowColor(String groupId, GroupManifest.Group group, GroupResolution explanation) {
-		if (group.required()) return ChatFormatting.GRAY;
+		if (group.alwaysInstalled()) return ChatFormatting.GRAY;
 		if (explanation != null && (explanation.reasons().contains(GroupResolution.Reason.EXPLICIT_REQUEST_UNAVAILABLE) || explanation.status() == GroupResolution.Status.UNAVAILABLE
 				|| explanation.status() == GroupResolution.Status.BLOCKED || explanation.status() == GroupResolution.Status.CONFLICT))
 			return ChatFormatting.RED;
@@ -499,7 +499,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 			return ChatFormatting.AQUA;
 		}
 		if (resolution.forcedGroups().contains(groupId)) return ChatFormatting.AQUA;
-		return group.defaultSelected() ? ChatFormatting.YELLOW : ChatFormatting.GRAY;
+		return group.arrivesSelected() ? ChatFormatting.YELLOW : ChatFormatting.GRAY;
 	}
 
 	/** The row's state word in the surviving status keys; statuses whose explanation is a full sentence stay hover-only. */
@@ -555,7 +555,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 	}
 
 	private boolean hasOptionalCategoryGroups(String category) {
-		return groups.values().stream().anyMatch(group -> category.equals(group.category()) && !group.required());
+		return groups.values().stream().anyMatch(group -> category.equals(group.category()) && !group.alwaysInstalled());
 	}
 
 	private SelectionIntent currentIntent() {

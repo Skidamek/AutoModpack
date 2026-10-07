@@ -218,6 +218,47 @@ def _v_launch_server(ctx: Context, step):
     _launch_server(ctx)
 
 
+@verb("write_server_conf")
+def _v_write_server_conf(ctx: Context, step):
+    """Stage an explicit server.conf before boot; its presence makes the staged JSON predecessor inert."""
+    conf_dir = ctx.server_dir / "automodpack"
+    conf_dir.mkdir(parents=True, exist_ok=True)
+    (conf_dir / "server.conf").write_text(str(step.get("content", "")), encoding="utf-8")
+
+
+@verb("assert_server_conf")
+def _v_assert_server_conf(ctx: Context, step):
+    """Assert the live server.conf: dotted-path expectations, absent paths, and raw substrings."""
+    path = ctx.server_dir / "automodpack" / "server.conf"
+    try:
+        config = reconf_min.read_config(path)
+        text = path.read_text(encoding="utf-8")
+    except (OSError, ValueError) as error:
+        raise RuntimeError(f"server.conf is not readable at {path}: {error}") from error
+
+    def walk(dotted):
+        node = config
+        for segment in str(dotted).split("."):
+            if not isinstance(node, dict) or segment not in node:
+                return None, False
+            node = node[segment]
+        return node, True
+
+    for dotted, expected in (step.get("expect") or {}).items():
+        actual, present = walk(dotted)
+        if not present:
+            raise RuntimeError(f"server.conf has no value at {dotted}; actual file:\n{text}")
+        if actual != expected:
+            raise RuntimeError(f"server.conf at {dotted}: expected {expected!r}, got {actual!r}; actual file:\n{text}")
+    for dotted in step.get("absent") or []:
+        _, present = walk(dotted)
+        if present:
+            raise RuntimeError(f"server.conf still has {dotted}; actual file:\n{text}")
+    for needle in step.get("textContains") or []:
+        if str(needle) not in text:
+            raise RuntimeError(f"server.conf is missing {needle!r}; actual file:\n{text}")
+
+
 @verb("wait_server")
 def _v_wait_server(ctx: Context, step):
     to = ctx.scenario.get("timeouts", {}) or ctx.settings.get("timeouts", {})

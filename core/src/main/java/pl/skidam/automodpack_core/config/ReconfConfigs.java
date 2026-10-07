@@ -50,7 +50,8 @@ import pl.skidam.reconf.Value;
  *
  * <p>
  * A field annotated with {@link Comment} gets its comment emitted on fresh generation and is materialized by
- * {@code ensure} (with that comment) when an existing file lacks it.
+ * {@code ensure} (with that comment) when an existing file lacks it. Comments document a field; they never carry it,
+ * so the {@link ConfMigration} repairs write their own values into the document.
  */
 public final class ReconfConfigs {
 	private ReconfConfigs() {}
@@ -64,7 +65,10 @@ public final class ReconfConfigs {
 
 	private static final String BANNER = "AutoModpack configuration. Docs: https://moddedmc.wiki/en/project/automodpack/docs";
 
-	/** Reads one human config; empty when neither it nor a JSON predecessor exists, {@link ConfigTools.ConfigParseException} with position when it is corrupt. */
+	/**
+	 * Reads one human config; empty when neither it nor a JSON predecessor exists, {@link ConfigTools.ConfigParseException} with position when it is corrupt. Reading a canonical file never writes, so a read-only config
+	 * directory still loads; only the one-shot JSON to conf conversion writes, because the canonical file it produces is what the next read serves.
+	 */
 	public static <T> Optional<T> read(Path path, Class<T> type) {
 		if (Files.isRegularFile(path)) return Optional.of(readConf(path, type));
 		Path jsonSource = firstJsonSource(path);
@@ -83,9 +87,11 @@ public final class ReconfConfigs {
 
 	/**
 	 * Saves by reconciliation: the current document (kept byte-exact outside edited spans) is reconciled with the
-	 * model, missing {@link Comment} fields are ensured, and the result is written atomically. A corrupt existing
-	 * file fails this save loudly instead of being overwritten - the user's file cannot be reconciled and silently
-	 * regenerating it would hide the defect.
+	 * model, the {@link ConfMigration} repairs converge the file's superseded keys, missing {@link Comment} fields are
+	 * ensured, and the result is written atomically. This is where a repaired read finally lands on disk, so the
+	 * repairs of one type and the read that translated them can never disagree. A corrupt existing file fails this
+	 * save loudly instead of being overwritten - the user's file cannot be reconciled and silently regenerating it
+	 * would hide the defect.
 	 */
 	public static <T> void save(Path path, T model, Class<T> type, Supplier<T> defaults) throws IOException {
 		Document document;
@@ -104,8 +110,9 @@ public final class ReconfConfigs {
 		Value.Obj tree = modelTree(model);
 		document.reconcile(tree);
 		setArrays(document, tree, document.tree(), ConfigPath.root());
+		for (ConfMigration migration : ConfMigration.applicableTo(type)) migration.repair(document, path);
 		ensureDeclared(document, type, defaults.get());
-		ensureGroupListComments(document, model);
+		ensureNestedComments(document, type, model);
 		OsPaths.requirePublishableConfig(path);
 		DurableFiles.writeAtomic(path, document.text());
 	}
@@ -150,7 +157,10 @@ public final class ReconfConfigs {
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Failed to read configuration " + path.toAbsolutePath().normalize(), e);
 		}
-		String json = parseJson(path, bytes);
+		Document document = parseDocument(path, bytes);
+		JsonObject tree = toJsonObject(document.tree());
+		for (ConfMigration migration : ConfMigration.applicableTo(type)) migration.forRead(tree);
+		String json = ConfigTools.GSON.toJson(tree);
 		List<String> unknown = ConfigTools.unknownKeys(json, type);
 		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
 		return ConfigTools.parse(json, type);
@@ -234,7 +244,7 @@ public final class ReconfConfigs {
 			if (comment != null) byKey.put(serializedName(field), comment.value());
 		}
 		Document document = Reconf.parse(Reconf.canonical(root, Comments.of(BANNER, byKey))).document();
-		ensureGroupListComments(document, model);
+		ensureNestedComments(document, type, model);
 		return document;
 	}
 
@@ -252,29 +262,26 @@ public final class ReconfConfigs {
 		}
 	}
 
-	private static void ensureGroupListComments(Document document, Object model) {
-		if (!(model instanceof ServerConfigJsons.ServerConfigFieldsV3 server) || server.modpack == null || server.modpack.categories == null) return;
-		for (var category : server.modpack.categories.entrySet()) {
-			if (category.getValue() == null) continue;
-			for (var group : category.getValue().entrySet()) {
-				ServerConfigJsons.GroupDeclaration declaration = group.getValue();
-				if (declaration == null) continue;
-				ensureGroupList(document, ConfigPath.of("modpack", category.getKey(), group.getKey()), declaration);
-			}
-		}
+	/**
+	 * Documents the {@link Comment} fields of every object the model nests under a dynamic path, the ones
+	 * {@link #ensureDeclared} cannot reach because its paths are not known from the type alone.
+	 */
+	private static void ensureNestedComments(Document document, Class<?> type, Object model) {
+		for (ConfMigration migration : ConfMigration.applicableTo(type))
+			for (ConfMigration.Shape shape : migration.nestedShapes(model)) ensureComments(document, shape.path(), shape.value());
 	}
 
-	private static void ensureGroupList(Document document, ConfigPath groupPath, ServerConfigJsons.GroupDeclaration declaration) {
-		for (Field field : ServerConfigJsons.GroupDeclaration.class.getDeclaredFields()) {
+	/** Ensures one nested object's declared {@link Comment} fields, materializing with their default and comment. */
+	private static void ensureComments(Document document, ConfigPath objectPath, Object value) {
+		for (Field field : value.getClass().getDeclaredFields()) {
 			Comment comment = field.getAnnotation(Comment.class);
 			if (comment == null) continue;
 			try {
-				Value value = toJsonValue(ConfigTools.GSON.toJsonTree(field.get(declaration)));
-				ConfigPath path = groupPath.appended(serializedName(field));
-				document.ensure(path, value, comment.value());
+				ConfigPath path = objectPath.appended(serializedName(field));
+				document.ensure(path, toJsonValue(ConfigTools.GSON.toJsonTree(field.get(value))), comment.value());
 				if (document.attachedComment(path).isEmpty()) document.setComment(path, comment.value());
 			} catch (IllegalAccessException e) {
-				throw new ConfigTools.ConfigException("Cannot read group list " + field.getName(), e);
+				throw new ConfigTools.ConfigException("Cannot read the default of config field " + field.getName(), e);
 			}
 		}
 	}
@@ -300,21 +307,19 @@ public final class ReconfConfigs {
 		return (Value.Obj) toJsonValue(object);
 	}
 
-	/** The reconf document as Gson-model JSON: the string path of {@link ConfigTools} (strict stream reader) does the binding. */
-	private static String parseJson(Path path, byte[] bytes) {
+	private static Document parseDocument(Path path, byte[] bytes) {
 		ParseResult result = Reconf.parse(bytes);
 		if (!result.isOk()) {
 			ParseError error = result.error();
 			throw new ConfigTools.ConfigParseException("Invalid configuration " + path.getFileName() + " at line " + error.line() + ":" + error.column() + " ("
 					+ error.kind() + "): " + error.message());
 		}
-		Value tree = result.document().tree();
-		return ConfigTools.GSON.toJson(toJsonObject((Value.Obj) tree));
+		return result.document();
 	}
 
 	// The bridge (RECONF-SPEC §13): reconf tree <-> Gson tree. Numbers travel as their exact literal text in both directions.
 
-	static JsonElement toJsonObject(Value.Obj obj) {
+	static JsonObject toJsonObject(Value.Obj obj) {
 		JsonObject out = new JsonObject();
 		for (var entry : obj.members.entrySet()) out.add(entry.getKey(), toJsonElement(entry.getValue()));
 		return out;

@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.config;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ServerConfigJsons.ServerConfigFieldsV3;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 
 /** The reconf-backed human-config store: kebab keys, reconcile saves, comment convergence, loud corruption. */
 class ReconfConfigsTest {
@@ -35,6 +37,9 @@ class ReconfConfigsTest {
 		assertTrue(text.contains("exclude: [**/.*, **/.*/**, \"**/*.{tmp,disabled,bak}\", kubejs/server_scripts/**]"), text);
 		assertTrue(text.contains("# extra paths from the server root"), text);
 		assertTrue(text.contains("name: \"\""), text);
+		assertTrue(text.contains("# REQUIRED is always installed. RECOMMENDED is pre-selected, players can opt out. OPTIONAL starts unchecked."), text);
+		assertTrue(text.contains("selection: REQUIRED"), text);
+		assertFalse(text.contains("default-selected"), text);
 		assertEquals("", config.modpack.name);
 	}
 
@@ -160,5 +165,79 @@ class ReconfConfigsTest {
 		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
 		assertEquals("Pack", config.modpack.name);
 		assertEquals(Set.of("mods/*.jar"), config.modpack.categories.get("General").get("main").fromServer);
+	}
+
+	@Test
+	void legacyGroupSelectionFlagsReadAsSelectionWithoutTouchingTheFile() throws IOException {
+		String legacy = """
+				# keep this comment
+				modpack {
+				  name: "Pack"
+				  General {
+				    main {
+				      required: true
+				      default-selected: true
+				    }
+				    extras {
+				      default-selected: true
+				    }
+				  }
+				}
+				""";
+		Files.writeString(serverConfig(), legacy, StandardCharsets.UTF_8);
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		assertEquals(GroupSelectionMode.REQUIRED, config.modpack.categories.get("General").get("main").selection);
+		assertEquals(GroupSelectionMode.RECOMMENDED, config.modpack.categories.get("General").get("extras").selection);
+		// A read never writes: a read-only config directory must load the same way this one does.
+		assertEquals(legacy, Files.readString(serverConfig(), StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void theNextSaveConvergesTheLegacyFlagsOntoSelection() throws IOException {
+		String legacy = """
+				# keep this comment
+				modpack {
+				  name: "Pack"
+				  General {
+				    main {
+				      required: true
+				      default-selected: true
+				    }
+				    extras {
+				      default-selected: true
+				    }
+				    handpicked {
+				      selection: OPTIONAL
+				      required: true
+				    }
+				  }
+				}
+				""";
+		Files.writeString(serverConfig(), legacy, StandardCharsets.UTF_8);
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		ReconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
+		assertTrue(text.contains("# keep this comment"), text);
+		assertTrue(text.contains("selection: REQUIRED"), text);
+		assertTrue(text.contains("selection: RECOMMENDED"), text);
+		assertFalse(text.contains("required"), text);
+		assertFalse(text.contains("default-selected"), text);
+		// The operator's own selection is the one that wins; the legacy pair beside it only leaves the file.
+		assertEquals(GroupSelectionMode.OPTIONAL, ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow().modpack.categories.get("General").get("handpicked").selection);
+
+		byte[] once = Files.readAllBytes(serverConfig());
+		ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class);
+		assertArrayEquals(once, Files.readAllBytes(serverConfig()));
+		ReconfConfigs.save(serverConfig(), ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow(), ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		assertArrayEquals(once, Files.readAllBytes(serverConfig()));
+	}
+
+	@Test
+	void nonBooleanLegacyGroupFlagFailsLoudly() throws IOException {
+		String bad = "modpack { General { main { required: \"yes\" } } }\n";
+		Files.writeString(serverConfig(), bad, StandardCharsets.UTF_8);
+		ConfigTools.ConfigParseException error = assertThrows(ConfigTools.ConfigParseException.class, () -> ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class));
+		assertTrue(error.getMessage().contains("required"), error.getMessage());
+		assertEquals(bad, Files.readString(serverConfig(), StandardCharsets.UTF_8));
 	}
 }

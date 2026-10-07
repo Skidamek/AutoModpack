@@ -11,7 +11,6 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ScreenImpl;
-import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
@@ -32,8 +31,6 @@ public class ErrorScreen extends VersionedScreen {
 		super(VersionedText.text("automodpack.error.title"));
 		this.parent = parent;
 		this.request = request;
-
-		if (AudioManager.isMusicPlaying()) AudioManager.stopMusic();
 	}
 
 	@Override

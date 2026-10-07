@@ -174,6 +174,8 @@ class NettyServerObjectResolutionTest {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.required = false;
+		group.defaultSelected = false;
 		group.description = description;
 		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(bytes.length), "config", false, hash, null));
 		fields.categories = Map.of("General", Map.of("main", group));

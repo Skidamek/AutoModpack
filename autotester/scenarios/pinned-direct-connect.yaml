@@ -57,8 +57,7 @@ topology:
             main:
               displayName: Core
               description: Required core files
-              required: true
-              defaultSelected: true
+              selection: REQUIRED
               from-server: ["/config/amp-autotest-marker.json", "/config/amp-autotest-pinned.txt"]
 
 serverFiles:

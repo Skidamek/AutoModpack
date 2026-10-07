@@ -1,0 +1,58 @@
+id: group-selection-migration
+description: |
+  An rc.1 server.conf declares group selection as the boolean pair `required`
+  and `default-selected`. Booting such a server must migrate every group to the
+  single `selection` key on disk, keep the admin's own comments, read the
+  migrated values, and publish the pack a joining client installs. A required
+  main group stays forced through the install; a default-selected extra group
+  stays part of the default selection.
+renderClient: true
+
+flow:
+  - do: write_server_conf
+    name: stage an rc.1 server.conf with the legacy group flags
+    content: |
+      # keep this comment
+      modpack {
+        name: "Group Selection Migration"
+        General {
+          main {
+            required: true
+            default-selected: true
+          }
+          extras {
+            default-selected: true
+          }
+        }
+      }
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - do: assert_server_conf
+    name: verify the conf migrated to the selection key on disk
+    expect:
+      modpack.General.main.selection: REQUIRED
+      modpack.General.extras.selection: RECOMMENDED
+    absent:
+      - modpack.General.main.required
+      - modpack.General.main.default-selected
+      - modpack.General.extras.default-selected
+    textContains:
+      - "# keep this comment"
+  - do: verify_files
+    name: verify all synced files landed on the client
+  - do: quit
+    name: quit the client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+
+serverFiles:
+  modpackName: Group Selection Migration
+  marker: config/amp-selection-migration-marker.json
+  files:
+    - path: config/amp-selection-migrated.txt
+      content: "migrated pack content\n"

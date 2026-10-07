@@ -18,7 +18,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 /*?}*/
 
 /** One ObjectSelectionList of already-wrapped text lines for a pinned-title / pinned-footer dialog body. */
-public final class TextScrollWidget extends ChromelessList<TextScrollWidget.Entry> implements RowViewport {
+public final class TextScrollWidget extends UniformList<TextScrollWidget.Entry> implements RowViewport {
 	private final boolean center;
 
 	public TextScrollWidget(Minecraft client, int width, int height, int contentWidth, int top, int bottom, List<? extends Component> lines, boolean center) {

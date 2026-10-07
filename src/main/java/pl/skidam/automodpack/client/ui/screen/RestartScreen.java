@@ -8,7 +8,6 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ScreenImpl;
-import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.ChangeSummary;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
@@ -35,8 +34,6 @@ public class RestartScreen extends VersionedScreen {
 		super(VersionedText.text("automodpack.restart.title"));
 		this.updateType = updateType;
 		this.changelogs = changelogs;
-
-		if (AudioManager.isMusicPlaying()) AudioManager.stopMusic();
 	}
 
 	@Override

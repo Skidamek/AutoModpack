@@ -15,6 +15,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 /** One-shot JSON → current human model. Used only when the canonical {@code .conf} is missing. */
@@ -140,10 +141,10 @@ public final class HumanConfigMigration {
 		for (var entry : json.entrySet()) {
 			if (entry.getKey().equals("name") || !entry.getValue().isJsonObject()) continue;
 			JsonObject object = entry.getValue().getAsJsonObject();
-			if (looksLikeGroup(object)) flat.put(entry.getKey(), mapGroup(object));
+			if (looksLikeGroup(object)) flat.put(entry.getKey(), mapGroup(object, entry.getKey()));
 			else {
 				Map<String, ServerConfigJsons.GroupDeclaration> groups = new LinkedHashMap<>();
-				for (var group : object.entrySet()) if (group.getValue().isJsonObject()) groups.put(group.getKey(), mapGroup(group.getValue().getAsJsonObject()));
+				for (var group : object.entrySet()) if (group.getValue().isJsonObject()) groups.put(group.getKey(), mapGroup(group.getValue().getAsJsonObject(), group.getKey()));
 				if (!groups.isEmpty()) categories.put(entry.getKey(), groups);
 			}
 		}
@@ -163,18 +164,19 @@ public final class HumanConfigMigration {
 	private static boolean looksLikeGroup(JsonObject object) {
 		return object.has("from-server") || object.has("fromServer") || object.has("syncedFiles") || object.has("exclude") || object.has("excludedFiles")
 				|| object.has("editable") || object.has("allowEditsInFiles") || object.has("displayName") || object.has("display-name") || object.has("required")
-				|| object.has("defaultSelected") || object.has("default-selected") || object.has("breaksWith") || object.has("breaks-with") || object.has("requires")
-				|| object.has("compatiblePlatforms") || object.has("compatible-platforms") || object.has("description");
+				|| object.has("defaultSelected") || object.has("default-selected") || object.has("selection") || object.has("breaksWith") || object.has("breaks-with")
+				|| object.has("requires") || object.has("compatiblePlatforms") || object.has("compatible-platforms") || object.has("description");
 	}
 
-	private static ServerConfigJsons.GroupDeclaration mapGroup(JsonObject json) {
+	private static ServerConfigJsons.GroupDeclaration mapGroup(JsonObject json, String groupId) {
 		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
 		String displayName = string(first(json, "displayName", "display-name"));
 		if (displayName != null) group.displayName = displayName;
 		String description = string(json.get("description"));
 		if (description != null) group.description = description;
-		if (json.has("required")) group.required = json.get("required").getAsBoolean();
-		if (json.has("defaultSelected") || json.has("default-selected")) group.defaultSelected = first(json, "defaultSelected", "default-selected").getAsBoolean();
+		// The selection key wins; the flag pair it replaced is read by the same rule the reconf repair applies.
+		if (json.has("selection")) group.selection = selectionEnum(json.get("selection"));
+		else if (json.has("required") || json.has("defaultSelected") || json.has("default-selected")) group.selection = GroupSelectionMigration.fromLegacyPair(json, "Group '" + groupId + "'");
 		List<String> breaksWith = stringList(first(json, "breaksWith", "breaks-with"));
 		if (breaksWith != null) group.breaksWith = new LinkedHashSet<>(breaksWith);
 		List<String> requires = stringList(json.get("requires"));
@@ -190,13 +192,18 @@ public final class HumanConfigMigration {
 		return group;
 	}
 
+	/** The selection key must be a string naming a mode - Gson would otherwise hand a null or an object to a raw runtime exception instead of the parse failure. */
+	private static GroupSelectionMode selectionEnum(JsonElement element) {
+		if (!element.isJsonPrimitive()) throw new ConfigTools.ConfigParseException("Group selection must be a string value, got " + element);
+		return ConfigTools.enumConstant(GroupSelectionMode.class, element.getAsString());
+	}
+
 	private static ServerConfigJsons.GroupDeclaration mainGroup(ServerConfigJsons.ServerConfigFieldsV3 config) {
 		ServerConfigJsons.GroupDeclaration main = config.modpack.categories.computeIfAbsent("General", ignored -> new LinkedHashMap<>()).computeIfAbsent("main", ignored -> new ServerConfigJsons.GroupDeclaration());
 		// v4 had no groups, so the migrated core group takes the factory declaration's required flags: a
 		// deselectable main group would let players join a migrated server with none of its content.
 		main.description = "Core modpack files";
-		main.required = true;
-		main.defaultSelected = true;
+		main.selection = GroupSelectionMode.REQUIRED;
 		return main;
 	}
 
@@ -217,11 +224,7 @@ public final class HumanConfigMigration {
 		if (element == null || !element.isJsonPrimitive()) return null;
 		String raw = element.getAsString();
 		if ("DIRECT".equals(raw)) return ModpackConnectionMode.HTTP;
-		try {
-			return ModpackConnectionMode.valueOf(raw);
-		} catch (IllegalArgumentException e) {
-			throw new ConfigTools.ConfigParseException("Unknown connection-mode value '" + raw + "'");
-		}
+		return ConfigTools.enumConstant(ModpackConnectionMode.class, raw);
 	}
 
 	private static void copyBoolean(JsonObject json, ClientConfigJsons.ClientConfigFieldsV3 config, String... names) {

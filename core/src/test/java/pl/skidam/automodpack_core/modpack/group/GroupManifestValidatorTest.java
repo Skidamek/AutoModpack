@@ -41,6 +41,17 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
+	void rejectsMissingSelectionFlags() {
+		var fields = catalogue();
+		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.files = Map.of("mods/example.jar", file("a"));
+		fields.categories = oneCategory("main", group);
+
+		GroupValidationException failure = assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+		assertTrue(failure.getMessage().contains("missing its selection flags"));
+	}
+
+	@Test
 	void rejectsEmptyCategory() {
 		var fields = catalogue();
 		fields.categories = linkedCategories("General", linkedGroups("main", group(file("a"))), "Empty", linkedGroups());
@@ -427,6 +438,8 @@ class GroupManifestValidatorTest {
 
 	private static ModpackJsons.CompleteModpackContentFields.ModpackGroupFields groupAt(String path, ModpackJsons.CompleteModpackContentFields.GroupFileFields file) {
 		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.required = false;
+		group.defaultSelected = false;
 		group.files = Map.of(path, file);
 		return group;
 	}

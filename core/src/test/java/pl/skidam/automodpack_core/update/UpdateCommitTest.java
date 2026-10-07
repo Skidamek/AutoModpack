@@ -1159,6 +1159,7 @@ class UpdateCommitTest {
 		fields.modpackName = "Test";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.required = true;
+		group.defaultSelected = true;
 		group.files = Map.of(pathA, file(pathA, hashA, sizeA), pathB, file(pathB, hashB, sizeB));
 		fields.categories = Map.of("General", Map.of("main", group));
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));

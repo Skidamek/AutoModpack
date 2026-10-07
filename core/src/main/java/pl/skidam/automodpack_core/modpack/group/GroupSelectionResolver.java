@@ -10,7 +10,7 @@ public final class GroupSelectionResolver {
 		Set<String> requestedGroups = new TreeSet<>();
 		for (var entry : manifest.groups().entrySet()) {
 			GroupManifest.Group group = entry.getValue();
-			if (group.defaultSelected() && !group.required()) requestedGroups.add(entry.getKey());
+			if (group.selection() == GroupSelectionMode.RECOMMENDED) requestedGroups.add(entry.getKey());
 		}
 		return new SelectionIntent(requestedGroups);
 	}
@@ -33,11 +33,11 @@ public final class GroupSelectionResolver {
 		for (String groupId : state.requiredGroups) state.resolveRoot(groupId, Source.REQUIRED, true);
 		for (String category : intent.requestedCategories()) for (var entry : manifest.groups().entrySet()) {
 			GroupManifest.Group group = entry.getValue();
-			if (category.equals(group.category()) && !group.required() && group.supports(platform)) state.resolveRoot(entry.getKey(), Source.EXPLICIT, false);
+			if (category.equals(group.category()) && !group.alwaysInstalled() && group.supports(platform)) state.resolveRoot(entry.getKey(), Source.EXPLICIT, false);
 		}
 		for (String groupId : intent.requestedGroups()) if (manifest.groups().containsKey(groupId)) {
 			GroupManifest.Group group = manifest.groups().get(groupId);
-			state.resolveRoot(groupId, defaultSelection && group.defaultSelected() ? Source.DEFAULT_SELECTED : Source.EXPLICIT, false);
+			state.resolveRoot(groupId, defaultSelection && group.arrivesSelected() ? Source.DEFAULT_SELECTED : Source.EXPLICIT, false);
 		}
 
 		state.checkConflicts();
@@ -57,7 +57,7 @@ public final class GroupSelectionResolver {
 		if (clickedGroup != null && requestedCategories.remove(clickedGroup.category())) {
 			for (var entry : manifest.groups().entrySet()) {
 				GroupManifest.Group group = entry.getValue();
-				if (clickedGroup.category().equals(group.category()) && !group.required() && group.supports(platform)) requestedGroups.add(entry.getKey());
+				if (clickedGroup.category().equals(group.category()) && !group.alwaysInstalled() && group.supports(platform)) requestedGroups.add(entry.getKey());
 			}
 		}
 		if (!requestedGroups.add(clicked)) requestedGroups.remove(clicked);
@@ -95,7 +95,7 @@ public final class GroupSelectionResolver {
 
 	private static Set<String> categoryGroups(GroupManifest manifest, String category, ClientPlatform platform) {
 		Set<String> categoryGroups = new TreeSet<>();
-		for (var entry : manifest.groups().entrySet()) if (category.equals(entry.getValue().category()) && !entry.getValue().required() && entry.getValue().supports(platform)) categoryGroups.add(entry.getKey());
+		for (var entry : manifest.groups().entrySet()) if (category.equals(entry.getValue().category()) && !entry.getValue().alwaysInstalled() && entry.getValue().supports(platform)) categoryGroups.add(entry.getKey());
 		return categoryGroups;
 	}
 
@@ -137,7 +137,7 @@ public final class GroupSelectionResolver {
 			requestedCategories.remove(category);
 			for (var entry : manifest.groups().entrySet()) {
 				GroupManifest.Group group = entry.getValue();
-				if (!category.equals(group.category()) || group.required() || !group.supports(platform)) continue;
+				if (!category.equals(group.category()) || group.alwaysInstalled() || !group.supports(platform)) continue;
 				if (!selectsAny(manifest, new SelectionIntent(Set.of(entry.getKey())), platform, conflicts)) expandedGroups.add(entry.getKey());
 			}
 		}
@@ -202,7 +202,7 @@ public final class GroupSelectionResolver {
 		}
 
 		private void initializeMandatoryGroups() {
-			for (var entry : manifest.groups().entrySet()) if (entry.getValue().required()) {
+			for (var entry : manifest.groups().entrySet()) if (entry.getValue().alwaysInstalled()) {
 				requiredGroups.add(entry.getKey());
 				forcedGroups.add(entry.getKey());
 				addReason(entry.getKey(), GroupResolution.Reason.REQUIRED);
@@ -255,7 +255,7 @@ public final class GroupSelectionResolver {
 			Set<String> closure = new TreeSet<>();
 			try {
 				for (String dependencyId : group.requires()) {
-					Closure dependencyClosure = resolveClosure(dependencyId, source, forced || group.required(), true, active);
+					Closure dependencyClosure = resolveClosure(dependencyId, source, forced || group.alwaysInstalled(), true, active);
 					if (!dependencyClosure.success()) {
 						Set<String> blocked = new TreeSet<>(dependencyClosure.groups());
 						blocked.add(groupId);
@@ -281,11 +281,11 @@ public final class GroupSelectionResolver {
 				addReason(groupId, GroupResolution.Reason.DEPENDENCY);
 				dependencyGroups.add(groupId);
 			}
-			if (forced || group.required()) {
+			if (forced || group.alwaysInstalled()) {
 				forcedGroups.add(groupId);
 				addReason(groupId, GroupResolution.Reason.FORCED);
 			}
-			if (group.required()) {
+			if (group.alwaysInstalled()) {
 				requiredGroups.add(groupId);
 				addReason(groupId, GroupResolution.Reason.REQUIRED);
 			}

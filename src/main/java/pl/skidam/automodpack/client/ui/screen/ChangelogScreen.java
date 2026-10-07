@@ -7,7 +7,6 @@ import java.util.concurrent.Future;
 import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
-import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
@@ -25,7 +24,6 @@ public final class ChangelogScreen extends ChangeBrowserScreen {
 				new BrowserAction(VersionedText.text("automodpack.management.history"),
 						screen -> ScreenImpl.setScreen(new ContentHistoryScreen(screen, new HistoryViewRequest(changelogs.journal(), newestSeq(changelogs.journal()), "", () -> {}))),
 						!changelogs.journal().isEmpty()));
-		if (AudioManager.isMusicPlaying()) AudioManager.stopMusic();
 	}
 
 	@Override

@@ -97,6 +97,7 @@ class ReconcileEditableStateTest {
 		fields.modpackName = "Test";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.required = true;
+		group.defaultSelected = true;
 		Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
 		files.put(EDITABLE_PATH, new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(packBytes.length), "config", true, HashUtils.sha1(packBytes), "0"));
 		group.files = files;

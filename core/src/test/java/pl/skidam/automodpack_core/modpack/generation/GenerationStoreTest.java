@@ -253,6 +253,8 @@ class GenerationStoreTest {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.required = false;
+		group.defaultSelected = false;
 		group.description = "one";
 		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields("8", "config", false, sha1("tampered"), null));
 		fields.categories = Map.of("General", Map.of("main", group));
@@ -294,6 +296,8 @@ class GenerationStoreTest {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.required = false;
+		group.defaultSelected = false;
 		group.description = description;
 		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), "config", false, sha1(content), null));
 		fields.categories = Map.of("General", Map.of("main", group));
@@ -323,6 +327,8 @@ class GenerationStoreTest {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.required = false;
+		group.defaultSelected = false;
 		group.description = "multi";
 		group.files = entries;
 		fields.categories = Map.of("General", Map.of("main", group));
@@ -337,6 +343,8 @@ class GenerationStoreTest {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.required = false;
+		group.defaultSelected = false;
 		group.description = description;
 		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), "config", false, hash, null));
 		fields.categories = Map.of("General", Map.of("main", group));

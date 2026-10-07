@@ -58,11 +58,16 @@ Read more about glob syntax on the [Globbing Wikipedia article](https://wikipedi
 |---|---|---|
 | `modpack.<category>.<id>.display-name` | `""` | Name shown to players in the Group Selection screen and the file browsers; blank shows the group id. The map key is the id used by rules and by `requires` and `breaks-with`. |
 | `modpack.<category>.<id>.description` | `""` | Short player-facing description of the group. |
-| `modpack.<category>.<id>.required` | `false` | Players cannot deselect the group. The factory `main` group sets this. |
-| `modpack.<category>.<id>.default-selected` | `false` | Preselected for players who have not chosen yet. Ignored when `required` is true. |
+| `modpack.<category>.<id>.selection` | `OPTIONAL` | One of `REQUIRED`, `RECOMMENDED` or `OPTIONAL`. `REQUIRED` is always installed and cannot be deselected; `RECOMMENDED` arrives preselected and players can opt out; `OPTIONAL` starts unchecked. The factory `main` group sets `REQUIRED`. |
 | `modpack.<category>.<id>.requires` | `[]` | Group ids that must also be selected for this group to make sense, for example a shader config pack that needs its shader pack. |
 | `modpack.<category>.<id>.breaks-with` | `[]` | Group ids that cannot be selected alongside this one, for example two mods that replace the same files. |
 | `modpack.<category>.<id>.compatible-platforms` | `[]` | Restricts the group to matching platforms, for example a group of Windows-only mods. See platforms below. |
+
+### Migrating the old selection flags
+
+Earlier versions wrote two booleans per group, `required` and `default-selected`. They still load: each group holding either one is read as a `selection` value, and the next save rewrites the file with that single key. Nothing is lost in between - a reload applies the same translation, and a group that already has `selection` keeps it.
+
+One pair has no equivalent: `required: true` together with `default-selected: false` asks for a group players cannot deselect and do not receive by default. It becomes `REQUIRED`, which is preselected, and the server log says so when the file is migrated. Write `selection` directly and nothing is collapsed.
 
 ### Platforms
 

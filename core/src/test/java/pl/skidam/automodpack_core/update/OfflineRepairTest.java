@@ -371,6 +371,7 @@ class OfflineRepairTest {
 		fields.modpackName = "Test";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.required = true;
+		group.defaultSelected = true;
 		Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
 		for (FileSpec spec : specs) files.put(spec.path(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(spec.size()), spec.type(), spec.editable(), spec.hash(), "0"));
 		group.files = files;

@@ -202,8 +202,7 @@ topology:
           General:
             main:
               displayName: Core
-              required: true
-              defaultSelected: true
+              selection: REQUIRED
               from-server: ["/config/amp-autotest-navigation.txt"]
             extra1:
               displayName: Extra One

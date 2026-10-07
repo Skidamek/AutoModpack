@@ -13,6 +13,7 @@ import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.network.chat.Component;
 
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
+import pl.skidam.automodpack.client.ui.versioned.VersionedScissor;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
@@ -33,7 +34,7 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		return VersionedText.text("automodpack.selection.groupFiles");
 	}
 
-	/** Group rows span the whole list like the shared ChromelessList lists do; vanilla caps the row width, which squashed every row into the center. */
+	/** Group rows span the whole list like the shared UniformList lists do; vanilla caps the row width, which squashed every row into the center. */
 	@Override
 	public int getRowWidth() {
 		return this.contentWidth;
@@ -42,8 +43,7 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	/*? if <1.21.4 {*/
 	/*@Override
 	protected int getScrollbarPosition() {
-		// The hit test compares absolute screen coordinates, so the anchor has to be absolute too.
-		return this.getRowLeft() + this.getRowWidth() + 4;
+		return ListChrome.scrollbarPosition(this.getRowLeft(), this.getRowWidth());
 	}
 	*//*?}*/
 
@@ -52,24 +52,20 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		return ActionAreaLayout.BUTTON_HEIGHT;
 	}
 
-	/** Vanilla renders the first row this far below the list's top edge; the window is shifted up so rows land where the caller asked. */
-	/*? if >=1.21.10 {*/
-	private static final int VANILLA_ROW_INSET = 2;
-	/*?} else {*/
-	/*private static final int VANILLA_ROW_INSET = 4;
-	*//*?}*/
 	private final int contentWidth;
 
 	public GroupSelectionList(Minecraft client, int width, int height, int contentWidth, int top, int bottom, List<Item> items, Consumer<Item> onToggle, Consumer<Item> onInspect) {
 		/*? if <1.20.3 {*/
-		/*super(client, width, height, top - VANILLA_ROW_INSET, bottom, ROW_HEIGHT);
+		/*super(client, width, height, ListChrome.windowTop(top), bottom, ROW_HEIGHT);
+		this.setLeftPos(0);
 		*//*?} else {*/
-		super(client, width, Math.max(ROW_HEIGHT, bottom - top) + VANILLA_ROW_INSET, top - VANILLA_ROW_INSET, ROW_HEIGHT);
+		super(client, width, ListChrome.listHeight(ROW_HEIGHT, top, bottom), ListChrome.windowTop(top), ROW_HEIGHT);
 		/*?}*/
 		this.contentWidth = Math.max(1, contentWidth);
 		this.centerListVertically = false;
-		// The only chrome this list carries itself: it is a ContainerObjectSelectionList, so it cannot sit on the shared
-		// ChromelessList base the other lists use. Its row window and scroll contract stay in sync with that base.
+		// This list cannot sit on the UniformList base - it needs ContainerObjectSelectionList for its interactive
+		// rows - so it strips vanilla chrome and draws the ListChrome look itself. Every number the shared lists pin
+		// reads from ListChrome, which is what keeps the two in step.
 		/*? if <1.21.1 {*/
 		/*this.setRenderBackground(false);
 		this.setRenderTopAndBottom(false);
@@ -85,17 +81,20 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	/*? if >=1.21.10 {*/
 	@Override
 	public int maxScrollAmount() {
-		// Vanilla pads contentHeight by 4 while its rows only start 2px down; with the window shifted onto the rows, the scroll range is exactly the overflow.
-		return Math.max(0, this.contentHeight() - this.height - (4 - VANILLA_ROW_INSET));
+		return ListChrome.scrollRange(this.contentHeight(), this.height);
 	}
 
 	/*?}*/
 	/*? if >=26.1 {*/
 	@Override
-	protected void extractListBackground(GuiGraphicsExtractor guiGraphics) {}
+	protected void extractListBackground(GuiGraphicsExtractor guiGraphics) {
+		ListChrome.drawBackdrop(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), this.getRight(), this.getBottom());
+	}
 
 	@Override
-	protected void extractListSeparators(GuiGraphicsExtractor guiGraphics) {}
+	protected void extractListSeparators(GuiGraphicsExtractor guiGraphics) {
+		ListChrome.drawSeparators(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), this.getRight(), this.getBottom());
+	}
 
 	@Override
 	protected boolean entriesCanBeSelected() {
@@ -103,10 +102,14 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	}
 	/*?} elif >=1.21.10 {*/
 	/*@Override
-	protected void renderListBackground(GuiGraphics guiGraphics) {}
+	protected void renderListBackground(GuiGraphics guiGraphics) {
+		ListChrome.drawBackdrop(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), this.getRight(), this.getBottom());
+	}
 
 	@Override
-	protected void renderListSeparators(GuiGraphics guiGraphics) {}
+	protected void renderListSeparators(GuiGraphics guiGraphics) {
+		ListChrome.drawSeparators(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), this.getRight(), this.getBottom());
+	}
 
 	@Override
 	protected boolean entriesCanBeSelected() {
@@ -114,16 +117,44 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	}
 	*//*?} elif >=1.21.1 {*/
 	/*@Override
-	protected void renderListBackground(GuiGraphics guiGraphics) {}
+	protected void renderListBackground(GuiGraphics guiGraphics) {
+		ListChrome.drawBackdrop(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), this.getRight(), this.getBottom());
+	}
 
 	@Override
-	protected void renderListSeparators(GuiGraphics guiGraphics) {}
+	protected void renderListSeparators(GuiGraphics guiGraphics) {
+		ListChrome.drawSeparators(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), this.getRight(), this.getBottom());
+	}
 
 	@Override
 	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
 	*//*?} elif >=1.20.4 {*/
 	/*@Override
 	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
+	*//*?}*/
+
+	/*? if <1.19.4 {*/
+	/*@Override
+	public void render(PoseStack matrices, int mouseX, int mouseY, float delta) {
+		VersionedMatrices chrome = new VersionedMatrices();
+		ListChrome.drawBackdrop(chrome, x0, y0, x1, y1);
+		// Separators precede super.render so the scrollbar paints over them, like vanilla's bands before its scrollbar.
+		ListChrome.drawSeparators(chrome, x0, y0, x1, y1);
+		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
+		super.render(matrices, mouseX, mouseY, delta);
+		VersionedScissor.disable();
+	}
+	*//*?} elif <1.20.3 {*/
+	/*@Override
+	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
+		VersionedMatrices chrome = new VersionedMatrices(graphics);
+		ListChrome.drawBackdrop(chrome, x0, y0, x1, y1);
+		// Separators precede super.render so the scrollbar paints over them, like vanilla's bands before its scrollbar.
+		ListChrome.drawSeparators(chrome, x0, y0, x1, y1);
+		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
+		super.render(graphics, mouseX, mouseY, delta);
+		VersionedScissor.disable();
+	}
 	*//*?}*/
 
 	@Override

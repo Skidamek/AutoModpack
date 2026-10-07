@@ -62,6 +62,7 @@ final class UpdateTestFixtures {
 		fields.modpackName = "Test";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.required = true;
+		group.defaultSelected = true;
 		ModpackJsons.CompleteModpackContentFields.GroupFileFields file = new ModpackJsons.CompleteModpackContentFields.GroupFileFields();
 		file.size = String.valueOf(size);
 		file.type = type;

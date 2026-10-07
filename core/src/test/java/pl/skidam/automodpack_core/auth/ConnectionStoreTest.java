@@ -106,6 +106,8 @@ class ConnectionStoreTest {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = modpackId;
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.required = false;
+		group.defaultSelected = false;
 		group.description = description;
 		String sha1 = HashUtils.sha1(content.getBytes(StandardCharsets.UTF_8));
 		group.files = new TreeMap<>(Map.of(path, new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), "config", false, sha1, null)));

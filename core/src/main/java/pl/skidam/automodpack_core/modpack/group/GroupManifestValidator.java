@@ -52,7 +52,11 @@ public final class GroupManifestValidator {
 				Set<String> requires = validateIds("Group '" + id + "' requires", group.requires, errors);
 				Set<ClientPlatform> platforms = validatePlatforms(id, group.compatiblePlatforms, errors);
 				Map<String, GroupManifest.GroupFile> files = validateFiles(id, group.files, errors);
-				groups.put(id, new GroupManifest.Group(group.displayName, group.description, category, group.required, group.defaultSelected, breaksWith, requires, platforms, files));
+				if (group.required == null || group.defaultSelected == null) {
+					errors.add("Group '" + id + "' is missing its selection flags");
+					continue;
+				}
+				groups.put(id, new GroupManifest.Group(group.displayName, group.description, category, GroupSelectionMode.of(group.required, group.defaultSelected), breaksWith, requires, platforms, files));
 			}
 		}
 
@@ -253,7 +257,7 @@ public final class GroupManifestValidator {
 
 	private static boolean isOptionalUnavailable(GroupManifest manifest, String groupId, ResolvedSelection selection) {
 		GroupManifest.Group group = manifest.groups().get(groupId);
-		if (group == null || group.required()) return false;
+		if (group == null || group.alwaysInstalled()) return false;
 		GroupResolution resolution = selection.resolution(groupId);
 		return resolution != null && (resolution.status() == GroupResolution.Status.BLOCKED || resolution.status() == GroupResolution.Status.UNAVAILABLE);
 	}

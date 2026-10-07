@@ -11,6 +11,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
@@ -132,6 +133,19 @@ class ConfigToolsTest {
 		EnumHolder holder = ConfigTools.parse("{\"reasons\":[\"SELECTED_MODPACK\",\"CHANGED_GROUP_SELECTION\"]}", EnumHolder.class);
 
 		assertEquals(List.of(UpdatePlan.RestartReason.SELECTED_MODPACK, UpdatePlan.RestartReason.CHANGED_GROUP_SELECTION), holder.reasons);
+	}
+
+	@Test
+	void durableEnumsAreExactWhileTheHumanParserForgivesCase() {
+		// Durable state is a tripwire: a stored "holepunch" where it wrote "HOLEPUNCH" is corruption and must fail.
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"connection-mode\": \"holepunch\"}", ServerConfigJsons.ServerConfigFieldsV3.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"selection\": \"Recommended\"}", ServerConfigJsons.GroupDeclaration.class));
+
+		// A human types configs by hand, so the human-facing reader forgives case without forgiving membership.
+		assertEquals(ModpackConnectionMode.HOLEPUNCH, ConfigTools.enumConstant(ModpackConnectionMode.class, "holepunch"));
+		assertEquals(ModpackConnectionMode.HOLEPUNCH, ConfigTools.enumConstant(ModpackConnectionMode.class, "Holepunch"));
+		assertEquals(GroupSelectionMode.RECOMMENDED, ConfigTools.enumConstant(GroupSelectionMode.class, "Recommended"));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.enumConstant(ModpackConnectionMode.class, "holepunchs"));
 	}
 
 	@Test
