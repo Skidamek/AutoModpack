@@ -26,18 +26,12 @@ public class LazyModLocator implements IDependencyLocator {
 		if (!GenerationProbes.NEOFORGE_EARLYSERVICES) return;
 
 		try {
-			// The outer jar's nested impl carries no jarjar metadata anymore, so surface it explicitly.
-			// This is the native Jar-in-Jar flow: extract the nested jar, read it as a mod file, add it.
 			Path implJar = ImplStore.select(LazyModLocator.class, "neoforge");
 			IModFile modFile = pipeline.readModFile(JarContents.ofPath(implJar), ModFileDiscoveryAttributes.DEFAULT);
 			if (modFile != null) pipeline.addModFile(modFile);
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
-		// FML enumerated dependency locators before the candidate phase appended the hosted jars, so
-		// their own jar-in-jar locators never run natively - replay them here, in the dependency phase
-		// they belong to (see EarlyServiceLayer.runDependencyLocators).
-		EarlyServiceLayer.runDependencyLocators(loadedMods, pipeline);
 	}
 
 	@Override

@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.platforms;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,6 +44,12 @@ class CurseForgeAPIHttpTest {
 			.formatted(SHA1);
 	private static final String FINGERPRINTS_200_NO_DOWNLOAD_URL = """
 			{"data":{"exactMatches":[{"file":{"releaseType":1,"hashes":[{"algo":1,"value":"%s"}],"downloadUrl":null,"fileName":"a.jar","displayName":"A 1.2.3","fileLength":123,"modId":7}}]}}"""
+			.formatted(SHA1);
+	private static final String FINGERPRINTS_200_SERVER_ONLY = """
+			{"data":{"exactMatches":[{"file":{"releaseType":1,"hashes":[{"algo":1,"value":"%s"}],"downloadUrl":"http://cdn.example/a.jar","fileName":"a.jar","displayName":"A 1.2.3","fileLength":123,"modId":7,"gameVersions":["1.21.1","Server"]}}]}}"""
+			.formatted(SHA1);
+	private static final String FINGERPRINTS_200_BOTH_SIDES = """
+			{"data":{"exactMatches":[{"file":{"releaseType":1,"hashes":[{"algo":1,"value":"%s"}],"downloadUrl":"http://cdn.example/a.jar","fileName":"a.jar","displayName":"A 1.2.3","fileLength":123,"modId":7,"gameVersions":["Client","Server"]}}]}}"""
 			.formatted(SHA1);
 	private static final String MODS_200 = """
 			{"data":[{"id":7,"isAvailable":true,"slug":"a-mod","links":{"websiteUrl":"https://www.curseforge.com/minecraft/mc-mods/a-mod"}}]}""";
@@ -156,11 +163,26 @@ class CurseForgeAPIHttpTest {
 		assertEquals("https://www.curseforge.com/minecraft/mc-mods/a-mod", info.projectPageUrl(), "the project page lookup still runs without a download url");
 	}
 
+	/** The side tags are the only signal CurseForge gives for a universal jar, so the gameVersions loop decides which mods leave the pack. */
+	@Test
+	void theSideTagsComeFromTheFileGameVersions() {
+		SERVED.clear();
+		scriptBody("/v1/fingerprints", FINGERPRINTS_200_SERVER_ONLY);
+		CurseForgeAPI serverOnly = CurseForgeAPI.getModInfosFromFingerPrints(baseUrl(), localEndpoint(), hashes()).get(0);
+		assertFalse(serverOnly.clientTag(), "a file tagged only Server never runs on a client");
+		assertTrue(serverOnly.serverTag());
+
+		scriptBody("/v1/fingerprints", FINGERPRINTS_200_BOTH_SIDES);
+		CurseForgeAPI both = CurseForgeAPI.getModInfosFromFingerPrints(baseUrl(), localEndpoint(), hashes()).get(0);
+		assertTrue(both.clientTag(), "a file tagged Client runs on a client whatever else it is tagged");
+		assertTrue(both.serverTag());
+	}
+
 	@Test
 	void theKeyNeverLeavesItsPinnedEndpoint() {
 		SERVED.clear();
 		List<CurseForgeAPI> infos = CurseForgeAPI.getModInfosFromFingerPrints(baseUrl(), TrustedEndpoint.PRODUCTION, hashes());
-		assertTrue(infos.isEmpty(), "a refused lookup is an empty result");
+		assertNull(infos, "a refused lookup is not asked, not an empty result");
 		assertTrue(SERVED.isEmpty(), "the pinned-endpoint refusal must happen before anything is sent");
 	}
 
@@ -169,7 +191,7 @@ class CurseForgeAPIHttpTest {
 		SERVED.clear();
 		script("/v1/fingerprints", 302);
 		List<CurseForgeAPI> infos = CurseForgeAPI.getModInfosFromFingerPrints(baseUrl(), localEndpoint(), hashes());
-		assertTrue(infos.isEmpty(), "a redirect answer is not a lookup result");
+		assertNull(infos, "a redirect answer is not a lookup result");
 		assertEquals(1, served("/v1/fingerprints").size(), "the redirect must not be followed");
 	}
 
@@ -178,7 +200,7 @@ class CurseForgeAPIHttpTest {
 		SERVED.clear();
 		script("/v1/fingerprints", 401, 200);
 		List<CurseForgeAPI> infos = CurseForgeAPI.getModInfosFromFingerPrints(baseUrl(), localEndpoint(), hashes());
-		assertTrue(infos.isEmpty());
+		assertNull(infos, "a refused key must not read as an empty match set");
 		assertEquals(1, served("/v1/fingerprints").size(), "a 401 verdict must not retry");
 	}
 }

@@ -9,6 +9,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import pl.skidam.automodpack_core.utils.cache.LooseRecordCache;
 import pl.skidam.automodpack_core.utils.cache.SharedCacheRegistry;
@@ -26,15 +27,15 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 		super(recordsDirectory, "platform cache");
 	}
 
-	/** Returns the cached records for the given sha1 digests, keyed by the requested digest and omitting the missing ones. */
+	/** The cached records for the given sha1 digests, keyed by the normalized digest they were requested under, omitting the missing ones. */
 	public Map<String, Record> getAll(Collection<String> sha1s) {
 		Map<String, Record> records = new HashMap<>();
 		for (String sha1 : sha1s) {
 			if (sha1 == null || sha1.isBlank()) continue;
 			String normalizedHash = sha1.toLowerCase(Locale.ROOT);
 			synchronized (lock(normalizedHash)) {
-				Record record = sanitize(readRecord(normalizedHash, Record.class), normalizedHash);
-				if (record != null && (record.modrinth() != null || record.curseforge() != null)) records.put(sha1, record);
+				Record record = sanitize(readRecord(normalizedHash, Record.class));
+				if (record != null && (record.modrinth() != null || record.curseforge() != null)) records.put(normalizedHash, record);
 			}
 		}
 		return records;
@@ -45,7 +46,8 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 		String normalizedHash = sha1.toLowerCase(Locale.ROOT);
 		synchronized (lock(normalizedHash)) {
 			Record record = readOrCreateRecord(normalizedHash);
-			record.modrinth = new ModrinthEntry(info, mainPageUrl);
+			String page = mainPageUrl != null ? mainPageUrl : record.modrinth == null ? null : record.modrinth.mainPageUrl;
+			record.modrinth = new ModrinthEntry(info, page);
 			writeRecord(normalizedHash, record);
 		}
 	}
@@ -74,20 +76,13 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 	}
 
 	private Record readOrCreateRecord(String normalizedHash) {
-		Record record = sanitize(readRecord(normalizedHash, Record.class), normalizedHash);
+		Record record = sanitize(readRecord(normalizedHash, Record.class));
 		return record != null ? record : new Record(normalizedHash);
 	}
 
-	private Record sanitize(Record record, String normalizedHash) {
-		if (record == null) return null;
-		if (record.curseforge != null && CurseForgeAPI.isPlaceholderProjectPage(record.curseforge.projectPageUrl())) {
-			record.curseforge = null;
-			if (record.modrinth == null) {
-				evict(normalizedHash);
-				return null;
-			}
-			writeRecord(normalizedHash, record);
-		}
+	/** An unlisted CurseForge project has no usable public page, which says nothing about what else the entry knows: only the page goes, the side tags stay. */
+	private Record sanitize(Record record) {
+		if (record != null && record.curseforge != null && CurseForgeAPI.isPlaceholderProjectPage(record.curseforge.projectPageUrl)) record.curseforge.projectPageUrl = null;
 		return record;
 	}
 
@@ -102,6 +97,9 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 	}
 
 	public static final class Record {
+		/** The Modrinth version environments that mean clients never load the file. */
+		private static final Set<String> CLIENT_UNSUPPORTED_MODRINTH = Set.of("server_only", "dedicated_server_only");
+
 		private String sha1;
 		private ModrinthEntry modrinth;
 		private CurseForgeEntry curseforge;
@@ -119,6 +117,17 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 		public CurseForgeEntry curseforge() {
 			return curseforge;
 		}
+
+		/** Why a client does not run this file, or null to keep it in the pack: the Modrinth version environment decides whenever it is filled, the CurseForge side tags only fill a missing field. */
+		public String clientExclusionReason() {
+			String environment = modrinth == null ? null : modrinth.environment;
+			if (environment != null && !environment.isBlank()) {
+				String declared = environment.trim().toLowerCase(Locale.ROOT);
+				return CLIENT_UNSUPPORTED_MODRINTH.contains(declared) ? "modrinth environment " + declared : null;
+			}
+			if (curseforge == null || !curseforge.sideTagsKnown) return null;
+			return curseforge.serverTag && !curseforge.clientTag ? "curseforge gameVersions Server" : null;
+		}
 	}
 
 	public static final class ModrinthEntry {
@@ -129,6 +138,7 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 		private long fileSize;
 		private String releaseType;
 		private String mainPageUrl;
+		private String environment;
 
 		private ModrinthEntry() {}
 
@@ -140,6 +150,7 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 			fileSize = info.fileSize();
 			releaseType = info.releaseType();
 			this.mainPageUrl = mainPageUrl;
+			environment = info.environment();
 		}
 
 		public String modrinthId() {
@@ -169,6 +180,10 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 		public String mainPageUrl() {
 			return mainPageUrl;
 		}
+
+		public String environment() {
+			return environment;
+		}
 	}
 
 	public static final class CurseForgeEntry {
@@ -179,6 +194,10 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 		private String fileSize;
 		private String releaseType;
 		private String projectPageUrl;
+		private boolean clientTag;
+		private boolean serverTag;
+		/** Written by every entry, so an older record that predates the field reads as never told and is asked again. */
+		private boolean sideTagsKnown;
 
 		private CurseForgeEntry() {}
 
@@ -190,6 +209,9 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 			fileSize = info.fileSize();
 			releaseType = info.releaseType();
 			projectPageUrl = info.projectPageUrl();
+			clientTag = info.clientTag();
+			serverTag = info.serverTag();
+			sideTagsKnown = true;
 		}
 
 		public int modId() {
@@ -218,6 +240,18 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 
 		public String projectPageUrl() {
 			return projectPageUrl;
+		}
+
+		public boolean clientTag() {
+			return clientTag;
+		}
+
+		public boolean serverTag() {
+			return serverTag;
+		}
+
+		public boolean sideTagsKnown() {
+			return sideTagsKnown;
 		}
 	}
 }

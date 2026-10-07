@@ -9,8 +9,8 @@ description: |
   the outer jar's classes resolve through the GAME-layer bridge, just like a split early-service
   mod (Sodium): the transformation service is only a vehicle to load early, so nothing depends on
   modlauncher registering it at boot. On NeoForge fml10/fml11 (1.21.10, 26.1) there is no bridge -
-  the jar is appended to FMLLoader's flat classloader chain - but the same dependency-locator
-  replay loads the inner mod in place.
+  the jar is appended to FMLLoader's flat classloader chain before discovery, and FML enumerates
+  the dependency locator itself.
 
   The outer and inner jar share one modId (crash_assistant), so this scenario also proves the
   outer jar is NOT loaded as a mod in addition to the locator replay - that would be a

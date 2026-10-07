@@ -1,6 +1,9 @@
 package pl.skidam.automodpack_core.loader;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -14,6 +17,7 @@ import java.util.zip.ZipOutputStream;
 
 import org.junit.jupiter.api.Test;
 
+import pl.skidam.automodpack_core.modpack.group.ModEnvironment;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -102,6 +106,7 @@ class FileInspectionTest {
 			assertEquals("2.0.0", mod.version());
 			assertEquals(Set.of("jsonmod"), mod.IDs());
 			assertEquals(Set.of("fabric-api"), mod.deps());
+			assertEquals(ModEnvironment.CLIENT, mod.environment());
 		} finally {
 			Files.deleteIfExists(jar);
 		}
@@ -145,15 +150,49 @@ class FileInspectionTest {
 		}
 	}
 
+	/** A loader-service jar is a mod with no metadata: the fact has to survive the inspection or the file is re-read forever. */
+	@Test
+	void aServiceOnlyJarIsAModWithoutMetadata() throws IOException {
+		Path jar = Files.createTempDirectory("service-only-").resolve("service.jar");
+
+		try {
+			Files.write(jar, jar(Map.of(LoaderServicePaths.FORGE_MOD_LOCATOR, new byte[0])));
+			FileInspection.Inspection inspection = inspection(jar);
+
+			assertTrue(inspection.mod());
+			assertNull(inspection.metadata());
+			assertEquals(ModEnvironment.UNKNOWN, inspection.environment());
+		} finally {
+			Files.deleteIfExists(jar);
+		}
+	}
+
+	@Test
+	void aPlainArchiveIsNotAMod() throws IOException {
+		Path archive = Files.createTempDirectory("plain-").resolve("pack.zip");
+
+		try {
+			Files.write(archive, jar(Map.of("data/x.txt", new byte[0])));
+
+			assertFalse(inspection(archive).mod());
+		} finally {
+			Files.deleteIfExists(archive);
+		}
+	}
+
 	private static FileInspection.Mod onlyNested(FileInspection.Mod mod) {
 		assertEquals(1, mod.nestedMods().size());
 		return mod.nestedMods().iterator().next();
 	}
 
 	private static FileInspection.Mod inspect(Path jar) throws IOException {
+		return inspection(jar).metadata();
+	}
+
+	private static FileInspection.Inspection inspection(Path jar) throws IOException {
 		Path cacheDirectory = Files.createTempDirectory("file-cache-");
 		try (FileCache cache = FileCache.open(cacheDirectory)) {
-			return FileInspection.getMod(jar, cache);
+			return FileInspection.inspect(jar, cache);
 		} finally {
 			FileTrees.delete(cacheDirectory);
 		}

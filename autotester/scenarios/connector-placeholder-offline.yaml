@@ -1,0 +1,66 @@
+id: connector-placeholder-offline
+description: |
+  Offline / client-only proof that a Fabric mod published for NeoForge as a
+  Sinytra Connector placeholder (neoforge.mods.toml with connector:placeholder=true,
+  plus a real fabric.mod.json) is remapped and initialized by Connector from
+  AutoModpack's active projection.
+
+  VinURL 2.6.0 is the reported case: Fabric and NeoForge builds share the filename
+  vinurl-2.6.0+mc1.21.1.jar. The NeoForge file is not a native NeoForge mod; it is
+  a Connector placeholder so FML can warn if Connector is missing. Native mods/
+  discovery still lets Connector remap it. AutoModpack's EarlyModLocator currently
+  treats a successful FML claim as "not Connector's", never sets
+  connector.additionalModLocations, and leaves Connector's mutated 0.0 placeholder
+  as the winning mod - no item/sound registries, then a join mismatch against a
+  server that did remap.
+
+  Crash-tolerant: headless software GL may kill the client at the first frame.
+
+network: host
+mode: client-only
+
+timeouts:
+  clientStartSeconds: 1200
+
+targets:
+  - 1.21.1-neoforge
+
+flow:
+  - do: stage_modpack
+    name: stage Connector + a Connector placeholder Fabric mod (VinURL NeoForge file) into the active projection
+    mods:
+      - url: https://cdn.modrinth.com/data/u58R1TMW/versions/IITF0PRC/connector-2.0.0-beta.17%2B1.21.1-full.jar
+        sha512: cb92b662047208792e61191d372d1e255766200406c35769007101f8c578c1018938610c3b90352afd93ec42d7963acf3607e35c50e669df50ac85d7c5529560
+      - url: https://cdn.modrinth.com/data/Aqlf1Shp/versions/7nHK7hMg/forgified-fabric-api-0.116.7%2B2.2.4%2B1.21.1.jar
+        sha512: 858acb32a79e7ed1f37472bd7c50e3d2f47c7d7f6e734a8cece3800eb30d565a09580c261778ea73a0ae25e10e9eb9b16866012fe61d24f671b0ffe3ae2377dd
+      - url: https://cdn.modrinth.com/data/ordsPcFz/versions/uhJhCT7X/kotlinforforge-5.12.0-all.jar
+        sha512: b8c3942f4d33179edf3f102f3d870b99dd436f8b8236dbbd31aa51b888162c692cfd88927295f24dc8b4375232f4c6c17360c5d6c4823f93cbcd7cf4bdc8bd14
+      - url: https://cdn.modrinth.com/data/FYpiwiBR/versions/dgLCqZyo/ConnectorExtras-1.12.1%2B1.21.1.jar
+        sha512: ff9fc5d48a81e820c8c26b8a045e0ab7a3b0e9b5eaee7369b2eadb3f93d7eb423255073dfc327d131cb667df93be066560f3704b4cc8a12b07486b98a12bad1d
+      - url: https://cdn.modrinth.com/data/ccKDOlHs/versions/NMCHU6DZ/owo-lib-neoforge-0.12.15.5-beta.1%2B1.21.jar
+        sha512: 4de5c5d52139244b8c5260d641087664d992624b822599a32e03c08eb133be854a2f413667dbca1e55772445b04a70210c17b3bc13e3c88e425e7d928104b9fa
+      - url: https://cdn.modrinth.com/data/5PsMUIsq/versions/VPrh5CCo/vinurl-2.6.0%2Bmc1.21.1.jar
+        sha512: c9b5ea885b51887cd41e261b41399a823c212c7e172c0250c2832da079ef72066bf7e531c616cc4cb2966d3d8b271a381f43d2b9746031cf391f6772a2916020
+  - do: launch_client
+    name: boot the client against the pre-staged modpack
+  - do: wait_for
+    name: VinURL appears in the FML mod list
+    timeout: 600s
+    until:
+      log:
+        container: client
+        matches: 'VinURL .*\(vinurl\)'
+  - use: finish_client_only
+  - do: assert
+    name: Connector remapped the placeholder to the real Fabric VinURL 2.6.0
+    that:
+      all:
+        - log:
+            container: client
+            matches_all:
+              - 'VinURL 2\.6\.0 \(vinurl\)'
+              - 'vinurl-2\.6\.0\+mc1\.21\.1_mapped_moj'
+        - log:
+            container: client
+            not_matches:
+              - 'VinURL 0\.0 \(vinurl\)'

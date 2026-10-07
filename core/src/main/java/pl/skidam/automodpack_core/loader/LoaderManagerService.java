@@ -4,6 +4,7 @@ public interface LoaderManagerService {
 	enum ModPlatform {
 		FABRIC, FORGE, NEOFORGE
 	}
+	/** The side this JVM runs as; a mod's own declared side is {@code ModEnvironment}. */
 	enum EnvironmentType {
 		CLIENT, SERVER, UNIVERSAL
 	}

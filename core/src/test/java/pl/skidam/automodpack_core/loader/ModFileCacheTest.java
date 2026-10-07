@@ -2,13 +2,18 @@ package pl.skidam.automodpack_core.loader;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -54,6 +59,46 @@ class ModFileCacheTest {
 			assertNotNull(mod);
 			assertEquals(contentAddressedObject.toAbsolutePath().normalize(), mod.path());
 			assertEquals("example", mod.IDs().iterator().next());
+		}
+	}
+
+	/**
+	 * A loader-service jar carries no metadata, so it is recorded as a mod without one. The copy answers from a directory the
+	 * process has never read, so it fails unless the verdict was persisted and validates.
+	 */
+	@Test
+	void persistsTheServiceOnlyJarItCannotDescribe() throws Exception {
+		Path jar = temporaryDirectory.resolve("service.jar");
+		Path records = temporaryDirectory.resolve("mod-cache");
+		try (OutputStream output = Files.newOutputStream(jar); JarOutputStream zip = new JarOutputStream(output)) {
+			zip.putNextEntry(new JarEntry(LoaderServicePaths.FORGE_MOD_LOCATOR));
+			zip.closeEntry();
+		}
+
+		try (FileCache hashCache = FileCache.open(temporaryDirectory.resolve("file-cache")); ModFileCache modCache = ModFileCache.open(records)) {
+			assertTrue(modCache.inspect(jar, hashCache).mod());
+		}
+
+		Path copied = temporaryDirectory.resolve("mod-cache-copy");
+		copyTree(records, copied);
+		try (FileCache hashCache = FileCache.open(temporaryDirectory.resolve("file-cache")); ModFileCache modCache = ModFileCache.open(copied)) {
+			FileInspection.Inspection cached = modCache.inspect(jar, hashCache);
+
+			assertTrue(cached.mod(), "a persisted service-only jar still reads as a mod");
+			assertNull(cached.metadata());
+		}
+	}
+
+	private static void copyTree(Path from, Path to) throws IOException {
+		try (Stream<Path> walk = Files.walk(from)) {
+			for (Path source : walk.toList()) {
+				Path destination = to.resolve(from.relativize(source).toString());
+				if (Files.isDirectory(source)) Files.createDirectories(destination);
+				else {
+					Files.createDirectories(destination.getParent());
+					Files.copy(source, destination, StandardCopyOption.REPLACE_EXISTING);
+				}
+			}
 		}
 	}
 

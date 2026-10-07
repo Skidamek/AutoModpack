@@ -14,10 +14,25 @@ import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.modpack.group.ModEnvironment;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
+import pl.skidam.automodpack_core.platforms.PlatformSideVerdicts;
+import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public final class ModpackCandidateScanner {
 	private final StableSourceSnapshotter sourceSnapshotter = new StableSourceSnapshotter();
+	private final PlatformSideVerdicts sideVerdicts;
+
+	public ModpackCandidateScanner() {
+		this(null);
+	}
+
+	/** The platform side stage is a collaborator, so the scanner holds it; without one it asks no platform anything. */
+	public ModpackCandidateScanner(PlatformSideVerdicts sideVerdicts) {
+		this.sideVerdicts = sideVerdicts;
+	}
 
 	public ModpackCandidate scan(Request request) throws CandidateBuildException {
 		Objects.requireNonNull(request);
@@ -119,6 +134,7 @@ public final class ModpackCandidateScanner {
 			throw taskFailure;
 		}
 		results.sort(Comparator.comparing(result -> result.selected == null ? result.sourceForOrdering() : result.selected));
+		if (request.autoExcludeServerSideMods()) applyPlatformSideVerdicts(results, request);
 
 		Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields>> filesByGroup = new TreeMap<>();
 		for (String groupId : declarations.keySet()) filesByGroup.put(groupId, new TreeMap<>());
@@ -152,8 +168,8 @@ public final class ModpackCandidateScanner {
 				ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 				group.displayName = declaration.displayName;
 				group.description = declaration.description;
-				group.required = declaration.required;
-				group.defaultSelected = declaration.defaultSelected;
+				group.required = declaration.selection.policyRequired();
+				group.defaultSelected = declaration.selection.policyDefaultSelected();
 				group.breaksWith = sortedSet(declaration.breaksWith);
 				group.requires = sortedSet(declaration.requires);
 				group.compatiblePlatforms = sortedSet(declaration.compatiblePlatforms);
@@ -161,7 +177,7 @@ public final class ModpackCandidateScanner {
 				categories.computeIfAbsent(categoryByGroup.get(entry.getKey()), ignored -> new LinkedHashMap<>()).put(entry.getKey(), group);
 			}
 			fields.categories = categories;
-			warnUnmatchedEditableRules(declarations, filesByGroup);
+			auditEditableRules(declarations, filesByGroup);
 			GroupManifest manifest = GroupManifestValidator.validate(fields);
 			return new ModpackCandidate(manifest, new TreeMap<>(objects), new TreeMap<>(provenance), exclusions);
 		} catch (Exception e) {
@@ -177,8 +193,9 @@ public final class ModpackCandidateScanner {
 		CandidateSource selected = null;
 		GroupManifest.GroupFile file = null;
 		StagedObject object = null;
+		StableSourceSnapshotter.Snapshot snapshot = null;
 		if (candidate != null) {
-			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(candidate, request.autoExcludeServerSideMods(),
+			snapshot = sourceSnapshotter.snapshot(candidate, request.autoExcludeServerSideMods(),
 					request.stagingDirectory(), request.fileCache(), request.modFileCache(), request.objectStoreDirectory(), request.materializeMissingObjects());
 			if (snapshot.exclusion() != null) {
 				exclusions.add(excluded(candidate, snapshot.exclusion()));
@@ -194,7 +211,40 @@ public final class ModpackCandidateScanner {
 			file = new GroupManifest.GroupFile(file.size(), file.type(), editable.matched(), file.sha1(), file.murmur());
 			provenance = new CandidateProvenance(selected, editable.decisiveRule());
 		}
-		return new PathResult(selected, file, object, provenance, exclusions, pair.explicit != null ? pair.explicit : pair.synced);
+		return new PathResult(selected, file, object, provenance, exclusions, pair.explicit != null ? pair.explicit : pair.synced, snapshot == null ? null : snapshot.environment(),
+				file != null && HashUtils.isSha1(file.sha1()) ? HashUtils.normalizeSha1(file.sha1()) : null);
+	}
+
+	/**
+	 * A publish drops the jars the platforms say clients cannot run; a preview only reports them, so what a generate would
+	 * publish is read from the report instead of from a second network round that may answer differently tomorrow.
+	 */
+	private void applyPlatformSideVerdicts(List<PathResult> results, Request request) {
+		if (sideVerdicts == null) return;
+		Map<String, GroupManifest.GroupFile> askable = new LinkedHashMap<>();
+		for (PathResult result : results) {
+			if (result.file == null || result.normalizedSha1 == null || !ModpackContentType.MOD.equals(result.file.type())) continue;
+			if (result.environment == ModEnvironment.CLIENT || result.environment == ModEnvironment.SERVER) continue;
+			askable.putIfAbsent(result.normalizedSha1, result.file);
+		}
+		Map<String, String> reasons = sideVerdicts.excludeFromClientPack(askable);
+		if (reasons.isEmpty()) return;
+		boolean applied = request.applyPlatformExclusions();
+		for (int i = 0; i < results.size(); i++) {
+			PathResult result = results.get(i);
+			String reason = result.normalizedSha1 == null ? null : reasons.get(result.normalizedSha1);
+			if (reason == null) continue;
+			List<ExcludedCandidate> exclusions = new ArrayList<>(result.exclusions);
+			exclusions.add(new ExcludedCandidate(result.selected, ExcludedCandidate.Reason.SERVER_SIDE_MOD, reason));
+			if (applied) {
+				if (result.object != null) try {
+					result.object.delete();
+				} catch (IOException e) {
+					LOGGER.error("Could not delete the staged object of the platform-excluded {}", result.selected.logicalPath(), e);
+				}
+				results.set(i, new PathResult(null, null, null, null, exclusions, result.sourceForOrdering, result.environment, null));
+			} else results.set(i, new PathResult(result.selected, result.file, result.object, result.provenance, exclusions, result.sourceForOrdering, result.environment, result.normalizedSha1));
+		}
 	}
 
 	private static GroupRules compileRules(String groupId, ServerConfigJsons.GroupDeclaration declaration) throws CandidateBuildException {
@@ -202,21 +252,28 @@ public final class ModpackCandidateScanner {
 				compileRuleSet(declaration.editable, groupId, "editable"));
 	}
 
-	private static void warnUnmatchedEditableRules(Map<String, ServerConfigJsons.GroupDeclaration> declarations,
+	/** Warns about editable rules that match no pack files, and about rules matching active mods, which load from the standard mods folder instead of the projection. */
+	private static void auditEditableRules(Map<String, ServerConfigJsons.GroupDeclaration> declarations,
 			Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields>> filesByGroup) {
 		for (var entry : declarations.entrySet()) {
 			Set<String> rules = entry.getValue().editable;
 			if (rules == null || rules.isEmpty()) continue;
-			Set<String> paths = filesByGroup.getOrDefault(entry.getKey(), Map.of()).keySet();
+			Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = filesByGroup.getOrDefault(entry.getKey(), Map.of());
 			for (String rule : rules) {
 				if (rule == null || rule.startsWith("!")) continue;
 				PathRuleSet matcher = new PathRuleSet(List.of(rule));
 				boolean matched = false;
-				for (String path : paths) if (matcher.matches(path)) {
+				long matchedMods = 0;
+				for (var file : files.entrySet()) if (matcher.matches(file.getKey())) {
 					matched = true;
-					break;
+					if (ModpackPathPolicy.isActiveMod(file.getKey(), file.getValue().type)) matchedMods++;
 				}
 				if (!matched) LOGGER.warn("editable rule '{}' in group '{}' matched no pack files", rule, entry.getKey());
+				else
+					if (matchedMods > 0)
+						LOGGER.warn(
+								"editable rule '{}' in group '{}' matches {} active mod(s), which will load from the standard mods folder instead of the modpack projection. Not recommended: such mods need a restart to update and fall outside in-place mod management. Use this only for mods that break when loaded in place.",
+								rule, entry.getKey(), matchedMods);
 			}
 		}
 	}
@@ -352,7 +409,9 @@ public final class ModpackCandidateScanner {
 			StagedObject object,
 			CandidateProvenance provenance,
 			List<ExcludedCandidate> exclusions,
-			CandidateSource sourceForOrdering) {}
+			CandidateSource sourceForOrdering,
+			ModEnvironment environment,
+			String normalizedSha1) {}
 
 	public record Request(
 			String modpackId,
@@ -365,6 +424,7 @@ public final class ModpackCandidateScanner {
 			Path groupRoot,
 			Map<String, Map<String, ServerConfigJsons.GroupDeclaration>> modpack,
 			boolean autoExcludeServerSideMods,
+			boolean applyPlatformExclusions,
 			Path stagingDirectory,
 			Executor executor,
 			Path objectStoreDirectory,

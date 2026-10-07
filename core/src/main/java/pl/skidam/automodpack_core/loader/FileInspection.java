@@ -17,6 +17,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.modpack.group.ModEnvironment;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.MiniToml;
@@ -32,54 +33,70 @@ public class FileInspection {
 
 	public record HashPathPair(String hash, Path path) {}
 
-	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, Set<String> services) {
+	/** Whether the file is a mod jar at all and the metadata when there is any: a service-only jar is a mod whose metadata is absent, a fact a null {@link Mod} alone cannot carry. */
+	public record Inspection(boolean mod, Mod metadata) {
+		/** The side this file's own metadata declares; a jar that ships no readable metadata declares none. */
+		public ModEnvironment environment() {
+			return metadata == null ? ModEnvironment.UNKNOWN : metadata.environment();
+		}
+	}
+
+	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, Set<String> services, ModEnvironment environment) {
 		public Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods) {
-			this(IDs, hash, version, path, deps, nestedMods, null, Set.of());
+			this(IDs, hash, version, path, deps, nestedMods, null, Set.of(), ModEnvironment.UNIVERSAL);
+		}
+
+		public Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, Set<String> services) {
+			this(IDs, hash, version, path, deps, nestedMods, id, services, ModEnvironment.UNIVERSAL);
 		}
 
 		public Mod {
 			services = services == null ? Set.of() : Set.copyOf(services);
+			environment = environment == null ? ModEnvironment.UNIVERSAL : environment;
 		}
 
 		public Mod at(Path newPath) {
-			return new Mod(IDs, hash, version, newPath, deps, nestedMods, id, services);
+			return new Mod(IDs, hash, version, newPath, deps, nestedMods, id, services, environment);
 		}
 	}
 
-	private record ModMetadata(String modId, String version, Set<String> provides, Set<String> deps, LoaderManagerService.EnvironmentType environment, Set<String> declaredJars) {
+	private record ModMetadata(String modId, String version, Set<String> provides, Set<String> deps, ModEnvironment environment, Set<String> declaredJars) {
 		ModMetadata {
 			declaredJars = declaredJars == null ? Set.of() : Set.copyOf(declaredJars);
 		}
 	}
 
-	public static Mod getMod(Path file, FileCache cache) {
-		if (isJarInvalid(file)) return null;
+	/** One open answers both facts about the file, so a jar is never mounted once per question. */
+	public static Inspection inspect(Path file, FileCache cache) {
+		if (isJarInvalid(file)) return new Inspection(false, null);
 
 		String hash = FileIntegrity.identityHash(file, cache);
 		if (hash == null) {
 			LOGGER.error("Failed to get hash for file: {}", file);
-			return null;
+			return new Inspection(false, null);
 		}
 
 		try (FileSystem fs = FileSystems.newFileSystem(file)) {
 			ModMetadata meta = getModMetadata(fs);
-
-			if (meta != null && meta.modId() != null) {
-				Set<String> ids = new HashSet<>(meta.provides());
-				ids.add(meta.modId());
-
-				Set<Mod> nestedMods = scanForNestedMods(fs, meta.declaredJars());
-				Set<String> services = Set.copyOf(getServices(fs, LoaderServicePaths.ALL_SERVICES));
-
-				if (meta.version() != null) return new Mod(ids, hash, meta.version(), file, meta.deps(), nestedMods, meta.modId(), services);
-				LOGGER.error("Incomplete mod info for file: {} (ID: {}, Ver: {})", file, meta.modId(), meta.version());
-			}
+			return meta == null ? new Inspection(hasSpecificServices(fs), null) : new Inspection(true, completeMod(fs, meta, hash, file));
 		} catch (IOException e) {
 			LOGGER.debug("Failed to inspect mod file: {}", file);
+			return new Inspection(false, null);
 		}
-		return null;
 	}
 
+	private static Mod completeMod(FileSystem fs, ModMetadata meta, String hash, Path file) {
+		if (meta.modId() == null) return null;
+		if (meta.version() == null) {
+			LOGGER.error("Incomplete mod info for file: {} (ID: {}, Ver: {})", file, meta.modId(), meta.version());
+			return null;
+		}
+		Set<String> ids = new HashSet<>(meta.provides());
+		ids.add(meta.modId());
+		return new Mod(ids, hash, meta.version(), file, meta.deps(), scanForNestedMods(fs, meta.declaredJars()), meta.modId(), Set.copyOf(getServices(fs, LoaderServicePaths.ALL_SERVICES)), meta.environment());
+	}
+
+	/** Whether the file is a mod or an early-service jar, with no cache and no metadata: for loader call sites that only need the yes. */
 	public static boolean isMod(Path file) {
 		if (isJarInvalid(file)) return false;
 		try (FileSystem fs = FileSystems.newFileSystem(file)) {
@@ -134,10 +151,6 @@ public class FileInspection {
 			LOGGER.debug("Skipping unreadable nested jar: {}", path);
 			return false;
 		}
-	}
-
-	public static LoaderManagerService.EnvironmentType getModEnvironment(Path file) {
-		return extractBasicInfo(file, ModMetadata::environment);
 	}
 
 	private static boolean isJarInvalid(Path file) {
@@ -229,7 +242,7 @@ public class FileInspection {
 			Set<String> declaredJars = metadata.declaredJars();
 			Set<Mod> nestedMods = nestedChildren.entrySet().stream().filter(child -> declaredJars.contains(child.getKey())).map(Map.Entry::getValue).collect(Collectors.toSet());
 			// Investigate if we need hash or not
-			return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedMods, metadata.modId(), Set.of());
+			return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedMods, metadata.modId(), Set.of(), metadata.environment());
 		}
 		return null;
 	}
@@ -260,7 +273,7 @@ public class FileInspection {
 			String version = "1";
 			Set<String> provides = new HashSet<>();
 			Set<String> deps = new HashSet<>();
-			LoaderManagerService.EnvironmentType env = LoaderManagerService.EnvironmentType.UNIVERSAL;
+			ModEnvironment env = ModEnvironment.UNIVERSAL;
 
 			for (Map<String, Object> modTable : mods) {
 				if (modId == null) modId = MiniToml.getString(modTable, "modId");
@@ -295,8 +308,8 @@ public class FileInspection {
 						// Determine Environment based on Minecraft/Forge side requirement
 						if (isPlatformId(depId)) {
 							String side = MiniToml.getString(depTable, "side");
-							if ("client".equalsIgnoreCase(side)) env = LoaderManagerService.EnvironmentType.CLIENT;
-							else if ("server".equalsIgnoreCase(side)) env = LoaderManagerService.EnvironmentType.SERVER;
+							if ("client".equalsIgnoreCase(side)) env = ModEnvironment.CLIENT;
+							else if ("server".equalsIgnoreCase(side)) env = ModEnvironment.SERVER;
 						}
 					}
 				}
@@ -315,7 +328,7 @@ public class FileInspection {
 			String version = getJsonString(json, "version");
 			Set<String> provides = new HashSet<>();
 			Set<String> deps = new HashSet<>();
-			LoaderManagerService.EnvironmentType env = LoaderManagerService.EnvironmentType.UNIVERSAL;
+			ModEnvironment env = ModEnvironment.UNIVERSAL;
 
 			if (json.has("provides")) {
 				for (JsonElement e : json.get("provides").getAsJsonArray()) {
@@ -336,11 +349,7 @@ public class FileInspection {
 				}
 			}
 
-			if (json.has("environment")) {
-				String envStr = json.get("environment").getAsString();
-				if ("client".equalsIgnoreCase(envStr)) env = LoaderManagerService.EnvironmentType.CLIENT;
-				else if ("server".equalsIgnoreCase(envStr)) env = LoaderManagerService.EnvironmentType.SERVER;
-			}
+			if (json.has("environment")) env = ModEnvironment.of(json.get("environment").getAsString());
 
 			Set<String> declaredJars = new HashSet<>();
 			if (json.has("jars") && json.get("jars").isJsonArray()) {

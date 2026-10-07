@@ -6,9 +6,10 @@ import java.util.Locale;
  * Launch facts every later phase reads, captured once per boot by whichever loader generation runs:
  * legacy Forge from its transformation-service {@code onLoad} (ModLauncher's stored launch arguments,
  * with the JVM's {@code sun.java.command} as fallback), NeoForge fml4 from its graphics-bootstrap
- * arguments, NeoForge fml10/11 from its {@code ILaunchContext} (no argument parsing at all). Pure
- * JDK statics on purpose: locators read these from wherever their loader loads them, so this holder
- * must never drag a loader type into a class-load.
+ * arguments, NeoForge fml10/11 from {@code FMLLoader} {@code VersionInfo} at graphics bootstrap
+ * (userdev fills Minecraft from classpath {@code version.json} when that record is still empty).
+ * Pure JDK statics on purpose: locators read these from wherever their loader loads them, so this
+ * holder must never drag a loader type into a class-load.
  */
 public final class EarlyLaunchEnvironment {
 	/** The running Minecraft version. */

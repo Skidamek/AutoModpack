@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import pl.skidam.automodpack_core.modpack.group.ModEnvironment;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -33,38 +34,46 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 	}
 
 	public FileInspection.Mod getOrComputeMod(Path file, String knownSha1, FileCache cache) throws IOException {
-		Path absPath = file.toAbsolutePath().normalize();
-		String hash = contentHash(absPath, knownSha1, cache);
-		if (hash == null) return null;
-
-		synchronized (lock(hash)) {
-			ModRecord cached = readRecord(hash, ModRecord.class);
-			if (isComplete(cached)) return cached.at(absPath);
-			if (ModRecord.isNotAMod(cached)) return null;
-
-			hash = contentHash(absPath, knownSha1, cache);
-			if (hash == null) return null;
-			cached = readRecord(hash, ModRecord.class);
-			if (isComplete(cached)) return cached.at(absPath);
-			if (ModRecord.isNotAMod(cached)) return null;
-
-			FileInspection.Mod modFile = FileInspection.getMod(absPath, cache);
-			if (modFile != null) writeRecord(hash, new ModRecord(modFile));
-			else if (!FileInspection.isMod(absPath)) writeRecord(hash, new ModRecord(hash));
-			return modFile;
-		}
+		return inspect(file, knownSha1, cache).metadata();
 	}
 
 	public FileInspection.Mod getModOrNull(Path path, FileCache cache) {
 		return getModOrNull(path, null, cache);
 	}
 
+	/** The metadata when there is any, with an unreadable file reading as none. */
 	public FileInspection.Mod getModOrNull(Path path, String knownSha1, FileCache cache) {
 		try {
-			return getOrComputeMod(path, knownSha1, cache);
+			return inspect(path, knownSha1, cache).metadata();
 		} catch (IOException e) {
 			LOGGER.error("Failed to compute mod metadata for path: {}", path, e);
 			return null;
+		}
+	}
+
+	/** Whether the bytes are a mod jar and the metadata when there is any, from one mount; a service-only jar is a mod without metadata. */
+	public FileInspection.Inspection inspect(Path path, FileCache cache) throws IOException {
+		return inspect(path, null, cache);
+	}
+
+	public FileInspection.Inspection inspect(Path path, String knownSha1, FileCache cache) throws IOException {
+		Path absPath = path.toAbsolutePath().normalize();
+		String hash = contentHash(absPath, knownSha1, cache);
+		if (hash == null) return new FileInspection.Inspection(false, null);
+
+		synchronized (lock(hash)) {
+			ModRecord cached = readRecord(hash, ModRecord.class);
+			if (cached != null) return cached.at(absPath);
+
+			hash = contentHash(absPath, knownSha1, cache);
+			if (hash == null) return new FileInspection.Inspection(false, null);
+			cached = readRecord(hash, ModRecord.class);
+			if (cached != null) return cached.at(absPath);
+
+			// A service-only jar is a verdict too, so it is recorded like any other: without it every scan reopened it.
+			ModRecord record = new ModRecord(hash, FileInspection.inspect(absPath, cache));
+			writeRecord(hash, record);
+			return record.at(absPath);
 		}
 	}
 
@@ -77,13 +86,10 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		return hash == null ? null : hash.toLowerCase(Locale.ROOT);
 	}
 
-	private static boolean isComplete(ModRecord cached) {
-		return cached != null && cached.id != null && cached.services != null;
-	}
-
+	/** Metadata without a readable side, and a record from before the is-mod verdict existed, are both rebuilt rather than answered. */
 	@Override
 	protected boolean validate(ModRecord record, String key) {
-		return key.equalsIgnoreCase(record.hash);
+		return record != null && key.equalsIgnoreCase(record.hash) && (record.id == null || (record.isMod && environmentOf(record.environment) != null));
 	}
 
 	@Override
@@ -92,6 +98,7 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 	}
 
 	static final class ModRecord {
+		private boolean isMod;
 		private Set<String> IDs;
 		private String hash;
 		private String version;
@@ -99,31 +106,36 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		private Set<ModRecord> nestedMods;
 		private String id;
 		private Set<String> services;
+		private String environment;
 
 		private ModRecord() {}
 
-		private ModRecord(FileInspection.Mod mod) {
+		private ModRecord(String contentHash, FileInspection.Inspection inspection) {
+			hash = contentHash;
+			isMod = inspection.mod();
+			FileInspection.Mod mod = inspection.metadata();
+			if (mod == null) return;
 			IDs = mod.IDs();
-			hash = mod.hash();
 			version = mod.version();
 			deps = mod.deps();
-			nestedMods = mod.nestedMods().stream().map(ModRecord::new).collect(Collectors.toSet());
+			nestedMods = mod.nestedMods().stream().map(nested -> new ModRecord(mod.hash(), new FileInspection.Inspection(true, nested))).collect(Collectors.toSet());
 			id = mod.id();
 			services = mod.services();
+			environment = mod.environment().name();
 		}
 
-		/** A content-keyed verdict that the bytes are no mod jar; id and services stay null, so it can never pass {@link #isComplete} or produce a Mod. */
-		private ModRecord(String contentHash) {
-			hash = contentHash;
+		private FileInspection.Inspection at(Path path) {
+			if (id == null) return new FileInspection.Inspection(isMod, null);
+			Set<String> modIds = IDs == null ? Set.of() : IDs;
+			Set<String> modDeps = deps == null ? Set.of() : deps;
+			Set<String> modServices = services == null ? Set.of() : services;
+			Set<FileInspection.Mod> nested = nestedMods == null ? Set.of() : nestedMods.stream().map(record -> record.at(null).metadata()).collect(Collectors.toSet());
+			return new FileInspection.Inspection(true, new FileInspection.Mod(modIds, hash, version, path, modDeps, nested, id, modServices, environmentOf(environment)));
 		}
+	}
 
-		private static boolean isNotAMod(ModRecord record) {
-			return record != null && record.hash != null && record.id == null && record.services == null;
-		}
-
-		private FileInspection.Mod at(Path path) {
-			Set<FileInspection.Mod> nested = nestedMods == null ? Set.of() : nestedMods.stream().map(record -> record.at(null)).collect(Collectors.toSet());
-			return new FileInspection.Mod(IDs == null ? Set.of() : IDs, hash, version, path, deps == null ? Set.of() : deps, nested, id, services == null ? Set.of() : services);
-		}
+	private static ModEnvironment environmentOf(String name) {
+		for (ModEnvironment environment : ModEnvironment.values()) if (environment.name().equals(name)) return environment;
+		return null;
 	}
 }

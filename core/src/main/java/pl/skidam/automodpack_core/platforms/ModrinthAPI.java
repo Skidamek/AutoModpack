@@ -19,7 +19,10 @@ import com.google.gson.JsonObject;
 import pl.skidam.automodpack_core.utils.Json;
 
 public record ModrinthAPI(String modrinthID, String requestUrl, String downloadUrl, String fileVersion, String fileName, long fileSize, String releaseType,
-		String SHA1Hash) {
+		String SHA1Hash, String environment) {
+	public ModrinthAPI(String modrinthID, String requestUrl, String downloadUrl, String fileVersion, String fileName, long fileSize, String releaseType, String SHA1Hash) {
+		this(modrinthID, requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, SHA1Hash, null);
+	}
 
 	private static final String BASE_URL = "https://api.modrinth.com/v2";
 	private static final Set<String> DOWNLOADABLE_VERSION_STATUSES = Set.of("listed", "archived", "unlisted");
@@ -116,29 +119,25 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 		return getModsInfosFromListOfSHA1(BASE_URL + "/version_files", listOfSha1);
 	}
 
-	/** The request url is injectable so tests can serve the endpoint locally. */
+	/** The request url is injectable so tests can serve the endpoint locally. Every requested hash Modrinth does not name is matched against nothing; null means the platform could not be asked. */
 	public static List<ModrinthAPI> getModsInfosFromListOfSHA1(String requestUrl, List<String> listOfSha1) {
-		if (listOfSha1 == null || listOfSha1.isEmpty()) return null;
+		if (listOfSha1 == null || listOfSha1.isEmpty()) return List.of();
+		return PlatformBatches.ask("Modrinth", listOfSha1, hashes -> versionFiles(requestUrl, hashes));
+	}
 
-		List<ModrinthAPI> modrinthAPIList = new LinkedList<>();
-
-		try {
-			JsonObject JSONObjects = Json.fromModrinthUrl(requestUrl, listOfSha1);
-			if (JSONObjects == null) {
-				LOGGER.warn("Modrinth returned no version files for {} hashes at {}", listOfSha1.size(), requestUrl);
-				return modrinthAPIList;
-			}
-			Set<String> wantedSha1s = Set.copyOf(listOfSha1);
-			for (String key : JSONObjects.keySet()) {
-				JsonObject JSONObject = JSONObjects.getAsJsonObject(key);
-				ModrinthAPI modrinthAPI = parseJsonObject(JSONObject, wantedSha1s);
-				if (modrinthAPI != null) modrinthAPIList.add(modrinthAPI);
-			}
-		} catch (Exception e) {
-			LOGGER.error("Failed to fetch data from Modrinth API", e);
+	private static List<ModrinthAPI> versionFiles(String requestUrl, List<String> listOfSha1) {
+		JsonObject versions = Json.fromModrinthUrl(requestUrl, listOfSha1);
+		if (versions == null) {
+			LOGGER.warn("Modrinth could not be asked about {} hashes at {}", listOfSha1.size(), requestUrl);
+			return null;
 		}
-
-		return modrinthAPIList;
+		List<ModrinthAPI> hits = new LinkedList<>();
+		Set<String> wantedSha1s = Set.copyOf(listOfSha1);
+		for (String key : versions.keySet()) {
+			ModrinthAPI modrinthAPI = parseJsonObject(versions.getAsJsonObject(key), wantedSha1s);
+			if (modrinthAPI != null) hits.add(modrinthAPI);
+		}
+		return hits;
 	}
 
 	private static ModrinthAPI parseJsonObject(JsonObject JSONObject, Set<String> wantedSha1s) {
@@ -178,7 +177,12 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 		long fileSize = JSONObjectFile.get("size").getAsLong();
 		if (sha1 == null) sha1 = JSONObjectFile.get("hashes").getAsJsonObject().get("sha1").getAsString();
 
-		return new ModrinthAPI(modrinthID, null, downloadUrl, fileVersion, fileName, fileSize, releaseType, sha1);
+		return new ModrinthAPI(modrinthID, null, downloadUrl, fileVersion, fileName, fileSize, releaseType, sha1, versionEnvironment(JSONObject));
+	}
+
+	private static String versionEnvironment(JsonObject version) {
+		if (version == null || !version.has("environment") || !version.get("environment").isJsonPrimitive()) return "";
+		return version.get("environment").getAsString();
 	}
 
 	/** The human project slug of every given project id that is publicly downloadable; ids without a slug or a downloadable status are absent. */

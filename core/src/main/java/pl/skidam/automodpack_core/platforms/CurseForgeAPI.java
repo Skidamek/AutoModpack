@@ -8,8 +8,10 @@ import java.io.InputStreamReader;
 import java.net.URL;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -24,7 +26,11 @@ import pl.skidam.automodpack_core.utils.HttpClientPool;
 
 @SuppressWarnings("deprecation")
 public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, String fileSize, String releaseType, String murmurHash,
-		String sha1Hash, int modId, String projectPageUrl) {
+		String sha1Hash, int modId, String projectPageUrl, boolean clientTag, boolean serverTag) {
+	public CurseForgeAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, String fileSize, String releaseType, String murmurHash, String sha1Hash, int modId,
+			String projectPageUrl) {
+		this(requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmurHash, sha1Hash, modId, projectPageUrl, false, false);
+	}
 
 	private static final Gson GSON = new Gson();
 
@@ -51,34 +57,40 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		return getModInfosFromFingerPrints(BASE_URL, TrustedEndpoint.PRODUCTION, hashes);
 	}
 
-	/** The request base url and the endpoint the key is provisioned for travel together, so the pin always holds; tests point both at a local server. */
+	/**
+	 * The request base url and the endpoint the key is provisioned for travel together, so the pin always holds; tests point both at a local
+	 * server. Every requested fingerprint CurseForge does not match is matched against nothing; null means the platform could not be asked.
+	 */
 	public static List<CurseForgeAPI> getModInfosFromFingerPrints(String baseUrl, TrustedEndpoint endpoint, Map<String, String> hashes) {
-		if (hashes == null || hashes.isEmpty()) return null;
+		if (hashes == null || hashes.isEmpty()) return List.of();
+		return PlatformBatches.ask("CurseForge", new ArrayList<>(hashes.entrySet()), batch -> {
+			Map<String, String> fingerprints = new LinkedHashMap<>();
+			for (Map.Entry<String, String> entry : batch) fingerprints.put(entry.getKey(), entry.getValue());
+			return exactMatches(baseUrl, endpoint, fingerprints);
+		});
+	}
 
-		List<CurseForgeAPI> curseForgeAPIList = new LinkedList<>();
-
+	private static List<CurseForgeAPI> exactMatches(String baseUrl, TrustedEndpoint endpoint, Map<String, String> hashes) {
 		try {
-			JsonArray exactMatches = fromCurseForgeUrl(baseUrl + "/fingerprints", endpoint, murmurRequest(hashes.values().stream().toList())).get("data")
-					.getAsJsonObject().get("exactMatches").getAsJsonArray();
-			for (JsonElement match : exactMatches) {
-				JsonObject JSONObject = match.getAsJsonObject();
-				CurseForgeAPI curseForgeAPI = parseJsonObject(JSONObject, hashes);
-				if (curseForgeAPI != null) curseForgeAPIList.add(curseForgeAPI);
+			JsonObject response = fromCurseForgeUrl(baseUrl + "/fingerprints", endpoint, murmurRequest(hashes.values().stream().toList()));
+			if (response == null || !response.has("data") || !response.get("data").isJsonObject()) {
+				LOGGER.warn("CurseForge could not be asked about {} fingerprints at {}", hashes.size(), baseUrl + "/fingerprints");
+				return null;
 			}
-			Map<Integer, String> listedPages = getListedProjectPages(curseForgeAPIList, baseUrl, endpoint);
-			if (listedPages != null) {
-				List<CurseForgeAPI> listed = new LinkedList<>();
-				for (CurseForgeAPI info : curseForgeAPIList) {
-					if (!listedPages.containsKey(info.modId())) continue;
-					listed.add(info.withProjectPageUrl(listedPages.get(info.modId())));
-				}
-				curseForgeAPIList = listed;
+			List<CurseForgeAPI> hits = new LinkedList<>();
+			for (JsonElement match : response.getAsJsonObject("data").getAsJsonArray("exactMatches")) {
+				CurseForgeAPI info = parseJsonObject(match.getAsJsonObject(), hashes);
+				if (info != null) hits.add(info);
 			}
-		} catch (Exception e) {
+			Map<Integer, String> listedPages = getListedProjectPages(hits, baseUrl, endpoint);
+			if (listedPages == null) return hits;
+			List<CurseForgeAPI> listed = new LinkedList<>();
+			for (CurseForgeAPI info : hits) if (listedPages.containsKey(info.modId())) listed.add(info.withProjectPageUrl(listedPages.get(info.modId())));
+			return listed;
+		} catch (IOException e) {
 			LOGGER.error("Failed to fetch data from CurseForge API", e);
+			return null;
 		}
-
-		return curseForgeAPIList;
 	}
 
 	/** CurseForge assigns `project-{id}` as the slug/name/page of unlisted or deleted projects. */
@@ -159,16 +171,32 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		String murmur = hashes.get(sha1);
 		int modId = fileJson.has("modId") && !fileJson.get("modId").isJsonNull() ? fileJson.get("modId").getAsInt() : 0;
 
-		return new CurseForgeAPI(null, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmur, sha1, modId, null);
+		boolean clientTag = false;
+		boolean serverTag = false;
+		if (fileJson.has("gameVersions") && fileJson.get("gameVersions").isJsonArray()) {
+			for (JsonElement version : fileJson.getAsJsonArray("gameVersions")) {
+				if (version == null || !version.isJsonPrimitive()) continue;
+				String name = version.getAsString();
+				if ("Client".equalsIgnoreCase(name)) clientTag = true;
+				else if ("Server".equalsIgnoreCase(name)) serverTag = true;
+			}
+		}
+		return new CurseForgeAPI(null, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmur, sha1, modId, null, clientTag, serverTag);
 	}
 
-	/** Listed projects keyed by mod id; the page url may be null. Null means the bulk lookup failed and fingerprint hits should be kept. */
-	private static Map<Integer, String> getListedProjectPages(List<CurseForgeAPI> infos, String baseUrl, TrustedEndpoint endpoint) throws IOException {
+	/** Listed projects keyed by mod id; the page url may be null. Null means the bulk lookup failed, which costs the pages but never the confirmed fingerprint hits. */
+	private static Map<Integer, String> getListedProjectPages(List<CurseForgeAPI> infos, String baseUrl, TrustedEndpoint endpoint) {
 		List<Integer> modIds = infos.stream().map(CurseForgeAPI::modId).filter(id -> id > 0).distinct().toList();
 		if (modIds.isEmpty()) return new HashMap<>();
-		JsonObject request = new JsonObject();
-		request.add("modIds", GSON.toJsonTree(modIds));
-		JsonObject response = fromCurseForgeUrl(baseUrl + "/mods", endpoint, request);
+		JsonObject response;
+		try {
+			JsonObject request = new JsonObject();
+			request.add("modIds", GSON.toJsonTree(modIds));
+			response = fromCurseForgeUrl(baseUrl + "/mods", endpoint, request);
+		} catch (IOException e) {
+			LOGGER.warn("CurseForge would not list the projects of {} confirmed fingerprints; their page urls stay unset", infos.size(), e);
+			return null;
+		}
 		if (response == null || !response.has("data") || !response.get("data").isJsonArray()) return null;
 		Map<Integer, String> listed = new HashMap<>();
 		for (JsonElement element : response.getAsJsonArray("data")) {
@@ -186,7 +214,7 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 	}
 
 	private CurseForgeAPI withProjectPageUrl(String url) {
-		return new CurseForgeAPI(requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmurHash, sha1Hash, modId, url);
+		return new CurseForgeAPI(requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmurHash, sha1Hash, modId, url, clientTag, serverTag);
 	}
 
 	private static JsonObject murmurRequest(List<String> murmurHashes) {
@@ -195,6 +223,7 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		return request;
 	}
 
+	/** The parsed body of an answered request; anything else is an IOException carrying the status, so a refusal can never read as an empty answer. */
 	private static JsonObject fromCurseForgeUrl(String requestUrl, TrustedEndpoint endpoint, JsonObject requestBody) throws IOException {
 		if (requestBody == null) return null;
 		endpoint.refuseForeign(requestUrl);
@@ -203,12 +232,9 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		// The key must never see a redirect target, so this request never follows one.
 		HttpResponse<byte[]> response = HttpClientPool.request(requestUrl, headers, body, false);
 		int code = response.statusCode();
-		if (code == 200) {
-			return parseObject(response.body());
-		}
-		if (code == 401) LOGGER.error("CurseForge API authorization failed with HTTP 401");
-		else LOGGER.warn("{} responded {} code", requestUrl, code);
-		return null;
+		if (code == 200) return parseObject(response.body());
+		if (code == 401) throw new IOException("CurseForge API authorization failed with HTTP 401");
+		throw new IOException(requestUrl + " responded " + code);
 	}
 
 	/** The body parsed as a JSON object; an array body is not an answer. */

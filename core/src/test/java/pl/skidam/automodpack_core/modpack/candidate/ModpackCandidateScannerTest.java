@@ -17,6 +17,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.generation.ContentTree;
+import pl.skidam.automodpack_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.platforms.PlatformCache;
+import pl.skidam.automodpack_core.platforms.PlatformSideVerdicts;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -310,10 +313,24 @@ class ModpackCandidateScannerTest {
 	}
 
 	private ModpackCandidate scan(Path server, Path groups, Map<String, ServerConfigJsons.GroupDeclaration> declarations) throws Exception {
+		return scan(server, groups, declarations, false, true, null);
+	}
+
+	private ModpackCandidate scan(Path server, Path groups, Map<String, ServerConfigJsons.GroupDeclaration> declarations, boolean autoExcludeServerSideMods, boolean applyPlatformExclusions,
+			PlatformSideVerdicts sideVerdicts) throws Exception {
 		Executor direct = Runnable::run;
-		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, Map.of("General", declarations),
-				false, tempDir.resolve("staging"), direct, null, null, null, true);
-		return new ModpackCandidateScanner().scan(request);
+		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, Map.of("General", declarations), autoExcludeServerSideMods, applyPlatformExclusions,
+				tempDir.resolve("staging"), direct, null, null, null, true);
+		return new ModpackCandidateScanner(sideVerdicts).scan(request);
+	}
+
+	/** A platform cache that already answers for {@code jar} with the given Modrinth version environment, so the stage never asks the network. */
+	private PlatformSideVerdicts cacheAnsweringModrinth(Path jar, String environment) throws IOException {
+		Path cacheDirectory = tempDir.resolve("platform-cache");
+		try (PlatformCache cache = PlatformCache.open(cacheDirectory)) {
+			cache.putModrinth(HashUtils.getHash(jar), new ModrinthAPI("mod", null, "https://cdn.example/a.jar", "1.0.0", "a.jar", 1L, "release", HashUtils.getHash(jar), environment), null);
+		}
+		return new PlatformSideVerdicts(cacheDirectory);
 	}
 
 	private static ServerConfigJsons.GroupDeclaration group(String... rules) {
@@ -473,10 +490,64 @@ class ModpackCandidateScannerTest {
 		}
 	}
 
+	/** The jar's own metadata answers this one, so the scan never reaches a platform stage at all. */
+	@Test
+	void jarServerEnvironmentIsExcludedWithoutAskingPlatforms() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main"));
+		writeModJar(groups.resolve("main/server-only.jar"), "server");
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()), true, true, null);
+
+		assertFalse(candidate.manifest().groups().get("main").files().containsKey("server-only.jar"));
+		assertEquals(1, candidate.exclusions().size());
+		assertEquals(ExcludedCandidate.Reason.SERVER_SIDE_MOD, candidate.exclusions().get(0).reason());
+		assertEquals("detected as a server-side mod", candidate.exclusions().get(0).message());
+	}
+
+	@Test
+	void universalJarIsExcludedWhenModrinthSaysClientsDoNotRunIt() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main"));
+		Path universal = groups.resolve("main/universal.jar");
+		writeModJar(universal);
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()), true, true, cacheAnsweringModrinth(universal, "server_only"));
+
+		assertFalse(candidate.manifest().groups().get("main").files().containsKey("universal.jar"));
+		assertEquals(1, candidate.exclusions().size());
+		assertEquals(ExcludedCandidate.Reason.SERVER_SIDE_MOD, candidate.exclusions().get(0).reason());
+		assertEquals("modrinth environment server_only", candidate.exclusions().get(0).message());
+	}
+
+	@Test
+	void previewReportsThePlatformExclusionWithoutDroppingTheJar() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main"));
+		Path universal = groups.resolve("main/universal.jar");
+		writeModJar(universal);
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()), true, false, cacheAnsweringModrinth(universal, "server_only"));
+
+		assertTrue(candidate.manifest().groups().get("main").files().containsKey("universal.jar"), "a preview reports the verdict, only a publish applies it");
+		assertEquals(1, candidate.exclusions().size());
+		assertEquals(ExcludedCandidate.Reason.SERVER_SIDE_MOD, candidate.exclusions().get(0).reason());
+	}
+
 	private static void writeModJar(Path path) throws IOException {
+		writeModJar(path, null);
+	}
+
+	private static void writeModJar(Path path, String environment) throws IOException {
+		String json = environment == null
+				? "{\"schemaVersion\":1,\"id\":\"testmod\",\"version\":\"1.0.0\"}"
+				: "{\"schemaVersion\":1,\"id\":\"testmod\",\"version\":\"1.0.0\",\"environment\":\"" + environment + "\"}";
 		try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(path))) {
 			jar.putNextEntry(new JarEntry("fabric.mod.json"));
-			jar.write("{\"schemaVersion\":1,\"id\":\"testmod\",\"version\":\"1.0.0\"}".getBytes(StandardCharsets.UTF_8));
+			jar.write(json.getBytes(StandardCharsets.UTF_8));
 			jar.closeEntry();
 		}
 	}

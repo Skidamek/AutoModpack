@@ -31,19 +31,17 @@ public class LoaderManager implements LoaderManagerService {
 
 	@Override
 	public String getLoaderVersion() {
-		// getVersionInfo() is only reachable through the loader instance once it is current (see
-		// EarlyModLocator) - fall back to the value captured off the launch context during discovery;
-		// by the time preload is false, getVersionInfo() is always populated.
+		// getVersionInfo() is only reachable through the loader instance once it is current.
+		// Preload uses the value captured in EarlyServiceBootstrapper; after preload, VersionInfo is populated.
 		if (preload && EarlyLaunchEnvironment.LOADER_VERSION != null) return EarlyLaunchEnvironment.LOADER_VERSION;
 		return FMLLoader.getCurrent().getVersionInfo().neoForgeVersion();
 	}
 
 	@Override
 	public EnvironmentType getEnvironmentType() {
-		// At mod-construction time the loader-native dist is authoritative: the launch-context
-		// distribution exists only for preload, where FMLLoader's dist isn't populated yet (see
-		// EarlyModLocator). Trusting the capture past preload let a stale or misparsed
-		// launchTarget report CLIENT on a real dedicated server and crash mod construction.
+		// At mod-construction time the loader-native dist is authoritative. Preload uses the capture
+		// from EarlyServiceBootstrapper. Trusting that capture past preload let a stale launchTarget
+		// report CLIENT on a real dedicated server and crash mod construction.
 		if (preload && EarlyLaunchEnvironment.IS_CLIENT != null) {
 			return EarlyLaunchEnvironment.IS_CLIENT ? EnvironmentType.CLIENT : EnvironmentType.SERVER;
 		}

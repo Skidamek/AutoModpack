@@ -58,7 +58,6 @@ extra["loaderVersions"] =
 		"loader-forge-fml47" to structuredString("1.20.1-forge", "deps", "forge"),
 		"loader-forge-earlyservices" to structuredString("1.20.1-forge", "deps", "forge"),
 		"loader-modlauncher-earlyservices" to structuredString("1.20.1-forge", "deps", "forge"),
-		"loader-neoforge-shared" to structuredString("1.21.1-neoforge", "deps", "neoforge"),
 		"loader-neoforge-fml4" to structuredString("1.21.1-neoforge", "deps", "neoforge"),
 		"loader-neoforge-earlyservices" to structuredString("1.21.10-neoforge", "deps", "neoforge"),
 	)

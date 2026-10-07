@@ -8,9 +8,9 @@ import java.nio.file.*;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.loader.FileInspection;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.ModEnvironment;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -41,24 +41,25 @@ public final class StableSourceSnapshotter {
 			if (!before.regularFile()) throw new IOException("Source is not a regular file");
 			FileCache.FileFingerprint beforeFingerprint = before.fingerprint();
 			Exclusion exclusion = expectedPathExclusion(source);
-			if (exclusion != null) return new Snapshot(null, exclusion, null);
+			if (exclusion != null) return new Snapshot(null, exclusion, null, null);
 
 			String sha1 = fileCache != null ? fileCache.getOrComputeHash(source.sourcePath()) : HashUtils.getHash(source.sourcePath());
 			if (sha1 == null) throw new IOException("SHA-1 calculation returned null");
 			if (!beforeFingerprint.equals(FileCache.fingerprint(source.sourcePath())))
 				throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
 
-			FileInspection.Mod mod = modFileCache == null ? null : modFileCache.getModOrNull(source.sourcePath(), fileCache);
-			if (isSelfFile(source.sourcePath(), mod)) return Snapshot.SKIPPED;
-			exclusion = expectedContentExclusion(source.sourcePath(), autoExcludeServerMods, mod);
-			if (exclusion != null) return new Snapshot(null, exclusion, null);
-			String type = fileType(source.sourcePath(), source.logicalPath(), mod);
+			FileInspection.Inspection inspection = modFileCache == null ? FileInspection.inspect(source.sourcePath(), fileCache) : modFileCache.inspect(source.sourcePath(), fileCache);
+			if (isSelfFile(source.sourcePath(), inspection)) return Snapshot.SKIPPED;
+			ModEnvironment environment = inspection.environment();
+			exclusion = expectedContentExclusion(autoExcludeServerMods, inspection);
+			if (exclusion != null) return new Snapshot(null, exclusion, null, environment);
+			String type = fileType(source.logicalPath(), inspection);
 			boolean fetchable = ModpackContentType.isSourceFetchable(type);
 			// A changed file is read once cold per need: the identity hash first, then the staging copy; the murmur
 			// rides the staged bytes - page-warm and proven equal by the copy's own SHA-1 - instead of re-reading the source.
-			if (!materializeMissing) return new Snapshot(groupFile(source, before, type, sha1, fetchable ? sourceMurmur(source, fileCache) : null, fileCache), null, null);
+			if (!materializeMissing) return new Snapshot(groupFile(source, before, type, sha1, fetchable ? sourceMurmur(source, fileCache) : null, fileCache), null, null, environment);
 			if (trustedObject(objectStoreDirectory, sha1, before.size(), fileCache))
-				return new Snapshot(groupFile(source, before, type, sha1, fetchable ? sourceMurmur(source, fileCache) : null, fileCache), null, null);
+				return new Snapshot(groupFile(source, before, type, sha1, fetchable ? sourceMurmur(source, fileCache) : null, fileCache), null, null, environment);
 
 			FileTrees.createManagedDirectory(stagingDirectory, "staging directory");
 			staged = Files.createTempFile(stagingDirectory, "snapshot-", stagingSuffix(source.sourcePath()));
@@ -74,7 +75,7 @@ public final class StableSourceSnapshotter {
 				murmur = HashUtils.getCurseforgeMurmurHash(staged);
 				if (fileCache != null && murmur != null) fileCache.publishMurmur(source.sourcePath(), murmur);
 			}
-			return new Snapshot(groupFile(source, before, type, sha1, murmur, fileCache), null, new StagedObject(sha1, size, staged));
+			return new Snapshot(groupFile(source, before, type, sha1, murmur, fileCache), null, new StagedObject(sha1, size, staged), environment);
 		} catch (CandidateBuildException e) {
 			delete(staged, e);
 			throw e;
@@ -120,23 +121,22 @@ public final class StableSourceSnapshotter {
 		return null;
 	}
 
-	/** The AutoModpack jar itself never becomes a candidate; clients receive it through the bootstrap flow, so it is not an exclusion event either. */
-	private static boolean isSelfFile(Path source, FileInspection.Mod cachedMod) {
-		String modId = cachedMod != null && cachedMod.id() != null ? cachedMod.id() : FileInspection.getModID(source);
-		return MOD_ID.equals(modId) || (MOD_ID + "_bootstrap").equals(modId) || (MOD_ID + "-bootstrap").equals(modId)
-				|| (MOD_ID + "_mod").equals(modId);
+	/**
+	 * The AutoModpack jar itself never becomes a candidate; clients receive it through the bootstrap flow, so it is not an
+	 * exclusion event either. A file the inspection already answered carries its own id, so this reopens nothing.
+	 */
+	private static boolean isSelfFile(Path source, FileInspection.Inspection inspection) {
+		FileInspection.Mod mod = inspection.metadata();
+		String modId = mod != null && mod.id() != null ? mod.id() : inspection.mod() ? FileInspection.getModID(source) : null;
+		return MOD_ID.equals(modId) || (MOD_ID + "_bootstrap").equals(modId) || (MOD_ID + "-bootstrap").equals(modId) || (MOD_ID + "_mod").equals(modId);
 	}
 
-	private static Exclusion expectedContentExclusion(Path source, boolean autoExcludeServerMods, FileInspection.Mod cachedMod) {
-		if (cachedMod == null && !FileInspection.isMod(source)) return null;
-		return autoExcludeServerMods && LoaderManagerService.EnvironmentType.SERVER.equals(FileInspection.getModEnvironment(source))
-				? new Exclusion(ExcludedCandidate.Reason.SERVER_SIDE_MOD, "detected as a server-side mod")
-				: null;
+	private static Exclusion expectedContentExclusion(boolean autoExcludeServerMods, FileInspection.Inspection inspection) {
+		return autoExcludeServerMods && inspection.environment() == ModEnvironment.SERVER ? new Exclusion(ExcludedCandidate.Reason.SERVER_SIDE_MOD, "detected as a server-side mod") : null;
 	}
 
-	private static String fileType(Path source, String logicalPath, FileInspection.Mod cachedMod) {
-		if (cachedMod != null || FileInspection.isMod(source)) return ModpackContentType.MOD;
-		return ModpackPathPolicy.typeForPath(logicalPath);
+	private static String fileType(String logicalPath, FileInspection.Inspection inspection) {
+		return inspection.mod() ? ModpackContentType.MOD : ModpackPathPolicy.typeForPath(logicalPath);
 	}
 
 	private static String stagingSuffix(Path source) {
@@ -158,9 +158,9 @@ public final class StableSourceSnapshotter {
 		String copy(Path source, Path staged) throws IOException;
 	}
 
-	public record Snapshot(GroupManifest.GroupFile file, Exclusion exclusion, StagedObject object) {
+	public record Snapshot(GroupManifest.GroupFile file, Exclusion exclusion, StagedObject object, ModEnvironment environment) {
 		/** The source is neither a candidate nor an exclusion event; it never reaches any report. */
-		public static final Snapshot SKIPPED = new Snapshot(null, null, null);
+		public static final Snapshot SKIPPED = new Snapshot(null, null, null, null);
 	}
 
 	public record Exclusion(ExcludedCandidate.Reason reason, String message) {}

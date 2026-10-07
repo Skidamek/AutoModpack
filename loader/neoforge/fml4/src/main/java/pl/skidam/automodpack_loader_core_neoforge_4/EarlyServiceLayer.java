@@ -22,7 +22,6 @@ import net.neoforged.neoforgespi.locating.IModFile;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.loader.ServiceJarIndex;
 import pl.skidam.automodpack_loader_core_modlauncher.ModLauncherEarlyServiceBridge;
-import pl.skidam.automodpack_loader_core_neoforge_shared.EarlyServiceReplay;
 
 /**
  * Holds the per-jar child SERVICE module layers built by {@link EarlyServiceBootstrapper}
@@ -40,8 +39,8 @@ import pl.skidam.automodpack_loader_core_neoforge_shared.EarlyServiceReplay;
  * <p>
  * The ModLauncher-family machinery this shares with legacy Forge - the child-layer build, the
  * child-layer registry, the {@code ITransformationService} forwarding engine and the GAME-classloader
- * bridge - lives in {@link ModLauncherEarlyServiceBridge}; the locator/reader replay machinery it
- * shares with the flat-classloader fml10/11 generation lives in {@link EarlyServiceReplay}.
+ * bridge - lives in {@link ModLauncherEarlyServiceBridge}. Locator/reader replay lives in
+ * {@link EarlyServiceReplay}; fml10/11 does not call it.
  */
 public final class EarlyServiceLayer {
 
@@ -116,9 +115,9 @@ public final class EarlyServiceLayer {
 	/**
 	 * Runs the hosted jars' {@code IModFileCandidateLocator}s against AutoModpack's discovery pipeline.
 	 * This is how mods like Sodium load their real (inner) mod jar - the loader would otherwise only
-	 * run this from its SERVICE layer, which AutoModpack never reaches. The replay itself is shared
-	 * with the fml10/11 generation (see {@link EarlyServiceReplay}); only this generation's
-	 * service cache and child-layer classloaders are bound here.
+	 * run this from its SERVICE layer, which a child layer never reaches. The helper lives in
+	 * {@link EarlyServiceReplay}; fml10/11 does not call it, because those locators load from FML's
+	 * own classloader after the bootstrap append.
 	 */
 	public static void runCandidateLocators(List<Path> jars, ILaunchContext context, IDiscoveryPipeline pipeline) {
 		EarlyServiceReplay.runCandidateLocators(jars, jar -> serviceImpls(jar, CANDIDATE_LOCATOR_SERVICE), EarlyServiceLayer::classLoaderFor, context, pipeline);
@@ -126,7 +125,7 @@ public final class EarlyServiceLayer {
 
 	/**
 	 * Runs the hosted jars' {@code IDependencyLocator}s. This is how mods like Ixeris load their real
-	 * (inner) mod jar. Shared with the fml10/11 generation (see {@link EarlyServiceReplay}).
+	 * (inner) mod jar. fml10/11 does not call this; FML enumerates those locators itself.
 	 */
 	public static void runDependencyLocators(List<Path> jars, List<IModFile> loadedMods, IDiscoveryPipeline pipeline) {
 		EarlyServiceReplay.runDependencyLocators(jars, jar -> serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE), EarlyServiceLayer::classLoaderFor, loadedMods, pipeline);
@@ -136,8 +135,7 @@ public final class EarlyServiceLayer {
 	 * Forwards an early-service jar's {@code IModFileReader}s into the live discovery pipeline, so a
 	 * modpack-folder mod that ships a reader for a custom mod-file format can interpret candidates in
 	 * place - no copy needed. Instantiates this generation's readers from the jar's child SERVICE
-	 * layer; the splice into the pipeline's reader list is shared with the fml10/11 generation (see
-	 * {@link EarlyServiceReplay#forwardModFileReaders}).
+	 * layer and splices them into the pipeline (see {@link EarlyServiceReplay#forwardModFileReaders}).
 	 */
 	public static void runModFileReaders(Path jar, IDiscoveryPipeline pipeline) {
 		ClassLoader cl = ModLauncherEarlyServiceBridge.classLoaderFor(jar);

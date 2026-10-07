@@ -25,7 +25,6 @@ val bundledModules =
 		":loader-forge-earlyservices",
 		":loader-forge-fml40",
 		":loader-forge-fml47",
-		":loader-neoforge-shared",
 		":loader-neoforge-earlyservices",
 		":loader-neoforge-fml4",
 	)

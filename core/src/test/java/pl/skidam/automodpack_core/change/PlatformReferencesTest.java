@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.change;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.nio.file.Path;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.platforms.PlatformCache;
@@ -34,7 +36,10 @@ class PlatformReferencesTest {
 					new CurseForgeAPI(null, "https://edge.forgecdn.net/file.jar", "1", "example.jar", "1", "release", "1", SHA1, 1318792, "https://www.curseforge.com/minecraft/mc-mods/project-1318792"));
 			ChangeSet referenced = PlatformReferences.withCachedReferences(catalogue(), cache);
 			assertEquals(List.of(MODRINTH_PAGE), referenced.changes().get(0).occurrences().get(0).references());
-			assertNull(cache.getAll(List.of(SHA1)).get(SHA1).curseforge());
+			// A deleted project's public page is unusable, but its side tags still answer whether the client runs the file.
+			PlatformCache.CurseForgeEntry curseForge = cache.getAll(List.of(SHA1)).get(SHA1).curseforge();
+			assertNotNull(curseForge);
+			assertNull(curseForge.projectPageUrl());
 		}
 	}
 
@@ -81,7 +86,7 @@ class PlatformReferencesTest {
 
 	private static ChangeSet catalogue() {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(1, "mod", false, SHA1, null);
-		GroupManifest.Group group = new GroupManifest.Group("Main", "", "General", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/example.jar", file)));
+		GroupManifest.Group group = new GroupManifest.Group("Main", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/example.jar", file)));
 		return ChangeSet.catalogue(new GroupManifest("pack", "Pack", "1", "fabric", "1", "1.21", new TreeMap<>(Map.of("main", group))));
 	}
 }

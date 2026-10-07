@@ -68,16 +68,16 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 		List<Path> connectorModLocations = new ArrayList<>();
 		for (Path path : candidatePaths) {
 			Optional<IModFile> modFile = pipeline.addPath(path, ModFileDiscoveryAttributes.DEFAULT, IncompatibleFileReporting.WARN_ALWAYS);
-			if (modFile.isEmpty()) connectorModLocations.add(path);
+			if (modFile.isEmpty() || isConnectorPlaceholder(modFile.get())) connectorModLocations.add(path);
 		}
-		// Connector remains responsible for plain Fabric jars that have no native FML representation,
-		// but it must not rediscover jars already claimed by a higher-priority custom reader. This is
-		// what lets translation layers such as Roxy replace Fabric metadata before Connector validates it.
-		// Only the unclaimable paths are offered here - unlike forge, whose modsToLoad pre-filters out
-		// every incompatible jar, nothing was dropped before discovery on this generation.
+		// Unclaimed Fabric jars plus Connector placeholders (FML-readable toml that Connector remaps). A custom reader that translated a Fabric jar into a real FML mod (Roxy) is not a placeholder and is not offered.
 		ConnectorFallback.offer(connectorModLocations);
 		// Replay all early-service candidate locators together, priority-ordered (see the method).
 		EarlyServiceLayer.runCandidateLocators(earlyServiceJars, context, pipeline);
+	}
+
+	private static boolean isConnectorPlaceholder(IModFile modFile) {
+		return modFile.getModFileInfo() != null && ConnectorFallback.isPlaceholder(modFile.getModFileInfo().getFileProperties());
 	}
 
 	@Override
