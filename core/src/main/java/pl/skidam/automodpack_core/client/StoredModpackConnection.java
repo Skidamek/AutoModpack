@@ -66,6 +66,11 @@ public final class StoredModpackConnection implements AutoCloseable {
 		return advertisedDocument;
 	}
 
+	/** The live transfer, or null after {@link #newUpdater} consumed it or {@link #close} ran. */
+	public synchronized PackTransport transport() {
+		return transport;
+	}
+
 	/** Transfers this session's transport ownership to an updater. This connection becomes empty. */
 	public synchronized ModpackUpdater newUpdater(SelectedModpackTarget target, ClientStorage storage) throws IOException {
 		if (!modpackId.equals(target.manifest().modpackId())) throw new IOException("Selected modpack identity does not match the connected pack");

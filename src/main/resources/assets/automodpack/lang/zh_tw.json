@@ -84,6 +84,8 @@
   "automodpack.packDetails.connection": "伺服器 %s  |  %s",
   "automodpack.packDetails.generation": "世代 %s  |  %s",
   "automodpack.packDetails.working": "處理中...",
+  "automodpack.music.play": "播放音樂",
+  "automodpack.music.stop": "停止播放",
   "automodpack.changelog.view": "檢視更新日誌",
   "automodpack.changelog.latestNote": "伺服器最新更新說明：%s",
   "automodpack.browser.search": "搜尋檔案",

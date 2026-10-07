@@ -88,6 +88,8 @@
   "automodpack.packDetails.connection": "Сервер %s  |  %s",
   "automodpack.packDetails.generation": "Генерація %s  |  %s",
   "automodpack.packDetails.working": "Виконується...",
+  "automodpack.music.play": "Відтворити музику",
+  "automodpack.music.stop": "Зупинити музику",
   "automodpack.changelog.view": "Журнал змін",
   "automodpack.changelog.latestNote": "Останній опис оновлення з сервера: %s",
   "automodpack.browser.search": "Пошук файлів",

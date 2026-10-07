@@ -81,6 +81,8 @@
   "automodpack.packDetails.connection": "servr %s  |  %s",
   "automodpack.packDetails.generation": "generashun %s  |  %s",
   "automodpack.packDetails.working": "werkz...",
+  "automodpack.music.play": "pl4y mu51c",
+  "automodpack.music.stop": "5t0p mu51c",
   "automodpack.changelog.view": "see changelogz",
   "automodpack.changelog.latestNote": "newest patch note frum da servr: %s",
   "automodpack.browser.search": "find filez",

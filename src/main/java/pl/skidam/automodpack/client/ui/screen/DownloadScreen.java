@@ -13,10 +13,12 @@ import net.minecraft.resources.Identifier;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.WaitingPresentation;
+import pl.skidam.automodpack.client.ui.versioned.VersionedIconButton;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
+import pl.skidam.automodpack_core.client.WaitingMusic;
 import pl.skidam.automodpack_core.screen.DownloadView;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.utils.ByteFormat;
@@ -34,8 +36,7 @@ public class DownloadScreen extends VersionedScreen {
 	private final long startedAtNanos = System.nanoTime();
 	private boolean musicStarted = false;
 	private AbstractWidget cancelButton;
-	private Button muteMusicButton;
-	private Button playMusicButton;
+	private Button musicButton;
 
 	private String cachedStage = "0/0";
 	private double cachedPercentage = 0.0;
@@ -70,18 +71,18 @@ public class DownloadScreen extends VersionedScreen {
 		// No label on the button: the icon speaks and the tooltip names it - a text label inside a 20px button scissor-clips mid-word.
 		int iconX = panelLeft(ActionAreaLayout.FOOTER_RAIL) + panelWidth(ActionAreaLayout.FOOTER_RAIL) - ActionAreaLayout.BUTTON_HEIGHT;
 		int iconY = VersionedScreen.widgetY(cancelButton);
+		musicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(iconX, iconY, ActionAreaLayout.BUTTON_HEIGHT, 16, button -> toggleMusic(), "music-note", VersionedText.text("automodpack.music.play")));
+	}
 
-		muteMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(iconX, iconY, ActionAreaLayout.BUTTON_HEIGHT, 16, button -> {
+	/** Unlike the details screen's preview, this choice is the player's real one and is remembered for the next download. */
+	private void toggleMusic() {
+		if (AudioManager.isMusicPlaying()) {
 			AudioManager.stopMusic();
 			ClientPreferences.setMusicEnabled(false);
-		}, "music-note"));
-		setTooltip(muteMusicButton, VersionedText.translatable("soundCategory.music"));
-
-		playMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(iconX, iconY, ActionAreaLayout.BUTTON_HEIGHT, 16, button -> {
+		} else {
 			AudioManager.playMusic();
 			ClientPreferences.setMusicEnabled(true);
-		}, "mute-music-note"));
-		setTooltip(playMusicButton, VersionedText.translatable("soundCategory.music"));
+		}
 	}
 
 	private void updateUIState() {
@@ -172,26 +173,30 @@ public class DownloadScreen extends VersionedScreen {
 		}
 
 		checkAndStartMusic();
-		updateMusicButtons();
+		updateMusicButton();
 	}
 
-	private void updateMusicButtons() {
-		if (playMusicButton.active && muteMusicButton.active) {
-			boolean playing = AudioManager.isMusicPlaying();
-			muteMusicButton.visible = playing;
-			playMusicButton.visible = !playing;
-		} else {
-			muteMusicButton.visible = clientConfig.playMusic;
-			playMusicButton.visible = !clientConfig.playMusic;
-		}
+	/** The icon shows the action, so a download that autoplayed music rests on the red X and one that did not rests on the note. */
+	private void updateMusicButton() {
+		boolean playing = AudioManager.isMusicPlaying();
+		Component action = VersionedText.text(playing ? "automodpack.music.stop" : "automodpack.music.play");
+		((VersionedIconButton) musicButton).setSprite(playing ? "mute-music-note" : "music-note");
+		((VersionedIconButton) musicButton).setNarration(action);
+		setTooltip(musicButton, action);
 	}
 
 	private void checkAndStartMusic() {
-		muteMusicButton.active = true;
-		playMusicButton.active = true;
+		musicButton.active = true;
 		if (musicStarted) return;
 		if (clientConfig.playMusic) AudioManager.playMusic();
 		musicStarted = true;
+	}
+
+	@Override
+	public void removed() {
+		AudioManager.stopMusic();
+		WaitingMusic.endRun();
+		super.removed();
 	}
 
 	@Override

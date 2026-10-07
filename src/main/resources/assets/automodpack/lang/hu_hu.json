@@ -84,6 +84,8 @@
   "automodpack.packDetails.connection": "Szerver %s  |  %s",
   "automodpack.packDetails.generation": "Generáció %s  |  %s",
   "automodpack.packDetails.working": "Folyamatban...",
+  "automodpack.music.play": "Zene lejátszása",
+  "automodpack.music.stop": "Zene leállítása",
   "automodpack.changelog.view": "Changelogok megtekintése",
   "automodpack.changelog.latestNote": "A szerver legújabb frissítési jegyzete: %s",
   "automodpack.browser.search": "Fájlok keresése",

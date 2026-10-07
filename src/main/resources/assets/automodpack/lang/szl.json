@@ -88,6 +88,8 @@
   "automodpack.packDetails.connection": "Serwer %s  |  %s",
   "automodpack.packDetails.generation": "Generacyjo %s  |  %s",
   "automodpack.packDetails.working": "Robiymy...",
+  "automodpack.music.play": "Puscij muzyka",
+  "automodpack.music.stop": "Zastow muzyka",
   "automodpack.changelog.view": "Pokŏż changelogi",
   "automodpack.changelog.latestNote": "Nojnowszo notatka ô zmianach ôd serwera: %s",
   "automodpack.browser.search": "Szukej plikōw",

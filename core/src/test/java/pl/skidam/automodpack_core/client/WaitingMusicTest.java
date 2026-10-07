@@ -42,9 +42,7 @@ class WaitingMusicTest {
 	Path tempDir;
 
 	@AfterEach
-	void tearDown() throws Exception {
-		WaitingMusic.Session session = WaitingMusic.current();
-		if (session != null) session.awaitFetch();
+	void tearDown() {
 		WaitingMusic.endRun();
 	}
 
@@ -154,6 +152,25 @@ class WaitingMusicTest {
 		assertNull(session.loopFile(), "a broken body never becomes the loop file");
 		awaitObject(storage, TRACK_SHA1, false);
 		WaitingMusic.endRun();
+	}
+
+	@Test
+	void aListenWithoutARouteLoopsACachedObjectAndBundlesWhenTheObjectIsMissing() throws Exception {
+		ClientStorage storage = storage();
+		FakeTransport transport = new FakeTransport(TRACK);
+		WaitingMusic.start(transport, storage, TRACK_SHA1);
+		transport.awaitDone();
+		awaitObject(storage, TRACK_SHA1, true);
+		WaitingMusic.endRun();
+
+		WaitingMusic.Session cached = WaitingMusic.bundled(storage, TRACK_SHA1);
+		assertEquals(WaitingMusic.Kind.LOOP, cached.kind());
+		assertEquals(object(storage, TRACK_SHA1), cached.loopFile());
+		WaitingMusic.endRun();
+
+		WaitingMusic.Session missing = WaitingMusic.bundled(storage, NEW_TRACK_SHA1);
+		assertEquals(WaitingMusic.Kind.BUNDLED, missing.kind());
+		assertNull(missing.loopFile());
 	}
 
 	@Test

@@ -5,6 +5,7 @@ import java.util.List;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -13,6 +14,7 @@ import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.UiFormat;
+import pl.skidam.automodpack.client.ui.versioned.VersionedIconButton;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -45,12 +47,15 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 	private String generationLine;
 	private MutableComponent idTooltip;
 	private MutableComponent generationTooltip;
+	private Button musicButton;
+	private final WaitingMusicPlayer music;
 
 	public ModpackSettingsScreen(Screen parent, InstalledModpackController controller, InstalledModpackController.Pack pack) {
 		super(VersionedText.text("automodpack.packDetails.title"));
 		this.parent = parent;
 		this.controller = controller;
 		this.pack = pack;
+		this.music = controller.waitingMusicPlayer();
 	}
 
 	@Override
@@ -85,18 +90,30 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 		}
 		for (AbstractWidget button : addActionAreaAt(PANEL_WIDTH, actionGridTop(), rows.toArray(ActionRow[]::new))) actionButtons.add(button);
 		// Back sits on the shared bottom rail like on every other screen, so it never reads as one more grid action.
-		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), button -> ScreenImpl.setScreen(parent))));
+		AbstractWidget back = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28,
+				actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), button -> ScreenImpl.setScreen(parent)))).get(0);
+		int iconX = panelLeft(ActionAreaLayout.FOOTER_RAIL) + panelWidth(ActionAreaLayout.FOOTER_RAIL) - ActionAreaLayout.BUTTON_HEIGHT;
+		int iconY = VersionedScreen.widgetY(back);
+		musicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(iconX, iconY, ActionAreaLayout.BUTTON_HEIGHT, 16, button -> toggleMusic(), "music-note"));
 		// Destructive verbs say what they do before the player commits: Deactivate keeps files, Remove deletes them.
 		for (int index = 0; index < actions.size() && index < actionButtons.size(); index++) {
 			Component tooltip = actions.get(index).tooltip();
 			if (tooltip != null) setTooltip(actionButtons.get(index), tooltip);
 		}
 		updateActions();
+		updateMusicButton();
+	}
+
+	/** One button, both jobs: the preview never autoplays, so its resting state is always play. Resuming re-fetches, so the track is never a stale one. */
+	private void toggleMusic() {
+		if (music.state().playing()) music.stop();
+		else music.play(pack);
 	}
 
 	@Override
 	public void tick() {
 		super.tick();
+		updateMusicButton();
 		if (!busy || busyVisible || Util.getMillis() - busyAt < BUSY_VISIBLE_MILLIS) return;
 		busyVisible = true;
 		updateActions();
@@ -281,6 +298,25 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 		showHoverTooltip(generationTooltip, this.width / 2 - this.font.width(generationLine) / 2, y, this.font.width(generationLine), mouseX, mouseY);
 		if (busyVisible)
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.packDetails.working").withStyle(ChatFormatting.YELLOW), this.width / 2, this.height - 44, TextColors.WHITE);
+	}
+
+	private void updateMusicButton() {
+		if (musicButton == null) return;
+		WaitingMusicPlayer.MusicState state = music.state();
+		Component action = VersionedText.text(state.playing() ? "automodpack.music.stop" : "automodpack.music.play");
+		((VersionedIconButton) musicButton).setSprite(state.playing() ? "mute-music-note" : "music-note");
+		((VersionedIconButton) musicButton).setNarration(action);
+		musicButton.active = !state.busy();
+		// A failed refresh only ever shows while the fallback track plays, so the news lands on the stop button's tooltip - the icon already says what the press does.
+		setTooltip(musicButton, state.fetching()
+				? VersionedText.text("automodpack.waitingMusic.fetching")
+				: state.refreshFailed() ? VersionedText.text("automodpack.waitingMusic.refreshFailed") : action);
+	}
+
+	@Override
+	public void removed() {
+		music.close();
+		super.removed();
 	}
 
 	@Override

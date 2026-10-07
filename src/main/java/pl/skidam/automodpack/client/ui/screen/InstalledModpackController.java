@@ -557,6 +557,10 @@ final class InstalledModpackController {
 		Minecraft.getInstance().execute(released);
 	}
 
+	WaitingMusicPlayer waitingMusicPlayer() {
+		return new WaitingMusicPlayer(storage);
+	}
+
 	private void failure(Throwable cause, String messageKey, FailureCategory category) {
 		ScreenManager.failure(FailureRequest.of(cause, messageKey, category, FailureDestination.CURRENT_SCREEN, null));
 	}

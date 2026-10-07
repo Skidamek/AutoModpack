@@ -55,7 +55,6 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 /*import net.minecraft.client.gui.GuiGraphics;
 *//*?}*/
 
-import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack.client.ClientTextures;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
@@ -635,7 +634,7 @@ public class VersionedScreen extends Screen {
 	}
 
 	public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath, Component message) {
-		return new VersionedIconButton(x, y, buttonWidth, spriteWidth, onPress, Common.id("textures/gui/sprites/" + spritePath + ".png"), message);
+		return new VersionedIconButton(x, y, buttonWidth, spriteWidth, onPress, spritePath, message);
 	}
 
 	protected static final class ActionDefinition {

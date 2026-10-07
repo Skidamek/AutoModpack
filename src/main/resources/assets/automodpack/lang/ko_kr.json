@@ -84,6 +84,8 @@
   "automodpack.packDetails.connection": "서버 %s  |  %s",
   "automodpack.packDetails.generation": "세대 %s  |  %s",
   "automodpack.packDetails.working": "작업 중...",
+  "automodpack.music.play": "음악 재생",
+  "automodpack.music.stop": "음악 중지",
   "automodpack.changelog.view": "변경 내역 보기",
   "automodpack.changelog.latestNote": "서버의 최신 패치 노트: %s",
   "automodpack.browser.search": "파일 검색",

@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -38,7 +39,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * (decoded as they arrive, promoted for every later sync), or the bundled track when the head advertises none, the
  * object is missing, the fetch fails before playable audio, or the body is over the guardrail. The bundled track never
  * plays while a fetch is still in flight, and a stream that fails mid-play ends in silence rather than in an
- * interrupting switch.
+ * interrupting switch. A play with no route to fetch through takes {@link #bundled}, so nothing downstream has to
+ * reason about a missing transport.
  */
 public final class WaitingMusic {
 
@@ -54,8 +56,17 @@ public final class WaitingMusic {
 		current = null;
 	}
 
-	/** Starts the run's session: a CAS hit plays at once, a fresh track streams in, absence resolves to bundled. */
+	/** Starts the run's session over a live route: a CAS hit plays at once, a fresh track streams in. */
 	public static Session start(PackTransport transport, ClientStorage storage, String advertisedSha1) {
+		return begin(storage, advertisedSha1, Objects.requireNonNull(transport, "transport"));
+	}
+
+	/** Starts the run's session with no route to fetch through: a cached object or the bundled track, never a request. */
+	public static Session bundled(ClientStorage storage, String advertisedSha1) {
+		return begin(storage, advertisedSha1, null);
+	}
+
+	private static Session begin(ClientStorage storage, String advertisedSha1, PackTransport transport) {
 		String sha1 = advertisedSha1 == null ? "" : advertisedSha1.trim().toLowerCase(Locale.ROOT);
 		Session existing = current;
 		if (existing != null && existing.advertisedSha1.equals(sha1)) return existing;
@@ -74,7 +85,6 @@ public final class WaitingMusic {
 		private final String advertisedSha1;
 		private final LinkedBlockingQueue<byte[]> chunks = new LinkedBlockingQueue<>();
 		private final CompletableFuture<Kind> kind = new CompletableFuture<>();
-		private final CompletableFuture<Void> fetchFinished = new CompletableFuture<>();
 		private volatile boolean fetchAlive = true;
 		private volatile IOException fetchError;
 		private volatile byte[] residual;
@@ -144,16 +154,6 @@ public final class WaitingMusic {
 			return loopFile;
 		}
 
-		/** Blocks until the object fetch (or the cache-hit / bundled decision) has released every file it opened. */
-		void awaitFetch() throws InterruptedException {
-			try {
-				fetchFinished.get(20, TimeUnit.SECONDS);
-			} catch (TimeoutException e) {
-				throw new IllegalStateException("waiting music fetch did not finish", e);
-			} catch (ExecutionException ignored) {
-			}
-		}
-
 		private void completeKind(Kind value) {
 			kind.complete(value);
 		}
@@ -161,7 +161,6 @@ public final class WaitingMusic {
 		private void begin(PackTransport transport) {
 			if (!HashUtils.isSha1(advertisedSha1)) {
 				completeKind(Kind.BUNDLED);
-				fetchFinished.complete(null);
 				return;
 			}
 			Path object = storage.objectFile(advertisedSha1);
@@ -169,11 +168,14 @@ public final class WaitingMusic {
 				if (Files.isRegularFile(object) && FileIntegrity.matches(object, Files.size(object), advertisedSha1)) {
 					loopFile = object;
 					completeKind(Kind.LOOP);
-					fetchFinished.complete(null);
 					return;
 				}
 			} catch (IOException e) {
 				LOGGER.warn("Could not read the cached waiting music object; fetching it again", e);
+			}
+			if (transport == null) {
+				completeKind(Kind.BUNDLED);
+				return;
 			}
 			try {
 				ClientObjectStore.publishOwnership(storage, Set.of(advertisedSha1));
@@ -220,7 +222,6 @@ public final class WaitingMusic {
 				deleteQuietly(temp);
 			} finally {
 				fetchAlive = false;
-				fetchFinished.complete(null);
 			}
 		}
 

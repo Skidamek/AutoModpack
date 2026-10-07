@@ -88,6 +88,8 @@
   "automodpack.packDetails.connection": "Сервер %s  |  %s",
   "automodpack.packDetails.generation": "Генерация %s  |  %s",
   "automodpack.packDetails.working": "Выполняется...",
+  "automodpack.music.play": "Воспроизвести музыку",
+  "automodpack.music.stop": "Остановить музыку",
   "automodpack.changelog.view": "Журнал изменений",
   "automodpack.changelog.latestNote": "Последнее описание обновления с сервера: %s",
   "automodpack.browser.search": "Поиск файлов",

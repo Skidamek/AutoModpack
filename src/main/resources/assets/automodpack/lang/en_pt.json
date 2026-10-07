@@ -81,6 +81,8 @@
   "automodpack.packDetails.connection": "Server %s  |  %s",
   "automodpack.packDetails.generation": "Generation %s  |  %s",
   "automodpack.packDetails.working": "Workin'...",
+  "automodpack.music.play": "Play music, matey",
+  "automodpack.music.stop": "Stop music, matey",
   "automodpack.changelog.view": "Read th' ship's logs",
   "automodpack.changelog.latestNote": "Latest captain's note from th' server: %s",
   "automodpack.browser.search": "Search th' loot",

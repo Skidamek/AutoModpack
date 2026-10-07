@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_loader_core_neoforge_shared;
+package pl.skidam.automodpack_loader_core_neoforge_4;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
@@ -17,15 +17,12 @@ import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
 
 /**
  * Replays the mod-locating services of hosted NeoForge early-service jars into AutoModpack's own
- * discovery - shared verbatim by both neoforge generations, ModLauncher-era fml4 and the
- * flat-classloader fml10/11. FML enumerated locators and readers from its classloader chain BEFORE
- * the candidate phase that hosted these jars, so its own passes never see them: their candidate
- * locators, dependency locators and mod file readers must be driven by hand, which is what the
- * methods below do - priority-ordered across all hosted jars. A replay that throws refuses the
- * launch loudly: a swallowed failure would leave that mod silently absent from the game, which is
- * the stealth degradation the project bans. Where a jar's implementations and the
- * classloader that can see them live is per-generation knowledge, passed in by the caller; only the
- * replay machinery itself lives here.
+ * discovery. fml4 calls this because those locators live on a child SERVICE layer FML's
+ * ServiceLoader never sees. fml10/11 does not: it appends the jars to FML's own classloader before
+ * discovery, so FML enumerates the locators itself. A replay that throws refuses the launch
+ * loudly: a swallowed failure would leave that mod silently absent from the game. Where a jar's
+ * implementations and the classloader that can see them live is per-generation knowledge, passed
+ * in by the caller.
  *
  * <p>
  * Compiled against the oldest consumer pin (neoforgespi 4.x): every type in these signatures exists
@@ -37,8 +34,7 @@ public final class EarlyServiceReplay {
 
 	/**
 	 * Runs the {@code IModFileCandidateLocator}s declared inside the hosted jars against AutoModpack's
-	 * discovery pipeline - how mods like Sodium (fml4) or a Connector-style locator (fml10/11) load
-	 * their real (inner) mod jar in place.
+	 * discovery pipeline - how mods like Sodium load their real (inner) mod jar in place on fml4.
 	 */
 	public static void runCandidateLocators(List<Path> jars, Function<Path, List<String>> implsFor, Function<Path, ClassLoader> loaderFor, ILaunchContext context,
 			IDiscoveryPipeline pipeline) {
@@ -54,7 +50,7 @@ public final class EarlyServiceReplay {
 
 	/**
 	 * Runs the {@code IDependencyLocator}s declared inside the hosted jars - how a jar-in-jar
-	 * dependency locator (CrashAssistant-style on fml4, Ixeris-style on fml10/11) contributes its
+	 * dependency locator (CrashAssistant-style) contributes its
 	 * real (inner) mod jar in place.
 	 */
 	public static void runDependencyLocators(List<Path> jars, Function<Path, List<String>> implsFor, Function<Path, ClassLoader> loaderFor, List<IModFile> loadedMods,

@@ -84,6 +84,8 @@
   "automodpack.packDetails.connection": "Servidor %s  |  %s",
   "automodpack.packDetails.generation": "Generación %s  |  %s",
   "automodpack.packDetails.working": "En curso...",
+  "automodpack.music.play": "Reproducir música",
+  "automodpack.music.stop": "Detener música",
   "automodpack.changelog.view": "Ver historial de cambios",
   "automodpack.changelog.latestNote": "Última nota de la versión del servidor: %s",
   "automodpack.browser.search": "Buscar archivos",

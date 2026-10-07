@@ -84,6 +84,8 @@
   "automodpack.packDetails.connection": "服务器 %s  |  %s",
   "automodpack.packDetails.generation": "世代 %s  |  %s",
   "automodpack.packDetails.working": "处理中...",
+  "automodpack.music.play": "播放音乐",
+  "automodpack.music.stop": "停止播放",
   "automodpack.changelog.view": "查看更新日志",
   "automodpack.changelog.latestNote": "服务器最新更新说明：%s",
   "automodpack.browser.search": "搜索文件",
