@@ -17,7 +17,7 @@ public record PackAbsence(Kind kind, String detail) {
 		NOTHING_FOUND,
 		/** Files were found and every one of them was excluded from the modpack. */
 		ALL_EXCLUDED,
-		/** The modpack holds files, but no group is required or selected by default, so no client would receive any. */
+		/** The modpack holds files, but no group is required or recommended, so no client would receive any. */
 		NOTHING_SELECTED,
 		/** Nothing was ever published and this attempt did not ask for a publication. */
 		NEVER_PUBLISHED

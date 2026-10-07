@@ -26,7 +26,7 @@ Compression is plain HTTP negotiation, per request, with no heuristics: a reques
 
 When `validate-secrets` is on, every request has to carry the login-issued secret as an `Authorization: Bearer` header, so `secret-lifetime` and revocation apply per request: a revoked secret dies at the next request, not at the next connection. The certificate verification ladder does not change.
 
-The optional waiting track is an object like any other: drop an `.ogg` at `automodpack/host-modpack/waiting-music.ogg`, and the next publish stores it in the object store and writes its sha1 into the head document. Clients fetch `objects/<sha1>` only when they do not already hold those bytes, so a track that did not change costs nothing on any host. The track is waiting music: files past 5 MiB are refused at publish and aborted at the response head, and a generation that publishes without the file serves the bundled track. Licensing is the operator's responsibility.
+The optional waiting track is an object like any other: drop an `.ogg` at `automodpack/host-modpack/waiting-music.ogg`, and the next publish stores it in the object store and writes its sha1 into the head document. Clients fetch `objects/<sha1>` only when they do not already hold those bytes, so a track that did not change costs nothing on any host. The installed pack's details screen plays that advertised track, so a new file can be heard after generate without reinstalling the pack. The track is waiting music: files past 5 MiB are refused at publish and aborted at the response head, and a generation that publishes without the file serves the bundled track. Licensing is the operator's responsibility.
 
 Three hosting shapes serve byte-identical bytes; a client cannot tell them apart.
 

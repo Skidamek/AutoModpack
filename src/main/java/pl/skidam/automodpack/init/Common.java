@@ -66,7 +66,7 @@ public class Common {
 				LOGGER.info("Modpack generation completed! took {}ms", System.currentTimeMillis() - genStart);
 			} else if (generation instanceof ModpackExecutor.PublishResult.NothingToPublish nothing) {
 				LOGGER.warn("{}", nothing.absence().detail());
-			} else if (generation instanceof ModpackExecutor.PublishResult.Rejected rejected) {
+			} else if (generation instanceof ModpackExecutor.Rejected rejected) {
 				throw new IllegalStateException("Failed to generate modpack: " + rejected.detail(), rejected.cause());
 			}
 		} else {
@@ -76,7 +76,7 @@ public class Common {
 				LOGGER.info("Modpack loaded at content {}! took {}ms", loaded.current().contentToken(), System.currentTimeMillis() - genStart);
 			} else if (generation instanceof ModpackExecutor.LoadResult.NothingPublished nothing) {
 				LOGGER.warn("{}", nothing.absence().detail());
-			} else if (generation instanceof ModpackExecutor.LoadResult.Rejected rejected) {
+			} else if (generation instanceof ModpackExecutor.Rejected rejected) {
 				throw new IllegalStateException("Failed to load modpack: " + rejected.detail(), rejected.cause());
 			}
 		}
