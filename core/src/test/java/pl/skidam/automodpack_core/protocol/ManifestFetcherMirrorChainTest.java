@@ -24,6 +24,7 @@ import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.generation.Journal;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
@@ -62,7 +63,7 @@ class ManifestFetcherMirrorChainTest {
 		assertTrue(Files.exists(storage.historyHeadFile(MODPACK_ID)), "The fetched head document must land in the installed mirror");
 		assertEquals(new String(headBytes, StandardCharsets.UTF_8), Files.readString(storage.historyHeadFile(MODPACK_ID), StandardCharsets.UTF_8));
 		// The install the first sync drives: the active generation now points at the fetched head's token.
-		storage.writeActiveState(MODPACK_ID, head.contentToken, head.ownershipLedger);
+		storage.writeActiveState(PackDocument.fromFields(head));
 
 		// The second contact carries the mirror's hash as the validator: the server answers without a body and the
 		// content is served from the mirror. The flow's local verification runs regardless - only the transfer is skipped.
@@ -88,7 +89,7 @@ class ManifestFetcherMirrorChainTest {
 		assertTrue(Files.exists(storage.historyHeadFile(MODPACK_ID)), "the first fetch must install the vouching head mirror");
 		// The install the first sync drives: the active generation now points at the fetched head's token, so the
 		// re-check's mirror vouches and the journal fetch pipelines behind the head.
-		storage.writeActiveState(MODPACK_ID, head.contentToken, head.ownershipLedger);
+		storage.writeActiveState(PackDocument.fromFields(head));
 
 		// The re-check vouches and pipelines the journal behind the head; the host close-frames every document, so the
 		// head's body ends at EOF and spends the lane - the pipelined journal response never parses. One fresh-lane
@@ -120,7 +121,7 @@ class ManifestFetcherMirrorChainTest {
 		ClientStorage storage = storage();
 		var first = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(20, TimeUnit.SECONDS);
 		assertTrue(first.successful(), () -> "first fetch failed: " + first.failure());
-		storage.writeActiveState(MODPACK_ID, head.contentToken, head.ownershipLedger);
+		storage.writeActiveState(PackDocument.fromFields(head));
 
 		int afterFirst = server.requests.size();
 		var second = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(20, TimeUnit.SECONDS);
@@ -148,7 +149,7 @@ class ManifestFetcherMirrorChainTest {
 		assertEquals(new String(newHeadBytes, StandardCharsets.UTF_8), Files.readString(storage.historyHeadFile(MODPACK_ID)));
 		assertEquals(afterSecond + 2, server.requests.size(), "a changed generation must be served, not 304'd");
 		// The install the third sync drives: the active generation moves to the new token, so the next recheck vouches.
-		storage.writeActiveState(MODPACK_ID, newHead.contentToken, newHead.ownershipLedger);
+		storage.writeActiveState(PackDocument.fromFields(newHead));
 
 		int afterThird = server.requests.size();
 		var fourth = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(20, TimeUnit.SECONDS);

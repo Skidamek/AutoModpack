@@ -87,7 +87,7 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 	}
 
 	@Override
-	protected boolean validate(Record record, String key) {
+	protected boolean belongsTo(Record record, String key) {
 		return key.equals(record.sha1);
 	}
 

@@ -13,8 +13,11 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 /**
  * Shared skeleton for caches of immutable loose records: a 64-slot striped lock array, a hot-record
  * map, two-character-sharded record paths, and refcounted open/close through {@link SharedCacheRegistry}.
- * Subclasses own the domain record and decide through {@link #validate(Object, String)} whether a
- * record genuinely belongs to a key.
+ * Subclasses own the domain record and answer two separate questions about it: {@link #belongsTo} whether
+ * it is the record this key addresses, and {@link #isCurrent} whether its shape still carries everything a
+ * reader needs. The split matters because the two failures are not the same event - content filed under the
+ * wrong key is corruption and is set aside with a loud log, while a record from before a field existed is a
+ * rebuildable cache miss that is quietly overwritten.
  */
 public abstract class LooseRecordCache<T> implements AutoCloseable {
 	protected static final String RECORD_SUFFIX = ".json";
@@ -50,19 +53,23 @@ public abstract class LooseRecordCache<T> implements AutoCloseable {
 	}
 
 	/**
-	 * The record for {@code key}, or null when none is persisted. Unusable content is set aside as
-	 * evidence and reads as absent; physical IO trouble cannot read as a miss and escapes as
-	 * {@link UncheckedIOException}.
+	 * The record for {@code key}, or null when none is persisted or the one persisted cannot answer. Content filed
+	 * under the wrong key is set aside as evidence and reads as absent; physical IO trouble cannot read as a miss and
+	 * escapes as {@link UncheckedIOException}.
 	 */
 	protected T readRecord(String key, Class<T> type) {
 		T hot = hotRecords.get(key);
-		if (hot != null && validate(hot, key)) return hot;
+		if (hot != null && belongsTo(hot, key) && isCurrent(hot)) return hot;
+		if (hot != null) hotRecords.remove(key, hot);
 		try {
 			T record = ConfigTools.readState(recordPath(key), type, description + " cache record", fields -> {
-				if (!validate(fields, key)) throw new IllegalArgumentException("Cache record does not belong to " + key);
+				if (!belongsTo(fields, key)) throw new IllegalArgumentException("Cache record does not belong to " + key);
 				return fields;
 			}).orElse(null);
-			if (record != null) hotRecords.put(key, record);
+			// A record that belongs here but no longer answers is rebuilt, not set aside: it is the expected cost of
+			// every shape change, and the rebuild overwrites it in place.
+			if (record == null || !isCurrent(record)) return null;
+			hotRecords.put(key, record);
 			return record;
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
@@ -81,8 +88,13 @@ public abstract class LooseRecordCache<T> implements AutoCloseable {
 		}
 	}
 
-	/** Whether {@code record} genuinely belongs to {@code key}; guards hot hits and disk reads alike. */
-	protected abstract boolean validate(T record, String key);
+	/** Whether {@code record} is the record this {@code key} addresses; guards hot hits and disk reads alike. */
+	protected abstract boolean belongsTo(T record, String key);
+
+	/** Whether {@code record} still carries everything a reader needs; a record that does not is rebuilt rather than answered. */
+	protected boolean isCurrent(T record) {
+		return true;
+	}
 
 	/** Releases this instance from its subclass registry; true when the last reference closed. */
 	protected abstract boolean releaseFromRegistry();

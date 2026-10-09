@@ -322,7 +322,7 @@ class UpdateCommitTest {
 		Files.move(storage.activeDirectory(), storage.backupDirectory());
 		Files.createDirectories(storage.activePath("mods"));
 		Files.write(storage.activePath("mods/new.jar"), newBytes);
-		storage.writeActiveState(newTarget.manifest().modpackId(), newTarget.packTarget().contentToken(), newTarget.document().ownershipLedger().toFields());
+		storage.writeActiveState(newTarget.document());
 
 		new PublicationRollback(storage).abandonStuckPublication(transaction);
 

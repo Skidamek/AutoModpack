@@ -17,6 +17,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 class HeadMirrorTest {
 	private static final String MODPACK_ID = "abc1234";
@@ -38,17 +39,23 @@ class HeadMirrorTest {
 		assertFalse(Files.exists(fetched), "The fetched file is consumed by the atomic swap");
 	}
 
+	/**
+	 * The vouch is a transfer validator, not a verdict on local state. A pack whose update has not been applied yet has
+	 * no active generation at all, and gating the validator on one makes every check during the update a full fetch of
+	 * a document the client already holds byte for byte.
+	 */
 	@Test
-	void installedSha1VouchesOnlyForTheActiveGeneration() throws Exception {
+	void installedSha1VouchesForTheMirrorBytesWhileTheUpdateIsStillPending() throws Exception {
 		ClientStorage storage = storage();
 		HeadMirror mirror = new HeadMirror(storage);
-		ClientGenerationStore generations = new ClientGenerationStore(storage);
 
-		assertNull(mirror.installedSha1(generations, MODPACK_ID), "No mirror, no vouch");
+		assertNull(mirror.installedSha1(MODPACK_ID), "No mirror, no vouch");
 
-		Path fetched = fetchedHead(storage, "mirror-content");
+		Path fetched = fetchedHead(storage, "not-yet-applied");
 		mirror.replaceFrom(fetched);
-		assertNull(mirror.installedSha1(generations, MODPACK_ID), "A mirror naming a foreign generation never counts as installed");
+		assertNull(storage.readActiveState(), "precondition: the fetched head has not been applied, so nothing is active");
+
+		assertEquals(HashUtils.getHash(storage.historyHeadFile(MODPACK_ID)), mirror.installedSha1(MODPACK_ID), "The held bytes are what the validator stands for");
 	}
 
 	@Test

@@ -360,7 +360,7 @@ public final class StateHistory {
 			}
 		if (generation == null) throw new IOException("Pack history has no generation " + identity.contentToken() + " for " + identity.activeModpackId());
 		PackDocument document = generations.document(identity.activeModpackId(), generation);
-		storage.writeActiveState(identity.activeModpackId(), identity.contentToken(), document.ownershipLedger().toFields(), identity.selection());
+		storage.writeActiveState(document, identity.selection());
 		SelectionIntent target = identity.selection();
 		// Checking an instance out is wanting what it ran: the snapshot's applied selection becomes the desire.
 		if (target != null) new ClientSelectionStore(storage.selectionFile()).put(identity.activeModpackId(), target);

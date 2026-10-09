@@ -490,7 +490,7 @@ public final class UpdateCommit {
 		if (!preserveNewerSelection) storage.writeSelectedModpackId(UpdateTransactionValidator.plannedFollow(transaction));
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
 			applyLauncherMetadata(transaction, resolved.flatTarget());
-			storage.writeActiveState(transaction.plan().modpackId(), transaction.packTarget().contentToken(), resolved.document().ownershipLedger().toFields(), resolved.selection().intent());
+			storage.writeActiveState(resolved.document(), resolved.selection().intent());
 		} else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
 			GeneratedCopyState.removeGeneration(storage, transaction.plan().modpackId(), transaction.plan().packTarget().contentToken());
 			storage.clearActiveState();

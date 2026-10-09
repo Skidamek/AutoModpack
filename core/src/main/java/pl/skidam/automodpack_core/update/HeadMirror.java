@@ -8,7 +8,6 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Objects;
 
-import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -19,8 +18,10 @@ import pl.skidam.automodpack_core.utils.ModpackContentTools;
 /**
  * The client's per-pack replica of the server head document. Like the journal mirror it is only ever replaced whole
  * with a fetched copy of the server artifact, never rewritten client-side. Its installed hash is the conditional-fetch
- * validator, and it vouches only for a generation the active state actually points at: an unapplied update never
- * counts as installed.
+ * validator and means exactly one thing: these are the bytes this client holds, so a matching answer costs no transfer.
+ * Whether the served head is the generation the client already runs is a separate question, answered by
+ * {@link ClientGenerationStore#headMatchesActive} against the callers' own state; folding it in here would make every
+ * check during a pending update unconditional, which is the one moment the transfer is worth avoiding.
  */
 public final class HeadMirror {
 	private final ClientStorage storage;
@@ -50,17 +51,11 @@ public final class HeadMirror {
 		}
 	}
 
-	/** The sha1 of the mirror bytes only when the mirror parses and names the generation the active state points at; null otherwise. */
-	public String installedSha1(ClientGenerationStore generations, String modpackId) throws IOException {
+	/** The sha1 of the mirror bytes when the mirror parses and names a generation; null otherwise. */
+	public String installedSha1(String modpackId) throws IOException {
 		GenerationJsons.HeadDocumentFields head = read(modpackId);
 		if (head == null || head.contentToken == null || head.contentToken.isBlank()) {
 			LOGGER.info("Installed head mirror of {} does not vouch: no readable mirror", modpackId);
-			return null;
-		}
-		if (!generations.headMatchesActive(modpackId, head.contentToken)) {
-			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-			LOGGER.info("Installed head mirror of {} does not vouch: the mirror names {}, the active generation is {}", modpackId, head.contentToken,
-					state == null ? "none" : state.modpackId + "/" + state.contentToken);
 			return null;
 		}
 		return HashUtils.getHash(storage.historyHeadFile(modpackId));

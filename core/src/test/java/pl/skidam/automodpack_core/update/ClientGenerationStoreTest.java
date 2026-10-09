@@ -24,6 +24,9 @@ import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
@@ -57,7 +60,7 @@ class ClientGenerationStoreTest {
 
 		assertTrue(new ClientGenerationStore(storage).activeDocument().isEmpty());
 
-		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields());
+		storage.writeActiveState(document);
 		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
 		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX).orElseThrow();
 
@@ -74,7 +77,7 @@ class ClientGenerationStoreTest {
 		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
 		TestPacks.stageGeneration(storage, document);
 		SelectionIntent applied = new SelectionIntent(Set.of("main"));
-		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields(), applied);
+		storage.writeActiveState(document, applied);
 
 		// The pointer carries the applied answer even when the store's desire has already moved ahead of it.
 		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main", "extra")));
@@ -82,7 +85,7 @@ class ClientGenerationStoreTest {
 		assertEquals(applied, new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX).orElseThrow().selection().intent());
 
 		// A pointer written before the split falls back to the store, which was the applied record then.
-		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields());
+		storage.writeActiveState(document);
 		assertEquals(new SelectionIntent(Set.of("main", "extra")), new ClientGenerationStore(storage).appliedSelection(FIRST_PACK).orElseThrow());
 	}
 
@@ -92,7 +95,7 @@ class ClientGenerationStoreTest {
 		String hash = store(storage, "default-object");
 		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
 		TestPacks.stageGeneration(storage, document);
-		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields());
+		storage.writeActiveState(document);
 
 		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX).orElseThrow();
 
@@ -105,7 +108,7 @@ class ClientGenerationStoreTest {
 	void declaringDetachmentFreesTheActiveProjection() throws Exception {
 		ClientStorage storage = storage();
 		PackDocument document = document(FIRST_PACK, "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", 12, Instant.now());
-		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields());
+		storage.writeActiveState(document);
 		Path activeFile = storage.activePath("config/kept.txt");
 		Files.createDirectories(activeFile.getParent());
 		Files.writeString(activeFile, "kept", StandardCharsets.UTF_8);
@@ -130,7 +133,7 @@ class ClientGenerationStoreTest {
 		PackDocument second = document(FIRST_PACK, secondHash, Files.size(storage.objectFile(secondHash)), Instant.parse("2026-01-02T00:00:00Z"), first);
 		TestPacks.stageGeneration(storage, first);
 		TestPacks.stageGeneration(storage, second);
-		storage.writeActiveState(FIRST_PACK, first.contentToken(), first.ownershipLedger().toFields());
+		storage.writeActiveState(first);
 
 		PackDocument newest = new ClientGenerationStore(storage).newestDocument(FIRST_PACK);
 		assertEquals(second.contentToken(), newest.contentToken());
@@ -146,7 +149,7 @@ class ClientGenerationStoreTest {
 		PackDocument second = document(FIRST_PACK, secondHash, Files.size(storage.objectFile(secondHash)), Instant.parse("2026-01-02T00:00:00Z"), first);
 		TestPacks.stageGeneration(storage, first);
 		TestPacks.stageGeneration(storage, second);
-		storage.writeActiveState(FIRST_PACK, second.contentToken(), second.ownershipLedger().toFields());
+		storage.writeActiveState(second);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
 		List<JournalEntry> entries = new JournalMirror(storage).entries(FIRST_PACK);
 
@@ -174,29 +177,12 @@ class ClientGenerationStoreTest {
 		appendEntry(storage, first);
 		appendEntry(storage, second);
 
-		storage.writeActiveState(FIRST_PACK, second.contentToken(), second.ownershipLedger().toFields());
+		storage.writeActiveState(second);
 		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
 		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX).orElseThrow();
 
 		assertEquals(second.policySha1(), target.document().policySha1());
 		assertEquals(second.createdAt(), target.document().createdAt());
-	}
-
-	@Test
-	void anUnwitnessedSameTokenGenerationFailsNamingTheServedPolicy() throws Exception {
-		ClientStorage storage = storage();
-		String hash = store(storage, "shared-object");
-		long size = Files.size(storage.objectFile(hash));
-		PackDocument first = document(FIRST_PACK, hash, size, Instant.parse("2026-01-01T00:00:00Z"));
-		PackDocument second = republished(FIRST_PACK, hash, size, Instant.parse("2026-01-02T00:00:00Z"));
-		appendEntry(storage, first);
-		appendEntry(storage, second);
-
-		storage.writeActiveState(FIRST_PACK, second.contentToken(), second.ownershipLedger().toFields());
-		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
-
-		IOException missing = assertThrows(IOException.class, () -> new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX));
-		assertTrue(missing.getMessage().contains(HashUtils.normalizeSha1(second.policySha1())), missing.getMessage());
 	}
 
 	private static PackDocument republished(String modpackId, String hash, long size, Instant createdAt) {
@@ -214,6 +200,32 @@ class ClientGenerationStoreTest {
 	}
 
 	@Test
+	void aWaitingTrackBelongsOnlyToThePolicyGenerationNamedByTheHead() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "shared-object");
+		long size = Files.size(storage.objectFile(hash));
+		PackDocument first = document(FIRST_PACK, hash, size, Instant.parse("2026-01-01T00:00:00Z"));
+		PackDocument second = republished(FIRST_PACK, hash, size, Instant.parse("2026-01-02T00:00:00Z"));
+		ClientObjectStore.storeObject(storage, first.policySha1(), ConfigTools.GSON.toJson(first.manifest().toFields()).getBytes(StandardCharsets.UTF_8));
+		ClientObjectStore.storeObject(storage, second.policySha1(), ConfigTools.GSON.toJson(second.manifest().toFields()).getBytes(StandardCharsets.UTF_8));
+		appendEntry(storage, first);
+		appendEntry(storage, second);
+		String trackSha1 = store(storage, "waiting-track");
+		GenerationJsons.HeadDocumentFields head = TestPacks.head(second.manifest());
+		head.policySha1 = second.policySha1();
+		head.waitingMusicSha1 = trackSha1;
+		ConfigTools.writeAtomic(storage.historyHeadFile(FIRST_PACK), head);
+
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		List<JournalEntry> entries = new JournalMirror(storage).entries(FIRST_PACK);
+		JournalEntry firstEntry = entries.get(0);
+		JournalEntry secondEntry = entries.get(1);
+
+		assertEquals("", generations.document(FIRST_PACK, firstEntry).waitingMusicSha1());
+		assertEquals(trackSha1, generations.document(FIRST_PACK, secondEntry).waitingMusicSha1());
+	}
+
+	@Test
 	void marksARollbackTargetRestorableOnlyWhenEveryTreeObjectIsAvailableLocally() throws Exception {
 		ClientStorage storage = storage();
 		String firstHash = store(storage, "first-object");
@@ -222,7 +234,7 @@ class ClientGenerationStoreTest {
 		PackDocument second = document(FIRST_PACK, secondHash, Files.size(storage.objectFile(secondHash)), Instant.parse("2026-01-02T00:00:00Z"), first);
 		TestPacks.stageGeneration(storage, first);
 		TestPacks.stageGeneration(storage, second);
-		storage.writeActiveState(FIRST_PACK, second.contentToken(), second.ownershipLedger().toFields());
+		storage.writeActiveState(second);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
 		List<JournalEntry> entries = new JournalMirror(storage).entries(FIRST_PACK);
 
@@ -240,16 +252,103 @@ class ClientGenerationStoreTest {
 		assertFalse(generations.locallyRestorable(FIRST_PACK, entries.get(0)), "a generation whose policy object is gone cannot be restored");
 	}
 
+	/**
+	 * The active pointer is the one record of what this client runs, and the content-addressed copy of its policy
+	 * document is only a cache. A pointer that cannot be read back because the cache entry went away is a pointer the
+	 * boot deletes, and deleting it loses the player's installed modpack over a collectible cache miss.
+	 */
 	@Test
-	void reconstructionFailsLoudlyWhenThePolicyObjectIsMissing() throws Exception {
+	void theInstalledGenerationSurvivesLosingItsContentAddressedPolicyCopy() throws Exception {
 		ClientStorage storage = storage();
 		String hash = store(storage, "projection-object");
 		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
 		TestPacks.stageGeneration(storage, document);
-		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields());
+		storage.writeActiveState(document);
 		Files.delete(storage.objectFile(document.policySha1()));
 
-		assertThrows(IOException.class, () -> new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX));
+		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX).orElseThrow();
+
+		assertEquals(document.manifest(), target.document().manifest());
+		assertEquals(document.policySha1(), target.document().policySha1());
+		assertEquals(document.contentToken(), target.document().contentToken());
+	}
+
+	/**
+	 * One content token can carry several generations: a policy-only publish changes the policy document while the file
+	 * tree, and with it the token, stays put. The pointer is what says which one is installed, and it answers without
+	 * reading the object store at all.
+	 */
+	@Test
+	void aRepublishedGenerationUnderTheSameTokenResolvesToWhatThePointerCommitted() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "shared-object");
+		long size = Files.size(storage.objectFile(hash));
+		PackDocument first = document(FIRST_PACK, hash, size, Instant.parse("2026-01-01T00:00:00Z"));
+		PackDocument second = republished(FIRST_PACK, hash, size, Instant.parse("2026-01-02T00:00:00Z"));
+		appendEntry(storage, first);
+		appendEntry(storage, second);
+
+		storage.writeActiveState(second);
+		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
+
+		// The mirror now holds two generations under one token. The pointer names one of them, and the answer has to
+		// be that one: pairing its manifest with the other entry's policy hash would be a document that never existed.
+		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX).orElseThrow();
+
+		assertEquals(second.manifest(), target.document().manifest());
+		assertEquals(second.policySha1(), target.document().policySha1());
+		assertNotEquals(first.policySha1(), target.document().policySha1(), "precondition: the republication is a different policy document");
+	}
+
+	/**
+	 * A pointer written by a shipped build carries no manifest, so it has to keep resolving the way it always did:
+	 * through the content-addressed copy. This is the only thing standing between an upgrade and a boot that cannot find
+	 * its own modpack, so the absence has to be an accepted shape rather than an accident.
+	 */
+	@Test
+	void aPointerWrittenBeforeTheManifestFieldStillResolves() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "projection-object");
+		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
+		TestPacks.stageGeneration(storage, document);
+		storage.writeActiveState(document);
+
+		Path pointer = storage.stateFile();
+		JsonObject written = JsonParser.parseString(Files.readString(pointer, StandardCharsets.UTF_8)).getAsJsonObject();
+		JsonObject shipped = written.deepCopy();
+		shipped.remove("manifest");
+		shipped.remove("manifestSha1");
+		assertEquals(2, written.size() - shipped.size(), "precondition: this pointer carries the two fields a shipped one lacks");
+		Files.writeString(pointer, shipped.toString(), StandardCharsets.UTF_8);
+
+		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX).orElseThrow();
+
+		assertEquals(document.manifest(), target.document().manifest());
+	}
+
+	/**
+	 * A pointer that carries a manifest for a different generation describes a pack the client never installed, and
+	 * nothing downstream would notice: the ledger, the pack, and the token would all still agree. The pointer is unique
+	 * state, so this fails the boot in place for a human to look at rather than resolving into a plausible lie.
+	 */
+	@Test
+	void rejectsAPointerWhoseCarriedManifestIsNotItsOwnGeneration() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "projection-object");
+		long size = Files.size(storage.objectFile(hash));
+		PackDocument document = document(FIRST_PACK, hash, size, TestPacks.CREATED);
+		TestPacks.stageGeneration(storage, document);
+		storage.writeActiveState(document);
+
+		Path pointer = storage.stateFile();
+		JsonObject written = JsonParser.parseString(Files.readString(pointer, StandardCharsets.UTF_8)).getAsJsonObject();
+		GroupManifest.GroupFile other = new GroupManifest.GroupFile(size, "mod", false, hash, null);
+		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
+				new TreeMap<>(Map.of("mods/other.jar", other)));
+		written.add("manifest", ConfigTools.GSON.toJsonTree(new GroupManifest(FIRST_PACK, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group)))));
+		Files.writeString(pointer, written.toString(), StandardCharsets.UTF_8);
+
+		assertThrows(IOException.class, storage::readActiveState);
 	}
 
 	@Test
@@ -263,7 +362,7 @@ class ClientGenerationStoreTest {
 		TestPacks.stageGeneration(storage, first);
 		TestPacks.stageGeneration(storage, second);
 		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
-		storage.writeActiveState(SECOND_PACK, second.contentToken(), second.ownershipLedger().toFields());
+		storage.writeActiveState(second);
 		Path overlay = storage.overlayFile(FIRST_PACK, "config/options.txt");
 		Files.createDirectories(overlay.getParent());
 		Files.writeString(overlay, "edit", StandardCharsets.UTF_8);
@@ -304,6 +403,24 @@ class ClientGenerationStoreTest {
 		assertEquals(second, new ClientGenerationStore(storage).newestDocument(SECOND_PACK));
 	}
 
+	/**
+	 * A generation whose documents are not on this machine and a mirror that is damaged are different events, and the
+	 * caller acts on them differently: the first is a pack that has not synced yet, the second is storage the player
+	 * has to look at. Collapsing them into one IOException is what let a pack awaiting a sync take the screen down.
+	 */
+	@Test
+	void reportsUnstoredGenerationContentDistinctlyFromADamagedMirror() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "projection-object");
+		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
+		TestPacks.stageGeneration(storage, document);
+		Files.delete(storage.objectFile(document.policySha1()));
+
+		MissingGenerationContentException failure = assertThrows(MissingGenerationContentException.class, () -> new ClientGenerationStore(storage).newestDocument(FIRST_PACK));
+		assertTrue(failure.getMessage().contains(document.contentToken()), "the failure names the generation that is not stored, not the entry that could not be reached");
+		assertFalse(failure.getMessage().contains("never reaches"), "the old message blamed the mirror for content that was simply never fetched");
+	}
+
 	@Test
 	void compactionReclaimsNeverConsentedFetchesWhole() throws Exception {
 		ClientStorage storage = storage();
@@ -313,7 +430,7 @@ class ClientGenerationStoreTest {
 		PackDocument fetched = document(SECOND_PACK, fetchedHash, Files.size(storage.objectFile(fetchedHash)), TestPacks.CREATED);
 		TestPacks.stageGeneration(storage, kept);
 		TestPacks.stageGeneration(storage, fetched);
-		storage.writeActiveState(FIRST_PACK, kept.contentToken(), kept.ownershipLedger().toFields());
+		storage.writeActiveState(kept);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
 
 		// The cancelled install is cache: the accepted pack's history and objects survive, the fetch's do not.
@@ -334,7 +451,7 @@ class ClientGenerationStoreTest {
 		String newerHash = store(storage, "newer-object");
 		PackDocument active = document(FIRST_PACK, activeHash, Files.size(storage.objectFile(activeHash)), TestPacks.CREATED);
 		TestPacks.stageGeneration(storage, active);
-		storage.writeActiveState(FIRST_PACK, active.contentToken(), active.ownershipLedger().toFields());
+		storage.writeActiveState(active);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
 
 		generations.detachOnDeclinedAdvance(FIRST_PACK, active.contentToken());
@@ -364,17 +481,17 @@ class ClientGenerationStoreTest {
 		assertFalse(generations.isDetached(FIRST_PACK), "a pack without an active state cannot detach");
 
 		TestPacks.stageGeneration(storage, first);
-		storage.writeActiveState(FIRST_PACK, first.contentToken(), first.ownershipLedger().toFields());
+		storage.writeActiveState(first);
 		generations.detachOnDeclinedAdvance(FIRST_PACK, secondHash);
 		assertTrue(generations.isDetached(FIRST_PACK));
 
-		storage.writeActiveState(FIRST_PACK, first.contentToken(), first.ownershipLedger().toFields());
+		storage.writeActiveState(first);
 		assertTrue(generations.isDetached(FIRST_PACK), "committing the same pack preserves its sovereignty");
 
 		generations.detachOnDeclinedAdvance(SECOND_PACK, firstHash);
 		assertFalse(generations.isDetached(SECOND_PACK), "the flag belongs to the active pack only");
 
-		storage.writeActiveState(SECOND_PACK, second.contentToken(), second.ownershipLedger().toFields());
+		storage.writeActiveState(second);
 		assertFalse(generations.isDetached(FIRST_PACK));
 		assertFalse(generations.isDetached(SECOND_PACK));
 	}
@@ -392,7 +509,7 @@ class ClientGenerationStoreTest {
 		TestPacks.stageGeneration(storage, first);
 		TestPacks.stageGeneration(storage, second);
 		TestPacks.stageGeneration(storage, third);
-		storage.writeActiveState(FIRST_PACK, first.contentToken(), first.ownershipLedger().toFields());
+		storage.writeActiveState(first);
 		Files.createDirectories(storage.overlayFile(FIRST_PACK, "config/options.txt").getParent());
 		Files.writeString(storage.overlayFile(FIRST_PACK, "config/options.txt"), "overlay-object", StandardCharsets.UTF_8);
 		String overlayHash = HashUtils.sha1("overlay-object".getBytes(StandardCharsets.UTF_8));
@@ -442,7 +559,7 @@ class ClientGenerationStoreTest {
 		PackDocument second = document(FIRST_PACK, secondHash, Files.size(storage.objectFile(secondHash)), TestPacks.CREATED.plusSeconds(1), first);
 		TestPacks.stageGeneration(storage, first);
 		TestPacks.stageGeneration(storage, second);
-		storage.writeActiveState(FIRST_PACK, second.contentToken(), second.ownershipLedger().toFields());
+		storage.writeActiveState(second);
 		Files.writeString(storage.transactionFile(), "{}", StandardCharsets.UTF_8);
 
 		assertThrows(IOException.class, () -> new ClientGenerationStore(storage).compact());
@@ -460,7 +577,7 @@ class ClientGenerationStoreTest {
 		PackDocument second = document(FIRST_PACK, secondHash, Files.size(storage.objectFile(secondHash)), TestPacks.CREATED.plusSeconds(1), first);
 		TestPacks.stageGeneration(storage, first);
 		TestPacks.stageGeneration(storage, second);
-		storage.writeActiveState(FIRST_PACK, second.contentToken(), second.ownershipLedger().toFields());
+		storage.writeActiveState(second);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
 
 		ClientGenerationStore.CompactionReceipt receipt = generations.compact().receipts().get(0);
@@ -484,7 +601,7 @@ class ClientGenerationStoreTest {
 		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
 		TestPacks.stageGeneration(storage, document);
 		writeHead(storage, FIRST_PACK, document);
-		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields());
+		storage.writeActiveState(document);
 
 		GenerationHosting hosting = new ClientGenerationStore(storage).hosting();
 
@@ -501,7 +618,7 @@ class ClientGenerationStoreTest {
 		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
 		TestPacks.stageGeneration(storage, document);
 		writeHead(storage, FIRST_PACK, document);
-		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields());
+		storage.writeActiveState(document);
 		Files.delete(storage.objectFile(hash));
 
 		assertThrows(IOException.class, () -> new ClientGenerationStore(storage).hosting());

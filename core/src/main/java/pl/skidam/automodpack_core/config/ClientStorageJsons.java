@@ -28,6 +28,15 @@ public class ClientStorageJsons {
 		public String status = "ACTIVE";
 		public GenerationJsons.OwnershipLedgerFields ownershipLedger = new GenerationJsons.OwnershipLedgerFields();
 		/**
+		 * The installed generation's own policy document. What is installed has to be readable from the pointer alone:
+		 * the content-addressed copy is only a cache, and a client whose pointer outlives the object it once fetched
+		 * must still know what it runs. Null in a pointer written before the pointer carried it; those resolve through
+		 * the object store exactly as before, and the next commit rewrites them with it.
+		 */
+		public ModpackJsons.CompleteModpackContentFields manifest = null;
+		/** The hash that manifest was served under; without it a document rebuilt from the mirror would pair this manifest with another generation's hash. */
+		public String manifestSha1 = "";
+		/**
 		 * The group selection this pointer was committed under: the applied answer to "what is installed". Null lists
 		 * mean a pointer written before the selection was recorded; readers fall back to the selection store, which
 		 * was the applied record before the store became the player's desired state.

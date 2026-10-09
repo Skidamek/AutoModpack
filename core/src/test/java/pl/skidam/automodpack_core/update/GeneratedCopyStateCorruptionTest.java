@@ -128,7 +128,7 @@ class GeneratedCopyStateCorruptionTest {
 		Files.createDirectories(bundle.getParent());
 		byte[] bundleBytes = "generated-bundle".getBytes(StandardCharsets.UTF_8);
 		Files.write(bundle, bundleBytes);
-		storage.writeActiveState(target.manifest().modpackId(), target.packTarget().contentToken(), target.document().ownershipLedger().toFields(), target.selection().intent());
+		storage.writeActiveState(target.document(), target.selection().intent());
 		Files.writeString(storage.generatedCopiesFile(), "{\"schemaVersion\":2,\"states\":[]}", StandardCharsets.UTF_8);
 
 		GeneratedCopyState.rebuildActive(storage);

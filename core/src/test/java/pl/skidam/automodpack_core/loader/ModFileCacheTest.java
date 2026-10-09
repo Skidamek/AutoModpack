@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -18,6 +19,9 @@ import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -88,6 +92,51 @@ class ModFileCacheTest {
 			assertTrue(cached.mod(), "a persisted service-only jar still reads as a mod");
 			assertNull(cached.metadata());
 			assertTrue(cached.providesAny(Set.of(LoaderServicePaths.FORGE_MOD_LOCATOR)), "the services that jar ships are the cached identity");
+		}
+	}
+
+	/**
+	 * Every shape change to the record turns every persisted record into a rebuild. That is the normal cost of adding a
+	 * field, so it must read as a cache miss: the record is overwritten in place and nothing is filed as corruption. A
+	 * build that mistakes a stale shape for corruption sets every record aside with an error and a stack trace instead.
+	 */
+	@Test
+	void rebuildsARecordFromAnOlderShapeWithoutFilingItAsCorruption() throws Exception {
+		Path jar = temporaryDirectory.resolve("mod.jar");
+		Path records = temporaryDirectory.resolve("mod-cache");
+		writeMod(jar);
+		try (FileCache hashCache = FileCache.open(temporaryDirectory.resolve("file-cache")); ModFileCache modCache = ModFileCache.open(records)) {
+			assertNotNull(modCache.getOrComputeMod(jar, hashCache));
+		}
+
+		Path record = onlyRecord(records);
+		JsonObject persisted = JsonParser.parseString(Files.readString(record, StandardCharsets.UTF_8)).getAsJsonObject();
+		JsonObject stale = persisted.deepCopy();
+		stale.remove("isMod");
+		stale.remove("environment");
+		assertEquals(2, persisted.size() - stale.size(), "the persisted record no longer has the fields this test strips, so it is no longer testing a stale shape");
+		Files.writeString(record, stale.toString(), StandardCharsets.UTF_8);
+
+		// The copy answers from a directory this process has never read, so the on-disk record is the only candidate.
+		Path copied = temporaryDirectory.resolve("mod-cache-copy");
+		copyTree(records, copied);
+		try (FileCache hashCache = FileCache.open(temporaryDirectory.resolve("file-cache")); ModFileCache modCache = ModFileCache.open(copied)) {
+			assertNotNull(modCache.getOrComputeMod(jar, hashCache));
+			assertEquals(List.of(), setAsideCopies(copied), "a stale shape is a rebuild, not corruption");
+		}
+	}
+
+	private static Path onlyRecord(Path records) throws IOException {
+		try (Stream<Path> walk = Files.walk(records)) {
+			List<Path> found = walk.filter(Files::isRegularFile).toList();
+			assertEquals(1, found.size(), "the inspection cache persisted exactly one record");
+			return found.get(0);
+		}
+	}
+
+	private static List<Path> setAsideCopies(Path records) throws IOException {
+		try (Stream<Path> walk = Files.walk(records)) {
+			return walk.filter(path -> path.getFileName().toString().contains(".corrupt-")).toList();
 		}
 	}
 

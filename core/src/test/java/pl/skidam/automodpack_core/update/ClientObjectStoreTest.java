@@ -88,7 +88,7 @@ class ClientObjectStoreTest {
 		String orphan = store(storage, "orphan");
 		PackDocument record = TestPacks.document(manifest(referenced, bytes.length));
 		TestPacks.stageGeneration(storage, record);
-		storage.writeActiveState(MODPACK_ID, record.contentToken(), record.ownershipLedger().toFields());
+		storage.writeActiveState(record);
 
 		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage, Set.of());
 
@@ -146,7 +146,7 @@ class ClientObjectStoreTest {
 		PackDocument active = TestPacks.document(manifest(MODPACK_ID, activeHash, activeBytes.length), historical.ownershipLedger(), TestPacks.CREATED.plusSeconds(1));
 		TestPacks.stageGeneration(storage, historical);
 		TestPacks.stageGeneration(storage, active);
-		storage.writeActiveState(MODPACK_ID, active.contentToken(), active.ownershipLedger().toFields());
+		storage.writeActiveState(active);
 
 		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage, Set.of());
 

@@ -85,10 +85,15 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		return hash == null ? null : hash.toLowerCase(Locale.ROOT);
 	}
 
+	@Override
+	protected boolean belongsTo(ModRecord record, String key) {
+		return record != null && key.equalsIgnoreCase(record.hash);
+	}
+
 	/** Metadata without a readable side, a record from before the is-mod verdict, and a record from before services were stored, are rebuilt rather than answered. */
 	@Override
-	protected boolean validate(ModRecord record, String key) {
-		return record != null && key.equalsIgnoreCase(record.hash) && record.services != null && (record.id == null || (record.isMod && environmentOf(record.environment) != null));
+	protected boolean isCurrent(ModRecord record) {
+		return record.services != null && (record.id == null || (record.isMod && environmentOf(record.environment) != null));
 	}
 
 	@Override
@@ -118,7 +123,7 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 			IDs = mod.IDs();
 			version = mod.version();
 			deps = mod.deps();
-			nestedMods = mod.nestedMods().stream().map(nested -> new ModRecord(mod.hash(), new FileInspection.Inspection(true, nested, Set.of()))).collect(Collectors.toSet());
+			nestedMods = mod.nestedMods().stream().map(nested -> new ModRecord(nested.hash(), new FileInspection.Inspection(true, nested, Set.of()))).collect(Collectors.toSet());
 			id = mod.id();
 			environment = mod.environment().name();
 		}

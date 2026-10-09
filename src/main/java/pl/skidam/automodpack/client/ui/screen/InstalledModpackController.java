@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client.ui.screen;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.MODPACK_LOADER;
 
 import java.io.IOException;
@@ -50,6 +51,7 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.MissingGenerationContentException;
 import pl.skidam.automodpack_core.update.OfflineRepair;
 import pl.skidam.automodpack_core.update.RecoveredFiles;
 import pl.skidam.automodpack_core.update.StateHistory;
@@ -162,6 +164,11 @@ final class InstalledModpackController {
 				PackDocument record;
 				try {
 					record = generations.newestDocument(modpackId, activeState);
+				} catch (MissingGenerationContentException e) {
+					// The generation's own documents are not on this machine yet. That is what a pack awaiting its
+					// first sync looks like, not broken storage, so the list keeps every pack it could read.
+					LOGGER.info("Installed modpack {} has no stored documents for its newest generation yet, so it is not listed until the next sync: {}", modpackId, e.getMessage());
+					continue;
 				} catch (IOException | RuntimeException e) {
 					discoveryFailure = e;
 					continue;

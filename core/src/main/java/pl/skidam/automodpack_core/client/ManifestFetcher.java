@@ -33,7 +33,6 @@ import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.protocol.PackTransport.DocumentConditional;
 import pl.skidam.automodpack_core.protocol.UnauthorizedException;
 import pl.skidam.automodpack_core.screen.ScreenManager;
-import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.HeadMirror;
@@ -158,7 +157,7 @@ public final class ManifestFetcher {
 			String head = null;
 			String journal = null;
 			try {
-				head = new HeadMirror(storage).installedSha1(new ClientGenerationStore(storage), selectedModpackId);
+				head = new HeadMirror(storage).installedSha1(selectedModpackId);
 				Path journalMirror = storage.historyJournalFile(selectedModpackId);
 				journal = Files.exists(journalMirror, LinkOption.NOFOLLOW_LINKS) ? HashUtils.getHash(journalMirror) : null;
 			} catch (IOException | RuntimeException e) {

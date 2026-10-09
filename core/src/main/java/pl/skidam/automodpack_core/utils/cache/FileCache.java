@@ -247,7 +247,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	}
 
 	@Override
-	protected boolean validate(CachedFile record, String key) {
+	protected boolean belongsTo(CachedFile record, String key) {
 		return key.equals(record.path());
 	}
 

@@ -380,7 +380,7 @@ class OfflineRepairTest {
 		TestPacks.stageGeneration(storage, document);
 		SelectedModpackTarget target = SelectedModpackTarget.prepare(document, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
 		new ClientSelectionStore(storage.selectionFile()).put(document.manifest().modpackId(), target.selection().intent());
-		storage.writeActiveState(document.manifest().modpackId(), document.contentToken(), document.ownershipLedger().toFields());
+		storage.writeActiveState(document);
 		return target;
 	}
 

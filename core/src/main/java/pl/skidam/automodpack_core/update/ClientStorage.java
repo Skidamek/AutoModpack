@@ -19,10 +19,12 @@ import java.util.TreeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.ContentTree;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -534,11 +536,19 @@ public final class ClientStorage {
 			throw new IllegalArgumentException("Client active state identity is invalid");
 		OwnershipLedger.fromFields(state.ownershipLedger);
 		if (!state.modpackId.equals(state.ownershipLedger.modpackId)) throw new IllegalArgumentException("Client active state and its ledger belong to different modpacks");
+		// A carried manifest has to be the generation this pointer names, or the pointer would describe something it does not run.
+		if (state.manifest != null && !ContentTree.fromManifest(GroupManifestValidator.validate(state.manifest)).token().equals(state.contentToken))
+			throw new IllegalArgumentException("Client active state carries a manifest that is not its own generation");
 		return state;
 	}
 
-	public void writeActiveState(String modpackId, String contentToken, GenerationJsons.OwnershipLedgerFields ownershipLedger, SelectionIntent applied) throws IOException {
-		ClientStorageJsons.ClientGenerationStateFields state = baseActiveState(modpackId, contentToken, ownershipLedger);
+	/**
+	 * Publishes the pointer for what the client now runs. The document is the one argument on purpose: the pack, the
+	 * generation, the ledger, and the manifest it carries all describe one generation, and taking them apart let a
+	 * commit write a pointer naming one thing while recording another.
+	 */
+	public void writeActiveState(PackDocument document, SelectionIntent applied) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = baseActiveState(document);
 		SelectionIntent selection = Objects.requireNonNull(applied, "applied selection");
 		state.selectedGroups = List.copyOf(selection.requestedGroups());
 		state.selectedCategories = List.copyOf(selection.requestedCategories());
@@ -548,15 +558,18 @@ public final class ClientStorage {
 	}
 
 	/** Stages a pointer with no recorded selection: the pre-split shape, whose applied answer falls back to the store. */
-	public void writeActiveState(String modpackId, String contentToken, GenerationJsons.OwnershipLedgerFields ownershipLedger) throws IOException {
-		publishActiveState(baseActiveState(modpackId, contentToken, ownershipLedger));
+	public void writeActiveState(PackDocument document) throws IOException {
+		publishActiveState(baseActiveState(document));
 	}
 
-	private ClientStorageJsons.ClientGenerationStateFields baseActiveState(String modpackId, String contentToken, GenerationJsons.OwnershipLedgerFields ownershipLedger) throws IOException {
+	private ClientStorageJsons.ClientGenerationStateFields baseActiveState(PackDocument document) throws IOException {
+		Objects.requireNonNull(document, "installed document");
 		ClientStorageJsons.ClientGenerationStateFields state = new ClientStorageJsons.ClientGenerationStateFields();
-		state.modpackId = ModpackId.requireValid(modpackId);
-		state.contentToken = HashUtils.requireDigest(contentToken, "generation ID");
-		state.ownershipLedger = Objects.requireNonNull(ownershipLedger, "ownership ledger");
+		state.modpackId = ModpackId.requireValid(document.manifest().modpackId());
+		state.contentToken = HashUtils.requireDigest(document.contentToken(), "generation ID");
+		state.ownershipLedger = document.ownershipLedger().toFields();
+		state.manifest = document.manifest().toFields();
+		state.manifestSha1 = document.policySha1();
 		state.detached = currentDetachmentFor(state.modpackId);
 		return state;
 	}

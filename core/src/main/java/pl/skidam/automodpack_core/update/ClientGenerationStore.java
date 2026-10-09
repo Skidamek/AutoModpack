@@ -163,7 +163,7 @@ public final class ClientGenerationStore {
 
 	private SelectedModpackTarget resolveActive(ClientStorageJsons.ClientGenerationStateFields state, ClientPlatform platform) throws IOException {
 		Objects.requireNonNull(platform, "platform");
-		PackDocument document = document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger));
+		PackDocument document = document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger), state.manifest, state.manifestSha1);
 		Optional<SelectionIntent> applied = appliedSelection(state.modpackId);
 		return applied.isPresent()
 				? SelectedModpackTarget.prepare(document, null, applied.get(), platform)
@@ -441,8 +441,20 @@ public final class ClientGenerationStore {
 	}
 
 	private PackDocument document(String modpackId, JournalEntry entry, OwnershipLedger ledger) throws IOException {
+		return document(modpackId, entry, ledger, null, null);
+	}
+
+	/**
+	 * One generation's document. {@code carriedManifest} and {@code carriedPolicySha1} are the policy document the
+	 * caller already holds in durable state; without them the content-addressed copy is the only source, and a pointer
+	 * that outlives that copy cannot describe what the client runs. Both travel together because a mirror can carry
+	 * several generations under one content token: pairing this manifest with another entry's hash would be a document
+	 * that never existed.
+	 */
+	private PackDocument document(String modpackId, JournalEntry entry, OwnershipLedger ledger, ModpackJsons.CompleteModpackContentFields carriedManifest, String carriedPolicySha1) throws IOException {
 		try {
-			return new PackDocument(policyDocument(entry.policySha1()), entry.contentToken(), entry.policySha1(), entry.createdAt(), ledger, advertisedTrack(modpackId, entry));
+			GroupManifest manifest = carriedManifest == null ? policyDocument(entry.policySha1()) : GroupManifestValidator.validate(carriedManifest);
+			return new PackDocument(manifest, entry.contentToken(), carriedManifest == null ? entry.policySha1() : carriedPolicySha1, entry.createdAt(), ledger, advertisedTrack(modpackId, entry));
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
@@ -453,7 +465,7 @@ public final class ClientGenerationStore {
 	/** The advertised track's hash when the head mirror names this exact generation; the mirror is the only offline record of the track. */
 	private String advertisedTrack(String modpackId, JournalEntry entry) throws IOException {
 		GenerationJsons.HeadDocumentFields head = new HeadMirror(storage).read(modpackId);
-		return head != null && entry.contentToken().equals(head.contentToken) ? head.waitingMusicSha1 : "";
+		return head != null && entry.contentToken().equals(head.contentToken) && entry.policySha1().equals(head.policySha1) ? head.waitingMusicSha1 : "";
 	}
 
 	/**
@@ -487,18 +499,25 @@ public final class ClientGenerationStore {
 	 */
 	private OwnershipLedger replayedLedger(String modpackId, JournalEntry target) throws IOException {
 		OwnershipLedger ledger = null;
+		int unwitnessed = 0;
 		for (JournalEntry entry : new JournalMirror(storage).entries(modpackId)) {
 			GroupManifest manifest;
 			try {
 				manifest = policyDocument(entry.policySha1());
 			} catch (IOException unavailable) {
 				if (ledger != null) throw new IOException("The journal mirror policy history has a gap at entry " + entry.seq() + ": " + modpackId, unavailable);
+				unwitnessed++;
 				continue;
 			}
 			if (!modpackId.equals(manifest.modpackId())) throw new IOException("Cached policy document belongs to another modpack: " + entry.policySha1());
 			ledger = OwnershipLedger.materialize(ledger == null ? OwnershipLedger.empty(manifest.modpackId()) : ledger, manifest);
 			if (entry.seq() == target.seq()) return ledger;
 		}
-		throw new IOException("The journal mirror never reaches entry " + target.seq() + " with its policy documents: " + modpackId);
+		// Nothing folded at all means no entry's policy document is on this machine, which is an unsynced pack rather
+		// than a damaged mirror. Saying "the mirror never reaches the entry" points the reader at the wrong file.
+		if (ledger == null)
+			throw new MissingGenerationContentException("No stored policy document reconstructs generation " + target.contentToken()
+					+ " of " + modpackId + "; its " + unwitnessed + " journal entries are history this client never fetched, and one sync stores the newest");
+		throw new IOException("The journal mirror holds no entry " + target.seq() + " for " + modpackId);
 	}
 }
