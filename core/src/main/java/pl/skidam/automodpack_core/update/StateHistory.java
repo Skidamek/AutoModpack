@@ -9,10 +9,12 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
+import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.ContentTree;
@@ -56,6 +58,13 @@ public final class StateHistory {
 	}
 
 	public record SnapshotView(Snapshot snapshot, InstanceTree tree, List<FileDiff> diffs, Restorability restorability) {}
+
+	public record CheckoutResult(ChangeSet changes, RestartDemand restartDemand) {
+		public CheckoutResult {
+			Objects.requireNonNull(changes, "checkout changes");
+			Objects.requireNonNull(restartDemand, "restart demand");
+		}
+	}
 
 	public static List<Snapshot> entries(ClientStorage storage) throws IOException {
 		return ClientStorageMutation.run(storage, () -> ClientStateJournal.open(storage).entries());
@@ -188,7 +197,7 @@ public final class StateHistory {
 		});
 	}
 
-	public static Path checkout(ClientStorage storage, long seq) throws IOException {
+	public static CheckoutResult checkout(ClientStorage storage, long seq) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				ClientStateJournal journal = ClientStateJournal.open(storage);
@@ -199,17 +208,24 @@ public final class StateHistory {
 				if (Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS))
 					throw new IOException("An offline repair is pending; finish or discard it before restoring a timeline snapshot");
 				InstanceTree live = InstanceTree.observe(storage, target.keys(), cache);
-				if (live.sameAs(target)) return storage.gameDirectory();
+				ChangeSet changes = changesBetween(live, target);
+				String previousFollow = storage.selectedModpackId();
+				SelectionIntent previousSelection = target.identity().activeModpackId().isEmpty()
+						? null
+						: new ClientSelectionStore(storage.selectionFile()).get(target.identity().activeModpackId()).orElse(null);
 				// Unsnapshotted local edits die in the overwrite otherwise, like the single-file restore's LIVE row.
-				snapshotIfDirty(storage, target.keys(), Kind.LIVE, snapshot.modpackId(), "checkout-" + seq);
-				applyTree(storage, live, target, cache);
+				if (!live.sameAs(target)) snapshotIfDirty(storage, target.keys(), Kind.LIVE, snapshot.modpackId(), "checkout-" + seq);
+				if (!sameFiles(live, target)) applyTree(storage, live, target, cache);
 				applyIdentity(storage, target.identity());
-				detachInstalled(storage);
 				InstanceTree after = InstanceTree.observe(storage, target.keys(), cache);
 				if (!sameFiles(after, target)) throw new IOException("Instance restore did not reproduce snapshot " + seq);
 				after.write(storage);
-				journal.append(after.sha1(), Kind.RESTORE, target.identity().activeModpackId(), "restore-" + seq);
-				return storage.gameDirectory();
+				boolean metadataChanged = !previousFollow.equals(target.identity().activeModpackId())
+						|| target.identity().selection() != null && !Objects.equals(previousSelection, target.identity().selection());
+				if (!live.sameAs(after) || metadataChanged) journal.append(after.sha1(), Kind.RESTORE, target.identity().activeModpackId(), "restore-" + seq);
+				Set<String> changedPaths = new HashSet<>();
+				for (ChangeSet.Change change : changes.changes()) changedPaths.add(change.logicalPath());
+				return new CheckoutResult(changes, RestartPolicy.inGame(Set.of(), changedPaths));
 			}
 		});
 	}
@@ -348,6 +364,7 @@ public final class StateHistory {
 
 	private static void applyIdentity(ClientStorage storage, InstanceTree.LiveIdentity identity) throws IOException {
 		if (identity.activeModpackId().isEmpty()) {
+			storage.writeSelectedModpackId("");
 			storage.clearActiveState();
 			return;
 		}
@@ -360,7 +377,8 @@ public final class StateHistory {
 			}
 		if (generation == null) throw new IOException("Pack history has no generation " + identity.contentToken() + " for " + identity.activeModpackId());
 		PackDocument document = generations.document(identity.activeModpackId(), generation);
-		storage.writeActiveState(document, identity.selection());
+		storage.writeActiveState(document, identity.selection(), true);
+		storage.writeSelectedModpackId(identity.activeModpackId());
 		SelectionIntent target = identity.selection();
 		// Checking an instance out is wanting what it ran: the snapshot's applied selection becomes the desire.
 		if (target != null) new ClientSelectionStore(storage.selectionFile()).put(identity.activeModpackId(), target);
@@ -370,12 +388,6 @@ public final class StateHistory {
 			written.add(tombstone.modpackId());
 		}
 		if (!written.contains(identity.activeModpackId())) storage.writeOverlayState(identity.activeModpackId(), Set.of());
-	}
-
-	private static void detachInstalled(ClientStorage storage) throws IOException {
-		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
-		if (active == null) return;
-		storage.setDetached(active.modpackId, true);
 	}
 
 	private static void acquireTreeBlobs(ClientStorage storage, InstanceTree tree, FileCache cache) throws IOException {
@@ -421,6 +433,29 @@ public final class StateHistory {
 			if (a.root() != b.root() || !a.overlayPackId().equals(b.overlayPackId()) || !a.path().equals(b.path()) || !a.sha1().equals(b.sha1()) || a.size() != b.size()) return false;
 		}
 		return true;
+	}
+
+	private static ChangeSet changesBetween(InstanceTree before, InstanceTree after) {
+		Map<Key, TrackedFile> oldFiles = new HashMap<>();
+		for (TrackedFile file : before.files()) oldFiles.put(file.key(), file);
+		Map<Key, TrackedFile> newFiles = new HashMap<>();
+		for (TrackedFile file : after.files()) newFiles.put(file.key(), file);
+		Set<Key> keys = new TreeSet<>(Key.ORDER);
+		keys.addAll(oldFiles.keySet());
+		keys.addAll(newFiles.keySet());
+		List<ChangeSet.Change> changes = new ArrayList<>();
+		for (Key key : keys) {
+			TrackedFile oldFile = oldFiles.get(key);
+			TrackedFile newFile = newFiles.get(key);
+			if (oldFile != null && newFile != null && oldFile.sha1().equals(newFile.sha1()) && oldFile.size() == newFile.size()) continue;
+			TrackedFile file = newFile == null ? oldFile : newFile;
+			ChangeSet.Kind kind = oldFile == null ? ChangeSet.Kind.ADDED : newFile == null ? ChangeSet.Kind.REMOVED : ChangeSet.Kind.MODIFIED;
+			String location = file.root().name() + (file.overlayPackId().isEmpty() ? "" : ":" + file.overlayPackId());
+			ChangeSet.Occurrence occurrence = new ChangeSet.Occurrence(location, file.path(), file.size(), oldFile == null ? null : oldFile.size(),
+					oldFile == null ? null : oldFile.sha1(), newFile == null ? null : newFile.sha1(), null, List.of(), List.of());
+			changes.add(new ChangeSet.Change(file.path(), kind, List.of(occurrence)));
+		}
+		return ChangeSet.of(changes);
 	}
 
 	private static TrackedFile requireFile(InstanceTree tree, Root root, String overlayPackId, String path) throws IOException {

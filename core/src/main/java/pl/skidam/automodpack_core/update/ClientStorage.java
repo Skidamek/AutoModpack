@@ -548,7 +548,17 @@ public final class ClientStorage {
 	 * commit write a pointer naming one thing while recording another.
 	 */
 	public void writeActiveState(PackDocument document, SelectionIntent applied) throws IOException {
+		writeActiveState(applied, baseActiveState(document));
+	}
+
+	/** Publishes a generation with the detachment chosen by an explicit state transition. */
+	public void writeActiveState(PackDocument document, SelectionIntent applied, boolean detached) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = baseActiveState(document);
+		state.detached = detached;
+		writeActiveState(applied, state);
+	}
+
+	private void writeActiveState(SelectionIntent applied, ClientStorageJsons.ClientGenerationStateFields state) throws IOException {
 		SelectionIntent selection = Objects.requireNonNull(applied, "applied selection");
 		state.selectedGroups = List.copyOf(selection.requestedGroups());
 		state.selectedCategories = List.copyOf(selection.requestedCategories());

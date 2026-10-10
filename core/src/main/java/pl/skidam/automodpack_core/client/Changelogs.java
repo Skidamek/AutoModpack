@@ -59,6 +59,13 @@ public class Changelogs {
 		setRestartReasons(preview.restartReasons().stream().map(Enum::name).toList());
 	}
 
+	public void replaceWith(ChangeSet changes) {
+		changeSet = Objects.requireNonNull(changes, "changes");
+		latestPatchNotes = "";
+		journal = List.of();
+		setRestartReasons(List.of());
+	}
+
 	public String latestPatchNotes() {
 		return latestPatchNotes;
 	}

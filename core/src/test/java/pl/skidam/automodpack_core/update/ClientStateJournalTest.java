@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -10,12 +11,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.generation.TestPacks;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Kind;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Snapshot;
@@ -134,6 +141,50 @@ class ClientStateJournalTest {
 		assertEquals(StateHistory.Restorability.NOT_KEPT, StateHistory.views(storage).get(0).restorability());
 		assertThrows(IOException.class, () -> StateHistory.checkout(storage, 1));
 		assertEquals("current", Files.readString(live, StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void checkoutRestoresDetachedSelectionAndReportsRestartWork() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "mod".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(bytes);
+		ClientObjectStore.storeObject(storage, hash, bytes);
+		GroupManifest.GroupFile mod = new GroupManifest.GroupFile(bytes.length, "mod", false, hash, null);
+		GroupManifest.Group group = new GroupManifest.Group("", "test pack", "General", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Set.of(), Map.of("mods/test.jar", mod));
+		GroupManifest manifest = new GroupManifest("abc1234", "test pack", "", "", "", "", Map.of("main", group));
+		PackDocument document = PackDocument.create(manifest, TestPacks.policySha1(manifest), TestPacks.CREATED, null);
+		TestPacks.stageGeneration(storage, document);
+		SelectionIntent selection = new SelectionIntent(Set.of("main"));
+		InstanceTree target = InstanceTree.of(new LiveIdentity("abc1234", document.contentToken(), false, selection, List.of()),
+				List.of(new TrackedFile(Root.PROJECTION, "", "mods/test.jar", hash, bytes.length)));
+		target.write(storage);
+		ClientStateJournal.open(storage).append(target.sha1(), Kind.INSTALL, "abc1234", "install");
+
+		StateHistory.CheckoutResult result = StateHistory.checkout(storage, 1);
+
+		assertEquals("abc1234", storage.selectedModpackId());
+		assertTrue(storage.readActiveState().detached);
+		assertEquals("mod", Files.readString(storage.activePath("mods/test.jar"), StandardCharsets.UTF_8));
+		assertEquals(RestartDemand.REQUIRED, result.restartDemand());
+		assertEquals(1, result.changes().changes().size());
+		assertEquals(Kind.RESTORE, ClientStateJournal.open(storage).head().kind());
+	}
+
+	@Test
+	void checkoutClearsStaleSelectionEvenWhenFilesAlreadyMatch() throws Exception {
+		ClientStorage storage = storage();
+		InstanceTree target = InstanceTree.of(LiveIdentity.empty(), List.of());
+		target.write(storage);
+		ClientStateJournal.open(storage).append(target.sha1(), Kind.DEACTIVATION, "abc1234", "deactivate");
+		storage.writeSelectedModpackId("abc1234");
+
+		StateHistory.CheckoutResult result = StateHistory.checkout(storage, 1);
+
+		assertEquals("", storage.selectedModpackId());
+		assertNull(storage.readActiveState());
+		assertEquals(RestartDemand.NONE, result.restartDemand());
+		assertTrue(result.changes().changes().isEmpty());
+		assertEquals(Kind.RESTORE, ClientStateJournal.open(storage).head().kind());
 	}
 
 	@Test

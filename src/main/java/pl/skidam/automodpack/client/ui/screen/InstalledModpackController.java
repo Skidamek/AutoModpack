@@ -23,11 +23,14 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedServers;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.change.ChangeSet;
+import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.client.ClientOfflineRepair;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.ModpackUtils;
+import pl.skidam.automodpack_core.client.SessionUpdateState;
 import pl.skidam.automodpack_core.client.StoredModpackConnection;
 import pl.skidam.automodpack_core.client.SwitchFlow;
+import pl.skidam.automodpack_core.client.UpdateType;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
@@ -54,6 +57,7 @@ import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.MissingGenerationContentException;
 import pl.skidam.automodpack_core.update.OfflineRepair;
 import pl.skidam.automodpack_core.update.RecoveredFiles;
+import pl.skidam.automodpack_core.update.RestartDemand;
 import pl.skidam.automodpack_core.update.StateHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
@@ -310,8 +314,15 @@ final class InstalledModpackController {
 	void restoreState(ClientStateJournal.Snapshot snapshot, Runnable released) {
 		ScreenManager.background(() -> {
 			try {
-				StateHistory.checkout(storage, snapshot.seq());
-				releaseOnClient(released);
+				StateHistory.CheckoutResult result = StateHistory.checkout(storage, snapshot.seq());
+				Changelogs changelogs = new Changelogs();
+				changelogs.replaceWith(result.changes());
+				if (!result.changes().changes().isEmpty()) SessionUpdateState.markAppliedContentNotLoaded();
+				LOGGER.info("Restored instance timeline snapshot {} ({} changed paths; restart demand {})", snapshot.seq(), result.changes().changes().size(), result.restartDemand());
+				releaseOnClient(() -> {
+					released.run();
+					if (result.restartDemand() != RestartDemand.NONE) ScreenManager.restart(UpdateType.UPDATE, changelogs);
+				});
 			} catch (Exception e) {
 				released.run();
 				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
