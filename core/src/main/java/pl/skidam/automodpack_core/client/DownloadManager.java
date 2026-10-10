@@ -295,7 +295,7 @@ public class DownloadManager implements DownloadView {
 	private void processDownloadTask(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data) {
 		Path storeFile = dataLayout.objectFile(hashPathPair.hash());
 		try (FileCache cache = FileCache.open(dataLayout.fileCacheDirectory())) {
-			if (ClientObjectStore.acquireVerified(storeFile, hashPathPair.hash(), task.fileSize, List.of(), cache, ClientObjectStore.CorruptObjectPolicy.EVICT_QUIETLY).present()) {
+			if (ClientObjectStore.acquireVerified(storeFile, hashPathPair.hash(), task.fileSize, List.of(), cache, ClientObjectStore.CorruptObjectPolicy.KEEP).present()) {
 				// The run's total is remaining wire bytes, so a CAS hit only fills the amount this task still owed.
 				totalBytesDownloaded.addAndGet(PartialResume.remainingBytes(dataLayout.stagingDirectory(), hashPathPair.hash(), task.fileSize));
 				cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.COMPLETED);

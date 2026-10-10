@@ -227,10 +227,15 @@ public final class ClientObjectStore {
 	/** Runs one deletion pass against an explicit reference set; the manual compaction supplies its reduced keep set here. */
 	static CollectionResult collectUnreachableObjects(ClientStorage storage, ExpectedSizes references) throws IOException {
 		return SharedObjectOwnership.withGlobalReferences(storage.dataLocation(), "client", references.hashes(), globallyReferenced -> {
-			StorageReport before = measure(storage, references, true);
+			// Collection is based on reachability. Missing or corrupt pinned objects are already reported by the receipt;
+			// refusing to sweep unrelated objects cannot restore them, and their hashes remain protected from deletion.
+			StorageReport before = measure(storage, references, false);
 			ObjectStoreMaintenance.DeletionReceipt deletion = ObjectStoreMaintenance.deleteUnreachable(storage.objectsDirectory(), globallyReferenced);
 			ObjectStoreMaintenance.DeletionReceipt staging = PartialResume.wipeSliceDirectories(storage.stagingDirectory());
-			StorageReport after = measure(storage, references, true);
+			StorageReport after = measure(storage, references, false);
+			if (after.missingReferencedObjectCount() > 0 || after.invalidReferencedObjectCount() > 0)
+				LOGGER.warn("Client storage collection completed with {} missing and {} corrupt referenced objects; those hashes remain pinned",
+						after.missingReferencedObjectCount(), after.invalidReferencedObjectCount());
 			return new CollectionResult(before, after, deletion.deletedCount(), deletion.deletedBytes(), staging.deletedCount(), staging.deletedBytes());
 		});
 	}

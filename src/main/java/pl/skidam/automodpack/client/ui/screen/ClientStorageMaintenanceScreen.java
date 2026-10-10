@@ -73,7 +73,8 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		} else if (verificationReport != null) {
 			lines.add(blankLine());
 			lines.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.storage.verificationReceipt", verificationReport.validReferencedObjectCount(), verificationReport.referencedObjectCount(),
-					UiFormat.formatSize(verificationReport.validReferencedObjectBytes())), wrapWidth));
+					UiFormat.formatSize(verificationReport.validReferencedObjectBytes()), verificationReport.missingReferencedObjectCount(), verificationReport.invalidReferencedObjectCount()), wrapWidth,
+					verificationReport.missingReferencedObjectCount() > 0 || verificationReport.invalidReferencedObjectCount() > 0 ? ChatFormatting.YELLOW : ChatFormatting.GREEN));
 		}
 		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, LINE_HEIGHT, maintenanceRow, footerRow);
 		this.titleTop = layout.titleTop();
@@ -90,7 +91,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		begin(Operation.VERIFY);
 		work = ScreenManager.background(() -> {
 			try {
-				ClientObjectStore.StorageReport report = controller.validateStorage();
+				ClientObjectStore.StorageReport report = controller.inspectStorage();
 				this.minecraft.execute(() -> finishVerification(report));
 			} catch (Exception exception) {
 				this.minecraft.execute(() -> fail(exception));
@@ -194,7 +195,8 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		} else if (collectionResult != null) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.storage.complete").withStyle(ChatFormatting.GREEN), this.width / 2, statusY, TextColors.WHITE);
 		} else if (verificationReport != null) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.storage.verified").withStyle(ChatFormatting.GREEN), this.width / 2, statusY, TextColors.WHITE);
+			ChatFormatting color = verificationReport.missingReferencedObjectCount() > 0 || verificationReport.invalidReferencedObjectCount() > 0 ? ChatFormatting.YELLOW : ChatFormatting.GREEN;
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.storage.verified").withStyle(color), this.width / 2, statusY, TextColors.WHITE);
 		}
 	}
 

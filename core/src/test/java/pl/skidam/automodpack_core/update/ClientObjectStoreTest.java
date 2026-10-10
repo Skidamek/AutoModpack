@@ -32,6 +32,7 @@ import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.ExpectedSizes;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 class ClientObjectStoreTest {
 	private static final String MODPACK_ID = "abc1234";
@@ -132,6 +133,50 @@ class ClientObjectStoreTest {
 
 		assertEquals(0, result.deletedObjectCount());
 		assertTrue(Files.exists(first.objectFile(hash)));
+	}
+
+	@Test
+	void collectionStopsWhenAnotherInstancesOwnershipReceiptIsCorruptUntilItIsRefreshed() throws Exception {
+		Path sharedData = temporaryDirectory.resolve("shared-data");
+		ClientStorage first = storage("first-game", sharedData);
+		ClientStorage second = storage("second-game", sharedData);
+		String referenced = store(second, "second-instance-object");
+		String orphan = store(first, "shared-orphan");
+		ClientObjectStore.publishOwnership(second, Set.of(referenced));
+		Path receipt = sharedData.resolve("object-owners").resolve(second.dataLocation().ownerId() + ".client.json");
+		Files.writeString(receipt, "{not a receipt", StandardCharsets.UTF_8);
+
+		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(first, Set.of()));
+		assertTrue(Files.exists(first.objectFile(referenced)), "An unreadable receipt cannot release another installation's object pins");
+		assertTrue(Files.exists(first.objectFile(orphan)), "A blocked collection deletes nothing");
+		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(first, Set.of()), "The quarantined receipt blocks later collections too");
+		try (var receipts = Files.list(receipt.getParent())) {
+			assertTrue(receipts.anyMatch(path -> path.getFileName().toString().startsWith(receipt.getFileName() + ".corrupt-")), "The unreadable receipt stays as evidence");
+		}
+
+		ClientObjectStore.publishOwnership(second, Set.of(referenced));
+		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(first, Set.of());
+		assertEquals(1, result.deletedObjectCount());
+		assertTrue(Files.exists(first.objectFile(referenced)));
+		assertFalse(Files.exists(first.objectFile(orphan)));
+	}
+
+	@Test
+	void failedAcquisitionKeepsCorruptCasBytesUntilVerifiedReplacementIsReady() throws Exception {
+		ClientStorage storage = storage();
+		byte[] expected = "expected-object".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(expected);
+		Path object = storage.objectFile(hash);
+		Files.createDirectories(object.getParent());
+		Files.writeString(object, "corrupt-object", StandardCharsets.UTF_8);
+
+		ClientObjectStore.Acquisition acquisition;
+		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
+			acquisition = ClientObjectStore.acquireVerified(object, hash, expected.length, List.of(), cache, ClientObjectStore.CorruptObjectPolicy.KEEP);
+		}
+
+		assertTrue(acquisition.missing());
+		assertTrue(Files.exists(object), "Failed acquisition must not remove bytes that durable history may still need");
 	}
 
 	@Test

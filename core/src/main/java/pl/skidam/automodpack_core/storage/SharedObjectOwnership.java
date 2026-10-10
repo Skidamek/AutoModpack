@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -59,29 +60,34 @@ public final class SharedObjectOwnership {
 		ConfigTools.writeAtomicCompact(owners.resolve(location.ownerId() + "." + canonicalComponent + ".json"), fields);
 	}
 
-	/**
-	 * Collects the pinned hashes of every receipt in the ownership root. A receipt that cannot be trusted is set aside
-	 * loudly instead of refusing collection store-wide forever: one stale receipt (an owner deleted by hand, a hand
-	 * edit, a stray editor file) must not permanently block every instance's collection on the shared data root.
-	 * Skipping an unreadable receipt can only release unknown pins - the store is closed under verified promotion, so
-	 * any wrongly reclaimed object is re-downloaded and re-verified on its consumer's next miss.
-	 */
+	/** Collects every trusted pin. An unreadable receipt is set aside and blocks deletion until its owner republishes a valid receipt. */
 	private static Set<String> readAllOwners(DataRootResolver.Layout layout) throws IOException {
 		Path owners = layout.objectOwnersDirectory();
 		if (!Files.exists(owners, LinkOption.NOFOLLOW_LINKS)) return Set.of();
 		if (Files.isSymbolicLink(owners) || !Files.isDirectory(owners, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Shared object ownership root is not a directory: " + owners);
 		TreeSet<String> result = new TreeSet<>();
 		try (Stream<Path> paths = Files.list(owners)) {
-			for (Path path : paths.toList()) {
+			List<Path> entries = paths.toList();
+			Set<String> names = new HashSet<>();
+			for (Path path : entries) names.add(path.getFileName().toString());
+			for (Path path : entries) {
+				String name = path.getFileName().toString();
+				int corruptMarker = name.indexOf(DurableFiles.CORRUPT_ASIDE_MARKER);
+				if (corruptMarker >= 0 && !names.contains(name.substring(0, corruptMarker)))
+					throw new IOException("Cannot collect shared objects until the ownership receipt is refreshed: " + path);
+			}
+			for (Path path : entries) {
 				if (path.getFileName().toString().endsWith(DurableFiles.TEMPORARY_SUFFIX)) {
 					// A crash during a receipt write leaves a transient ConfigTools temporary; it is never a receipt.
 					Files.deleteIfExists(path);
 					continue;
 				}
+				if (path.getFileName().toString().contains(DurableFiles.CORRUPT_ASIDE_MARKER)) continue;
 				try {
 					result.addAll(readOwner(path));
-				} catch (IOException unusable) {
+				} catch (IOException | RuntimeException unusable) {
 					DurableFiles.setAside(path, "Shared object ownership receipt " + path.getFileName(), unusable);
+					throw new IOException("Cannot collect shared objects until the ownership receipt is refreshed: " + path.getFileName(), unusable);
 				}
 			}
 		}

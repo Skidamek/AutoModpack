@@ -189,8 +189,8 @@ final class InstalledModpackController {
 		return discoveryFailure;
 	}
 
-	ClientObjectStore.StorageReport validateStorage() throws IOException {
-		return ClientObjectStore.validate(storage);
+	ClientObjectStore.StorageReport inspectStorage() throws IOException {
+		return ClientObjectStore.measure(storage);
 	}
 
 	ClientGenerationStore.CompactionResult compactStorage() throws IOException {
