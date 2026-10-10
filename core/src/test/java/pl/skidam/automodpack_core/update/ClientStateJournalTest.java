@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
+import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -141,6 +143,58 @@ class ClientStateJournalTest {
 		assertEquals(StateHistory.Restorability.NOT_KEPT, StateHistory.views(storage).get(0).restorability());
 		assertThrows(IOException.class, () -> StateHistory.checkout(storage, 1));
 		assertEquals("current", Files.readString(live, StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void removedPackCanBeRestoredUntilItsTimelineCheckpointIsForgotten() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "restored pack file".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(bytes);
+		ClientObjectStore.storeObject(storage, hash, bytes);
+		PackDocument document = TestPacks.document(TestPacks.manifest("pack", "config/pack.txt", "restored pack file"));
+		TestPacks.stageGeneration(storage, document);
+		SelectionIntent selection = new SelectionIntent(Set.of("main"));
+		storage.writeActiveState(document, selection);
+		new ClientSelectionStore(storage.selectionFile()).put(document.manifest().modpackId(), selection);
+		InstanceTree installed = InstanceTree.of(new LiveIdentity(document.manifest().modpackId(), document.contentToken(), false, selection, List.of()),
+				List.of(new TrackedFile(Root.PROJECTION, "", "config/pack.txt", hash, bytes.length)));
+		installed.write(storage);
+		ClientStateJournal journal = ClientStateJournal.open(storage);
+		journal.append(installed.sha1(), Kind.INSTALL, document.manifest().modpackId(), "install");
+		Path projected = storage.activePath("config/pack.txt");
+		Files.createDirectories(projected.getParent());
+		Files.write(projected, bytes);
+
+		storage.clearActiveState();
+		new ClientSelectionStore(storage.selectionFile()).remove(document.manifest().modpackId());
+		Files.delete(projected);
+		InstanceTree removed = InstanceTree.of(LiveIdentity.empty(), List.of());
+		removed.write(storage);
+		journal.append(removed.sha1(), Kind.REMOVAL, document.manifest().modpackId(), "remove");
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		generations.forgetModpack(document.manifest().modpackId());
+
+		assertTrue(Files.exists(storage.historyJournalFile(document.manifest().modpackId())));
+		assertTrue(generations.installedPackIds().isEmpty());
+		generations.compact();
+		assertTrue(Files.exists(storage.objectFile(document.policySha1())));
+		assertTrue(Files.exists(storage.objectFile(hash)));
+		assertEquals(StateHistory.Restorability.READY, StateHistory.views(storage).get(0).restorability());
+		StateHistory.checkout(storage, 1);
+		assertEquals("restored pack file", Files.readString(projected, StandardCharsets.UTF_8));
+		assertTrue(storage.readActiveState().detached);
+
+		storage.clearActiveState();
+		new ClientSelectionStore(storage.selectionFile()).remove(document.manifest().modpackId());
+		Files.delete(projected);
+		journal = ClientStateJournal.open(storage);
+		journal.append(removed.sha1(), Kind.REMOVAL, document.manifest().modpackId(), "remove-again");
+		generations.forgetModpack(document.manifest().modpackId());
+		StateHistory.forgetOlderThan(storage, ClientStateJournal.open(storage).head().seq());
+
+		assertFalse(Files.exists(storage.historyJournalFile(document.manifest().modpackId())));
+		assertFalse(Files.exists(storage.objectFile(hash)));
+		assertFalse(Files.exists(storage.objectFile(document.policySha1())));
 	}
 
 	@Test

@@ -275,9 +275,13 @@ public final class ClientObjectStore {
 	 * but never the sweep.
 	 */
 	static Map<String, Long> collectMirrorClaims(ClientStorage storage) throws IOException {
+		return collectMirrorClaims(storage, Set.copyOf(new ClientGenerationStore(storage).mirroredPackIds()));
+	}
+
+	static Map<String, Long> collectMirrorClaims(ClientStorage storage, Set<String> modpackIds) throws IOException {
 		TreeMap<String, Long> claims = new TreeMap<>();
 		Set<String> distrusted = new HashSet<>();
-		for (String modpackId : new ClientGenerationStore(storage).mirroredPackIds()) {
+		for (String modpackId : modpackIds) {
 			for (JournalEntry entry : new JournalMirror(storage).entries(modpackId)) {
 				claim(claims, distrusted, entry.policySha1(), -1);
 				for (JournalEntry.Change change : entry.changes()) {

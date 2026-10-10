@@ -70,6 +70,15 @@ public final class StateHistory {
 		return ClientStorageMutation.run(storage, () -> ClientStateJournal.open(storage).entries());
 	}
 
+	static Set<String> referencedModpackIdsLocked(ClientStorage storage) throws IOException {
+		Set<String> referenced = new HashSet<>();
+		for (Snapshot snapshot : ClientStateJournal.open(storage).entries()) {
+			String modpackId = InstanceTree.read(storage, snapshot.treeSha1()).identity().activeModpackId();
+			if (!modpackId.isEmpty()) referenced.add(modpackId);
+		}
+		return referenced;
+	}
+
 	/** One pass over the timeline: trees, parent diffs, and restorability, with a single live observation. */
 	public static List<SnapshotView> views(ClientStorage storage) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
@@ -235,10 +244,17 @@ public final class StateHistory {
 			ClientStateJournal journal = ClientStateJournal.open(storage);
 			List<Snapshot> remaining = journal.entries().stream().filter(entry -> entry.seq() >= seq).toList();
 			if (remaining.isEmpty()) throw new IOException("Forgetting that prefix would leave no snapshots");
+			Set<String> forgottenPacks = new HashSet<>();
+			for (Snapshot entry : journal.entries())
+				if (entry.seq() < seq) {
+					String modpackId = InstanceTree.read(storage, entry.treeSha1()).identity().activeModpackId();
+					if (!modpackId.isEmpty()) forgottenPacks.add(modpackId);
+				}
 			journal.replaceAll(remaining);
 			Set<String> kept = new HashSet<>();
 			for (Snapshot entry : remaining) kept.add(entry.treeSha1());
 			InstanceTree.deleteUnused(storage, kept);
+			new ClientGenerationStore(storage).pruneUnreferencedMirrorsLocked(forgottenPacks);
 			ClientObjectStore.collectUnreachableObjects(storage, Set.of());
 			return null;
 		});

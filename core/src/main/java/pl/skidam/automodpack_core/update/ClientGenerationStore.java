@@ -283,9 +283,21 @@ public final class ClientGenerationStore {
 		new ClientSelectionStore(storage.selectionFile()).remove(normalizedModpackId);
 		GeneratedCopyState.removePack(storage, normalizedModpackId);
 		storage.clearOverlay(normalizedModpackId);
-		FileTrees.delete(storage.historyPackDirectory(normalizedModpackId));
+		if (!StateHistory.referencedModpackIdsLocked(storage).contains(normalizedModpackId)) FileTrees.delete(storage.historyPackDirectory(normalizedModpackId));
 		FileTrees.delete(storage.connectionDirectory(normalizedModpackId));
 		ClientObjectStore.collectUnreachableObjects(storage, Set.of());
+	}
+
+	Set<String> pruneUnreferencedMirrorsLocked(Set<String> candidates) throws IOException {
+		Set<String> timelinePacks = StateHistory.referencedModpackIdsLocked(storage);
+		Set<String> archived = new TreeSet<>();
+		for (String modpackId : candidates) {
+			if (!Files.exists(storage.historyPackDirectory(modpackId), LinkOption.NOFOLLOW_LINKS)) continue;
+			if (hasLocalState(modpackId)) continue;
+			if (timelinePacks.contains(modpackId)) archived.add(modpackId);
+			else FileTrees.delete(storage.historyPackDirectory(modpackId));
+		}
+		return Set.copyOf(archived);
 	}
 
 	/** The boundary marker of one pack's last manual compaction; purely informational state for the storage UI. */
@@ -319,9 +331,8 @@ public final class ClientGenerationStore {
 
 	private CompactionResult compactLocked() throws IOException {
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Cannot compact client history while an update transaction is active: " + storage.transactionFile());
-		// Never-consented mirrors are a fetch's cache, so compaction reclaims them whole; keeping them would pin
-		// their objects forever and leave a mirror whose policy documents the collection just deleted.
-		for (String modpackId : mirroredPackIds()) if (!hasLocalState(modpackId)) FileTrees.delete(storage.historyPackDirectory(modpackId));
+		// Fetch caches can go, but a removed pack's mirror is the identity record its retained instance snapshots restore.
+		Set<String> archivedMirrors = pruneUnreferencedMirrorsLocked(Set.copyOf(mirroredPackIds()));
 		ExpectedSizes kept = new ExpectedSizes();
 		List<KeptPack> keptPacks = new ArrayList<>();
 		for (String modpackId : installedPackIds()) {
@@ -340,6 +351,8 @@ public final class ClientGenerationStore {
 			removeGeneratedCopies(modpackId, keptTokens);
 			keptPacks.add(new KeptPack(modpackId, newest.seq()));
 		}
+		for (var claim : ClientObjectStore.collectMirrorClaims(storage, archivedMirrors).entrySet())
+			kept.optional(claim.getKey(), claim.getValue(), "timeline-restorable pack history");
 		ClientObjectStore.collectNonHistoryReferences(storage, kept);
 		ClientObjectStore.CollectionResult collection = ClientObjectStore.collectUnreachableObjects(storage, kept);
 		List<CompactionReceipt> receipts = new ArrayList<>();
