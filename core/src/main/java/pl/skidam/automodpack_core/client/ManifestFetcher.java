@@ -162,11 +162,10 @@ public final class ManifestFetcher {
 				journal = Files.exists(journalMirror, LinkOption.NOFOLLOW_LINKS) ? HashUtils.getHash(journalMirror) : null;
 			} catch (IOException | RuntimeException e) {
 				// A mirror that cannot be read costs only the optimization: the fetch proceeds unconditionally.
-				LOGGER.warn("Cannot read the installed hashes of modpack {}; fetching without conditionals", selectedModpackId, e);
+				LOGGER.warn("Cannot use cached modpack data for {}; fetching from the server", selectedModpackId, e);
 			}
 			headExpected = head;
 			journalExpected = journal;
-			if (head != null) LOGGER.info("Installed head mirror vouches for {}; fetching head and journal conditionally in one round trip", selectedModpackId);
 		} else {
 			headExpected = null;
 			journalExpected = null;
@@ -261,7 +260,7 @@ public final class ManifestFetcher {
 			content = ModpackContentTools.readHeadDocument(source);
 			if (fetch.path() != null) validators.put(endpoint, GenerationHosting.HEAD_DOCUMENT_KEY, fetch.etag());
 		} else {
-			LOGGER.info("Fetched the head document from the server (installed mirror {})", headExpected == null ? "did not vouch" : "is stale");
+			LOGGER.info("Fetched modpack data from the server");
 			content = ModpackContentTools.readHeadDocument(storage.modpackContentTempFile());
 			if (content != null) {
 				try {
@@ -316,7 +315,7 @@ public final class ManifestFetcher {
 		}
 		if (journalFetched == null) {
 			if (!mirror.isStale(modpackId, content.contentToken)) return CompletableFuture.completedFuture(false);
-			LOGGER.info("Journal mirror is stale for modpack {}; fetching the full journal from the server", modpackId);
+			LOGGER.info("Fetching modpack history from the server for {}", modpackId);
 			journalFetched = fetchJournal(transport, storage, journalExpected == null
 					? null
 					: new DocumentConditional(journalExpected, validators.get(connectionInfo.endpoint, GenerationHosting.JOURNAL_KEY)));

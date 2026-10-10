@@ -18,7 +18,6 @@ import pl.skidam.automodpack.modpack.GameHelpers;
 import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.content.LoginUpdateResponse;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
-import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class DataS2CPacket {
 
@@ -76,21 +75,7 @@ public class DataS2CPacket {
 			} else {
 				disconnect(handler, VersionedText.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!"));
 
-				LOGGER.error("AutoModpack connection failed. Check the advertised endpoint and its configured connection mode.");
-
-				if (!serverConfig.modpackHost) {
-					LOGGER.warn("Built-in modpack hosting is disabled; the advertised endpoint must be handled externally.");
-				} else if (serverConfig.connectionMode == ModpackConnectionMode.HOLEPUNCH) {
-					LOGGER.warn("HOLEPUNCH expects a marked Minecraft Login connection; bindPort is not used.");
-				} else if (serverConfig.connectionMode == ModpackConnectionMode.MAGIC && serverConfig.bindPort == -1) {
-					LOGGER.warn("MAGIC expects AMMH/AMOK routing on the Minecraft port.");
-				} else if (serverConfig.connectionMode == ModpackConnectionMode.MAGIC) {
-					LOGGER.warn("MAGIC expects AMMH/AMOK before TLS on dedicated port '{}'.", serverConfig.bindPort);
-				} else if (serverConfig.connectionMode == ModpackConnectionMode.HTTP && serverConfig.bindPort == -1) {
-					LOGGER.warn("HTTP with bindPort -1 is only advertised; the URL contract must be served externally over HTTPS.");
-				} else {
-					LOGGER.warn("HTTP expects TLS (or a TLS-terminating proxy in front) immediately on dedicated port '{}'.", serverConfig.bindPort);
-				}
+				LOGGER.error("AutoModpack connection failed. Check the advertised endpoint and server configuration.");
 
 				if (serverConfig.disableInternalTLS) {
 					LOGGER.warn("Internal TLS termination is disabled; clients still use TLS and a compatible terminator must forward decrypted traffic to AutoModpack.");

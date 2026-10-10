@@ -171,7 +171,6 @@ public class NettyServer {
 		// reader pool exist rather than after. HOLEPUNCH and MAGIC on the Minecraft port keep theirs below, because
 		// those modes carry the route over the game connection itself.
 		if (endpointOwner() == EndpointOwner.EXTERNAL) {
-			LOGGER.info("Modpack hosting is advertised without a built-in listener; expecting the endpoint to be served externally");
 			return Optional.empty();
 		}
 
@@ -192,14 +191,12 @@ public class NettyServer {
 			prepareTls();
 
 			if (connectionMode == ModpackConnectionMode.HOLEPUNCH) {
-				LOGGER.info("Hosting modpack through Minecraft Login holepunch; bindPort is not used");
 				startSharedTraffic();
 				holepunchActive = ServerHolepunchBridge.register(this);
 				return Optional.empty();
 			}
 
 			if (connectionMode == ModpackConnectionMode.MAGIC && serverConfig.bindPort == -1) {
-				LOGGER.info("Hosting modpack through magic packet routing on the Minecraft port");
 				startSharedTraffic();
 				sharedMagicEnabled = true;
 				return Optional.empty();
@@ -223,7 +220,7 @@ public class NettyServer {
 			bindAddress = new InetSocketAddress(address, port);
 		}
 
-		LOGGER.info("Starting {} modpack host server on {}", connectionMode, bindAddress);
+		LOGGER.info("Starting modpack host server on {}", bindAddress);
 
 		Class<? extends ServerChannel> socketChannelClass;
 		if (Epoll.isAvailable()) {

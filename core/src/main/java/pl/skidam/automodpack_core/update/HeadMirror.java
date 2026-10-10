@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -54,10 +52,7 @@ public final class HeadMirror {
 	/** The sha1 of the mirror bytes when the mirror parses and names a generation; null otherwise. */
 	public String installedSha1(String modpackId) throws IOException {
 		GenerationJsons.HeadDocumentFields head = read(modpackId);
-		if (head == null || head.contentToken == null || head.contentToken.isBlank()) {
-			LOGGER.info("Installed head mirror of {} does not vouch: no readable mirror", modpackId);
-			return null;
-		}
+		if (head == null || head.contentToken == null || head.contentToken.isBlank()) return null;
 		return HashUtils.getHash(storage.historyHeadFile(modpackId));
 	}
 

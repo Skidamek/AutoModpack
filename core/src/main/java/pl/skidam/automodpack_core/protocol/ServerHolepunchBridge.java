@@ -87,7 +87,7 @@ public final class ServerHolepunchBridge {
 				}
 			});
 		}
-		LOGGER.debug("Holepunched AutoModpack connection handed over: {}", remoteAddress);
+		LOGGER.debug("AutoModpack connection handed over: {}", remoteAddress);
 	}
 
 	/** Forwards decrypted transport-frame payloads before the handoff and decodes camouflaged TLS records after it. */

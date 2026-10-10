@@ -147,7 +147,7 @@ public class HandshakeS2CPacket {
 			// error; reject them here where an honest reason can be given.
 			if (serverConfig.connectionMode == ModpackConnectionMode.HOLEPUNCH && !ServerHolepunchBridge.isRegistered()) {
 				Component reason = VersionedText.literal("AutoModpack modpack hosting is unavailable on the server. Ask the admin to check the server log and try again later.");
-				LOGGER.error("Modpack hosting is not running while the connection mode is HOLEPUNCH; rejecting {} instead of advertising a dead endpoint", GameHelpers.getPlayerName(profile));
+				LOGGER.error("Modpack hosting is unavailable; rejecting {} instead of advertising an unreachable endpoint", GameHelpers.getPlayerName(profile));
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);
 				return;
@@ -160,7 +160,7 @@ public class HandshakeS2CPacket {
 
 			String advertisedEndpointHost = serverConfig.advertisedEndpointHost;
 			int advertisedEndpointPort = serverConfig.advertisedEndpointPort;
-			LOGGER.info("Sending {} AutoModpack endpoint: {}:{} ({})", GameHelpers.getPlayerName(profile), advertisedEndpointHost, advertisedEndpointPort, serverConfig.connectionMode);
+			LOGGER.info("Sending AutoModpack connection details to {}", GameHelpers.getPlayerName(profile));
 
 			DataPacket dataPacket = new DataPacket(advertisedEndpointHost, advertisedEndpointPort, secret, serverConfig.connectionMode, serverConfig.requireModpack);
 			String packetContentJson = dataPacket.toJson();
