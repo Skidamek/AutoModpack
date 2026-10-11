@@ -421,6 +421,44 @@ class UpdateCommitTest {
 	}
 
 	@Test
+	void helperRecoveryFinishesAPartialApplyThatAlreadyWroteCapturedAbsentFiles() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		byte[] configBytes = "configured=true\n".getBytes(StandardCharsets.UTF_8);
+		String configHash = store(storage, configBytes);
+		byte[] oldPack = "old-resource-pack".getBytes(StandardCharsets.UTF_8);
+		byte[] newPack = "new-resource-pack".getBytes(StandardCharsets.UTF_8);
+		String oldPackHash = store(storage, oldPack);
+		String newPackHash = store(storage, newPack);
+		SelectedModpackTarget target = twoFileTarget(storage, "config/first.properties", "config/later.properties", configHash, configBytes.length, newPackHash, newPack.length);
+		Path liveConfig = storage.gameDirectory().resolve("config/first.properties");
+		Path livePack = storage.gameDirectory().resolve("config/later.properties");
+		Files.createDirectories(liveConfig.getParent());
+		Files.write(liveConfig, configBytes);
+		Files.write(livePack, oldPack);
+		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(
+				new Operation(Root.PROJECTION, "config/first.properties", OperationType.INSTALL_OBJECT, configHash, configBytes.length, null),
+				new Operation(Root.PROJECTION, "config/later.properties", OperationType.INSTALL_OBJECT, newPackHash, newPack.length, null),
+				new Operation(Root.GAME_DIR, "config/first.properties", OperationType.INSTALL_OBJECT, configHash, configBytes.length, null),
+				new Operation(Root.GAME_DIR, "config/later.properties", OperationType.INSTALL_OBJECT, newPackHash, newPack.length, oldPackHash)).stream().sorted(Operation.ORDER).toList(),
+				List.of(new ProjectedFile(Root.PROJECTION, "config/first.properties", true, configHash, configBytes.length),
+						new ProjectedFile(Root.PROJECTION, "config/later.properties", true, newPackHash, newPack.length),
+						new ProjectedFile(Root.GAME_DIR, "config/first.properties", true, configHash, configBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/later.properties", true, newPackHash, newPack.length)),
+				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(),
+				List.of(new UpdatePlan.BaselineCapture(Root.GAME_DIR, "config/first.properties", "", -1, true),
+						new UpdatePlan.BaselineCapture(Root.GAME_DIR, "config/later.properties", oldPackHash, oldPack.length, false)),
+				List.of(), List.of(), ChangeSet.empty()).withPlannedSelectedModpackId(target.manifest().modpackId());
+		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, plan, target));
+
+		UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null));
+
+		assertTrue(execution instanceof UpdateCommit.Applied, () -> "expected applied recovery, got " + execution);
+		assertArrayEquals(configBytes, Files.readAllBytes(liveConfig));
+		assertArrayEquals(newPack, Files.readAllBytes(livePack));
+		assertFalse(Files.exists(storage.transactionFile()));
+	}
+
+	@Test
 	void aRebuiltTransactionRetiresAnInterruptedApply() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
 		byte[] earlyBytes = "early-game-file".getBytes(StandardCharsets.UTF_8);
@@ -434,7 +472,7 @@ class UpdateCommitTest {
 		Files.write(drifted, playerBytes);
 		String playerHash = HashUtils.sha1(playerBytes);
 
-		// Attempt one plans against a world without the player's file and dies on it, after the early file is already materialized.
+		// Attempt one plans against a world without the player's file and dies on it before any live write.
 		UpdatePlan interruptedPlan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(
 				new Operation(Root.GAME_DIR, "config/early.txt", OperationType.INSTALL_OBJECT, earlyHash, earlyBytes.length, null),
 				new Operation(Root.GAME_DIR, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null),
@@ -448,12 +486,12 @@ class UpdateCommitTest {
 
 		assertTrue(first instanceof UpdateCommit.ReplanRequired);
 		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, persistedTransaction(storage).resultStatus);
-		assertArrayEquals(earlyBytes, Files.readAllBytes(storage.gameDirectory().resolve("config/early.txt")));
+		assertFalse(Files.exists(storage.gameDirectory().resolve("config/early.txt")));
 		assertArrayEquals(playerBytes, Files.readAllBytes(drifted));
 
-		// The rebuild observes the same world attempt one left behind: both game ops now name the bytes they expect to find.
+		// The rebuild names the live tree attempt one refused to touch: early still absent, the player's file still present.
 		UpdatePlan rebuiltPlan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(
-				new Operation(Root.GAME_DIR, "config/early.txt", OperationType.INSTALL_OBJECT, earlyHash, earlyBytes.length, earlyHash),
+				new Operation(Root.GAME_DIR, "config/early.txt", OperationType.INSTALL_OBJECT, earlyHash, earlyBytes.length, null),
 				new Operation(Root.GAME_DIR, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, playerHash),
 				new Operation(Root.PROJECTION, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null))
 				.stream().sorted(Operation.ORDER).toList(),
@@ -493,7 +531,7 @@ class UpdateCommitTest {
 						new ProjectedFile(Root.GAME_DIR, "config/early.txt", true, earlyHash, earlyBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
 		UpdatePlan rebuiltPlan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(
-				new Operation(Root.GAME_DIR, "config/early.txt", OperationType.INSTALL_OBJECT, earlyHash, earlyBytes.length, earlyHash),
+				new Operation(Root.GAME_DIR, "config/early.txt", OperationType.INSTALL_OBJECT, earlyHash, earlyBytes.length, null),
 				new Operation(Root.GAME_DIR, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, playerHash),
 				new Operation(Root.PROJECTION, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null))
 				.stream().sorted(Operation.ORDER).toList(),

@@ -9,14 +9,12 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.EnumSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -24,12 +22,8 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.launchers.LauncherVersionSwapper;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
-import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
-import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
-import pl.skidam.automodpack_core.update.UpdatePlan.ConflictAction;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
-import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
@@ -62,6 +56,11 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * content on a warm cache: the overlay gate is one directory walk plus one {@link FileCache} stat per overlay file, the
  * managed-state match one stat per projected non-projection row, and the configuration and selection gates one small
  * JSON document each.
+ *
+ * <p>
+ * Each live operation is baseline, destination, or drift: still the planned before-state, already this apply's
+ * after-state, or neither. Pin and apply share that classification. A third hash or size is the only replan.
+ * {@link UpdatePlan#baselineCaptures()} names CAS retention and history; it is not an apply-time gate.
  */
 public final class UpdateCommit {
 	private final ClientStorage storage;
@@ -374,7 +373,7 @@ public final class UpdateCommit {
 		};
 	}
 
-	/** The modpack apply sequence: pre-mutation captures, live operations, projection publication, and durable finalization. */
+	/** The modpack apply sequence: pin remaining before-bytes, live operations, projection publication, and durable finalization. */
 	private void applyModpackTransaction(UpdateTransaction transaction, AtomicReference<Operation> current, boolean publicationStarted, boolean liveAlreadyApplied,
 			boolean preserveNewerSelection) throws IOException {
 		beforeFirstMutation(transaction, publicationStarted);
@@ -396,43 +395,56 @@ public final class UpdateCommit {
 	/** One planned byte the apply must prove and pin before a single live file moves. */
 	private record Pinned(Path path, String hash, long size, String failureStory) {}
 
-	/** Every baseline capture, preservation, and preserved conflict source: one loop, so "acquire every pinned byte before any mutation" is one statement. */
+	/** Still the planned before-state, already this apply's after-state, or neither. */
+	private enum InFlight {
+		BASELINE, DESTINATION, DRIFT
+	}
+
+	/** Pin remaining before-bytes of every live operation so a later mutation of this attempt still has them in CAS. */
 	private void capturePinnedBytes(UpdateTransaction transaction) throws IOException {
-		UpdatePlan plan = transaction.plan();
-		for (Pinned pinned : Stream.concat(pinnedBaselines(transaction, plan.baselineCaptures()),
-				Stream.concat(pinnedPreservations(transaction, plan.preservations()), pinnedConflictSources(plan.conflicts()))).toList())
-			acquireImmutable(pinned);
-	}
-
-	/** A capture of an absent path pins nothing; it only proves the path is still absent. */
-	private Stream<Pinned> pinnedBaselines(UpdateTransaction transaction, List<BaselineCapture> captures) throws IOException {
-		Stream.Builder<Pinned> pinned = Stream.builder();
-		for (BaselineCapture capture : captures) {
-			Path source = resolve(capture.root(), capture.relativePath(), transaction);
-			if (capture.absent()) {
-				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) throw new UpdateReplanRequiredException(source, "Captured path was expected to be absent: " + source);
-				continue;
-			}
-			pinned.add(new Pinned(source, capture.expectedHash(), capture.expectedSize(), "Captured source changed"));
+		for (Operation operation : transaction.plan().operations()) {
+			if (operation.root() == Root.PROJECTION) continue;
+			Path live = resolve(operation, transaction);
+			if (requireInFlight(live, operation) == InFlight.DESTINATION) continue;
+			if (operation.expectedExistingHash() == null) continue;
+			acquireImmutable(new Pinned(live, operation.expectedExistingHash(), Files.size(live), driftStory(operation, live)));
 		}
-		return pinned.build();
 	}
 
-	/** A preservation's bytes must be owned before the pack's version overwrites them, so the state entry's change hashes name real objects. */
-	private Stream<Pinned> pinnedPreservations(UpdateTransaction transaction, List<Preservation> preservations) throws IOException {
-		Stream.Builder<Pinned> pinned = Stream.builder();
-		for (Preservation preservation : preservations)
-			pinned.add(new Pinned(resolve(preservation.root(), preservation.relativePath(), transaction), preservation.expectedHash(), preservation.expectedSize(), "Preserved source changed"));
-		return pinned.build();
+	private InFlight inFlight(Path live, Operation operation) {
+		boolean atDestination = operation.operation() == OperationType.DELETE
+				? !Files.exists(live, LinkOption.NOFOLLOW_LINKS)
+				: FileIntegrity.matchesNamed(live, operation.expectedSize(), operation.expectedObjectHash(), fileCache);
+		boolean atBaseline = atBaseline(live, operation);
+		if (atDestination && !atBaseline) return InFlight.DESTINATION;
+		if (atBaseline) return InFlight.BASELINE;
+		return InFlight.DRIFT;
 	}
 
-	/** The local side of every preserve-local conflict, pinned before the pack's version overwrites it. */
-	private Stream<Pinned> pinnedConflictSources(List<Conflict> conflicts) {
-		Stream.Builder<Pinned> pinned = Stream.builder();
-		for (Conflict conflict : conflicts)
-			if (conflict.action() == ConflictAction.PRESERVE_LOCAL)
-				pinned.add(new Pinned(storage.gamePath(conflict.sourcePath()), conflict.sourceHash(), conflict.sourceSize(), "Conflict source changed"));
-		return pinned.build();
+	private boolean atBaseline(Path live, Operation operation) {
+		if (operation.expectedExistingHash() == null) return !Files.exists(live, LinkOption.NOFOLLOW_LINKS);
+		try {
+			return Files.isRegularFile(live, LinkOption.NOFOLLOW_LINKS) && FileIntegrity.matches(live, Files.size(live), operation.expectedExistingHash(), fileCache);
+		} catch (IOException e) {
+			return false;
+		}
+	}
+
+	private InFlight requireInFlight(Path live, Operation operation) throws IOException {
+		InFlight state = inFlight(live, operation);
+		if (state == InFlight.DRIFT) throw new UpdateReplanRequiredException(live, driftStory(operation, live));
+		return state;
+	}
+
+	private static String driftStory(Operation operation, Path live) {
+		String described = operation.root() == Root.OVERLAY ? "Client overlay" : "Game-directory";
+		return described + (operation.expectedExistingHash() == null ? " target appeared after planning: " : " target changed after planning: ") + live;
+	}
+
+	private boolean matchesPlannedDestination(Path live, ProjectedFile destination) {
+		if (destination == null) return false;
+		if (!destination.present()) return !Files.exists(live, LinkOption.NOFOLLOW_LINKS);
+		return FileIntegrity.matchesNamed(live, destination.expectedSize(), destination.expectedHash(), fileCache);
 	}
 
 	/** The shared capture body: prove the live bytes are the planned ones, then pin them in the object store. */
@@ -446,12 +458,8 @@ public final class UpdateCommit {
 		for (ProjectedFile projected : transaction.plan().projectedFinalState()) {
 			if (projected.root() == Root.PROJECTION) continue;
 			Path target = resolve(projected.root(), projected.relativePath(), transaction);
-			if (projected.present()) {
-				if (!FileIntegrity.matchesNamed(target, projected.expectedSize(), projected.expectedHash(), fileCache))
-					throw new UpdateReplanRequiredException(target, "Projected target changed during update: " + target);
-			} else
-				if (Files.exists(target, LinkOption.NOFOLLOW_LINKS))
-					throw new UpdateReplanRequiredException(target, "Projected absent target appeared during update: " + target);
+			if (!matchesPlannedDestination(target, projected))
+				throw new UpdateReplanRequiredException(target, (projected.present() ? "Projected target changed during update: " : "Projected absent target appeared during update: ") + target);
 		}
 	}
 
@@ -547,8 +555,7 @@ public final class UpdateCommit {
 			if (operation.operation() != OperationType.INSTALL_OBJECT || operation.root() == Root.PROJECTION) continue;
 			current.set(operation);
 			Path target = resolve(operation, transaction);
-			if (FileIntegrity.matchesNamed(target, operation.expectedSize(), operation.expectedObjectHash(), fileCache)) continue;
-			verifyExpectedExisting(operation, target);
+			if (requireInFlight(target, operation) == InFlight.DESTINATION) continue;
 			Path source = storage.objectFile(operation.expectedObjectHash());
 			VerifiedFileTransfer.copyAtomic(source, target, operation.expectedSize(), operation.expectedObjectHash(), fileCache);
 		}
@@ -556,24 +563,9 @@ public final class UpdateCommit {
 			if (operation.operation() != OperationType.DELETE || operation.root() == Root.PROJECTION) continue;
 			current.set(operation);
 			Path target = resolve(operation, transaction);
-			if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
-				verifyExpectedExisting(operation, target);
-				Files.delete(target);
-			}
+			if (requireInFlight(target, operation) != InFlight.DESTINATION) Files.delete(target);
 			FileTrees.pruneEmptyAncestors(target, storage.root(operation.root(), transaction.plan().modpackId()));
 		}
-	}
-
-	private void verifyExpectedExisting(Operation operation, Path target) throws IOException {
-		if (operation.root() != Root.OVERLAY && operation.root() != Root.GAME_DIR) return;
-		String described = operation.root() == Root.OVERLAY ? "Client overlay" : "Game-directory";
-		if (operation.expectedExistingHash() == null) {
-			if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) throw new UpdateReplanRequiredException(target, described + " target appeared after planning: " + target);
-			return;
-		}
-		if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS) || !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)
-				|| !FileIntegrity.matches(target, Files.size(target), operation.expectedExistingHash(), fileCache))
-			throw new UpdateReplanRequiredException(target, described + " target changed after planning: " + target);
 	}
 
 	private void cleanupTransactionDirectories(UpdateTransaction transaction) throws IOException {
