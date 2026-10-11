@@ -36,6 +36,14 @@ class FileIntegrityTest {
 	}
 
 	@Test
+	void observeTreatsADirectoryAtThePathAsAMismatch() throws Exception {
+		Path directory = Files.createDirectory(temporaryDirectory.resolve("nested.jar"));
+		String hash = HashUtils.sha1("file-bytes".getBytes(StandardCharsets.UTF_8));
+		assertFalse(FileIntegrity.observe(directory, 10, hash, null));
+		assertFalse(FileIntegrity.observeNamed(directory, 10, hash, null));
+	}
+
+	@Test
 	void matchWithoutCacheStillReadsCurrentBytes() throws Exception {
 		Path file = Files.writeString(temporaryDirectory.resolve("object.bin"), "expected-bytes", StandardCharsets.UTF_8);
 		String hash = HashUtils.getHash(file);

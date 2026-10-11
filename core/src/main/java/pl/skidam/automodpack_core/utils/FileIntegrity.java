@@ -91,33 +91,34 @@ public final class FileIntegrity {
 		}
 	}
 
-	/** Worktree identity for apply: a sharing violation is IO, not a mismatch. */
+	/** Worktree identity for apply: a sharing violation on a regular file is IO. A directory or other non-file at the path is a mismatch. */
 	public static boolean observe(Path file, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
-		FileCache.StatSnapshot snapshot;
-		try {
-			snapshot = FileCache.statSnapshot(file);
-		} catch (NoSuchFileException e) {
-			return false;
-		}
+		FileCache.StatSnapshot snapshot = regularFileSnapshot(file);
+		if (snapshot == null) return false;
 		try (var ignored = Files.newByteChannel(file, Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS))) {
 			return matches(file, expectedSize, expectedSha1, cache, snapshot);
 		}
 	}
 
-	/** Named-object identity for apply: a sharing violation is IO, not a mismatch. */
+	/** Named-object identity for apply: a sharing violation on a regular file is IO. A directory or other non-file at the path is a mismatch. */
 	public static boolean observeNamed(Path file, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
 		if (!HashUtils.isSha1(expectedSha1)) return false;
-		FileCache.StatSnapshot snapshot;
-		try {
-			snapshot = FileCache.statSnapshot(file);
-		} catch (NoSuchFileException e) {
-			return false;
-		}
+		FileCache.StatSnapshot snapshot = regularFileSnapshot(file);
+		if (snapshot == null) return false;
 		try (var ignored = Files.newByteChannel(file, Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS))) {
 			if (matchesNamed(file, expectedSize, expectedSha1, cache, snapshot)) return true;
-			if (!snapshot.isTrackedRegularFile() || snapshot.size() != expectedSize) return false;
+			if (snapshot.size() != expectedSize) return false;
 			String hashed = cache != null ? cache.hash(file) : HashUtils.hashFile(file);
 			return expectedSha1.equalsIgnoreCase(hashed);
+		}
+	}
+
+	private static FileCache.StatSnapshot regularFileSnapshot(Path file) throws IOException {
+		try {
+			FileCache.StatSnapshot snapshot = FileCache.statSnapshot(file);
+			return snapshot.isTrackedRegularFile() ? snapshot : null;
+		} catch (NoSuchFileException e) {
+			return null;
 		}
 	}
 

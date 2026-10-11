@@ -3,11 +3,13 @@ package pl.skidam.automodpack_core.update;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
@@ -43,6 +45,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
+import pl.skidam.automodpack_core.utils.PlatformUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 class UpdateCommitTest {
@@ -457,6 +460,51 @@ class UpdateCommitTest {
 		UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null));
 
 		assertTrue(execution instanceof UpdateCommit.Applied, () -> "expected applied recovery, got " + execution);
+		assertArrayEquals(configBytes, Files.readAllBytes(liveConfig));
+		assertArrayEquals(newPack, Files.readAllBytes(livePack));
+		assertFalse(Files.exists(storage.transactionFile()));
+	}
+
+	@Test
+	void recoverySkipsAlreadyWrittenFilesAfterAShareLockedLaterFile() throws Exception {
+		Assumptions.assumeTrue(PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS);
+		OpenOption noShareDelete = noShareDelete();
+		Assumptions.assumeTrue(noShareDelete != null);
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		byte[] configBytes = "configured=true\n".getBytes(StandardCharsets.UTF_8);
+		String configHash = store(storage, configBytes);
+		byte[] oldPack = "old-resource-pack".getBytes(StandardCharsets.UTF_8);
+		byte[] newPack = "new-resource-pack".getBytes(StandardCharsets.UTF_8);
+		String oldPackHash = store(storage, oldPack);
+		String newPackHash = store(storage, newPack);
+		SelectedModpackTarget target = twoFileTarget(storage, "config/first.properties", "config/later.properties", configHash, configBytes.length, newPackHash, newPack.length);
+		Path liveConfig = storage.gameDirectory().resolve("config/first.properties");
+		Path livePack = storage.gameDirectory().resolve("config/later.properties");
+		Files.createDirectories(livePack.getParent());
+		Files.write(livePack, oldPack);
+		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(
+				new Operation(Root.PROJECTION, "config/first.properties", OperationType.INSTALL_OBJECT, configHash, configBytes.length, null),
+				new Operation(Root.PROJECTION, "config/later.properties", OperationType.INSTALL_OBJECT, newPackHash, newPack.length, null),
+				new Operation(Root.GAME_DIR, "config/first.properties", OperationType.INSTALL_OBJECT, configHash, configBytes.length, null),
+				new Operation(Root.GAME_DIR, "config/later.properties", OperationType.INSTALL_OBJECT, newPackHash, newPack.length, oldPackHash)).stream().sorted(Operation.ORDER).toList(),
+				List.of(new ProjectedFile(Root.PROJECTION, "config/first.properties", true, configHash, configBytes.length),
+						new ProjectedFile(Root.PROJECTION, "config/later.properties", true, newPackHash, newPack.length),
+						new ProjectedFile(Root.GAME_DIR, "config/first.properties", true, configHash, configBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/later.properties", true, newPackHash, newPack.length)),
+				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(),
+				List.of(new UpdatePlan.BaselineCapture(Root.GAME_DIR, "config/first.properties", "", -1, true),
+						new UpdatePlan.BaselineCapture(Root.GAME_DIR, "config/later.properties", oldPackHash, oldPack.length, false)),
+				List.of(), List.of(), ChangeSet.empty()).withPlannedSelectedModpackId(target.manifest().modpackId());
+
+		try (FileChannel ignored = FileChannel.open(livePack, StandardOpenOption.READ, StandardOpenOption.WRITE, noShareDelete)) {
+			UpdateCommit.Outcome deferred = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Fresh(() -> UpdateCommit.Built.of(UpdateTestFixtures.createTransaction(storage, plan, target)), null));
+			assertEquals(UpdateTransaction.Status.DEFERRED_LOCKED, deferred.status(), () -> "share-locked later file was " + deferred);
+			assertArrayEquals(configBytes, Files.readAllBytes(liveConfig));
+			assertArrayEquals(oldPack, Files.readAllBytes(livePack));
+		}
+
+		UpdateCommit.Outcome recovered = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null));
+		assertTrue(recovered instanceof UpdateCommit.Applied, () -> "expected applied recovery, got " + recovered);
 		assertArrayEquals(configBytes, Files.readAllBytes(liveConfig));
 		assertArrayEquals(newPack, Files.readAllBytes(livePack));
 		assertFalse(Files.exists(storage.transactionFile()));
@@ -1259,6 +1307,16 @@ class UpdateCommitTest {
 		file.sha1 = hash;
 		file.murmur = "0";
 		return file;
+	}
+
+	@SuppressWarnings({"unchecked", "rawtypes"})
+	private static OpenOption noShareDelete() {
+		try {
+			Class type = Class.forName("com.sun.nio.file.ExtendedOpenOption");
+			return (OpenOption) Enum.valueOf(type, "NOSHARE_DELETE");
+		} catch (ReflectiveOperationException | IllegalArgumentException e) {
+			return null;
+		}
 	}
 
 	private static SelectedModpackTarget nextTarget(ClientStorage storage, SelectedModpackTarget parent, String path, String hash, long size, Instant createdAt) throws IOException {
