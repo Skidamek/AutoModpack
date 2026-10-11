@@ -10,11 +10,9 @@ import pl.skidam.reconf.Document;
 
 /**
  * One config type's extension of the generic human-config store: the repair step for keys a newer model replaced, and the
- * nested declaration shapes whose documented members the store materializes. The repair runs twice over the same rule:
- * reading hands the model parse a tree the current shape understands, and saving applies the very same rule to the
- * document so the file converges on the next write. Reading never writes - a read-only config directory must still load
- * - so a repair that could not be persisted is never the load's problem. Owning the nested shapes is what keeps the
- * store free of what any one config type means.
+ * nested declaration shapes whose documented members the store materializes. The same rule runs on the parse tree
+ * ({@link #forRead}) and on the document ({@link #repair}). {@link ReconfConfigs#read} never writes; {@link ReconfConfigs#readOrCreate}
+ * converges a writable stale file. Owning the nested shapes is what keeps the store free of what any one config type means.
  */
 public interface ConfMigration {
 	/**
@@ -45,5 +43,19 @@ public interface ConfMigration {
 	/** Every nested declaration of this config type's model; the store documents each one's declared fields. */
 	default List<Shape> nestedShapes(Object model) {
 		return List.of();
+	}
+
+	/** Every group's declaration under {@code modpack}; {@code name} is the pack's display name, not a category. */
+	static void forEachGroup(JsonObject document, GroupVisitor visitor) {
+		if (!(document.get("modpack") instanceof JsonObject modpack)) return;
+		for (var category : modpack.entrySet()) {
+			if (category.getKey().equals("name") || !(category.getValue() instanceof JsonObject categoryObject)) continue;
+			for (var group : categoryObject.entrySet()) if (group.getValue() instanceof JsonObject groupObject) visitor.visit(category.getKey(), group.getKey(), groupObject);
+		}
+	}
+
+	@FunctionalInterface
+	interface GroupVisitor {
+		void visit(String category, String group, JsonObject declaration);
 	}
 }

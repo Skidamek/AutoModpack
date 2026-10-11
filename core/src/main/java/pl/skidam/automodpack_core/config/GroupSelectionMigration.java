@@ -61,12 +61,12 @@ public final class GroupSelectionMigration implements ConfMigration {
 
 	@Override
 	public void forRead(JsonObject document) {
-		forEachGroup(document, (category, group, declaration) -> migrate(declaration, context(category, group)));
+		ConfMigration.forEachGroup(document, (category, group, declaration) -> migrate(declaration, context(category, group)));
 	}
 
 	@Override
 	public void repair(Document document, Path path) {
-		forEachGroup(ReconfConfigs.toJsonObject(document.tree()), (category, group, declaration) -> {
+		ConfMigration.forEachGroup(ReconfConfigs.toJsonObject(document.tree()), (category, group, declaration) -> {
 			if (!migrate(declaration, context(category, group))) return;
 			ConfigPath groupPath = ConfigPath.of(PACK_SECTION, category, group);
 			// The value lands in the document on its own account, with no comment of its own: a data migration must never
@@ -75,15 +75,6 @@ public final class GroupSelectionMigration implements ConfMigration {
 			for (String key : LEGACY_KEYS) document.remove(groupPath.appended(key));
 			LOGGER.info("Migrated the selection flags of group '{}' in category '{}' to 'selection' in {}", group, category, path.getFileName());
 		});
-	}
-
-	/** Every group's declaration under the pack section, in file order; {@code name} is the pack's display name, not a category. */
-	private static void forEachGroup(JsonObject document, GroupVisitor visitor) {
-		if (!(document.get(PACK_SECTION) instanceof JsonObject modpack)) return;
-		for (var category : modpack.entrySet()) {
-			if (category.getKey().equals("name") || !(category.getValue() instanceof JsonObject categoryObject)) continue;
-			for (var group : categoryObject.entrySet()) if (group.getValue() instanceof JsonObject groupObject) visitor.visit(category.getKey(), group.getKey(), groupObject);
-		}
 	}
 
 	@Override
@@ -108,9 +99,5 @@ public final class GroupSelectionMigration implements ConfMigration {
 
 	private static String context(String category, String group) {
 		return "Group '" + group + "' in category '" + category + "'";
-	}
-
-	private interface GroupVisitor {
-		void visit(String category, String group, JsonObject declaration);
 	}
 }
