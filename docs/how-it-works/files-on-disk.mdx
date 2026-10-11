@@ -2,14 +2,6 @@
 
 AutoModpack keeps its files in an `automodpack/` folder inside the game directory: the server root for a server, the instance folder for a client. This page writes that folder as `~/automodpack/`.
 
-## Bootstrap
-
-Bootstrap allows making a very simple user friednly setup for private server, it only requires installing AutoModpack and provide a single file to client, on a first client boot, AutoModpack will install the default selection of a modpack, boot straight into it and keep in sync.
-
-The one-shot client drop-in is `~/automodpack/automodpack-bootstrap.json`. Put a copy there, start the game, and AutoModpack imports it and deletes it. AutoModpack must already be installed. The file lives inside `automodpack/` because a pack can never write there; the same file name at the instance root is ignored with a warning. If the file includes `serverName`, the import also creates the entry in the vanilla server list.
-
-`/automodpack host bootstrap` writes `~/automodpack/automodpack-bootstrap.exported.json`. Copy that file to clients as `automodpack-bootstrap.json`. It is never imported by the instance that wrote it, so running the command on a logical server does not reroute the same instance. An install export contains a provisioning secret, so treat it like a credential.
-
 ## You edit these
 
 | Path | Role |
@@ -19,7 +11,7 @@ The one-shot client drop-in is `~/automodpack/automodpack-bootstrap.json`. Put a
 | `automodpack-bootstrap.json` | Client drop-in, imported on launch, then deleted |
 | `automodpack-bootstrap.exported.json` | Written by `/automodpack host bootstrap`, for copying to clients |
 | `host-modpack/<group>/` | Pack files the server itself does not need; the folder name is the group id, and `main` is the default group |
-| `host-modpack/patch-notes.md` | Notes for the next published generation; cleared when it publishes |
+| `host-modpack/patch-notes.md` | Notes for the next published generation; cleared when it publishes or when `generate replace-notes` reads it |
 | `host-modpack/waiting-music.ogg` | Optional custom waiting track. Publish it with `/automodpack generate` (or a start with `generate-modpack-on-start`). Clients stream it during downloads and can play the advertised track from pack details |
 | `credentials/certificate.crt` | TLS certificate chain |
 | `credentials/private-key.pem` | TLS private key, PKCS#8 PEM |
@@ -40,6 +32,7 @@ Do not edit those manually!
 | `current-projection.json` | The materialized view of the current generation |
 | `staging/` | In-flight publishes |
 | `data/` | The server's own content store (dedicated servers always keep it here) |
+| `impl-cache/` | Internal working cache |
 
 ### Client runtime: `~/automodpack/client/`
 
@@ -53,7 +46,7 @@ Do not edit those manually!
 | `incoming/`, `backup/` | Update and repair working state |
 | `selected.json`, `active-state.json`, `selections.json`, `restart-state.json`, `update-transaction.json`, `repair.json` | Follow pointer (`modpackId`), installed generation, and in-flight work |
 
-`automodpack/helper/`, outside `client/`, is where detached update and repair helpers log their runs.
+`automodpack/helper/`, outside `client/`, is where detached update and repair helpers log their runs. `automodpack/self-update.json`, also outside `client/`, holds a pending AutoModpack version swap until the next boot applies it.
 
 `generated-copies.json` holds one record per installed generation, so switching between group selections never makes it grow. It is machine state: leave it alone. A file that cannot be parsed is renamed to `generated-copies.json.corrupt-<random>` next to itself, so the broken content stays for a bug report, and the record of the installed generation is rebuilt from the installed pack on the next launch. Nothing else on disk is touched.
 
@@ -67,14 +60,14 @@ Downloaded and hosted bytes live in a content-addressed store, shared across the
 - macOS: `~/Library/Application Support/automodpack/data`
 - Windows: `%LOCALAPPDATA%\automodpack\data`
 
-A dedicated server keeps its store inside the instance at `~/automodpack/server/data/`. A client whose shared root is not writable falls back to its own `~/automodpack/client/data/`. Tests and isolated runs can set `AUTOMODPACK_DATA_ROOT`, or the `automodpack.data.root` system property; a configured root that cannot be used is an error rather than a silent fallback.
+A dedicated server keeps its store inside the instance at `~/automodpack/server/data/`. A client whose shared root is not writable falls back to its own `~/automodpack/client/data/`. An instance on a different drive or volume gets the same instance-local store, because nothing can be hard-linked across volumes, so two instances on different drives hold their own copies of the pack and their own pin lists. Tests and isolated runs can set `AUTOMODPACK_DATA_ROOT`, or the `automodpack.data.root` system property; a configured root that cannot be used is an error rather than a silent fallback.
 
-The store contains Git-style objects under `objects/`, metadata caches, per-pack connection records under `packs/<modpack-id>/`, and `known-hosts.json`, the saved certificate pins.
+The store contains Git-style objects under `objects/`, metadata caches, per-pack connection records under `packs/<modpack-id>/`, and `known-hosts.json`, the saved certificate pins. The store and `known-hosts.json` belong to the user, not to one instance: instances that share a data root share them, so a server verified in one instance is trusted in every other instance of the same user.
 
 ## The projection
 
 The selected generation is materialized into the fixed path `~/automodpack/client/active/`. Immutable files are hard-linked from the content store where the filesystem allows it, so most packs cost little extra disk space. All editable files keep their live copy in the game directory and use the overlay only after the player changes them.
 
-The game directory receives live copies for files the loader or game must read there, and for every editable file, players included: the standard `mods` folder gets the AutoModpack loader, loader-required copies, files pinned through `pinned-mod-ids`, and editable mod jars. Non-editable mods load straight from the projection, so a pack jar only meets the player's `mods` folder when the pack says the player may touch it. The projection path never changes with generation identity, so switching or restoring a generation rewires one tree instead of juggling one physical tree per pack.
+The game directory receives live copies for files the loader or game must read there, and for every editable file, players included: the standard `mods` folder gets the AutoModpack loader, loader-required copies, and editable mod jars. A jar that matches `pinned-mod-ids` stays in the player's `mods` folder, and AutoModpack does not load the pack's overlapping copy. Non-editable mods load straight from the projection, so a pack jar only meets the player's `mods` folder when the pack says the player may touch it. The projection path never changes with generation identity, so switching or restoring a generation rewires one tree instead of juggling one physical tree per pack.
 
 A bad update is also recoverable before the loader sees it: the fix lands in the projection, rather than crashing the game from the standard `mods` folder.

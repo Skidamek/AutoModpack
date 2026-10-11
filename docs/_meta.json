@@ -3,8 +3,16 @@
     "name": "Quick start",
     "icon": null
   },
+  "players.mdx": {
+    "name": "For players",
+    "icon": null
+  },
   "pack-content.mdx": {
     "name": "Building the modpack",
+    "icon": null
+  },
+  "groups.mdx": {
+    "name": "Groups",
     "icon": null
   },
   "configuration": {
@@ -25,6 +33,14 @@
   },
   "compatibility": {
     "name": "Compatibility",
+    "icon": null
+  },
+  "migrating-from-v4.mdx": {
+    "name": "Upgrading from v4",
+    "icon": null
+  },
+  "troubleshooting.mdx": {
+    "name": "Troubleshooting",
     "icon": null
   },
   "faq.mdx": {
