@@ -287,7 +287,6 @@ public final class UpdateCommit {
 		AtomicReference<Operation> current = new AtomicReference<>();
 		Path blockedPath = null;
 		boolean publicationStarted = publicationStarted(transaction);
-		boolean liveAlreadyApplied = publicationStarted || managedStateMatches(transaction);
 		boolean preserveNewerSelection = publicationStarted && validator.mutableInputDrift(transaction, fileCache).selection();
 		try {
 			transaction.resultStatus = null;
@@ -295,7 +294,7 @@ public final class UpdateCommit {
 			transaction.resultPath = null;
 			transaction.resultMessage = null;
 			setPhase(transaction, UpdateTransaction.Phase.PREPARING);
-			applyModpackTransaction(transaction, current, publicationStarted, liveAlreadyApplied, preserveNewerSelection);
+			applyModpackTransaction(transaction, current, publicationStarted, publicationStarted || managedStateMatches(transaction), preserveNewerSelection);
 			persistPhase(transaction, UpdateTransaction.Phase.COMMITTED);
 		} catch (IOException e) {
 			Operation currentOperation = current.get();
@@ -472,11 +471,11 @@ public final class UpdateCommit {
 		}
 	}
 
-	private boolean managedStateMatches(UpdateTransaction transaction) {
+	private boolean managedStateMatches(UpdateTransaction transaction) throws IOException {
 		try {
 			verifyManagedFinalState(transaction);
 			return true;
-		} catch (IOException e) {
+		} catch (UpdateReplanRequiredException e) {
 			return false;
 		}
 	}
