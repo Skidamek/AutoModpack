@@ -7,13 +7,17 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.PosixFilePermission;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -456,6 +460,48 @@ class UpdateCommitTest {
 		assertArrayEquals(configBytes, Files.readAllBytes(liveConfig));
 		assertArrayEquals(newPack, Files.readAllBytes(livePack));
 		assertFalse(Files.exists(storage.transactionFile()));
+	}
+
+	@Test
+	void anUnreadableLiveFileIsALockOrFailureInsteadOfDrift() throws Exception {
+		Assumptions.assumeTrue(temporaryDirectory.getFileSystem().supportedFileAttributeViews().contains("posix"));
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		byte[] expectedBytes = "expected-game-file".getBytes(StandardCharsets.UTF_8);
+		String expectedHash = store(storage, expectedBytes);
+		byte[] plannedBytes = "planned-game-file".getBytes(StandardCharsets.UTF_8);
+		String plannedHash = HashUtils.sha1(plannedBytes);
+		SelectedModpackTarget target = UpdateTestFixtures.target(storage, "config/locked.bin", "config", false, expectedHash, expectedBytes.length);
+		Path live = storage.gameDirectory().resolve("config/locked.bin");
+		Files.createDirectories(live.getParent());
+		Files.write(live, plannedBytes);
+		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(
+				new Operation(Root.PROJECTION, "config/locked.bin", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null),
+				new Operation(Root.GAME_DIR, "config/locked.bin", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, plannedHash)),
+				List.of(new ProjectedFile(Root.PROJECTION, "config/locked.bin", true, expectedHash, expectedBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/locked.bin", true, expectedHash, expectedBytes.length)),
+				clientConfig(target.manifest().modpackId()), Set.of(), List.of(),
+				List.of(new UpdatePlan.BaselineCapture(Root.GAME_DIR, "config/locked.bin", plannedHash, plannedBytes.length, false)),
+				List.of(), List.of(), ChangeSet.empty()).withPlannedSelectedModpackId(target.manifest().modpackId());
+		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, plan, target));
+		Set<PosixFilePermission> previous = Files.getPosixFilePermissions(live);
+		Files.setPosixFilePermissions(live, Set.of());
+		try {
+			try (var ignored = Files.newByteChannel(live, Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS))) {
+				Assumptions.assumeTrue(false, "this uid can still read a mode-000 file");
+			} catch (AccessDeniedException expected) {
+			}
+			try {
+				UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null));
+				assertFalse(execution instanceof UpdateCommit.ReplanRequired, () -> "unreadable live file looked like drift: " + execution);
+				assertEquals(UpdateTransaction.Status.DEFERRED_LOCKED, execution.status());
+			} catch (UpdateExecutionException failure) {
+				assertEquals(UpdateTransaction.Status.FAILED, persistedTransaction(storage).resultStatus);
+			}
+		} finally {
+			Files.setPosixFilePermissions(live, previous);
+		}
+		assertArrayEquals(plannedBytes, Files.readAllBytes(live));
+		assertTrue(Files.exists(storage.transactionFile()));
 	}
 
 	@Test

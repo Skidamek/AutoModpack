@@ -7,7 +7,9 @@ import java.nio.file.AccessDeniedException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Map;
@@ -59,8 +61,10 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  *
  * <p>
  * Each live operation is baseline, destination, or drift: still the planned before-state, already this apply's
- * after-state, or neither. Pin and apply share that classification. A third hash or size is the only replan.
- * {@link UpdatePlan#baselineCaptures()} names CAS retention and history; it is not an apply-time gate.
+ * after-state, or neither. Pin and apply share that classification. A third hash or size is the only replan. A
+ * sharing violation while observing the live path is a lock, not drift: the helper retries it, and must not see
+ * {@link UpdateTransaction.Status#REPLAN_REQUIRED}. {@link UpdatePlan#baselineCaptures()} names CAS retention and
+ * history; it is not an apply-time gate.
  */
 public final class UpdateCommit {
 	private final ClientStorage storage;
@@ -298,6 +302,7 @@ public final class UpdateCommit {
 			Operation currentOperation = current.get();
 			if (blockedPath == null && currentOperation != null) blockedPath = resolve(currentOperation, transaction);
 			if (e instanceof UpdateReplanRequiredException replan && blockedPath == null) blockedPath = replan.changedPath();
+			if (blockedPath == null && e instanceof FileSystemException fileSystem && fileSystem.getFile() != null && !fileSystem.getFile().isBlank()) blockedPath = Path.of(fileSystem.getFile());
 			UpdateTransaction.Status status = e instanceof UpdateReplanRequiredException
 					? UpdateTransaction.Status.REPLAN_REQUIRED
 					: isLockFailure(e) ? UpdateTransaction.Status.DEFERRED_LOCKED : UpdateTransaction.Status.FAILED;
@@ -377,8 +382,8 @@ public final class UpdateCommit {
 	private void applyModpackTransaction(UpdateTransaction transaction, AtomicReference<Operation> current, boolean publicationStarted, boolean liveAlreadyApplied,
 			boolean preserveNewerSelection) throws IOException {
 		beforeFirstMutation(transaction, publicationStarted);
-		snapshotBefore(transaction);
 		capturePinnedBytes(transaction);
+		snapshotBefore(transaction);
 		if (!liveAlreadyApplied) applyOperations(transaction, current);
 		current.set(null);
 		if (!publicationStarted) {
@@ -411,23 +416,34 @@ public final class UpdateCommit {
 		}
 	}
 
-	private InFlight inFlight(Path live, Operation operation) {
+	private InFlight inFlight(Path live, Operation operation) throws IOException {
+		FileCache.StatSnapshot snapshot = snapshotIfPresent(live);
+		if (snapshot != null && snapshot.isTrackedRegularFile()) proveReadable(live);
 		boolean atDestination = operation.operation() == OperationType.DELETE
-				? !Files.exists(live, LinkOption.NOFOLLOW_LINKS)
-				: FileIntegrity.matchesNamed(live, operation.expectedSize(), operation.expectedObjectHash(), fileCache);
-		boolean atBaseline = atBaseline(live, operation);
+				? snapshot == null
+				: snapshot != null && FileIntegrity.matchesNamed(live, operation.expectedSize(), operation.expectedObjectHash(), fileCache);
+		boolean atBaseline = atBaseline(operation, snapshot, live);
 		if (atDestination && !atBaseline) return InFlight.DESTINATION;
 		if (atBaseline) return InFlight.BASELINE;
 		return InFlight.DRIFT;
 	}
 
-	private boolean atBaseline(Path live, Operation operation) {
-		if (operation.expectedExistingHash() == null) return !Files.exists(live, LinkOption.NOFOLLOW_LINKS);
+	private static FileCache.StatSnapshot snapshotIfPresent(Path live) throws IOException {
 		try {
-			return Files.isRegularFile(live, LinkOption.NOFOLLOW_LINKS) && FileIntegrity.matches(live, Files.size(live), operation.expectedExistingHash(), fileCache);
-		} catch (IOException e) {
-			return false;
+			return FileCache.statSnapshot(live);
+		} catch (NoSuchFileException e) {
+			return null;
 		}
+	}
+
+	private static void proveReadable(Path live) throws IOException {
+		try (var ignored = Files.newByteChannel(live, Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS))) {
+		}
+	}
+
+	private boolean atBaseline(Operation operation, FileCache.StatSnapshot snapshot, Path live) {
+		if (operation.expectedExistingHash() == null) return snapshot == null;
+		return snapshot != null && snapshot.isTrackedRegularFile() && FileIntegrity.matches(live, snapshot.size(), operation.expectedExistingHash(), fileCache);
 	}
 
 	private InFlight requireInFlight(Path live, Operation operation) throws IOException {
