@@ -18,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 import pl.skidam.automodpack_core.config.ServerConfigJsons.ServerConfigFieldsV3;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 /** The reconf-backed human-config store: kebab keys, reconcile saves, comment convergence, loud corruption. */
 class ReconfConfigsTest {
@@ -291,5 +292,42 @@ class ReconfConfigsTest {
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertFalse(text.matches("(?s).*\\nauto-exclude-server-side-mods: true\\n.*"), text);
 		assertTrue(text.contains("auto-exclude-server-side-mods: METADATA"), text);
+	}
+
+	@Test
+	void humanConfEnumsForgiveCaseAndSaveCanonically() throws IOException {
+		String mixed = """
+				connection-mode: holepunch
+				modpack {
+				  General {
+				    main {
+				      selection: recommended
+				      auto-exclude-server-side-mods: metadata
+				    }
+				  }
+				}
+				""";
+		Files.writeString(serverConfig(), mixed, StandardCharsets.UTF_8);
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		assertEquals(ModpackConnectionMode.HOLEPUNCH, config.connectionMode);
+		assertEquals(GroupSelectionMode.RECOMMENDED, config.modpack.categories.get("General").get("main").selection);
+		assertEquals(ServerSideModExclusion.METADATA, config.modpack.categories.get("General").get("main").autoExcludeServerSideMods);
+		assertEquals(mixed, Files.readString(serverConfig(), StandardCharsets.UTF_8));
+
+		ReconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
+		assertTrue(text.contains("connection-mode: HOLEPUNCH"), text);
+		assertTrue(text.contains("selection: RECOMMENDED"), text);
+		assertTrue(text.contains("auto-exclude-server-side-mods: METADATA"), text);
+		assertFalse(text.contains("connection-mode: holepunch"), text);
+		assertFalse(text.contains("selection: recommended"), text);
+		assertFalse(text.contains("auto-exclude-server-side-mods: metadata"), text);
+	}
+
+	@Test
+	void unknownHumanConfEnumStillFails() throws IOException {
+		Files.writeString(serverConfig(), "connection-mode: holepunchs\n", StandardCharsets.UTF_8);
+		ConfigTools.ConfigParseException error = assertThrows(ConfigTools.ConfigParseException.class, () -> ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class));
+		assertTrue(String.valueOf(error.getCause().getMessage()).contains("holepunchs"), error.getMessage());
 	}
 }

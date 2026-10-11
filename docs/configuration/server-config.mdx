@@ -57,8 +57,8 @@ Read more about glob syntax on the [Globbing Wikipedia article](https://wikipedi
 |---|---|---|
 | `modpack.<category>.<id>.display-name` | `""` | Name shown to players in the Group Selection screen and the file browsers; blank shows the group id. The map key is the id used by rules and by `requires` and `breaks-with`. |
 | `modpack.<category>.<id>.description` | `""` | Short player-facing description of the group. |
-| `modpack.<category>.<id>.selection` | `OPTIONAL` | One of `REQUIRED`, `RECOMMENDED` or `OPTIONAL`. `REQUIRED` is always installed and cannot be deselected; `RECOMMENDED` arrives preselected and players can opt out; `OPTIONAL` starts unchecked. The factory `main` group sets `REQUIRED`. |
-| `modpack.<category>.<id>.auto-exclude-server-side-mods` | `METADATA` | One of `DISABLED`, `METADATA` or `PLATFORMS`. `DISABLED` ships every jar. `METADATA` drops jars whose own metadata says they are server-only. `PLATFORMS` also asks Modrinth and CurseForge about leftover universal jars. |
+| `modpack.<category>.<id>.selection` | `OPTIONAL` | One of `REQUIRED`, `RECOMMENDED` or `OPTIONAL` (any case). `REQUIRED` is always installed and cannot be deselected; `RECOMMENDED` arrives preselected and players can opt out; `OPTIONAL` starts unchecked. The factory `main` group sets `REQUIRED`. |
+| `modpack.<category>.<id>.auto-exclude-server-side-mods` | `METADATA` | One of `DISABLED`, `METADATA` or `PLATFORMS` (any case). `DISABLED` ships every jar. `METADATA` drops jars whose own metadata says they are server-only. `PLATFORMS` also asks Modrinth and CurseForge about leftover universal jars. |
 | `modpack.<category>.<id>.requires` | `[]` | Group ids that must also be selected for this group to make sense, for example a shader config pack that needs its shader pack. |
 | `modpack.<category>.<id>.breaks-with` | `[]` | Group ids that cannot be selected alongside this one, for example two mods that replace the same files. |
 | `modpack.<category>.<id>.compatible-platforms` | `[]` | Restricts the group to matching platforms, for example a group of Windows-only mods. See platforms below. |
@@ -83,7 +83,7 @@ When a client cannot detect a platform at all, groups without `compatible-platfo
 
 | Setting | Default | Description |
 |---|---|---|
-| `connection-mode` | `HOLEPUNCH` | HOLEPUNCH uses the Minecraft port. MAGIC can share it or use `bind-port`. HTTP uses `bind-port`. The modes and their port behavior are described in [hosting](../how-it-works/hosting). |
+| `connection-mode` | `HOLEPUNCH` | One of `HOLEPUNCH`, `MAGIC` or `HTTP` (any case). HOLEPUNCH uses the Minecraft port. MAGIC can share it or use `bind-port`. HTTP uses `bind-port`. The modes and their port behavior are described in [hosting](../how-it-works/hosting). |
 | `bind-address` | `""` | Local address for a dedicated listener. Empty binds to all interfaces. Used only when the selected mode starts one. |
 | `bind-port` | `-1` | Controls built-in listeners according to `connection-mode`; see the [mode matrix](../how-it-works/hosting#connection-modes-and-ports). Values unused by the selected mode are preserved. |
 | `advertised-endpoint-host` | `""` | Public hostname or IP sent to clients as the download endpoint. Empty uses the hostname the player connected to. |

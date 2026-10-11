@@ -163,7 +163,7 @@ public final class ReconfConfigs {
 		String json = ConfigTools.GSON.toJson(tree);
 		List<String> unknown = ConfigTools.unknownKeys(json, type);
 		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
-		return ConfigTools.parse(json, type);
+		return ConfigTools.parseHuman(json, type);
 	}
 
 	private static <T> T migrateJson(Path canonical, Path jsonSource, Class<T> type) {

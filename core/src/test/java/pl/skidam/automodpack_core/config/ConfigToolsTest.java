@@ -142,10 +142,13 @@ class ConfigToolsTest {
 		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"selection\": \"Recommended\"}", ServerConfigJsons.GroupDeclaration.class));
 
 		// A human types configs by hand, so the human-facing reader forgives case without forgiving membership.
+		assertEquals(ModpackConnectionMode.HOLEPUNCH, ConfigTools.parseHuman("{\"connection-mode\": \"holepunch\"}", ServerConfigJsons.ServerConfigFieldsV3.class).connectionMode);
+		assertEquals(GroupSelectionMode.RECOMMENDED, ConfigTools.parseHuman("{\"selection\": \"Recommended\"}", ServerConfigJsons.GroupDeclaration.class).selection);
 		assertEquals(ModpackConnectionMode.HOLEPUNCH, ConfigTools.enumConstant(ModpackConnectionMode.class, "holepunch"));
 		assertEquals(ModpackConnectionMode.HOLEPUNCH, ConfigTools.enumConstant(ModpackConnectionMode.class, "Holepunch"));
 		assertEquals(GroupSelectionMode.RECOMMENDED, ConfigTools.enumConstant(GroupSelectionMode.class, "Recommended"));
 		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.enumConstant(ModpackConnectionMode.class, "holepunchs"));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parseHuman("{\"connection-mode\": \"holepunchs\"}", ServerConfigJsons.ServerConfigFieldsV3.class));
 	}
 
 	@Test

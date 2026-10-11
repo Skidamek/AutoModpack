@@ -61,6 +61,9 @@ public final class ConfigTools {
 
 	public static final Gson GSON = buildGson();
 
+	/** Human {@code .conf} parse: unknown enum names still fail, case does not. Durable state stays on {@link #GSON}. */
+	public static final Gson HUMAN = buildHumanGson();
+
 	/** Strict-enums Gson without pretty printing, for JSON-lines documents where one line is one record. */
 	public static final Gson COMPACT = strictEnums(new GsonBuilder().disableHtmlEscaping()).create();
 
@@ -71,6 +74,13 @@ public final class ConfigTools {
 		CUSTOM_JSON_ADAPTERS.forEach(builder::registerTypeAdapter);
 		STRICT_INTEGRAL_DESERIALIZERS.forEach(builder::registerTypeAdapter);
 		return strictEnums(builder).create();
+	}
+
+	private static Gson buildHumanGson() {
+		GsonBuilder builder = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting();
+		CUSTOM_JSON_ADAPTERS.forEach(builder::registerTypeAdapter);
+		STRICT_INTEGRAL_DESERIALIZERS.forEach(builder::registerTypeAdapter);
+		return builder.registerTypeHierarchyAdapter(Enum.class, new HumanEnumTypeAdapter()).create();
 	}
 
 	/** Registers the strict enum adapter every durable-state Gson must carry, so unknown enum names fail loudly instead of deserializing to null. */
@@ -87,7 +97,7 @@ public final class ConfigTools {
 			throw new ConfigException("Failed to read configuration " + path.toAbsolutePath().normalize(), e);
 		}
 		JsonElement tree = parseTree(json, type);
-		T value = deserialize(tree, type);
+		T value = deserialize(tree, type, GSON);
 		List<String> unknown = unknownKeys(tree, type);
 		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
 		return Optional.of(value);
@@ -157,14 +167,19 @@ public final class ConfigTools {
 		String json = Files.readString(path, StandardCharsets.UTF_8);
 		if (json.isBlank()) throw new ConfigParseException(description + " is empty: " + path);
 		JsonElement tree = parseTree(json, type);
-		T value = deserialize(tree, type);
+		T value = deserialize(tree, type, GSON);
 		List<String> unknown = unknownKeys(tree, type);
 		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
 		return value;
 	}
 
 	public static <T> T parse(String json, Class<T> type) {
-		return deserialize(parseTree(json, type), type);
+		return deserialize(parseTree(json, type), type, GSON);
+	}
+
+	/** Human {@code .conf} JSON: enum names match without regard to case, unknown names still fail. */
+	public static <T> T parseHuman(String json, Class<T> type) {
+		return deserialize(parseTree(json, type), type, HUMAN);
 	}
 
 	private static JsonElement parseTree(String json, Class<?> type) {
@@ -176,9 +191,9 @@ public final class ConfigTools {
 		}
 	}
 
-	private static <T> T deserialize(JsonElement tree, Class<T> type) {
+	private static <T> T deserialize(JsonElement tree, Class<T> type, Gson gson) {
 		try {
-			T value = GSON.fromJson(tree, type);
+			T value = gson.fromJson(tree, type);
 			if (value == null) throw new ConfigParseException("Configuration JSON produced null for " + type.getSimpleName());
 			return value;
 		} catch (JsonParseException e) {
@@ -435,6 +450,20 @@ public final class ConfigTools {
 				return Enum.valueOf((Class<? extends Enum>) type, name);
 			} catch (IllegalArgumentException unknown) {
 				throw new JsonParseException("Unknown " + ((Class<?>) type).getSimpleName() + " value '" + name + "'", unknown);
+			}
+		}
+	}
+
+	/** Human config enums: the same membership as {@link StrictEnumTypeAdapter}, matched without regard to case. */
+	public static final class HumanEnumTypeAdapter implements JsonDeserializer<Enum<?>> {
+		@Override
+		@SuppressWarnings({"unchecked", "rawtypes"})
+		public Enum<?> deserialize(JsonElement json, Type type, JsonDeserializationContext context) throws JsonParseException {
+			if (!json.isJsonPrimitive()) throw new JsonParseException("Enum " + ((Class<?>) type).getSimpleName() + " value must be a string name");
+			try {
+				return enumConstant((Class<? extends Enum>) type, json.getAsString());
+			} catch (ConfigParseException e) {
+				throw new JsonParseException(e.getMessage(), e);
 			}
 		}
 	}
