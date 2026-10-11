@@ -10,13 +10,9 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
@@ -29,11 +25,6 @@ import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.JarUtils;
 
 public final class UpdateHelperMain {
-	// Receipt: the launcher exits within seconds of spawning the helper (popup OK click), and even a user who
-	// walks away comes back well inside 15 minutes. A parent still alive past that is not coming back - a
-	// reused PID of some immortal process or a hung game - and holding the lease for it would park every
-	// future boot's recovery wait. Giving up leaves the transaction pending; the next game launch retries it.
-	private static final long PARENT_EXIT_TIMEOUT_MILLIS = Duration.ofMinutes(15).toMillis();
 	private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withLocale(Locale.ROOT);
 
 	private UpdateHelperMain() {}
@@ -86,7 +77,7 @@ public final class UpdateHelperMain {
 			}
 			try (lease) {
 				try {
-					if (!waitForGameExit(parentPid)) return 1;
+					waitForGameExit(parentPid);
 
 					UpdateCommit commits = new UpdateCommit(ClientStorage.open(gameDirectory));
 					long backoff = UpdateRecovery.INITIAL_BACKOFF_MILLIS;
@@ -120,25 +111,15 @@ public final class UpdateHelperMain {
 		}
 	}
 
-	/**
-	 * Bounded wait for the launching game to exit, since recovery while it runs only fails on the locks it
-	 * holds. False when the parent outlived {@link #PARENT_EXIT_TIMEOUT_MILLIS} or the wait failed; the
-	 * transaction then stays pending and the next game launch retries it.
-	 */
-	private static boolean waitForGameExit(long parentPid) throws InterruptedException {
+	/** Waits until the process that spawned this helper has exited, or returns immediately when it is already gone. */
+	private static void waitForGameExit(long parentPid) {
 		ProcessHandle parent = ProcessHandle.of(parentPid).orElse(null);
-		if (parent == null) return true;
-		log("Waiting for the game process " + parentPid + " to exit");
-		try {
-			parent.onExit().get(PARENT_EXIT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
-			return true;
-		} catch (TimeoutException timeout) {
-			log("The game process " + parentPid + " is still alive after " + PARENT_EXIT_TIMEOUT_MILLIS / 60000 + " minutes; giving up; the transaction stays pending and the next game launch will retry it");
-			return false;
-		} catch (ExecutionException failure) {
-			log("Waiting for the game process " + parentPid + " failed: " + failure.getCause() + "; the transaction stays pending and the next game launch will retry it");
-			return false;
+		if (parent == null) {
+			log("Game process " + parentPid + " is already gone");
+			return;
 		}
+		log("Waiting for the game process " + parentPid + " to exit");
+		parent.onExit().join();
 	}
 
 	/**

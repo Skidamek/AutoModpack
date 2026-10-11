@@ -217,7 +217,7 @@ public class SelfUpdater {
 			} catch (IOException e) {
 				// The running jar stays locked on Windows until this process exits; the helper finishes the swap then.
 				LOGGER.info("AutoModpack self-update swap is staged and will finish after this process exits", e);
-				DetachedUpdateHelper.launch();
+				UpdateRecovery.handoffToHelper();
 			}
 			LOGGER.info("AutoModpack update is ready; restart required");
 			new ReLauncher(UpdateType.AUTOMODPACK).restart(true);

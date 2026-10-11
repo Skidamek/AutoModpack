@@ -94,8 +94,21 @@ public final class UpdateRecovery {
 			LOGGER.error("If the update keeps failing, send that file together with {} and the latest log", GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());
 			return new RecoveryAttempt(outcome, deferred, true);
 		}
-		DetachedUpdateHelper.launch();
+		handoffToHelper();
 		return new RecoveryAttempt(outcome, deferred, false);
+	}
+
+	/**
+	 * Starts the helper now, while this process is still alive. The helper waits for this PID to exit and then
+	 * recovers; a shutdown hook is too late (Windows can skip it, and the JVM is already tearing down). A launch
+	 * failure leaves the journal pending so the next boot retries.
+	 */
+	public static void handoffToHelper() {
+		try {
+			DetachedUpdateHelper.launch();
+		} catch (IOException launchFailure) {
+			LOGGER.error("Could not launch the detached update helper", launchFailure);
+		}
 	}
 
 	private static void logDeferredRecovery(ClientStorage storage, UpdateTransaction transaction, UpdateCommit.Outcome outcome, UpdateLoopDetector.Outcome loop) {

@@ -36,10 +36,10 @@ import pl.skidam.automodpack_core.utils.WindowsLockProbe;
 
 public final class DetachedUpdateHelper {
 	private static final String HELPER_MAIN = UpdateHelperMain.class.getName();
-	// Receipt: the helper holds the lease for its parent-exit wait plus UpdateRecovery.retryBudgetMillis() of sleeps
+	// Receipt: after the game has exited the helper holds the lease for UpdateRecovery.retryBudgetMillis() of sleeps
 	// and per-attempt IO, so a helper that is converging frees the lease well inside it. Past this wait the helper is
-	// stuck on a game process that will not exit, and hanging this boot behind it serves nobody - the deferred
-	// recovery path proceeds without it and the helper keeps working alone.
+	// still waiting on a live game or stuck, and hanging this boot behind it serves nobody - the deferred recovery
+	// path proceeds without it and the helper keeps working alone.
 	private static final Duration HELPER_LEASE_WAIT = Duration.ofMinutes(3);
 	// A released lease is noticed within half a second, the helper's own initial backoff step.
 	private static final long LEASE_POLL_MILLIS = 500;
@@ -53,6 +53,10 @@ public final class DetachedUpdateHelper {
 		return GameDirectory.current().resolve(HELPER_DIR).toAbsolutePath().normalize();
 	}
 
+	/**
+	 * Spawns the helper for this process's PID. Call as soon as this process cannot finish the apply; the helper
+	 * waits for that PID itself. Do not start it from a shutdown hook.
+	 */
 	public static void launch() throws IOException {
 		Path sourceJar = THIS_MOD_JAR.toAbsolutePath().normalize();
 		if (!Files.isRegularFile(sourceJar)) throw new IOException("Runnable AutoModpack JAR is missing: " + sourceJar);
