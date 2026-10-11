@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.client;
 
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LEASE_FILE;
+import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_PRESENCE_FILE;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -53,56 +54,37 @@ public final class UpdateHelperMain {
 	}
 
 	private static int runOnce(String[] arguments) throws IOException, InterruptedException {
-		if (arguments.length < 1 || arguments.length > 2) throw new IOException("Expected parent PID and optional environment");
+		if (arguments.length < 1 || arguments.length > 3) throw new IOException("Expected parent PID, optional environment, and optional parent start epoch milli");
 		long parentPid = Long.parseLong(arguments[0]);
 		if (parentPid <= 0 || parentPid == ProcessHandle.current().pid()) throw new IOException("Invalid parent PID");
 		LoaderManagerService.EnvironmentType environment = environment(arguments);
+		Long parentStartEpochMilli = parentStartEpochMilli(arguments);
 
 		Path gameDirectory = GameDirectory.current();
 		DataRootResolver.Location dataLocation = DataRootResolver.resolve(gameDirectory, environment);
 		logStart(parentPid, environment, gameDirectory, dataLocation);
+		Path helperDirectory = gameDirectory.resolve(HELPER_PRESENCE_FILE).toAbsolutePath().normalize().getParent();
+		Files.createDirectories(helperDirectory);
+		Path presenceFile = gameDirectory.resolve(HELPER_PRESENCE_FILE).toAbsolutePath().normalize();
 		Path leaseFile = gameDirectory.resolve(HELPER_LEASE_FILE).toAbsolutePath().normalize();
-		Files.createDirectories(leaseFile.getParent());
-		try (FileChannel leaseChannel = FileChannel.open(leaseFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
-			FileLock lease;
-			try {
-				lease = leaseChannel.tryLock();
-			} catch (OverlappingFileLockException e) {
-				log("Another update helper already holds the lease; exiting");
+		try (FileChannel presenceChannel = FileChannel.open(presenceFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+			FileLock presence = tryLock(presenceChannel);
+			if (presence == null) {
+				log("Another update helper is already running; exiting");
 				return 0;
 			}
-			if (lease == null) {
-				log("Another update helper already holds the lease; exiting");
-				return 0;
-			}
-			try (lease) {
+			try (presence) {
 				try {
-					waitForGameExit(parentPid);
-
-					UpdateCommit commits = new UpdateCommit(ClientStorage.open(gameDirectory));
-					long backoff = UpdateRecovery.INITIAL_BACKOFF_MILLIS;
-					for (int attempt = 1;; attempt++) {
-						boolean selfUpdateRecovered = recoverSelfUpdate(gameDirectory, dataLocation);
-						UpdateCommit.Outcome outcome = commits.run(new UpdateCommit.Recover(null));
-						boolean done = outcome.settled();
-						if (done && selfUpdateRecovered) {
-							log("Pending update transaction recovered on attempt " + attempt);
+					waitForGameExit(parentPid, parentStartEpochMilli);
+					try (FileChannel leaseChannel = FileChannel.open(leaseFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+						FileLock lease = tryLock(leaseChannel);
+						if (lease == null) {
+							log("Another update helper already holds the work lease; exiting");
 							return 0;
 						}
-						if (!done && outcome instanceof UpdateCommit.Blocked blocked) {
-							log("Update recovery attempt " + attempt + " failed: status " + outcome.status() + ", operation " + blocked.operation() + ", blocked path "
-									+ blocked.blockedPath() + ", message " + blocked.message());
-						} else if (done) {
-							// A pending swap record left behind would name an object the next boot's recovery still needs;
-							// exiting success here would drop it on the floor.
-							log("Update transaction recovered on attempt " + attempt + ", but the self-update swap is still pending");
+						try (lease) {
+							return recoverPending(gameDirectory, dataLocation);
 						}
-						if (outcome.status() == UpdateTransaction.Status.REPLAN_REQUIRED || attempt >= UpdateRecovery.MAX_ATTEMPTS) {
-							log("Update helper gave up; the transaction stays pending and the next game launch will retry it");
-							return 1;
-						}
-						Thread.sleep(backoff);
-						backoff = Math.min(UpdateRecovery.MAX_BACKOFF_MILLIS, backoff * 2);
 					}
 				} finally {
 					DetachedUpdateHelper.cleanupOldHelperJars();
@@ -111,15 +93,68 @@ public final class UpdateHelperMain {
 		}
 	}
 
-	/** Waits until the process that spawned this helper has exited, or returns immediately when it is already gone. */
-	private static void waitForGameExit(long parentPid) {
+	private static int recoverPending(Path gameDirectory, DataRootResolver.Location dataLocation) throws IOException, InterruptedException {
+		UpdateCommit commits = new UpdateCommit(ClientStorage.open(gameDirectory));
+		long backoff = UpdateRecovery.INITIAL_BACKOFF_MILLIS;
+		for (int attempt = 1;; attempt++) {
+			boolean selfUpdateRecovered = recoverSelfUpdate(gameDirectory, dataLocation);
+			UpdateCommit.Outcome outcome = commits.run(new UpdateCommit.Recover(null));
+			boolean done = outcome.settled();
+			if (done && selfUpdateRecovered) {
+				log("Pending update transaction recovered on attempt " + attempt);
+				return 0;
+			}
+			if (!done && outcome instanceof UpdateCommit.Blocked blocked) {
+				log("Update recovery attempt " + attempt + " failed: status " + outcome.status() + ", operation " + blocked.operation() + ", blocked path "
+						+ blocked.blockedPath() + ", message " + blocked.message());
+			} else if (done) {
+				log("Update transaction recovered on attempt " + attempt + ", but the self-update swap is still pending");
+			}
+			if (outcome.status() == UpdateTransaction.Status.REPLAN_REQUIRED || attempt >= UpdateRecovery.MAX_ATTEMPTS) {
+				log("Update helper gave up; the transaction stays pending and the next game launch will retry it");
+				return 1;
+			}
+			Thread.sleep(backoff);
+			backoff = Math.min(UpdateRecovery.MAX_BACKOFF_MILLIS, backoff * 2);
+		}
+	}
+
+	private static FileLock tryLock(FileChannel channel) throws IOException {
+		try {
+			return channel.tryLock();
+		} catch (OverlappingFileLockException e) {
+			return null;
+		}
+	}
+
+	/** Waits until the launching game process has exited, or returns immediately when that process is already gone or the pid was reused. */
+	private static void waitForGameExit(long parentPid, Long parentStartEpochMilli) {
 		ProcessHandle parent = ProcessHandle.of(parentPid).orElse(null);
 		if (parent == null) {
 			log("Game process " + parentPid + " is already gone");
 			return;
 		}
+		if (parentGone(parent, parentStartEpochMilli)) {
+			log("Game process " + parentPid + " was reused by another process; starting recovery");
+			return;
+		}
 		log("Waiting for the game process " + parentPid + " to exit");
 		parent.onExit().join();
+	}
+
+	/** True when {@code parent} is not the process that spawned this helper. Empty startInstant cannot disprove identity, so that handle is still treated as the parent. */
+	static boolean parentGone(ProcessHandle parent, Long parentStartEpochMilli) {
+		if (parentStartEpochMilli == null) return false;
+		return parent.info().startInstant().map(instant -> instant.toEpochMilli() != parentStartEpochMilli).orElse(false);
+	}
+
+	private static Long parentStartEpochMilli(String[] arguments) throws IOException {
+		if (arguments.length < 3 || arguments[2].isBlank() || arguments[2].equals("-")) return null;
+		try {
+			return Long.parseLong(arguments[2]);
+		} catch (NumberFormatException e) {
+			throw new IOException("Invalid parent start epoch milli: " + arguments[2]);
+		}
 	}
 
 	/**

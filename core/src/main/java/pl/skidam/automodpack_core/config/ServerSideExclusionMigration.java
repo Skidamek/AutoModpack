@@ -8,6 +8,7 @@ import java.util.Set;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 
 import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 import pl.skidam.reconf.ConfigPath;
@@ -84,6 +85,12 @@ public final class ServerSideExclusionMigration implements ConfMigration {
 	public void repair(Document document, Path path) {
 		JsonObject tree = ReconfConfigs.toJsonObject(document.tree());
 		if (!tree.has(KEY) && !tree.has(LEGACY_CAMEL)) return;
+		Boolean enabled = packLevelEnabled(tree);
+		if (enabled != null && !enabled)
+			forEachGroup(tree, (category, group, declaration) -> {
+				if (declaration.has(KEY) || declaration.has(LEGACY_CAMEL)) return;
+				document.ensure(ConfigPath.of(PACK_SECTION, category, group).appended(KEY), ReconfConfigs.toJsonValue(new JsonPrimitive(ServerSideModExclusion.DISABLED.name())), null);
+			});
 		document.remove(ConfigPath.of(KEY));
 		document.remove(ConfigPath.of(LEGACY_CAMEL));
 		LOGGER.info("Moved pack-level '{}' onto groups in {}", KEY, path.getFileName());

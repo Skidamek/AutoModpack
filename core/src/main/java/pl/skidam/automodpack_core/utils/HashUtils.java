@@ -83,16 +83,20 @@ public final class HashUtils {
 		return normalizeSha1(value);
 	}
 
-	/** Full SHA-1 of current bytes. Path-keyed identity goes through {@code FileIntegrity} / {@code FileCache}. */
+	/** Full SHA-1 of current bytes. A sharing violation or missing file is IO, not a null hash. */
+	public static String hashFile(Path path) throws IOException {
+		MessageDigest digest = newSha1Digest();
+		try (InputStream is = Files.newInputStream(path)) {
+			digestStream(digest, is);
+		}
+		return HexFormat.of().formatHex(digest.digest());
+	}
+
+	/** Full SHA-1 of current bytes. Path-keyed identity goes through {@code FileIntegrity} / {@code FileCache}. Missing or unreadable files return null. */
 	public static String getHash(Path path) {
 		try {
-			MessageDigest digest = newSha1Digest();
-			try (InputStream is = Files.newInputStream(path)) {
-				digestStream(digest, is);
-			}
-			return HexFormat.of().formatHex(digest.digest());
+			return hashFile(path);
 		} catch (IOException ignored) {
-			// File might not exist
 		} catch (Exception e) {
 			LOGGER.error("Failed to get hash for path: {}", path, e);
 		}

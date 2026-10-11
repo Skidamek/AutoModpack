@@ -104,9 +104,10 @@ public final class StateHistoryScreen extends VersionedScreen {
 		if (timelineButtons == null) return;
 		Snapshot selected = selectedEntry();
 		StateHistory.Restorability restorability = selected == null ? null : restorability(selected.seq());
+		boolean timelineLocked = restorability == StateHistory.Restorability.UPDATE_PENDING;
 		timelineButtons.get(0).active = selected != null && restorability == StateHistory.Restorability.READY && !busy;
-		timelineButtons.get(1).active = selected != null && !busy;
-		timelineButtons.get(2).active = selected != null && !busy && views != null && !views.isEmpty() && selected.seq() != views.get(0).snapshot().seq();
+		timelineButtons.get(1).active = selected != null && !busy && !timelineLocked;
+		timelineButtons.get(2).active = selected != null && !busy && !timelineLocked && views != null && !views.isEmpty() && selected.seq() != views.get(0).snapshot().seq();
 		setTooltip(timelineButtons.get(0), restoreTooltip(selected, restorability));
 	}
 
@@ -130,9 +131,10 @@ public final class StateHistoryScreen extends VersionedScreen {
 		TrackedFile selectedFile = selectedFile();
 		StateHistory.FileGate gate = gate(selectedFile);
 		List<AbstractWidget> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows);
-		buttons.get(0).active = !busy && gate == StateHistory.FileGate.AVAILABLE;
+		boolean timelineLocked = selectedEntry() != null && restorability(selectedEntry().seq()) == StateHistory.Restorability.UPDATE_PENDING;
+		buttons.get(0).active = !busy && gate == StateHistory.FileGate.AVAILABLE && !timelineLocked;
 		buttons.get(1).active = selectedFile != null && !busy;
-		setTooltip(buttons.get(0), fileRestoreTooltip(gate));
+		setTooltip(buttons.get(0), timelineLocked ? VersionedText.text("automodpack.stateHistory.restoreUpdatePending") : fileRestoreTooltip(gate));
 	}
 
 	private RowListWidget.Row entryRow(Snapshot entry) {
@@ -188,6 +190,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 			case READY -> VersionedText.text("automodpack.stateHistory.restoreReady");
 			case CURRENT -> VersionedText.text("automodpack.stateHistory.restoreCurrent");
 			case NOT_KEPT -> VersionedText.text("automodpack.stateHistory.restoreNotKept");
+			case UPDATE_PENDING -> VersionedText.text("automodpack.stateHistory.restoreUpdatePending");
 		};
 	}
 
@@ -278,6 +281,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private void forgetOlder() {
 		Snapshot entry = selectedEntry();
 		if (entry == null || busy || views == null || views.isEmpty() || entry.seq() == views.get(0).snapshot().seq()) return;
+		if (restorability(entry.seq()) == StateHistory.Restorability.UPDATE_PENDING) return;
 		if (!forgetArmed) {
 			forgetArmed = true;
 			restoreArmed = false;
@@ -291,6 +295,7 @@ public final class StateHistoryScreen extends VersionedScreen {
 	private void restoreFile() {
 		TrackedFile file = selectedFile();
 		if (file == null || busy) return;
+		if (selectedEntry() != null && restorability(selectedEntry().seq()) == StateHistory.Restorability.UPDATE_PENDING) return;
 		beginWork();
 		runFileOp(() -> controller.restoreStateFile(selectedEntry().seq(), file.root(), file.path()), WorkResult.RESTORED);
 	}

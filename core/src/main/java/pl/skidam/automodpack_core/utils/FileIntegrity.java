@@ -2,7 +2,11 @@ package pl.skidam.automodpack_core.utils;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.Set;
 
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -84,6 +88,36 @@ public final class FileIntegrity {
 			return matchesNamed(file, expectedSize, expectedSha1, cache, FileCache.statSnapshot(file));
 		} catch (IOException e) {
 			return false;
+		}
+	}
+
+	/** Worktree identity for apply: a sharing violation is IO, not a mismatch. */
+	public static boolean observe(Path file, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
+		FileCache.StatSnapshot snapshot;
+		try {
+			snapshot = FileCache.statSnapshot(file);
+		} catch (NoSuchFileException e) {
+			return false;
+		}
+		try (var ignored = Files.newByteChannel(file, Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS))) {
+			return matches(file, expectedSize, expectedSha1, cache, snapshot);
+		}
+	}
+
+	/** Named-object identity for apply: a sharing violation is IO, not a mismatch. */
+	public static boolean observeNamed(Path file, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
+		if (!HashUtils.isSha1(expectedSha1)) return false;
+		FileCache.StatSnapshot snapshot;
+		try {
+			snapshot = FileCache.statSnapshot(file);
+		} catch (NoSuchFileException e) {
+			return false;
+		}
+		try (var ignored = Files.newByteChannel(file, Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS))) {
+			if (matchesNamed(file, expectedSize, expectedSha1, cache, snapshot)) return true;
+			if (!snapshot.isTrackedRegularFile() || snapshot.size() != expectedSize) return false;
+			String hashed = cache != null ? cache.hash(file) : HashUtils.hashFile(file);
+			return expectedSha1.equalsIgnoreCase(hashed);
 		}
 	}
 

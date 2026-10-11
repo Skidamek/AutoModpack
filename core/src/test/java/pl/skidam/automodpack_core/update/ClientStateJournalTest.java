@@ -242,6 +242,25 @@ class ClientStateJournalTest {
 	}
 
 	@Test
+	void checkoutRefusesWhileAnUpdateTransactionIsPending() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "restored".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(bytes);
+		ClientObjectStore.storeObject(storage, hash, bytes);
+		InstanceTree tree = InstanceTree.of(LiveIdentity.empty(), List.of(new TrackedFile(Root.GAME_DIR, "", "config/pack.txt", hash, bytes.length)));
+		tree.write(storage);
+		ClientStateJournal.open(storage).append(tree.sha1(), Kind.LIVE, "", "txn-1");
+		Files.createDirectories(storage.transactionFile().getParent());
+		Files.writeString(storage.transactionFile(), "{}", StandardCharsets.UTF_8);
+
+		assertEquals(StateHistory.Restorability.UPDATE_PENDING, StateHistory.views(storage).get(0).restorability());
+		IOException error = assertThrows(IOException.class, () -> StateHistory.checkout(storage, 1));
+		assertTrue(error.getMessage().contains("pending"));
+		error = assertThrows(IOException.class, () -> StateHistory.forgetOlderThan(storage, 1));
+		assertTrue(error.getMessage().contains("pending"));
+	}
+
+	@Test
 	void timelinePinsReachTheReferenceSweep() throws Exception {
 		ClientStorage storage = storage();
 		String installed = store(storage, "installed-bytes");

@@ -43,6 +43,9 @@ public final class StoragePaths {
 	/** The instance-level pending self-update swap; consumed at boot before any role machinery wakes up. */
 	public static final Path SELF_UPDATE_FILE = AUTOMODPACK_DIR.resolve("self-update.json");
 	public static final Path HELPER_DIR = AUTOMODPACK_DIR.resolve("helper");
+	/** Held for the helper process's whole life, including the parent wait. launch() probes this and does not spawn a second JVM. */
+	public static final Path HELPER_PRESENCE_FILE = HELPER_DIR.resolve("presence.lock");
+	/** Held only while the helper is in the Recover loop. Boot waits this out; a waiter that has not started work does not hold it. */
 	public static final Path HELPER_LEASE_FILE = HELPER_DIR.resolve("running.lock");
 	public static final Path HELPER_LOG_FILE = HELPER_DIR.resolve("last-helper-run.log");
 

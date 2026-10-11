@@ -9,7 +9,6 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Map;
@@ -418,10 +417,9 @@ public final class UpdateCommit {
 
 	private InFlight inFlight(Path live, Operation operation) throws IOException {
 		FileCache.StatSnapshot snapshot = snapshotIfPresent(live);
-		if (snapshot != null && snapshot.isTrackedRegularFile()) proveReadable(live);
 		boolean atDestination = operation.operation() == OperationType.DELETE
 				? snapshot == null
-				: snapshot != null && FileIntegrity.matchesNamed(live, operation.expectedSize(), operation.expectedObjectHash(), fileCache);
+				: snapshot != null && FileIntegrity.observeNamed(live, operation.expectedSize(), operation.expectedObjectHash(), fileCache);
 		boolean atBaseline = atBaseline(operation, snapshot, live);
 		if (atDestination && !atBaseline) return InFlight.DESTINATION;
 		if (atBaseline) return InFlight.BASELINE;
@@ -436,14 +434,9 @@ public final class UpdateCommit {
 		}
 	}
 
-	private static void proveReadable(Path live) throws IOException {
-		try (var ignored = Files.newByteChannel(live, Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS))) {
-		}
-	}
-
-	private boolean atBaseline(Operation operation, FileCache.StatSnapshot snapshot, Path live) {
+	private boolean atBaseline(Operation operation, FileCache.StatSnapshot snapshot, Path live) throws IOException {
 		if (operation.expectedExistingHash() == null) return snapshot == null;
-		return snapshot != null && snapshot.isTrackedRegularFile() && FileIntegrity.matches(live, snapshot.size(), operation.expectedExistingHash(), fileCache);
+		return snapshot != null && snapshot.isTrackedRegularFile() && FileIntegrity.observe(live, snapshot.size(), operation.expectedExistingHash(), fileCache);
 	}
 
 	private InFlight requireInFlight(Path live, Operation operation) throws IOException {
@@ -457,15 +450,15 @@ public final class UpdateCommit {
 		return described + (operation.expectedExistingHash() == null ? " target appeared after planning: " : " target changed after planning: ") + live;
 	}
 
-	private boolean matchesPlannedDestination(Path live, ProjectedFile destination) {
+	private boolean matchesPlannedDestination(Path live, ProjectedFile destination) throws IOException {
 		if (destination == null) return false;
-		if (!destination.present()) return !Files.exists(live, LinkOption.NOFOLLOW_LINKS);
-		return FileIntegrity.matchesNamed(live, destination.expectedSize(), destination.expectedHash(), fileCache);
+		if (!destination.present()) return snapshotIfPresent(live) == null;
+		return FileIntegrity.observeNamed(live, destination.expectedSize(), destination.expectedHash(), fileCache);
 	}
 
 	/** The shared capture body: prove the live bytes are the planned ones, then pin them in the object store. */
 	private void acquireImmutable(Pinned pinned) throws IOException {
-		if (!FileIntegrity.matches(pinned.path(), pinned.size(), pinned.hash(), fileCache)) throw new UpdateReplanRequiredException(pinned.path(), pinned.failureStory() + ": " + pinned.path());
+		if (!FileIntegrity.observe(pinned.path(), pinned.size(), pinned.hash(), fileCache)) throw new UpdateReplanRequiredException(pinned.path(), pinned.failureStory() + ": " + pinned.path());
 		VerifiedFileTransfer.copyAtomicImmutable(pinned.path(), storage.objectFile(pinned.hash().toLowerCase(Locale.ROOT)), pinned.size(), pinned.hash(), fileCache);
 	}
 

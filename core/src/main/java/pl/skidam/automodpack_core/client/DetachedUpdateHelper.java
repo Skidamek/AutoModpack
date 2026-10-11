@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.storage.StoragePaths.DATA_ROOT_PROPERTY
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_DIR;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LEASE_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LOG_FILE;
+import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_PRESENCE_FILE;
 
 import java.io.File;
 import java.io.IOException;
@@ -15,6 +16,7 @@ import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
@@ -36,10 +38,9 @@ import pl.skidam.automodpack_core.utils.WindowsLockProbe;
 
 public final class DetachedUpdateHelper {
 	private static final String HELPER_MAIN = UpdateHelperMain.class.getName();
-	// Receipt: after the game has exited the helper holds the lease for UpdateRecovery.retryBudgetMillis() of sleeps
-	// and per-attempt IO, so a helper that is converging frees the lease well inside it. Past this wait the helper is
-	// still waiting on a live game or stuck, and hanging this boot behind it serves nobody - the deferred recovery
-	// path proceeds without it and the helper keeps working alone.
+	// Receipt: the work lease is held only while Recover retries. UpdateRecovery.retryBudgetMillis() of sleeps plus
+	// per-attempt IO fits well inside this wait. A helper still waiting on the parent does not hold this lease, so boot
+	// recovers immediately. Past this wait the applying helper is stuck, and hanging this boot behind it serves nobody.
 	private static final Duration HELPER_LEASE_WAIT = Duration.ofMinutes(3);
 	// A released lease is noticed within half a second, the helper's own initial backoff step.
 	private static final long LEASE_POLL_MILLIS = 500;
@@ -54,10 +55,15 @@ public final class DetachedUpdateHelper {
 	}
 
 	/**
-	 * Spawns the helper for this process's PID. Call as soon as this process cannot finish the apply; the helper
-	 * waits for that PID itself. Do not start it from a shutdown hook.
+	 * Spawns the helper for this process's PID and start instant. Call as soon as this process cannot finish the apply;
+	 * the helper waits for that process itself. Do not start it from a shutdown hook. A helper already present for this
+	 * instance is left to finish after this process exits.
 	 */
 	public static void launch() throws IOException {
+		if (presenceHeld()) {
+			LOGGER.info("A detached update helper is already running; it will finish after this process exits");
+			return;
+		}
 		Path sourceJar = THIS_MOD_JAR.toAbsolutePath().normalize();
 		if (!Files.isRegularFile(sourceJar)) throw new IOException("Runnable AutoModpack JAR is missing: " + sourceJar);
 		Path absoluteHelperDirectory = helperDirectory();
@@ -79,16 +85,36 @@ public final class DetachedUpdateHelper {
 		// The helper has no loader service. Pin this process's already-resolved root as a JVM property before the main class; configuredRoot prefers it over env and role defaults.
 		String environment = LOADER_MANAGER == null || LOADER_MANAGER.getEnvironmentType() == null ? "" : LOADER_MANAGER.getEnvironmentType().name();
 		DataRootResolver.Location dataLocation = DataRootResolver.resolve(GameDirectory.current(), LOADER_MANAGER == null ? null : LOADER_MANAGER.getEnvironmentType());
-		new ProcessBuilder(javaExecutable.toString(), "-D" + DATA_ROOT_PROPERTY + "=" + dataLocation.root(), "-cp", classpath, HELPER_MAIN, Long.toString(ProcessHandle.current().pid()), environment)
+		String parentStart = ProcessHandle.current().info().startInstant().map(instant -> Long.toString(instant.toEpochMilli())).orElse("-");
+		new ProcessBuilder(javaExecutable.toString(), "-D" + DATA_ROOT_PROPERTY + "=" + dataLocation.root(), "-cp", classpath, HELPER_MAIN, Long.toString(ProcessHandle.current().pid()), environment, parentStart)
 				.directory(GameDirectory.current().toFile())
 				.redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(helperLog.toFile())).start();
 		LOGGER.info("Launched detached update helper for the latest pending transaction from {} (environment {}); its output goes to {}", helperJar, environment.isBlank() ? "unknown" : environment, helperLog);
 	}
 
+	/** True when a helper process already holds presence, including while it waits for the game to exit. */
+	static boolean presenceHeld() throws IOException {
+		Path presenceFile = GameDirectory.current().resolve(HELPER_PRESENCE_FILE).toAbsolutePath().normalize();
+		if (!Files.isRegularFile(presenceFile, LinkOption.NOFOLLOW_LINKS)) return false;
+		try (FileChannel channel = FileChannel.open(presenceFile, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+			FileLock probe;
+			try {
+				probe = channel.tryLock();
+			} catch (OverlappingFileLockException e) {
+				return true;
+			}
+			if (probe == null) return true;
+			probe.release();
+			return false;
+		} catch (NoSuchFileException e) {
+			return false;
+		}
+	}
+
 	/**
-	 * True after waiting out a helper that already held the lease, so the caller should retry recovery once.
-	 * False when none was running, or when it still held the lease after {@link #HELPER_LEASE_WAIT} and this
-	 * boot proceeds without it - the running helper keeps its lease and finishes, or gives up, on its own.
+	 * True after waiting out a helper that already held the work lease, so the caller should retry recovery once.
+	 * False when none is applying, or when it still held the lease after {@link #HELPER_LEASE_WAIT} and this
+	 * boot proceeds without it. The applying helper keeps that lease and finishes on its own.
 	 */
 	public static boolean awaitRunningHelper() throws IOException {
 		Path leaseFile = GameDirectory.current().resolve(HELPER_LEASE_FILE).toAbsolutePath().normalize();

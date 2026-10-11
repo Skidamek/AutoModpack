@@ -42,7 +42,7 @@ public final class StateHistory {
 	private StateHistory() {}
 
 	public enum Restorability {
-		CURRENT, READY, NOT_KEPT
+		CURRENT, READY, NOT_KEPT, UPDATE_PENDING
 	}
 
 	public enum FileGate {
@@ -208,6 +208,7 @@ public final class StateHistory {
 
 	public static CheckoutResult checkout(ClientStorage storage, long seq) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
+			requireNoPendingUpdate(storage);
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				ClientStateJournal journal = ClientStateJournal.open(storage);
 				Snapshot snapshot = journal.require(seq);
@@ -241,6 +242,7 @@ public final class StateHistory {
 
 	public static void forgetOlderThan(ClientStorage storage, long seq) throws IOException {
 		ClientStorageMutation.run(storage, () -> {
+			requireNoPendingUpdate(storage);
 			ClientStateJournal journal = ClientStateJournal.open(storage);
 			List<Snapshot> remaining = journal.entries().stream().filter(entry -> entry.seq() >= seq).toList();
 			if (remaining.isEmpty()) throw new IOException("Forgetting that prefix would leave no snapshots");
@@ -262,6 +264,7 @@ public final class StateHistory {
 
 	public static Path restoreFile(ClientStorage storage, long seq, Root root, String path) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
+			requireNoPendingUpdate(storage);
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				Snapshot snapshot = ClientStateJournal.open(storage).require(seq);
 				InstanceTree tree = InstanceTree.read(storage, snapshot.treeSha1());
@@ -366,9 +369,15 @@ public final class StateHistory {
 	}
 
 	private static Restorability restorabilityOf(ClientStorage storage, InstanceTree target, InstanceTree live, FileCache cache) throws IOException {
+		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) return Restorability.UPDATE_PENDING;
 		if (live.sameAs(target)) return Restorability.CURRENT;
 		if (!blobsPresent(storage, target, cache) || !identityFeasible(storage, target.identity())) return Restorability.NOT_KEPT;
 		return Restorability.READY;
+	}
+
+	private static void requireNoPendingUpdate(ClientStorage storage) throws IOException {
+		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS))
+			throw new IOException("A modpack update is still pending; finish it or restart the game before changing the instance timeline");
 	}
 
 	private static boolean identityFeasible(ClientStorage storage, InstanceTree.LiveIdentity identity) throws IOException {
