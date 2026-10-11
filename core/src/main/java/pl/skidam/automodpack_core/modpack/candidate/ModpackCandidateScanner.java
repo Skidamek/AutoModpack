@@ -213,7 +213,7 @@ public final class ModpackCandidateScanner {
 			provenance = new CandidateProvenance(selected, editable.decisiveRule());
 		}
 		return new PathResult(selected, file, object, provenance, exclusions, pair.explicit != null ? pair.explicit : pair.synced, snapshot == null ? null : snapshot.environment(),
-				file != null && HashUtils.isSha1(file.sha1()) ? HashUtils.normalizeSha1(file.sha1()) : null);
+				file != null && HashUtils.isSha1(file.sha1()) ? HashUtils.normalizeSha1(file.sha1()) : null, exclusion);
 	}
 
 	/**
@@ -224,7 +224,7 @@ public final class ModpackCandidateScanner {
 		if (sideVerdicts == null) return;
 		Map<String, GroupManifest.GroupFile> askable = new LinkedHashMap<>();
 		for (PathResult result : results) {
-			if (!exclusionMode(request, result).asksPlatforms()) continue;
+			if (!result.exclusion.asksPlatforms()) continue;
 			if (result.file == null || result.normalizedSha1 == null || !ModpackContentType.MOD.equals(result.file.type())) continue;
 			if (result.environment == ModEnvironment.CLIENT || result.environment == ModEnvironment.SERVER) continue;
 			askable.putIfAbsent(result.normalizedSha1, result.file);
@@ -235,7 +235,7 @@ public final class ModpackCandidateScanner {
 		boolean applied = request.applyPlatformExclusions();
 		for (int i = 0; i < results.size(); i++) {
 			PathResult result = results.get(i);
-			if (!exclusionMode(request, result).asksPlatforms()) continue;
+			if (!result.exclusion.asksPlatforms()) continue;
 			String reason = result.normalizedSha1 == null ? null : reasons.get(result.normalizedSha1);
 			if (reason == null) continue;
 			List<ExcludedCandidate> exclusions = new ArrayList<>(result.exclusions);
@@ -246,24 +246,13 @@ public final class ModpackCandidateScanner {
 				} catch (IOException e) {
 					LOGGER.error("Could not delete the staged object of the platform-excluded {}", result.selected.logicalPath(), e);
 				}
-				results.set(i, new PathResult(null, null, null, null, exclusions, result.sourceForOrdering, result.environment, null));
-			} else results.set(i, new PathResult(result.selected, result.file, result.object, result.provenance, exclusions, result.sourceForOrdering, result.environment, result.normalizedSha1));
+				results.set(i, new PathResult(null, null, null, null, exclusions, result.sourceForOrdering, result.environment, null, result.exclusion));
+			} else results.set(i, new PathResult(result.selected, result.file, result.object, result.provenance, exclusions, result.sourceForOrdering, result.environment, result.normalizedSha1, result.exclusion));
 		}
 	}
 
 	private static ServerSideModExclusion exclusionMode(ServerConfigJsons.GroupDeclaration declaration) {
 		return ServerSideModExclusion.orDefault(declaration == null ? null : declaration.autoExcludeServerSideMods);
-	}
-
-	private static ServerSideModExclusion exclusionMode(Request request, PathResult result) {
-		CandidateSource source = result.selected != null ? result.selected : result.sourceForOrdering;
-		if (source == null) return ServerSideModExclusion.METADATA;
-		for (var category : request.modpack().values()) {
-			if (category == null) continue;
-			ServerConfigJsons.GroupDeclaration declaration = category.get(source.groupId());
-			if (declaration != null) return exclusionMode(declaration);
-		}
-		return ServerSideModExclusion.METADATA;
 	}
 
 	private static GroupRules compileRules(String groupId, ServerConfigJsons.GroupDeclaration declaration) throws CandidateBuildException {
@@ -430,7 +419,8 @@ public final class ModpackCandidateScanner {
 			List<ExcludedCandidate> exclusions,
 			CandidateSource sourceForOrdering,
 			ModEnvironment environment,
-			String normalizedSha1) {}
+			String normalizedSha1,
+			ServerSideModExclusion exclusion) {}
 
 	public record Request(
 			String modpackId,
