@@ -17,6 +17,7 @@ import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,10 +77,18 @@ public final class ReconfConfigs {
 		return Optional.of(migrateJson(path, jsonSource, type));
 	}
 
-	/** Reads or generates one human config; a fresh file is generated canonically with the {@link Comment} declarations. */
+	/**
+	 * Reads or generates one human config; a fresh file is generated canonically with the {@link Comment} declarations.
+	 * An existing file that still carries superseded keys is rewritten when the repaired document differs; a current
+	 * file is left byte-exact. A refused write keeps the translated model and logs that the file is stale.
+	 */
 	public static <T> T readOrCreate(Path path, Class<T> type, Supplier<T> defaults) {
 		Optional<T> existing = read(path, type);
-		if (existing.isPresent()) return existing.get();
+		if (existing.isPresent()) {
+			T value = existing.get();
+			if (Files.isRegularFile(path)) convergeExisting(path, value, type, defaults);
+			return value;
+		}
 		T value = defaults.get();
 		writeFresh(path, value, type);
 		return value;
@@ -94,6 +103,12 @@ public final class ReconfConfigs {
 	 * would hide the defect.
 	 */
 	public static <T> void save(Path path, T model, Class<T> type, Supplier<T> defaults) throws IOException {
+		Document document = prepareSaveDocument(path, model, type, defaults);
+		OsPaths.requirePublishableConfig(path);
+		DurableFiles.writeAtomic(path, document.text());
+	}
+
+	private static <T> Document prepareSaveDocument(Path path, T model, Class<T> type, Supplier<T> defaults) throws IOException {
 		Document document;
 		if (!Files.isRegularFile(path)) {
 			document = freshDocument(model, type);
@@ -113,8 +128,21 @@ public final class ReconfConfigs {
 		for (ConfMigration migration : ConfMigration.applicableTo(type)) migration.repair(document, path);
 		ensureDeclared(document, type, defaults.get());
 		ensureNestedComments(document, type, model);
-		OsPaths.requirePublishableConfig(path);
-		DurableFiles.writeAtomic(path, document.text());
+		return document;
+	}
+
+	/** Rewrites {@code path} only when the repaired document differs; a refused write leaves the translated model in memory. */
+	private static <T> void convergeExisting(Path path, T model, Class<T> type, Supplier<T> defaults) {
+		try {
+			byte[] bytes = Files.readAllBytes(path);
+			byte[] repaired = prepareSaveDocument(path, model, type, defaults).text();
+			if (Arrays.equals(bytes, repaired)) return;
+			OsPaths.requirePublishableConfig(path);
+			DurableFiles.writeAtomic(path, repaired);
+			LOGGER.info("Updated {} to the current config shape", path.getFileName());
+		} catch (IOException e) {
+			LOGGER.warn("Could not update {} to the current config shape; this process uses the translated settings and the file still has the old keys", path.getFileName(), e);
+		}
 	}
 
 	/**

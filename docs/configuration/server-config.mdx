@@ -6,7 +6,7 @@ The file uses a small subset of HOCON: comments (`#`), `key: value` options, inl
 
 ## Editing the file
 
-Apply changes with `/automodpack config reload` or a restart. When the reload changes connection settings, run `/automodpack host restart` to apply them.
+Apply changes with `/automodpack config reload` or a restart. When the reload changes connection settings, run `/automodpack host restart` to apply them. A start rewrites superseded keys in the file when it can; a read-only config directory still boots and keeps the old file.
 
 ## General
 

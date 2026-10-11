@@ -8,10 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Set;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -329,5 +333,51 @@ class ReconfConfigsTest {
 		Files.writeString(serverConfig(), "connection-mode: holepunchs\n", StandardCharsets.UTF_8);
 		ConfigTools.ConfigParseException error = assertThrows(ConfigTools.ConfigParseException.class, () -> ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class));
 		assertTrue(String.valueOf(error.getCause().getMessage()).contains("holepunchs"), error.getMessage());
+	}
+
+	@Test
+	void readOrCreateConvergesStaleKeysWithoutAnExplicitSave() throws IOException {
+		String legacy = """
+				auto-exclude-server-side-mods: true
+				modpack {
+				  General {
+				    main {
+				      required: true
+				      default-selected: true
+				    }
+				  }
+				}
+				""";
+		Files.writeString(serverConfig(), legacy, StandardCharsets.UTF_8);
+		ServerConfigFieldsV3 config = ReconfConfigs.readOrCreate(serverConfig(), ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		assertEquals(GroupSelectionMode.REQUIRED, config.modpack.categories.get("General").get("main").selection);
+		assertEquals(ServerSideModExclusion.METADATA, config.modpack.categories.get("General").get("main").autoExcludeServerSideMods);
+		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
+		assertTrue(text.contains("selection: REQUIRED"), text);
+		assertTrue(text.contains("auto-exclude-server-side-mods: METADATA"), text);
+		assertFalse(text.contains("required: true"), text);
+		assertFalse(text.contains("\nauto-exclude-server-side-mods: true"), text);
+
+		byte[] once = Files.readAllBytes(serverConfig());
+		ReconfConfigs.readOrCreate(serverConfig(), ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		assertArrayEquals(once, Files.readAllBytes(serverConfig()));
+	}
+
+	@Test
+	void readOrCreateKeepsTheTranslatedModelWhenTheFileCannotBeRewritten() throws IOException {
+		Assumptions.assumeTrue(FileSystems.getDefault().supportedFileAttributeViews().contains("posix"), "posix permissions");
+		String legacy = "auto-exclude-server-side-mods: true\nmodpack { General { main { selection: REQUIRED } } }\n";
+		Files.writeString(serverConfig(), legacy, StandardCharsets.UTF_8);
+		Path parent = serverConfig().getParent();
+		Set<PosixFilePermission> previous = Files.getPosixFilePermissions(parent);
+		try {
+			Files.setPosixFilePermissions(parent, PosixFilePermissions.fromString("r-xr-xr-x"));
+			Assumptions.assumeFalse(Files.isWritable(parent), "this uid can still write a directory without the write bit");
+			ServerConfigFieldsV3 config = ReconfConfigs.readOrCreate(serverConfig(), ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+			assertEquals(ServerSideModExclusion.METADATA, config.modpack.categories.get("General").get("main").autoExcludeServerSideMods);
+			assertEquals(legacy, Files.readString(serverConfig(), StandardCharsets.UTF_8));
+		} finally {
+			Files.setPosixFilePermissions(parent, previous);
+		}
 	}
 }
