@@ -341,7 +341,7 @@ public class ModpackExecutor {
 			// A preview reports the files a publish would drop; only a publish takes them out of the manifest.
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpack.name, AM_VERSION,
 					advertiseVersions ? LOADER : null, advertiseVersions ? LOADER_VERSION : null, advertiseVersions ? MC_VERSION : null, serverRoot, groupRoot,
-					serverConfig.modpack.categories, serverConfig.autoExcludeServerSideMods, materializeMissingObjects, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()),
+					serverConfig.modpack.categories, materializeMissingObjects, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()),
 					creationExecutor, generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects);
 			ModpackCandidate candidate = candidateScan.scan(request);
 			for (ExcludedCandidate exclusion : candidate.exclusions())

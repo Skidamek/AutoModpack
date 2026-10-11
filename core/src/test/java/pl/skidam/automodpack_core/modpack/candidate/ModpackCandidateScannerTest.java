@@ -17,6 +17,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.generation.ContentTree;
+import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.platforms.PlatformCache;
 import pl.skidam.automodpack_core.platforms.PlatformSideVerdicts;
@@ -313,14 +314,14 @@ class ModpackCandidateScannerTest {
 	}
 
 	private ModpackCandidate scan(Path server, Path groups, Map<String, ServerConfigJsons.GroupDeclaration> declarations) throws Exception {
-		return scan(server, groups, declarations, false, true, null);
+		return scan(server, groups, declarations, true, null);
 	}
 
-	private ModpackCandidate scan(Path server, Path groups, Map<String, ServerConfigJsons.GroupDeclaration> declarations, boolean autoExcludeServerSideMods, boolean applyPlatformExclusions,
-			PlatformSideVerdicts sideVerdicts) throws Exception {
+	private ModpackCandidate scan(Path server, Path groups, Map<String, ServerConfigJsons.GroupDeclaration> declarations, boolean applyPlatformExclusions, PlatformSideVerdicts sideVerdicts)
+			throws Exception {
 		Executor direct = Runnable::run;
-		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, Map.of("General", declarations), autoExcludeServerSideMods, applyPlatformExclusions,
-				tempDir.resolve("staging"), direct, null, null, null, true);
+		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, Map.of("General", declarations), applyPlatformExclusions, tempDir.resolve("staging"),
+				direct, null, null, null, true);
 		return new ModpackCandidateScanner(sideVerdicts).scan(request);
 	}
 
@@ -498,7 +499,9 @@ class ModpackCandidateScannerTest {
 		Files.createDirectories(groups.resolve("main"));
 		writeModJar(groups.resolve("main/server-only.jar"), "server");
 
-		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()), true, true, null);
+		ServerConfigJsons.GroupDeclaration main = group();
+		main.autoExcludeServerSideMods = ServerSideModExclusion.METADATA;
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main));
 
 		assertFalse(candidate.manifest().groups().get("main").files().containsKey("server-only.jar"));
 		assertEquals(1, candidate.exclusions().size());
@@ -514,7 +517,9 @@ class ModpackCandidateScannerTest {
 		Path universal = groups.resolve("main/universal.jar");
 		writeModJar(universal);
 
-		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()), true, true, cacheAnsweringModrinth(universal, "server_only"));
+		ServerConfigJsons.GroupDeclaration main = group();
+		main.autoExcludeServerSideMods = ServerSideModExclusion.PLATFORMS;
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), true, cacheAnsweringModrinth(universal, "server_only"));
 
 		assertFalse(candidate.manifest().groups().get("main").files().containsKey("universal.jar"));
 		assertEquals(1, candidate.exclusions().size());
@@ -530,11 +535,62 @@ class ModpackCandidateScannerTest {
 		Path universal = groups.resolve("main/universal.jar");
 		writeModJar(universal);
 
-		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()), true, false, cacheAnsweringModrinth(universal, "server_only"));
+		ServerConfigJsons.GroupDeclaration main = group();
+		main.autoExcludeServerSideMods = ServerSideModExclusion.PLATFORMS;
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false, cacheAnsweringModrinth(universal, "server_only"));
 
 		assertTrue(candidate.manifest().groups().get("main").files().containsKey("universal.jar"), "a preview reports the verdict, only a publish applies it");
 		assertEquals(1, candidate.exclusions().size());
 		assertEquals(ExcludedCandidate.Reason.SERVER_SIDE_MOD, candidate.exclusions().get(0).reason());
+	}
+
+	@Test
+	void disabledModeKeepsAJarTheMetadataWouldDrop() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main"));
+		writeModJar(groups.resolve("main/server-only.jar"), "server");
+
+		ServerConfigJsons.GroupDeclaration main = group();
+		main.autoExcludeServerSideMods = ServerSideModExclusion.DISABLED;
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main));
+
+		assertTrue(candidate.manifest().groups().get("main").files().containsKey("server-only.jar"));
+		assertEquals(0, candidate.exclusions().size());
+	}
+
+	@Test
+	void metadataModeKeepsAUniversalJarThePlatformWouldDrop() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main"));
+		Path universal = groups.resolve("main/universal.jar");
+		writeModJar(universal);
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()), true, cacheAnsweringModrinth(universal, "server_only"));
+
+		assertTrue(candidate.manifest().groups().get("main").files().containsKey("universal.jar"));
+		assertEquals(0, candidate.exclusions().size());
+	}
+
+	@Test
+	void platformExclusionAppliesOnlyToTheGroupThatAsked() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main"));
+		Files.createDirectories(groups.resolve("push"));
+		Path universal = groups.resolve("main/universal.jar");
+		writeModJar(universal);
+		Files.copy(universal, groups.resolve("push/universal.jar"));
+
+		ServerConfigJsons.GroupDeclaration main = group();
+		main.autoExcludeServerSideMods = ServerSideModExclusion.PLATFORMS;
+		ServerConfigJsons.GroupDeclaration push = group();
+		push.autoExcludeServerSideMods = ServerSideModExclusion.METADATA;
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main, "push", push), true, cacheAnsweringModrinth(universal, "server_only"));
+
+		assertFalse(candidate.manifest().groups().get("main").files().containsKey("universal.jar"));
+		assertTrue(candidate.manifest().groups().get("push").files().containsKey("universal.jar"));
 	}
 
 	private static void writeModJar(Path path) throws IOException {

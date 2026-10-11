@@ -23,7 +23,7 @@ public interface ConfMigration {
 	 * registry would hold null.
 	 */
 	static List<ConfMigration> registry() {
-		return List.of(GroupSelectionMigration.INSTANCE);
+		return List.of(GroupSelectionMigration.INSTANCE, ServerSideExclusionMigration.INSTANCE);
 	}
 
 	/** The extensions that own this config type; the store iterates them and special-cases nothing. */

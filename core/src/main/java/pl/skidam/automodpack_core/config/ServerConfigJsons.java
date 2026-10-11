@@ -19,6 +19,7 @@ import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
+import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class ServerConfigJsons {
@@ -30,8 +31,6 @@ public class ServerConfigJsons {
 		public boolean generateModpackOnStart = true;
 		@ReconfConfigs.Comment("host-modpack/<id>/ is included in full. from-server pulls extra files from the server root. exclude and editable apply after that; they do not add files.")
 		public ModpackFields modpack = ModpackFields.withMainGroup();
-		@SerializedName("auto-exclude-server-side-mods")
-		public boolean autoExcludeServerSideMods = true;
 		@SerializedName("require-modpack")
 		public boolean requireModpack = true;
 		@SerializedName("nag-un-modded-clients")
@@ -171,6 +170,9 @@ public class ServerConfigJsons {
 		public String description = "";
 		@ReconfConfigs.Comment("REQUIRED is always installed. RECOMMENDED is pre-selected, players can opt out. OPTIONAL starts unchecked.")
 		public GroupSelectionMode selection = GroupSelectionMode.OPTIONAL;
+		@ReconfConfigs.Comment("DISABLED ships every jar. METADATA drops jars whose own metadata says server-only. PLATFORMS also asks Modrinth and CurseForge.")
+		@SerializedName("auto-exclude-server-side-mods")
+		public ServerSideModExclusion autoExcludeServerSideMods = ServerSideModExclusion.METADATA;
 
 		@SerializedName("breaks-with")
 		public Set<String> breaksWith = Set.of();

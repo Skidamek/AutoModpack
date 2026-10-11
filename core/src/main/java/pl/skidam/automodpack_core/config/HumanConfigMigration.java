@@ -16,6 +16,7 @@ import com.google.gson.JsonPrimitive;
 
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
+import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 /** One-shot JSON → current human model. Used only when the canonical {@code .conf} is missing. */
@@ -25,8 +26,9 @@ public final class HumanConfigMigration {
 	private static final List<String> DROPPED_SERVER = List.of("forceCopyFilesToStandardLocation", "nonModpackFilesToDelete", "updateIpsOnEveryStart", "autoExcludeUnnecessaryFiles");
 	private static final List<String> DROPPED_CLIENT = List.of("selectedModpack", "installedModpacks", "allowRemoteNonModpackDeletions");
 	public static ServerConfigJsons.ServerConfigFieldsV3 mapServer(JsonObject json) {
-		if (isV4Server(json)) return mapV4Server(json);
-		return mapV5Server(json);
+		ServerConfigJsons.ServerConfigFieldsV3 config = isV4Server(json) ? mapV4Server(json) : mapV5Server(json);
+		ServerSideExclusionMigration.applyToMapped(config, json);
+		return config;
 	}
 
 	public static MappedClient mapClient(JsonObject json) {
@@ -103,7 +105,6 @@ public final class HumanConfigMigration {
 	private static void copySameNameServer(JsonObject json, ServerConfigJsons.ServerConfigFieldsV3 config) {
 		copyBoolean(json, "modpackHost", "modpack-host", v -> config.modpackHost = v);
 		copyBoolean(json, "generateModpackOnStart", "generate-modpack-on-start", v -> config.generateModpackOnStart = v);
-		copyBoolean(json, "autoExcludeServerSideMods", "auto-exclude-server-side-mods", v -> config.autoExcludeServerSideMods = v);
 		copyBoolean(json, "requireModpack", "require-modpack", v -> config.requireModpack = v);
 		copyBoolean(json, "nagUnModdedClients", "nag-un-modded-clients", v -> config.nagUnModdedClients = v);
 		String nagMessage = string(first(json, "nagMessage", "nag-message"));
@@ -165,7 +166,8 @@ public final class HumanConfigMigration {
 		return object.has("from-server") || object.has("fromServer") || object.has("syncedFiles") || object.has("exclude") || object.has("excludedFiles")
 				|| object.has("editable") || object.has("allowEditsInFiles") || object.has("displayName") || object.has("display-name") || object.has("required")
 				|| object.has("defaultSelected") || object.has("default-selected") || object.has("selection") || object.has("breaksWith") || object.has("breaks-with")
-				|| object.has("requires") || object.has("compatiblePlatforms") || object.has("compatible-platforms") || object.has("description");
+				|| object.has("requires") || object.has("compatiblePlatforms") || object.has("compatible-platforms") || object.has("description")
+				|| object.has("auto-exclude-server-side-mods") || object.has("autoExcludeServerSideMods");
 	}
 
 	private static ServerConfigJsons.GroupDeclaration mapGroup(JsonObject json, String groupId) {
@@ -177,6 +179,8 @@ public final class HumanConfigMigration {
 		// The selection key wins; the flag pair it replaced is read by the same rule the reconf repair applies.
 		if (json.has("selection")) group.selection = selectionEnum(json.get("selection"));
 		else if (json.has("required") || json.has("defaultSelected") || json.has("default-selected")) group.selection = GroupSelectionMigration.fromLegacyPair(json, "Group '" + groupId + "'");
+		JsonElement exclusion = first(json, "auto-exclude-server-side-mods", "autoExcludeServerSideMods");
+		if (exclusion != null) group.autoExcludeServerSideMods = exclusionEnum(exclusion);
 		List<String> breaksWith = stringList(first(json, "breaksWith", "breaks-with"));
 		if (breaksWith != null) group.breaksWith = new LinkedHashSet<>(breaksWith);
 		List<String> requires = stringList(json.get("requires"));
@@ -196,6 +200,11 @@ public final class HumanConfigMigration {
 	private static GroupSelectionMode selectionEnum(JsonElement element) {
 		if (!element.isJsonPrimitive()) throw new ConfigTools.ConfigParseException("Group selection must be a string value, got " + element);
 		return ConfigTools.enumConstant(GroupSelectionMode.class, element.getAsString());
+	}
+
+	private static ServerSideModExclusion exclusionEnum(JsonElement element) {
+		if (!element.isJsonPrimitive()) throw new ConfigTools.ConfigParseException("auto-exclude-server-side-mods must be a string value, got " + element);
+		return ConfigTools.enumConstant(ServerSideModExclusion.class, element.getAsString());
 	}
 
 	private static ServerConfigJsons.GroupDeclaration mainGroup(ServerConfigJsons.ServerConfigFieldsV3 config) {

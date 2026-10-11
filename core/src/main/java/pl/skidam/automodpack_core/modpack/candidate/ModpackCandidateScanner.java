@@ -17,6 +17,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
+import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 import pl.skidam.automodpack_core.platforms.PlatformSideVerdicts;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -113,7 +114,7 @@ public final class ModpackCandidateScanner {
 		try {
 			for (SourcePair pair : sources.values()) futures.add(CompletableFuture.supplyAsync(() -> {
 				try {
-					return process(pair, rulesByGroup.get(pair.groupId()), request);
+					return process(pair, rulesByGroup.get(pair.groupId()), exclusionMode(declarations.get(pair.groupId())), request);
 				} catch (CandidateBuildException e) {
 					throw new CompletionException(e);
 				}
@@ -134,7 +135,7 @@ public final class ModpackCandidateScanner {
 			throw taskFailure;
 		}
 		results.sort(Comparator.comparing(result -> result.selected == null ? result.sourceForOrdering() : result.selected));
-		if (request.autoExcludeServerSideMods()) applyPlatformSideVerdicts(results, request);
+		applyPlatformSideVerdicts(results, request);
 
 		Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields>> filesByGroup = new TreeMap<>();
 		for (String groupId : declarations.keySet()) filesByGroup.put(groupId, new TreeMap<>());
@@ -187,7 +188,7 @@ public final class ModpackCandidateScanner {
 		}
 	}
 
-	private PathResult process(SourcePair pair, GroupRules rules, Request request) throws CandidateBuildException {
+	private PathResult process(SourcePair pair, GroupRules rules, ServerSideModExclusion exclusion, Request request) throws CandidateBuildException {
 		List<ExcludedCandidate> exclusions = new ArrayList<>();
 		CandidateSource candidate = pair.explicit != null ? pair.explicit : pair.synced;
 		CandidateSource selected = null;
@@ -195,7 +196,7 @@ public final class ModpackCandidateScanner {
 		StagedObject object = null;
 		StableSourceSnapshotter.Snapshot snapshot = null;
 		if (candidate != null) {
-			snapshot = sourceSnapshotter.snapshot(candidate, request.autoExcludeServerSideMods(),
+			snapshot = sourceSnapshotter.snapshot(candidate, exclusion.dropsJarMetadata(),
 					request.stagingDirectory(), request.fileCache(), request.modFileCache(), request.objectStoreDirectory(), request.materializeMissingObjects());
 			if (snapshot.exclusion() != null) {
 				exclusions.add(excluded(candidate, snapshot.exclusion()));
@@ -223,15 +224,18 @@ public final class ModpackCandidateScanner {
 		if (sideVerdicts == null) return;
 		Map<String, GroupManifest.GroupFile> askable = new LinkedHashMap<>();
 		for (PathResult result : results) {
+			if (!exclusionMode(request, result).asksPlatforms()) continue;
 			if (result.file == null || result.normalizedSha1 == null || !ModpackContentType.MOD.equals(result.file.type())) continue;
 			if (result.environment == ModEnvironment.CLIENT || result.environment == ModEnvironment.SERVER) continue;
 			askable.putIfAbsent(result.normalizedSha1, result.file);
 		}
+		if (askable.isEmpty()) return;
 		Map<String, String> reasons = sideVerdicts.excludeFromClientPack(askable);
 		if (reasons.isEmpty()) return;
 		boolean applied = request.applyPlatformExclusions();
 		for (int i = 0; i < results.size(); i++) {
 			PathResult result = results.get(i);
+			if (!exclusionMode(request, result).asksPlatforms()) continue;
 			String reason = result.normalizedSha1 == null ? null : reasons.get(result.normalizedSha1);
 			if (reason == null) continue;
 			List<ExcludedCandidate> exclusions = new ArrayList<>(result.exclusions);
@@ -245,6 +249,21 @@ public final class ModpackCandidateScanner {
 				results.set(i, new PathResult(null, null, null, null, exclusions, result.sourceForOrdering, result.environment, null));
 			} else results.set(i, new PathResult(result.selected, result.file, result.object, result.provenance, exclusions, result.sourceForOrdering, result.environment, result.normalizedSha1));
 		}
+	}
+
+	private static ServerSideModExclusion exclusionMode(ServerConfigJsons.GroupDeclaration declaration) {
+		return ServerSideModExclusion.orDefault(declaration == null ? null : declaration.autoExcludeServerSideMods);
+	}
+
+	private static ServerSideModExclusion exclusionMode(Request request, PathResult result) {
+		CandidateSource source = result.selected != null ? result.selected : result.sourceForOrdering;
+		if (source == null) return ServerSideModExclusion.METADATA;
+		for (var category : request.modpack().values()) {
+			if (category == null) continue;
+			ServerConfigJsons.GroupDeclaration declaration = category.get(source.groupId());
+			if (declaration != null) return exclusionMode(declaration);
+		}
+		return ServerSideModExclusion.METADATA;
 	}
 
 	private static GroupRules compileRules(String groupId, ServerConfigJsons.GroupDeclaration declaration) throws CandidateBuildException {
@@ -423,7 +442,6 @@ public final class ModpackCandidateScanner {
 			Path serverRoot,
 			Path groupRoot,
 			Map<String, Map<String, ServerConfigJsons.GroupDeclaration>> modpack,
-			boolean autoExcludeServerSideMods,
 			boolean applyPlatformExclusions,
 			Path stagingDirectory,
 			Executor executor,

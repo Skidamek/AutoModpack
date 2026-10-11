@@ -32,6 +32,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
+import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 import pl.skidam.automodpack_core.platforms.PlatformSourceLookup;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -662,8 +663,8 @@ class ModpackExecutorTest {
 		ServerConfigJsons.GroupDeclaration main = new ServerConfigJsons.GroupDeclaration();
 		main.selection = GroupSelectionMode.of(required, defaultSelected);
 		main.fromServer = Set.of();
+		main.autoExcludeServerSideMods = ServerSideModExclusion.DISABLED;
 		config.modpack.categories = Map.of("General", Map.of("main", main));
-		config.autoExcludeServerSideMods = false;
 		config.validateSecrets = false;
 		return config;
 	}

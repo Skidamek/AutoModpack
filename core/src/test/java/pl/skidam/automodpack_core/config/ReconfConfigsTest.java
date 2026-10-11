@@ -17,6 +17,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ServerConfigJsons.ServerConfigFieldsV3;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
+import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 
 /** The reconf-backed human-config store: kebab keys, reconcile saves, comment convergence, loud corruption. */
 class ReconfConfigsTest {
@@ -39,8 +40,10 @@ class ReconfConfigsTest {
 		assertTrue(text.contains("name: \"\""), text);
 		assertTrue(text.contains("# REQUIRED is always installed. RECOMMENDED is pre-selected, players can opt out. OPTIONAL starts unchecked."), text);
 		assertTrue(text.contains("selection: REQUIRED"), text);
+		assertTrue(text.contains("auto-exclude-server-side-mods: METADATA"), text);
 		assertFalse(text.contains("default-selected"), text);
 		assertEquals("", config.modpack.name);
+		assertEquals(ServerSideModExclusion.METADATA, config.modpack.categories.get("General").get("main").autoExcludeServerSideMods);
 	}
 
 	@Test
@@ -239,5 +242,54 @@ class ReconfConfigsTest {
 		ConfigTools.ConfigParseException error = assertThrows(ConfigTools.ConfigParseException.class, () -> ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class));
 		assertTrue(error.getMessage().contains("required"), error.getMessage());
 		assertEquals(bad, Files.readString(serverConfig(), StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void packLevelServerSideExclusionFalseBecomesDisabledOnGroupsThatOmitTheKey() throws IOException {
+		String legacy = """
+				auto-exclude-server-side-mods: false
+				modpack {
+				  General {
+				    main {
+				      selection: REQUIRED
+				    }
+				    extras {
+				      auto-exclude-server-side-mods: PLATFORMS
+				    }
+				  }
+				}
+				""";
+		Files.writeString(serverConfig(), legacy, StandardCharsets.UTF_8);
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		assertEquals(ServerSideModExclusion.DISABLED, config.modpack.categories.get("General").get("main").autoExcludeServerSideMods);
+		assertEquals(ServerSideModExclusion.PLATFORMS, config.modpack.categories.get("General").get("extras").autoExcludeServerSideMods);
+		assertEquals(legacy, Files.readString(serverConfig(), StandardCharsets.UTF_8));
+
+		ReconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
+		assertFalse(text.contains("\nauto-exclude-server-side-mods: false"), text);
+		assertTrue(text.contains("auto-exclude-server-side-mods: DISABLED"), text);
+		assertTrue(text.contains("auto-exclude-server-side-mods: PLATFORMS"), text);
+	}
+
+	@Test
+	void packLevelServerSideExclusionTrueLeavesGroupsAtMetadata() throws IOException {
+		String legacy = """
+				auto-exclude-server-side-mods: true
+				modpack {
+				  General {
+				    main {
+				      selection: REQUIRED
+				    }
+				  }
+				}
+				""";
+		Files.writeString(serverConfig(), legacy, StandardCharsets.UTF_8);
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		assertEquals(ServerSideModExclusion.METADATA, config.modpack.categories.get("General").get("main").autoExcludeServerSideMods);
+		ReconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
+		assertFalse(text.matches("(?s).*\\nauto-exclude-server-side-mods: true\\n.*"), text);
+		assertTrue(text.contains("auto-exclude-server-side-mods: METADATA"), text);
 	}
 }

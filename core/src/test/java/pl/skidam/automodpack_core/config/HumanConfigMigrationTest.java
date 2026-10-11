@@ -16,6 +16,7 @@ import org.junit.jupiter.api.io.TempDir;
 import com.google.gson.JsonParser;
 
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
+import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 class HumanConfigMigrationTest {
@@ -54,6 +55,7 @@ class HumanConfigMigrationTest {
 		assertTrue(config.modpack.categories.get("General").get("main").exclude.contains("**/.*"));
 		assertFalse(config.modpack.categories.get("General").get("main").exclude.contains("kubejs/server_scripts/**"));
 		assertEquals(GroupSelectionMode.REQUIRED, config.modpack.categories.get("General").get("main").selection, "the migrated core group must stay required");
+		assertEquals(ServerSideModExclusion.METADATA, config.modpack.categories.get("General").get("main").autoExcludeServerSideMods);
 		assertTrue(Files.isRegularFile(conf));
 		assertTrue(Files.isRegularFile(dir.resolve("automodpack-server.json.backup")));
 		assertFalse(Files.exists(json));
@@ -137,6 +139,22 @@ class HumanConfigMigrationTest {
 		assertThrows(ConfigTools.ConfigParseException.class, () -> selectionOf(mappedGroup("\"selection\": null")));
 		assertThrows(ConfigTools.ConfigParseException.class, () -> selectionOf(mappedGroup("\"selection\": {}")));
 		assertThrows(ConfigTools.ConfigParseException.class, () -> selectionOf(mappedGroup("\"required\": \"yes\"")), "\"yes\" must not silently read as false and drop a required group");
+	}
+
+	@Test
+	void packLevelServerSideExclusionFalseDisablesGroupsThatOmitTheKey() {
+		ServerConfigJsons.ServerConfigFieldsV3 config = HumanConfigMigration.mapServer(JsonParser.parseString("""
+				{"autoExcludeServerSideMods": false, "modpack": {"General": {"main": {}, "kept": {"auto-exclude-server-side-mods": "PLATFORMS"}}}}
+				""").getAsJsonObject());
+		assertEquals(ServerSideModExclusion.DISABLED, config.modpack.categories.get("General").get("main").autoExcludeServerSideMods);
+		assertEquals(ServerSideModExclusion.PLATFORMS, config.modpack.categories.get("General").get("kept").autoExcludeServerSideMods);
+	}
+
+	@Test
+	void packLevelServerSideExclusionTrueLeavesGroupsAtMetadata() {
+		assertEquals(ServerSideModExclusion.METADATA,
+				HumanConfigMigration.mapServer(JsonParser.parseString("{\"auto-exclude-server-side-mods\": true, \"modpack\": {\"General\": {\"main\": {}}}}").getAsJsonObject()).modpack.categories.get("General")
+						.get("main").autoExcludeServerSideMods);
 	}
 
 	private static ServerConfigJsons.ServerConfigFieldsV3 mappedGroup(String members) {

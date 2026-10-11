@@ -301,7 +301,7 @@ public class FileInspection {
 			}
 
 			if (modId != null) {
-				// [[dependencies.<modId>]] is keyed by the mod's own id; a platform dependency's side says where the mod itself runs, feeding autoExcludeServerSideMods
+				// [[dependencies.<modId>]] is keyed by the mod's own id; a platform dependency's side says where the mod itself runs, feeding per-group auto-exclude-server-side-mods
 				Map<String, Object> depsTable = MiniToml.getTable(result, "dependencies");
 				if (depsTable != null) {
 					for (Map<String, Object> depTable : MiniToml.getTables(depsTable, modId)) {

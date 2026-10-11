@@ -14,7 +14,6 @@ Apply changes with `/automodpack config reload` or a restart. When the reload ch
 |---|---|---|
 | `modpack-host` | `true` | Runs AutoModpack's built-in connection handling. When false, clients still receive connection information, which can point at a proxy or an externally handled endpoint. See [hosting](../how-it-works/hosting). |
 | `generate-modpack-on-start` | `true` | Publishes a new generation on every start when the content changed. |
-| `auto-exclude-server-side-mods` | `true` | Leaves out mods whose metadata declares them server-side only. |
 | `require-modpack` | `true` | When true, players without AutoModpack are kicked and modded clients sync the pack before joining. When false, the pack is optional: players without the mod join vanilla, and modded clients are asked whether to sync before they join. |
 | `accepted-loaders` | current loader | Extra loaders allowed to join. The set is seeded with this server's loader on first load; this server's loader is always accepted even if you remove it. Unknown names are logged and ignored. Most mods are loader-specific, so change it with care. |
 | `advertise-versions-to-sync` | `true` | Advertises the pack's version metadata (modloader, loader version, Minecraft version) to clients. When false, clients treat the pack as files-only and never switch their launcher instance's versions. See [launcher compatibility](../compatibility/launchers#version-sync-and-switching) for which launchers apply it. |
@@ -59,6 +58,7 @@ Read more about glob syntax on the [Globbing Wikipedia article](https://wikipedi
 | `modpack.<category>.<id>.display-name` | `""` | Name shown to players in the Group Selection screen and the file browsers; blank shows the group id. The map key is the id used by rules and by `requires` and `breaks-with`. |
 | `modpack.<category>.<id>.description` | `""` | Short player-facing description of the group. |
 | `modpack.<category>.<id>.selection` | `OPTIONAL` | One of `REQUIRED`, `RECOMMENDED` or `OPTIONAL`. `REQUIRED` is always installed and cannot be deselected; `RECOMMENDED` arrives preselected and players can opt out; `OPTIONAL` starts unchecked. The factory `main` group sets `REQUIRED`. |
+| `modpack.<category>.<id>.auto-exclude-server-side-mods` | `METADATA` | One of `DISABLED`, `METADATA` or `PLATFORMS`. `DISABLED` ships every jar. `METADATA` drops jars whose own metadata says they are server-only. `PLATFORMS` also asks Modrinth and CurseForge about leftover universal jars. |
 | `modpack.<category>.<id>.requires` | `[]` | Group ids that must also be selected for this group to make sense, for example a shader config pack that needs its shader pack. |
 | `modpack.<category>.<id>.breaks-with` | `[]` | Group ids that cannot be selected alongside this one, for example two mods that replace the same files. |
 | `modpack.<category>.<id>.compatible-platforms` | `[]` | Restricts the group to matching platforms, for example a group of Windows-only mods. See platforms below. |
@@ -68,6 +68,10 @@ Read more about glob syntax on the [Globbing Wikipedia article](https://wikipedi
 Earlier versions wrote two booleans per group, `required` and `default-selected`. They still load: each group holding either one is read as a `selection` value, and the next save rewrites the file with that single key. Nothing is lost in between - a reload applies the same translation, and a group that already has `selection` keeps it.
 
 One pair has no equivalent: `required: true` together with `default-selected: false` asks for a group players cannot deselect and do not receive by default. It becomes `REQUIRED`, which is preselected, and the server log says so when the file is migrated. Write `selection` directly and nothing is collapsed.
+
+### Migrating pack-level server-side exclusion
+
+Earlier versions had one pack-level `auto-exclude-server-side-mods` boolean. It still loads: `false` becomes `DISABLED` on every group that does not already set the key, and `true` (or a missing key) leaves those groups at `METADATA`. The next save writes the key on each group and removes the pack-level one.
 
 ### Platforms
 
