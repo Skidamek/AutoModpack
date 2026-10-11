@@ -133,9 +133,21 @@ flow:
     path: "${active_dir}/config/amp-autotest-alpha.txt"
     content: "amp-autotest-alpha\n"
     timeout: 120s
+  - do: wait_for
+    name: show the offered restart after the config restore
+    timeout: 20s
+    until: { screen: RestartScreen }
+  - do: screenshot
+    name: capture the offered restart after instance restore
+    file: state-history-restored-restart
   - do: click
-    name: leave the timeline for the pack manager
-    select: { text: Back }
+    name: decline the restart and return to multiplayer
+    select: { key: automodpack.restart.cancel }
+  - do: wait_for
+    name: wait for the multiplayer hub
+    timeout: 20s
+    until: { screen: Play Multiplayer }
+  - use: open_pack_manager
   - do: wait_for
     name: show the pack still listed after restore
     timeout: 20s
