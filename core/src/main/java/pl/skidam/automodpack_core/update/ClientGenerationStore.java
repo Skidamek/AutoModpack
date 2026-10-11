@@ -38,12 +38,12 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
- * Reconstructs pack generations offline: the journal mirror supplies a generation's identity, the client CAS its
- * policy document, and the active-state pointer or the pending transaction its ownership ledger. The mirror is the
- * only history store; per-generation records are gone.
+ * Reconstructs pack generations offline: the journal mirror names generations, the client CAS holds witnessed
+ * policies, and the exact ledger comes from the active-state pointer, the pending transaction, or the head mirror.
  */
 public final class ClientGenerationStore {
 	private final ClientStorage storage;
@@ -177,7 +177,7 @@ public final class ClientGenerationStore {
 		return document(transaction.plan().modpackId(), mirrorEntry(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken()), OwnershipLedger.fromFields(transaction.ownershipLedger));
 	}
 
-	/** The newest mirror generation of one pack; its ledger comes from the active pointer when that is the newest generation. */
+	/** The newest mirror generation of one pack; its ledger comes from the active pointer, else the head mirror, else a witnessed fold. */
 	public PackDocument newestDocument(String modpackId) throws IOException {
 		return newestDocument(modpackId, storage.readActiveState());
 	}
@@ -186,7 +186,18 @@ public final class ClientGenerationStore {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		List<JournalEntry> entries = new JournalMirror(storage).entries(normalizedModpackId);
 		if (entries.isEmpty()) throw new IOException("Installed modpack journal mirror is missing: " + normalizedModpackId);
-		return document(normalizedModpackId, entries.get(entries.size() - 1), activeState);
+		JournalEntry newest = entries.get(entries.size() - 1);
+		if (activeState != null && activeState.modpackId.equals(normalizedModpackId) && activeState.contentToken.equals(newest.contentToken()))
+			return document(normalizedModpackId, newest, activeState);
+		GenerationJsons.HeadDocumentFields head = new HeadMirror(storage).read(normalizedModpackId);
+		if (head != null && head.contentToken != null && !head.contentToken.isBlank() && head.policySha1 != null && !head.policySha1.isBlank()) {
+			try {
+				if (newest.contentToken().equals(HashUtils.normalizeSha1(head.contentToken)) && newest.policySha1().equals(HashUtils.normalizeSha1(head.policySha1))) return PackDocument.fromFields(head);
+			} catch (RuntimeException ignored) {
+				// An incomplete or unusable head is not a document; the witnessed fold below is the reconstruction path.
+			}
+		}
+		return document(normalizedModpackId, newest, activeState);
 	}
 
 	/** One mirror generation's document: the entry's policy from the CAS, and the exact active-state ledger when that generation is active, else the mirror replay. */
@@ -433,9 +444,22 @@ public final class ClientGenerationStore {
 	private void unprotectProjection() throws IOException {
 		Path active = storage.activeDirectory();
 		if (!Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) return;
-		try (var paths = Files.walk(active)) {
-			for (Path file : paths.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).toList()) ImmutableFiles.unprotect(file);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); var paths = Files.walk(active)) {
+			for (Path file : paths.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).toList()) {
+				breakSharedObjectLink(file, cache);
+				ImmutableFiles.unprotect(file);
+			}
 		}
+	}
+
+	private void breakSharedObjectLink(Path file, FileCache cache) throws IOException {
+		String hash = cache.getHashOrNull(file);
+		if (hash == null) hash = HashUtils.hashFile(file);
+		if (!HashUtils.isSha1(hash)) return;
+		hash = HashUtils.normalizeSha1(hash);
+		Path object = storage.objectFile(hash);
+		if (!Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.sameInode(file, object)) return;
+		VerifiedFileTransfer.copyBreak(object, file, Files.size(file), hash, cache);
 	}
 
 	/**
@@ -505,10 +529,9 @@ public final class ClientGenerationStore {
 	}
 
 	/**
-	 * The mirror-replay ledger for one entry: policy documents are folded forward exactly like the server replays its
-	 * journal, starting from the first entry whose policy object is in the client CAS. History the client never
-	 * witnessed cannot contribute hashes or groups, so the replay is exact for the active generation and a stable,
-	 * conservative ownership view for older ones.
+	 * The mirror-replay ledger for one entry: policy documents this client has in CAS are folded forward. Entries whose
+	 * policy was never fetched (prefix or hole) are skipped; the server hosts only the current head, so those objects
+	 * cannot appear later. The target itself must be witnessed.
 	 */
 	private OwnershipLedger replayedLedger(String modpackId, JournalEntry target) throws IOException {
 		OwnershipLedger ledger = null;
@@ -517,8 +540,13 @@ public final class ClientGenerationStore {
 			GroupManifest manifest;
 			try {
 				manifest = policyDocument(entry.policySha1());
-			} catch (IOException unavailable) {
-				if (ledger != null) throw new IOException("The journal mirror policy history has a gap at entry " + entry.seq() + ": " + modpackId, unavailable);
+			} catch (MissingGenerationContentException unavailable) {
+				if (entry.seq() == target.seq()) {
+					if (ledger == null)
+						throw new MissingGenerationContentException("No stored policy document reconstructs generation " + target.contentToken() + " of " + modpackId + "; its " + (unwitnessed + 1)
+								+ " journal entries are history this client never fetched, and one sync stores the newest");
+					throw unavailable;
+				}
 				unwitnessed++;
 				continue;
 			}

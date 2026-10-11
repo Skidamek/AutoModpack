@@ -467,11 +467,10 @@ public final class ClientStorage {
 	}
 
 	/**
-	 * Scan-time approximation of the projection gate in the projection loader: whether an active
-	 * projection exists that the on-disk selection would load. Runs before preload, so it reads
-	 * files only; the authoritative decision applies the boot-recovered configuration later.
-	 * Returns the projection's mods directory to hand to loaders that discover mods by directory,
-	 * or {@code null} when the projection must not load.
+	 * Scan-time twin of the projection loader gate: whether {@code active/mods} should be handed to loaders that
+	 * discover mods by directory. The directory loads when it exists, unless selected and active-state disagree or
+	 * the state file was unreadable. A missing pointer with files on disk still loads. Runs before preload, so it
+	 * reads files only.
 	 */
 	public static Path loadableProjectionModsDirectory(Path gameDirectory) {
 		Path activeDirectory = gameDirectory.resolve(CLIENT_ACTIVE_DIR).normalize();
@@ -491,21 +490,19 @@ public final class ClientStorage {
 			scanTimeStateFailure = e;
 			return null;
 		}
-		if (state == null) return null;
-
 		ClientConfigJsons.SelectedModpackFields selected = ConfigTools.read(gameDirectory.resolve(CLIENT_SELECTED_FILE).normalize(), ClientConfigJsons.SelectedModpackFields.class).orElse(null);
 		if (activeSelectionMismatch(selected, state) != null) return null;
 		return activeModsDirectory;
 	}
 
-	/** Why the persisted active selection does not match the configured one, or null when the projection would load. */
+	/** Why selected and active-state disagree, or null when the projection may load (matching pointer, or no pointer). */
 	public static String activeSelectionMismatch(ClientConfigJsons.SelectedModpackFields selected, ClientStorageJsons.ClientGenerationStateFields state) {
 		return activeSelectionMismatch(selected == null ? null : selected.modpackId, state);
 	}
 
 	public static String activeSelectionMismatch(String followId, ClientStorageJsons.ClientGenerationStateFields state) {
 		if (followId == null) followId = "";
-		if (followId.isBlank()) return "no modpack is selected";
+		if (followId.isBlank()) return state == null ? null : "no modpack is selected";
 		if (!ModpackId.isValid(followId)) return "the configured selected modpack ID is invalid: " + followId;
 		if (state == null) return "the active state is missing";
 		if (!followId.equals(state.modpackId)) return "the active state belongs to " + state.modpackId + ", but the selected modpack is " + followId;

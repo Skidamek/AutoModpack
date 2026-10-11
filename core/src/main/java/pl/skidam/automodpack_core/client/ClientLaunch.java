@@ -9,7 +9,6 @@ import java.nio.file.LinkOption;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -139,7 +138,7 @@ public final class ClientLaunch {
 	private void bootLocalOrSelfUpdate(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) throws Exception {
 		boolean projectionActive = hasActiveProjection();
 		if (projectionActive) loadLocalModpack(connectionInfo, secret, projectionActive);
-		else SelfUpdater.update();
+		if (storage.selectedModpackId().isBlank() || !projectionActive) SelfUpdater.update();
 	}
 
 	private void loadLocalModpack(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean projectionActive) throws Exception {
@@ -185,22 +184,12 @@ public final class ClientLaunch {
 		new ModpackUpdater(target, connectionInfo, secret, storage).applyStoredTargetOffline();
 	}
 
-	/** The active pointer is unique state whose unusable content fails the boot in place, so its read failure propagates instead of reading as no projection. */
+	/** Whether {@code active/} should load this boot: the directory exists and selected does not disagree with active-state. */
 	private boolean hasActiveProjection() throws IOException {
-		String followId = storage.selectedModpackId();
-		if (followId.isBlank()) return false;
-		if (!ModpackId.isValid(followId)) {
-			LOGGER.warn("Skipping active modpack load because the configured selected modpack ID is invalid: {}", followId);
-			return false;
-		}
 		if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return false;
-		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-		if (state == null) {
-			LOGGER.warn("Skipping active modpack load because the active projection has no active state");
-			return false;
-		}
-		if (!followId.equals(state.modpackId)) {
-			LOGGER.warn("Skipping active modpack load because active state belongs to {}, but the selected modpack is {}", state.modpackId, followId);
+		String mismatch = ClientStorage.activeSelectionMismatch(storage.selectedModpackId(), storage.readActiveState());
+		if (mismatch != null) {
+			LOGGER.warn("Skipping active modpack load because {}", mismatch);
 			return false;
 		}
 		return true;

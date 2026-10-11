@@ -19,10 +19,7 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.ContentTree;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
-import pl.skidam.automodpack_core.modpack.generation.PackDocument;
-import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Kind;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Snapshot;
 import pl.skidam.automodpack_core.update.InstanceTree.Key;
@@ -35,8 +32,9 @@ import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
- * The user-facing instance timeline: snapshots of states this computer lived, whole-instance checkout, per-file
- * recovery, and forget-prefix. Diffs are computed from parent trees. Restore is offline.
+ * The user-facing instance timeline: snapshots of files this computer lived, whole-instance checkout, per-file
+ * recovery, and forget-prefix. Diffs are computed from parent trees. Restore is an offline file checkout; a loaded
+ * pack stays loaded and is detached so sync cannot overwrite the restored files.
  */
 public final class StateHistory {
 	private StateHistory() {}
@@ -214,25 +212,21 @@ public final class StateHistory {
 				Snapshot snapshot = journal.require(seq);
 				InstanceTree target = InstanceTree.read(storage, snapshot.treeSha1());
 				if (!blobsPresent(storage, target, cache)) throw new IOException("Instance snapshot " + seq + " is missing file data on this computer");
-				if (!identityFeasible(storage, target.identity())) throw new IOException("Pack history has no generation " + target.identity().contentToken() + " for " + target.identity().activeModpackId());
 				if (Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS))
 					throw new IOException("An offline repair is pending; finish or discard it before restoring a timeline snapshot");
 				InstanceTree live = InstanceTree.observe(storage, target.keys(), cache);
 				ChangeSet changes = changesBetween(live, target);
-				String previousFollow = storage.selectedModpackId();
-				SelectionIntent previousSelection = target.identity().activeModpackId().isEmpty()
-						? null
-						: new ClientSelectionStore(storage.selectionFile()).get(target.identity().activeModpackId()).orElse(null);
 				// Unsnapshotted local edits die in the overwrite otherwise, like the single-file restore's LIVE row.
 				if (!live.sameAs(target)) snapshotIfDirty(storage, target.keys(), Kind.LIVE, snapshot.modpackId(), "checkout-" + seq);
 				if (!sameFiles(live, target)) applyTree(storage, live, target, cache);
-				applyIdentity(storage, target.identity());
+				uncondemnRestoredOverlays(storage, target);
+				boolean froze = freezeLoadedPack(storage);
 				InstanceTree after = InstanceTree.observe(storage, target.keys(), cache);
 				if (!sameFiles(after, target)) throw new IOException("Instance restore did not reproduce snapshot " + seq);
 				after.write(storage);
-				boolean metadataChanged = !previousFollow.equals(target.identity().activeModpackId())
-						|| target.identity().selection() != null && !Objects.equals(previousSelection, target.identity().selection());
-				if (!live.sameAs(after) || metadataChanged) journal.append(after.sha1(), Kind.RESTORE, target.identity().activeModpackId(), "restore-" + seq);
+				String restorePack = storage.selectedModpackId();
+				if (restorePack.isBlank()) restorePack = snapshot.modpackId();
+				if (!live.sameAs(after) || froze) journal.append(after.sha1(), Kind.RESTORE, restorePack, "restore-" + seq);
 				Set<String> changedPaths = new HashSet<>();
 				for (ChangeSet.Change change : changes.changes()) changedPaths.add(change.logicalPath());
 				return new CheckoutResult(changes, RestartPolicy.inGame(Set.of(), changedPaths));
@@ -354,10 +348,7 @@ public final class StateHistory {
 			Path object = storage.objectFile(file.sha1());
 			if (FileIntegrity.matchesNamed(destination, file.size(), file.sha1(), cache)) continue;
 			FileTrees.requireNoSymbolicLinkDescendants(storage.root(file.root(), file.overlayPackId().isEmpty() ? "_" : file.overlayPackId()), destination, "instance restore");
-			if (file.root() == Root.PROJECTION) {
-				VerifiedFileTransfer.linkAtomic(object, destination, file.size(), file.sha1(), cache);
-				cache.overwriteCache(destination, file.sha1());
-			} else VerifiedFileTransfer.copyAtomic(object, destination, file.size(), file.sha1(), cache);
+			VerifiedFileTransfer.copyAtomic(object, destination, file.size(), file.sha1(), cache);
 		}
 		for (TrackedFile file : live.files()) {
 			if (wanted.contains(file.key())) continue;
@@ -370,9 +361,22 @@ public final class StateHistory {
 
 	private static Restorability restorabilityOf(ClientStorage storage, InstanceTree target, InstanceTree live, FileCache cache) throws IOException {
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) return Restorability.UPDATE_PENDING;
-		if (live.sameAs(target)) return Restorability.CURRENT;
-		if (!blobsPresent(storage, target, cache) || !identityFeasible(storage, target.identity())) return Restorability.NOT_KEPT;
+		if (sameFiles(live, target)) return Restorability.CURRENT;
+		if (!blobsPresent(storage, target, cache)) return Restorability.NOT_KEPT;
 		return Restorability.READY;
+	}
+
+	private static void uncondemnRestoredOverlays(ClientStorage storage, InstanceTree target) throws IOException {
+		Map<String, Set<String>> restored = new TreeMap<>();
+		for (TrackedFile file : target.files()) {
+			if (file.root() != Root.OVERLAY || file.overlayPackId().isEmpty()) continue;
+			restored.computeIfAbsent(file.overlayPackId(), ignored -> new TreeSet<>()).add(file.path());
+		}
+		for (var entry : restored.entrySet()) {
+			TreeSet<String> remaining = new TreeSet<>(storage.readOverlayState(entry.getKey()).deletedPaths);
+			if (!remaining.removeAll(entry.getValue())) continue;
+			storage.writeOverlayState(entry.getKey(), remaining);
+		}
 	}
 
 	private static void requireNoPendingUpdate(ClientStorage storage) throws IOException {
@@ -380,39 +384,13 @@ public final class StateHistory {
 			throw new IOException("A modpack update is still pending; finish it or restart the game before changing the instance timeline");
 	}
 
-	private static boolean identityFeasible(ClientStorage storage, InstanceTree.LiveIdentity identity) throws IOException {
-		if (identity.activeModpackId().isEmpty()) return true;
-		for (JournalEntry entry : new JournalMirror(storage).entries(identity.activeModpackId()))
-			if (entry.contentToken().equals(identity.contentToken())) return true;
-		return false;
-	}
-
-	private static void applyIdentity(ClientStorage storage, InstanceTree.LiveIdentity identity) throws IOException {
-		if (identity.activeModpackId().isEmpty()) {
-			storage.writeSelectedModpackId("");
-			storage.clearActiveState();
-			return;
-		}
-		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		JournalEntry generation = null;
-		for (JournalEntry entry : new JournalMirror(storage).entries(identity.activeModpackId()))
-			if (entry.contentToken().equals(identity.contentToken())) {
-				generation = entry;
-				break;
-			}
-		if (generation == null) throw new IOException("Pack history has no generation " + identity.contentToken() + " for " + identity.activeModpackId());
-		PackDocument document = generations.document(identity.activeModpackId(), generation);
-		storage.writeActiveState(document, identity.selection(), true);
-		storage.writeSelectedModpackId(identity.activeModpackId());
-		SelectionIntent target = identity.selection();
-		// Checking an instance out is wanting what it ran: the snapshot's applied selection becomes the desire.
-		if (target != null) new ClientSelectionStore(storage.selectionFile()).put(identity.activeModpackId(), target);
-		Set<String> written = new HashSet<>();
-		for (InstanceTree.Tombstone tombstone : identity.tombstones()) {
-			storage.writeOverlayState(tombstone.modpackId(), new TreeSet<>(tombstone.deletedPaths()));
-			written.add(tombstone.modpackId());
-		}
-		if (!written.contains(identity.activeModpackId())) storage.writeOverlayState(identity.activeModpackId(), Set.of());
+	/** Detaches the loaded pack so launch/join sync cannot overwrite restored files. Returns true when this call flipped the flag. */
+	private static boolean freezeLoadedPack(ClientStorage storage) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+		if (state == null || state.modpackId == null || state.modpackId.isBlank()) return false;
+		boolean wasDetached = state.detached;
+		new ClientGenerationStore(storage).declareDetached(state.modpackId);
+		return !wasDetached;
 	}
 
 	private static void acquireTreeBlobs(ClientStorage storage, InstanceTree tree, FileCache cache) throws IOException {

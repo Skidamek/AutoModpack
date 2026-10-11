@@ -11,10 +11,11 @@ import xyz.bluspring.knit.loader.api.KnitNativeModCompatExtension
  * mods directory. Fabric-side mods of the projection are injected into the loader by
  * AutoModpack itself and are skipped by the scan as natively present.
  *
- * The directory is only handed over when AutoModpack's own gate says the projection would
- * load (an active state that matches the on-disk selection), so a stale, detached, or
- * unselected projection is never exposed. Kilt sees exactly the directory AutoModpack
- * would load from.
+ * The directory is handed over when AutoModpack's own gate says the projection would
+ * load: the mods folder exists, and selected does not disagree with active-state. A
+ * missing pointer with jars on disk still loads. A half pointer (one of selected /
+ * active-state missing, or the ids differ) is not exposed. Kilt sees exactly the
+ * directory AutoModpack would load from.
  *
  * The handover is the raw directory, and dedup against the standard mods directory is
  * Kilt's own (mods already discovered natively are skipped) - that is also what lets a

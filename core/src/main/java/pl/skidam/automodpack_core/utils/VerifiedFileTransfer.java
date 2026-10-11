@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.utils;
 
 import java.io.IOException;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
@@ -114,6 +115,27 @@ public final class VerifiedFileTransfer {
 			if (Files.size(temporary) != expectedSize) throw new IOException("Linked file failed size verification: " + temporary);
 			DurableFiles.replace(temporary, targetFile);
 			return true;
+		} finally {
+			Files.deleteIfExists(temporary);
+		}
+	}
+
+	/**
+	 * Replaces a destination that shares the source inode with a private copy. Protection is per-inode, so unprotecting
+	 * a hard-linked projection would otherwise make the content-addressed object writable.
+	 */
+	public static void copyBreak(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
+		requireValidSource(sourceFile, expectedSize, expectedSha1, cache);
+		Path temporary = copyToTemporary(sourceFile, targetFile, expectedSize, expectedSha1, cache);
+		try {
+			try {
+				DurableFiles.replace(temporary, targetFile);
+			} catch (AccessDeniedException denied) {
+				ImmutableFiles.unprotect(targetFile);
+				DurableFiles.replace(temporary, targetFile);
+				ImmutableFiles.protect(sourceFile);
+			}
+			record(cache, targetFile, expectedSha1);
 		} finally {
 			Files.deleteIfExists(temporary);
 		}

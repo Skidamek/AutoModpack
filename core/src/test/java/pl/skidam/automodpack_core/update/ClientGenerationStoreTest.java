@@ -43,6 +43,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 class ClientGenerationStoreTest {
 	private static final String FIRST_PACK = "abc1234";
@@ -107,20 +108,25 @@ class ClientGenerationStoreTest {
 	@Test
 	void declaringDetachmentFreesTheActiveProjection() throws Exception {
 		ClientStorage storage = storage();
-		PackDocument document = document(FIRST_PACK, "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", 12, Instant.now());
+		byte[] bytes = "kept".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(bytes);
+		ClientObjectStore.storeObject(storage, hash, bytes);
+		Path object = storage.objectFile(hash);
+		PackDocument document = document(FIRST_PACK, hash, bytes.length, Instant.now());
 		storage.writeActiveState(document);
 		Path activeFile = storage.activePath("config/kept.txt");
 		Files.createDirectories(activeFile.getParent());
-		Files.writeString(activeFile, "kept", StandardCharsets.UTF_8);
-		ImmutableFiles.protect(activeFile);
+		VerifiedFileTransfer.linkAtomic(object, activeFile, bytes.length, hash, null);
+		assertTrue(ImmutableFiles.isProtected(object));
 		assertTrue(ImmutableFiles.isProtected(activeFile));
 
 		new ClientGenerationStore(storage).declareDetached(FIRST_PACK);
 
 		assertTrue(storage.isDetached(FIRST_PACK));
+		assertTrue(ImmutableFiles.isProtected(object));
 		assertFalse(ImmutableFiles.isProtected(activeFile));
-		// The owner can now edit and delete their kept state.
 		Files.writeString(activeFile, "edited", StandardCharsets.UTF_8);
+		assertEquals("kept", Files.readString(object, StandardCharsets.UTF_8));
 		Files.delete(activeFile);
 	}
 
@@ -419,6 +425,44 @@ class ClientGenerationStoreTest {
 		MissingGenerationContentException failure = assertThrows(MissingGenerationContentException.class, () -> new ClientGenerationStore(storage).newestDocument(FIRST_PACK));
 		assertTrue(failure.getMessage().contains(document.contentToken()), "the failure names the generation that is not stored, not the entry that could not be reached");
 		assertFalse(failure.getMessage().contains("never reaches"), "the old message blamed the mirror for content that was simply never fetched");
+	}
+
+	@Test
+	void newestDocumentSkipsAnUnwitnessedMiddlePolicy() throws Exception {
+		ClientStorage storage = storage();
+		String firstHash = store(storage, "first-object");
+		PackDocument first = document(FIRST_PACK, firstHash, Files.size(storage.objectFile(firstHash)), Instant.parse("2026-01-01T00:00:00Z"));
+		String secondHash = store(storage, "second-object");
+		PackDocument second = document(FIRST_PACK, secondHash, Files.size(storage.objectFile(secondHash)), Instant.parse("2026-01-02T00:00:00Z"), first);
+		String thirdHash = store(storage, "third-object");
+		PackDocument third = document(FIRST_PACK, thirdHash, Files.size(storage.objectFile(thirdHash)), Instant.parse("2026-01-03T00:00:00Z"), second);
+		TestPacks.stageGeneration(storage, first);
+		TestPacks.stageGeneration(storage, second);
+		TestPacks.stageGeneration(storage, third);
+		Files.delete(storage.objectFile(second.policySha1()));
+
+		PackDocument newest = new ClientGenerationStore(storage).newestDocument(FIRST_PACK);
+
+		assertEquals(third.contentToken(), newest.contentToken());
+		assertEquals(third.policySha1(), newest.policySha1());
+	}
+
+	@Test
+	void newestDocumentSkipsAHeadMirrorWhoseTokensAreNotDigests() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "projection-object");
+		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
+		TestPacks.stageGeneration(storage, document);
+		Path headFile = storage.historyHeadFile(FIRST_PACK);
+		Files.createDirectories(headFile.getParent());
+		GenerationJsons.HeadDocumentFields fields = TestPacks.head(document.manifest());
+		fields.contentToken = "not-a-sha1";
+		Files.writeString(headFile, ConfigTools.GSON.toJson(fields), StandardCharsets.UTF_8);
+
+		PackDocument newest = new ClientGenerationStore(storage).newestDocument(FIRST_PACK);
+
+		assertEquals(document.contentToken(), newest.contentToken());
+		assertEquals(document.policySha1(), newest.policySha1());
 	}
 
 	@Test

@@ -33,6 +33,8 @@ import pl.skidam.automodpack_core.update.InstanceTree.LiveIdentity;
 import pl.skidam.automodpack_core.update.InstanceTree.TrackedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 class ClientStateJournalTest {
 	@TempDir
@@ -92,9 +94,14 @@ class ClientStateJournalTest {
 		ClientStateJournal.open(storage).append(tree.sha1(), Kind.UPDATE, "abc1234", "txn-1");
 
 		assertThrows(Exception.class, () -> StateHistory.restoreFile(storage, 1, Root.PROJECTION, "mods/player.jar"));
+		PackDocument document = TestPacks.document(TestPacks.manifest("pack", "config/pack.txt", "pack-file"));
+		TestPacks.stageGeneration(storage, document);
+		storage.writeActiveState(document, new SelectionIntent(Set.of("main")));
+		storage.writeSelectedModpackId(document.manifest().modpackId());
 		Path restored = StateHistory.restoreFile(storage, 1, Root.GAME_DIR, "oldmods/player.jar");
 		assertEquals("player-mod", Files.readString(restored, StandardCharsets.UTF_8));
 		assertEquals(Kind.FILE_RESTORE, StateHistory.entries(storage).get(StateHistory.entries(storage).size() - 1).kind());
+		assertFalse(storage.readActiveState().detached);
 
 		Files.writeString(restored, "changed by hand", StandardCharsets.UTF_8);
 		assertThrows(Exception.class, () -> StateHistory.restoreFile(storage, 1, Root.GAME_DIR, "oldmods/player.jar"));
@@ -126,7 +133,7 @@ class ClientStateJournalTest {
 	}
 
 	@Test
-	void checkoutRefusesWhenPackHistoryIsGone() throws Exception {
+	void checkoutRestoresFilesWhenPackHistoryIsGone() throws Exception {
 		ClientStorage storage = storage();
 		byte[] bytes = "restored".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.sha1(bytes);
@@ -140,9 +147,10 @@ class ClientStateJournalTest {
 		Files.createDirectories(live.getParent());
 		Files.writeString(live, "current", StandardCharsets.UTF_8);
 
-		assertEquals(StateHistory.Restorability.NOT_KEPT, StateHistory.views(storage).get(0).restorability());
-		assertThrows(IOException.class, () -> StateHistory.checkout(storage, 1));
-		assertEquals("current", Files.readString(live, StandardCharsets.UTF_8));
+		assertEquals(StateHistory.Restorability.READY, StateHistory.views(storage).get(0).restorability());
+		StateHistory.checkout(storage, 1);
+		assertEquals("restored", Files.readString(live, StandardCharsets.UTF_8));
+		assertNull(storage.readActiveState());
 	}
 
 	@Test
@@ -182,7 +190,7 @@ class ClientStateJournalTest {
 		assertEquals(StateHistory.Restorability.READY, StateHistory.views(storage).get(0).restorability());
 		StateHistory.checkout(storage, 1);
 		assertEquals("restored pack file", Files.readString(projected, StandardCharsets.UTF_8));
-		assertTrue(storage.readActiveState().detached);
+		assertNull(storage.readActiveState());
 
 		storage.clearActiveState();
 		new ClientSelectionStore(storage.selectionFile()).remove(document.manifest().modpackId());
@@ -216,8 +224,8 @@ class ClientStateJournalTest {
 
 		StateHistory.CheckoutResult result = StateHistory.checkout(storage, 1);
 
-		assertEquals("abc1234", storage.selectedModpackId());
-		assertTrue(storage.readActiveState().detached);
+		assertEquals("", storage.selectedModpackId());
+		assertNull(storage.readActiveState());
 		assertEquals("mod", Files.readString(storage.activePath("mods/test.jar"), StandardCharsets.UTF_8));
 		assertEquals(RestartDemand.REQUIRED, result.restartDemand());
 		assertEquals(1, result.changes().changes().size());
@@ -225,7 +233,78 @@ class ClientStateJournalTest {
 	}
 
 	@Test
-	void checkoutClearsStaleSelectionEvenWhenFilesAlreadyMatch() throws Exception {
+	void checkoutKeepsTheLoadedPackAndDetaches() throws Exception {
+		ClientStorage storage = storage();
+		byte[] currentBytes = "current".getBytes(StandardCharsets.UTF_8);
+		String currentHash = HashUtils.sha1(currentBytes);
+		ClientObjectStore.storeObject(storage, currentHash, currentBytes);
+		GroupManifest.GroupFile mod = new GroupManifest.GroupFile(currentBytes.length, "mod", false, currentHash, null);
+		GroupManifest.Group group = new GroupManifest.Group("", "test pack", "General", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Set.of(), Map.of("mods/test.jar", mod));
+		GroupManifest manifest = new GroupManifest("abc1234", "test pack", "", "", "", "", Map.of("main", group));
+		PackDocument document = PackDocument.create(manifest, TestPacks.policySha1(manifest), TestPacks.CREATED, null);
+		TestPacks.stageGeneration(storage, document);
+		SelectionIntent selection = new SelectionIntent(Set.of("main"));
+		storage.writeActiveState(document, selection);
+		storage.writeSelectedModpackId("abc1234");
+		new ClientSelectionStore(storage.selectionFile()).put("abc1234", selection);
+		Path projected = storage.activePath("mods/test.jar");
+		Files.createDirectories(projected.getParent());
+		Files.write(projected, currentBytes);
+		InstanceTree empty = InstanceTree.of(LiveIdentity.empty(), List.of());
+		empty.write(storage);
+		ClientStateJournal journal = ClientStateJournal.open(storage);
+		journal.append(empty.sha1(), Kind.REMOVAL, "abc1234", "before-pack");
+		InstanceTree installed = InstanceTree.of(new LiveIdentity("abc1234", document.contentToken(), false, selection, List.of()),
+				List.of(new TrackedFile(Root.PROJECTION, "", "mods/test.jar", currentHash, currentBytes.length)));
+		installed.write(storage);
+		journal.append(installed.sha1(), Kind.INSTALL, "abc1234", "install");
+
+		StateHistory.CheckoutResult result = StateHistory.checkout(storage, 1);
+
+		assertEquals("abc1234", storage.selectedModpackId());
+		assertEquals("abc1234", storage.readActiveState().modpackId);
+		assertTrue(storage.readActiveState().detached);
+		assertEquals(selection, new ClientSelectionStore(storage.selectionFile()).get("abc1234").orElseThrow());
+		assertFalse(Files.exists(projected));
+		assertEquals(RestartDemand.REQUIRED, result.restartDemand());
+		assertEquals(StateHistory.Restorability.CURRENT, StateHistory.views(storage).get(0).restorability());
+	}
+
+	@Test
+	void checkoutDetachesWithoutOpeningTheCasObject() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "mod".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(bytes);
+		ClientObjectStore.storeObject(storage, hash, bytes);
+		Path object = storage.objectFile(hash);
+		GroupManifest.GroupFile mod = new GroupManifest.GroupFile(bytes.length, "mod", false, hash, null);
+		GroupManifest.Group group = new GroupManifest.Group("", "test pack", "General", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Set.of(), Map.of("mods/test.jar", mod));
+		GroupManifest manifest = new GroupManifest("abc1234", "test pack", "", "", "", "", Map.of("main", group));
+		PackDocument document = PackDocument.create(manifest, TestPacks.policySha1(manifest), TestPacks.CREATED, null);
+		TestPacks.stageGeneration(storage, document);
+		SelectionIntent selection = new SelectionIntent(Set.of("main"));
+		storage.writeActiveState(document, selection);
+		storage.writeSelectedModpackId("abc1234");
+		Path projected = storage.activePath("mods/test.jar");
+		Files.createDirectories(projected.getParent());
+		VerifiedFileTransfer.linkAtomic(object, projected, bytes.length, hash, null);
+		InstanceTree installed = InstanceTree.of(new LiveIdentity("abc1234", document.contentToken(), false, selection, List.of()),
+				List.of(new TrackedFile(Root.PROJECTION, "", "mods/test.jar", hash, bytes.length)));
+		installed.write(storage);
+		ClientStateJournal.open(storage).append(installed.sha1(), Kind.INSTALL, "abc1234", "install");
+		assertTrue(ImmutableFiles.isProtected(object));
+
+		StateHistory.checkout(storage, 1);
+
+		assertTrue(storage.readActiveState().detached);
+		assertTrue(ImmutableFiles.isProtected(object));
+		assertFalse(ImmutableFiles.isProtected(projected));
+		Files.writeString(projected, "edited", StandardCharsets.UTF_8);
+		assertEquals("mod", Files.readString(object, StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void checkoutLeavesFollowAloneWhenFilesAlreadyMatchAndNothingIsLoaded() throws Exception {
 		ClientStorage storage = storage();
 		InstanceTree target = InstanceTree.of(LiveIdentity.empty(), List.of());
 		target.write(storage);
@@ -234,11 +313,11 @@ class ClientStateJournalTest {
 
 		StateHistory.CheckoutResult result = StateHistory.checkout(storage, 1);
 
-		assertEquals("", storage.selectedModpackId());
+		assertEquals("abc1234", storage.selectedModpackId());
 		assertNull(storage.readActiveState());
 		assertEquals(RestartDemand.NONE, result.restartDemand());
 		assertTrue(result.changes().changes().isEmpty());
-		assertEquals(Kind.RESTORE, ClientStateJournal.open(storage).head().kind());
+		assertEquals(Kind.DEACTIVATION, ClientStateJournal.open(storage).head().kind());
 	}
 
 	@Test

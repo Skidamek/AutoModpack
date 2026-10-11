@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
 
-import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.ModFileCache;
@@ -60,9 +59,7 @@ final class ProjectionLoader {
 
 	void loadSelectedActiveProjection() throws Exception {
 		if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return;
-		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-		if (state == null) return;
-		String mismatch = ClientStorage.activeSelectionMismatch(storage.selectedModpackId(), state);
+		String mismatch = ClientStorage.activeSelectionMismatch(storage.selectedModpackId(), storage.readActiveState());
 		if (mismatch != null) {
 			LOGGER.warn("Skipping active modpack load after preload because {}", mismatch);
 			return;
@@ -100,14 +97,10 @@ final class ProjectionLoader {
 			LOGGER.error("Failed to list standard mods directory", e);
 		}
 
-		Set<String> activeModPaths = new HashSet<>();
 		Set<String> editableActiveModPaths = new HashSet<>();
 		ModpackJsons.ModpackContentFields target = storedTarget.get();
 		if (target != null && target.list != null) for (var item : target.list) {
-			if (!ModpackPathPolicy.isActiveMod(item.file, item.type)) continue;
-			String path = LogicalPath.normalize(item.file);
-			activeModPaths.add(path);
-			if (item.editable) editableActiveModPaths.add(path);
+			if (item.editable && ModpackPathPolicy.isActiveMod(item.file, item.type)) editableActiveModPaths.add(LogicalPath.normalize(item.file));
 		}
 		List<String> pinnedModIds = clientConfig == null || clientConfig.pinnedModIds == null ? List.of() : clientConfig.pinnedModIds;
 		Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT).toAbsolutePath().normalize();
@@ -117,7 +110,7 @@ final class ProjectionLoader {
 			try (Stream<Path> activeMods = Files.walk(activeModsDirectory)) {
 				for (Path path : activeMods.filter(JarUtils::isRegularJar).toList()) {
 					String relative = activeModLogicalPath(activeModsDirectory, path);
-					if (relative == null || !activeModPaths.contains(relative)) continue;
+					if (relative == null) continue;
 					if (Files.isRegularFile(storage.gamePath(relative), LinkOption.NOFOLLOW_LINKS)) liveModPaths.add(relative);
 					Path jar = storage.activePath(relative);
 					String hash = cache.getHashOrNull(jar);
