@@ -147,15 +147,13 @@ public final class StateHistory {
 		if (InstanceTree.isRunningModJar(storage.gamePath(path))) return FileGate.PROTECTED;
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
 		if (active == null) return FileGate.AVAILABLE;
-		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-			var target = new ClientGenerationStore(storage).readActiveTarget().orElse(null);
-			if (target == null) return FileGate.AVAILABLE;
-			String normalized = LogicalPath.normalize(path);
-			if (target.flatTarget().list != null)
-				for (var item : target.flatTarget().list)
-					if (LogicalPath.normalize(item.file).equals(normalized)) return item.editable ? FileGate.AVAILABLE : FileGate.OWNED;
-			return FileGate.AVAILABLE;
-		}
+		var target = new ClientGenerationStore(storage).readActiveTarget().orElse(null);
+		if (target == null) return FileGate.AVAILABLE;
+		String normalized = LogicalPath.normalize(path);
+		if (target.flatTarget().list != null)
+			for (var item : target.flatTarget().list)
+				if (LogicalPath.normalize(item.file).equals(normalized)) return item.editable ? FileGate.AVAILABLE : FileGate.OWNED;
+		return FileGate.AVAILABLE;
 	}
 
 	/** Snapshot live if it differs from head. Kind is LIVE when this is a dirty-before row. */
@@ -218,11 +216,11 @@ public final class StateHistory {
 				ChangeSet changes = changesBetween(live, target);
 				// Unsnapshotted local edits die in the overwrite otherwise, like the single-file restore's LIVE row.
 				if (!live.sameAs(target)) snapshotIfDirty(storage, target.keys(), Kind.LIVE, snapshot.modpackId(), "checkout-" + seq);
-				if (!sameFiles(live, target)) applyTree(storage, live, target, cache);
+				if (!live.sameFiles(target)) applyTree(storage, live, target, cache);
 				uncondemnRestoredOverlays(storage, target);
 				boolean froze = freezeLoadedPack(storage);
 				InstanceTree after = InstanceTree.observe(storage, target.keys(), cache);
-				if (!sameFiles(after, target)) throw new IOException("Instance restore did not reproduce snapshot " + seq);
+				if (!after.sameFiles(target)) throw new IOException("Instance restore did not reproduce snapshot " + seq);
 				after.write(storage);
 				String restorePack = storage.selectedModpackId();
 				if (restorePack.isBlank()) restorePack = snapshot.modpackId();
@@ -361,7 +359,7 @@ public final class StateHistory {
 
 	private static Restorability restorabilityOf(ClientStorage storage, InstanceTree target, InstanceTree live, FileCache cache) throws IOException {
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) return Restorability.UPDATE_PENDING;
-		if (sameFiles(live, target)) return Restorability.CURRENT;
+		if (live.sameFiles(target)) return Restorability.CURRENT;
 		if (!blobsPresent(storage, target, cache)) return Restorability.NOT_KEPT;
 		return Restorability.READY;
 	}
@@ -423,17 +421,6 @@ public final class StateHistory {
 			if (now.sha1().equals(before.sha1()) && now.size() == before.size()) continue;
 			UpdatePlan.ProjectedFile wanted = projected.get(key);
 			if (wanted == null || !wanted.present() || !now.sha1().equalsIgnoreCase(wanted.expectedHash()) || now.size() != wanted.expectedSize()) return false;
-		}
-		return true;
-	}
-
-	/** A checkout must reproduce the snapshot's files exactly; the appended row records the state as it actually came back. */
-	private static boolean sameFiles(InstanceTree left, InstanceTree right) {
-		if (left.files().size() != right.files().size()) return false;
-		for (int index = 0; index < left.files().size(); index++) {
-			TrackedFile a = left.files().get(index);
-			TrackedFile b = right.files().get(index);
-			if (a.root() != b.root() || !a.overlayPackId().equals(b.overlayPackId()) || !a.path().equals(b.path()) || !a.sha1().equals(b.sha1()) || a.size() != b.size()) return false;
 		}
 		return true;
 	}

@@ -236,6 +236,18 @@ public final class InstanceTree {
 		return sha1.equals(other.sha1);
 	}
 
+	/** File rows only: checkout restorability ignores identity (detach, selection, tombstones). */
+	boolean sameFiles(InstanceTree other) {
+		if (files.size() != other.files.size()) return false;
+		Map<Key, TrackedFile> right = new HashMap<>();
+		for (TrackedFile file : other.files) right.put(file.key(), file);
+		for (TrackedFile left : files) {
+			TrackedFile match = right.get(left.key());
+			if (match == null || !left.sha1().equals(match.sha1()) || left.size() != match.size()) return false;
+		}
+		return true;
+	}
+
 	private static ClientStorageJsons.InstanceTreeFields toFields(LiveIdentity identity, List<TrackedFile> files) {
 		ClientStorageJsons.InstanceTreeFields fields = new ClientStorageJsons.InstanceTreeFields();
 		fields.activeModpackId = identity.activeModpackId();
