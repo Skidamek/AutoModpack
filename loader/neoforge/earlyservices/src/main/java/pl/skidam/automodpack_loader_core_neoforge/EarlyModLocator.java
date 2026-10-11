@@ -32,7 +32,7 @@ import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
  * guard.
  *
  * <p>
- * Preload runs from {@link EarlyServiceBootstrapper}'s GraphicsBootstrapper phase, before mod
+ * Preload runs from {@link EarlyServiceBootstrapper} / {@link EarlyBootstrap} before mod
  * discovery, so {@code ModpackLoader.modsToLoad} is already populated by the time we get here.
  */
 public class EarlyModLocator implements IModFileCandidateLocator {
@@ -80,7 +80,7 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 
 	/**
 	 * Appends the hosted jars to FMLLoader's classloader chain (see {@link #appendToFmlClassLoaderChain}),
-	 * registers them for the service locators, and fires the jars' own GraphicsBootstrappers in place.
+	 * registers them for the service locators, and fires the jars' own early bootstrappers in place.
 	 */
 	static void hostInPlace(List<Path> earlyServiceJars, String[] arguments) {
 		ClassLoader childLoader = appendToFmlClassLoaderChain(earlyServiceJars);
@@ -106,6 +106,7 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 		EarlyServiceLayer.register(earlyServiceJars);
 
 		for (Path jar : earlyServiceJars) {
+			invokeEarlyBootstrappers(jar, childLoader, arguments);
 			for (String impl : EarlyServiceLayer.serviceImpls(jar, EarlyServiceLayer.GRAPHICS_BOOTSTRAPPER_SERVICE)) {
 				try {
 					GraphicsBootstrapper bootstrapper = (GraphicsBootstrapper) Class.forName(impl, true, childLoader).getDeclaredConstructor()
@@ -116,6 +117,29 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 				} catch (Throwable t) {
 					Constants.LOGGER.error("[AutoModpack] In-place GraphicsBootstrapper {} from {} failed", impl, jar.getFileName(), t);
 				}
+			}
+		}
+	}
+
+	private static Class<?> earlyBootstrapperType() {
+		try {
+			return Class.forName("net.neoforged.neoforgespi.EarlyBootstrapper");
+		} catch (ClassNotFoundException e) {
+			return null;
+		}
+	}
+
+	private static void invokeEarlyBootstrappers(Path jar, ClassLoader childLoader, String[] arguments) {
+		Class<?> type = earlyBootstrapperType();
+		if (type == null) return;
+		for (String impl : EarlyServiceLayer.serviceImpls(jar, EarlyServiceLayer.EARLY_BOOTSTRAPPER_SERVICE)) {
+			try {
+				Object bootstrapper = Class.forName(impl, true, childLoader).getDeclaredConstructor().newInstance();
+				Object args = Class.forName("net.neoforged.fml.loading.ProgramArgs").getMethod("from", String[].class).invoke(null, (Object) arguments);
+				Constants.LOGGER.debug("[AutoModpack] Invoking in-place EarlyBootstrapper {} from {}", impl, jar.getFileName());
+				type.getMethod("bootstrap", args.getClass()).invoke(bootstrapper, args);
+			} catch (Throwable t) {
+				Constants.LOGGER.error("[AutoModpack] In-place EarlyBootstrapper {} from {} failed", impl, jar.getFileName(), t);
 			}
 		}
 	}

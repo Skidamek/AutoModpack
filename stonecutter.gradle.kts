@@ -59,7 +59,8 @@ extra["loaderVersions"] =
 		"loader-forge-earlyservices" to structuredString("1.20.1-forge", "deps", "forge"),
 		"loader-modlauncher-earlyservices" to structuredString("1.20.1-forge", "deps", "forge"),
 		"loader-neoforge-fml4" to structuredString("1.21.1-neoforge", "deps", "neoforge"),
-		"loader-neoforge-earlyservices" to structuredString("1.21.10-neoforge", "deps", "neoforge"),
+		// 26.3 for EarlyBootstrapper; classes loaded on older FML must not mention that type.
+		"loader-neoforge-earlyservices" to structuredString("26.3-neoforge", "deps", "neoforge"),
 	)
 
 stonecutter.parameters {

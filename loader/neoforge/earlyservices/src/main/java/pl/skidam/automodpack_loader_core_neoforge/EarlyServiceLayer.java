@@ -19,8 +19,8 @@ import pl.skidam.automodpack_core.loader.ServiceJarIndex;
  * chained onto one flat {@code URLClassLoader} lineage that {@code FMLLoader} owns and grows via
  * {@code appendLoader}. Hosting happens in {@link EarlyServiceBootstrapper}, before
  * {@code ModDiscoverer} enumerates locators and readers, so those implementations load natively.
- * GraphicsBootstrappers of hosted jars are invoked from the bootstrapper because FML's own
- * bootstrapper pass is already running when we append. {@code FMLLoader.buildTransformingLoader()}
+ * Bootstrappers of hosted jars are invoked from the bootstrapper because FML's own
+ * bootstrapper pass has already started (or, for EarlyBootstrapper, already finished) when we append. {@code FMLLoader.buildTransformingLoader()}
  * later does {@code gameLoader.setFallbackClassLoader(currentClassLoader)}, so game code resolves
  * these jars through that fallback with no {@code addReads} bridge.
  */
@@ -29,6 +29,7 @@ public final class EarlyServiceLayer {
 	private EarlyServiceLayer() {}
 
 	public static final String GRAPHICS_BOOTSTRAPPER_SERVICE = LoaderServicePaths.NEOFORGE_GRAPHICS_BOOTSTRAPPER;
+	public static final String EARLY_BOOTSTRAPPER_SERVICE = LoaderServicePaths.NEOFORGE_EARLY_BOOTSTRAPPER;
 	public static final String CANDIDATE_LOCATOR_SERVICE = LoaderServicePaths.NEOFORGE_CANDIDATE_LOCATOR;
 	public static final String DEPENDENCY_LOCATOR_SERVICE = LoaderServicePaths.NEOFORGE_DEPENDENCY_LOCATOR;
 	public static final String LANGUAGE_LOADER_SERVICE = LoaderServicePaths.NEOFORGE_LANGUAGE_LOADER;
@@ -36,11 +37,11 @@ public final class EarlyServiceLayer {
 	public static final String CLASS_PROCESSOR_SERVICE = LoaderServicePaths.NEOFORGE_CLASS_PROCESSOR;
 	public static final String CLASS_PROCESSOR_PROVIDER_SERVICE = LoaderServicePaths.NEOFORGE_CLASS_PROCESSOR_PROVIDER;
 
-	public static final Set<String> HANDLEABLE_SERVICES = Set.of(GRAPHICS_BOOTSTRAPPER_SERVICE, CANDIDATE_LOCATOR_SERVICE, DEPENDENCY_LOCATOR_SERVICE,
+	public static final Set<String> HANDLEABLE_SERVICES = Set.of(GRAPHICS_BOOTSTRAPPER_SERVICE, EARLY_BOOTSTRAPPER_SERVICE, CANDIDATE_LOCATOR_SERVICE, DEPENDENCY_LOCATOR_SERVICE,
 			MOD_FILE_READER_SERVICE, LANGUAGE_LOADER_SERVICE, CLASS_PROCESSOR_SERVICE, CLASS_PROCESSOR_PROVIDER_SERVICE);
 
 	private static final Set<String> HANDLED_SERVICES = computeHandledServices();
-	private static final List<String> INVOKED_SERVICES = List.of(GRAPHICS_BOOTSTRAPPER_SERVICE);
+	private static final List<String> INVOKED_SERVICES = List.of(GRAPHICS_BOOTSTRAPPER_SERVICE, EARLY_BOOTSTRAPPER_SERVICE);
 
 	private static Set<String> computeHandledServices() {
 		Set<String> handled = new HashSet<>();
@@ -60,6 +61,7 @@ public final class EarlyServiceLayer {
 			handled.add(LoaderServicePaths.NEOFORGE_IMMEDIATE_WINDOW_PROVIDER);
 		}
 		handled.add(LANGUAGE_LOADER_SERVICE);
+		addIfPresent(handled, "net.neoforged.neoforgespi.EarlyBootstrapper", EARLY_BOOTSTRAPPER_SERVICE);
 		addIfPresent(handled, "net.neoforged.neoforgespi.transformation.ClassProcessor", CLASS_PROCESSOR_SERVICE);
 		addIfPresent(handled, "net.neoforged.neoforgespi.transformation.ClassProcessorProvider", CLASS_PROCESSOR_PROVIDER_SERVICE);
 		return Set.copyOf(handled);

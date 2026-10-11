@@ -30,6 +30,7 @@ public final class LoaderServicePaths {
 	public static final String NEOFORGE_LANGUAGE_LOADER = "META-INF/services/net.neoforged.neoforgespi.language.IModLanguageLoader";
 	public static final String NEOFORGE_CANDIDATE_LOCATOR = "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator";
 	public static final String NEOFORGE_GRAPHICS_BOOTSTRAPPER = "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper";
+	public static final String NEOFORGE_EARLY_BOOTSTRAPPER = "META-INF/services/net.neoforged.neoforgespi.EarlyBootstrapper";
 	public static final String NEOFORGE_CLASS_PROCESSOR = "META-INF/services/net.neoforged.neoforgespi.transformation.ClassProcessor";
 	public static final String NEOFORGE_CLASS_PROCESSOR_PROVIDER = "META-INF/services/net.neoforged.neoforgespi.transformation.ClassProcessorProvider";
 	public static final String NEOFORGE_IMMEDIATE_WINDOW_PROVIDER = "META-INF/services/net.neoforged.neoforgespi.earlywindow.ImmediateWindowProvider";
@@ -41,7 +42,7 @@ public final class LoaderServicePaths {
 
 	// Broad, cross-version set of NeoForge service files, same purpose as FORGE_SERVICES.
 	public static final Set<String> NEOFORGE_SERVICES = Set.of(NEOFORGE_MOD_LOCATOR, NEOFORGE_DEPENDENCY_LOCATOR, NEOFORGE_MOD_FILE_READER,
-			NEOFORGE_LANGUAGE_LOADER, NEOFORGE_CANDIDATE_LOCATOR, NEOFORGE_GRAPHICS_BOOTSTRAPPER, NEOFORGE_CLASS_PROCESSOR,
+			NEOFORGE_LANGUAGE_LOADER, NEOFORGE_CANDIDATE_LOCATOR, NEOFORGE_GRAPHICS_BOOTSTRAPPER, NEOFORGE_EARLY_BOOTSTRAPPER, NEOFORGE_CLASS_PROCESSOR,
 			NEOFORGE_CLASS_PROCESSOR_PROVIDER,
 			NEOFORGE_IMMEDIATE_WINDOW_PROVIDER, NEOFORGE_COREMOD, TRANSFORMATION_SERVICE);
 

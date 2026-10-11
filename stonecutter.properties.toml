@@ -1,7 +1,7 @@
 ["26.3-fabric"]
 
 ["26.3-neoforge"]
-deps.neoforge = "26.3.0.6-beta"
+deps.neoforge = "26.3.0.76"
 
 ["26.3"]
 deps.minecraft = "26.3"
@@ -12,7 +12,7 @@ publish_versions = "~26.3"
 ["26.2-fabric"]
 
 ["26.2-neoforge"]
-deps.neoforge = "26.2.0.28-beta"
+deps.neoforge = "26.2.0.90"
 
 ["26.2"]
 deps.minecraft = "26.2"
@@ -23,7 +23,7 @@ publish_versions = "~26.2"
 ["26.1-fabric"]
 
 ["26.1-neoforge"]
-deps.neoforge = "26.1.2.84"
+deps.neoforge = "26.1.2.116"
 
 ["26.1"]
 deps.minecraft = "26.1.2"
@@ -34,7 +34,7 @@ publish_versions = "~26.1"
 ["1.21.11-fabric"]
 
 ["1.21.11-neoforge"]
-deps.neoforge = "21.11.44"
+deps.neoforge = "21.11.45"
 
 ["1.21.11"]
 deps.minecraft = "1.21.11"
@@ -78,7 +78,7 @@ publish_versions = "1.21.5"
 ["1.21.4-fabric"]
 
 ["1.21.4-neoforge"]
-deps.neoforge = "21.4.157"
+deps.neoforge = "21.4.158"
 
 ["1.21.4"]
 deps.minecraft = "1.21.4"
@@ -89,7 +89,7 @@ publish_versions = "1.21.4"
 ["1.21.1-fabric"]
 
 ["1.21.1-neoforge"]
-deps.neoforge = "21.1.242"
+deps.neoforge = "21.1.259"
 
 ["1.21.1"]
 deps.minecraft = "1.21.1"
@@ -100,7 +100,7 @@ publish_versions = "1.21\n1.21.1"
 ["1.20.1-fabric"]
 
 ["1.20.1-forge"]
-deps.forge = "1.20.1-47.4.21"
+deps.forge = "1.20.1-47.4.26"
 
 ["1.20.1"]
 deps.minecraft = "1.20.1"

@@ -6,6 +6,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -28,11 +29,12 @@ import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
 
 /**
  * Cross-generation linkage: the universal outer jar registers this class and the fml4 bootstrapper
- * under the same GraphicsBootstrapper service. That interface declares the identical abstract pair
- * {@code name()}/{@code bootstrap(String[])} in neoforgespi 4.x, 10.x and 11.x, and this class's only
- * supertype beyond it is Object - so it loads on every NeoForge generation, and the
- * {@link GenerationProbes#NEOFORGE_EARLYSERVICES} guard no-ops it wherever the ModLauncher-era
- * generation runs.
+ * under the same GraphicsBootstrapper service, and {@link EarlyBootstrap} under EarlyBootstrapper
+ * (FML 12.0.10+ / NeoForge 26.3.0.66+). GraphicsBootstrapper is client-only from that FML on;
+ * EarlyBootstrapper runs in every env. Both call {@link #run(String[])}, which executes once.
+ * This class's only SPI supertype is GraphicsBootstrapper, which exists on every NeoForge
+ * generation this module loads in, and the {@link GenerationProbes#NEOFORGE_EARLYSERVICES} guard
+ * no-ops it wherever the ModLauncher-era generation runs.
  *
  * <p>
  * "Loads on every generation" is about LINKAGE, not just execution: verification resolves the types
@@ -48,6 +50,8 @@ import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
  */
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
+	private static final AtomicBoolean RAN = new AtomicBoolean();
+
 	@Override
 	public String name() {
 		return "automodpack";
@@ -55,7 +59,12 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
 	@Override
 	public void bootstrap(String[] arguments) {
+		run(arguments);
+	}
+
+	static void run(String[] arguments) {
 		if (!GenerationProbes.NEOFORGE_EARLYSERVICES) return;
+		if (!RAN.compareAndSet(false, true)) return;
 
 		FMLLoader loader = FMLLoader.getCurrent();
 		EarlyLaunchEnvironment.IS_CLIENT = loader.getDist() == Dist.CLIENT;
