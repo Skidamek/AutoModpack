@@ -64,6 +64,7 @@ class FakeBridge:
         self.baseline_snapshots: dict[Path, bytes] = {}
         self.first_install_archive_existing = False
         self.storage_verified = False
+        self.storage_receipt: str | None = None
         self.repair_mutations: set[tuple[str, str]] = set()
         self.repair_editable_reset = True
         self.repair_keep_unowned = False
@@ -199,6 +200,7 @@ class FakeBridge:
                     {"id": 46, "text": "Click again to clean" if self.storage_compact_armed else "Clean local storage", "enabled": not self.storage_running, "visible": True, "key": "automodpack.storage.confirmArmed" if self.storage_compact_armed else "automodpack.storage.confirm"},
                     {"id": 47, "text": "Back", "enabled": True, "visible": True},
                 ],
+                "other": [{"id": 102, "text": self.storage_receipt, "enabled": False, "visible": True}] if self.storage_receipt else [],
                 "textFields": [],
             },
             "settings": {
@@ -482,11 +484,8 @@ class FakeBridge:
             self.screen = self.storage_parent if self.screen == "storage" else "multiplayer"
         elif element_id == 91:
             self.storage_compact_armed = False
-            if self._has_damaged_timeline_object():
-                self.error_parent = "storage"
-                self.screen = "error"
-            else:
-                self.storage_verified = True
+            self.storage_verified = True
+            self.storage_receipt = "Valid: 0/1 objects (0 B). Missing: 0. Corrupt: 1." if self._has_damaged_timeline_object() else "Valid: 1/1 objects (1 B). Missing: 0. Corrupt: 0."
         elif element_id == 93:
             self.ctx.vars["fake_error_details_copied"] = True
         elif element_id == 94:
@@ -674,6 +673,7 @@ class FakeBridge:
         self.pack_b_files = []
         self.first_install_archive_existing = False
         self.storage_verified = False
+        self.storage_receipt = None
         self.storage_compact_armed = False
         self.groups_parent = "first_connection"
         self.acknowledged = False

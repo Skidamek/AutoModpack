@@ -972,17 +972,12 @@ flow:
     name: report corrupt required preservation bytes
     select: { text: Verify storage }
   - do: wait_for
-    name: show the corrupt preserved bytes as a verification error
+    name: show the corrupt preserved bytes on the storage receipt
     timeout: 120s
-    until: { screen: ErrorScreen }
-  - do: click
-    name: return from the preservation verification error to the maintenance screen
-    select: { text: Back }
-  - do: wait_for
-    name: keep maintenance usable after the preservation verification error
     until:
       all:
         - screen: ClientStorageMaintenanceScreen
+        - element: { text: "Corrupt: 1" }
         - element: { text: Verify storage, enabled: true }
   - do: click
     name: leave the failed preservation verification

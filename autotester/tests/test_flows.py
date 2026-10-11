@@ -423,7 +423,7 @@ def test_fake_new_repair_and_timeline_ui_states(make_ctx):
     bridge.click(100)
     assert bridge.gui()["screenClass"] == "ModpackSettingsScreen"
 
-    # Storage verification returns to the same screen after a corrupt timeline-tracked object fails.
+    # Storage verification stays on the maintenance screen and reports a corrupt timeline-tracked object.
     gamma = ctx.game_dir / "config/amp-autotest-gamma.cfg"
     gamma.parent.mkdir(parents=True, exist_ok=True)
     gamma.write_bytes(b"gamma")
@@ -436,11 +436,9 @@ def test_fake_new_repair_and_timeline_ui_states(make_ctx):
     assert bridge.storage_verified
     object_path.write_bytes(b"damaged")
     bridge.click(91)
-    assert bridge.gui()["screenClass"] == "ErrorScreen"
-    bridge.click(93)
-    assert ctx.vars["fake_error_details_copied"]
-    bridge.click(94)
     assert bridge.gui()["screenClass"] == "ClientStorageMaintenanceScreen"
+    assert any("Corrupt: 1" in str(element.get("text", "")) for element in bridge.gui().get("other", []))
+    assert any(button["text"] == "Verify storage" and button["enabled"] for button in bridge.gui()["buttons"])
 
     # Cleanup fires on the second press only; verify (and leaving) disarms the first press.
     object_path.write_bytes(b"gamma")
