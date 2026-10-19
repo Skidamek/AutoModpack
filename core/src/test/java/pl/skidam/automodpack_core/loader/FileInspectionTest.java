@@ -195,6 +195,22 @@ class FileInspectionTest {
 		}
 	}
 
+	/** Zipfs throws ProviderNotFoundException for a truncated zip whose path does not end with .jar/.zip; that has to read as none or login dies. */
+	@Test
+	void aTruncatedArchiveWithANonJarNameIsNotAMod() throws IOException {
+		Path archive = Files.createTempDirectory("truncated-disabled-").resolve("mod.jar.disabled");
+
+		try {
+			Files.write(archive, new byte[]{'P', 'K', 3, 4, 0, 0});
+			FileInspection.Inspection inspection = inspection(archive);
+
+			assertFalse(inspection.mod());
+			assertNull(inspection.metadata());
+		} finally {
+			Files.deleteIfExists(archive);
+		}
+	}
+
 	private static FileInspection.Mod onlyNested(FileInspection.Mod mod) {
 		assertEquals(1, mod.nestedMods().size());
 		return mod.nestedMods().iterator().next();

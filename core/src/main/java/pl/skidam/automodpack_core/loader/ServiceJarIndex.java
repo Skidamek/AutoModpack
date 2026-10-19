@@ -4,7 +4,6 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
 import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -12,6 +11,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import pl.skidam.automodpack_core.utils.JarUtils;
 
 /**
  * Per-jar early-service facts, derived once per jar from a single zip mount and cached for the JVM's
@@ -64,7 +65,7 @@ public final class ServiceJarIndex {
 		Set<String> services = Set.of();
 		Map<String, List<String>> impls = new HashMap<>();
 		T extra = null;
-		try (FileSystem fs = FileSystems.newFileSystem(jar)) {
+		try (FileSystem fs = JarUtils.openJar(jar)) {
 			services = FileInspection.getServices(fs, knownServices);
 			for (String service : replayedServices) {
 				if (Files.exists(fs.getPath(service))) {

@@ -89,7 +89,7 @@ public class FileInspection {
 			return new Inspection(false, null, Set.of());
 		}
 
-		try (FileSystem fs = FileSystems.newFileSystem(file)) {
+		try (FileSystem fs = JarUtils.openJar(file)) {
 			ModMetadata meta = getModMetadata(fs);
 			Set<String> services = getServices(fs, LoaderServicePaths.ALL_SERVICES);
 			Mod metadata = meta == null ? null : completeMod(fs, meta, hash, file);
@@ -114,7 +114,7 @@ public class FileInspection {
 	/** Whether the file is a mod or an early-service jar, with no cache and no metadata: for loader call sites that only need the yes. */
 	public static boolean isMod(Path file) {
 		if (isJarInvalid(file)) return false;
-		try (FileSystem fs = FileSystems.newFileSystem(file)) {
+		try (FileSystem fs = JarUtils.openJar(file)) {
 			return getModMetadata(fs) != null || hasSpecificServices(fs);
 		} catch (IOException e) {
 			return false;
@@ -124,7 +124,7 @@ public class FileInspection {
 	public static boolean isModCompatible(Path file) {
 		if (isJarInvalid(file)) return false;
 
-		try (FileSystem fs = FileSystems.newFileSystem(file)) {
+		try (FileSystem fs = JarUtils.openJar(file)) {
 			String entryPathString = metadataPathForLoader(getLoader());
 
 			if (entryPathString != null && Files.exists(fs.getPath(entryPathString))) return true;
@@ -184,7 +184,7 @@ public class FileInspection {
 
 	private static <T> T extractBasicInfo(Path file, Function<ModMetadata, T> extractor) {
 		if (isJarInvalid(file)) return null;
-		try (FileSystem fs = FileSystems.newFileSystem(file)) {
+		try (FileSystem fs = JarUtils.openJar(file)) {
 			ModMetadata meta = getModMetadata(fs);
 			return meta != null ? extractor.apply(meta) : null;
 		} catch (IOException e) {
@@ -460,7 +460,7 @@ public class FileInspection {
 	/** Same over a jar file: the only service read that works for a service-only jar, which has no mod metadata to inspect. */
 	public static Set<String> getServices(Path file, Set<String> ofInterest) {
 		if (isJarInvalid(file)) return Set.of();
-		try (FileSystem fs = FileSystems.newFileSystem(file)) {
+		try (FileSystem fs = JarUtils.openJar(file)) {
 			return getServices(fs, ofInterest);
 		} catch (IOException e) {
 			LOGGER.debug("Failed to read loader services of {}", file);

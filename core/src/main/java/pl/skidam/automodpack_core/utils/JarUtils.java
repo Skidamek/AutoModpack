@@ -6,6 +6,8 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.CodeSource;
@@ -28,6 +30,15 @@ public class JarUtils {
 
 	public static boolean isRegularJar(Path path) {
 		return hasJarExtension(path) && Files.isRegularFile(path);
+	}
+
+	/** A zip filesystem for {@code jar}. Zipfs throws unchecked exceptions for a path it will not mount, and those are {@link IOException} here so every caller has one failure type. */
+	public static FileSystem openJar(Path jar) throws IOException {
+		try {
+			return FileSystems.newFileSystem(jar);
+		} catch (RuntimeException e) {
+			throw new IOException("Failed to open " + jar, e);
+		}
 	}
 
 	/**
