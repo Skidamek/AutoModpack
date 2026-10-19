@@ -234,6 +234,25 @@ class DownloadObjectTest {
 		}
 	}
 
+	/** An open-ended take that dies on the wire still burns the take budget; a host that drops every requeue must fail, never retry forever. */
+	@Test
+	void anOpenEndedTakeOnADroppingHostFailsAfterTheTakeBudget(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			byte[] object = new byte[256 * 1024];
+			new SecureRandom().nextBytes(object);
+			String sha1 = HashUtils.sha1(object);
+			server.store().put(sha1, object);
+			server.closeFramedObjects.set(true);
+			try (DownloadClient client = client(server, "test-secret")) {
+				Path destination = directory.resolve("object");
+				var thrown = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertInstanceOf(RangeIgnoredException.class, rootCause(thrown));
+				for (int i = 0; i < 20; i++) server.dropNextObjectRequest();
+				assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+			}
+		}
+	}
+
 	/** A chunked 200 on a bounded take is the same range-ignoring verdict as the close-framed one - the CDN shape that ignores Range and answers chunked - not a generic retryable error that grinds the take budget. */
 	@Test
 	void aChunked200OnABoundedTakeThrowsRangeIgnoredAndDegradesTheHost(@TempDir Path directory) throws Exception {

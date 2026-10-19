@@ -85,7 +85,7 @@ final class ObjectTransfer {
 			pendingItems = 1;
 		}
 		if (openEnded) {
-			submitOpenEnded(remaining.peekFirst()[0]);
+			submitOpenEnded(remaining.peekFirst()[0], 1);
 			return future;
 		}
 		long[] head = remaining.pollFirst();
@@ -229,7 +229,7 @@ final class ObjectTransfer {
 				}
 				try {
 					if (take.end() < 0) {
-						submitOpenEnded(PartialResume.nextByte(directory, fileSize));
+						submitOpenEnded(PartialResume.nextByte(directory, fileSize), take.attempt() + 1);
 						return;
 					}
 					Take next = retryTake(take, takeBytes.get());
@@ -272,13 +272,13 @@ final class ObjectTransfer {
 		return new Take(sliceStart + present, sliceStart + expected - 1, laneIndex(), take.attempt() + 1, progressBase);
 	}
 
-	private void submitOpenEnded(long start) {
+	private void submitOpenEnded(long start, int attempt) {
 		session.takesSubmitted.incrementAndGet();
 		OutputStream writer;
 		try {
 			writer = PartialResume.writer(directory, fileSize, start);
 		} catch (IOException e) {
-			onTakeSettled(new Take(start, -1, 0, 1, 0), new AtomicLong(), e);
+			onTakeSettled(new Take(start, -1, 0, attempt, 0), new AtomicLong(), e);
 			return;
 		}
 		AtomicLong takeBytes = new AtomicLong();
@@ -286,7 +286,7 @@ final class ObjectTransfer {
 			takeBytes.addAndGet(bytes);
 			if (progress != null) progress.accept(bytes);
 		};
-		Take take = new Take(start, -1, 0, 1, 0);
+		Take take = new Take(start, -1, 0, attempt, 0);
 		lanes.withSlot(0, WIRE_CHUNK_BYTES, connection -> connection.sendDownloadFile(sha1Hex, ObjectTake.openEnded(writer, chunkCallback, start, fileSize)), submittedEpoch).whenComplete((path, takeError) -> {
 			try {
 				writer.close();
