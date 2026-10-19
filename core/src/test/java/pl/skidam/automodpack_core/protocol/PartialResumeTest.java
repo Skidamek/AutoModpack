@@ -94,6 +94,23 @@ class PartialResumeTest {
 	}
 
 	@Test
+	void aWriterDiscardsALeadingNamedTileAndKeepsTheRestAligned(@TempDir Path directory) throws Exception {
+		String sha1 = HashUtils.sha1("skip-head");
+		Path dir = PartialResume.directory(directory, sha1);
+		byte[] object = new byte[NetUtils.WIRE_CHUNK_BYTES + 50];
+		for (int i = 0; i < object.length; i++) object[i] = (byte) i;
+		Files.createDirectories(dir);
+		Files.write(PartialResume.sliceFile(dir, 0), Arrays.copyOf(object, NetUtils.WIRE_CHUNK_BYTES));
+		try (var out = PartialResume.writer(dir, object.length, 0)) {
+			out.write(object);
+		}
+		assertTrue(PartialResume.complete(dir, object.length));
+		Path assembled = directory.resolve("out");
+		PartialResume.assemble(dir, assembled, object.length);
+		assertArrayEquals(object, Files.readAllBytes(assembled));
+	}
+
+	@Test
 	void sequentialWriterFillsTilesFromAShortPrefix(@TempDir Path directory) throws Exception {
 		String sha1 = HashUtils.sha1("seq");
 		Path dir = PartialResume.directory(directory, sha1);

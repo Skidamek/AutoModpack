@@ -305,25 +305,22 @@ public final class PartialResume {
 		}
 
 		/**
-		 * Opens the tile this position falls in. A tile somebody else already finished whole is stepped over rather than
-		 * rewritten, which is what lets the platform and the host fill one object from opposite ends: whichever way the
-		 * bytes arrive, the tile exists once and both writers move past it.
+		 * Opens the tile this position falls in. A tile somebody else already finished whole is discarded from the
+		 * stream rather than rewritten, so the next incoming byte still lands at the matching file offset.
 		 */
 		private void open() throws IOException {
-			while (pos < fileSize) {
-				long start = sliceStart(pos);
-				long expected = sliceLength(start, fileSize);
-				if (presentLength(sliceFile(directory, start), expected) >= expected) {
-					pos = start + expected;
-					continue;
-				}
-				Path temp = sliceTemp(directory, start);
-				long have = inProgressLength(temp, expected);
-				current = have > 0 ? LocalFileWriter.openAt(temp, have) : LocalFileWriter.open(temp);
-				currentStart = start;
-				currentEnd = start + expected;
+			if (pos >= fileSize) return;
+			long start = sliceStart(pos);
+			long expected = sliceLength(start, fileSize);
+			currentStart = start;
+			currentEnd = start + expected;
+			if (presentLength(sliceFile(directory, start), expected) >= expected) {
+				current = OutputStream.nullOutputStream();
 				return;
 			}
+			Path temp = sliceTemp(directory, start);
+			long offsetInTile = pos - start;
+			current = offsetInTile == 0 ? LocalFileWriter.open(temp) : LocalFileWriter.openAt(temp, offsetInTile);
 		}
 
 		/** A tile that filled completely is named; one cut short stays a temp and is picked up or dropped on the next open. */
