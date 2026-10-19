@@ -26,11 +26,7 @@ import pl.skidam.automodpack_core.utils.HttpClientPool;
 
 @SuppressWarnings("deprecation")
 public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, String fileSize, String releaseType, String murmurHash,
-		String sha1Hash, int modId, String projectPageUrl, boolean clientTag, boolean serverTag) {
-	public CurseForgeAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, String fileSize, String releaseType, String murmurHash, String sha1Hash, int modId,
-			String projectPageUrl) {
-		this(requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmurHash, sha1Hash, modId, projectPageUrl, false, false);
-	}
+		String sha1Hash, int modId, String projectPageUrl) {
 
 	private static final Gson GSON = new Gson();
 
@@ -171,17 +167,7 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		String murmur = hashes.get(sha1);
 		int modId = fileJson.has("modId") && !fileJson.get("modId").isJsonNull() ? fileJson.get("modId").getAsInt() : 0;
 
-		boolean clientTag = false;
-		boolean serverTag = false;
-		if (fileJson.has("gameVersions") && fileJson.get("gameVersions").isJsonArray()) {
-			for (JsonElement version : fileJson.getAsJsonArray("gameVersions")) {
-				if (version == null || !version.isJsonPrimitive()) continue;
-				String name = version.getAsString();
-				if ("Client".equalsIgnoreCase(name)) clientTag = true;
-				else if ("Server".equalsIgnoreCase(name)) serverTag = true;
-			}
-		}
-		return new CurseForgeAPI(null, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmur, sha1, modId, null, clientTag, serverTag);
+		return new CurseForgeAPI(null, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmur, sha1, modId, null);
 	}
 
 	/** Listed projects keyed by mod id; the page url may be null. Null means the bulk lookup failed, which costs the pages but never the confirmed fingerprint hits. */
@@ -214,7 +200,7 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 	}
 
 	private CurseForgeAPI withProjectPageUrl(String url) {
-		return new CurseForgeAPI(requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmurHash, sha1Hash, modId, url, clientTag, serverTag);
+		return new CurseForgeAPI(requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmurHash, sha1Hash, modId, url);
 	}
 
 	private static JsonObject murmurRequest(List<String> murmurHashes) {

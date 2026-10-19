@@ -1,8 +1,10 @@
 package pl.skidam.automodpack_core.modpack.group;
 
+import static pl.skidam.automodpack_core.Constants.MOD_ID;
 import static pl.skidam.automodpack_core.storage.StoragePaths.BOOTSTRAP_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.MODPACK_CONTENT_FILE;
 
+import java.util.Collection;
 import java.util.Locale;
 import java.util.Set;
 
@@ -25,6 +27,20 @@ public final class ModpackPathPolicy {
 
 	public static boolean isReservedPath(String logicalPath) {
 		return RESERVED_ROOTS.contains(firstComponent(logicalPath).toLowerCase(Locale.ROOT));
+	}
+
+	/** Whether this mod id names AutoModpack itself; clients receive that jar through the self-update flow, never as pack content. */
+	public static boolean isSelfModId(String id) {
+		if (id == null || id.isBlank()) return false;
+		String canonical = id.strip().toLowerCase(Locale.ROOT);
+		return MOD_ID.equals(canonical) || (MOD_ID + "_bootstrap").equals(canonical) || (MOD_ID + "-bootstrap").equals(canonical) || (MOD_ID + "_mod").equals(canonical);
+	}
+
+	/** Whether any of the jar's ids names AutoModpack itself. */
+	public static boolean isSelfMod(Collection<String> ids) {
+		if (ids == null || ids.isEmpty()) return false;
+		for (String id : ids) if (isSelfModId(id)) return true;
+		return false;
 	}
 
 	/** Whether {@code logicalPath} is the client's generated dependency bundle, the one file name a modpack manifest can never claim. */

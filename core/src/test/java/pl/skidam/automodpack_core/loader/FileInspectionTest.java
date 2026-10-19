@@ -94,6 +94,58 @@ class FileInspectionTest {
 	}
 
 	@Test
+	void displayTestDecidesWhetherAClientMayLackTheJar() throws IOException {
+		Path forge = Files.createTempDirectory("display-test-").resolve("forgemod.jar");
+		Path neoforge = Files.createTempDirectory("display-test-").resolve("neoforgemod.jar");
+
+		try {
+			Files.write(forge, jar(Map.of("META-INF/mods.toml", toml("").getBytes(StandardCharsets.UTF_8))));
+			FileInspection.Inspection matched = inspection(forge);
+			assertFalse(matched.clientMayBeAbsent(), "an absent displayTest is Forge's MATCH_VERSION default");
+			assertFalse(matched.declaresServerOnly());
+
+			Files.write(forge, jar(Map.of("META-INF/mods.toml", toml("displayTest = \"IGNORE_SERVER_VERSION\"\n").getBytes(StandardCharsets.UTF_8))));
+			FileInspection.Inspection serverOnly = inspection(forge);
+			assertTrue(serverOnly.clientMayBeAbsent());
+			assertTrue(serverOnly.declaresServerOnly());
+
+			Files.write(forge, jar(Map.of("META-INF/mods.toml", toml("displayTest = \"IGNORE_ALL_VERSION\"\n").getBytes(StandardCharsets.UTF_8))));
+			FileInspection.Inspection indifferent = inspection(forge);
+			assertTrue(indifferent.clientMayBeAbsent());
+			assertFalse(indifferent.declaresServerOnly(), "only a client-side mod uses IGNORE_ALL_VERSION");
+
+			Files.write(forge, jar(Map.of("META-INF/mods.toml", toml("displayTest = \"NONE\"\n").getBytes(StandardCharsets.UTF_8))));
+			assertFalse(inspection(forge).clientMayBeAbsent(), "NONE keeps a custom check, so nothing is promised");
+
+			// NeoForge dropped the key, so a neoforge.mods.toml carrying it promises nothing.
+			Files.write(neoforge, jar(Map.of("META-INF/neoforge.mods.toml", toml("displayTest = \"IGNORE_SERVER_VERSION\"\n").getBytes(StandardCharsets.UTF_8))));
+			FileInspection.Inspection neo = inspection(neoforge);
+			assertTrue(neo.clientMayBeAbsent());
+			assertFalse(neo.declaresServerOnly());
+		} finally {
+			Files.deleteIfExists(forge);
+			Files.deleteIfExists(neoforge);
+		}
+	}
+
+	@Test
+	void nestedJarJarsWithholdTheDisplayTestPromise() throws IOException {
+		Path jar = Files.createTempDirectory("display-test-nested-").resolve("nesting.jar");
+		String nestedJson = "{\"id\": \"nested\", \"version\": \"1.0.0\"}";
+
+		try {
+			Files.write(jar, jar(Map.of("META-INF/mods.toml", toml("displayTest = \"IGNORE_SERVER_VERSION\"\n").getBytes(StandardCharsets.UTF_8),
+					"META-INF/jarjar/nested.jar", jar(Map.of("fabric.mod.json", nestedJson.getBytes(StandardCharsets.UTF_8))))));
+			FileInspection.Inspection inspection = inspection(jar);
+
+			assertFalse(inspection.clientMayBeAbsent(), "the root entry cannot speak for nested jars");
+			assertFalse(inspection.declaresServerOnly());
+		} finally {
+			Files.deleteIfExists(jar);
+		}
+	}
+
+	@Test
 	void fabricJsonEnvironmentMatchesMetadata() throws IOException {
 		Path jar = Files.createTempDirectory("json-metadata-").resolve("jsonmod.jar");
 		String json = "{\"id\": \"jsonmod\", \"version\": \"2.0.0\", \"environment\": \"client\", \"depends\": {\"fabric-api\": \"*\"}}";
@@ -209,6 +261,10 @@ class FileInspectionTest {
 		} finally {
 			Files.deleteIfExists(archive);
 		}
+	}
+
+	private static String toml(String displayTestLine) {
+		return "modLoader = \"javafml\"\n[[mods]]\nmodId = \"tomlmod\"\nversion = \"1.0.0\"\n" + displayTestLine;
 	}
 
 	private static FileInspection.Mod onlyNested(FileInspection.Mod mod) {

@@ -11,7 +11,7 @@ public enum ServerSideModExclusion {
 		return this != DISABLED;
 	}
 
-	/** Ask Modrinth and CurseForge about leftover universal jars. */
+	/** Ask Modrinth about leftover universal jars. */
 	public boolean asksPlatforms() {
 		return this == PLATFORMS;
 	}

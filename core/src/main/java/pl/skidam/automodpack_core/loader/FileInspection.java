@@ -51,6 +51,16 @@ public class FileInspection {
 			return metadata == null ? ModEnvironment.UNKNOWN : metadata.environment();
 		}
 
+		/** Whether the loader would let a client run without this jar; metadata-free jars promise nothing to the contrary. */
+		public boolean clientMayBeAbsent() {
+			return metadata == null || metadata.clientMayBeAbsent();
+		}
+
+		/** Whether the jar's own metadata names it a server-only mod. */
+		public boolean declaresServerOnly() {
+			return metadata != null && metadata.declaresServerOnly();
+		}
+
 		/** Whether this jar ships any of the named services. The wanted set is the caller's question, not a catalog this inspection stores. */
 		public boolean providesAny(Set<String> wanted) {
 			if (wanted == null || wanted.isEmpty() || services.isEmpty()) return false;
@@ -59,9 +69,38 @@ public class FileInspection {
 		}
 	}
 
-	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, ModEnvironment environment) {
+	/**
+	 * The legacy-Forge displayTest vocabulary, ordered from the most permissive to the strictest; a jar with several mod
+	 * entries aggregates to its strictest entry. Only {@code META-INF/mods.toml} carries the key - NeoForge removed it, so
+	 * a {@code neoforge.mods.toml} never promises anything by it.
+	 */
+	public enum DisplayTest {
+		/** IGNORE_SERVER_VERSION: the client may lack the jar, and the declaration names the mod server-only. */
+		IGNORE_SERVER_VERSION,
+		/** IGNORE_ALL_VERSION: the client may lack the jar; used by client-only mods, which say nothing about a server. */
+		IGNORE_ALL_VERSION,
+		/** MATCH_VERSION: Forge's default when the key is absent; the client must carry the same jar. */
+		MATCH_VERSION,
+		/** NONE: the author kept a custom check, so nothing is promised either way. */
+		NONE;
+
+		/** The value of the given name, or null when it names none of them. */
+		public static DisplayTest byName(String name) {
+			if (name == null) return null;
+			String trimmed = name.trim().toUpperCase(Locale.ROOT);
+			for (DisplayTest test : values()) if (test.name().equals(trimmed)) return test;
+			return null;
+		}
+
+		/** Whether the declaration lets a client lack the jar. */
+		public boolean permitsClientAbsence() {
+			return this == IGNORE_SERVER_VERSION || this == IGNORE_ALL_VERSION;
+		}
+	}
+
+	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, ModEnvironment environment, DisplayTest displayTest, boolean shipsNestedJars) {
 		public Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods) {
-			this(IDs, hash, version, path, deps, nestedMods, null, ModEnvironment.UNIVERSAL);
+			this(IDs, hash, version, path, deps, nestedMods, null, ModEnvironment.UNIVERSAL, null, false);
 		}
 
 		public Mod {
@@ -69,11 +108,25 @@ public class FileInspection {
 		}
 
 		public Mod at(Path newPath) {
-			return new Mod(IDs, hash, version, newPath, deps, nestedMods, id, environment);
+			return new Mod(IDs, hash, version, newPath, deps, nestedMods, id, environment, displayTest, shipsNestedJars);
+		}
+
+		/**
+		 * Whether the loader lets a client run without this jar: nothing enforces a client copy unless the jar carries a
+		 * legacy-Forge displayTest, which promises it for IGNORE_SERVER_VERSION and IGNORE_ALL_VERSION entries. Nested
+		 * JarJar jars carry declarations of their own, which the root entry cannot speak for.
+		 */
+		public boolean clientMayBeAbsent() {
+			return displayTest == null || (displayTest.permitsClientAbsence() && !shipsNestedJars);
+		}
+
+		/** Whether the jar's own declaration names it a server-only mod; nested jars hold their own names, so the claim goes unproven. */
+		public boolean declaresServerOnly() {
+			return displayTest == DisplayTest.IGNORE_SERVER_VERSION && !shipsNestedJars;
 		}
 	}
 
-	private record ModMetadata(String modId, String version, Set<String> provides, Set<String> deps, ModEnvironment environment, Set<String> declaredJars) {
+	private record ModMetadata(String modId, String version, Set<String> provides, Set<String> deps, ModEnvironment environment, Set<String> declaredJars, DisplayTest displayTest) {
 		ModMetadata {
 			declaredJars = declaredJars == null ? Set.of() : Set.copyOf(declaredJars);
 		}
@@ -108,7 +161,22 @@ public class FileInspection {
 		}
 		Set<String> ids = new HashSet<>(meta.provides());
 		ids.add(meta.modId());
-		return new Mod(ids, hash, meta.version(), file, meta.deps(), scanForNestedMods(fs, meta.declaredJars()), meta.modId(), meta.environment());
+		boolean shipsNestedJars = meta.displayTest() != null && shipsNestedJars(fs);
+		return new Mod(ids, hash, meta.version(), file, meta.deps(), scanForNestedMods(fs, meta.declaredJars()), meta.modId(), meta.environment(), meta.displayTest(), shipsNestedJars);
+	}
+
+	/**
+	 * Whether the jar ships any {@code META-INF/jarjar} jars. Unreadable means unprovable, and unprovable means no promise.
+	 */
+	private static boolean shipsNestedJars(FileSystem fs) {
+		Path jarJarDirectory = fs.getPath("META-INF", "jarjar");
+		if (Files.notExists(jarJarDirectory)) return false;
+		try (DirectoryStream<Path> stream = Files.newDirectoryStream(jarJarDirectory, "*.jar")) {
+			return stream.iterator().hasNext();
+		} catch (IOException e) {
+			LOGGER.error("Error examining JarJar directory in {}", fs, e);
+			return true;
+		}
 	}
 
 	/** Whether the file is a mod or an early-service jar, with no cache and no metadata: for loader call sites that only need the yes. */
@@ -257,7 +325,7 @@ public class FileInspection {
 			Set<String> declaredJars = metadata.declaredJars();
 			Set<Mod> nestedMods = nestedChildren.entrySet().stream().filter(child -> declaredJars.contains(child.getKey())).map(Map.Entry::getValue).collect(Collectors.toSet());
 			// Investigate if we need hash or not
-			return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedMods, metadata.modId(), metadata.environment());
+			return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedMods, metadata.modId(), metadata.environment(), metadata.displayTest(), false);
 		}
 		return null;
 	}
@@ -289,6 +357,7 @@ public class FileInspection {
 			Set<String> provides = new HashSet<>();
 			Set<String> deps = new HashSet<>();
 			ModEnvironment env = ModEnvironment.UNIVERSAL;
+			DisplayTest displayTest = null;
 
 			for (Map<String, Object> modTable : mods) {
 				if (modId == null) modId = MiniToml.getString(modTable, "modId");
@@ -298,6 +367,13 @@ public class FileInspection {
 
 				List<Object> prov = MiniToml.getList(modTable, "provides");
 				if (prov != null) for (Object p : prov) if (p instanceof String s) provides.add(s);
+
+				// Legacy Forge reads displayTest per mod entry and refuses unknown values; NeoForge dropped the key
+				// entirely, so only mods.toml promises anything by it. A multi-mod jar keeps its strictest entry.
+				if (!neoforgeSemantics) {
+					DisplayTest entry = displayTestOf(MiniToml.getString(modTable, "displayTest"));
+					if (displayTest == null || entry.ordinal() > displayTest.ordinal()) displayTest = entry;
+				}
 			}
 
 			if (modId != null) {
@@ -329,11 +405,18 @@ public class FileInspection {
 					}
 				}
 			}
-			return new ModMetadata(modId, version, provides, deps, env, Set.of());
+			return new ModMetadata(modId, version, provides, deps, env, Set.of(), displayTest);
 		} catch (Exception e) {
 			LOGGER.error("TOML Parse Error: {}", e.getMessage());
 			return null;
 		}
+	}
+
+	private static DisplayTest displayTestOf(String value) {
+		if (value == null) return DisplayTest.MATCH_VERSION; // Forge's default when the key is absent
+		DisplayTest test = DisplayTest.byName(value);
+		// A value Forge would refuse to load promises nothing either way.
+		return test == null ? DisplayTest.NONE : test;
 	}
 
 	private static ModMetadata parseJsonMetadata(BufferedReader reader) {
@@ -375,7 +458,7 @@ public class FileInspection {
 				}
 			}
 
-			return new ModMetadata(modId, version, provides, deps, env, declaredJars);
+			return new ModMetadata(modId, version, provides, deps, env, declaredJars, null);
 		} catch (Exception e) {
 			LOGGER.error("JSON Parse Error: {}", e.getMessage());
 			return null;

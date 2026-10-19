@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.platforms;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -44,12 +43,6 @@ class CurseForgeAPIHttpTest {
 			.formatted(SHA1);
 	private static final String FINGERPRINTS_200_NO_DOWNLOAD_URL = """
 			{"data":{"exactMatches":[{"file":{"releaseType":1,"hashes":[{"algo":1,"value":"%s"}],"downloadUrl":null,"fileName":"a.jar","displayName":"A 1.2.3","fileLength":123,"modId":7}}]}}"""
-			.formatted(SHA1);
-	private static final String FINGERPRINTS_200_SERVER_ONLY = """
-			{"data":{"exactMatches":[{"file":{"releaseType":1,"hashes":[{"algo":1,"value":"%s"}],"downloadUrl":"http://cdn.example/a.jar","fileName":"a.jar","displayName":"A 1.2.3","fileLength":123,"modId":7,"gameVersions":["1.21.1","Server"]}}]}}"""
-			.formatted(SHA1);
-	private static final String FINGERPRINTS_200_BOTH_SIDES = """
-			{"data":{"exactMatches":[{"file":{"releaseType":1,"hashes":[{"algo":1,"value":"%s"}],"downloadUrl":"http://cdn.example/a.jar","fileName":"a.jar","displayName":"A 1.2.3","fileLength":123,"modId":7,"gameVersions":["Client","Server"]}}]}}"""
 			.formatted(SHA1);
 	private static final String MODS_200 = """
 			{"data":[{"id":7,"isAvailable":true,"slug":"a-mod","links":{"websiteUrl":"https://www.curseforge.com/minecraft/mc-mods/a-mod"}}]}""";
@@ -161,21 +154,6 @@ class CurseForgeAPIHttpTest {
 		assertEquals(SHA1, info.sha1Hash());
 		assertEquals(7, info.modId());
 		assertEquals("https://www.curseforge.com/minecraft/mc-mods/a-mod", info.projectPageUrl(), "the project page lookup still runs without a download url");
-	}
-
-	/** The side tags are the only signal CurseForge gives for a universal jar, so the gameVersions loop decides which mods leave the pack. */
-	@Test
-	void theSideTagsComeFromTheFileGameVersions() {
-		SERVED.clear();
-		scriptBody("/v1/fingerprints", FINGERPRINTS_200_SERVER_ONLY);
-		CurseForgeAPI serverOnly = CurseForgeAPI.getModInfosFromFingerPrints(baseUrl(), localEndpoint(), hashes()).get(0);
-		assertFalse(serverOnly.clientTag(), "a file tagged only Server never runs on a client");
-		assertTrue(serverOnly.serverTag());
-
-		scriptBody("/v1/fingerprints", FINGERPRINTS_200_BOTH_SIDES);
-		CurseForgeAPI both = CurseForgeAPI.getModInfosFromFingerPrints(baseUrl(), localEndpoint(), hashes()).get(0);
-		assertTrue(both.clientTag(), "a file tagged Client runs on a client whatever else it is tagged");
-		assertTrue(both.serverTag());
 	}
 
 	@Test

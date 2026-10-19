@@ -80,7 +80,7 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 		return record != null ? record : new Record(normalizedHash);
 	}
 
-	/** An unlisted CurseForge project has no usable public page, which says nothing about what else the entry knows: only the page goes, the side tags stay. */
+	/** An unlisted CurseForge project has no usable public page: only the page goes, the rest of the entry stays. */
 	private Record sanitize(Record record) {
 		if (record != null && record.curseforge != null && CurseForgeAPI.isPlaceholderProjectPage(record.curseforge.projectPageUrl)) record.curseforge.projectPageUrl = null;
 		return record;
@@ -97,8 +97,11 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 	}
 
 	public static final class Record {
-		/** The Modrinth version environments that mean clients never load the file. */
-		private static final Set<String> CLIENT_UNSUPPORTED_MODRINTH = Set.of("server_only", "dedicated_server_only");
+		/**
+		 * The Modrinth version environments that mean clients never load the file. {@code server_only} is not one of them:
+		 * it stays usable in Singleplayer, so a client can carry it and the jar is never auto-excluded for it.
+		 */
+		private static final Set<String> CLIENT_UNSUPPORTED_MODRINTH = Set.of("dedicated_server_only");
 
 		private String sha1;
 		private ModrinthEntry modrinth;
@@ -118,15 +121,12 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 			return curseforge;
 		}
 
-		/** Why a client does not run this file, or null to keep it in the pack: the Modrinth version environment decides whenever it is filled, the CurseForge side tags only fill a missing field. */
+		/** Why a client does not run this file, or null to keep it in the pack: the Modrinth version environment decides whenever it is filled. */
 		public String clientExclusionReason() {
 			String environment = modrinth == null ? null : modrinth.environment;
-			if (environment != null && !environment.isBlank()) {
-				String declared = environment.trim().toLowerCase(Locale.ROOT);
-				return CLIENT_UNSUPPORTED_MODRINTH.contains(declared) ? "modrinth environment " + declared : null;
-			}
-			if (curseforge == null || !curseforge.sideTagsKnown) return null;
-			return curseforge.serverTag && !curseforge.clientTag ? "curseforge gameVersions Server" : null;
+			if (environment == null || environment.isBlank()) return null;
+			String declared = environment.trim().toLowerCase(Locale.ROOT);
+			return CLIENT_UNSUPPORTED_MODRINTH.contains(declared) ? "modrinth environment " + declared : null;
 		}
 	}
 
@@ -194,10 +194,6 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 		private String fileSize;
 		private String releaseType;
 		private String projectPageUrl;
-		private boolean clientTag;
-		private boolean serverTag;
-		/** Written by every entry, so an older record that predates the field reads as never told and is asked again. */
-		private boolean sideTagsKnown;
 
 		private CurseForgeEntry() {}
 
@@ -209,9 +205,6 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 			fileSize = info.fileSize();
 			releaseType = info.releaseType();
 			projectPageUrl = info.projectPageUrl();
-			clientTag = info.clientTag();
-			serverTag = info.serverTag();
-			sideTagsKnown = true;
 		}
 
 		public int modId() {
@@ -240,18 +233,6 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 
 		public String projectPageUrl() {
 			return projectPageUrl;
-		}
-
-		public boolean clientTag() {
-			return clientTag;
-		}
-
-		public boolean serverTag() {
-			return serverTag;
-		}
-
-		public boolean sideTagsKnown() {
-			return sideTagsKnown;
 		}
 	}
 }

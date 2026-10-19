@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.modpack.candidate;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.MOD_ID;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -41,7 +40,7 @@ public final class StableSourceSnapshotter {
 			if (!before.regularFile()) throw new IOException("Source is not a regular file");
 			FileCache.FileFingerprint beforeFingerprint = before.fingerprint();
 			Exclusion exclusion = expectedPathExclusion(source);
-			if (exclusion != null) return new Snapshot(null, exclusion, null, null);
+			if (exclusion != null) return new Snapshot(null, exclusion, null, null, true);
 
 			String sha1 = fileCache != null ? fileCache.getOrComputeHash(source.sourcePath()) : HashUtils.getHash(source.sourcePath());
 			if (sha1 == null) throw new IOException("SHA-1 calculation returned null");
@@ -49,17 +48,18 @@ public final class StableSourceSnapshotter {
 				throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
 
 			FileInspection.Inspection inspection = modFileCache == null ? FileInspection.inspect(source.sourcePath(), fileCache) : modFileCache.inspect(source.sourcePath(), fileCache);
-			if (isSelfFile(source.sourcePath(), inspection)) return Snapshot.SKIPPED;
+			if (isSelfFile(inspection)) return Snapshot.SKIPPED;
 			ModEnvironment environment = inspection.environment();
+			boolean clientMayBeAbsent = inspection.clientMayBeAbsent();
 			exclusion = expectedContentExclusion(autoExcludeServerMods, inspection);
-			if (exclusion != null) return new Snapshot(null, exclusion, null, environment);
+			if (exclusion != null) return new Snapshot(null, exclusion, null, environment, clientMayBeAbsent);
 			String type = fileType(source.logicalPath(), inspection);
 			boolean fetchable = ModpackContentType.isSourceFetchable(type);
 			// A changed file is read once cold per need: the identity hash first, then the staging copy; the murmur
 			// rides the staged bytes - page-warm and proven equal by the copy's own SHA-1 - instead of re-reading the source.
-			if (!materializeMissing) return new Snapshot(groupFile(source, before, type, sha1, fetchable ? sourceMurmur(source, fileCache) : null, fileCache), null, null, environment);
+			if (!materializeMissing) return new Snapshot(groupFile(source, before, type, sha1, fetchable ? sourceMurmur(source, fileCache) : null, fileCache), null, null, environment, clientMayBeAbsent);
 			if (trustedObject(objectStoreDirectory, sha1, before.size(), fileCache))
-				return new Snapshot(groupFile(source, before, type, sha1, fetchable ? sourceMurmur(source, fileCache) : null, fileCache), null, null, environment);
+				return new Snapshot(groupFile(source, before, type, sha1, fetchable ? sourceMurmur(source, fileCache) : null, fileCache), null, null, environment, clientMayBeAbsent);
 
 			FileTrees.createManagedDirectory(stagingDirectory, "staging directory");
 			staged = Files.createTempFile(stagingDirectory, "snapshot-", stagingSuffix(source.sourcePath()));
@@ -75,7 +75,7 @@ public final class StableSourceSnapshotter {
 				murmur = HashUtils.getCurseforgeMurmurHash(staged);
 				if (fileCache != null && murmur != null) fileCache.publishMurmur(source.sourcePath(), murmur);
 			}
-			return new Snapshot(groupFile(source, before, type, sha1, murmur, fileCache), null, new StagedObject(sha1, size, staged), environment);
+			return new Snapshot(groupFile(source, before, type, sha1, murmur, fileCache), null, new StagedObject(sha1, size, staged), environment, clientMayBeAbsent);
 		} catch (CandidateBuildException e) {
 			delete(staged, e);
 			throw e;
@@ -125,14 +125,21 @@ public final class StableSourceSnapshotter {
 	 * The AutoModpack jar itself never becomes a candidate; clients receive it through the bootstrap flow, so it is not an
 	 * exclusion event either. A file the inspection already answered carries its own id, so this reopens nothing.
 	 */
-	private static boolean isSelfFile(Path source, FileInspection.Inspection inspection) {
+	private static boolean isSelfFile(FileInspection.Inspection inspection) {
 		FileInspection.Mod mod = inspection.metadata();
-		String modId = mod == null ? null : mod.id();
-		return MOD_ID.equals(modId) || (MOD_ID + "_bootstrap").equals(modId) || (MOD_ID + "-bootstrap").equals(modId) || (MOD_ID + "_mod").equals(modId);
+		return mod != null && ModpackPathPolicy.isSelfModId(mod.id());
 	}
 
+	/**
+	 * A server-side verdict only counts when the jar's own metadata lets a client run without it: a Forge jar on
+	 * MATCH_VERSION (the default, including a missing displayTest) would get joining clients kicked, so it stays.
+	 * The verdict can come from the declared environment or from a displayTest that names the jar server-only.
+	 */
 	private static Exclusion expectedContentExclusion(boolean autoExcludeServerMods, FileInspection.Inspection inspection) {
-		return autoExcludeServerMods && inspection.environment() == ModEnvironment.SERVER ? new Exclusion(ExcludedCandidate.Reason.SERVER_SIDE_MOD, "detected as a server-side mod") : null;
+		if (!autoExcludeServerMods) return null;
+		if (!inspection.clientMayBeAbsent()) return null;
+		if (inspection.environment() != ModEnvironment.SERVER && !inspection.declaresServerOnly()) return null;
+		return new Exclusion(ExcludedCandidate.Reason.SERVER_SIDE_MOD, "detected as a server-side mod");
 	}
 
 	private static String fileType(String logicalPath, FileInspection.Inspection inspection) {
@@ -158,9 +165,9 @@ public final class StableSourceSnapshotter {
 		String copy(Path source, Path staged) throws IOException;
 	}
 
-	public record Snapshot(GroupManifest.GroupFile file, Exclusion exclusion, StagedObject object, ModEnvironment environment) {
+	public record Snapshot(GroupManifest.GroupFile file, Exclusion exclusion, StagedObject object, ModEnvironment environment, boolean clientMayBeAbsent) {
 		/** The source is neither a candidate nor an exclusion event; it never reaches any report. */
-		public static final Snapshot SKIPPED = new Snapshot(null, null, null, null);
+		public static final Snapshot SKIPPED = new Snapshot(null, null, null, null, true);
 	}
 
 	public record Exclusion(ExcludedCandidate.Reason reason, String message) {}

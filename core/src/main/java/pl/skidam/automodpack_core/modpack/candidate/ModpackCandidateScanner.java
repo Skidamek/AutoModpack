@@ -213,7 +213,7 @@ public final class ModpackCandidateScanner {
 			provenance = new CandidateProvenance(selected, editable.decisiveRule());
 		}
 		return new PathResult(selected, file, object, provenance, exclusions, pair.explicit != null ? pair.explicit : pair.synced, snapshot == null ? null : snapshot.environment(),
-				file != null && HashUtils.isSha1(file.sha1()) ? HashUtils.normalizeSha1(file.sha1()) : null, exclusion);
+				snapshot == null || snapshot.clientMayBeAbsent(), file != null && HashUtils.isSha1(file.sha1()) ? HashUtils.normalizeSha1(file.sha1()) : null, exclusion);
 	}
 
 	/**
@@ -222,12 +222,14 @@ public final class ModpackCandidateScanner {
 	 */
 	private void applyPlatformSideVerdicts(List<PathResult> results, Request request) {
 		if (sideVerdicts == null) return;
-		Map<String, GroupManifest.GroupFile> askable = new LinkedHashMap<>();
+		Set<String> askable = new LinkedHashSet<>();
 		for (PathResult result : results) {
 			if (!result.exclusion.asksPlatforms()) continue;
+			// A jar the loader would kick clients without (a Forge jar without a client-optional displayTest) stays whatever the platform says.
+			if (!result.clientMayBeAbsent) continue;
 			if (result.file == null || result.normalizedSha1 == null || !ModpackContentType.MOD.equals(result.file.type())) continue;
 			if (result.environment == ModEnvironment.CLIENT || result.environment == ModEnvironment.SERVER) continue;
-			askable.putIfAbsent(result.normalizedSha1, result.file);
+			askable.add(result.normalizedSha1);
 		}
 		if (askable.isEmpty()) return;
 		Map<String, String> reasons = sideVerdicts.excludeFromClientPack(askable);
@@ -246,8 +248,10 @@ public final class ModpackCandidateScanner {
 				} catch (IOException e) {
 					LOGGER.error("Could not delete the staged object of the platform-excluded {}", result.selected.logicalPath(), e);
 				}
-				results.set(i, new PathResult(null, null, null, null, exclusions, result.sourceForOrdering, result.environment, null, result.exclusion));
-			} else results.set(i, new PathResult(result.selected, result.file, result.object, result.provenance, exclusions, result.sourceForOrdering, result.environment, result.normalizedSha1, result.exclusion));
+				results.set(i, new PathResult(null, null, null, null, exclusions, result.sourceForOrdering, result.environment, result.clientMayBeAbsent, null, result.exclusion));
+			} else
+				results.set(i, new PathResult(result.selected, result.file, result.object, result.provenance, exclusions, result.sourceForOrdering, result.environment, result.clientMayBeAbsent, result.normalizedSha1,
+						result.exclusion));
 		}
 	}
 
@@ -419,6 +423,7 @@ public final class ModpackCandidateScanner {
 			List<ExcludedCandidate> exclusions,
 			CandidateSource sourceForOrdering,
 			ModEnvironment environment,
+			boolean clientMayBeAbsent,
 			String normalizedSha1,
 			ServerSideModExclusion exclusion) {}
 
