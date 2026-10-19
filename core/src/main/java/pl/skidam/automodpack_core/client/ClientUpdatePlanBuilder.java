@@ -495,6 +495,7 @@ final class ClientUpdatePlanBuilder {
 				String relativePath = LogicalPath.normalize(storage.gameDirectory().relativize(path.toAbsolutePath().normalize()).toString());
 				// The managed bundle is a root jar with a manifest, so the scan would otherwise see it as a player mod.
 				if (ModpackPathPolicy.isGeneratedBundlePath(relativePath)) continue;
+				if (ModpackPathPolicy.isSelfMod(mod.IDs())) continue;
 				roots.add(new NestedConflicts.StandardRoot(relativePath, mod));
 			}
 		}
@@ -520,11 +521,13 @@ final class ClientUpdatePlanBuilder {
 			Path source = resolvedObject(item, projection, cache);
 			if (source == null) continue;
 			FileInspection.Mod root = modCache.getModOrNull(source, item.sha1, cache);
-			if (root != null) packRoots.add(new NestedConflicts.PackRoot(LogicalPath.normalize(item.file), root));
+			if (root != null && !ModpackPathPolicy.isSelfMod(root.IDs())) packRoots.add(new NestedConflicts.PackRoot(LogicalPath.normalize(item.file), root));
 		}
 
 		Set<String> packRootIds = new HashSet<>();
-		targetMods.forEach(mod -> packRootIds.addAll(mod.ids()));
+		targetMods.forEach(mod -> {
+			if (!ModpackPathPolicy.isSelfMod(mod.ids())) packRootIds.addAll(mod.ids());
+		});
 		List<GeneratedBundle.Item> items = new ArrayList<>();
 		Set<NestedConflicts.Collider> colliders = new LinkedHashSet<>();
 		Set<String> previouslyCopiedPaths = previousCopies.stream().map(UpdatePlan.NestedCopy::relativePath).collect(Collectors.toSet());

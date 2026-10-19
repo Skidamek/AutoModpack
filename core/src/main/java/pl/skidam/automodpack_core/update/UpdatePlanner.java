@@ -267,7 +267,10 @@ public final class UpdatePlanner {
 		return paths;
 	}
 
-	/** Installs every target manifest item into the projection, its overlay, and - when not protected from the player's mods directory - the live copy. */
+	/**
+	 * Installs every target manifest item into the projection, its overlay, and - when not protected from the player's mods directory - the live copy. AutoModpack's own jar is skipped: clients receive it through the
+	 * self-update flow.
+	 */
 	private static void planTargetInstalls(Input input, Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, Set<String> liveCopyPaths,
 			Set<String> protectedIds, Map<String, ModInfo> targetModsByPath, PlanningSession session) {
 		Map<String, FileState> overlays = overlaysByRelative(input.files());
@@ -282,6 +285,13 @@ public final class UpdatePlanner {
 			// stops declaring the path editable.
 			if (overlay == null && session.has(new FileKey(Root.OVERLAY, relative)))
 				session.delete(new FileKey(Root.OVERLAY, relative), session.projected(new FileKey(Root.OVERLAY, relative)).sha1());
+			if (ModpackPathPolicy.isSelfMod(idsForPath(targetModsByPath, relative))) {
+				if (existing != null && existing.regularFile()) {
+					session.delete(modpackKey, existing.sha1());
+					session.restart(RestartReason.REMOVED_DUPLICATE_MODS);
+				}
+				continue;
+			}
 			if (!matches(existing, item.sha1, item.size)) session.install(modpackKey, item.sha1, item.size);
 
 			// Non-mod pack files always live in the working directory; mod files join them when they are editable or the loader requires their services there.
@@ -545,9 +555,11 @@ public final class UpdatePlanner {
 			// A live-copy path is resolved by editable-state reconciliation, not by duplicate resolution: neither its projection row
 			// nor the player's standard-directory jar may be deleted, vaulted or conflict-flagged as a duplicate of the other.
 			if (liveCopyPaths.contains(LogicalPath.normalize(standard.relativePath()))) continue;
+			if (ModpackPathPolicy.isSelfMod(standard.ids())) continue;
 			ModInfo winner = null;
 			for (ModInfo target : sortedTarget) {
 				if (liveCopyPaths.contains(LogicalPath.normalize(target.relativePath()))) continue;
+				if (ModpackPathPolicy.isSelfMod(target.ids())) continue;
 				if (!intersects(target.ids(), standard.ids())) continue;
 				if (winner == null || winsVersion(target.version(), target.relativePath(), winner.version(), winner.relativePath())) winner = target;
 			}

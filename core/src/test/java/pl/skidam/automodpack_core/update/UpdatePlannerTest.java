@@ -739,6 +739,39 @@ class UpdatePlannerTest {
 		assertEquals("mods/new-pack.jar", plan.conflicts().get(0).targetPath());
 	}
 
+	@Test
+	void packContentNeverInstallsAnAutoModpackJar() {
+		String packPath = "mods/automodpack-from-pack.jar";
+		String livePath = "mods/automodpack-running.jar";
+		String otherPath = "mods/other.jar";
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(packPath, item(packPath, TARGET_HASH, 9, "mod"), otherPath, item(otherPath, OTHER_HASH, 7, "mod")),
+				ledger(entry(packPath, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT), entry(otherPath, OTHER_HASH, 7, OwnershipLedger.Status.PRESENT)));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, livePath), new FileState(OLD_HASH, 8, true));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(packPath),
+				List.of(new ModInfo(packPath, TARGET_HASH, 9, "5.0.0", Set.of("automodpack"), Set.of()), new ModInfo(otherPath, OTHER_HASH, 7, "1.0.0", Set.of("other"), Set.of())),
+				List.of(new ModInfo(livePath, OLD_HASH, 8, "4.0.6", Set.of("automodpack"), Set.of())), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.relativePath().equals(packPath)));
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.relativePath().equals(livePath)));
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.relativePath().equals(otherPath) && operation.operation() == OperationType.INSTALL_OBJECT));
+		assertTrue(plan.conflicts().isEmpty());
+	}
+
+	@Test
+	void alreadyProjectedAutoModpackJarIsRemoved() {
+		String packPath = "mods/automodpack-from-pack.jar";
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(packPath, item(packPath, TARGET_HASH, 9, "mod")),
+				ledger(entry(packPath, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.PROJECTION, packPath), new FileState(TARGET_HASH, 9, true));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(new ModInfo(packPath, TARGET_HASH, 9, "5.0.0", Set.of("automodpack_mod"), Set.of())),
+				List.of(), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.PROJECTION && operation.relativePath().equals(packPath) && operation.operation() == OperationType.DELETE));
+		assertTrue(plan.restartReasons().contains(RestartReason.REMOVED_DUPLICATE_MODS));
+	}
+
 	private static UpdatePlanner.Input input(ModpackJsons.ModpackContentFields target, Map<FileKey, FileState> files) {
 		return new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3());
 	}
