@@ -1,8 +1,11 @@
 package pl.skidam.automodpack_core.utils;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.AccessDeniedException;
+import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -18,17 +21,68 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
-/** Applies and verifies the filesystem's native read-only policy for immutable files. */
+/**
+ * Applies and verifies the filesystem's native read-only policy for immutable files. A filesystem that cannot enforce the
+ * policy at all (Android FUSE ignores it silently) degrades to writable files with one loud log per filesystem instead of
+ * failing every publication; hash verification stays the integrity authority either way.
+ */
 public final class ImmutableFiles {
 	private static final Set<PosixFilePermission> WRITE_PERMISSIONS = EnumSet.of(PosixFilePermission.OWNER_WRITE, PosixFilePermission.GROUP_WRITE, PosixFilePermission.OTHERS_WRITE);
 	private static final Set<AclEntryPermission> ACL_WRITE_PERMISSIONS = EnumSet.of(AclEntryPermission.WRITE_DATA, AclEntryPermission.APPEND_DATA);
+	private static final ConcurrentHashMap<FileStore, Boolean> READ_ONLY_ENFORCEMENT = new ConcurrentHashMap<>();
 
 	private ImmutableFiles() {}
 
 	public static void protect(Path file) throws IOException {
 		Path normalized = file.toAbsolutePath().normalize();
 		if (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(normalized)) throw new IOException("Immutable path is not a regular file: " + normalized);
+		if (!enforcementWorks(normalized)) return; // the probe already logged this filesystem's verdict once
+		enforce(normalized);
+	}
+
+	/**
+	 * Probes the filesystem once per JVM on a throwaway file with the same enforcement path, so a filesystem that only
+	 * pretends to be read-only is told apart from a file that failed protection for its own reasons - those still throw.
+	 */
+	private static boolean enforcementWorks(Path file) throws IOException {
+		FileStore store;
+		Path probe;
+		try {
+			store = Files.getFileStore(file);
+			Boolean known = READ_ONLY_ENFORCEMENT.get(store);
+			if (known != null) return known;
+			probe = Files.createTempFile(file.getParent(), ".read-only-probe-", DurableFiles.TEMPORARY_SUFFIX);
+		} catch (IOException | RuntimeException e) {
+			// Nothing to probe with, so the per-file enforcement below stays the judge.
+			return true;
+		}
+		boolean capable;
+		try {
+			enforce(probe);
+			capable = true;
+		} catch (IOException | RuntimeException e) {
+			capable = false;
+			LOGGER.warn("The filesystem holding {} does not enforce read-only files; immutable files on it stay writable", file, e);
+		} finally {
+			removeProbe(probe);
+		}
+		READ_ONLY_ENFORCEMENT.put(store, capable);
+		return capable;
+	}
+
+	private static void removeProbe(Path probe) {
+		if (probe == null) return;
+		try {
+			deleteIfExists(probe);
+		} catch (IOException cleanupFailure) {
+			// The probe is disposable and carries the swept temporary suffix; a failed cleanup must not turn a
+			// capability answer into a storage failure.
+		}
+	}
+
+	private static void enforce(Path normalized) throws IOException {
 		PosixFileAttributeView posix = Files.getFileAttributeView(normalized, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
 		if (posix != null) {
 			if (disjoint(posix.readAttributes().permissions(), WRITE_PERMISSIONS)) return;
