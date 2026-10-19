@@ -75,7 +75,7 @@ public final class DetachedJoinPromptScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
-		return handleBackOnEscape(this::continuePlaying);
+	public void onClose() {
+		continuePlaying();
 	}
 }

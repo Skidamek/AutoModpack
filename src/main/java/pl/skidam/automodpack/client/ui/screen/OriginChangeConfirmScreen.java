@@ -58,7 +58,7 @@ public final class OriginChangeConfirmScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
-		return handleBackOnEscape(refused::run);
+	public void onClose() {
+		refused.run();
 	}
 }

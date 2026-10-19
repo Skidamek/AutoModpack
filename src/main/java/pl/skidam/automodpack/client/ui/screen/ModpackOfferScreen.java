@@ -74,7 +74,7 @@ public final class ModpackOfferScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
-		return handleBackOnEscape(this::cancelJoin);
+	public void onClose() {
+		cancelJoin();
 	}
 }

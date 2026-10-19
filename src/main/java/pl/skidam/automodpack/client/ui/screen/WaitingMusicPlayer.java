@@ -23,7 +23,6 @@ final class WaitingMusicPlayer {
 	private boolean busy;
 	private boolean fetching;
 	private boolean refreshFailed;
-	private boolean closed;
 
 	WaitingMusicPlayer(ClientStorage storage) {
 		this.storage = storage;
@@ -37,7 +36,7 @@ final class WaitingMusicPlayer {
 
 	/** Opens the pack's route and plays what it advertises; a press while one is already starting does nothing. */
 	void play(InstalledModpackController.Pack pack) {
-		if (closed || busy) return;
+		if (busy) return;
 		release();
 		busy = true;
 		fetching = true;
@@ -45,7 +44,7 @@ final class WaitingMusicPlayer {
 		ScreenManager.background(() -> {
 			WaitingMusicListen opened = openWaitingMusic(pack);
 			Minecraft.getInstance().execute(() -> {
-				if (closed || started != generation) {
+				if (started != generation) {
 					opened.close();
 					return;
 				}
@@ -67,7 +66,6 @@ final class WaitingMusicPlayer {
 
 	/** Leaving the screen releases the route and the audio without touching the remembered preference. */
 	void close() {
-		closed = true;
 		release();
 	}
 

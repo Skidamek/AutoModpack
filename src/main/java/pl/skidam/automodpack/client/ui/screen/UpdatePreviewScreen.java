@@ -224,8 +224,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
+	public void onClose() {
 		cancel();
-		return false;
 	}
 }

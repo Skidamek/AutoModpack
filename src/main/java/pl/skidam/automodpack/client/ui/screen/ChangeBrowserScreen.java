@@ -390,12 +390,12 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
+	public void onClose() {
 		if (closeOpenMenus()) {
 			rebuildBrowser();
-			return false;
+			return;
 		}
-		return handleBackOnEscape(this::back);
+		back();
 	}
 
 	@Override

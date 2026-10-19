@@ -128,7 +128,7 @@ public class RestartScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
-		return handleBackOnEscape(ScreenImpl::multiplayer);
+	public void onClose() {
+		ScreenImpl.multiplayer();
 	}
 }

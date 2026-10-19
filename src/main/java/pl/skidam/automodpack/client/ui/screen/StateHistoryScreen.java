@@ -463,13 +463,12 @@ public final class StateHistoryScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
+	public void onClose() {
 		if (mode == Mode.FILES) {
 			showTimeline();
-			return false;
+			return;
 		}
 		back();
-		return false;
 	}
 
 	@FunctionalInterface

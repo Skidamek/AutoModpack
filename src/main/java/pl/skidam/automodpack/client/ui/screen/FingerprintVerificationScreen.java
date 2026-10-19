@@ -141,10 +141,8 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
-		return handleBackOnEscape(() -> {
-			ScreenImpl.setScreen(parent);
-			if (!validated) canceledCallback.run();
-		});
+	public void onClose() {
+		ScreenImpl.setScreen(parent);
+		if (!validated) canceledCallback.run();
 	}
 }

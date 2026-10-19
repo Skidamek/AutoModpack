@@ -283,8 +283,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
+	public void onClose() {
 		back();
-		return false;
 	}
 }

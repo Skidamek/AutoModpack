@@ -124,7 +124,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
-		return handleBackOnEscape(() -> ScreenImpl.setScreen(verificationScreen));
+	public void onClose() {
+		ScreenImpl.setScreen(verificationScreen);
 	}
 }

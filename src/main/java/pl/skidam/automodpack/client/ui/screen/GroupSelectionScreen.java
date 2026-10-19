@@ -690,9 +690,9 @@ public class GroupSelectionScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
-		if (closeOpenMenus()) return false;
-		return handleBackOnEscape(this::back);
+	public void onClose() {
+		if (closeOpenMenus()) return;
+		back();
 	}
 
 }

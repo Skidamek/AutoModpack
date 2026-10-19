@@ -205,8 +205,8 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
-		return handleBackOnEscape(this::closeToParent);
+	public void onClose() {
+		closeToParent();
 	}
 
 	private enum Operation {

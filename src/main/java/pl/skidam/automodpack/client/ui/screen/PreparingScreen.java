@@ -30,6 +30,11 @@ public class PreparingScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		return onCancel != null && handleBackOnEscape(onCancel);
+		return onCancel != null;
+	}
+
+	@Override
+	public void onClose() {
+		if (onCancel != null) onCancel.run();
 	}
 }

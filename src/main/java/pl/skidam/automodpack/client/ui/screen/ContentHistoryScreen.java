@@ -192,7 +192,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
-		return handleBackOnEscape(this::back);
+	public void onClose() {
+		back();
 	}
 }

@@ -205,8 +205,8 @@ public final class PinnedModsScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
-		return handleBackOnEscape(() -> ScreenImpl.setScreen(parent));
+	public void onClose() {
+		ScreenImpl.setScreen(parent);
 	}
 
 	@Override

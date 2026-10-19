@@ -434,7 +434,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 	}
 
 	@Override
-	public boolean shouldCloseOnEsc() {
-		return handleBackOnEscape(this::cancel);
+	public void onClose() {
+		cancel();
 	}
 }

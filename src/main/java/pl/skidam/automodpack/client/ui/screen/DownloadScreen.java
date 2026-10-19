@@ -201,13 +201,16 @@ public class DownloadScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		return handleBackOnEscape(() -> {
-			if (cancelButton != null && cancelButton.active) {
-				cancelButton.active = false;
-				cancelDownload();
-				AudioManager.stopMusic();
-			}
-		});
+		return cancelButton != null && cancelButton.active;
+	}
+
+	@Override
+	public void onClose() {
+		if (cancelButton != null && cancelButton.active) {
+			cancelButton.active = false;
+			cancelDownload();
+			AudioManager.stopMusic();
+		}
 	}
 
 	public void cancelDownload() {

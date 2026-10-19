@@ -167,7 +167,7 @@ public class VersionedScreen extends Screen {
 		return false;
 	}
 
-	/** Closes every open dropdown menu; true when something was open, so escape can close the menu before the screen. */
+	/** Closes every open dropdown menu; true when something was open, so onClose can close the menu before the screen. */
 	protected final boolean closeOpenMenus() {
 		boolean open = menuOpen();
 		for (DropdownWidget dropdown : dropdowns) dropdown.closeMenu();
@@ -363,11 +363,6 @@ public class VersionedScreen extends Screen {
 				? ActionAreaLayout.fromTop(left, anchorY, width, actionRowGap(), geometryRows)
 				: ActionAreaLayout.fromBottom(left, anchorY + ActionAreaLayout.BUTTON_HEIGHT, width, actionRowGap(), geometryRows);
 		return new ActionArea(layout, definitions);
-	}
-
-	protected final boolean handleBackOnEscape(Runnable backAction) {
-		backAction.run();
-		return false;
 	}
 
 	/** Shows the tooltip while the pointer stays inside the given text bounds, matching vanilla hover-on-text behavior. */
