@@ -29,8 +29,6 @@ public final class UpdateRecovery {
 	static final long MAX_BACKOFF_MILLIS = 5_000;
 	// Two deferred restarts for the same transaction id; the third failed recover rolls back to the last finalized generation. The id is the episode; the count does not expire.
 	static final int MAX_DEFERRED_RESTARTS = 2;
-	// AWT preload dialog; Minecraft locale files are not loaded yet.
-	private static final String DEFERRED_POPUP_MESSAGE = "The modpack update paused on a busy file. Close programs using the modpack folder, including File Explorer windows, then restart again; if this keeps appearing, please send your latest log file.";
 
 	private UpdateRecovery() {}
 
@@ -124,8 +122,8 @@ public final class UpdateRecovery {
 			LOGGER.error("This is deferred restart {} of {} for the transaction; when they run out, the next failed launch rolls back to the last finalized generation", loop.restarts(), loop.maxRestarts());
 	}
 
-	/** The generic guidance, plus the lock probe's holder receipt when the failure captured one. */
+	/** AWT preload dialog; Minecraft locale files are not loaded yet. */
 	public static String deferredPopupMessage(String held) {
-		return held == null || held.isBlank() ? DEFERRED_POPUP_MESSAGE : DEFERRED_POPUP_MESSAGE + " Blocked paths: " + held + ".";
+		return "Some files are still open" + (held == null || held.isBlank() ? "" : " (" + held + ")") + ", so AutoModpack could not finish. Please start the game again.";
 	}
 }

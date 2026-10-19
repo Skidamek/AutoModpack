@@ -3,7 +3,7 @@ package pl.skidam.automodpack_core.utils;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.DirectoryNotEmptyException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -156,7 +156,7 @@ public final class FileTrees {
 		}
 	}
 
-	/** Removes empty parent directories without removing the retained root. */
+	/** Removes empty parent directories without removing the retained root. If a directory cannot be removed, stop. */
 	public static void pruneEmptyAncestors(Path removedPath, Path retainedRoot) throws IOException {
 		Path root = retainedRoot.toAbsolutePath().normalize();
 		Path removed = removedPath.toAbsolutePath().normalize();
@@ -167,7 +167,7 @@ public final class FileTrees {
 				throw new IOException("Empty-directory cleanup found a non-directory ancestor: " + directory);
 			try {
 				Files.delete(directory);
-			} catch (DirectoryNotEmptyException e) {
+			} catch (FileSystemException e) {
 				return;
 			}
 		}

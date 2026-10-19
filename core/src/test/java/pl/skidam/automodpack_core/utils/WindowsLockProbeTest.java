@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.utils;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -42,9 +43,8 @@ class WindowsLockProbeTest {
 
 		assertNull(WindowsLockProbe.describeHeld(file), "the holder receipt should clear once the channel closes");
 
-		// A directory input runs the entry probe; either outcome is a valid receipt there.
 		String directoryReceipt = WindowsLockProbe.describeHeld(tempDirectory);
 		System.err.println("WindowsLockProbe: " + directoryReceipt);
-		assertNotNull(directoryReceipt, WindowsNatives.loadError());
+		assertEquals("could not tell which", directoryReceipt, WindowsNatives.loadError());
 	}
 }
