@@ -309,6 +309,13 @@ final class ObjectTransfer {
 	}
 
 	private void finish(Throwable failure) {
+		if (failure == null) {
+			try {
+				if (!PartialResume.complete(directory, fileSize)) failure = new IOException("Incomplete slices for " + objectName());
+			} catch (IOException e) {
+				failure = e;
+			}
+		}
 		if (failure != null) {
 			WireTrace.log("DONE", "object", objectName(), "status", "fail:" + Throwables.detail(failure));
 			future.completeExceptionally(failure);
