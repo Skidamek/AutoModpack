@@ -381,7 +381,7 @@ public class Commands {
 	private static int activity(CommandContext<CommandSourceStack> context) {
 		runAsync(context, "Activity collection", () -> {
 			try {
-				VersionedCommandSource.sendFeedback(context, activityMessage(hostServer.activitySnapshot()), false);
+				send(context, activityMessage(hostServer.activitySnapshot()), false);
 			} catch (Exception e) {
 				LOGGER.error("Failed to collect modpack activity", e);
 				send(context, "Failed to collect modpack activity: " + e.getMessage(), ChatFormatting.RED, false);
@@ -863,32 +863,57 @@ public class Commands {
 		});
 	}
 
+	private static void send(CommandContext<CommandSourceStack> context, MutableComponent message, boolean broadcast) {
+		sendOnServerThread(context, () -> VersionedCommandSource.sendFeedback(context, message, broadcast));
+	}
+
 	private static void send(CommandContext<CommandSourceStack> context, String msg, ChatFormatting msgColor, boolean broadcast) {
-		VersionedCommandSource.sendFeedback(context,
+		sendOnServerThread(context, () -> VersionedCommandSource.sendFeedback(context,
 				VersionedText.literal(msg)
 						.withStyle(msgColor),
-				broadcast);
+				broadcast));
 	}
 
 	private static void send(CommandContext<CommandSourceStack> context, String msg, ChatFormatting msgColor, String appendMsg, ChatFormatting appendMsgColor, boolean broadcast) {
-		VersionedCommandSource.sendFeedback(context,
+		sendOnServerThread(context, () -> VersionedCommandSource.sendFeedback(context,
 				VersionedText.literal(msg)
 						.withStyle(msgColor)
 						.append(VersionedText.literal(" - ")
 								.withStyle(ChatFormatting.WHITE))
 						.append(VersionedText.literal(appendMsg)
 								.withStyle(appendMsgColor)),
-				broadcast);
+				broadcast));
 	}
 
 	private static void send(CommandContext<CommandSourceStack> context, String msg, ChatFormatting msgColor, MutableComponent appendMsg, ChatFormatting appendMsgColor, boolean broadcast) {
-		VersionedCommandSource.sendFeedback(context,
+		sendOnServerThread(context, () -> VersionedCommandSource.sendFeedback(context,
 				VersionedText.literal(msg)
 						.withStyle(msgColor)
 						.append(VersionedText.literal(" - ")
 								.withStyle(ChatFormatting.WHITE))
 						.append(appendMsg
 								.withStyle(appendMsgColor)),
-				broadcast);
+				broadcast));
+	}
+
+	/** Command feedback belongs on the server thread; broadcasting from a worker races the player list. */
+	private static void sendOnServerThread(CommandContext<CommandSourceStack> context, Runnable feedback) {
+		Runnable safeFeedback = () -> {
+			try {
+				feedback.run();
+			} catch (Exception e) {
+				LOGGER.error("Failed to send AutoModpack command feedback", e);
+			}
+		};
+		var server = context.getSource().getServer();
+		if (server.isSameThread()) {
+			safeFeedback.run();
+			return;
+		}
+		try {
+			server.execute(safeFeedback);
+		} catch (Exception e) {
+			LOGGER.error("Failed to schedule AutoModpack command feedback", e);
+		}
 	}
 }
