@@ -266,13 +266,14 @@ public final class ClientObjectStore {
 	}
 
 	/**
-	 * The journal mirror is the client's only history store, so every hash any entry names stays reachable: each
-	 * entry's policy document, every change target, and every replaced source. The active generation's tree is the
-	 * set of change targets up to its entry, so the mirror covers it as well. The sweep is consent-free on purpose:
-	 * every existing mirror keeps its bytes, and only the manual compaction drops a never-consented mirror whole, so
-	 * a collection outside it can never leave a mirror dangling. The claims are server-authored history, so they are
-	 * folded forgivingly: a buggy or hostile server must be able to fail a parse (the mirror asides unusable content)
-	 * but never the sweep.
+	 * The journal mirror is the client's only history store, so every hash any entry names that this CAS already holds
+	 * stays reachable: each entry's policy document, every change target, and every replaced source. The active
+	 * generation's tree is the set of change targets up to its entry, so the mirror covers it as well. Names without
+	 * bytes are generations this client never fetched; the server does not serve historical objects, so those names
+	 * are not holes. The sweep is consent-free on purpose: every existing mirror keeps its bytes, and only the manual
+	 * compaction drops a never-consented mirror whole, so a collection outside it can never leave a mirror dangling.
+	 * The claims are server-authored history, so they are folded forgivingly: a buggy or hostile server must be able
+	 * to fail a parse (the mirror asides unusable content) but never the sweep.
 	 */
 	static Map<String, Long> collectMirrorClaims(ClientStorage storage) throws IOException {
 		return collectMirrorClaims(storage, Set.copyOf(new ClientGenerationStore(storage).mirroredPackIds()));
@@ -283,11 +284,11 @@ public final class ClientObjectStore {
 		Set<String> distrusted = new HashSet<>();
 		for (String modpackId : modpackIds) {
 			for (JournalEntry entry : new JournalMirror(storage).entries(modpackId)) {
-				claim(claims, distrusted, entry.policySha1(), -1);
+				claim(storage, claims, distrusted, entry.policySha1(), -1);
 				for (JournalEntry.Change change : entry.changes()) {
-					claim(claims, distrusted, change.toSha1(), change.toSize());
+					claim(storage, claims, distrusted, change.toSha1(), change.toSize());
 					// Mirrors fetched from older servers carry no source size; only a positive size is a receipt, anything else stays unknown.
-					claim(claims, distrusted, change.fromSha1(), change.fromSize() > 0 ? change.fromSize() : -1);
+					claim(storage, claims, distrusted, change.fromSha1(), change.fromSize() > 0 ? change.fromSize() : -1);
 				}
 			}
 		}
@@ -295,17 +296,22 @@ public final class ClientObjectStore {
 		return claims;
 	}
 
-	/** Records one server-authored claim: first claim wins, an unknown grows into a known size, a contradiction demotes the size to unknown for good. */
-	private static void claim(TreeMap<String, Long> claims, Set<String> distrusted, String hash, long size) {
+	/** Records one server-authored claim for an object this CAS holds: first claim wins, an unknown grows into a known size, a contradiction demotes the size to unknown for good. */
+	private static void claim(ClientStorage storage, TreeMap<String, Long> claims, Set<String> distrusted, String hash, long size) {
 		if (hash == null) return;
 		String normalized = HashUtils.normalizeSha1(hash);
-		if (distrusted.contains(normalized)) return;
+		if (distrusted.contains(normalized) || !holdsObject(storage, normalized)) return;
 		Long known = claims.get(normalized);
 		if (known == null) claims.put(normalized, size);
 		else if (known >= 0 && size >= 0 && known.longValue() != size) {
 			claims.put(normalized, -1L);
 			distrusted.add(normalized);
 		} else if (known < 0 && size >= 0) claims.put(normalized, size);
+	}
+
+	/** Whether this CAS holds the named object as a regular file. */
+	static boolean holdsObject(ClientStorage storage, String hash) {
+		return Files.isRegularFile(storage.objectFile(hash), LinkOption.NOFOLLOW_LINKS);
 	}
 
 	/** Folds history claims under the owned receipts: claims fill hashes local state does not know and never override a local receipt, so merging cannot throw. */

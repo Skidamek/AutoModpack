@@ -247,9 +247,28 @@ class ClientObjectStoreTest {
 
 		// The contradiction demotes the size to unknown, so it is measured from the bytes: no false invalid count.
 		ClientObjectStore.StorageReport report = ClientObjectStore.measure(storage);
-		assertEquals(2, report.referencedObjectCount(), "The contested object and the entry's policy document");
+		assertEquals(1, report.referencedObjectCount(), "The contested object is present; the unwitnessed policy document is not a hole");
 		assertEquals(1, report.validReferencedObjectCount());
+		assertEquals(0, report.missingReferencedObjectCount());
 		assertEquals(0, report.invalidReferencedObjectCount());
+	}
+
+	@Test
+	void neverFetchedJournalHistoryIsNotAMissingObject() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "current-object".getBytes(StandardCharsets.UTF_8);
+		String current = store(storage, bytes);
+		writeMirror(storage, new JournalEntry.Change("mods/one.jar", null, 0, current, bytes.length));
+
+		ClientObjectStore.StorageReport report = ClientObjectStore.measure(storage);
+		assertEquals(1, report.referencedObjectCount());
+		assertEquals(1, report.validReferencedObjectCount());
+		assertEquals(0, report.missingReferencedObjectCount());
+		assertFalse(ClientObjectStore.referencedHashes(storage).contains(HashUtils.sha1("test-policy".getBytes(StandardCharsets.UTF_8))));
+
+		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage, Set.of());
+		assertEquals(0, result.after().missingReferencedObjectCount());
+		assertTrue(Files.exists(storage.objectFile(current)));
 	}
 
 	@Test

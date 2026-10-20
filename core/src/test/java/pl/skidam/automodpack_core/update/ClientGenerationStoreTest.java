@@ -595,6 +595,25 @@ class ClientGenerationStoreTest {
 	}
 
 	@Test
+	void compactionDoesNotReportNeverFetchedPoliciesAsMissing() throws Exception {
+		ClientStorage storage = storage();
+		String firstHash = store(storage, "first-object");
+		String secondHash = store(storage, "second-object");
+		PackDocument first = document(FIRST_PACK, firstHash, Files.size(storage.objectFile(firstHash)), TestPacks.CREATED);
+		PackDocument second = document(FIRST_PACK, secondHash, Files.size(storage.objectFile(secondHash)), TestPacks.CREATED.plusSeconds(1), first);
+		TestPacks.stageGeneration(storage, first);
+		TestPacks.stageGeneration(storage, second);
+		storage.writeActiveState(second);
+		Files.delete(storage.objectFile(first.policySha1()));
+
+		ClientGenerationStore.CompactionResult result = new ClientGenerationStore(storage).compact();
+
+		assertEquals(0, result.collection().after().missingReferencedObjectCount());
+		assertTrue(Files.exists(storage.objectFile(second.policySha1())));
+		assertFalse(Files.exists(storage.objectFile(first.policySha1())));
+	}
+
+	@Test
 	void compactionRefusesWhileAnUpdateTransactionIsActive() throws Exception {
 		ClientStorage storage = storage();
 		String hash = store(storage, "first-object");

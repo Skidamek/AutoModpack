@@ -349,7 +349,7 @@ public final class ClientGenerationStore {
 		for (String modpackId : installedPackIds()) {
 			List<JournalEntry> entries = new JournalMirror(storage).entries(modpackId);
 			if (entries.isEmpty()) continue;
-			for (JournalEntry entry : entries) kept.optional(entry.policySha1(), -1, "kept policy document");
+			for (JournalEntry entry : entries) if (ClientObjectStore.holdsObject(storage, entry.policySha1())) kept.optional(entry.policySha1(), -1, "kept policy document");
 			JournalEntry newest = entries.get(entries.size() - 1);
 			retainGenerationContent(newest, kept);
 			Set<String> keptTokens = new TreeSet<>(Set.of(newest.contentToken()));
