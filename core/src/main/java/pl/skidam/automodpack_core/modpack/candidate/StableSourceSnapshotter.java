@@ -123,11 +123,11 @@ public final class StableSourceSnapshotter {
 
 	/**
 	 * The AutoModpack jar itself never becomes a candidate; clients receive it through the bootstrap flow, so it is not an
-	 * exclusion event either. A file the inspection already answered carries its own id, so this reopens nothing.
+	 * exclusion event either. A file the inspection already answered carries its own ids, so this reopens nothing.
 	 */
 	private static boolean isSelfFile(FileInspection.Inspection inspection) {
 		FileInspection.Mod mod = inspection.metadata();
-		return mod != null && ModpackPathPolicy.isSelfModId(mod.id());
+		return mod != null && ModpackPathPolicy.isSelfMod(mod.IDs());
 	}
 
 	/**
