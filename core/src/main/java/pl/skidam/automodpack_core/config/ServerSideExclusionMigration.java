@@ -20,7 +20,6 @@ import pl.skidam.reconf.Document;
 public final class ServerSideExclusionMigration implements ConfMigration {
 	static final String KEY = "auto-exclude-server-side-mods";
 	private static final String LEGACY_CAMEL = "autoExcludeServerSideMods";
-	private static final String PACK_SECTION = "modpack";
 
 	public static final ServerSideExclusionMigration INSTANCE = new ServerSideExclusionMigration();
 
@@ -40,7 +39,7 @@ public final class ServerSideExclusionMigration implements ConfMigration {
 		Boolean enabled = packLevelEnabled(document);
 		if (enabled == null) return;
 		if (!enabled)
-			ConfMigration.forEachGroup(document, (category, group, declaration) -> {
+			ServerConfigJsons.forEachGroup(document, (category, group, declaration) -> {
 				if (!declaration.has(KEY) && !declaration.has(LEGACY_CAMEL)) declaration.addProperty(KEY, ServerSideModExclusion.DISABLED.name());
 			});
 		document.remove(KEY);
@@ -55,7 +54,7 @@ public final class ServerSideExclusionMigration implements ConfMigration {
 		Boolean enabled = packLevelEnabled(original);
 		if (enabled == null || enabled) return;
 		Set<String> explicit = new HashSet<>();
-		ConfMigration.forEachGroup(original, (category, group, declaration) -> {
+		ServerConfigJsons.forEachGroup(original, (category, group, declaration) -> {
 			if (declaration.has(KEY) || declaration.has(LEGACY_CAMEL)) explicit.add(category + "/" + group);
 		});
 		for (var category : config.modpack.categories.entrySet()) {
@@ -82,9 +81,9 @@ public final class ServerSideExclusionMigration implements ConfMigration {
 		JsonObject tree = ReconfConfigs.toJsonObject(document.tree());
 		if (!tree.has(KEY) && !tree.has(LEGACY_CAMEL)) return;
 		migrateDocument(tree);
-		ConfMigration.forEachGroup(tree, (category, group, declaration) -> {
+		ServerConfigJsons.forEachGroup(tree, (category, group, declaration) -> {
 			if (!declaration.has(KEY)) return;
-			document.ensure(ConfigPath.of(PACK_SECTION, category, group).appended(KEY), ReconfConfigs.toJsonValue(declaration.get(KEY)), null);
+			document.ensure(ConfigPath.of(ServerConfigJsons.PACK_SECTION, category, group).appended(KEY), ReconfConfigs.toJsonValue(declaration.get(KEY)), null);
 		});
 		document.remove(ConfigPath.of(KEY));
 		document.remove(ConfigPath.of(LEGACY_CAMEL));

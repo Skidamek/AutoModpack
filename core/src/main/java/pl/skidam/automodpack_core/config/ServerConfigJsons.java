@@ -23,6 +23,22 @@ import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class ServerConfigJsons {
+	static final String PACK_SECTION = "modpack";
+	private static final String PACK_NAME_KEY = "name";
+
+	/** Every group declaration under {@code modpack}; {@code name} is the pack's display name, not a category. */
+	static void forEachGroup(JsonObject document, GroupVisitor visitor) {
+		if (!(document.get(PACK_SECTION) instanceof JsonObject modpack)) return;
+		for (var category : modpack.entrySet()) {
+			if (category.getKey().equals(PACK_NAME_KEY) || !(category.getValue() instanceof JsonObject categoryObject)) continue;
+			for (var group : categoryObject.entrySet()) if (group.getValue() instanceof JsonObject groupObject) visitor.visit(category.getKey(), group.getKey(), groupObject);
+		}
+	}
+
+	@FunctionalInterface
+	interface GroupVisitor {
+		void visit(String category, String group, JsonObject declaration);
+	}
 
 	public static class ServerConfigFieldsV3 {
 		@SerializedName("modpack-host")
@@ -132,7 +148,7 @@ public class ServerConfigJsons {
 			@Override
 			public JsonElement serialize(ModpackFields src, Type type, JsonSerializationContext context) {
 				JsonObject object = new JsonObject();
-				object.addProperty("name", src.name);
+				object.addProperty(PACK_NAME_KEY, src.name);
 				for (var entry : src.categories.entrySet()) object.add(entry.getKey(), context.serialize(entry.getValue()));
 				return object;
 			}
@@ -142,7 +158,7 @@ public class ServerConfigJsons {
 				if (json == null || !json.isJsonObject()) throw new JsonParseException("modpack must hold the pack name and its categories: modpack { name: \"\", <category> { <group> { ... } } }");
 				ModpackFields fields = new ModpackFields();
 				for (var entry : json.getAsJsonObject().entrySet()) {
-					if (entry.getKey().equals("name")) {
+					if (entry.getKey().equals(PACK_NAME_KEY)) {
 						if (entry.getValue() == null || !entry.getValue().isJsonPrimitive() || !entry.getValue().getAsJsonPrimitive().isString())
 							throw new JsonParseException("modpack.name must be a string; the name key is reserved and cannot be a category");
 						fields.name = entry.getValue().getAsString();
@@ -156,7 +172,7 @@ public class ServerConfigJsons {
 			@Override
 			public void collectUnknownKeys(JsonElement element, String prefix, List<String> unknown) {
 				for (var entry : element.getAsJsonObject().entrySet()) {
-					if (entry.getKey().equals("name")) continue;
+					if (entry.getKey().equals(PACK_NAME_KEY)) continue;
 					String categoryPath = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
 					ConfigTools.collectUnknownKeys(entry.getValue(), GROUPS_TYPE, categoryPath, unknown);
 				}

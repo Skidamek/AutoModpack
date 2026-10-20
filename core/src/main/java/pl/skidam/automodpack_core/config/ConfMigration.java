@@ -44,18 +44,4 @@ public interface ConfMigration {
 	default List<Shape> nestedShapes(Object model) {
 		return List.of();
 	}
-
-	/** Every group's declaration under {@code modpack}; {@code name} is the pack's display name, not a category. */
-	static void forEachGroup(JsonObject document, GroupVisitor visitor) {
-		if (!(document.get("modpack") instanceof JsonObject modpack)) return;
-		for (var category : modpack.entrySet()) {
-			if (category.getKey().equals("name") || !(category.getValue() instanceof JsonObject categoryObject)) continue;
-			for (var group : categoryObject.entrySet()) if (group.getValue() instanceof JsonObject groupObject) visitor.visit(category.getKey(), group.getKey(), groupObject);
-		}
-	}
-
-	@FunctionalInterface
-	interface GroupVisitor {
-		void visit(String category, String group, JsonObject declaration);
-	}
 }

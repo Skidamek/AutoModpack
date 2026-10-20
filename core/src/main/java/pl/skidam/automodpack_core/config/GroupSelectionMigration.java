@@ -24,7 +24,6 @@ public final class GroupSelectionMigration implements ConfMigration {
 	private static final List<String> LEGACY_DEFAULT_SELECTED = List.of("defaultSelected", "default-selected");
 	private static final List<String> LEGACY_KEYS = List.of("required", "defaultSelected", "default-selected");
 
-	private static final String PACK_SECTION = "modpack";
 	private static final String SELECTION = "selection";
 
 	public static final GroupSelectionMigration INSTANCE = new GroupSelectionMigration();
@@ -61,14 +60,14 @@ public final class GroupSelectionMigration implements ConfMigration {
 
 	@Override
 	public void forRead(JsonObject document) {
-		ConfMigration.forEachGroup(document, (category, group, declaration) -> migrate(declaration, context(category, group)));
+		ServerConfigJsons.forEachGroup(document, (category, group, declaration) -> migrate(declaration, context(category, group)));
 	}
 
 	@Override
 	public void repair(Document document, Path path) {
-		ConfMigration.forEachGroup(ReconfConfigs.toJsonObject(document.tree()), (category, group, declaration) -> {
+		ServerConfigJsons.forEachGroup(ReconfConfigs.toJsonObject(document.tree()), (category, group, declaration) -> {
 			if (!migrate(declaration, context(category, group))) return;
-			ConfigPath groupPath = ConfigPath.of(PACK_SECTION, category, group);
+			ConfigPath groupPath = ConfigPath.of(ServerConfigJsons.PACK_SECTION, category, group);
 			// The value lands in the document on its own account, with no comment of its own: a data migration must never
 			// ride on an editorial annotation surviving. ensure leaves a member that is already there alone.
 			document.ensure(groupPath.appended(SELECTION), ReconfConfigs.toJsonValue(declaration.get(SELECTION)), null);
@@ -84,7 +83,7 @@ public final class GroupSelectionMigration implements ConfMigration {
 		for (var category : server.modpack.categories.entrySet()) {
 			if (category.getValue() == null) continue;
 			for (var group : category.getValue().entrySet())
-				if (group.getValue() != null) shapes.add(new Shape(ConfigPath.of(PACK_SECTION, category.getKey(), group.getKey()), group.getValue()));
+				if (group.getValue() != null) shapes.add(new Shape(ConfigPath.of(ServerConfigJsons.PACK_SECTION, category.getKey(), group.getKey()), group.getValue()));
 		}
 		return shapes;
 	}
