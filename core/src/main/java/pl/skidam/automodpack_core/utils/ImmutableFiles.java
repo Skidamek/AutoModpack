@@ -58,18 +58,20 @@ public final class ImmutableFiles {
 			// Nothing to probe with, so the per-file enforcement below stays the judge.
 			return true;
 		}
-		boolean capable;
 		try {
 			enforce(probe);
-			capable = true;
-		} catch (IOException | RuntimeException e) {
-			capable = false;
+			READ_ONLY_ENFORCEMENT.put(store, true);
+			return true;
+		} catch (UnenforceableReadOnlyException e) {
 			LOGGER.warn("The filesystem holding {} does not enforce read-only files; immutable files on it stay writable", file, e);
+			READ_ONLY_ENFORCEMENT.put(store, false);
+			return false;
+		} catch (IOException | RuntimeException e) {
+			LOGGER.warn("Read-only probe of {} failed; per-file enforcement stays the judge", file, e);
+			return true;
 		} finally {
 			removeProbe(probe);
 		}
-		READ_ONLY_ENFORCEMENT.put(store, capable);
-		return capable;
 	}
 
 	private static void removeProbe(Path probe) {
@@ -91,7 +93,7 @@ public final class ImmutableFiles {
 				permissions.addAll(posix.readAttributes().permissions());
 				permissions.removeAll(WRITE_PERMISSIONS);
 				posix.setPermissions(permissions);
-				if (!disjoint(posix.readAttributes().permissions(), WRITE_PERMISSIONS)) throw new IOException("Filesystem did not make immutable file read-only: " + normalized);
+				if (!disjoint(posix.readAttributes().permissions(), WRITE_PERMISSIONS)) throw new UnenforceableReadOnlyException("Filesystem did not make immutable file read-only: " + normalized);
 				channel.force(true);
 			}
 			return;
@@ -108,7 +110,7 @@ public final class ImmutableFiles {
 					entries.add(0, protection);
 					acl.setAcl(entries);
 				}
-				if (!isAclProtected(normalized, acl)) throw new IOException("Filesystem did not protect immutable file ACL: " + normalized);
+				if (!isAclProtected(normalized, acl)) throw new UnenforceableReadOnlyException("Filesystem did not protect immutable file ACL: " + normalized);
 				channel.force(true);
 			}
 			return;
@@ -117,16 +119,16 @@ public final class ImmutableFiles {
 			if (dos.readAttributes().isReadOnly()) return;
 			try (FileChannel channel = FileChannel.open(normalized, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
 				dos.setReadOnly(true);
-				if (!dos.readAttributes().isReadOnly()) throw new IOException("Filesystem did not make immutable file read-only: " + normalized);
+				if (!dos.readAttributes().isReadOnly()) throw new UnenforceableReadOnlyException("Filesystem did not make immutable file read-only: " + normalized);
 				channel.force(true);
 			}
 			return;
 		}
 		try {
-			if (!normalized.toFile().setReadOnly()) throw new IOException("Filesystem has no enforceable read-only policy for immutable file: " + normalized);
-			if (!blocksWrites(normalized)) throw new IOException("Filesystem did not enforce its read-only policy for immutable file: " + normalized);
+			if (!normalized.toFile().setReadOnly()) throw new UnenforceableReadOnlyException("Filesystem has no enforceable read-only policy for immutable file: " + normalized);
+			if (!blocksWrites(normalized)) throw new UnenforceableReadOnlyException("Filesystem did not enforce its read-only policy for immutable file: " + normalized);
 		} catch (UnsupportedOperationException | IllegalArgumentException e) {
-			throw new IOException("Filesystem has no enforceable read-only policy for immutable file: " + normalized, e);
+			throw new UnenforceableReadOnlyException("Filesystem has no enforceable read-only policy for immutable file: " + normalized, e);
 		}
 	}
 
@@ -223,6 +225,17 @@ public final class ImmutableFiles {
 			return false;
 		} catch (AccessDeniedException e) {
 			return true;
+		}
+	}
+
+	/** The filesystem accepted the call and then failed to actually make the file read-only. */
+	static final class UnenforceableReadOnlyException extends IOException {
+		UnenforceableReadOnlyException(String message) {
+			super(message);
+		}
+
+		UnenforceableReadOnlyException(String message, Throwable cause) {
+			super(message, cause);
 		}
 	}
 }
