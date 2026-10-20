@@ -116,6 +116,57 @@ class ModpackExecutorTest {
 	}
 
 	@Test
+	void replaceNotesAmendsTheHeadAndEmptyNotesRefuse() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("host-modpack");
+		Path generationRoot = tempDir.resolve("host-generations");
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.writeString(groups.resolve("main/config/example.txt"), "one", StandardCharsets.UTF_8);
+		Path notes = groups.resolve("patch-notes.md");
+
+		ConstantsSnapshot snapshot = new ConstantsSnapshot();
+		Constants.serverConfig = config();
+		Constants.AM_VERSION = "test";
+		Constants.LOADER = "test";
+		Constants.LOADER_VERSION = "test";
+		Constants.MC_VERSION = "test";
+		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
+		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
+		try {
+			assertEquals("No modpack has been published yet. Run /automodpack generate, or leave generate-modpack-on-start enabled to publish one at startup.",
+					assertInstanceOf(ModpackExecutor.ReplaceNotesResult.Rejected.class, executor.replaceNotes("too early")).detail());
+
+			ModpackExecutor.Published published = assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
+			assertEquals("", executor.technicalHistory(10).get(0).notes());
+
+			Files.writeString(notes, "   \n", StandardCharsets.UTF_8);
+			assertEquals("Patch notes are empty", assertInstanceOf(ModpackExecutor.ReplaceNotesResult.Rejected.class, executor.replaceNotes()).detail());
+			assertEquals("   \n", Files.readString(notes, StandardCharsets.UTF_8));
+			assertEquals("", executor.technicalHistory(10).get(0).notes());
+
+			Files.writeString(notes, "pending for next gen", StandardCharsets.UTF_8);
+			assertInstanceOf(ModpackExecutor.NoChanges.class, executor.publish());
+			assertEquals("pending for next gen", Files.readString(notes, StandardCharsets.UTF_8));
+
+			ModpackExecutor.NotesReplaced replaced = assertInstanceOf(ModpackExecutor.NotesReplaced.class, executor.replaceNotes());
+			assertEquals(published.current().contentToken(), replaced.current().contentToken());
+			assertEquals("pending for next gen", replaced.entry().notes());
+			assertEquals("", Files.readString(notes, StandardCharsets.UTF_8));
+			assertEquals("pending for next gen", executor.technicalHistory(10).get(0).notes());
+
+			ModpackExecutor.NotesReplaced again = assertInstanceOf(ModpackExecutor.NotesReplaced.class, executor.replaceNotes("inline caption"));
+			assertEquals("inline caption", again.entry().notes());
+			assertEquals(published.current().contentToken(), executor.currentDocument().orElseThrow().contentToken());
+			assertEquals(1, executor.technicalHistory(10).size());
+		} finally {
+			executor.stop();
+			snapshot.restore();
+			if (previous == null) System.clearProperty(StoragePaths.DATA_ROOT_PROPERTY);
+			else System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, previous);
+		}
+	}
+
+	@Test
 	void previewAndPublishAdmissionDoesNotQueue() throws Exception {
 		Path groups = tempDir.resolve("host-modpack");
 		Files.createDirectories(groups.resolve("main/config"));

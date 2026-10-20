@@ -200,6 +200,12 @@ public final class GenerationStore {
 		return new Publication(entry, manifest, ledger, hosting(updated));
 	}
 
+	/** Replaces notes on the live head journal entry. Content, policy, and seq stay; callers rebind hosting so the served journal size matches. */
+	public JournalEntry replaceHeadNotes(String notes) throws IOException {
+		if (loadCurrent().isEmpty()) throw new IOException("No modpack generation is published");
+		return journal.replaceHeadNotes(notes);
+	}
+
 	/** Restores the exact content and policy of a past journal entry as a new head entry. */
 	public Publication publishRestore(long targetSeq, String notes) throws IOException {
 		Current current = loadCurrent().orElseThrow(() -> new IOException("Nothing to restore before the root generation is published"));

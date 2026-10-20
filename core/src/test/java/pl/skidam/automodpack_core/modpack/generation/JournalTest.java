@@ -84,6 +84,28 @@ class JournalTest {
 	}
 
 	@Test
+	void replaceHeadNotesRewritesOnlyTheLiveEntry() throws Exception {
+		Path file = tempDir.resolve("journal.jsonl");
+		Journal journal = Journal.open(file);
+		journal.append(entry(1, "one"));
+		journal.append(entry(2, "two"));
+		String firstLine = Files.readString(file, StandardCharsets.UTF_8).split("\n", 2)[0];
+
+		JournalEntry updated = journal.replaceHeadNotes("Captioned");
+		assertEquals(2, updated.seq());
+		assertEquals("Captioned", updated.notes());
+		assertEquals(journal.head().contentToken(), updated.contentToken());
+		assertEquals(1, journal.entryAt(1).summary().added());
+		assertEquals("Entry 1", journal.entryAt(1).notes());
+
+		Journal reopened = Journal.open(file);
+		assertEquals("Captioned", reopened.head().notes());
+		assertEquals(2, reopened.length());
+		assertEquals(firstLine, Files.readString(file, StandardCharsets.UTF_8).split("\n", 2)[0]);
+		assertEquals("Captioned", journal.replaceHeadNotes("Captioned").notes());
+	}
+
+	@Test
 	void completeOpenRefusesATornTail() throws Exception {
 		Path file = tempDir.resolve("journal.jsonl");
 		Journal journal = Journal.open(file);

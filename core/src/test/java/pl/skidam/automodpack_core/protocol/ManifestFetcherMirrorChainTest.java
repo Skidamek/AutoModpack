@@ -75,6 +75,29 @@ class ManifestFetcherMirrorChainTest {
 	}
 
 	@Test
+	void aNotesOnlyJournalChangeIsFetchedWhileHeadIsUnchanged() throws Exception {
+		server = new ConditionalFetchTest.ContractServer();
+		GroupManifest manifest = TestPacks.manifest("notes caption", "config/example.txt", "chain-content");
+		GenerationJsons.HeadDocumentFields head = TestPacks.head(manifest);
+		byte[] headBytes = ConfigTools.GSON.toJson(head).getBytes(StandardCharsets.UTF_8);
+		server.store().put("head", headBytes);
+		server.store().put("journal", journalBytes(head.contentToken, manifest, "First"));
+
+		ClientStorage storage = storage();
+		var first = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(20, TimeUnit.SECONDS);
+		assertTrue(first.successful(), () -> "first fetch failed: " + first.failure());
+		storage.writeActiveState(PackDocument.fromFields(head));
+		assertEquals("First", Journal.openComplete(storage.historyJournalFile(MODPACK_ID)).head().notes());
+
+		server.store().put("journal", journalBytes(head.contentToken, manifest, "Captioned later"));
+		var second = ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo(), secret(), false, MODPACK_ID).get(20, TimeUnit.SECONDS);
+		assertTrue(second.successful(), () -> "second fetch failed: " + second.failure());
+		assertEquals(head.contentToken, second.content().contentToken);
+		assertEquals(new String(headBytes, StandardCharsets.UTF_8), Files.readString(storage.historyHeadFile(MODPACK_ID), StandardCharsets.UTF_8));
+		assertEquals("Captioned later", Journal.openComplete(storage.historyJournalFile(MODPACK_ID)).head().notes());
+	}
+
+	@Test
 	void aVouchedRecheckSurvivesACloseFramedHost() throws Exception {
 		server = new ConditionalFetchTest.ContractServer();
 		GroupManifest manifest = TestPacks.manifest("close framed recheck", "config/example.txt", "chain-content");
@@ -162,9 +185,13 @@ class ManifestFetcherMirrorChainTest {
 	}
 
 	private byte[] journalBytes(String headToken, GroupManifest manifest) throws IOException {
+		return journalBytes(headToken, manifest, "First");
+	}
+
+	private byte[] journalBytes(String headToken, GroupManifest manifest, String notes) throws IOException {
 		Path file = Files.createTempFile(temporaryDirectory, "journal-", ".jsonl");
 		Journal journal = Journal.open(file);
-		journal.append(new JournalEntry(1, headToken, HashUtils.sha1(ConfigTools.GSON.toJson(manifest.toFields()).getBytes(StandardCharsets.UTF_8)), TestPacks.CREATED, "First",
+		journal.append(new JournalEntry(1, headToken, HashUtils.sha1(ConfigTools.GSON.toJson(manifest.toFields()).getBytes(StandardCharsets.UTF_8)), TestPacks.CREATED, notes,
 				JournalEntry.NO_RESTORE, List.of(JournalEntry.Change.added("config/example.txt", headToken, 1))));
 		byte[] bytes = Files.readAllBytes(file);
 		Files.delete(file);

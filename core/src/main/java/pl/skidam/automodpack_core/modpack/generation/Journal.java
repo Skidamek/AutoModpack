@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -10,9 +11,10 @@ import java.util.TreeMap;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.JsonLines;
 
-/** The append-only history of one modpack lineage: one entry per content change. */
+/** The append-only history of one modpack lineage: one entry per content change. The live head's notes may be replaced in place. */
 public final class Journal {
 	/** Unusable journal *content*, not a locked or missing file: callers may aside the evidence. Physical IO stays a plain {@link IOException}. */
 	public static final class UnusableContentException extends IOException {
@@ -84,6 +86,21 @@ public final class Journal {
 		updated.add(entry);
 		entries = List.copyOf(updated);
 		return entry;
+	}
+
+	/** Replaces notes on the live head entry; seq, tokens, time, restore pointer, and changes stay. */
+	public synchronized JournalEntry replaceHeadNotes(String notes) throws IOException {
+		if (entries.isEmpty()) throw new IOException("The journal is empty");
+		JournalEntry head = entries.get(entries.size() - 1);
+		JournalEntry updated = new JournalEntry(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), notes, head.restoreOf(), head.changes());
+		if (updated.notes().equals(head.notes())) return updated;
+		List<JournalEntry> rewritten = new ArrayList<>(entries);
+		rewritten.set(rewritten.size() - 1, updated);
+		StringBuilder text = new StringBuilder();
+		for (JournalEntry entry : rewritten) text.append(ConfigTools.COMPACT.toJson(entry.toFields())).append('\n');
+		DurableFiles.writeAtomic(file, text.toString().getBytes(StandardCharsets.UTF_8));
+		entries = List.copyOf(rewritten);
+		return updated;
 	}
 
 	/** Rebuilds the served file set as of the given entry by folding the changes of every entry up to it. */

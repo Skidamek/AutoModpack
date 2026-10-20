@@ -83,6 +83,9 @@ public class Commands {
 			.then(generateIfContentNode)
 			.then(generateRevertNode)
 			.then(literal("history").executes(Commands::generationHistory))
+			.then(literal("replace-notes")
+					.executes(Commands::replaceNotes)
+					.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::replaceNotes)))
 			.then(generateStorageNode)
 			.then(literal("export-http")
 					.then(argument("directory", StringArgumentType.greedyString()).executes(Commands::exportHttpTree))
@@ -537,6 +540,7 @@ public class Commands {
 		send(context, "/automodpack generate preview [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate if-content <content-token> [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate revert <seq> confirm [notes <text...>]", ChatFormatting.YELLOW, false);
+		send(context, "/automodpack generate replace-notes [text...]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate history/storage [collect confirm]/export-http [--all] <dir>", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack host start/stop/restart/activity/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
@@ -705,6 +709,24 @@ public class Commands {
 				}
 			} catch (IOException e) {
 				send(context, "FAILED: could not export the HTTP contract tree: " + e.getMessage(), ChatFormatting.RED, true);
+			}
+		});
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int replaceNotes(CommandContext<CommandSourceStack> context) {
+		String notes = optionalArgument(context, "notes");
+		Util.backgroundExecutor().execute(() -> {
+			send(context, "Replacing patch notes...", ChatFormatting.YELLOW, true);
+			long start = System.currentTimeMillis();
+			ModpackExecutor.ReplaceNotesResult result = modpackExecutor.replaceNotes(notes);
+			if (result instanceof ModpackExecutor.NotesReplaced replaced) {
+				send(context, "NOTES REPLACED on #" + replaced.entry().seq() + elapsed(start), ChatFormatting.GREEN, true);
+				send(context, "Patch notes: " + firstLine(replaced.entry().notes()), ChatFormatting.GRAY, false);
+				replaced.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, true));
+				reportHostingFailure(context, replaced.hostingFailure());
+			} else if (result instanceof ModpackExecutor.Rejected rejected) {
+				send(context, "FAILED: " + rejected.detail(), ChatFormatting.RED, true);
 			}
 		});
 		return Command.SINGLE_SUCCESS;

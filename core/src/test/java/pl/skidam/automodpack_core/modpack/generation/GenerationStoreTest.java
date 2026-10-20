@@ -78,6 +78,28 @@ class GenerationStoreTest {
 	}
 
 	@Test
+	void replaceHeadNotesKeepsIdentityAndResizesTheHostedJournal() throws Exception {
+		Path objects = tempDir.resolve("objects");
+		Path state = tempDir.resolve("state");
+		GenerationStore store = new GenerationStore(state, objects);
+		store.publish(candidate("one", "content-one"), "First", null);
+		store.publish(candidate("two", "content-two"), "Second", null);
+		long seq = store.loadCurrent().orElseThrow().seq();
+		String token = store.loadCurrent().orElseThrow().contentToken();
+		long before = Files.size(state.resolve("journal.jsonl"));
+
+		JournalEntry updated = store.replaceHeadNotes("Captioned later");
+		assertEquals(seq, updated.seq());
+		assertEquals(token, updated.contentToken());
+		assertEquals("Captioned later", updated.notes());
+		assertEquals("First", store.history(10).get(0).notes());
+		assertEquals(token, store.loadCurrent().orElseThrow().contentToken());
+		long after = Files.size(state.resolve("journal.jsonl"));
+		assertTrue(after > before);
+		assertEquals(after, store.hosting().hosted(GenerationHosting.JOURNAL_KEY).orElseThrow().size());
+	}
+
+	@Test
 	void collectThenRestoreFailsLoudlyAboutTheCollectedObjects() throws Exception {
 		Path objects = tempDir.resolve("objects");
 		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects);

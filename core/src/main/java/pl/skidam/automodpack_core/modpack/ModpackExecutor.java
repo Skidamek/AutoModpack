@@ -199,6 +199,33 @@ public class ModpackExecutor {
 		return generationStore.history(limit);
 	}
 
+	public ReplaceNotesResult replaceNotes() {
+		return replaceNotes(null);
+	}
+
+	public ReplaceNotesResult replaceNotes(String inlineNotes) {
+		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
+		try (OperationLocks.Lease operation = locks.acquire(OperationLocks.Operation.PUBLICATION)) {
+			return bindHosting(replaceNotesLocked(inlineNotes), operation, serverConfig);
+		} catch (OperationLocks.BusyException busy) {
+			return new ReplaceNotesResult.Rejected(new Refusal(OperationLocks.BUSY, busy));
+		} catch (Exception e) {
+			LOGGER.error("Failed to replace patch notes", e);
+			return new ReplaceNotesResult.Rejected(new Refusal(Throwables.detail(e), e));
+		}
+	}
+
+	private ReplaceNotesResult replaceNotesLocked(String inlineNotes) throws Exception {
+		GenerationStore.Current current = generationStore.loadCurrent().orElse(null);
+		if (current == null)
+			return new ReplaceNotesResult.Rejected(new Refusal("No modpack has been published yet. Run /automodpack generate, or leave generate-modpack-on-start enabled to publish one at startup.", null));
+		GenerationPatchNotes.Resolution notes = GenerationPatchNotes.resolve(inlineNotes, patchNotesFile);
+		if (notes.text().isBlank()) return new ReplaceNotesResult.Rejected(new Refusal("Patch notes are empty", null));
+		JournalEntry entry = generationStore.replaceHeadNotes(notes.text());
+		consumePatchNotes(notes);
+		return new NotesReplaced(entry, currentDocument(current), List.of(), generationStore.hosting());
+	}
+
 	public HttpExporter.Result exportHttp(Path targetDirectory) throws IOException {
 		return exportHttp(targetDirectory, false);
 	}
@@ -693,6 +720,34 @@ public class ModpackExecutor {
 		@Override
 		public Loaded withHostingFailure(Throwable failure) {
 			return new Loaded(current, hosting, failure);
+		}
+	}
+
+	public sealed interface ReplaceNotesResult extends HostingOutcome permits NotesReplaced, ReplaceNotesResult.Rejected {
+
+		record Rejected(Refusal refusal) implements ReplaceNotesResult, ModpackExecutor.Rejected {
+			public Rejected {
+				Objects.requireNonNull(refusal, "refusal");
+			}
+		}
+	}
+
+	public record NotesReplaced(JournalEntry entry, PackDocument current, List<String> warnings, GenerationHosting hosting, Throwable hostingSwapFailure) implements ReplaceNotesResult, CommittedOutcome {
+		public NotesReplaced {
+			Objects.requireNonNull(entry, "entry");
+			Objects.requireNonNull(current, "current");
+			warnings = warnings == null ? List.of() : List.copyOf(warnings);
+			Objects.requireNonNull(hosting, "hosting");
+			if (entry.notes().isBlank()) throw new IllegalArgumentException("Replaced patch notes are empty");
+		}
+
+		public NotesReplaced(JournalEntry entry, PackDocument current, List<String> warnings, GenerationHosting hosting) {
+			this(entry, current, warnings, hosting, null);
+		}
+
+		@Override
+		public NotesReplaced withHostingFailure(Throwable failure) {
+			return new NotesReplaced(entry, current, warnings, hosting, failure);
 		}
 	}
 }

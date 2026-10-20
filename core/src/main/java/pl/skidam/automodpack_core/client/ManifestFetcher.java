@@ -292,12 +292,11 @@ public final class ManifestFetcher {
 
 	/**
 	 * After a successful head fetch the pack's durable history artifacts must vouch for it: the head policy document
-	 * is stored in the client CAS under its own hash (the mirror's entries name it), and the journal mirror must
-	 * vouch for the head content token; when it is stale, missing, or unreadable, the whole journal file is fetched
-	 * under the reserved key - conditionally when the mirror's own hash can serve as the validator - and swapped in
-	 * whole. A journal fetch already pipelined beside the head request skips the staleness gate: it is the same
-	 * request the gate would have issued, and a body the server did send is always fresher than deciding from the
-	 * gate alone. Returns whether the journal was actually refetched.
+	 * is stored in the client CAS under its own hash (the mirror's entries name it), and the journal is synced even
+	 * when the content token is unchanged, because head notes can be replaced without a new generation. The whole
+	 * journal file is fetched under the reserved key - conditionally when the mirror's own hash can serve as the
+	 * validator - and swapped in whole. A journal fetch already pipelined beside the head request is the same request
+	 * this method would have issued. Returns whether the journal was actually refetched.
 	 */
 	private static CompletableFuture<Boolean> syncJournalMirror(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, PackTransport transport, GenerationJsons.HeadDocumentFields content,
 			String journalExpected,
@@ -314,8 +313,6 @@ public final class ManifestFetcher {
 			return CompletableFuture.failedFuture(e);
 		}
 		if (journalFetched == null) {
-			if (!mirror.isStale(modpackId, content.contentToken)) return CompletableFuture.completedFuture(false);
-			LOGGER.info("Fetching modpack history from the server for {}", modpackId);
 			journalFetched = fetchJournal(transport, storage, journalExpected == null
 					? null
 					: new DocumentConditional(journalExpected, validators.get(connectionInfo.endpoint, GenerationHosting.JOURNAL_KEY)));
@@ -325,6 +322,7 @@ public final class ManifestFetcher {
 				if (fetch.unchanged() && journalExpected == null) throw new IOException("Server answered UNCHANGED to an unconditional journal request");
 				// A conditional match means the served journal equals the mirror's own bytes: nothing to replace.
 				if (!fetch.unchanged()) {
+					LOGGER.info("Fetched modpack history from the server for {}", modpackId);
 					mirror.replaceFrom(modpackId, fetch.path());
 					// The mirror now holds the served bytes, so the served etag stands for them and may be replayed.
 					validators.put(connectionInfo.endpoint, GenerationHosting.JOURNAL_KEY, fetch.etag());

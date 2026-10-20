@@ -10,6 +10,8 @@ With `generate-modpack-on-start` on (the default), the server publishes on every
 
 Patch notes travel with the generation. Pass them inline with `generate notes <text...>`, or write them to `automodpack/host-modpack/patch-notes.md`, which is read and cleared when a publish succeeds. A preview with `generate preview` shows the same diff a publish would produce, without publishing.
 
+To caption a generation that already shipped, run `/automodpack generate replace-notes` (reads the same file) or `/automodpack generate replace-notes <text...>`. That replaces the live generation's notes only: the content token and journal sequence stay put, and a later publish freezes that line. Empty notes are refused. Auto-generate on start never does this, so a leftover file still waits for the next real generation.
+
 `generate if-content <content-token>` publishes only while the pack still matches a token you name. A script that copies files and then publishes can therefore never publish a state it has not seen: if someone changed the pack in between, the command reports the mismatch instead of racing it.
 
 ## The journal
