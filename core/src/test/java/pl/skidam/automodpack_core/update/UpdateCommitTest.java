@@ -6,9 +6,16 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.DirectoryNotEmptyException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystemException;
+import java.nio.file.FileSystemLoopException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
+import java.nio.file.NotLinkException;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -1210,11 +1217,21 @@ class UpdateCommitTest {
 
 	@Test
 	void treatsAccessDeniedAsARecoverableStorageLockOnlyWhereItMeansOne() {
-		// On Windows a denied delete is how an open handle reports a sharing violation; on other kernels it is a
-		// plain permission problem - a permanent failure, not a lock the update should defer behind.
 		assertTrue(UpdateCommit.isLockFailure(new AccessDeniedException("active", "backup", null), true));
 		assertFalse(UpdateCommit.isLockFailure(new AccessDeniedException("active", "backup", null), false));
-		assertTrue(UpdateCommit.isLockFailure(new FileSystemException("active", "backup", "being used by another process"), false));
+		FileSystemException german = new FileSystemException("active", null, "Der Prozess kann nicht auf die Datei zugreifen, da sie von einem anderen Prozess verwendet wird");
+		assertTrue(UpdateCommit.isLockFailure(german, true));
+		assertTrue(UpdateCommit.isLockFailure(german, false));
+		assertTrue(UpdateCommit.isLockFailure(new FileSystemException("active", null, "プロセスはファイルにアクセスできません"), false));
+		assertFalse(UpdateCommit.isLockFailure(new DirectoryNotEmptyException("dir"), true));
+		assertFalse(UpdateCommit.isLockFailure(new DirectoryNotEmptyException("dir"), false));
+		assertFalse(UpdateCommit.isLockFailure(new NoSuchFileException("missing"), true));
+		assertFalse(UpdateCommit.isLockFailure(new NoSuchFileException("missing"), false));
+		assertFalse(UpdateCommit.isLockFailure(new FileAlreadyExistsException("exists"), true));
+		assertFalse(UpdateCommit.isLockFailure(new NotDirectoryException("file"), true));
+		assertFalse(UpdateCommit.isLockFailure(new AtomicMoveNotSupportedException("from", "to", null), true));
+		assertFalse(UpdateCommit.isLockFailure(new FileSystemLoopException("loop"), true));
+		assertFalse(UpdateCommit.isLockFailure(new NotLinkException("link"), true));
 	}
 
 	@Test

@@ -4,10 +4,16 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
 import java.nio.file.AccessDeniedException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.DirectoryNotEmptyException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystemException;
+import java.nio.file.FileSystemLoopException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
+import java.nio.file.NotLinkException;
 import java.nio.file.Path;
 import java.util.EnumSet;
 import java.util.Locale;
@@ -659,23 +665,22 @@ public final class UpdateCommit {
 	}
 
 	/**
-	 * On Windows a denied delete is how an open handle reports a sharing violation; on other kernels it is a plain
-	 * permission problem - a permanent failure, not a lock the update should defer behind. Classifying every Windows
-	 * instance as a lock is the conservative reading: the accepted cost is a permanent permission failure that defers
-	 * with a locked-file story, because the alternative misclassifies a genuine in-use file as a terminal error. Other
-	 * kernels name the sharing conflict in the message - only those count.
+	 * AccessDeniedException is a sharing violation only on Windows. A generic FileSystemException is a lock on every OS
+	 * because the kernel reason is localized (FormatMessage, strerror); named subtypes that cannot be a lock stay failures.
 	 */
 	static boolean isLockFailure(IOException exception, boolean windows) {
 		Throwable current = exception;
 		while (current != null) {
-			if (windows && current instanceof AccessDeniedException) return true;
-			if (current instanceof FileSystemException fileSystemException) {
-				String detail = (Objects.toString(fileSystemException.getReason(), "") + " " + Objects.toString(fileSystemException.getMessage(), "")).toLowerCase(Locale.ROOT);
-				if (detail.contains("used by another process") || detail.contains("being used by another process") || detail.contains("sharing violation")) return true;
-			}
+			if (current instanceof AccessDeniedException) return windows;
+			if (current instanceof FileSystemException fileSystemException && !definiteNonLock(fileSystemException)) return true;
 			current = current.getCause();
 		}
 		return false;
+	}
+
+	private static boolean definiteNonLock(FileSystemException exception) {
+		return exception instanceof NoSuchFileException || exception instanceof DirectoryNotEmptyException || exception instanceof FileAlreadyExistsException || exception instanceof NotDirectoryException
+				|| exception instanceof AtomicMoveNotSupportedException || exception instanceof FileSystemLoopException || exception instanceof NotLinkException;
 	}
 
 	private static boolean isLockFailure(IOException exception) {
