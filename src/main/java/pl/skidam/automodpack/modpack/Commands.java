@@ -379,7 +379,7 @@ public class Commands {
 	private static final int ACTIVITY_SHOWN_ENTRIES = 5;
 
 	private static int activity(CommandContext<CommandSourceStack> context) {
-		Util.backgroundExecutor().execute(() -> {
+		runAsync(context, "Activity collection", () -> {
 			try {
 				VersionedCommandSource.sendFeedback(context, activityMessage(hostServer.activitySnapshot()), false);
 			} catch (Exception e) {
@@ -453,7 +453,7 @@ public class Commands {
 	}
 
 	private static int reload(CommandContext<CommandSourceStack> context) {
-		Util.backgroundExecutor().execute(() -> {
+		runAsync(context, "Config reload", () -> {
 			var reloaded = ConfigUtils.reloadServerConfig();
 			if (reloaded.isEmpty()) {
 				send(context, "Error while reloading config file!", ChatFormatting.RED, true);
@@ -468,7 +468,7 @@ public class Commands {
 	}
 
 	private static int startModpackHost(CommandContext<CommandSourceStack> context) {
-		Util.backgroundExecutor().execute(() -> {
+		runAsync(context, "Host start", () -> {
 			if (hostServer.isRunning()) {
 				send(context, "Modpack hosting is already running!", ChatFormatting.RED, false);
 				return;
@@ -483,7 +483,7 @@ public class Commands {
 	}
 
 	private static int stopModpackHost(CommandContext<CommandSourceStack> context) {
-		Util.backgroundExecutor().execute(() -> {
+		runAsync(context, "Host stop", () -> {
 			boolean wasRunning = hostServer.isRunning();
 			if (wasRunning) send(context, "Stopping modpack hosting...", ChatFormatting.RED, true);
 			if (!hostServer.stop()) {
@@ -499,7 +499,7 @@ public class Commands {
 	}
 
 	private static int restartModpackHost(CommandContext<CommandSourceStack> context) {
-		Util.backgroundExecutor().execute(() -> {
+		runAsync(context, "Host restart", () -> {
 			send(context, "Restarting modpack hosting...", ChatFormatting.YELLOW, true);
 			if (!hostServer.stop()) {
 				send(context, "Couldn't restart server!", ChatFormatting.RED, true);
@@ -563,7 +563,7 @@ public class Commands {
 	private static int runGeneration(CommandContext<CommandSourceStack> context, boolean preview, boolean guarded) {
 		String notes = optionalArgument(context, "notes");
 		String expectedToken = guarded ? StringArgumentType.getString(context, "content-token") : null;
-		Util.backgroundExecutor().execute(() -> {
+		runAsync(context, preview ? "Modpack preview" : "Modpack generation", () -> {
 			send(context, preview ? "Preparing modpack preview..." : "Generating modpack...", ChatFormatting.YELLOW, !preview);
 			long start = System.currentTimeMillis();
 			if (preview) reportPreview(context, start, modpackExecutor.preview(notes));
@@ -628,7 +628,7 @@ public class Commands {
 		if (targetSeq < 1) return 0;
 		String notes = optionalArgument(context, "notes");
 		if (!resolveAndReportRevertTarget(context, targetSeq)) return 0;
-		Util.backgroundExecutor().execute(() -> {
+		runAsync(context, "Modpack revert", () -> {
 			long start = System.currentTimeMillis();
 			send(context, "Reverting the modpack to #" + targetSeq + "...", ChatFormatting.YELLOW, true);
 			ModpackExecutor.RevertResult result = modpackExecutor.revert(targetSeq, notes);
@@ -698,7 +698,7 @@ public class Commands {
 
 	private static int exportHttpTree(CommandContext<CommandSourceStack> context, boolean includeAll) {
 		String directory = StringArgumentType.getString(context, "directory");
-		Util.backgroundExecutor().execute(() -> {
+		runAsync(context, "HTTP export", () -> {
 			send(context, "Exporting the HTTP contract tree...", ChatFormatting.YELLOW, true);
 			try {
 				HttpExporter.Result result = modpackExecutor.exportHttp(Path.of(directory), includeAll);
@@ -716,7 +716,7 @@ public class Commands {
 
 	private static int replaceNotes(CommandContext<CommandSourceStack> context) {
 		String notes = optionalArgument(context, "notes");
-		Util.backgroundExecutor().execute(() -> {
+		runAsync(context, "Patch notes replacement", () -> {
 			send(context, "Replacing patch notes...", ChatFormatting.YELLOW, true);
 			long start = System.currentTimeMillis();
 			ModpackExecutor.ReplaceNotesResult result = modpackExecutor.replaceNotes(notes);
@@ -755,7 +755,7 @@ public class Commands {
 	}
 
 	private static int modpackGroups(CommandContext<CommandSourceStack> context) {
-		Util.backgroundExecutor().execute(() -> {
+		runAsync(context, "Group overview", () -> {
 			try {
 				Optional<PackDocument> published = modpackExecutor.currentDocument();
 				for (String line : GroupInspector.overview(serverConfig.modpack.categories, published.map(PackDocument::manifest).orElse(null)))
@@ -769,7 +769,7 @@ public class Commands {
 
 	private static int modpackGroupDetail(CommandContext<CommandSourceStack> context) {
 		String groupId = StringArgumentType.getString(context, "group-id");
-		Util.backgroundExecutor().execute(() -> {
+		runAsync(context, "Group detail", () -> {
 			try {
 				Optional<PackDocument> published = modpackExecutor.currentDocument();
 				Optional<List<String>> lines = GroupInspector.detail(serverConfig.modpack.categories, groupId, published.map(PackDocument::manifest).orElse(null));
@@ -849,6 +849,18 @@ public class Commands {
 			send(context, String.format(Locale.ROOT, "Excluded: %s/%s - %s (%s)", exclusion.source().groupId(), exclusion.source().logicalPath(),
 					exclusion.reason().name().toLowerCase(Locale.ROOT), exclusion.message()), ChatFormatting.GRAY, false);
 		state.patchNotesSource().ifPresent(source -> send(context, "Patch notes: " + source.name().toLowerCase(Locale.ROOT), ChatFormatting.WHITE, false));
+	}
+
+	/** Runs command work off the server thread; an escaping exception would be relayed by Minecraft as a delayed server crash. */
+	private static void runAsync(CommandContext<CommandSourceStack> context, String action, Runnable task) {
+		Util.backgroundExecutor().execute(() -> {
+			try {
+				task.run();
+			} catch (Exception e) {
+				LOGGER.error("AutoModpack {} failed", action, e);
+				send(context, action + " failed: " + Throwables.detail(e), ChatFormatting.RED, true);
+			}
+		});
 	}
 
 	private static void send(CommandContext<CommandSourceStack> context, String msg, ChatFormatting msgColor, boolean broadcast) {

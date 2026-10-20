@@ -30,7 +30,7 @@ public final class Constants {
 	public static Path THIS_MOD_JAR;
 	public static ModpackExecutor modpackExecutor;
 	public static NettyServer hostServer;
-	public static ServerConfigJsons.ServerConfigFieldsV3 serverConfig;
+	public static volatile ServerConfigJsons.ServerConfigFieldsV3 serverConfig;
 	/** The process config document: boot owns loading it, flows land committed snapshots through one seam, screens only read. */
 	public static volatile ClientConfigJsons.ClientConfigFieldsV3 clientConfig;
 	/**

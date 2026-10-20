@@ -14,7 +14,7 @@ public class ConfigUtils {
 	/** One completed server-config reload: the config now installed as the global server config and whether hosting must restart. */
 	public record ReloadedServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config, boolean connectionSettingsChanged) {}
 
-	/** Reads, normalizes and saves the server config file, then swaps it into the running global; empty when the file is unreadable. */
+	/** Reads, normalizes and saves the server config file, then swaps it into the running global. Empty when no file exists; throws when it cannot be read, parsed or saved, leaving the running global untouched. */
 	public static Optional<ReloadedServerConfig> reloadServerConfig() {
 		Optional<ServerConfigJsons.ServerConfigFieldsV3> read = ReconfConfigs.read(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class);
 		if (read.isEmpty()) return Optional.empty();
