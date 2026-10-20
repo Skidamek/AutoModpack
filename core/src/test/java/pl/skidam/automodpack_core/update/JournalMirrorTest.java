@@ -18,6 +18,7 @@ import pl.skidam.automodpack_core.modpack.generation.Journal;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 class JournalMirrorTest {
@@ -27,38 +28,37 @@ class JournalMirrorTest {
 	Path temporaryDirectory;
 
 	@Test
-	void missingMirrorIsStaleAndReplaceFromInstallsTheFetchedReplica() throws Exception {
+	void missingMirrorReadsEmptyAndReplaceFromInstallsTheFetchedReplica() throws Exception {
 		ClientStorage storage = storage();
 		JournalMirror mirror = new JournalMirror(storage);
 		String headToken = sha1("head-content");
 		Path fetched = fetchedJournal(storage, headToken, sha1("older-content"));
 
-		assertTrue(mirror.isStale(MODPACK_ID, headToken));
-		assertTrue(mirror.isStale(MODPACK_ID, sha1("other")));
+		assertTrue(mirror.lastEntryToken(MODPACK_ID).isEmpty());
 		assertTrue(mirror.entries(MODPACK_ID).isEmpty());
 
 		mirror.replaceFrom(MODPACK_ID, fetched);
 
-		assertFalse(mirror.isStale(MODPACK_ID, headToken));
-		assertTrue(mirror.isStale(MODPACK_ID, sha1("other")));
 		assertEquals(headToken, mirror.lastEntryToken(MODPACK_ID).orElseThrow());
 		assertEquals(2, mirror.entries(MODPACK_ID).size());
 		assertFalse(Files.exists(fetched), "The fetched file is consumed by the atomic swap");
 	}
 
 	@Test
-	void outOfDateOrUnreadableMirrorCountsAsStale() throws Exception {
+	void unreadableMirrorIsSetAsideAndReadsEmpty() throws Exception {
 		ClientStorage storage = storage();
 		JournalMirror mirror = new JournalMirror(storage);
 		Path fetched = fetchedJournal(storage, sha1("new-head"), sha1("older-content"));
 		mirror.replaceFrom(MODPACK_ID, fetched);
 
-		// A head token the mirror's last entry does not carry means the mirror lags the server.
-		assertTrue(mirror.isStale(MODPACK_ID, sha1("newer-head")));
-		assertFalse(mirror.isStale(MODPACK_ID, sha1("new-head")));
-
 		Files.writeString(storage.historyJournalFile(MODPACK_ID), "{not a journal", StandardCharsets.UTF_8);
-		assertTrue(mirror.isStale(MODPACK_ID, sha1("new-head")));
+
+		assertTrue(mirror.entries(MODPACK_ID).isEmpty());
+		Path journal = storage.historyJournalFile(MODPACK_ID);
+		assertFalse(Files.exists(journal));
+		try (var siblings = Files.list(journal.getParent())) {
+			assertTrue(siblings.anyMatch(path -> path.getFileName().toString().contains(DurableFiles.CORRUPT_ASIDE_MARKER)));
+		}
 	}
 
 	@Test

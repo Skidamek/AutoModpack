@@ -70,16 +70,6 @@ public final class JournalMirror {
 		return Files.exists(storage.historyJournalFile(modpackId), LinkOption.NOFOLLOW_LINKS);
 	}
 
-	/** True when the mirror cannot vouch for the head document: missing, unreadable, or its last entry carries another token. */
-	public boolean isStale(String modpackId, String headContentToken) {
-		try {
-			Optional<String> last = lastEntryToken(modpackId);
-			return last.isEmpty() || !last.get().equals(headContentToken);
-		} catch (IOException | RuntimeException e) {
-			return true;
-		}
-	}
-
 	/** Verifies the fetched journal file parses completely, then swaps it in as the pack's mirror under the mutation lock. */
 	public void replaceFrom(String modpackId, Path fetchedFile) throws IOException {
 		ModpackId.requireValid(modpackId);
