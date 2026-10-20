@@ -336,7 +336,6 @@ public class FileInspection {
 			String version = "1";
 			Set<String> provides = new HashSet<>();
 			Set<String> deps = new HashSet<>();
-			ModEnvironment env = ModEnvironment.UNIVERSAL;
 			DisplayTest displayTest = null;
 
 			for (Map<String, Object> modTable : mods) {
@@ -357,7 +356,8 @@ public class FileInspection {
 			}
 
 			if (modId != null) {
-				// [[dependencies.<modId>]] is keyed by the mod's own id; a platform dependency's side says where the mod itself runs, feeding per-group auto-exclude-server-side-mods
+				// [[dependencies.<modId>]] is keyed by the mod's own id. side on a minecraft/forge/neoforge row is which
+				// physical side that dependency is checked on, not whether this jar loads on the client.
 				Map<String, Object> depsTable = MiniToml.getTable(result, "dependencies");
 				if (depsTable != null) {
 					for (Map<String, Object> depTable : MiniToml.getTables(depsTable, modId)) {
@@ -375,17 +375,10 @@ public class FileInspection {
 						if (!required) continue;
 
 						deps.add(depId);
-
-						// Determine Environment based on Minecraft/Forge side requirement
-						if (isPlatformId(depId)) {
-							String side = MiniToml.getString(depTable, "side");
-							if ("client".equalsIgnoreCase(side)) env = ModEnvironment.CLIENT;
-							else if ("server".equalsIgnoreCase(side)) env = ModEnvironment.SERVER;
-						}
 					}
 				}
 			}
-			return new ModMetadata(modId, version, provides, deps, env, Set.of(), displayTest);
+			return new ModMetadata(modId, version, provides, deps, ModEnvironment.UNIVERSAL, Set.of(), displayTest);
 		} catch (Exception e) {
 			LOGGER.error("TOML Parse Error: {}", e.getMessage());
 			return null;
@@ -450,10 +443,6 @@ public class FileInspection {
 			LOGGER.error("JSON Parse Error: {}", e.getMessage());
 			return null;
 		}
-	}
-
-	private static boolean isPlatformId(String id) {
-		return "minecraft".equals(id) || "neoforge".equals(id) || "forge".equals(id);
 	}
 
 	private static String getJsonString(JsonObject obj, String key) {

@@ -96,11 +96,25 @@ Editable files keep their copy in the game directory, mods included: a mod match
 
 A file reaches clients when one of the two sources provides it: the group directory includes everything it holds, and `from-server` pulls matching files from the server root. AutoModpack does not care what a file is; the same rules move mods, configs, and everything else.
 
-- Keep a server file off clients: add its path to `exclude`. A server-side mod, for example, is kept off with `mods/the-server-mod.jar`. Each group also has `auto-exclude-server-side-mods`: the default `METADATA` drops jars whose own metadata says they are server-only. `PLATFORMS` also asks Modrinth and CurseForge. `DISABLED` ships every jar in that group.
+- Keep a server file off clients: add its path to `exclude`. A dedicated-server mod, for example, is kept off with `mods/the-server-mod.jar`. Each group also has `auto-exclude-server-side-mods`, which tries to drop dedicated-server jars on a best-effort basis. See [Dedicated-server jars](#dedicated-server-jars). `DISABLED` ships every jar in that group.
 - Give clients a file the server does not need: put it in the group directory, for example `automodpack/host-modpack/main/mods/`.
 - Split fully: remove the mod rules from `from-server` and put every client mod into the group directory. The pack's mods then come only from `host-modpack`, and the server's `mods` folder stays server-only.
 
 A `!` rule inside `from-server` also skips a path, but only for the server root; the group directory can still provide the file.
+
+## Dedicated-server jars
+
+Each group has `auto-exclude-server-side-mods`. It tries to drop jars that a joining client must not run. This is best effort. It does not drop every mod that looks server-side.
+
+`DISABLED` ships every jar in the group.
+
+`METADATA` drops Fabric jars with `environment: server` and Forge jars with `displayTest` `IGNORE_SERVER_VERSION`.
+
+`PLATFORMS` does the same, then asks Modrinth about leftover universal jars and drops those tagged `dedicated_server_only`.
+
+A `side` of `SERVER` on a `minecraft`, `forge`, or `neoforge` dependency is not a reason to drop the jar. That field says which side the dependency is checked on. The jar still loads on the client. If the pack leaves it out, Forge kicks joiners for a mismatched mod list.
+
+If auto-exclude leaves a jar in the pack and you still do not want it on clients, add the path to `exclude`.
 
 ## File rules
 
@@ -115,7 +129,7 @@ Remove the file from the server, or keep it on the server and add it to `exclude
 ## What never ships
 
 - AutoModpack's own jar. `/automodpack generate` never packs it and never publishes its updates: clients follow the AutoModpack version the server runs and pick the matching release up from Modrinth. To update players, update the jar on the server, restart, and clients sync to it on their next connection. The details, including `sync-automodpack-version` and `self-updater`, are in [AutoModpack's own updates](how-it-works/client-updates#automodpacks-own-updates).
-- Mods whose metadata declares them server-side, when a group's `auto-exclude-server-side-mods` is `METADATA` or `PLATFORMS` (default `METADATA`). `PLATFORMS` also drops universal mods that Modrinth or CurseForge says clients never load. A preview reports those platform verdicts but keeps the jars, so you see what a publish would drop.
+- Dedicated-server jars, when a group's `auto-exclude-server-side-mods` is `METADATA` or `PLATFORMS` (default `METADATA`). This is best effort. See [Dedicated-server jars](#dedicated-server-jars). A preview reports platform verdicts but keeps the jars, so you see what a publish would drop.
 - Empty, hidden, `.tmp`, `.disabled`, and `.bak` files. The default `exclude` rules carry these patterns and can be edited; the `automodpack/` namespace and Windows-reserved device names are always left out and cannot be turned back on.
 - The paths `saves/`, `screenshots/`, `logs/`, and `automodpack/` can never be claimed by the pack.
 

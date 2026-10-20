@@ -90,10 +90,10 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		return record != null && key.equalsIgnoreCase(record.hash);
 	}
 
-	/** Metadata without a readable side, a record from before the is-mod verdict, and a record from before the client-absence facts were stored, are rebuilt rather than answered. */
+	/** Metadata without a readable side, a record from before the is-mod verdict, and a record from before the client-absence facts or declared-only environment were stored, are rebuilt rather than answered. */
 	@Override
 	protected boolean isCurrent(ModRecord record) {
-		return record.services != null && record.clientAbsenceKnown && (record.id == null || (record.isMod && environmentOf(record.environment) != null));
+		return record.services != null && record.clientAbsenceKnown && record.environmentFromJarKnown && (record.id == null || (record.isMod && environmentOf(record.environment) != null));
 	}
 
 	@Override
@@ -115,6 +115,8 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		private boolean declaresServerOnly;
 		/** Written by every record, so one from before the client-absence facts were stored is rebuilt rather than answered. */
 		private boolean clientAbsenceKnown;
+		/** Written by every record, so one that inferred environment from a loader dependency side is rebuilt. */
+		private boolean environmentFromJarKnown;
 
 		private ModRecord() {}
 
@@ -123,6 +125,7 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 			isMod = inspection.mod();
 			services = inspection.services();
 			clientAbsenceKnown = true;
+			environmentFromJarKnown = true;
 			FileInspection.Mod mod = inspection.metadata();
 			if (mod == null) return;
 			IDs = mod.IDs();

@@ -170,7 +170,7 @@ public class ServerConfigJsons {
 		public String description = "";
 		@ReconfConfigs.Comment("REQUIRED is always installed. RECOMMENDED is pre-selected, players can opt out. OPTIONAL starts unchecked.")
 		public GroupSelectionMode selection = GroupSelectionMode.OPTIONAL;
-		@ReconfConfigs.Comment("DISABLED ships every jar. METADATA drops jars whose own metadata says server-only. PLATFORMS also asks Modrinth and CurseForge.")
+		@ReconfConfigs.Comment("DISABLED ships every jar. METADATA and PLATFORMS drop dedicated-server jars on a best-effort basis. Use exclude for anything else.")
 		@SerializedName("auto-exclude-server-side-mods")
 		public ServerSideModExclusion autoExcludeServerSideMods = ServerSideModExclusion.METADATA;
 

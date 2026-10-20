@@ -131,9 +131,9 @@ public final class StableSourceSnapshotter {
 	}
 
 	/**
-	 * A server-side verdict only counts when the jar's own metadata lets a client run without it: a Forge jar on
-	 * MATCH_VERSION (the default, including a missing displayTest) would get joining clients kicked, so it stays.
-	 * The verdict can come from the declared environment or from a displayTest that names the jar server-only.
+	 * Best-effort drop of jars a joining client must not run: Fabric {@code environment: server}, or Forge
+	 * {@code IGNORE_SERVER_VERSION}. A minecraft/forge/neoforge dependency {@code side} is not a signal — those jars still
+	 * load on the client. A Forge jar on MATCH_VERSION stays even when another signal looks server-only.
 	 */
 	private static Exclusion expectedContentExclusion(boolean autoExcludeServerMods, FileInspection.Inspection inspection) {
 		if (!autoExcludeServerMods) return null;

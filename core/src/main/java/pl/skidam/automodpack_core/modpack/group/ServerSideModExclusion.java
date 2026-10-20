@@ -1,17 +1,17 @@
 package pl.skidam.automodpack_core.modpack.group;
 
-/** How a group decides that a jar is server-only and should stay off clients. */
+/** Best-effort drop of jars a joining client must not run. */
 public enum ServerSideModExclusion {
 	DISABLED,
 	METADATA,
 	PLATFORMS;
 
-	/** Drop jars whose own metadata declares a server environment. */
+	/** Drop Fabric {@code environment: server} and Forge {@code IGNORE_SERVER_VERSION}. */
 	public boolean dropsJarMetadata() {
 		return this != DISABLED;
 	}
 
-	/** Ask Modrinth about leftover universal jars. */
+	/** Ask Modrinth about leftover universal jars for {@code dedicated_server_only}. */
 	public boolean asksPlatforms() {
 		return this == PLATFORMS;
 	}

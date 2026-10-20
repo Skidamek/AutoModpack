@@ -46,6 +46,7 @@ class ReconfConfigsTest {
 		assertTrue(text.contains("# REQUIRED is always installed. RECOMMENDED is pre-selected, players can opt out. OPTIONAL starts unchecked."), text);
 		assertTrue(text.contains("selection: REQUIRED"), text);
 		assertTrue(text.contains("auto-exclude-server-side-mods: METADATA"), text);
+		assertTrue(text.contains("Use exclude for anything else."), text);
 		assertFalse(text.contains("default-selected"), text);
 		assertEquals("", config.modpack.name);
 		assertEquals(ServerSideModExclusion.METADATA, config.modpack.categories.get("General").get("main").autoExcludeServerSideMods);

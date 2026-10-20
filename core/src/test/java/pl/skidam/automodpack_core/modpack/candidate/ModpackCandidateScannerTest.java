@@ -659,6 +659,38 @@ class ModpackCandidateScannerTest {
 		assertTrue(candidate.manifest().groups().get("push").files().containsKey("universal.jar"));
 	}
 
+	@Test
+	void neoforgeJarWithMinecraftSideServerStaysUnderMetadata() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main"));
+		writeNeoForgeJar(groups.resolve("main/worldgen.jar"), "SERVER");
+
+		ServerConfigJsons.GroupDeclaration main = group();
+		main.autoExcludeServerSideMods = ServerSideModExclusion.METADATA;
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main));
+
+		assertTrue(candidate.manifest().groups().get("main").files().containsKey("worldgen.jar"));
+		assertEquals(0, candidate.exclusions().size());
+	}
+
+	@Test
+	void neoforgeJarWithMinecraftSideServerIsDroppedWhenModrinthSaysDedicatedServerOnly() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main"));
+		Path jar = groups.resolve("main/dedicated.jar");
+		writeNeoForgeJar(jar, "SERVER");
+
+		ServerConfigJsons.GroupDeclaration main = group();
+		main.autoExcludeServerSideMods = ServerSideModExclusion.PLATFORMS;
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), true, cacheAnsweringModrinth(jar, "dedicated_server_only"));
+
+		assertFalse(candidate.manifest().groups().get("main").files().containsKey("dedicated.jar"));
+		assertEquals(1, candidate.exclusions().size());
+		assertEquals("modrinth environment dedicated_server_only", candidate.exclusions().get(0).message());
+	}
+
 	private static void writeModJar(Path path) throws IOException {
 		writeModJar(path, null);
 	}
@@ -670,6 +702,16 @@ class ModpackCandidateScannerTest {
 		try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(path))) {
 			jar.putNextEntry(new JarEntry("fabric.mod.json"));
 			jar.write(json.getBytes(StandardCharsets.UTF_8));
+			jar.closeEntry();
+		}
+	}
+
+	private static void writeNeoForgeJar(Path path, String minecraftSide) throws IOException {
+		String toml = "modLoader = \"javafml\"\nloaderVersion = \"[1,)\"\n[[mods]]\nmodId = \"testmod\"\nversion = \"1.0.0\"\n[[dependencies.testmod]]\nmodId = \"minecraft\"\ntype = \"required\"\nside = \""
+				+ minecraftSide + "\"\n";
+		try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(path))) {
+			jar.putNextEntry(new JarEntry("META-INF/neoforge.mods.toml"));
+			jar.write(toml.getBytes(StandardCharsets.UTF_8));
 			jar.closeEntry();
 		}
 	}

@@ -61,6 +61,7 @@ class FileInspectionTest {
 			FileInspection.Mod mod = inspect(jar);
 
 			assertEquals(Set.of("required_default", "mandatory_explicit", "required_type", "minecraft"), mod.deps());
+			assertEquals(ModEnvironment.UNIVERSAL, mod.environment(), "a minecraft dependency side is not this jar's environment");
 		} finally {
 			Files.deleteIfExists(jar);
 		}
