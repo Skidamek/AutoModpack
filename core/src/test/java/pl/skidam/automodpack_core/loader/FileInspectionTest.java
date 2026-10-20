@@ -102,25 +102,29 @@ class FileInspectionTest {
 		try {
 			Files.write(forge, jar(Map.of("META-INF/mods.toml", toml("").getBytes(StandardCharsets.UTF_8))));
 			FileInspection.Inspection matched = inspection(forge);
-			assertFalse(matched.clientMayBeAbsent(), "an absent displayTest is Forge's MATCH_VERSION default");
+			assertEquals(ClientPresence.REQUIRED, matched.clientPresence(), "an absent displayTest is Forge's MATCH_VERSION default");
+			assertFalse(matched.clientMayBeAbsent());
 			assertFalse(matched.declaresServerOnly());
 
 			Files.write(forge, jar(Map.of("META-INF/mods.toml", toml("displayTest = \"IGNORE_SERVER_VERSION\"\n").getBytes(StandardCharsets.UTF_8))));
 			FileInspection.Inspection serverOnly = inspection(forge);
+			assertEquals(ClientPresence.SERVER_ONLY, serverOnly.clientPresence());
 			assertTrue(serverOnly.clientMayBeAbsent());
 			assertTrue(serverOnly.declaresServerOnly());
 
 			Files.write(forge, jar(Map.of("META-INF/mods.toml", toml("displayTest = \"IGNORE_ALL_VERSION\"\n").getBytes(StandardCharsets.UTF_8))));
 			FileInspection.Inspection indifferent = inspection(forge);
+			assertEquals(ClientPresence.OPTIONAL, indifferent.clientPresence());
 			assertTrue(indifferent.clientMayBeAbsent());
 			assertFalse(indifferent.declaresServerOnly(), "only a client-side mod uses IGNORE_ALL_VERSION");
 
 			Files.write(forge, jar(Map.of("META-INF/mods.toml", toml("displayTest = \"NONE\"\n").getBytes(StandardCharsets.UTF_8))));
-			assertFalse(inspection(forge).clientMayBeAbsent(), "NONE keeps a custom check, so nothing is promised");
+			assertEquals(ClientPresence.REQUIRED, inspection(forge).clientPresence(), "NONE keeps a custom check, so nothing is promised");
 
 			// NeoForge dropped the key, so a neoforge.mods.toml carrying it promises nothing.
 			Files.write(neoforge, jar(Map.of("META-INF/neoforge.mods.toml", toml("displayTest = \"IGNORE_SERVER_VERSION\"\n").getBytes(StandardCharsets.UTF_8))));
 			FileInspection.Inspection neo = inspection(neoforge);
+			assertEquals(ClientPresence.OPTIONAL, neo.clientPresence());
 			assertTrue(neo.clientMayBeAbsent());
 			assertFalse(neo.declaresServerOnly());
 		} finally {
@@ -139,7 +143,8 @@ class FileInspectionTest {
 					"META-INF/jarjar/nested.jar", jar(Map.of("fabric.mod.json", nestedJson.getBytes(StandardCharsets.UTF_8))))));
 			FileInspection.Inspection inspection = inspection(jar);
 
-			assertFalse(inspection.clientMayBeAbsent(), "the root entry cannot speak for nested jars");
+			assertEquals(ClientPresence.REQUIRED, inspection.clientPresence(), "the root entry cannot speak for nested jars");
+			assertFalse(inspection.clientMayBeAbsent());
 			assertFalse(inspection.declaresServerOnly());
 		} finally {
 			Files.deleteIfExists(jar);

@@ -90,10 +90,10 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		return record != null && key.equalsIgnoreCase(record.hash);
 	}
 
-	/** Metadata without a readable side, a record from before the is-mod verdict, and a record from before the client-absence facts or declared-only environment were stored, are rebuilt rather than answered. */
+	/** Metadata without a readable side, a record from before the is-mod verdict, and a record from before the client-presence fact or declared-only environment were stored, are rebuilt rather than answered. */
 	@Override
 	protected boolean isCurrent(ModRecord record) {
-		return record.services != null && record.clientAbsenceKnown && record.environmentFromJarKnown && (record.id == null || (record.isMod && environmentOf(record.environment) != null));
+		return record.services != null && clientPresenceOf(record.clientPresence) != null && record.environmentFromJarKnown && (record.id == null || (record.isMod && environmentOf(record.environment) != null));
 	}
 
 	@Override
@@ -111,10 +111,7 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		private String id;
 		private Set<String> services;
 		private String environment;
-		private boolean clientMayBeAbsent;
-		private boolean declaresServerOnly;
-		/** Written by every record, so one from before the client-absence facts were stored is rebuilt rather than answered. */
-		private boolean clientAbsenceKnown;
+		private String clientPresence;
 		/** Written by every record, so one that inferred environment from a loader dependency side is rebuilt. */
 		private boolean environmentFromJarKnown;
 
@@ -124,8 +121,8 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 			hash = contentHash;
 			isMod = inspection.mod();
 			services = inspection.services();
-			clientAbsenceKnown = true;
 			environmentFromJarKnown = true;
+			clientPresence = inspection.clientPresence().name();
 			FileInspection.Mod mod = inspection.metadata();
 			if (mod == null) return;
 			IDs = mod.IDs();
@@ -134,8 +131,6 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 			nestedMods = mod.nestedMods().stream().map(nested -> new ModRecord(nested.hash(), new FileInspection.Inspection(true, nested, Set.of()))).collect(Collectors.toSet());
 			id = mod.id();
 			environment = mod.environment().name();
-			clientMayBeAbsent = mod.clientMayBeAbsent();
-			declaresServerOnly = mod.declaresServerOnly();
 		}
 
 		private FileInspection.Inspection at(Path path) {
@@ -144,12 +139,17 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 			Set<String> modIds = IDs == null ? Set.of() : IDs;
 			Set<String> modDeps = deps == null ? Set.of() : deps;
 			Set<FileInspection.Mod> nested = nestedMods == null ? Set.of() : nestedMods.stream().map(record -> record.at(null).metadata()).collect(Collectors.toSet());
-			return new FileInspection.Inspection(true, new FileInspection.Mod(modIds, hash, version, path, modDeps, nested, id, environmentOf(environment), clientMayBeAbsent, declaresServerOnly), shipped);
+			return new FileInspection.Inspection(true, new FileInspection.Mod(modIds, hash, version, path, modDeps, nested, id, environmentOf(environment), clientPresenceOf(clientPresence)), shipped);
 		}
 	}
 
 	private static ModEnvironment environmentOf(String name) {
 		for (ModEnvironment environment : ModEnvironment.values()) if (environment.name().equals(name)) return environment;
+		return null;
+	}
+
+	private static ClientPresence clientPresenceOf(String name) {
+		for (ClientPresence presence : ClientPresence.values()) if (presence.name().equals(name)) return presence;
 		return null;
 	}
 }

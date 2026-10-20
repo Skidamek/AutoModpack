@@ -51,14 +51,19 @@ public class FileInspection {
 			return metadata == null ? ModEnvironment.UNKNOWN : metadata.environment();
 		}
 
-		/** Whether the loader would let a client run without this jar; metadata-free jars promise nothing to the contrary. */
+		/** What a joining client is allowed to do with this jar; metadata-free jars promise nothing, so they are {@link ClientPresence#OPTIONAL}. */
+		public ClientPresence clientPresence() {
+			return metadata == null ? ClientPresence.OPTIONAL : metadata.clientPresence();
+		}
+
+		/** Whether the loader would let a client run without this jar. */
 		public boolean clientMayBeAbsent() {
-			return metadata == null || metadata.clientMayBeAbsent();
+			return clientPresence() != ClientPresence.REQUIRED;
 		}
 
 		/** Whether the jar's own metadata names it a server-only mod. */
 		public boolean declaresServerOnly() {
-			return metadata != null && metadata.declaresServerOnly();
+			return clientPresence() == ClientPresence.SERVER_ONLY;
 		}
 
 		/** Whether this jar ships any of the named services. The wanted set is the caller's question, not a catalog this inspection stores. */
@@ -90,17 +95,18 @@ public class FileInspection {
 		}
 	}
 
-	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, ModEnvironment environment, boolean clientMayBeAbsent, boolean declaresServerOnly) {
+	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, ModEnvironment environment, ClientPresence clientPresence) {
 		public Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods) {
-			this(IDs, hash, version, path, deps, nestedMods, null, ModEnvironment.UNIVERSAL, true, false);
+			this(IDs, hash, version, path, deps, nestedMods, null, ModEnvironment.UNIVERSAL, ClientPresence.OPTIONAL);
 		}
 
 		public Mod {
 			environment = environment == null ? ModEnvironment.UNIVERSAL : environment;
+			clientPresence = clientPresence == null ? ClientPresence.OPTIONAL : clientPresence;
 		}
 
 		public Mod at(Path newPath) {
-			return new Mod(IDs, hash, version, newPath, deps, nestedMods, id, environment, clientMayBeAbsent, declaresServerOnly);
+			return new Mod(IDs, hash, version, newPath, deps, nestedMods, id, environment, clientPresence);
 		}
 	}
 
@@ -140,8 +146,7 @@ public class FileInspection {
 		Set<String> ids = new HashSet<>(meta.provides());
 		ids.add(meta.modId());
 		boolean nested = meta.displayTest() != null && shipsNestedJars(fs);
-		return new Mod(ids, hash, meta.version(), file, meta.deps(), scanForNestedMods(fs, meta.declaredJars()), meta.modId(), meta.environment(), clientMayBeAbsent(meta.displayTest(), nested),
-				declaresServerOnly(meta.displayTest(), nested));
+		return new Mod(ids, hash, meta.version(), file, meta.deps(), scanForNestedMods(fs, meta.declaredJars()), meta.modId(), meta.environment(), clientPresence(meta.displayTest(), nested));
 	}
 
 	/**
@@ -304,8 +309,7 @@ public class FileInspection {
 			Set<String> declaredJars = metadata.declaredJars();
 			Set<Mod> nestedMods = nestedChildren.entrySet().stream().filter(child -> declaredJars.contains(child.getKey())).map(Map.Entry::getValue).collect(Collectors.toSet());
 			// Investigate if we need hash or not
-			return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedMods, metadata.modId(), metadata.environment(), clientMayBeAbsent(metadata.displayTest(), false),
-					declaresServerOnly(metadata.displayTest(), false));
+			return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedMods, metadata.modId(), metadata.environment(), clientPresence(metadata.displayTest(), false));
 		}
 		return null;
 	}
@@ -391,12 +395,11 @@ public class FileInspection {
 		return test == null ? DisplayTest.NONE : test;
 	}
 
-	private static boolean clientMayBeAbsent(DisplayTest displayTest, boolean shipsNestedJars) {
-		return displayTest == null || (displayTest.permitsClientAbsence() && !shipsNestedJars);
-	}
-
-	private static boolean declaresServerOnly(DisplayTest displayTest, boolean shipsNestedJars) {
-		return displayTest == DisplayTest.IGNORE_SERVER_VERSION && !shipsNestedJars;
+	private static ClientPresence clientPresence(DisplayTest displayTest, boolean shipsNestedJars) {
+		if (displayTest == null) return ClientPresence.OPTIONAL;
+		if (shipsNestedJars) return ClientPresence.REQUIRED;
+		if (displayTest == DisplayTest.IGNORE_SERVER_VERSION) return ClientPresence.SERVER_ONLY;
+		return displayTest.permitsClientAbsence() ? ClientPresence.OPTIONAL : ClientPresence.REQUIRED;
 	}
 
 	private static ModMetadata parseJsonMetadata(BufferedReader reader) {
