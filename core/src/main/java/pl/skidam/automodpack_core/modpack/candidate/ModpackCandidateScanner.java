@@ -224,7 +224,7 @@ public final class ModpackCandidateScanner {
 		if (sideVerdicts == null) return;
 		Set<String> askable = new LinkedHashSet<>();
 		for (PathResult result : results) {
-			if (!result.exclusion.asksPlatforms()) continue;
+			if (!result.exclusionMode.asksPlatforms()) continue;
 			// A jar the loader would kick clients without (a Forge jar without a client-optional displayTest) stays whatever the platform says.
 			if (!result.clientMayBeAbsent) continue;
 			if (result.file == null || result.normalizedSha1 == null || !ModpackContentType.MOD.equals(result.file.type())) continue;
@@ -237,7 +237,7 @@ public final class ModpackCandidateScanner {
 		boolean applied = request.applyPlatformExclusions();
 		for (int i = 0; i < results.size(); i++) {
 			PathResult result = results.get(i);
-			if (!result.exclusion.asksPlatforms()) continue;
+			if (!result.exclusionMode.asksPlatforms()) continue;
 			String reason = result.normalizedSha1 == null ? null : reasons.get(result.normalizedSha1);
 			if (reason == null) continue;
 			List<ExcludedCandidate> exclusions = new ArrayList<>(result.exclusions);
@@ -248,10 +248,10 @@ public final class ModpackCandidateScanner {
 				} catch (IOException e) {
 					LOGGER.error("Could not delete the staged object of the platform-excluded {}", result.selected.logicalPath(), e);
 				}
-				results.set(i, new PathResult(null, null, null, null, exclusions, result.sourceForOrdering, result.environment, result.clientMayBeAbsent, null, result.exclusion));
+				results.set(i, new PathResult(null, null, null, null, exclusions, result.sourceForOrdering, result.environment, result.clientMayBeAbsent, null, result.exclusionMode));
 			} else
 				results.set(i, new PathResult(result.selected, result.file, result.object, result.provenance, exclusions, result.sourceForOrdering, result.environment, result.clientMayBeAbsent, result.normalizedSha1,
-						result.exclusion));
+						result.exclusionMode));
 		}
 	}
 
@@ -425,7 +425,7 @@ public final class ModpackCandidateScanner {
 			ModEnvironment environment,
 			boolean clientMayBeAbsent,
 			String normalizedSha1,
-			ServerSideModExclusion exclusion) {}
+			ServerSideModExclusion exclusionMode) {}
 
 	public record Request(
 			String modpackId,
