@@ -292,7 +292,7 @@ class DownloadObjectTest {
 				var first = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, 100, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
 				assertInstanceOf(RangeIgnoredException.class, rootCause(first));
 				var second = assertThrows(ExecutionException.class, () -> client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), destination, 100, null).get(AWAIT_SECONDS, TimeUnit.SECONDS));
-				assertTrue(rootCause(second).getMessage().contains("does not match the expected object size"), String.valueOf(rootCause(second)));
+				assertInstanceOf(ObjectSizeMismatchException.class, rootCause(second), String.valueOf(rootCause(second)));
 			}
 			assertTrue(PartialResume.remaining(directory.resolve("object"), 100).stream().anyMatch(range -> range[0] == 0), "the body was never consumed into a finished slice");
 		}

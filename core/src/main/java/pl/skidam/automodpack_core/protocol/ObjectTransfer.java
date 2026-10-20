@@ -298,10 +298,8 @@ final class ObjectTransfer {
 
 	/** Pack-hygiene verdicts and the player's own no are final for the range; anything else (a lost lane, a timeout) is worth another attempt. */
 	private static boolean permanentFailure(Throwable error) {
-		if (error instanceof MissingObjectException || error instanceof UnauthorizedException || error instanceof StaleRangeException || error instanceof LocalStorageException
-				|| error instanceof RangeIgnoredException || error instanceof UserRejectedCertificateException)
-			return true;
-		return error instanceof IOException && error.getMessage() != null && error.getMessage().contains("does not match the expected object size");
+		return error instanceof MissingObjectException || error instanceof UnauthorizedException || error instanceof StaleRangeException || error instanceof LocalStorageException
+				|| error instanceof RangeIgnoredException || error instanceof UserRejectedCertificateException || error instanceof ObjectSizeMismatchException;
 	}
 
 	private boolean retryWorth(Throwable error) {

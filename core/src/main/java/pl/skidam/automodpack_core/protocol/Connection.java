@@ -457,7 +457,7 @@ class Connection implements AutoCloseable {
 				// On a full-object take a 200 without a Content-Range whose declared length differs from the expected size is the wrong object: the length comparison is the verdict, no hash needed after a full download.
 				if (head.contentRange() == null && take.expectedSize() >= 0 && head.contentLength() != null && head.contentLength() != take.expectedSize()) {
 					discardBody(head);
-					future.completeExceptionally(new IOException("Served object length " + head.contentLength() + " does not match the expected object size " + take.expectedSize() + " for " + originPath));
+					future.completeExceptionally(new ObjectSizeMismatchException(head.contentLength(), take.expectedSize(), originPath));
 					return;
 				}
 				boolean resumed = take.offset() > 0 && head.contentRange() != null;
