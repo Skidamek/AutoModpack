@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.client.ui.screen;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.MOD_ID;
 import static pl.skidam.automodpack_core.Constants.clientConfig;
 
 import java.io.IOException;
@@ -33,6 +32,7 @@ import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.loader.PinnedMods;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.platforms.PlatformCache;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.GameDirectory;
@@ -226,8 +226,8 @@ public final class PinnedModsScreen extends VersionedScreen {
 					if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 					FileInspection.Mod mod = modCache.getModOrNull(path, cache);
 					if (mod == null || mod.IDs() == null || mod.IDs().isEmpty() || mod.id() == null || mod.id().isBlank()) continue;
+					if (ModpackPathPolicy.isSelfMod(mod.IDs())) continue;
 					String canonical = mod.id().strip().toLowerCase(Locale.ROOT);
-					if (MOD_ID.equals(canonical) || "automodpack_mod".equals(canonical)) continue;
 					mods.add(new LiveMod(canonical, PinnedMods.ids(mod.IDs()), path.getFileName().toString(), path));
 				}
 			}

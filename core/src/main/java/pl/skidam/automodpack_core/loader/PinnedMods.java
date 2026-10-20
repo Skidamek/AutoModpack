@@ -7,7 +7,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.TreeSet;
 
-import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 
 /**
  * Instance-wide client pins: listed mod ids that are present in live {@code mods/} stay there,
@@ -66,8 +66,7 @@ public final class PinnedMods {
 
 	private static String indexId(String value) {
 		String id = canonicalize(value);
-		if (id == null) return null;
-		if (id.equals(Constants.MOD_ID) || id.equals("automodpack_mod")) return null;
+		if (id == null || ModpackPathPolicy.isSelfModId(id)) return null;
 		return id;
 	}
 
