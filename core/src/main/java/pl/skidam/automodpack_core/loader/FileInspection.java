@@ -70,37 +70,29 @@ public class FileInspection {
 	}
 
 	/**
-	 * The legacy-Forge displayTest vocabulary, ordered from the most permissive to the strictest; a jar with several mod
-	 * entries aggregates to its strictest entry. Only {@code META-INF/mods.toml} carries the key - NeoForge removed it, so
-	 * a {@code neoforge.mods.toml} never promises anything by it.
+	 * Legacy Forge displayTest, strictest entry wins. Only {@code META-INF/mods.toml} carries the key; NeoForge dropped it.
 	 */
-	public enum DisplayTest {
-		/** IGNORE_SERVER_VERSION: the client may lack the jar, and the declaration names the mod server-only. */
+	private enum DisplayTest {
 		IGNORE_SERVER_VERSION,
-		/** IGNORE_ALL_VERSION: the client may lack the jar; used by client-only mods, which say nothing about a server. */
 		IGNORE_ALL_VERSION,
-		/** MATCH_VERSION: Forge's default when the key is absent; the client must carry the same jar. */
 		MATCH_VERSION,
-		/** NONE: the author kept a custom check, so nothing is promised either way. */
 		NONE;
 
-		/** The value of the given name, or null when it names none of them. */
-		public static DisplayTest byName(String name) {
+		static DisplayTest byName(String name) {
 			if (name == null) return null;
 			String trimmed = name.trim().toUpperCase(Locale.ROOT);
 			for (DisplayTest test : values()) if (test.name().equals(trimmed)) return test;
 			return null;
 		}
 
-		/** Whether the declaration lets a client lack the jar. */
-		public boolean permitsClientAbsence() {
+		boolean permitsClientAbsence() {
 			return this == IGNORE_SERVER_VERSION || this == IGNORE_ALL_VERSION;
 		}
 	}
 
-	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, ModEnvironment environment, DisplayTest displayTest, boolean shipsNestedJars) {
+	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, ModEnvironment environment, boolean clientMayBeAbsent, boolean declaresServerOnly) {
 		public Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods) {
-			this(IDs, hash, version, path, deps, nestedMods, null, ModEnvironment.UNIVERSAL, null, false);
+			this(IDs, hash, version, path, deps, nestedMods, null, ModEnvironment.UNIVERSAL, true, false);
 		}
 
 		public Mod {
@@ -108,21 +100,7 @@ public class FileInspection {
 		}
 
 		public Mod at(Path newPath) {
-			return new Mod(IDs, hash, version, newPath, deps, nestedMods, id, environment, displayTest, shipsNestedJars);
-		}
-
-		/**
-		 * Whether the loader lets a client run without this jar: nothing enforces a client copy unless the jar carries a
-		 * legacy-Forge displayTest, which promises it for IGNORE_SERVER_VERSION and IGNORE_ALL_VERSION entries. Nested
-		 * JarJar jars carry declarations of their own, which the root entry cannot speak for.
-		 */
-		public boolean clientMayBeAbsent() {
-			return displayTest == null || (displayTest.permitsClientAbsence() && !shipsNestedJars);
-		}
-
-		/** Whether the jar's own declaration names it a server-only mod; nested jars hold their own names, so the claim goes unproven. */
-		public boolean declaresServerOnly() {
-			return displayTest == DisplayTest.IGNORE_SERVER_VERSION && !shipsNestedJars;
+			return new Mod(IDs, hash, version, newPath, deps, nestedMods, id, environment, clientMayBeAbsent, declaresServerOnly);
 		}
 	}
 
@@ -161,8 +139,9 @@ public class FileInspection {
 		}
 		Set<String> ids = new HashSet<>(meta.provides());
 		ids.add(meta.modId());
-		boolean shipsNestedJars = meta.displayTest() != null && shipsNestedJars(fs);
-		return new Mod(ids, hash, meta.version(), file, meta.deps(), scanForNestedMods(fs, meta.declaredJars()), meta.modId(), meta.environment(), meta.displayTest(), shipsNestedJars);
+		boolean nested = meta.displayTest() != null && shipsNestedJars(fs);
+		return new Mod(ids, hash, meta.version(), file, meta.deps(), scanForNestedMods(fs, meta.declaredJars()), meta.modId(), meta.environment(), clientMayBeAbsent(meta.displayTest(), nested),
+				declaresServerOnly(meta.displayTest(), nested));
 	}
 
 	/**
@@ -325,7 +304,8 @@ public class FileInspection {
 			Set<String> declaredJars = metadata.declaredJars();
 			Set<Mod> nestedMods = nestedChildren.entrySet().stream().filter(child -> declaredJars.contains(child.getKey())).map(Map.Entry::getValue).collect(Collectors.toSet());
 			// Investigate if we need hash or not
-			return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedMods, metadata.modId(), metadata.environment(), metadata.displayTest(), false);
+			return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedMods, metadata.modId(), metadata.environment(), clientMayBeAbsent(metadata.displayTest(), false),
+					declaresServerOnly(metadata.displayTest(), false));
 		}
 		return null;
 	}
@@ -413,10 +393,17 @@ public class FileInspection {
 	}
 
 	private static DisplayTest displayTestOf(String value) {
-		if (value == null) return DisplayTest.MATCH_VERSION; // Forge's default when the key is absent
+		if (value == null) return DisplayTest.MATCH_VERSION;
 		DisplayTest test = DisplayTest.byName(value);
-		// A value Forge would refuse to load promises nothing either way.
 		return test == null ? DisplayTest.NONE : test;
+	}
+
+	private static boolean clientMayBeAbsent(DisplayTest displayTest, boolean shipsNestedJars) {
+		return displayTest == null || (displayTest.permitsClientAbsence() && !shipsNestedJars);
+	}
+
+	private static boolean declaresServerOnly(DisplayTest displayTest, boolean shipsNestedJars) {
+		return displayTest == DisplayTest.IGNORE_SERVER_VERSION && !shipsNestedJars;
 	}
 
 	private static ModMetadata parseJsonMetadata(BufferedReader reader) {
