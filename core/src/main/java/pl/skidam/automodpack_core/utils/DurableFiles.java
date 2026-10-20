@@ -54,6 +54,19 @@ public final class DurableFiles {
 	}
 
 	/**
+	 * Removes rebuildable cache content that cannot be understood. Callers treat the path as absent; a failed delete
+	 * is IO trouble and propagates so the poison is not read as empty while still live.
+	 */
+	public static void discard(Path path) throws IOException {
+		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return;
+		if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(path)) {
+			FileTrees.delete(path);
+			return;
+		}
+		ImmutableFiles.deleteIfExists(path);
+	}
+
+	/**
 	 * Moves a persisted state file that cannot be understood aside as evidence, renamed in place next to where it
 	 * lived, so callers can treat it as absent instead of crashing. A failed move is IO trouble and propagates: the
 	 * poison is still at the live path, so continuing as empty would re-log every boot. The evidence stays until a

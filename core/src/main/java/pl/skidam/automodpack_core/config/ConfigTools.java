@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.config;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -96,11 +94,7 @@ public final class ConfigTools {
 		} catch (IOException e) {
 			throw new ConfigException("Failed to read configuration " + path.toAbsolutePath().normalize(), e);
 		}
-		JsonElement tree = parseTree(json, type);
-		T value = deserialize(tree, type, GSON);
-		List<String> unknown = unknownKeys(tree, type);
-		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
-		return Optional.of(value);
+		return Optional.of(deserialize(parseTree(json, type), type, GSON));
 	}
 
 	public static <T> T readOrCreate(Path path, Class<T> type, Supplier<T> defaults) {
@@ -117,14 +111,23 @@ public final class ConfigTools {
 
 	/**
 	 * Reads one persisted-but-rebuildable state document: a missing file reads as empty, unusable content (including a
-	 * non-regular path occupying the name) is set aside as evidence and also reads as empty, and only real IO trouble
-	 * of a regular file propagates. The mapper folds every content validation in; the state's owner stays the sole
-	 * authority on what its document must look like. A failed aside is IO trouble, never empty. This leniency is for
-	 * machine-written state only - user-owned config files take the strict {@link #read} path, which never sets
-	 * anything aside.
+	 * non-regular path occupying the name) is set aside as evidence and also reads as empty, extra keys are absorbed
+	 * with no log and no rewrite, and only real IO trouble of a regular file propagates. The mapper folds every content
+	 * validation in; the state's owner stays the sole authority on what its document must look like. A failed aside is
+	 * IO trouble, never empty. This leniency is for machine-written state only - user-owned config files take the
+	 * strict {@link #read} path, which never sets anything aside.
 	 */
 	public static <F, S> Optional<S> readState(Path path, Class<F> type, String description, Function<F, S> fromFields) throws IOException {
 		return readPersisted(path, type, description, fromFields, PersistFate.REBUILDABLE);
+	}
+
+	/**
+	 * Reads one rebuildable cache document: a missing file reads as empty, unusable content is deleted and also reads
+	 * as empty, extra keys are absorbed with no log and no rewrite, and only real IO trouble of a regular file
+	 * propagates. A failed delete is IO trouble, never empty.
+	 */
+	public static <F, S> Optional<S> readCached(Path path, Class<F> type, String description, Function<F, S> fromFields) throws IOException {
+		return readPersisted(path, type, description, fromFields, PersistFate.CACHE);
 	}
 
 	/**
@@ -139,38 +142,44 @@ public final class ConfigTools {
 	}
 
 	private enum PersistFate {
-		REBUILDABLE, UNIQUE
+		REBUILDABLE, UNIQUE, CACHE
 	}
 
 	private static <F, S> Optional<S> readPersisted(Path path, Class<F> type, String description, Function<F, S> fromFields, PersistFate fate) throws IOException {
 		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
-		boolean rebuildable = fate == PersistFate.REBUILDABLE;
 		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
 			IOException unusable = new IOException(description + " is not a regular file: " + path);
-			if (!rebuildable) throw unusable;
-			DurableFiles.setAside(path, description, unusable);
-			return Optional.empty();
+			return discardUnusable(path, description, unusable, fate);
 		}
 		try {
 			return Optional.of(fromFields.apply(readDocument(path, type, description)));
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
-			if (!rebuildable) throw new IOException(description + " is unusable; it fails every boot until a human moves, fixes, or deletes it: " + path, e);
-			DurableFiles.setAside(path, description, e);
+			return discardUnusable(path, description, e, fate);
+		}
+	}
+
+	private static <S> Optional<S> discardUnusable(Path path, String description, Exception cause, PersistFate fate) throws IOException {
+		if (fate == PersistFate.UNIQUE) throw cause instanceof IOException io ? io : new IOException(description + " is unusable; it fails every boot until a human moves, fixes, or deletes it: " + path, cause);
+		if (fate == PersistFate.CACHE) {
+			try {
+				DurableFiles.discard(path);
+			} catch (IOException discardFailure) {
+				discardFailure.addSuppressed(cause);
+				throw new IOException(description + " is unusable and could not be discarded: " + path, discardFailure);
+			}
 			return Optional.empty();
 		}
+		DurableFiles.setAside(path, description, cause);
+		return Optional.empty();
 	}
 
 	/** Reads one regular file as JSON without wrapping physical IO in {@link ConfigException}. */
 	private static <T> T readDocument(Path path, Class<T> type, String description) throws IOException {
 		String json = Files.readString(path, StandardCharsets.UTF_8);
 		if (json.isBlank()) throw new ConfigParseException(description + " is empty: " + path);
-		JsonElement tree = parseTree(json, type);
-		T value = deserialize(tree, type, GSON);
-		List<String> unknown = unknownKeys(tree, type);
-		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
-		return value;
+		return deserialize(parseTree(json, type), type, GSON);
 	}
 
 	public static <T> T parse(String json, Class<T> type) {

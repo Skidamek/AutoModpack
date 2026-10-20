@@ -2,8 +2,11 @@ package pl.skidam.automodpack_core.platforms;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
@@ -32,6 +35,25 @@ class PlatformCacheTest {
 	}
 
 	/** Records come back under the normalized digest, so a caller may ask in any case. */
+	@Test
+	void extraCurseForgeSideTagsStayOnDiskAndStillAnswer() throws Exception {
+		Path records = temporaryDirectory.resolve("platform-cache");
+		Path record = records.resolve(SHA1.substring(0, 2)).resolve(SHA1.substring(2) + ".json");
+		Files.createDirectories(record.getParent());
+		String json = "{\"sha1\":\"" + SHA1
+				+ "\",\"curseforge\":{\"modId\":1,\"downloadUrl\":\"https://example/a.jar\",\"fileVersion\":\"1.0\",\"fileName\":\"a.jar\",\"fileSize\":\"1\",\"releaseType\":\"release\",\"projectPageUrl\":\"https://example\",\"clientTag\":true,\"serverTag\":true,\"sideTagsKnown\":true}}";
+		Files.writeString(record, json, StandardCharsets.UTF_8);
+
+		try (PlatformCache cache = PlatformCache.open(records)) {
+			assertEquals("https://example/a.jar", cache.getAll(List.of(SHA1)).get(SHA1).curseforge().downloadUrl());
+		}
+
+		assertEquals(json, Files.readString(record, StandardCharsets.UTF_8));
+		try (var leftovers = Files.walk(records)) {
+			assertTrue(leftovers.noneMatch(path -> path.getFileName().toString().contains(".corrupt-")));
+		}
+	}
+
 	@Test
 	void recordsAreKeyedByTheNormalizedDigest() throws IOException {
 		try (PlatformCache cache = PlatformCache.open(temporaryDirectory.resolve("platform-cache"))) {

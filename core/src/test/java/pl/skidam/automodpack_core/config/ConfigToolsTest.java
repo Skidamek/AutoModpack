@@ -223,6 +223,39 @@ class ConfigToolsTest {
 	}
 
 	@Test
+	void readStateAbsorbsUnknownKeysWithoutRewritingOrSettingAside() throws Exception {
+		Path path = temporaryDirectory.resolve("state.json");
+		String json = "{\"value\":3,\"retired\":true}";
+		Files.writeString(path, json, StandardCharsets.UTF_8);
+
+		assertEquals(3, ConfigTools.readState(path, StateDocument.class, "Test state", StateDocument::validated).orElseThrow().value);
+		assertEquals(json, Files.readString(path, StandardCharsets.UTF_8));
+		try (var leftovers = Files.list(temporaryDirectory)) {
+			assertEquals(0, leftovers.filter(entry -> entry.getFileName().toString().contains(".corrupt-")).count());
+		}
+	}
+
+	@Test
+	void readCachedDeletesUnusableContentWithoutSettingItAside() throws Exception {
+		Path missing = temporaryDirectory.resolve("missing.json");
+		assertTrue(ConfigTools.readCached(missing, StateDocument.class, "Test cache", StateDocument::validated).isEmpty());
+		assertFalse(Files.exists(missing));
+
+		Path unusable = temporaryDirectory.resolve("cache.json");
+		Files.writeString(unusable, "{\"value\": -1}", StandardCharsets.UTF_8);
+		assertTrue(ConfigTools.readCached(unusable, StateDocument.class, "Test cache", StateDocument::validated).isEmpty());
+		assertFalse(Files.exists(unusable));
+		try (var leftovers = Files.list(temporaryDirectory)) {
+			assertEquals(0, leftovers.filter(entry -> entry.getFileName().toString().contains(".corrupt-")).count());
+		}
+
+		Path directory = temporaryDirectory.resolve("cache-dir.json");
+		Files.createDirectory(directory);
+		assertTrue(ConfigTools.readCached(directory, StateDocument.class, "Test cache", StateDocument::validated).isEmpty());
+		assertFalse(Files.exists(directory));
+	}
+
+	@Test
 	void readStateTreatsUnusableContentAsAbsentAndSetsItAside() throws Exception {
 		Path missing = temporaryDirectory.resolve("missing.json");
 		assertTrue(ConfigTools.readState(missing, StateDocument.class, "Test state", StateDocument::validated).isEmpty());

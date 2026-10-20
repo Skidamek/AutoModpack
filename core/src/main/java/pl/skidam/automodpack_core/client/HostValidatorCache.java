@@ -59,6 +59,11 @@ public final class HostValidatorCache {
 				}.getType())
 						.forEach(entries::put);
 			} catch (IOException | RuntimeException e) {
+				try {
+					DurableFiles.discard(file);
+				} catch (IOException discardFailure) {
+					e.addSuppressed(discardFailure);
+				}
 				LOGGER.warn("Cannot read the host validator cache {}; conditionals fall back to sha1-only", file.getFileName(), e);
 			}
 		}

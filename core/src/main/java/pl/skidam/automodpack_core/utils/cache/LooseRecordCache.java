@@ -16,8 +16,8 @@ import pl.skidam.automodpack_core.config.ConfigTools;
  * Subclasses own the domain record and answer two separate questions about it: {@link #belongsTo} whether
  * it is the record this key addresses, and {@link #isCurrent} whether its shape still carries everything a
  * reader needs. The split matters because the two failures are not the same event - content filed under the
- * wrong key is corruption and is set aside with a loud log, while a record from before a field existed is a
- * rebuildable cache miss that is quietly overwritten.
+ * wrong key is discarded and reads as a miss, extra keys from a removed field stay and are absorbed, and a
+ * record from before a field existed is a rebuildable cache miss that is quietly overwritten.
  */
 public abstract class LooseRecordCache<T> implements AutoCloseable {
 	protected static final String RECORD_SUFFIX = ".json";
@@ -54,19 +54,19 @@ public abstract class LooseRecordCache<T> implements AutoCloseable {
 
 	/**
 	 * The record for {@code key}, or null when none is persisted or the one persisted cannot answer. Content filed
-	 * under the wrong key is set aside as evidence and reads as absent; physical IO trouble cannot read as a miss and
-	 * escapes as {@link UncheckedIOException}.
+	 * under the wrong key is discarded and reads as absent; physical IO trouble cannot read as a miss and escapes as
+	 * {@link UncheckedIOException}.
 	 */
 	protected T readRecord(String key, Class<T> type) {
 		T hot = hotRecords.get(key);
 		if (hot != null && belongsTo(hot, key) && isCurrent(hot)) return hot;
 		if (hot != null) hotRecords.remove(key, hot);
 		try {
-			T record = ConfigTools.readState(recordPath(key), type, description + " cache record", fields -> {
+			T record = ConfigTools.readCached(recordPath(key), type, description + " cache record", fields -> {
 				if (!belongsTo(fields, key)) throw new IllegalArgumentException("Cache record does not belong to " + key);
 				return fields;
 			}).orElse(null);
-			// A record that belongs here but no longer answers is rebuilt, not set aside: it is the expected cost of
+			// A record that belongs here but no longer answers is rebuilt, not discarded: it is the expected cost of
 			// every shape change, and the rebuild overwrites it in place.
 			if (record == null || !isCurrent(record)) return null;
 			hotRecords.put(key, record);

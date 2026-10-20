@@ -4,8 +4,10 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.BOOTSTRAP_FILE;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
@@ -26,8 +28,15 @@ public final class BootstrapInstaller {
 			LOGGER.warn("Ignoring instance-root {}; packs can write that path. Place the file at {}", BOOTSTRAP_FILE.getFileName(), BOOTSTRAP_FILE);
 		if (!Files.isRegularFile(storage.bootstrapFile())) return Optional.empty();
 
-		ConnectionJsons.KnownHostsBootstrapFields fields = ConfigTools.read(storage.bootstrapFile(), ConnectionJsons.KnownHostsBootstrapFields.class)
-				.orElseThrow(() -> new ConfigTools.ConfigException("Bootstrap file is not a regular file"));
+		String json;
+		try {
+			json = Files.readString(storage.bootstrapFile(), StandardCharsets.UTF_8);
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to read bootstrap file " + storage.bootstrapFile().toAbsolutePath().normalize(), e);
+		}
+		List<String> unknown = ConfigTools.unknownKeys(json, ConnectionJsons.KnownHostsBootstrapFields.class);
+		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", storage.bootstrapFile().getFileName(), String.join(", ", unknown));
+		ConnectionJsons.KnownHostsBootstrapFields fields = ConfigTools.parse(json, ConnectionJsons.KnownHostsBootstrapFields.class);
 		final BootstrapConfig.Validated bootstrap;
 		try {
 			bootstrap = BootstrapConfig.validate(fields);

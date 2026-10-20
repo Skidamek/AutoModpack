@@ -126,6 +126,26 @@ class ModFileCacheTest {
 		}
 	}
 
+	@Test
+	void unreadableRecordIsDeletedNotSetAside() throws Exception {
+		Path jar = temporaryDirectory.resolve("mod.jar");
+		Path records = temporaryDirectory.resolve("mod-cache");
+		writeMod(jar);
+		try (FileCache hashCache = FileCache.open(temporaryDirectory.resolve("file-cache")); ModFileCache modCache = ModFileCache.open(records)) {
+			assertNotNull(modCache.getOrComputeMod(jar, hashCache));
+		}
+
+		Path record = onlyRecord(records);
+		Files.writeString(record, "not-json", StandardCharsets.UTF_8);
+
+		Path copied = temporaryDirectory.resolve("mod-cache-unreadable");
+		copyTree(records, copied);
+		try (FileCache hashCache = FileCache.open(temporaryDirectory.resolve("file-cache")); ModFileCache modCache = ModFileCache.open(copied)) {
+			assertNotNull(modCache.getOrComputeMod(jar, hashCache));
+			assertEquals(List.of(), setAsideCopies(copied), "an unreadable cache record is discarded, not filed as corruption");
+		}
+	}
+
 	private static Path onlyRecord(Path records) throws IOException {
 		try (Stream<Path> walk = Files.walk(records)) {
 			List<Path> found = walk.filter(Files::isRegularFile).toList();
