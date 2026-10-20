@@ -578,6 +578,22 @@ class ModpackCandidateScannerTest {
 	}
 
 	@Test
+	void serverOnlyModrinthEnvironmentStaysInThePack() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main"));
+		Path universal = groups.resolve("main/universal.jar");
+		writeModJar(universal);
+
+		ServerConfigJsons.GroupDeclaration main = group();
+		main.autoExcludeServerSideMods = ServerSideModExclusion.PLATFORMS;
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), true, cacheAnsweringModrinth(universal, "server_only"));
+
+		assertTrue(candidate.manifest().groups().get("main").files().containsKey("universal.jar"));
+		assertEquals(0, candidate.exclusions().size());
+	}
+
+	@Test
 	void previewReportsThePlatformExclusionWithoutDroppingTheJar() throws Exception {
 		Path server = tempDir.resolve("server");
 		Path groups = tempDir.resolve("groups");
