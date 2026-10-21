@@ -81,9 +81,12 @@ public final class JournalMirror {
 	}
 
 	private void replaceFromLocked(String modpackId, int verifiedEntries, Path fetchedFile) throws IOException {
-		if (Journal.openComplete(fetchedFile).length() != verifiedEntries) throw new IOException("Fetched journal changed while it was swapped into the mirror");
+		List<JournalEntry> entries = Journal.openComplete(fetchedFile).entries();
+		if (entries.size() != verifiedEntries) throw new IOException("Fetched journal changed while it was swapped into the mirror");
 		Path mirror = storage.historyJournalFile(modpackId);
 		Files.createDirectories(mirror.getParent());
 		DurableFiles.replace(fetchedFile, mirror);
+		BasicFileAttributes attributes = Files.getFileAttributeView(mirror, BasicFileAttributeView.class, LinkOption.NOFOLLOW_LINKS).readAttributes();
+		VERIFIED_MIRRORS.put(mirror, new VerifiedMirror(attributes.lastModifiedTime(), attributes.size(), entries));
 	}
 }
