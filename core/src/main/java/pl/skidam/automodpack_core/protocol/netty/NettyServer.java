@@ -190,19 +190,20 @@ public class NettyServer {
 
 			prepareTls();
 
+			Optional<ChannelFuture> started;
 			if (connectionMode == ModpackConnectionMode.HOLEPUNCH) {
 				startSharedTraffic();
 				holepunchActive = ServerHolepunchBridge.register(this);
-				return Optional.empty();
-			}
-
-			if (connectionMode == ModpackConnectionMode.MAGIC && serverConfig.bindPort == -1) {
+				started = Optional.empty();
+			} else if (connectionMode == ModpackConnectionMode.MAGIC && serverConfig.bindPort == -1) {
 				startSharedTraffic();
 				sharedMagicEnabled = true;
-				return Optional.empty();
+				started = Optional.empty();
+			} else {
+				started = startDedicated(connectionMode);
 			}
-
-			return startDedicated(connectionMode);
+			logHostFingerprint();
+			return started;
 		} catch (Exception e) {
 			LOGGER.error("Failed to start modpack hosting", e);
 			stop();
@@ -255,6 +256,10 @@ public class NettyServer {
 		return Optional.of(serverChannel);
 	}
 
+	private void logHostFingerprint() {
+		if (certificateFingerprint != null) LOGGER.info("AutoModpack host certificate fingerprint: {}", certificateFingerprint);
+	}
+
 	/** TLS (when internal termination is on) and the URL contract, appended after whatever wire-side stack is present. */
 	public void installContractHandlers(ChannelPipeline pipeline) {
 		// Streaming responses queue whole chunks ahead of the peer's drain; the watermark bounds that queue and keeps compression overlapped with the wire.
@@ -284,7 +289,6 @@ public class NettyServer {
 		sslCtx = SslContextBuilder.forServer(certFile.toFile(), privateKeyFile.toFile()).sslProvider(SslProvider.JDK).protocols("TLSv1.3")
 				.ciphers(Arrays.asList("TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256")).sessionTimeout(1800).build();
 		certificateFingerprint = NetUtils.getFingerprint(cert);
-		if (certificateFingerprint != null) LOGGER.warn("Certificate fingerprint: {}", certificateFingerprint);
 	}
 
 	/**
