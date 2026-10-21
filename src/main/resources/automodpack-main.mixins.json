@@ -16,7 +16,6 @@
     "fabric.CommandsMixin"
   ],
   "client": [
-    "core.ClientConnectionAccessor",
     "core.DisconnectedScreenMixin",
     "core.ClientPlayJoinMixin",
     "core.ClientLoginNetworkHandlerAccessor",
