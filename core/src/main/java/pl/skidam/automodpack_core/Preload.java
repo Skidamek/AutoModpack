@@ -33,7 +33,7 @@ public class Preload {
 	public Preload(LoaderManagerService loaderManager, ModpackLoaderService modpackLoader) {
 		try {
 			long start = System.currentTimeMillis();
-			LOGGER.info("Prelaunching AutoModpack...");
+			LOGGER.debug("Prelaunching AutoModpack...");
 			initializeConstants(loaderManager, modpackLoader);
 			recoverPendingSelfUpdate();
 			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
@@ -46,9 +46,8 @@ public class Preload {
 				serverConfig = ConfigUtils.loadOrCreateServerConfig();
 			}
 			updateAll();
-			LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
+			LOGGER.debug("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
 		} catch (Exception e) {
-			e.printStackTrace();
 			throw new RuntimeException(e);
 		}
 	}

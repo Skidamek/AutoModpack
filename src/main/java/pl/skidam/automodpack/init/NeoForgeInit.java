@@ -23,7 +23,7 @@ public class NeoForgeInit {
 		preload = false;
 
 		long start = System.currentTimeMillis();
-		LOGGER.info("Launching AutoModpack...");
+		LOGGER.debug("Launching AutoModpack...");
 
 		Common.init();
 
@@ -36,7 +36,7 @@ public class NeoForgeInit {
 		}
 
 
-		LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
+		LOGGER.debug("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
 	}
 
 /^? if >1.20.5 {^/

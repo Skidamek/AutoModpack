@@ -53,7 +53,7 @@ public class DataS2CPacket {
 				}
 				disconnect(handler, VersionedText.literal("[AutoModpack] Install/Update modpack to join"));
 			} else if (clientResponse == LoginUpdateResponse.CONTINUE) {
-				LOGGER.info("{} has installed whole modpack", GameHelpers.getPlayerName(profile));
+				LOGGER.debug("{} has installed whole modpack", GameHelpers.getPlayerName(profile));
 			} else if (clientResponse == LoginUpdateResponse.CLIENT_REJECTED) {
 				String fingerprint = hostServer.getCertificateFingerprint();
 				if (fingerprint == null) {

@@ -92,7 +92,7 @@ public class ReLauncher {
 			try {
 				callback.run();
 			} catch (Exception e) {
-				e.printStackTrace();
+				LOGGER.error("Restart callback failed", e);
 			}
 		}
 	}

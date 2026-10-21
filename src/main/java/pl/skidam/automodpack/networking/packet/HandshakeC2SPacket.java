@@ -58,13 +58,10 @@ public class HandshakeC2SPacket {
 		if (!serverMCVersion.equals(MC_VERSION)) return;
 
 		if (AM_VERSION.equals(serverAMVersion)) {
-			LOGGER.info("Versions match {}", AM_VERSION);
+			LOGGER.debug("Versions match {}", AM_VERSION);
 			return;
-		} else {
-			LOGGER.warn("Versions mismatch. Server: {}: Client: {}", serverAMVersion, AM_VERSION);
 		}
-
-		LOGGER.info("Syncing AutoModpack to server version: {}", serverAMVersion);
+		LOGGER.debug("Versions mismatch. Server: {}: Client: {}", serverAMVersion, AM_VERSION);
 
 		ModrinthAPI automodpack = ModrinthAPI.getModSpecificVersion(SelfUpdater.AUTOMODPACK_ID, serverAMVersion, MC_VERSION);
 
@@ -76,6 +73,7 @@ public class HandshakeC2SPacket {
 		SemanticVersion semver = SemanticVersion.parse(automodpack.fileVersion());
 
 		if (SelfUpdater.validUpdate(semver, SemanticVersion.parse(AM_VERSION))) {
+			LOGGER.info("Updating AutoModpack to {}", serverAMVersion);
 			ScreenManager.waiting();
 			ClientLoginDisconnect.disconnect(handler);
 			SelfUpdater.installModVersion(automodpack);

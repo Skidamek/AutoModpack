@@ -64,7 +64,7 @@ public final class ImplStore {
 
 		try (FileCache cache = FileCache.open(cacheDir.resolve(RECORDS_DIR))) {
 			if (stampHits(cacheDir, manifest, cache)) {
-				LOGGER.info("AutoModpack impl cache hit for digest {}", manifest.digest());
+				LOGGER.debug("AutoModpack impl cache hit for digest {}", manifest.digest());
 				return implJar;
 			}
 			// One lock file per cache directory serializes concurrent restages (a helper process could
@@ -72,7 +72,7 @@ public final class ImplStore {
 			// the new one, and a boot that already mounted a jar keeps its open file until it exits.
 			FileLocks.withLock(lockFile, () -> {
 				if (stampHits(cacheDir, manifest, cache)) return implJar;
-				LOGGER.info("AutoModpack impl cache miss - restaging all {} impls for digest {}", manifest.entries().size(), manifest.digest());
+				LOGGER.debug("AutoModpack impl cache miss - restaging all {} impls for digest {}", manifest.entries().size(), manifest.digest());
 				restage(outerJar, manifest, cacheDir, cache);
 				return implJar;
 			});

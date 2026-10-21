@@ -68,7 +68,7 @@ public class SelfUpdater {
 
 		if (gettingServerVersion) {
 			if (serverModpackContent.automodpackVersion.equals(AM_VERSION)) {
-				LOGGER.info("AutoModpack is up-to-date with server version: {}", serverModpackContent.automodpackVersion);
+				LOGGER.debug("AutoModpack is up-to-date with server version: {}", serverModpackContent.automodpackVersion);
 				return false;
 			}
 
@@ -77,7 +77,7 @@ public class SelfUpdater {
 				return false;
 			}
 
-			LOGGER.info("Syncing AutoModpack to server version: {}", serverModpackContent.automodpackVersion);
+			LOGGER.info("Updating AutoModpack to {}", serverModpackContent.automodpackVersion);
 			String mcVersion = lookupMcVersion(serverModpackContent.mcVersion);
 			ModrinthAPI lookup = ModrinthAPI.getModSpecificVersion(AUTOMODPACK_ID, serverModpackContent.automodpackVersion, mcVersion);
 			if (lookup == null) {
@@ -87,7 +87,7 @@ public class SelfUpdater {
 			}
 			modrinthAPIList.add(lookup);
 		} else {
-			LOGGER.info("Checking if AutoModpack is up-to-date...");
+			LOGGER.debug("Checking if AutoModpack is up-to-date...");
 			modrinthAPIList = ModrinthAPI.getModInfosFromID(AUTOMODPACK_ID);
 		}
 
@@ -112,7 +112,7 @@ public class SelfUpdater {
 
 			// Exact Hash Match (Fastest check)
 			if (automodpack.SHA1Hash().equals(localJarHash)) {
-				LOGGER.info("Already on the target version (Hash match): {}", AM_VERSION);
+				LOGGER.debug("Already on the target version (Hash match): {}", AM_VERSION);
 				return false;
 			}
 
@@ -121,9 +121,9 @@ public class SelfUpdater {
 			// If we are NOT forced to sync to server, and remote is older or equal
 			if (!gettingServerVersion && comparison <= 0) {
 				if (comparison == 0) {
-					LOGGER.info("No updates found. You are on the latest version: {}", rawRemoteVersion);
+					LOGGER.debug("No updates found. You are on the latest version: {}", rawRemoteVersion);
 				} else {
-					LOGGER.info("Development check: Installed version {} is newer/different than release {}.", AM_VERSION, rawRemoteVersion);
+					LOGGER.debug("Development check: Installed version {} is newer/different than release {}.", AM_VERSION, rawRemoteVersion);
 				}
 				// Since Modrinth lists are usually sorted latest-first, if the first is older, no newer exists.
 				return false;
@@ -132,7 +132,7 @@ public class SelfUpdater {
 			// Stable -> Beta Protection
 			// If checking for updates (not syncing), do not update FROM Stable TO Beta.
 			if (!gettingServerVersion && currentVersion.isStable() && !remoteVersion.isStable()) {
-				LOGGER.info("Skipping update: You are on Stable ({}) and latest is Pre-release ({}).", AM_VERSION, rawRemoteVersion);
+				LOGGER.debug("Skipping update: You are on Stable ({}) and latest is Pre-release ({}).", AM_VERSION, rawRemoteVersion);
 				continue; // Skip this beta, keep looking for a newer Stable version in the list
 			}
 
@@ -144,12 +144,12 @@ public class SelfUpdater {
 				continue;
 			}
 
-			LOGGER.info("Update found! Updating from {} to {}", AM_VERSION, rawRemoteVersion);
+			LOGGER.info("Updating AutoModpack to {}", rawRemoteVersion);
 			installModVersion(automodpack);
 			return true;
 		}
 
-		if (!gettingServerVersion) LOGGER.info("No suitable updates found.");
+		if (!gettingServerVersion) LOGGER.debug("No suitable updates found.");
 		return false;
 	}
 
@@ -199,7 +199,7 @@ public class SelfUpdater {
 				ScreenManager.download(downloadManager, "AutoModpack " + automodpack.fileVersion());
 				downloadManager.download(targetJar, automodpack.SHA1Hash(), null, ModpackContentType.MOD,
 						List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
-						() -> LOGGER.info("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));
+						() -> LOGGER.debug("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));
 				downloadManager.joinAll();
 				downloadManager.finish();
 			}
@@ -216,7 +216,7 @@ public class SelfUpdater {
 				SelfUpdateSwap.commit(gameDirectory, dataLocation, currentPath, targetPath, automodpack.SHA1Hash(), automodpack.fileSize(), currentHash);
 			} catch (IOException e) {
 				// The running jar stays locked on Windows until this process exits; the helper finishes the swap then.
-				LOGGER.info("AutoModpack self-update swap is staged and will finish after this process exits", e);
+				LOGGER.debug("Self-update swap deferred to the helper; the running jar is still in use", e);
 				UpdateRecovery.handoffToHelper();
 			}
 			LOGGER.info("AutoModpack update is ready; restart required");

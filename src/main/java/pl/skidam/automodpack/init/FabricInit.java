@@ -16,7 +16,7 @@ public class FabricInit {
 		preload = false;
 
 		long start = System.currentTimeMillis();
-		LOGGER.info("Launching AutoModpack...");
+		LOGGER.debug("Launching AutoModpack...");
 
 		Common.init();
 
@@ -28,7 +28,7 @@ public class FabricInit {
 			new AudioManager();
 		}
 
-		LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
+		LOGGER.debug("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
 	}
 }
 /*?}*/

@@ -74,7 +74,7 @@ public class DataC2SPacket {
 
 			InetSocketAddress endpoint = AddressHelpers.format(effectiveHost, effectivePort);
 
-			LOGGER.info("AutoModpack endpoint: {}:{}", endpoint.getHostString(), endpoint.getPort());
+			LOGGER.debug("AutoModpack endpoint: {}:{}", endpoint.getHostString(), endpoint.getPort());
 
 			connectionInfo = new ConnectionJsons.ConnectionInfo(connectionAttempt.origin(), endpoint, connectionMode, connectionAttempt.expectedFingerprint());
 		} catch (Exception e) {

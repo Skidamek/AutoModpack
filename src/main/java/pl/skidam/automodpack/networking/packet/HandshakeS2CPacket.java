@@ -103,7 +103,7 @@ public class HandshakeS2CPacket {
 
 	private static void handleHandshake(Connection connection, GameProfile profile, FriendlyByteBuf buf, PacketSender sender, boolean nothingToServeHere) {
 		try {
-			LOGGER.info("{} has installed AutoModpack.", GameHelpers.getPlayerName(profile));
+			LOGGER.debug("{} has installed AutoModpack.", GameHelpers.getPlayerName(profile));
 
 			String clientResponse = buf.readUtf(Short.MAX_VALUE);
 			HandshakePacket clientHandshakePacket = HandshakePacket.fromJson(clientResponse);
@@ -138,7 +138,7 @@ public class HandshakeS2CPacket {
 			// boot line is the receipt. An external endpoint is advertised as configured, because this process cannot know
 			// what the host behind it is currently serving.
 			if (nothingToServeHere) {
-				LOGGER.info("{} joined a server that hosts no modpack", GameHelpers.getPlayerName(profile));
+				LOGGER.debug("{} joined a server that hosts no modpack", GameHelpers.getPlayerName(profile));
 				return;
 			}
 
@@ -160,7 +160,7 @@ public class HandshakeS2CPacket {
 
 			String advertisedEndpointHost = serverConfig.advertisedEndpointHost;
 			int advertisedEndpointPort = serverConfig.advertisedEndpointPort;
-			LOGGER.info("Sending AutoModpack connection details to {}", GameHelpers.getPlayerName(profile));
+			LOGGER.debug("Sending AutoModpack connection details to {}", GameHelpers.getPlayerName(profile));
 
 			DataPacket dataPacket = new DataPacket(advertisedEndpointHost, advertisedEndpointPort, secret, serverConfig.connectionMode, serverConfig.requireModpack);
 			String packetContentJson = dataPacket.toJson();
