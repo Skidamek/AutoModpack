@@ -35,7 +35,6 @@ public final class UpdateHelperMain {
 
 	public static void main(String[] arguments) {
 		DetachedProcesses.ignoreHangup();
-		RuntimeJar.holdLease();
 		int exitCode = run(arguments);
 		System.out.flush();
 		if (exitCode != 0) System.exit(exitCode);

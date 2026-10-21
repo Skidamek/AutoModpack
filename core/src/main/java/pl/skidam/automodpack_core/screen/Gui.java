@@ -138,7 +138,6 @@ public class Gui {
 
 	public static void main(String[] args) throws Exception {
 		DetachedProcesses.ignoreHangup();
-		RuntimeJar.holdLease();
 		String text = "Failed to load text";
 		for (String arg : args) {
 			if (arg.startsWith("--AM.text=")) text = arg.substring(10);

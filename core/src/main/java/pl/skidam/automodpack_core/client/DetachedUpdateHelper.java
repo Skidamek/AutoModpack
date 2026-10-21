@@ -125,9 +125,10 @@ public final class DetachedUpdateHelper {
 	}
 
 	/**
-	 * Mirrors the helper's last run into the process log, so a latest.log paste is enough. The helper writes
-	 * {@link HelperStatusFields} before releasing the work lease; this never parses last-helper-run.log. The document
-	 * is consumed after a mirror so a later boot cannot reprint an old outcome.
+	 * Mirrors the previous helper run into the process log, so a latest.log paste is enough. Call after boot recovery
+	 * has waited out a still-running helper. The helper writes {@link HelperStatusFields} before releasing the work
+	 * lease; this never parses last-helper-run.log. The document is consumed after a mirror so a later boot cannot
+	 * reprint an old outcome.
 	 */
 	public static void mirrorRecentRuns() {
 		mirrorRecentRuns(GameDirectory.current().resolve(HELPER_STATUS_FILE).toAbsolutePath().normalize());
@@ -158,11 +159,11 @@ public final class DetachedUpdateHelper {
 
 	static void mirrorStatus(HelperStatusFields status) {
 		if (!status.failed) {
-			if (status.duration != null && !status.duration.isBlank()) LOGGER.info("AutoModpack helper recovered the pending update ({})", status.duration);
-			else LOGGER.info("AutoModpack helper recovered the pending update");
+			if (status.duration != null && !status.duration.isBlank()) LOGGER.info("Previous AutoModpack helper run recovered the pending update ({})", status.duration);
+			else LOGGER.info("Previous AutoModpack helper run recovered the pending update");
 			return;
 		}
-		LOGGER.error("AutoModpack helper failed");
+		LOGGER.error("Previous AutoModpack helper run failed");
 		if (status.details == null) return;
 		for (String message : status.details) LOGGER.error("{}", message);
 	}

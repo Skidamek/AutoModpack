@@ -4,11 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -27,34 +24,27 @@ class RuntimeJarTest {
 	}
 
 	@Test
-	void cleanupKeepsTheCurrentAndLeasedJars(@TempDir Path temp) throws Exception {
+	void cleanupKeepsTheCurrentJarAndDeletesTheRest(@TempDir Path temp) throws Exception {
 		Path dir = temp.resolve("helper");
+		Files.createDirectories(dir);
 		Path sourceA = temp.resolve("a.jar");
 		Path sourceB = temp.resolve("b.jar");
-		Path sourceC = temp.resolve("c.jar");
 		Files.writeString(sourceA, "a");
 		Files.writeString(sourceB, "b");
-		Files.writeString(sourceC, "c");
 		Path jarA = RuntimeJar.ensure(sourceA, dir);
 		Path jarB = RuntimeJar.ensure(sourceB, dir);
+		Path leftoverRuntime = dir.resolve("automodpack-runtime-old.jar");
+		Path leftoverLock = dir.resolve("automodpack-runtime-old.jar.lock");
+		Path leftoverUuid = dir.resolve("automodpack-update-helper-deadbeef.jar");
+		Files.writeString(leftoverRuntime, "old");
+		Files.writeString(leftoverLock, "lock");
+		Files.writeString(leftoverUuid, "uuid");
 
 		RuntimeJar.cleanup(dir, jarB);
 		assertFalse(Files.exists(jarA));
 		assertTrue(Files.exists(jarB));
-
-		Path jarC = RuntimeJar.ensure(sourceC, dir);
-		RuntimeJar.cleanup(dir, jarB);
-		assertFalse(Files.exists(jarC));
-
-		jarC = RuntimeJar.ensure(sourceC, dir);
-		try (FileChannel channel = FileChannel.open(RuntimeJar.lockFile(jarC), StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
-				FileLock ignored = channel.lock(0, Long.MAX_VALUE, true)) {
-			RuntimeJar.cleanup(dir, jarB);
-			assertTrue(Files.exists(jarC));
-		}
-
-		RuntimeJar.cleanup(dir, jarB);
-		assertTrue(Files.exists(jarB));
-		assertFalse(Files.exists(jarC));
+		assertFalse(Files.exists(leftoverRuntime));
+		assertFalse(Files.exists(leftoverLock));
+		assertFalse(Files.exists(leftoverUuid));
 	}
 }

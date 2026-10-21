@@ -38,7 +38,6 @@ public class Preload {
 			LOGGER.debug("Prelaunching AutoModpack...");
 			initializeConstants(loaderManager, modpackLoader);
 			RuntimeJar.prepareForBoot();
-			DetachedUpdateHelper.mirrorRecentRuns();
 			recoverPendingSelfUpdate();
 			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
 				storage = ClientStorage.open(GameDirectory.current());
@@ -46,6 +45,7 @@ public class Preload {
 				clientConfig = decision.clientConfig();
 				trustedBootstrapApply = decision.trustedBootstrapApply();
 				rolledBackStuckUpdate = decision.rolledBackStuckUpdate();
+				DetachedUpdateHelper.mirrorRecentRuns();
 			} else {
 				serverConfig = ConfigUtils.loadOrCreateServerConfig();
 			}
