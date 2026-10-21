@@ -6,7 +6,6 @@ import java.awt.GraphicsEnvironment;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Future;
-import java.util.concurrent.Semaphore;
 
 import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.client.UpdateType;
@@ -40,10 +39,10 @@ public final class ScreenManager {
 		instance.restart(updateType, changelogs);
 	}
 
-	/** Preload restart UI: Minecraft screens are not installed yet, so this is the AWT adapter. */
-	public static Semaphore preloadRestart(String message) {
-		if (GraphicsEnvironment.isHeadless()) return null;
-		return new Gui().open(message);
+	/** Preload restart UI: Minecraft screens are not installed yet, so this is the AWT adapter. Returns as soon as the window process is spawned. */
+	public static void preloadRestart(String message) {
+		if (GraphicsEnvironment.isHeadless()) return;
+		new Gui().open(message);
 	}
 
 	public static void completeWithoutRestart() {

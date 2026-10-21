@@ -50,6 +50,7 @@ public final class StoragePaths {
 	public static final Path HELPER_LOG_FILE = HELPER_DIR.resolve("last-helper-run.log");
 	/** The helper writes this before releasing the work lease; the next boot reads it once so a finished run is not missed. */
 	public static final Path HELPER_STATUS_FILE = HELPER_DIR.resolve("last-helper-status.json");
+	public static final Path GUI_LOG_FILE = HELPER_DIR.resolve("last-gui-run.log");
 
 	public static final Path SERVER_DIR = AUTOMODPACK_DIR.resolve("server");
 	public static final Path SERVER_PROJECTION_FILE = SERVER_DIR.resolve("current-projection.json");

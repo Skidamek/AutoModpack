@@ -30,7 +30,6 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.DurableFiles;
-import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.WindowsLockProbe;
 
 public final class DetachedUpdateHelper {
@@ -178,21 +177,10 @@ public final class DetachedUpdateHelper {
 	private static List<Path> helperClasspath(Path runtimeJar) throws IOException {
 		List<Path> classpath = new ArrayList<>();
 		classpath.add(runtimeJar);
-		classpath.add(runtimeDependency(Gson.class));
-		classpath.add(runtimeDependency(LogManager.class));
-		classpath.add(runtimeDependency(LoggerContext.class));
+		classpath.add(RuntimeJar.dependency(Gson.class));
+		classpath.add(RuntimeJar.dependency(LogManager.class));
+		classpath.add(RuntimeJar.dependency(LoggerContext.class));
 		return classpath;
-	}
-
-	private static Path runtimeDependency(Class<?> type) throws IOException {
-		Path path;
-		try {
-			path = JarUtils.getJarPath(type).toAbsolutePath().normalize();
-		} catch (RuntimeException e) {
-			throw new IOException("Cannot locate helper runtime dependency " + type.getName(), e);
-		}
-		if (!Files.isRegularFile(path) && !Files.isDirectory(path)) throw new IOException("Helper runtime dependency is unavailable: " + path);
-		return path;
 	}
 
 }

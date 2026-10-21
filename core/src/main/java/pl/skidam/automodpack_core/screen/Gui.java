@@ -1,38 +1,54 @@
 package pl.skidam.automodpack_core.screen;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.storage.StoragePaths.GUI_LOG_FILE;
+
 import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.concurrent.CompletableFuture;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Semaphore;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.plaf.ColorUIResource;
 
-import pl.skidam.automodpack_core.Constants;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LoggerContext;
+
+import pl.skidam.automodpack_core.client.DetachedProcesses;
+import pl.skidam.automodpack_core.client.RuntimeJar;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 public class Gui {
 
 	private String text;
-	private Semaphore semaphore;
 
-	// After the window is closed, the jvm should exit without forgetting about eventual callbacks from ReLauncher
-	public Semaphore open(String text) {
+	/** Spawns the restart window in its own JVM and returns immediately; falls back to this JVM only when spawning fails. */
+	public void open(String text) {
 		this.text = text;
-		semaphore = new Semaphore(0, true);
-		if (hasAwtSupport()) {
-			CompletableFuture.runAsync(this::window).whenCompleteAsync((o, throwable) -> semaphore.release());
-		} else {
-			CompletableFuture.runAsync(this::openForked).whenCompleteAsync((o, throwable) -> semaphore.release());
+		try {
+			openForked();
+		} catch (Exception e) {
+			LOGGER.error("Could not open the restart window in a separate process", e);
+			if (!hasAwtSupport()) {
+				LOGGER.error("AWT is unavailable; cannot show the restart window");
+				LOGGER.info("Please restart the game to apply updates!");
+				return;
+			}
+			try {
+				window();
+			} catch (Exception fallbackFailure) {
+				LOGGER.error("Could not show the restart window", fallbackFailure);
+				LOGGER.info("Please restart the game to apply updates!");
+			}
 		}
-
-		return semaphore;
 	}
 
 	private void window() {
@@ -40,7 +56,7 @@ public class Gui {
 		JFrame frame = new JFrame();
 		frame.setUndecorated(true);
 		frame.setLayout(null);
-		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		frame.setResizable(false);
 		Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
 		frame.getContentPane().setBackground(new ColorUIResource(22, 27, 34));
@@ -73,6 +89,12 @@ public class Gui {
 			frame.dispose();
 			windowSemaphore.release();
 		});
+		frame.addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(WindowEvent e) {
+				windowSemaphore.release();
+			}
+		});
 
 		BufferedImage icon = null;
 		try {
@@ -82,7 +104,7 @@ public class Gui {
 				inputStream.close();
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			LOGGER.warn("Could not load the restart window icon", e);
 		}
 
 		frame.add(OKButton);
@@ -93,52 +115,30 @@ public class Gui {
 		frame.setAlwaysOnTop(true);
 		frame.setVisible(true);
 
-		if (semaphore != null) semaphore.release();
-
 		try {
-			windowSemaphore.acquire(); // wait for user interaction to close the gui
+			windowSemaphore.acquire();
 		} catch (InterruptedException e) {
-			e.printStackTrace();
+			Thread.currentThread().interrupt();
+			LOGGER.error("Restart window interrupted", e);
 		}
 	}
 
-	// Thanks to fabric loader project for this piece code -
-	// https://github.com/FabricMC/fabric-loader/blob/master/src/main/java/net/fabricmc/loader/impl/gui/FabricGuiEntry.java
-	private void openForked() {
-		try {
-			Path javaBinDir = Paths.get(System.getProperty("java.home"), "bin").toAbsolutePath();
-			String[] executables = {"javaw.exe", "java.exe", "java"};
-			Path javaPath = null;
+	private void openForked() throws IOException {
+		Path log = GameDirectory.current().resolve(GUI_LOG_FILE).toAbsolutePath().normalize();
+		DetachedProcesses.start(Gui.class, List.of("-Xmx100M"), List.of("--AM.text=" + text), GameDirectory.current(), log, guiClasspath());
+	}
 
-			for (String executable : executables) {
-				Path path = javaBinDir.resolve(executable);
-
-				if (Files.isRegularFile(path)) {
-					javaPath = path;
-					break;
-				}
-			}
-
-			if (javaPath == null) throw new RuntimeException("can't find java executable in " + javaBinDir);
-
-			Process process = new ProcessBuilder(javaPath.toString(), "-Xmx100M", "-cp", Constants.THIS_MOD_JAR.toString(), Gui.class.getName(),
-					"--AM.text=" + text).redirectOutput(ProcessBuilder.Redirect.INHERIT).redirectError(ProcessBuilder.Redirect.INHERIT).start();
-
-			final Thread shutdownHook = new Thread(process::destroy);
-
-			Runtime.getRuntime().addShutdownHook(shutdownHook);
-			int rVal = process.waitFor();
-			Runtime.getRuntime().removeShutdownHook(shutdownHook);
-
-			if (semaphore != null) semaphore.release();
-
-			if (rVal != 0) throw new IOException("subprocess exited with code " + rVal);
-		} catch (IOException | InterruptedException e) {
-			e.printStackTrace();
-		}
+	private static List<Path> guiClasspath() throws IOException {
+		List<Path> classpath = new ArrayList<>();
+		classpath.add(RuntimeJar.current());
+		classpath.add(RuntimeJar.dependency(LogManager.class));
+		classpath.add(RuntimeJar.dependency(LoggerContext.class));
+		return classpath;
 	}
 
 	public static void main(String[] args) throws Exception {
+		DetachedProcesses.ignoreHangup();
+		RuntimeJar.holdLease();
 		String text = "Failed to load text";
 		for (String arg : args) {
 			if (arg.startsWith("--AM.text=")) text = arg.substring(10);

@@ -19,6 +19,7 @@ import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 /**
@@ -40,7 +41,7 @@ public final class RuntimeJar {
 	public static void prepareForBoot() {
 		Path directory = defaultDirectory();
 		try {
-			Path jar = ensure(THIS_MOD_JAR, directory);
+			Path jar = ensure(sourceJar(), directory);
 			current = jar;
 			cleanup(directory, jar);
 		} catch (IOException e) {
@@ -54,7 +55,7 @@ public final class RuntimeJar {
 		if (jar != null && Files.isRegularFile(jar)) return jar;
 		synchronized (RuntimeJar.class) {
 			if (current != null && Files.isRegularFile(current)) return current;
-			current = ensure(THIS_MOD_JAR, defaultDirectory());
+			current = ensure(sourceJar(), defaultDirectory());
 			return current;
 		}
 	}
@@ -83,6 +84,18 @@ public final class RuntimeJar {
 				throw new IllegalStateException("Cannot lease the AutoModpack runtime jar " + jar, e);
 			}
 		}
+	}
+
+	/** Locates a runtime dependency for a detached process classpath. */
+	public static Path dependency(Class<?> type) throws IOException {
+		Path path;
+		try {
+			path = JarUtils.getJarPath(type).toAbsolutePath().normalize();
+		} catch (RuntimeException e) {
+			throw new IOException("Cannot locate runtime dependency " + type.getName(), e);
+		}
+		if (!Files.isRegularFile(path) && !Files.isDirectory(path)) throw new IOException("Runtime dependency is unavailable: " + path);
+		return path;
 	}
 
 	static Path ensure(Path source, Path directory) throws IOException {
@@ -132,6 +145,11 @@ public final class RuntimeJar {
 	static Path lockFile(Path jar) {
 		Path absolute = jar.toAbsolutePath().normalize();
 		return absolute.resolveSibling(absolute.getFileName().toString() + LOCK_SUFFIX);
+	}
+
+	/** The game sets {@link pl.skidam.automodpack_core.Constants#THIS_MOD_JAR} during preload; a detached child finds its own jar. */
+	private static Path sourceJar() {
+		return (THIS_MOD_JAR != null ? THIS_MOD_JAR : JarUtils.getJarPath(RuntimeJar.class)).toAbsolutePath().normalize();
 	}
 
 	private static Path defaultDirectory() {

@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.client;
 import static pl.skidam.automodpack_core.Constants.*;
 
 import java.awt.*;
-import java.util.concurrent.Semaphore;
 
 import pl.skidam.automodpack_core.client.compat.crashassistant.ProcessSignalIO;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
@@ -50,35 +49,13 @@ public class ReLauncher {
 			ScreenManager.restart(updateType, changelogs);
 		} else if (preload) {
 			ProcessSignalIO.post("normal_stop"); // let crash assistant know
-
-			Semaphore semaphore = null;
-			final Thread shutdownHook = new Thread(() -> runCallbacks(callbacks));
-			Runtime.getRuntime().addShutdownHook(shutdownHook);
-
-			if (isHeadless) {
-				LOGGER.info("Please restart the game to apply updates!");
-			} else {
-				semaphore = ScreenManager.preloadRestart(updateMessage);
-			}
-
-			wait(semaphore); // wait for gui to launch
+			if (isHeadless) LOGGER.info("Please restart the game to apply updates!");
+			else ScreenManager.preloadRestart(updateMessage);
 			runCallbacks(callbacks);
-			Runtime.getRuntime().removeShutdownHook(shutdownHook);
-			wait(semaphore); // wait for user interaction to close the gui
 			System.exit(0);
 		}
 
 		runCallbacks(callbacks);
-	}
-
-	private void wait(Semaphore semaphore) {
-		if (semaphore != null) {
-			try {
-				semaphore.acquire();
-			} catch (InterruptedException e) {
-				LOGGER.error("Failed to acquire semaphore", e);
-			}
-		}
 	}
 
 	private void handleServerRestart(Runnable[] callbacks) {
