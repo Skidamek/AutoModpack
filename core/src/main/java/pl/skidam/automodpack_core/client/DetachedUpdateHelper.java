@@ -2,12 +2,10 @@ package pl.skidam.automodpack_core.client;
 
 import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.storage.StoragePaths.DATA_ROOT_PROPERTY;
-import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_DIR;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LEASE_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LOG_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_PRESENCE_FILE;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -20,8 +18,8 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
-import java.util.UUID;
-import java.util.stream.Stream;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
@@ -30,14 +28,10 @@ import com.google.gson.Gson;
 
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
-import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.JarUtils;
-import pl.skidam.automodpack_core.utils.PlatformUtils;
-import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.WindowsLockProbe;
 
 public final class DetachedUpdateHelper {
-	private static final String HELPER_MAIN = UpdateHelperMain.class.getName();
 	// Receipt: the work lease is held only while Recover retries. UpdateRecovery.retryBudgetMillis() of sleeps plus
 	// per-attempt IO fits well inside this wait. A helper still waiting on the parent does not hold this lease, so boot
 	// recovers immediately. Past this wait the applying helper is stuck, and hanging this boot behind it serves nobody.
@@ -49,11 +43,6 @@ public final class DetachedUpdateHelper {
 
 	private DetachedUpdateHelper() {}
 
-	/** The helper hosts instance-level machinery, so its jars live beside the instance state, outside any role tree. */
-	public static Path helperDirectory() {
-		return GameDirectory.current().resolve(HELPER_DIR).toAbsolutePath().normalize();
-	}
-
 	/**
 	 * Spawns the helper for this process's PID and start instant. Call as soon as this process cannot finish the apply;
 	 * the helper waits for that process itself. Do not start it from a shutdown hook. A helper already present for this
@@ -64,21 +53,7 @@ public final class DetachedUpdateHelper {
 			LOGGER.info("A detached update helper is already running; it will finish after this process exits");
 			return;
 		}
-		Path sourceJar = THIS_MOD_JAR.toAbsolutePath().normalize();
-		if (!Files.isRegularFile(sourceJar)) throw new IOException("Runnable AutoModpack JAR is missing: " + sourceJar);
-		Path absoluteHelperDirectory = helperDirectory();
-		Files.createDirectories(absoluteHelperDirectory);
-
-		long size = Files.size(sourceJar);
-		String hash = FileIntegrity.identityHash(sourceJar, null);
-		if (hash == null) throw new IOException("Cannot hash the runnable AutoModpack JAR");
-		Path helperJar = absoluteHelperDirectory.resolve("automodpack-update-helper-" + UUID.randomUUID() + ".jar");
-		VerifiedFileTransfer.copyAtomic(sourceJar, helperJar, size, hash);
-
-		Path javaExecutable = Path.of(System.getProperty("java.home"), "bin", PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS ? "java.exe" : "java").toAbsolutePath().normalize();
-		if (!Files.isRegularFile(javaExecutable)) throw new IOException("Java executable is missing: " + javaExecutable);
-		String classpath = String.join(File.pathSeparator, helperJar.toString(), runtimeDependency(Gson.class).toString(), runtimeDependency(LogManager.class).toString(),
-				runtimeDependency(LoggerContext.class).toString());
+		Path runtimeJar = RuntimeJar.current();
 		// The game process exits right after this launch, so inherited streams would die with it; the helper's story must outlive the game in a file.
 		// Append: a second helper that loses the lease still starts with this redirect already open, and must not truncate the running helper's log.
 		Path helperLog = GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize();
@@ -86,10 +61,9 @@ public final class DetachedUpdateHelper {
 		String environment = LOADER_MANAGER == null || LOADER_MANAGER.getEnvironmentType() == null ? "" : LOADER_MANAGER.getEnvironmentType().name();
 		DataRootResolver.Location dataLocation = DataRootResolver.resolve(GameDirectory.current(), LOADER_MANAGER == null ? null : LOADER_MANAGER.getEnvironmentType());
 		String parentStart = ProcessHandle.current().info().startInstant().map(instant -> Long.toString(instant.toEpochMilli())).orElse("-");
-		new ProcessBuilder(javaExecutable.toString(), "-D" + DATA_ROOT_PROPERTY + "=" + dataLocation.root(), "-cp", classpath, HELPER_MAIN, Long.toString(ProcessHandle.current().pid()), environment, parentStart)
-				.directory(GameDirectory.current().toFile())
-				.redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(helperLog.toFile())).start();
-		LOGGER.info("Launched detached update helper for the latest pending transaction from {} (environment {}); its output goes to {}", helperJar, environment.isBlank() ? "unknown" : environment, helperLog);
+		DetachedProcesses.start(UpdateHelperMain.class, List.of("-D" + DATA_ROOT_PROPERTY + "=" + dataLocation.root()),
+				List.of(Long.toString(ProcessHandle.current().pid()), environment, parentStart), GameDirectory.current(), helperLog, helperClasspath(runtimeJar));
+		LOGGER.info("Launched detached update helper for the latest pending transaction from {} (environment {}); its output goes to {}", runtimeJar, environment.isBlank() ? "unknown" : environment, helperLog);
 	}
 
 	/** True when a helper process already holds presence, including while it waits for the game to exit. */
@@ -180,24 +154,13 @@ public final class DetachedUpdateHelper {
 		}
 	}
 
-	public static void cleanupOldHelperJars() {
-		cleanupOldHelperJars(helperDirectory());
-	}
-
-	private static void cleanupOldHelperJars(Path directory) {
-		if (!Files.isDirectory(directory)) return;
-		try (Stream<Path> files = Files.list(directory)) {
-			for (Path file : files.filter(path -> path.getFileName().toString().startsWith("automodpack-update-helper-")
-					&& JarUtils.hasJarExtension(path)).toList()) {
-				try {
-					Files.deleteIfExists(file);
-				} catch (IOException e) {
-					LOGGER.debug("Helper JAR is still in use: {}", file);
-				}
-			}
-		} catch (IOException e) {
-			LOGGER.debug("Failed to clean old update-helper JARs", e);
-		}
+	private static List<Path> helperClasspath(Path runtimeJar) throws IOException {
+		List<Path> classpath = new ArrayList<>();
+		classpath.add(runtimeJar);
+		classpath.add(runtimeDependency(Gson.class));
+		classpath.add(runtimeDependency(LogManager.class));
+		classpath.add(runtimeDependency(LoggerContext.class));
+		return classpath;
 	}
 
 	private static Path runtimeDependency(Class<?> type) throws IOException {

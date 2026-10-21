@@ -31,6 +31,8 @@ public final class UpdateHelperMain {
 	private UpdateHelperMain() {}
 
 	public static void main(String[] arguments) {
+		DetachedProcesses.ignoreHangup();
+		RuntimeJar.holdLease();
 		int exitCode = run(arguments);
 		System.out.flush();
 		if (exitCode != 0) System.exit(exitCode);
@@ -74,20 +76,16 @@ public final class UpdateHelperMain {
 				return 0;
 			}
 			try (presence) {
-				try {
-					waitForGameExit(parentPid, parentStartEpochMilli);
-					try (FileChannel leaseChannel = FileChannel.open(leaseFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
-						FileLock lease = tryLock(leaseChannel);
-						if (lease == null) {
-							log("Another update helper already holds the work lease; exiting");
-							return 0;
-						}
-						try (lease) {
-							return recoverPending(gameDirectory, dataLocation);
-						}
+				waitForGameExit(parentPid, parentStartEpochMilli);
+				try (FileChannel leaseChannel = FileChannel.open(leaseFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+					FileLock lease = tryLock(leaseChannel);
+					if (lease == null) {
+						log("Another update helper already holds the work lease; exiting");
+						return 0;
 					}
-				} finally {
-					DetachedUpdateHelper.cleanupOldHelperJars();
+					try (lease) {
+						return recoverPending(gameDirectory, dataLocation);
+					}
 				}
 			}
 		}
