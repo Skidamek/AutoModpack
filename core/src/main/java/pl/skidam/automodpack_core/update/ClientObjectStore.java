@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -349,9 +350,16 @@ public final class ClientObjectStore {
 
 	/** Every instance-tree file hash is a required pin, so cleanup cannot strand a snapshot. Forget-prefix is the only unpin. */
 	private static void collectStateJournal(ClientStorage storage, ExpectedSizes retained) throws IOException {
+		// Successive snapshots repeat most files, so pin each hash once; only a new size can still change the receipt.
+		Map<String, Long> pinned = new HashMap<>();
 		for (ClientStateJournal.Snapshot snapshot : ClientStateJournal.open(storage).entries()) {
 			InstanceTree tree = InstanceTree.read(storage, snapshot.treeSha1());
-			for (InstanceTree.TrackedFile file : tree.files()) retained.require(file.sha1(), file.size(), "instance timeline");
+			for (InstanceTree.TrackedFile file : tree.files()) {
+				Long known = pinned.get(file.sha1());
+				if (known != null && (file.size() == -1 || known.longValue() == file.size())) continue;
+				retained.require(file.sha1(), file.size(), "instance timeline");
+				pinned.put(file.sha1(), file.size());
+			}
 		}
 	}
 

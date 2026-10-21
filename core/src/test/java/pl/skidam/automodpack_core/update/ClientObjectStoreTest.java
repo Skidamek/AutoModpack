@@ -272,6 +272,21 @@ class ClientObjectStoreTest {
 	}
 
 	@Test
+	void timelineSizeConflictStillFailsTheSweep() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "timeline-object");
+		ClientStateJournal journal = ClientStateJournal.open(storage);
+		InstanceTree first = InstanceTree.of(InstanceTree.LiveIdentity.empty(), List.of(new InstanceTree.TrackedFile(UpdatePlan.Root.PROJECTION, "", "mods/one.jar", hash, 4)));
+		first.write(storage);
+		journal.append(first.sha1(), ClientStateJournal.Kind.UPDATE, MODPACK_ID, "txn-1");
+		InstanceTree second = InstanceTree.of(InstanceTree.LiveIdentity.empty(), List.of(new InstanceTree.TrackedFile(UpdatePlan.Root.PROJECTION, "", "mods/one.jar", hash, 5)));
+		second.write(storage);
+		journal.append(second.sha1(), ClientStateJournal.Kind.UPDATE, MODPACK_ID, "txn-2");
+
+		assertThrows(IOException.class, () -> ClientObjectStore.referencedHashes(storage));
+	}
+
+	@Test
 	void historyClaimsFillUnknownHashesWithoutOverridingLocalReceipts() throws Exception {
 		String local = HashUtils.sha1("local".getBytes(StandardCharsets.UTF_8));
 		String unknown = HashUtils.sha1("unknown".getBytes(StandardCharsets.UTF_8));
