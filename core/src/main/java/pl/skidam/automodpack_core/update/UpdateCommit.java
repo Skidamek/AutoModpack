@@ -362,9 +362,10 @@ public final class UpdateCommit {
 	 * persisted: drop the working directories, checkpoint the state history, retire the journal, and refresh the
 	 * ownership receipt. The receipt published at commit start names every object the journal pinned, and retiring it
 	 * is the only reference loss since, so the stale on-disk receipt protected everything until this refresh replaces
-	 * it with exactly the durable set. A publish is a full-state sweep (~2ms over a 200-entry journal, pinned by
-	 * {@code ClientObjectStoreTest.referenceSweepStaysCheapOnATwoHundredEntryJournal}), so a commit publishes at its
-	 * start and here, and never per file. The publish is bookkeeping and stays out of the failure path: it runs under
+	 * it with exactly the durable set. A publish is a full-state sweep whose cost tracks durable history, not the
+	 * files this update changed (pinned by {@code ClientObjectStoreTest.referenceSweepStaysCheapOnATwoHundredEntryJournal}),
+	 * so a commit publishes at its start and here, and never per file. The publish is bookkeeping and stays out of the
+	 * failure path: it runs under
 	 * the lock, every collection republishes it before deleting anything, so a failed one only makes the next collection
 	 * refuse, while failing a committed apply here would report a failure over bytes that already landed.
 	 */
