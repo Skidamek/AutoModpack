@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.client;
 
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LEASE_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_PRESENCE_FILE;
+import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_STATUS_FILE;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -13,6 +14,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 import pl.skidam.automodpack_core.loader.FileInspection;
@@ -40,14 +43,15 @@ public final class UpdateHelperMain {
 
 	static int run(String[] arguments) {
 		long start = System.nanoTime();
+		RunLog log = new RunLog();
 		try {
-			return runOnce(arguments);
+			return runOnce(arguments, log, start) ? 1 : 0;
 		} catch (Exception failure) {
-			log("Fatal helper failure: " + failure);
+			log.fail("Fatal helper failure: " + failure);
 			failure.printStackTrace();
 			return 1;
 		} finally {
-			log("Update helper run ended after " + seconds(System.nanoTime() - start));
+			log.narrate("Update helper run ended after " + seconds(System.nanoTime() - start));
 		}
 	}
 
@@ -55,7 +59,7 @@ public final class UpdateHelperMain {
 		return String.format(Locale.ROOT, "%.1fs", nanos / 1_000_000_000.0);
 	}
 
-	private static int runOnce(String[] arguments) throws IOException, InterruptedException {
+	private static boolean runOnce(String[] arguments, RunLog log, long start) throws IOException, InterruptedException {
 		if (arguments.length < 1 || arguments.length > 3) throw new IOException("Expected parent PID, optional environment, and optional parent start epoch milli");
 		long parentPid = Long.parseLong(arguments[0]);
 		if (parentPid <= 0 || parentPid == ProcessHandle.current().pid()) throw new IOException("Invalid parent PID");
@@ -64,7 +68,7 @@ public final class UpdateHelperMain {
 
 		Path gameDirectory = GameDirectory.current();
 		DataRootResolver.Location dataLocation = DataRootResolver.resolve(gameDirectory, environment);
-		logStart(parentPid, environment, gameDirectory, dataLocation);
+		logStart(parentPid, environment, gameDirectory, dataLocation, log);
 		Path helperDirectory = gameDirectory.resolve(HELPER_PRESENCE_FILE).toAbsolutePath().normalize().getParent();
 		Files.createDirectories(helperDirectory);
 		Path presenceFile = gameDirectory.resolve(HELPER_PRESENCE_FILE).toAbsolutePath().normalize();
@@ -72,45 +76,53 @@ public final class UpdateHelperMain {
 		try (FileChannel presenceChannel = FileChannel.open(presenceFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
 			FileLock presence = tryLock(presenceChannel);
 			if (presence == null) {
-				log("Another update helper is already running; exiting");
-				return 0;
+				log.narrate("Another update helper is already running; exiting");
+				return false;
 			}
 			try (presence) {
-				waitForGameExit(parentPid, parentStartEpochMilli);
+				waitForGameExit(parentPid, parentStartEpochMilli, log);
 				try (FileChannel leaseChannel = FileChannel.open(leaseFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
 					FileLock lease = tryLock(leaseChannel);
 					if (lease == null) {
-						log("Another update helper already holds the work lease; exiting");
-						return 0;
+						log.narrate("Another update helper already holds the work lease; exiting");
+						return false;
 					}
 					try (lease) {
-						return recoverPending(gameDirectory, dataLocation);
+						try {
+							return recoverPending(gameDirectory, dataLocation, log);
+						} catch (Exception failure) {
+							log.fail("Fatal helper failure: " + failure);
+							failure.printStackTrace();
+							return true;
+						} finally {
+							writeStatus(log, start);
+						}
 					}
 				}
 			}
 		}
 	}
 
-	private static int recoverPending(Path gameDirectory, DataRootResolver.Location dataLocation) throws IOException, InterruptedException {
+	private static boolean recoverPending(Path gameDirectory, DataRootResolver.Location dataLocation, RunLog log) throws IOException, InterruptedException {
 		UpdateCommit commits = new UpdateCommit(ClientStorage.open(gameDirectory));
 		long backoff = UpdateRecovery.INITIAL_BACKOFF_MILLIS;
 		for (int attempt = 1;; attempt++) {
-			boolean selfUpdateRecovered = recoverSelfUpdate(gameDirectory, dataLocation);
+			boolean selfUpdateRecovered = recoverSelfUpdate(gameDirectory, dataLocation, log);
 			UpdateCommit.Outcome outcome = commits.run(new UpdateCommit.Recover(null));
 			boolean done = outcome.settled();
 			if (done && selfUpdateRecovered) {
-				log("Pending update transaction recovered on attempt " + attempt);
-				return 0;
+				log.narrate("Pending update transaction recovered on attempt " + attempt);
+				return false;
 			}
 			if (!done && outcome instanceof UpdateCommit.Blocked blocked) {
-				log("Update recovery attempt " + attempt + " failed: status " + outcome.status() + ", operation " + blocked.operation() + ", blocked path "
+				log.detail("Update recovery attempt " + attempt + " failed: status " + outcome.status() + ", operation " + blocked.operation() + ", blocked path "
 						+ blocked.blockedPath() + ", message " + blocked.message());
 			} else if (done) {
-				log("Update transaction recovered on attempt " + attempt + ", but the self-update swap is still pending");
+				log.detail("Update transaction recovered on attempt " + attempt + ", but the self-update swap is still pending");
 			}
 			if (outcome.status() == UpdateTransaction.Status.REPLAN_REQUIRED || attempt >= UpdateRecovery.MAX_ATTEMPTS) {
-				log("Update helper gave up; the transaction stays pending and the next game launch will retry it");
-				return 1;
+				log.fail("Update helper gave up; the transaction stays pending and the next game launch will retry it");
+				return true;
 			}
 			Thread.sleep(backoff);
 			backoff = Math.min(UpdateRecovery.MAX_BACKOFF_MILLIS, backoff * 2);
@@ -126,17 +138,17 @@ public final class UpdateHelperMain {
 	}
 
 	/** Waits until the launching game process has exited, or returns immediately when that process is already gone or the pid was reused. */
-	private static void waitForGameExit(long parentPid, Long parentStartEpochMilli) {
+	private static void waitForGameExit(long parentPid, Long parentStartEpochMilli, RunLog log) {
 		ProcessHandle parent = ProcessHandle.of(parentPid).orElse(null);
 		if (parent == null) {
-			log("Game process " + parentPid + " is already gone");
+			log.narrate("Game process " + parentPid + " is already gone");
 			return;
 		}
 		if (parentGone(parent, parentStartEpochMilli)) {
-			log("Game process " + parentPid + " was reused by another process; starting recovery");
+			log.narrate("Game process " + parentPid + " was reused by another process; starting recovery");
 			return;
 		}
-		log("Waiting for the game process " + parentPid + " to exit");
+		log.narrate("Waiting for the game process " + parentPid + " to exit");
 		parent.onExit().join();
 	}
 
@@ -177,8 +189,16 @@ public final class UpdateHelperMain {
 		System.out.println("[" + LocalDateTime.now().format(TIMESTAMP) + "] [AutoModpack update helper] " + message);
 	}
 
+	private static void writeStatus(RunLog log, long start) {
+		try {
+			DetachedUpdateHelper.writeRunStatus(GameDirectory.current().resolve(HELPER_STATUS_FILE).toAbsolutePath().normalize(), log.failed(), seconds(System.nanoTime() - start), log.details());
+		} catch (IOException e) {
+			log.narrate("Could not write helper status: " + e);
+		}
+	}
+
 	/** One receipt line so the helper log identifies its run: version, parent, role, and the roots it recovers through. */
-	private static void logStart(long parentPid, LoaderManagerService.EnvironmentType environment, Path gameDirectory, DataRootResolver.Location dataLocation) {
+	private static void logStart(long parentPid, LoaderManagerService.EnvironmentType environment, Path gameDirectory, DataRootResolver.Location dataLocation, RunLog log) {
 		String version = "unknown";
 		Path helperJar = null;
 		try {
@@ -187,19 +207,48 @@ public final class UpdateHelperMain {
 			if (found != null && !found.isBlank()) version = found;
 		} catch (RuntimeException ignored) {
 		}
-		log("Update helper " + version + " starting; parent game process " + parentPid + ", environment " + (environment == null ? "unknown" : environment.name()) + ", game directory " + gameDirectory + ", data root "
+		log.narrate("Update helper " + version + " starting; parent game process " + parentPid + ", environment " + (environment == null ? "unknown" : environment.name()) + ", game directory " + gameDirectory
+				+ ", data root "
 				+ dataLocation.root()
 				+ (helperJar == null ? "" : ", running from " + helperJar));
 	}
 
-	private static boolean recoverSelfUpdate(Path gameDirectory, DataRootResolver.Location dataLocation) {
+	private static boolean recoverSelfUpdate(Path gameDirectory, DataRootResolver.Location dataLocation, RunLog log) {
 		try {
 			SelfUpdateSwap.recover(gameDirectory, dataLocation);
 			return true;
 		} catch (IOException failure) {
-			log("Self-update recovery failed: " + failure);
+			log.detail("Self-update recovery failed: " + failure);
 			failure.printStackTrace();
 			return false;
+		}
+	}
+
+	/** Collects only failure details for the status document; narration stays in the helper log. */
+	private static final class RunLog {
+		private final List<String> details = new ArrayList<>();
+		private boolean failed;
+
+		void detail(String message) {
+			details.add(message);
+			log(message);
+		}
+
+		void fail(String message) {
+			failed = true;
+			detail(message);
+		}
+
+		void narrate(String message) {
+			log(message);
+		}
+
+		boolean failed() {
+			return failed;
+		}
+
+		List<String> details() {
+			return details;
 		}
 	}
 }

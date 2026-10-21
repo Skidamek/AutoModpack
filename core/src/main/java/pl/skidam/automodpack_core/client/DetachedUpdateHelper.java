@@ -5,13 +5,12 @@ import static pl.skidam.automodpack_core.storage.StoragePaths.DATA_ROOT_PROPERTY
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LEASE_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LOG_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_PRESENCE_FILE;
+import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_STATUS_FILE;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
@@ -20,14 +19,17 @@ import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
 
 import com.google.gson.Gson;
 
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.WindowsLockProbe;
 
@@ -38,8 +40,6 @@ public final class DetachedUpdateHelper {
 	private static final Duration HELPER_LEASE_WAIT = Duration.ofMinutes(3);
 	// A released lease is noticed within half a second, the helper's own initial backoff step.
 	private static final long LEASE_POLL_MILLIS = 500;
-	// The helper log accumulates whole runs; the tail covers the most recent one or two.
-	private static final int HELPER_LOG_TAIL_BYTES = 8192;
 
 	private DetachedUpdateHelper() {}
 
@@ -126,32 +126,53 @@ public final class DetachedUpdateHelper {
 	}
 
 	/**
-	 * Mirrors the helper's recent narration into the client log, so latest.log alone carries what the helper did between
-	 * sessions - its parent wait, its per-attempt failures, its give-up.
+	 * Mirrors the helper's last run into the process log, so a latest.log paste is enough. The helper writes
+	 * {@link HelperStatusFields} before releasing the work lease; this never parses last-helper-run.log. The document
+	 * is consumed after a mirror so a later boot cannot reprint an old outcome.
 	 */
 	public static void mirrorRecentRuns() {
-		Path helperLog = GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize();
+		mirrorRecentRuns(GameDirectory.current().resolve(HELPER_STATUS_FILE).toAbsolutePath().normalize());
+	}
+
+	static void mirrorRecentRuns(Path statusFile) {
 		try {
-			if (!Files.isRegularFile(helperLog, LinkOption.NOFOLLOW_LINKS)) return;
-			byte[] tail;
-			try (FileChannel channel = FileChannel.open(helperLog, StandardOpenOption.READ)) {
-				long position = Math.max(0, channel.size() - HELPER_LOG_TAIL_BYTES);
-				tail = new byte[(int) (channel.size() - position)];
-				ByteBuffer buffer = ByteBuffer.wrap(tail);
-				while (buffer.hasRemaining() && channel.read(buffer, position + buffer.position()) > 0) {
+			ConfigTools.readCached(statusFile, HelperStatusFields.class, "Helper run status", Function.identity()).ifPresent(status -> {
+				mirrorStatus(status);
+				try {
+					DurableFiles.discard(statusFile);
+				} catch (IOException e) {
+					LOGGER.warn("Cannot consume the detached helper's status from {}", statusFile.getFileName(), e);
 				}
-			}
-			int start = 0;
-			while (start < tail.length && tail[start] != '\n') start++;
-			if (start >= tail.length - 1) return;
-			start++;
-			LOGGER.info("Mirroring the detached helper's recent runs from {}", helperLog);
-			for (String line : new String(tail, start, tail.length - start, StandardCharsets.UTF_8).split("\r?\n")) {
-				if (!line.isBlank()) LOGGER.info("{}", line);
-			}
+			});
 		} catch (IOException | RuntimeException e) {
-			LOGGER.warn("Cannot mirror the detached helper's log tail from {}", helperLog, e);
+			LOGGER.warn("Cannot read the detached helper's status from {}", statusFile.getFileName(), e);
 		}
+	}
+
+	static void writeRunStatus(Path file, boolean failed, String duration, List<String> details) throws IOException {
+		HelperStatusFields fields = new HelperStatusFields();
+		fields.failed = failed;
+		fields.duration = duration == null ? "" : duration;
+		fields.details = details == null ? new ArrayList<>() : new ArrayList<>(details);
+		ConfigTools.writeCached(file, fields);
+	}
+
+	static void mirrorStatus(HelperStatusFields status) {
+		if (!status.failed) {
+			if (status.duration != null && !status.duration.isBlank()) LOGGER.info("AutoModpack helper recovered the pending update ({})", status.duration);
+			else LOGGER.info("AutoModpack helper recovered the pending update");
+			return;
+		}
+		LOGGER.error("AutoModpack helper failed");
+		if (status.details == null) return;
+		for (String message : status.details) LOGGER.error("{}", message);
+	}
+
+	/** Rebuildable receipt of the last helper run. Document class, not record: this graph lands on disk where the game's Gson cannot read records. */
+	public static class HelperStatusFields {
+		public boolean failed;
+		public String duration = "";
+		public List<String> details = new ArrayList<>();
 	}
 
 	private static List<Path> helperClasspath(Path runtimeJar) throws IOException {

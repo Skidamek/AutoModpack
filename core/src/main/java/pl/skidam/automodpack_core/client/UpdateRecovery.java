@@ -68,10 +68,7 @@ public final class UpdateRecovery {
 			LOGGER.info("The detached update helper finished; retrying recovery of transaction {}", deferred.transactionId);
 			outcome = recover.recover();
 			deferred = outcome instanceof UpdateCommit.Blocked blocked ? blocked.transaction() : deferred;
-			if (outcome.settled()) {
-				DetachedUpdateHelper.mirrorRecentRuns();
-				return new RecoveryAttempt(outcome, deferred, false);
-			}
+			if (outcome.settled()) return new RecoveryAttempt(outcome, deferred, false);
 		}
 		if (outcome.status() == UpdateTransaction.Status.REPLAN_REQUIRED && outcome instanceof UpdateCommit.Blocked blocked) {
 			// The pending plan no longer means what the player approved, and no restart can re-approve it - only the
@@ -117,7 +114,6 @@ public final class UpdateRecovery {
 		LOGGER.error("Journal-recorded result: status {}, operation {}, path {}, message {}", transaction.resultStatus, transaction.resultOperation, transaction.resultPath, transaction.resultMessage);
 		LOGGER.error("The full transaction journal is at {}", storage.transactionFile().toAbsolutePath().normalize());
 		LOGGER.error("The detached helper's own log, with its per-attempt recovery failures, is at {}", GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());
-		DetachedUpdateHelper.mirrorRecentRuns();
 		if (loop.decision() == UpdateLoopDetector.Decision.RESTART)
 			LOGGER.error("This is deferred restart {} of {} for the transaction; when they run out, the next failed launch rolls back to the last finalized generation", loop.restarts(), loop.maxRestarts());
 	}

@@ -8,6 +8,7 @@ import java.util.Locale;
 
 import pl.skidam.automodpack_core.client.BootRecovery;
 import pl.skidam.automodpack_core.client.ClientLaunch;
+import pl.skidam.automodpack_core.client.DetachedUpdateHelper;
 import pl.skidam.automodpack_core.client.RuntimeJar;
 import pl.skidam.automodpack_core.client.SelfUpdater;
 import pl.skidam.automodpack_core.config.ConfigUtils;
@@ -37,6 +38,7 @@ public class Preload {
 			LOGGER.debug("Prelaunching AutoModpack...");
 			initializeConstants(loaderManager, modpackLoader);
 			RuntimeJar.prepareForBoot();
+			DetachedUpdateHelper.mirrorRecentRuns();
 			recoverPendingSelfUpdate();
 			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
 				storage = ClientStorage.open(GameDirectory.current());

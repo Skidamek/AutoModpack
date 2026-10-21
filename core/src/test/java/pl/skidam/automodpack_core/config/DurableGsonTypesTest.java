@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 import pl.skidam.automodpack_core.auth.IssuedSecret;
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.client.DetachedUpdateHelper;
 import pl.skidam.automodpack_core.platforms.PlatformCache;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -28,7 +29,8 @@ class DurableGsonTypesTest {
 	@Test
 	void gsonFacingTypesAreNotRecords() throws IOException {
 		Set<Class<?>> visited = new HashSet<>();
-		for (Class<?> type : List.of(UpdateTransaction.class, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.SelectedModpackFields.class, ServerConfigJsons.ServerConfigFieldsV3.class,
+		for (Class<?> type : List.of(UpdateTransaction.class, DetachedUpdateHelper.HelperStatusFields.class, ClientConfigJsons.ClientConfigFieldsV3.class,
+				ClientConfigJsons.SelectedModpackFields.class, ServerConfigJsons.ServerConfigFieldsV3.class,
 				AuthJsons.SecretsFields.class,
 				IssuedSecret.class, Secrets.Secret.class, ConnectionJsons.ConnectionRecordFields.class, ConnectionJsons.KnownHostsFields.class, ConnectionJsons.KnownHostsBootstrapFields.class,
 				SelectionJsons.ClientSelectionStoreFields.class, GenerationJsons.HeadDocumentFields.class, GenerationJsons.JournalEntryFields.class, ModpackJsons.CompleteModpackContentFields.class,
