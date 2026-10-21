@@ -110,7 +110,7 @@ final class ProjectionPublication {
 		}
 	}
 
-	private void verify(Path projection, List<ProjectedFile> finalState) throws IOException {
+	private void verify(Path projection, List<ProjectedFile> finalState, boolean cacheIdentity) throws IOException {
 		Map<String, ProjectedFile> expected = new HashMap<>();
 		for (ProjectedFile projected : finalState) if (projected.root() == Root.PROJECTION && projected.present()) expected.put(UpdateTransactionValidator.normalizeOperationPath(projected.relativePath()), projected);
 		if (!Files.isDirectory(projection, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Active client projection is not a directory: " + projection);
@@ -120,16 +120,28 @@ final class ProjectionPublication {
 				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 				String relative = UpdateTransactionValidator.normalizeOperationPath(projection.relativize(path).toString());
 				ProjectedFile expectedFile = expected.remove(relative);
-				if (expectedFile == null || !FileIntegrity.matchesObject(path, storage.objectFile(expectedFile.expectedHash()), expectedFile.expectedSize(), expectedFile.expectedHash(), fileCache))
-					throw new IOException("Client projection file verification failed: " + path);
+				boolean matches = expectedFile != null && (cacheIdentity
+						? fileCache.matchesImmutable(path, expectedFile.expectedSize(), expectedFile.expectedHash())
+						: FileIntegrity.matchesObject(path, storage.objectFile(expectedFile.expectedHash()), expectedFile.expectedSize(), expectedFile.expectedHash(), fileCache));
+				if (!matches) throw new IOException("Client projection file verification failed: " + path);
 			}
 		}
 		if (!expected.isEmpty()) throw new IOException("Client projection is missing files: " + expected.keySet());
 	}
 
-	boolean verifyQuietly(Path projection, List<ProjectedFile> finalState) {
+	/** Active records were seeded by the last publication, so their cache identity proves the same bytes without a canonical stat. */
+	boolean verifyActiveQuietly(Path projection, List<ProjectedFile> finalState) {
+		return verifyQuietly(projection, finalState, true);
+	}
+
+	/** Incoming links have no records yet; prove them by canonical inode instead of hashing every fresh link. */
+	boolean verifyIncomingQuietly(Path projection, List<ProjectedFile> finalState) {
+		return verifyQuietly(projection, finalState, false);
+	}
+
+	private boolean verifyQuietly(Path projection, List<ProjectedFile> finalState, boolean cacheIdentity) {
 		try {
-			verify(projection, finalState);
+			verify(projection, finalState, cacheIdentity);
 			return true;
 		} catch (IOException e) {
 			return false;

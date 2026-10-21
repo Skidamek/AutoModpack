@@ -547,8 +547,8 @@ public final class UpdateCommit {
 	 * active tree keeps the swap owed; the built area waits for the helper or the next boot.
 	 */
 	private Lock publishProjection(UpdateTransaction transaction) throws IOException {
-		if (projection.verifyQuietly(storage.activeDirectory(), transaction.plan().projectedFinalState())) return null;
-		if (!projection.verifyQuietly(storage.incomingDirectory(), transaction.plan().projectedFinalState())) projection.build(transaction);
+		if (projection.verifyActiveQuietly(storage.activeDirectory(), transaction.plan().projectedFinalState())) return null;
+		if (!projection.verifyIncomingQuietly(storage.incomingDirectory(), transaction.plan().projectedFinalState())) projection.build(transaction);
 		probe.reached(Step.PROJECTION_BUILT);
 		setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
 		try {
