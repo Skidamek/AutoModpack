@@ -35,6 +35,18 @@ Never copy-paste random commands from the internet, always read the documentatio
 
 After obtaining the certificate, the files you need are `fullchain.pem` (the full chain certificate, copy and rename to `cert.crt`) and `privkey.pem` (the private key, copy and rename to `key.pem`).
 
+<Callout variant="warning">
+Anyone holding `key.pem` can impersonate your server. A `key.pem` that AutoModpack generates is owner-only: `600` on Linux and macOS, and an owner-only ACL on Windows. If you copied a key in yourself, lock it down; on Linux and macOS the server logs a warning when the key is group- or world-readable:
+
+```bash
+chmod 600 automodpack/.private/key.pem
+```
+
+```powershell
+icacls automodpack\.private\key.pem /inheritance:r /grant:r "$($env:USERNAME):F"
+```
+</Callout>
+
 ### Wait but why do I need all this? It's just a modpack for my friends!
 
 If someone could easily take control over the automodpack connection, they could download on your (or your friends) computers anything they want.

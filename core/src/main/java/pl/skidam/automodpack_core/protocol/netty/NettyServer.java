@@ -100,6 +100,8 @@ public class NettyServer {
                     NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
                 }
 
+                NetUtils.warnIfPrivateKeyIsTooOpen(serverPrivateKeyFile);
+
                 X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
 
                 if (cert == null) {

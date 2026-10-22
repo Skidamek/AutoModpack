@@ -9,10 +9,26 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.LockFreeInputStream;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.AclEntry;
+import java.nio.file.attribute.AclEntryPermission;
+import java.nio.file.attribute.AclEntryType;
+import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.*;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateFactory;
@@ -21,7 +37,13 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.EnumSet;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class NetUtils {
 
@@ -55,6 +77,8 @@ public class NetUtils {
     public static final int DEFAULT_CHUNK_SIZE = 256 * 1024; // 256 KB
     public static final int MIN_CHUNK_SIZE = 8 * 1024; // 8 KB
     public static final int MAX_CHUNK_SIZE = 512 * 1024; // 512 KB
+
+    private static final Set<PosixFilePermission> OWNER_ONLY = PosixFilePermissions.fromString("rw-------");
 
     public static String getFingerprint(X509Certificate cert) throws CertificateEncodingException {
         byte[] certificate = cert.getEncoded();
@@ -117,8 +141,71 @@ public class NetUtils {
         String keyPem = "-----BEGIN PRIVATE KEY-----\n"
                 + formatBase64(Base64.getEncoder().encodeToString(keySpec.getEncoded()))
                 + "-----END PRIVATE KEY-----";
-        CustomFileUtils.setupFilePaths(path);
-        Files.writeString(path, keyPem);
+        writeOwnerOnly(path, keyPem.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Writes a secret through a temporary that is owner-only before any byte lands, then moves it into place, so the
+     * key never exists under a group- or world-readable name. POSIX creates it rw-------, Windows gets a single
+     * owner-allow ACL entry. A rename keeps both.
+     */
+    public static void writeOwnerOnly(Path target, byte[] bytes) throws IOException {
+        Path parent = target.toAbsolutePath().normalize().getParent();
+        if (parent == null) throw new IOException("Path has no parent: " + target);
+        Files.createDirectories(parent);
+
+        Path temporary = parent.resolve("." + target.getFileName() + "." + UUID.randomUUID() + ".tmp");
+        boolean posix = Files.getFileAttributeView(parent, PosixFileAttributeView.class) != null;
+        FileAttribute<?>[] attributes = posix ? new FileAttribute<?>[]{PosixFilePermissions.asFileAttribute(OWNER_ONLY)} : new FileAttribute<?>[0];
+        try {
+            try (FileChannel channel = FileChannel.open(temporary, Set.of(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE), attributes)) {
+                if (!posix) restrictAclToOwner(temporary);
+                ByteBuffer buffer = ByteBuffer.wrap(bytes);
+                while (buffer.hasRemaining()) channel.write(buffer);
+                channel.force(true);
+            }
+            try {
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+    }
+
+    // Windows: a single owner-allow ACL entry. Where the filesystem has no ACL view or the ACL APIs fail, the file keeps what the filesystem gave it.
+    private static void restrictAclToOwner(Path file) {
+        AclFileAttributeView acl = Files.getFileAttributeView(file, AclFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+        if (acl == null) return;
+        try {
+            AclEntry ownerAllow = AclEntry.newBuilder()
+                    .setType(AclEntryType.ALLOW)
+                    .setPrincipal(Files.getOwner(file, LinkOption.NOFOLLOW_LINKS))
+                    .setPermissions(EnumSet.allOf(AclEntryPermission.class))
+                    .build();
+            acl.setAcl(List.of(ownerAllow));
+        } catch (UnsupportedOperationException | SecurityException | IOException e) {
+            LOGGER.warn("Could not restrict {} to the owner: {}", file, e.toString());
+        }
+    }
+
+    /**
+     * New keys are created owner-only; an existing key that group or others can read is left as it is and called out,
+     * so the operator can chmod 600 it.
+     */
+    public static void warnIfPrivateKeyIsTooOpen(Path privateKeyFile) {
+        Set<PosixFilePermission> permissions;
+        try {
+            permissions = Files.getPosixFilePermissions(privateKeyFile);
+        } catch (UnsupportedOperationException | IOException e) {
+            return;
+        }
+        boolean shared = permissions.contains(PosixFilePermission.GROUP_READ) || permissions.contains(PosixFilePermission.GROUP_WRITE) || permissions.contains(PosixFilePermission.GROUP_EXECUTE)
+                || permissions.contains(PosixFilePermission.OTHERS_READ) || permissions.contains(PosixFilePermission.OTHERS_WRITE) || permissions.contains(PosixFilePermission.OTHERS_EXECUTE);
+        if (shared) {
+            LOGGER.warn("{} is readable by group or others; chmod 600 it so only the server user can read the private key", privateKeyFile);
+        }
     }
 
     private static String formatBase64(String base64) {
