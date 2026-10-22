@@ -403,9 +403,30 @@ class Connection implements AutoCloseable {
 			return take.limitBytes() >= 0 && head.contentLength() != null && head.contentLength() > take.limitBytes();
 		}
 
-		/** Consumes the body into the destination; a body that busts the take's byte limit fails this take alone and reports true. */
+		/**
+		 * The most body bytes this answer may carry when the take has no byte limit of its own: the slice it asked for,
+		 * else what is left of an object of known size from where the answer starts; negative when neither is known.
+		 */
+		private long objectBound(ResponseHead head) {
+			if (take.limitBytes() >= 0) return -1;
+			if (take.endInclusive() >= 0) return take.endInclusive() - take.offset() + 1;
+			if (take.expectedSize() < 0) return -1;
+			return head.status() == 206 || head.contentRange() != null ? take.expectedSize() - take.offset() : take.expectedSize();
+		}
+
+		/**
+		 * Consumes the body into the destination; a body that busts the take's byte limit fails this take alone and reports
+		 * true. A body past the object it answers is a hostile or broken host: refused by its declared identity length
+		 * before a byte lands, or failed the moment it streams past, and the lane goes with it rather than draining it.
+		 */
 		private boolean consumeAndComplete(ResponseHead head, long writeOffset) throws IOException {
-			if (!consumeBody(head, destination, writeOffset, chunks, null, take.tap(), false, take.limitBytes())) return false;
+			long bound = objectBound(head);
+			boolean identity = head.contentEncoding() == null || head.contentEncoding().isBlank();
+			if (bound >= 0 && identity && head.contentLength() != null && head.contentLength() > bound) {
+				unhealthy = true;
+				throw new IOException("Declared Content-Length " + head.contentLength() + " runs past the " + bound + " byte object answer for " + originPath);
+			}
+			if (!consumeBody(head, destination, writeOffset, chunks, null, take.tap(), false, take.limitBytes(), bound)) return false;
 			future.completeExceptionally(new IOException("Object exceeds the " + take.limitBytes() + " byte limit for " + originPath));
 			return true;
 		}
@@ -514,13 +535,13 @@ class Connection implements AutoCloseable {
 			}
 			if (head.status() == 200) {
 				if (sha1Hex == null) {
-					consumeBody(head, destination, 0, chunks, null, null, true, -1L);
+					consumeBody(head, destination, 0, chunks, null, null, true, -1L, -1L);
 					future.complete(new DocumentFetch(destination, false, head.etag()));
 					return;
 				}
 				// A conditional document's body hash is the ground truth, so a host that ignores the condition still reads as unchanged when the bytes match the expectation.
 				MessageDigest hash = HashUtils.newSha1Digest();
-				consumeBody(head, destination, 0, chunks, hash, null, true, -1L);
+				consumeBody(head, destination, 0, chunks, hash, null, true, -1L, -1L);
 				boolean unchanged = HexFormat.of().formatHex(hash.digest()).equals(sha1Hex);
 				future.complete(new DocumentFetch(destination, unchanged, head.etag()));
 				return;
@@ -625,9 +646,11 @@ class Connection implements AutoCloseable {
 	 * and the frame drain below consumes whatever framing bytes the decoder left behind. Truncate is only honest for a
 	 * single-writer destination (documents): an object partial shares positioned writers across pipelined requests, so
 	 * a truncate there would wipe bytes another writer already settled. A non-negative limit stops the copy once the
-	 * decoded body passes it and still drains the frame, so the return value says whether the limit was the verdict.
+	 * decoded body passes it and still drains the frame, so the return value says whether the limit was the verdict. A
+	 * non-negative {@code failPastBytes} fails the copy outright once the decoded body passes it, with no drain.
 	 */
-	private boolean consumeBody(ResponseHead head, Path destination, long writeOffset, IntConsumer chunkCallback, MessageDigest hash, OutputStream tap, boolean truncate, long limitBytes) throws IOException {
+	private boolean consumeBody(ResponseHead head, Path destination, long writeOffset, IntConsumer chunkCallback, MessageDigest hash, OutputStream tap, boolean truncate, long limitBytes, long failPastBytes)
+			throws IOException {
 		if (head.status() == 204 || head.status() == 304) return false;
 		InputStream framed;
 		boolean closeFramed = false;
@@ -644,8 +667,9 @@ class Connection implements AutoCloseable {
 		WireCodec codec = WireCodec.negotiate(encoding);
 		if (codec == null && !encoding.isEmpty()) throw new IOException("Unsupported Content-Encoding: " + head.contentEncoding());
 		InputStream source = codec == null ? framed : codec.unwrap(framed);
-		LimitedBody limited = limitBytes >= 0 ? new LimitedBody(source, limitBytes) : null;
+		LimitedBody limited = limitBytes >= 0 ? new LimitedBody(source, limitBytes, false) : null;
 		if (limited != null) source = limited;
+		else if (failPastBytes >= 0) source = new LimitedBody(source, failPastBytes, true);
 		if (closeFramed) unhealthy = true;
 		transfer(source, destination, writeOffset, chunkCallback, hash, head.contentLength(), tap, truncate);
 		if (framed instanceof ChunkedBody chunked) chunked.drainToFrameEnd();
@@ -680,21 +704,25 @@ class Connection implements AutoCloseable {
 	}
 
 	private void discardBody(ResponseHead head) throws IOException {
-		consumeBody(head, null, 0, null, null, null, false, -1L);
+		consumeBody(head, null, 0, null, null, null, false, -1L, -1L);
 	}
 
 	/**
 	 * Serves at most {@code limit} decoded bytes, then reports EOF once and remembers whether the body actually
 	 * carried more: an honest body of exactly the limit reads as complete, a longer one reads as over the cap while
-	 * the frame drain walks the remaining body bytes off the wire.
+	 * the frame drain walks the remaining body bytes off the wire. With {@code failFast} a longer body throws instead.
 	 */
-	private static final class LimitedBody extends InputStream {
+	private final class LimitedBody extends InputStream {
 		private final InputStream source;
+		private final long limit;
+		private final boolean failFast;
 		private long remaining;
 		private boolean exceeded;
 
-		LimitedBody(InputStream source, long limit) {
+		LimitedBody(InputStream source, long limit, boolean failFast) {
 			this.source = source;
+			this.limit = limit;
+			this.failFast = failFast;
 			this.remaining = limit;
 		}
 
@@ -713,6 +741,10 @@ class Connection implements AutoCloseable {
 		public int read(byte[] buffer, int offset, int length) throws IOException {
 			if (remaining <= 0) {
 				exceeded = source.read() >= 0;
+				if (exceeded && failFast) {
+					unhealthy = true;
+					throw new IOException("Body ran past the " + limit + " byte object answer");
+				}
 				return -1;
 			}
 			int read = source.read(buffer, offset, (int) Math.min(length, remaining));

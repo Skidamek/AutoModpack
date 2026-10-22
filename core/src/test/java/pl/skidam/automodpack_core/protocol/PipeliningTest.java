@@ -94,6 +94,32 @@ class PipeliningTest {
 	}
 
 	@Test
+	void aPartialAnswerPastItsSliceNeverLandsPastTheSlice(@TempDir Path directory) throws Exception {
+		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
+			String sha1 = storeObjects(server, 1).get(0);
+			long size = server.store().get(sha1).length;
+			server.overlongPartials.set(true);
+			try (Connection connection = connection(server, "test-secret")) {
+				Path declared = directory.resolve("declared");
+				var thrown = assertThrows(ExecutionException.class, () -> takeSlice(connection, sha1, declared, size).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertTrue(rootCause(thrown).getMessage().contains("runs past the 10 byte"), String.valueOf(rootCause(thrown)));
+				assertFalse(Files.exists(declared), "a declared overrun is refused before a byte lands");
+			}
+			server.chunkedObjects.set(true);
+			try (Connection connection = connection(server, "test-secret")) {
+				Path streamed = directory.resolve("streamed");
+				var thrown = assertThrows(ExecutionException.class, () -> takeSlice(connection, sha1, streamed, size).get(AWAIT_SECONDS, TimeUnit.SECONDS));
+				assertTrue(rootCause(thrown).getMessage().contains("ran past the 10 byte"), String.valueOf(rootCause(thrown)));
+				assertTrue(!Files.exists(streamed) || Files.size(streamed) <= 10, "a streamed overrun stops at the slice");
+			}
+		}
+	}
+
+	private static CompletableFuture<Path> takeSlice(Connection connection, String sha1, Path destination, long size) {
+		return connection.sendDownloadFile(sha1.getBytes(StandardCharsets.UTF_8), Connection.ObjectTake.rangedSlice(destination, null, 0, 9, size));
+	}
+
+	@Test
 	void aFailingResponseFailsEveryPendingRequestBehindIt(@TempDir Path directory) throws Exception {
 		try (ConditionalFetchTest.ContractServer server = new ConditionalFetchTest.ContractServer()) {
 			List<String> hashes = storeObjects(server, IN_FLIGHT);

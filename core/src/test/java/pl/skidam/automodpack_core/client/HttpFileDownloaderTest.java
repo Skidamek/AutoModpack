@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.concurrent.Executors;
 
 import org.junit.jupiter.api.AfterAll;
@@ -44,12 +45,28 @@ class HttpFileDownloaderTest {
 			}
 			exchange.close();
 		});
+		server.createContext("/endless", exchange -> {
+			exchange.sendResponseHeaders(200, 0);
+			try (OutputStream out = exchange.getResponseBody()) {
+				out.write(FULL);
+				while (true) out.write(new byte[8192]);
+			} catch (IOException closedByTheClient) {
+			}
+		});
 		server.start();
 	}
 
 	@AfterAll
 	static void stopServer() {
 		server.stop(0);
+	}
+
+	@Test
+	void aBodyRunningPastTheObjectFailsAtItsEnd(@TempDir Path directory) throws Exception {
+		DownloadSource source = new DownloadSource("http://127.0.0.1:" + server.getAddress().getPort() + "/endless", DownloadSource.Provider.MODRINTH);
+		IOException thrown = assertTimeoutPreemptively(Duration.ofSeconds(10),
+				() -> assertThrows(IOException.class, () -> new HttpFileDownloader().download(source, directory.resolve("object"), FULL.length, 0, null, 0, null)));
+		assertTrue(thrown.getMessage().contains("ran past"), thrown.getMessage());
 	}
 
 	@Test

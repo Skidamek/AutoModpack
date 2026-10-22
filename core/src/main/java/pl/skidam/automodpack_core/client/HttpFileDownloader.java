@@ -145,6 +145,8 @@ public class HttpFileDownloader {
 				int bytesRead;
 				while ((bytesRead = in.read(buffer)) != -1) {
 					if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+					// The bound is the object, not this request's range end: a server ignoring the Range header sends it whole.
+					if (written + bytesRead > fileSize) throw new IOException("Platform body ran past the " + fileSize + "-byte object " + target.getFileName());
 					out.write(buffer, 0, bytesRead);
 					written += bytesRead;
 					lastProgressNanos.set(System.nanoTime());

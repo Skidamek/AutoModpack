@@ -591,6 +591,7 @@ class ConditionalFetchTest {
 		final AtomicBoolean closeFramedDocuments = new AtomicBoolean(false);
 		final AtomicBoolean requireAuth = new AtomicBoolean(false);
 		final AtomicBoolean lieAboutResumeStart = new AtomicBoolean(false);
+		final AtomicBoolean overlongPartials = new AtomicBoolean(false);
 		final AtomicBoolean compressDocuments = new AtomicBoolean(false);
 		final AtomicBoolean gzipDocuments = new AtomicBoolean(false);
 		final AtomicBoolean chunkedDocuments = new AtomicBoolean(false);
@@ -840,8 +841,16 @@ class ConditionalFetchTest {
 				}
 				if (range != null) {
 					ranges.add(range);
-					respond(out, "206 Partial Content", Arrays.copyOfRange(content, (int) range[0], (int) range[1] + 1),
-							"Content-Range: bytes " + (lieAboutResumeStart.get() ? range[0] + 5 : range[0]) + "-" + range[1] + "/" + content.length);
+					byte[] slice = Arrays.copyOfRange(content, (int) range[0], (int) range[1] + 1);
+					String contentRange = "Content-Range: bytes " + (lieAboutResumeStart.get() ? range[0] + 5 : range[0]) + "-" + range[1] + "/" + content.length;
+					if (overlongPartials.get()) {
+						// A hostile host: the partial carries far more than the slice it claims, declared or chunked.
+						byte[] overlong = Arrays.copyOf(slice, slice.length + 64 * 1024);
+						if (chunkedObjects.get()) respondChunked(out, "206 Partial Content", overlong, 0, contentRange);
+						else respond(out, "206 Partial Content", overlong, contentRange);
+						return;
+					}
+					respond(out, "206 Partial Content", slice, contentRange);
 					return;
 				}
 				lastResponseZstd.set(false);
