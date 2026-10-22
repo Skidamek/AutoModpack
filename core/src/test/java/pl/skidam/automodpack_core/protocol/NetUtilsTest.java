@@ -10,9 +10,12 @@ import java.nio.file.attribute.AclEntryType;
 import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipal;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.security.Provider;
 import java.security.Security;
 import java.security.cert.X509Certificate;
+import java.security.spec.ECGenParameterSpec;
 
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -95,6 +98,21 @@ class NetUtilsTest {
 		NetUtils.ensureSelfSignedTlsPair(certFile, keyFile);
 		assertArrayEquals(existingKey, Files.readAllBytes(keyFile));
 		NetUtils.validateKeyMatchesCertificate(NetUtils.loadPrivateKey(keyFile), NetUtils.loadCertificate(certFile));
+	}
+
+	@Test
+	void ensureSelfSignedTlsPairSignsACertificateWithAnExistingEcKey(@TempDir Path directory) throws Exception {
+		Path certFile = directory.resolve("certificate.crt");
+		Path keyFile = directory.resolve("private-key.pem");
+		KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
+		generator.initialize(new ECGenParameterSpec("secp256r1"));
+		KeyPair ecPair = generator.generateKeyPair();
+		NetUtils.savePrivateKey(ecPair.getPrivate(), keyFile);
+		NetUtils.ensureSelfSignedTlsPair(certFile, keyFile);
+		X509Certificate certificate = NetUtils.loadCertificate(certFile);
+		assertEquals(ecPair.getPublic(), certificate.getPublicKey());
+		assertEquals("SHA256withECDSA", certificate.getSigAlgName());
+		NetUtils.validateKeyMatchesCertificate(NetUtils.loadPrivateKey(keyFile), certificate);
 	}
 
 	@Test

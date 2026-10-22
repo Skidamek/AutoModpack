@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.protocol;
 
 import static pl.skidam.automodpack_core.Constants.AM_VERSION;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -15,7 +16,12 @@ import java.security.*;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.RSAPrivateCrtKey;
+import java.security.spec.ECFieldFp;
+import java.security.spec.ECParameterSpec;
+import java.security.spec.ECPoint;
+import java.security.spec.ECPublicKeySpec;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.RSAPublicKeySpec;
@@ -32,7 +38,9 @@ import javax.security.auth.x500.X500Principal;
 import org.bouncycastle.asn1.DERNull;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
+import org.bouncycastle.asn1.x9.X9ObjectIdentifiers;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.math.ec.ECCurve;
 import org.bouncycastle.operator.ContentSigner;
 
 import pl.skidam.automodpack_core.utils.DurableFiles;
@@ -120,8 +128,6 @@ public class NetUtils {
 	public static final int WRITE_BUFFER_LOW_WATER = 256 * 1024;
 	public static final int WRITE_BUFFER_HIGH_WATER = 512 * 1024;
 
-	private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
-	private static final AlgorithmIdentifier SIGNATURE_ALGORITHM_IDENTIFIER = new AlgorithmIdentifier(PKCSObjectIdentifiers.sha256WithRSAEncryption, DERNull.INSTANCE);
 	// A self-signed leaf is trusted by its pin, DNS record, or the player, never by its dates; this only has to outlive the server.
 	private static final int SELF_SIGNED_VALIDITY_YEARS = 100;
 
@@ -184,14 +190,20 @@ public class NetUtils {
 	}
 
 	private static ContentSigner createContentSigner(PrivateKey privateKey) throws GeneralSecurityException {
-		Signature signature = Signature.getInstance(SIGNATURE_ALGORITHM);
+		String algorithm = signatureAlgorithm(privateKey);
+		AlgorithmIdentifier algorithmIdentifier = switch (algorithm) {
+			case "SHA256withRSA" -> new AlgorithmIdentifier(PKCSObjectIdentifiers.sha256WithRSAEncryption, DERNull.INSTANCE);
+			case "SHA256withECDSA" -> new AlgorithmIdentifier(X9ObjectIdentifiers.ecdsa_with_SHA256);
+			default -> throw new GeneralSecurityException("Cannot self-sign with " + algorithm);
+		};
+		Signature signature = Signature.getInstance(algorithm);
 		signature.initSign(privateKey);
 		ByteArrayOutputStream encodedCertificate = new ByteArrayOutputStream();
 
 		return new ContentSigner() {
 			@Override
 			public AlgorithmIdentifier getAlgorithmIdentifier() {
-				return SIGNATURE_ALGORITHM_IDENTIFIER;
+				return algorithmIdentifier;
 			}
 
 			@Override
@@ -278,13 +290,17 @@ public class NetUtils {
 		}
 		KeyPair keyPair;
 		try {
-			keyPair = keyExists ? existingRsaKeyPair(privateKeyFile) : generateKeyPair();
+			keyPair = keyExists ? existingKeyPair(privateKeyFile) : generateKeyPair();
 		} catch (Exception e) {
 			throw new IllegalStateException("The TLS private key " + privateKeyFile + " has no certificate and cannot be given a self-signed one; put its certificate at " + certFile, e);
 		}
 		try {
 			if (!keyExists) savePrivateKey(keyPair.getPrivate(), privateKeyFile);
-			saveCertificate(selfSign(keyPair), certFile);
+			X509Certificate certificate = selfSign(keyPair);
+			saveCertificate(certificate, certFile);
+			if (keyExists)
+				LOGGER.warn("Built a new self-signed TLS certificate {} for the existing key {}; its fingerprint {} is new, so clients that trusted this server will be asked to trust it again", certFile, privateKeyFile,
+						getFingerprint(certificate));
 		} catch (IOException e) {
 			throw e;
 		} catch (Exception e) {
@@ -292,22 +308,26 @@ public class NetUtils {
 		}
 	}
 
-	/** The pair behind an existing PKCS#8 RSA key: the CRT form carries the public exponent, so the public key needs no other file. */
-	private static KeyPair existingRsaKeyPair(Path privateKeyFile) throws Exception {
-		if (!(loadPrivateKey(privateKeyFile) instanceof RSAPrivateCrtKey key)) throw new GeneralSecurityException("only an RSA private key can sign the self-signed certificate");
-		PublicKey publicKey = KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(key.getModulus(), key.getPublicExponent()));
+	/** The pair behind an existing PKCS#8 key: RSA's CRT form carries the public exponent and an EC public point is d·G, so neither needs another file. */
+	private static KeyPair existingKeyPair(Path privateKeyFile) throws Exception {
+		PrivateKey key = loadPrivateKey(privateKeyFile);
+		PublicKey publicKey;
+		if (key instanceof RSAPrivateCrtKey rsa) {
+			publicKey = KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(rsa.getModulus(), rsa.getPublicExponent()));
+		} else if (key instanceof ECPrivateKey ec && ec.getParams().getCurve().getField() instanceof ECFieldFp field) {
+			ECParameterSpec params = ec.getParams();
+			ECCurve curve = new ECCurve.Fp(field.getP(), params.getCurve().getA(), params.getCurve().getB(), params.getOrder(), BigInteger.valueOf(params.getCofactor()));
+			var q = curve.createPoint(params.getGenerator().getAffineX(), params.getGenerator().getAffineY()).multiply(ec.getS()).normalize();
+			publicKey = KeyFactory.getInstance("EC").generatePublic(new ECPublicKeySpec(new ECPoint(q.getAffineXCoord().toBigInteger(), q.getAffineYCoord().toBigInteger()), params));
+		} else {
+			throw new GeneralSecurityException("only an RSA or prime-curve EC private key can sign the self-signed certificate");
+		}
 		return new KeyPair(publicKey, key);
 	}
 
 	/** Proves the key pairs with the certificate by signing a fresh random challenge and verifying it with the certificate's public key. */
 	public static void validateKeyMatchesCertificate(PrivateKey privateKey, X509Certificate certificate) throws GeneralSecurityException {
-		String algorithm = switch (privateKey.getAlgorithm()) {
-			case "RSA" -> "SHA256withRSA";
-			case "EC", "ECDSA" -> "SHA256withECDSA";
-			case "Ed25519" -> "Ed25519";
-			case "DSA" -> "SHA256withDSA";
-			default -> throw new GeneralSecurityException("Unsupported private key algorithm: " + privateKey.getAlgorithm());
-		};
+		String algorithm = signatureAlgorithm(privateKey);
 		byte[] challenge = new byte[64];
 		new SecureRandom().nextBytes(challenge);
 		Signature signature = Signature.getInstance(algorithm);
@@ -317,6 +337,16 @@ public class NetUtils {
 		verification.initVerify(certificate.getPublicKey());
 		verification.update(challenge);
 		if (!verification.verify(signature.sign())) throw new GeneralSecurityException("The private key does not match the certificate " + certificate.getSubjectX500Principal());
+	}
+
+	private static String signatureAlgorithm(PrivateKey privateKey) throws GeneralSecurityException {
+		return switch (privateKey.getAlgorithm()) {
+			case "RSA" -> "SHA256withRSA";
+			case "EC", "ECDSA" -> "SHA256withECDSA";
+			case "Ed25519" -> "Ed25519";
+			case "DSA" -> "SHA256withDSA";
+			default -> throw new GeneralSecurityException("Unsupported private key algorithm: " + privateKey.getAlgorithm());
+		};
 	}
 
 	private static String formatBase64(byte[] derEncodedBytes) {
