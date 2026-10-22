@@ -42,6 +42,7 @@ import javax.net.ssl.SSLSocket;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.BasicConstraints;
 import org.bouncycastle.asn1.x509.CRLDistPoint;
+import org.bouncycastle.asn1.x509.CRLNumber;
 import org.bouncycastle.asn1.x509.CRLReason;
 import org.bouncycastle.asn1.x509.DistributionPoint;
 import org.bouncycastle.asn1.x509.DistributionPointName;
@@ -201,6 +202,23 @@ class LeafRevocationTest {
 	}
 
 	@Test
+	void aCrlOlderThanTheCachedOneIsARollbackThatNeverWins(@TempDir Path directory) throws Exception {
+		X509Certificate leaf = leaf(HTTP);
+		FetchCache cache = new FetchCache(directory);
+		Instant issued = Instant.now().minusSeconds(600);
+		Instant next = Instant.now().plusSeconds(86_400);
+		serve(HTTP, crl(caKeys, issued, BigInteger.valueOf(5), next, null, leaf.getSerialNumber()));
+		assertEquals(Status.REVOKED, check(leaf, cache));
+		age(directory);
+		serve(HTTP, crl(caKeys, issued.minusSeconds(3600), BigInteger.valueOf(6), next, null));
+		serve(TLS, crl(caKeys, issued, BigInteger.valueOf(4), next, null));
+		assertEquals(Status.REVOKED, check(leaf, cache), "an earlier thisUpdate and a lower CRL number both lose to the cached copy");
+
+		serve(TLS, crl(caKeys, issued.plusSeconds(300), BigInteger.valueOf(6), next, null));
+		assertEquals(Status.GOOD, check(leaf, cache), "the race goes on past the rollback to a newer CRL");
+	}
+
+	@Test
 	void anOversizedOrSlowCrlIsUnknown() throws Exception {
 		X509Certificate leaf = leaf(HTTP);
 		served.put(HTTP, new Served(bomb(), 0, WireCodec.GZIP));
@@ -323,8 +341,13 @@ class LeafRevocationTest {
 	}
 
 	private byte[] crl(KeyPair signer, Instant nextUpdate, String shard, BigInteger... revoked) throws Exception {
-		X509v2CRLBuilder builder = new X509v2CRLBuilder(CA_NAME, Date.from(Instant.now().minusSeconds(7200)));
+		return crl(signer, Instant.now().minusSeconds(7200), null, nextUpdate, shard, revoked);
+	}
+
+	private byte[] crl(KeyPair signer, Instant thisUpdate, BigInteger number, Instant nextUpdate, String shard, BigInteger... revoked) throws Exception {
+		X509v2CRLBuilder builder = new X509v2CRLBuilder(CA_NAME, Date.from(thisUpdate));
 		builder.setNextUpdate(Date.from(nextUpdate));
+		if (number != null) builder.addExtension(Extension.cRLNumber, false, new CRLNumber(number));
 		for (BigInteger serial : revoked) builder.addCRLEntry(serial, Date.from(Instant.now().minusSeconds(600)), CRLReason.keyCompromise);
 		if (shard != null) {
 			DistributionPointName scope = new DistributionPointName(new GeneralNames(new GeneralName(GeneralName.uniformResourceIdentifier, shard)));

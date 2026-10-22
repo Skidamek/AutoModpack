@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.protocol;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.security.GeneralSecurityException;
 import java.security.cert.CRLException;
 import java.security.cert.CertPathValidator;
@@ -22,6 +23,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
+import org.bouncycastle.asn1.ASN1Integer;
 import org.bouncycastle.asn1.x509.CRLDistPoint;
 import org.bouncycastle.asn1.x509.DistributionPoint;
 import org.bouncycastle.asn1.x509.DistributionPointName;
@@ -68,12 +70,14 @@ final class LeafRevocation {
 
 	/**
 	 * Races the sources of one CRL, cached under the first; only a CRL that settles the leaf's status (signed by its
-	 * issuer, in scope, before its nextUpdate) wins, so a fast bad answer from one source never beats a good one.
+	 * issuer, in scope, before its nextUpdate) and is no older than the cached copy wins, so neither a fast bad answer
+	 * nor a replayed older CRL from one source ever beats a good one.
 	 */
 	static CompletableFuture<Status> check(X509Certificate leaf, X509Certificate[] presented, List<String> sources, FetchCache cache, Duration deadline) {
 		X509Certificate issuer = issuer(leaf, presented);
 		if (issuer == null) return CompletableFuture.completedFuture(Status.UNKNOWN);
-		return cache.get(sources, body -> settled(leaf, issuer, body), deadline)
+		X509CRL cached = crl(cache.stored(sources.get(0)));
+		return cache.get(sources, body -> settled(leaf, issuer, body, cached), deadline)
 				.thenApply(status -> status == null ? Status.UNKNOWN : status)
 				.exceptionally(error -> Status.UNKNOWN);
 	}
@@ -108,16 +112,39 @@ final class LeafRevocation {
 		return null;
 	}
 
-	/** The leaf's status by this CRL body; null when the body is no CRL or cannot settle it. */
-	private static Status settled(X509Certificate leaf, X509Certificate issuer, byte[] body) {
-		X509CRL crl;
+	/** The leaf's status by this CRL body; null when the body is no CRL, is older than {@code cached}, or cannot settle it. */
+	private static Status settled(X509Certificate leaf, X509Certificate issuer, byte[] body, X509CRL cached) {
+		X509CRL crl = crl(body);
+		if (crl == null || cached != null && olderThan(crl, cached)) return null;
+		Status status = judge(leaf, issuer, crl);
+		return status == Status.UNKNOWN ? null : status;
+	}
+
+	private static X509CRL crl(byte[] body) {
+		if (body == null) return null;
 		try {
-			crl = (X509CRL) CertificateFactory.getInstance("X.509").generateCRL(new ByteArrayInputStream(body));
+			return (X509CRL) CertificateFactory.getInstance("X.509").generateCRL(new ByteArrayInputStream(body));
 		} catch (CRLException | CertificateException e) {
 			return null;
 		}
-		Status status = judge(leaf, issuer, crl);
-		return status == Status.UNKNOWN ? null : status;
+	}
+
+	/** Issued before {@code cached}, by thisUpdate or, when both carry one, by CRL number. */
+	private static boolean olderThan(X509CRL crl, X509CRL cached) {
+		if (crl.getThisUpdate().before(cached.getThisUpdate())) return true;
+		BigInteger number = crlNumber(crl);
+		BigInteger cachedNumber = crlNumber(cached);
+		return number != null && cachedNumber != null && number.compareTo(cachedNumber) < 0;
+	}
+
+	private static BigInteger crlNumber(X509CRL crl) {
+		byte[] extension = crl.getExtensionValue(Extension.cRLNumber.getId());
+		if (extension == null) return null;
+		try {
+			return ASN1Integer.getInstance(JcaX509ExtensionUtils.parseExtensionValue(extension)).getValue();
+		} catch (IOException | RuntimeException unreadable) {
+			return null;
+		}
 	}
 
 	private static Status judge(X509Certificate leaf, X509Certificate issuer, X509CRL crl) {

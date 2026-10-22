@@ -82,6 +82,12 @@ public final class FetchCache {
 		return fetch.copy().completeOnTimeout(null, wait.toMillis(), TimeUnit.MILLISECONDS).thenApplyAsync(body -> parseQuietly(body != null ? body : file == null ? null : read(file), parse), FETCHES);
 	}
 
+	/** The body kept under {@code url} whatever its age, or null; a caller judges a fetched body against it. */
+	public byte[] stored(String url) {
+		Path file = file(url);
+		return file == null ? null : read(file);
+	}
+
 	/** Races every URL and keeps the first body {@code parse} accepts; a rejected or failed answer never ends the race. */
 	private <T> byte[] fetch(List<String> urls, Function<byte[], T> parse, Path file) {
 		CompletableFuture<byte[]> winner = new CompletableFuture<>();
