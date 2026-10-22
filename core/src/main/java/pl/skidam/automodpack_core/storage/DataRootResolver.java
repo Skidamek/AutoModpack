@@ -59,6 +59,11 @@ public final class DataRootResolver {
 			return root.resolve("known-hosts.json").normalize();
 		}
 
+		/** {@link pl.skidam.automodpack_core.utils.FetchCache}'s regenerable revocation data: the Mozilla OneCRL feed and CA CRLs. */
+		public Path fetchCacheDirectory() {
+			return root.resolve("fetch-cache").normalize();
+		}
+
 		public Path knownHostsLockFile() {
 			return root.resolve("known-hosts.json.lock").normalize();
 		}

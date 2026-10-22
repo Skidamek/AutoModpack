@@ -8,11 +8,15 @@ import java.io.IOException;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
+import pl.skidam.automodpack_core.protocol.OneCrl;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.storage.StorageLeftovers;
 import pl.skidam.automodpack_core.storage.StoragePaths;
+import pl.skidam.automodpack_core.utils.FetchCache;
 
 public class Server {
 
@@ -36,6 +40,8 @@ public class Server {
 			return;
 		}
 
+		FetchCache.useDirectory(DataRootResolver.resolve(GameDirectory.current(), LoaderManagerService.EnvironmentType.SERVER).layout().fetchCacheDirectory());
+		OneCrl.startRefresh();
 		modpackExecutor = new ModpackExecutor();
 		var generation = modpackExecutor.publish();
 

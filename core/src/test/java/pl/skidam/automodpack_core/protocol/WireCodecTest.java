@@ -3,9 +3,11 @@ package pl.skidam.automodpack_core.protocol;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.Random;
 
 import org.junit.jupiter.api.Test;
@@ -39,6 +41,17 @@ class WireCodecTest {
 		assertNull(WireCodec.negotiate("identity"));
 		assertNull(WireCodec.negotiate(null));
 		assertEquals("zstd, gzip", WireCodec.offeredEncodings());
+	}
+
+	@Test
+	void responseCodingAcceptsOnlyOneKnownCoding() throws Exception {
+		assertNull(WireCodec.responseCoding(null));
+		assertNull(WireCodec.responseCoding(""));
+		assertNull(WireCodec.responseCoding("identity"));
+		assertEquals(WireCodec.GZIP, WireCodec.responseCoding("GZip"));
+		assertEquals(WireCodec.ZSTD, WireCodec.responseCoding(" zstd "));
+		assertThrows(IOException.class, () -> WireCodec.responseCoding("br"));
+		assertThrows(IOException.class, () -> WireCodec.responseCoding("gzip, zstd"));
 	}
 
 	@Test

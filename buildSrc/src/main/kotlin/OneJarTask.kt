@@ -40,7 +40,7 @@ import java.util.zip.ZipOutputStream
  * answering the whole patch line) for the holepunch handshake.
  */
 /** One-shot level 20: the measured sweet spot on the shipped solid (-19 gave up 4.9 KB more, -21/-22 under 100 bytes each, --max 905 bytes for 12 s) and single-threaded by nature, so the bytes cannot drift with core count. */
-private const val ZSTD_LEVEL = 20
+internal const val ZSTD_LEVEL = 20
 
 /** The packed vanilla protocol table (covered Minecraft version to number), read by core's MinecraftProtocols for the holepunch handshake. */
 const val PROTOCOLS_ENTRY = "mc-protocols.json"
@@ -200,7 +200,8 @@ abstract class OneJarTask : DefaultTask() {
                 val copy = ZipEntry(entry.name).apply {
                     time = 0L
                 }
-                if (entry.method == ZipEntry.STORED) {
+                if (entry.method == ZipEntry.STORED || entry.name.endsWith(".zst")) {
+                    // Zstd entries are already compressed; a second ZIP deflate pass only hides that from the audit.
                     putStored(output, copy, bytes)
                 } else {
                     // Everything else re-enters as DEFLATE: the optimized outer is STORE/DEFLATE only (method 93 is unreadable on Java 17).

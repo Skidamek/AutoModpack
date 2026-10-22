@@ -69,7 +69,7 @@ Downloaded and hosted bytes live in a content-addressed store, shared across the
 
 A dedicated server keeps its store inside the instance at `~/automodpack/server/data/`. A client whose shared root is not writable falls back to its own `~/automodpack/client/data/`. Tests and isolated runs can set `AUTOMODPACK_DATA_ROOT`, or the `automodpack.data.root` system property; a configured root that cannot be used is an error rather than a silent fallback.
 
-The store contains Git-style objects under `objects/`, metadata caches, per-pack connection records under `packs/<modpack-id>/`, and `known-hosts.json`, the saved certificate pins.
+The store contains Git-style objects under `objects/`, metadata caches, per-pack connection records under `packs/<modpack-id>/`, `known-hosts.json` (saved certificate pins), and `fetch-cache/` (revocation data refetched when older than six hours and kept when a refetch fails: the last Mozilla OneCRL feed, which overlays the snapshot inside the jar).
 
 ## The projection
 

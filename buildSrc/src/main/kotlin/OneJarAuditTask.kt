@@ -92,6 +92,7 @@ abstract class OneJarAuditTask : DefaultTask() {
 
             jar.entries().asSequence().filterNot { it.isDirectory }.forEach { entry ->
                 if (entry.name.startsWith(JARJAR_PREFIX)) throw GradleException("The one jar must not nest a jar under $JARJAR_PREFIX: ${entry.name}")
+                if (entry.name.endsWith(".zst") && entry.method != ZipEntry.STORED) throw GradleException("${entry.name} must be STORE, not method ${entry.method}")
                 if (entry.name == WAITING_MUSIC_PATH) musicSize = entry.size
                 val compressedSize = entry.compressedSize.coerceAtLeast(0)
                 groupedSizes.merge(groupName(entry.name), compressedSize) { current, added -> current + added }

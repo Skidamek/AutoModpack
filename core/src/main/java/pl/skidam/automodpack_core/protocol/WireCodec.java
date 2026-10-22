@@ -67,6 +67,22 @@ public enum WireCodec {
 	}
 
 	/**
+	 * The single coding a response's {@code Content-Encoding} names; null means identity. An unknown coding or a
+	 * chain is rejected instead of silently decoding only its first member.
+	 */
+	public static WireCodec responseCoding(String contentEncoding) throws IOException {
+		if (contentEncoding == null || contentEncoding.isBlank()) return null;
+		String value = contentEncoding.trim();
+		if (value.indexOf(',') >= 0) throw new IOException("Unsupported Content-Encoding chain: " + value);
+		String name = value.toLowerCase(Locale.ROOT);
+		if ("identity".equals(name)) return null;
+		for (WireCodec codec : values()) {
+			if (codec.wireName.equals(name)) return codec;
+		}
+		throw new IOException("Unsupported Content-Encoding: " + value);
+	}
+
+	/**
 	 * The first registry codec the header accepts, in registry preference order; null means identity, and an unknown
 	 * name stays null for the caller to reject. Tokens match exactly, and a {@code q} parameter at or below zero
 	 * excludes the coding (an unparseable one counts as excluded - never send what cannot be ruled in).

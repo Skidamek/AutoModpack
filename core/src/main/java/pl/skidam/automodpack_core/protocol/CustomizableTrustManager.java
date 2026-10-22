@@ -7,7 +7,6 @@ import java.net.Socket;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -17,8 +16,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import javax.net.ssl.SSLEngine;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
 
 public class CustomizableTrustManager extends X509ExtendedTrustManager {
@@ -89,25 +86,12 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 
 	/** The production CA set is the JDK's; tests inject a keystore whose CA the deferral gate can judge as trusted. */
 	CustomizableTrustManager(SessionTrust sessionTrust, Consumer<X509Certificate[]> onValidating, KeyStore trustStore) throws KeyStoreException {
-		this.defaultTrustManager = createTrustManager(trustStore);
+		this.defaultTrustManager = RevokingTrustManager.wrap(trustStore);
 		this.sessionTrust = sessionTrust;
 		this.onValidating = onValidating;
 	}
 
 	private record Deferred(X509Certificate certificate, CertificateException failure, boolean pinMatched) {}
-
-	private static X509ExtendedTrustManager createTrustManager(KeyStore trustStore) throws KeyStoreException {
-		try {
-			TrustManagerFactory factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-			factory.init(trustStore);
-			for (TrustManager manager : factory.getTrustManagers()) {
-				if (manager instanceof X509ExtendedTrustManager extended) return extended;
-			}
-			throw new IllegalStateException("No X509ExtendedTrustManager found");
-		} catch (NoSuchAlgorithmException e) {
-			throw new RuntimeException("Default algorithm unavailable", e);
-		}
-	}
 
 	public synchronized X509Certificate getDeferredCertificate(Socket socket) {
 		Deferred entry = deferred.get(socket);

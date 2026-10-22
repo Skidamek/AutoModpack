@@ -1,6 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+import org.gradle.language.jvm.tasks.ProcessResources
 
 plugins {
 	kotlin("jvm")
@@ -63,6 +64,17 @@ java {
 
 tasks.withType<JavaCompile> {
 	options.encoding = "UTF-8"
+}
+
+val compressOneCrlSnapshot =
+	tasks.register<CompressOneCrlTask>("compressOneCrlSnapshot") {
+		source.set(layout.projectDirectory.file("src/main/onecrl/onecrl.json"))
+		output.set(layout.buildDirectory.file("generated/onecrl.json.zst"))
+	}
+
+tasks.named<ProcessResources>("processResources") {
+	dependsOn(compressOneCrlSnapshot)
+	from(compressOneCrlSnapshot.flatMap { it.output })
 }
 
 tasks.named<Test>("test") {

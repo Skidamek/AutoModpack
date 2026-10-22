@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
+import pl.skidam.automodpack_core.protocol.OneCrl;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -37,6 +38,8 @@ public class Preload {
 			long start = System.currentTimeMillis();
 			LOGGER.debug("Prelaunching AutoModpack...");
 			initializeConstants(loaderManager, modpackLoader);
+			FetchCache.useDirectory(DataRootResolver.resolve(GameDirectory.current()).layout().fetchCacheDirectory());
+			OneCrl.startRefresh();
 			RuntimeJar.prepareForBoot();
 			recoverPendingSelfUpdate();
 			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {

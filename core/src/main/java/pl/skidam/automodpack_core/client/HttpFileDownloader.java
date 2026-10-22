@@ -10,7 +10,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -129,9 +128,7 @@ public class HttpFileDownloader {
 			writeOffset = 0;
 		}
 
-		String encoding = response.headers().firstValue("Content-Encoding").orElse("").trim().toLowerCase(Locale.ROOT);
-		WireCodec codec = WireCodec.negotiate(encoding);
-		if (codec == null && !encoding.isEmpty()) throw new IOException("Unsupported Content-Encoding: " + encoding);
+		WireCodec codec = WireCodec.responseCoding(response.headers().firstValue("Content-Encoding").orElse(null));
 
 		try (InputStream rawIn = response.body()) {
 			AtomicLong lastProgressNanos = new AtomicLong(System.nanoTime());
