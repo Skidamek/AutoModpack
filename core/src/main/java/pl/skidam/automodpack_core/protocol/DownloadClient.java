@@ -94,10 +94,37 @@ public class DownloadClient implements AutoCloseable {
 
         try {
             PreValidationConnection conn = getPreValidationConnection(addresses, context);
-            return new InitialConnectionResult(conn, context);
-        } catch (IOException e) { // Inavlid/Selfsigned certificate, prompt user for trust.
+            return afterCaVouch(conn, context, addresses, keyStore, trustCallback);
+        } catch (IOException e) { // Invalid/Selfsigned certificate, prompt user for trust.
             return recoverProbeConnection(e, addresses, keyStore, trustCallback, capturedChain.get());
         }
+    }
+
+    /**
+     * A CA-vouched handshake still has to clear the CA's CRL: revoked is final, and an undecidable CRL leaves the leaf
+     * to the player the way a self-signed one does. A leaf naming no http CRL distribution point stays silently trusted.
+     */
+    private InitialConnectionResult afterCaVouch(PreValidationConnection conn, SSLContext context, Jsons.ModpackAddresses addresses, KeyStore keyStore, Function<X509Certificate, Boolean> trustCallback) throws IOException {
+        X509Certificate[] chain;
+        try {
+            chain = (X509Certificate[]) conn.getSocket().getSession().getPeerCertificates();
+        } catch (Exception e) {
+            NetUtils.closeQuietly(conn.getSocket());
+            throw new IOException("Server did not present a certificate", e);
+        }
+        LeafRevocation.Status status;
+        try {
+            status = LeafRevocation.check(chain[0], chain).get(LeafRevocation.DEADLINE.toMillis() + 1000, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            status = LeafRevocation.Status.UNKNOWN;
+        }
+        if (status == LeafRevocation.Status.GOOD) return new InitialConnectionResult(conn, context);
+        NetUtils.closeQuietly(conn.getSocket());
+        if (status == LeafRevocation.Status.REVOKED) {
+            throw new IOException("The certificate for " + addresses.hostAddress.getHostString() + " was revoked by its CA");
+        }
+        LOGGER.warn("Cannot tell whether the CA revoked the certificate from {}; only the player can trust it", addresses.hostAddress.getHostString());
+        return recoverProbeConnection(new IOException("Certificate revocation status is unknown"), addresses, keyStore, trustCallback, chain);
     }
 
     private InitialConnectionResult recoverProbeConnection(IOException originalError, Jsons.ModpackAddresses addresses, KeyStore keyStore, Function<X509Certificate, Boolean> trustCallback, X509Certificate[] chain) throws IOException {

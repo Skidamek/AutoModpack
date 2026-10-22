@@ -1,3 +1,7 @@
+### Revocation
+
+AutoModpack checks Mozilla's OneCRL against every CA-vouched pack TLS handshake, and against outbound HTTPS that refreshes that list. A certificate on OneCRL is never a WebPKI vouch; a saved fingerprint or the player's confirmation still can be. A CA-vouched leaf is also checked against its CA's CRL before it is trusted silently: a revoked leaf is refused, and a leaf whose CRL cannot be decided is left to the player. A leaf that names no http CRL distribution point keeps its silent trust. The bundled OneCRL snapshot works offline; a live Mozilla feed overlays it when reachable, cached under `automodpack/fetch-cache/`.
+
 ### How to verify the certificate fingerprint?
 To verify, simply **copy the fingerprint from your server console to the game.** This is a one-time verification, meaning you won't need to repeat it after the initial connection. This process helps prevent security threats like [Man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack). **The fingerprint is the same for everyone on your server, and it never changes, it's recommended to share it with players ahead of time.**
 
