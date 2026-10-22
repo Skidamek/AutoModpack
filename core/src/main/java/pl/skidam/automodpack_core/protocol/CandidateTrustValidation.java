@@ -38,10 +38,11 @@ import pl.skidam.automodpack_core.utils.Throwables;
  * The one certificate-trust plumbing and ladder every client transport runs over a freshly handshaked candidate
  * socket. The ladder reads, in order: a saved pin is law - the presented leaf must match it exactly, and a changed
  * leaf fails outright with no recovery short of the player revoking the pin or importing a new pinned join address;
- * a CA chain that covers the typed hostname accepts the leaf and is never stored, ending the ladder before any DNS
- * is spent; a published DNSSEC fingerprint for the typed hostname decides every leaf the CAs did not cover, and is
- * never stored; and whatever remains is the player's explicit decision. On acceptance the session trust pins the
- * certificate, so every later handshake on the same SSLContext passes without asking again.
+ * a CA chain that covers the typed hostname, and whose leaf its CA has not revoked, accepts the leaf and is never
+ * stored, ending the ladder before any DNS is spent; a published DNSSEC fingerprint for the typed hostname decides
+ * every leaf the CAs did not cover, and is never stored; and whatever remains is the player's explicit decision.
+ * On acceptance the session trust pins the certificate, so every later handshake on the same SSLContext passes
+ * without asking again.
  */
 public final class CandidateTrustValidation {
 
@@ -91,7 +92,7 @@ public final class CandidateTrustValidation {
 		// cached session, and it may only be the pin or the leaf the session already accepted. Anything else is a
 		// session the ladder condemned (or has not accepted yet); it is invalidated and dropped, never laundered.
 		if (trustManager.getDeferredCertificate(candidate.socket()) == null) {
-			X509Certificate[] resumed = resumedChain(candidate);
+			X509Certificate[] resumed = peerChain(candidate);
 			boolean acceptable = false;
 			if (resumed != null) {
 				try {
@@ -141,16 +142,33 @@ public final class CandidateTrustValidation {
 		// A CA chain that passed the JDK's validation for the endpoint also covers the typed origin: the deferral
 		// carries no failure exactly when the CAs vouched for this chain, and the origin name in its SANs anchors
 		// that vouch to the address the player typed. Self-signed leaves deferred with a failure never take this
-		// step, and a CA-vouched first contact costs no DNS round trip.
+		// step, and a CA-vouched first contact costs no DNS round trip. The vouch stands only while the CA has not
+		// revoked the leaf: a revocation is final, and an undecidable one leaves the leaf to the record and the player.
 		if (candidate.trustManager().getDeferredFailure(candidate.socket()) == null && leafCoversOrigin(certificate, candidate.originHost())) {
-			try {
-				candidate.sessionTrust().accept(certificate);
-				LOGGER.info("Trusting the certificate from {} because its CA chain covers the origin {}", candidate.endpointHost(), candidate.originHost());
-				return CompletableFuture.completedFuture(null);
-			} catch (CertificateException e) {
-				return reject(candidate, new IOException("Cannot fingerprint the CA-signed certificate", e));
-			}
+			return LeafRevocation.check(certificate, peerChain(candidate)).thenCompose(status -> switch (status) {
+				case GOOD -> trustCaVouch(candidate, certificate);
+				case REVOKED -> reject(candidate, new CertificateException("The certificate for " + candidate.originHost() + " was revoked by its CA"));
+				case UNKNOWN -> {
+					LOGGER.warn("Cannot tell whether the CA revoked the certificate from {}; only a published record or the player can trust it", candidate.endpointHost());
+					yield recordOrPlayer(candidate, certificate);
+				}
+			});
 		}
+		return recordOrPlayer(candidate, certificate);
+	}
+
+	private static CompletableFuture<Void> trustCaVouch(Candidate candidate, X509Certificate certificate) {
+		try {
+			candidate.sessionTrust().accept(certificate);
+			LOGGER.info("Trusting the certificate from {} because its CA chain covers the origin {}", candidate.endpointHost(), candidate.originHost());
+			return CompletableFuture.completedFuture(null);
+		} catch (CertificateException e) {
+			return reject(candidate, new IOException("Cannot fingerprint the CA-signed certificate", e));
+		}
+	}
+
+	/** Whatever the CAs did not vouch for: a published DNSSEC fingerprint decides it, and without one the player does. */
+	private static CompletableFuture<Void> recordOrPlayer(Candidate candidate, X509Certificate certificate) {
 		return DnsPinResolver.resolvePinAsync(candidate.originHost()).thenCompose(result -> {
 			if (result instanceof DnsPinResolver.Authoritative authoritative) {
 				try {
@@ -272,8 +290,8 @@ public final class CandidateTrustValidation {
 		});
 	}
 
-	/** The peer certificates a resumed session carries; null when the JDK has none to show. */
-	private static X509Certificate[] resumedChain(Candidate candidate) {
+	/** The peer certificates the socket's session carries; null when the JDK has none to show. */
+	private static X509Certificate[] peerChain(Candidate candidate) {
 		try {
 			Certificate[] peers = candidate.socket().getSession().getPeerCertificates();
 			return peers instanceof X509Certificate[] certificates ? certificates : null;
