@@ -52,10 +52,16 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@v8
+      # actions/checkout hands its token input, github.token by default and never empty, to the action; a plain
+      # anonymous fetch of this public repository keeps the write token in the push step alone.
+      - name: Check out the tested commit
+        run: |
+          git init -q .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch -q --depth 1 origin "${GITHUB_SHA}"
+          git checkout -q FETCH_HEAD
+      # v8 has no token input default: it reads this run's artifact with the runtime token only.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: onecrl-snapshot
           path: core/src/main/onecrl
