@@ -49,20 +49,14 @@ public final class OneCrl {
 		});
 	}
 
-	/** True when any certificate in the chain is on the live list. A match error fails closed. */
-	static boolean blocks(X509Certificate[] chain) {
-		if (chain == null) return false;
-		Blocklist current = live;
-		for (X509Certificate certificate : chain) {
-			if (certificate == null) continue;
-			try {
-				if (current.blocks(certificate)) return true;
-			} catch (Exception e) {
-				LOGGER.warn("OneCRL match failed; treating the certificate as blocked", e);
-				return true;
-			}
+	/** True when the certificate is on the live list. A match error fails closed. */
+	static boolean blocks(X509Certificate certificate) {
+		try {
+			return live.blocks(certificate);
+		} catch (Exception e) {
+			LOGGER.warn("OneCRL match failed; treating the certificate as blocked", e);
+			return true;
 		}
-		return false;
 	}
 
 	/** The enabled records of a Mozilla feed; null for a feed that is empty or fills the page limit, which may be truncated. */
