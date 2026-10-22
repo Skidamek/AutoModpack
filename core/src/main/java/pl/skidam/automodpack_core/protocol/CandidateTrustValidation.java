@@ -143,7 +143,8 @@ public final class CandidateTrustValidation {
 		// carries no failure exactly when the CAs vouched for this chain, and the origin name in its SANs anchors
 		// that vouch to the address the player typed. Self-signed leaves deferred with a failure never take this
 		// step, and a CA-vouched first contact costs no DNS round trip. The vouch stands only while the CA has not
-		// revoked the leaf: a revocation is final, and an undecidable one leaves the leaf to the record and the player.
+		// revoked the leaf: a revocation is final, an undecidable one leaves the leaf to the record and the player, and a
+		// leaf naming no http CRL distribution point has no CRL to consult, so its vouch stands as it did before this check.
 		if (candidate.trustManager().getDeferredFailure(candidate.socket()) == null && leafCoversOrigin(certificate, candidate.originHost())) {
 			return LeafRevocation.check(certificate, peerChain(candidate)).thenCompose(status -> switch (status) {
 				case GOOD -> trustCaVouch(candidate, certificate);

@@ -36,8 +36,9 @@ import pl.skidam.automodpack_core.utils.FetchCache;
  * Whether a CA-vouched leaf was revoked by its CA, from the CRL its http distribution point names. The JDK's PKIX
  * revocation checker judges that CRL (issuer, signature, scope, nextUpdate) against the issuer from the presented
  * chain, offline: the CRL comes from {@link FetchCache}, racing the http distribution point and the same URL over
- * https, and the cache stops waiting for a refetch at {@link #DEADLINE}. A leaf without an http CRL distribution
- * point has nothing to check. Anything that cannot be decided is {@link Status#UNKNOWN}.
+ * https, and the cache stops waiting for a refetch at {@link #DEADLINE}. A leaf naming no http CRL distribution point
+ * (OCSP-only and short-lived certificates) is {@link Status#GOOD} by design: there is no CRL to consult, so the CA's
+ * vouch stands. Anything with a CRL that cannot be decided is {@link Status#UNKNOWN}.
  */
 final class LeafRevocation {
 
