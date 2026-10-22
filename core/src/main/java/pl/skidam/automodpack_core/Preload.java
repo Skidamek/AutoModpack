@@ -48,10 +48,10 @@ public class Preload {
 				clientConfig = decision.clientConfig();
 				trustedBootstrapApply = decision.trustedBootstrapApply();
 				rolledBackStuckUpdate = decision.rolledBackStuckUpdate();
-				DetachedUpdateHelper.mirrorRecentRuns();
 			} else {
 				serverConfig = ConfigUtils.loadOrCreateServerConfig();
 			}
+			DetachedUpdateHelper.mirrorRecentRuns();
 			updateAll();
 			LOGGER.debug("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
 		} catch (Exception e) {
