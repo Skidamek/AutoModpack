@@ -3,11 +3,13 @@ package pl.skidam.automodpack_loader_core_forge;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiFunction;
 
 import cpw.mods.modlauncher.api.IEnvironment;
 import cpw.mods.modlauncher.api.IModuleLayerManager;
 import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
+import joptsimple.OptionSpecBuilder;
 
 import pl.skidam.automodpack_core.Preload;
 import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
@@ -68,7 +70,19 @@ public class AutoModpackTransformationService implements ITransformationService 
 
 		new Preload(new LoaderManager(), new ModpackLoader());
 		EarlyServiceLayer.bootstrap();
-		ModLauncherEarlyServiceBridge.forEachTransformationService("onLoad", service -> service.onLoad(env, otherServices));
+		ModLauncherEarlyServiceBridge.onLoad(env, otherServices);
+	}
+
+	@Override
+	public void arguments(BiFunction<String, String, OptionSpecBuilder> argumentBuilder) {
+		if (!GenerationProbes.FORGE_PRESENT) return;
+		ModLauncherEarlyServiceBridge.arguments(argumentBuilder);
+	}
+
+	@Override
+	public void argumentValues(OptionResult option) {
+		if (!GenerationProbes.FORGE_PRESENT) return;
+		ModLauncherEarlyServiceBridge.argumentValues(option);
 	}
 
 	@Override

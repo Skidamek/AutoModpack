@@ -3,11 +3,13 @@ package pl.skidam.automodpack_loader_core_neoforge_4;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiFunction;
 
 import cpw.mods.modlauncher.api.IEnvironment;
 import cpw.mods.modlauncher.api.IModuleLayerManager;
 import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
+import joptsimple.OptionSpecBuilder;
 
 import pl.skidam.automodpack_core.loader.GenerationProbes;
 import pl.skidam.automodpack_loader_core_modlauncher.ModLauncherEarlyServiceBridge;
@@ -54,7 +56,19 @@ public class AutoModpackTransformationService implements ITransformationService 
 	@Override
 	public void onLoad(IEnvironment env, Set<String> otherServices) {
 		if (!GenerationProbes.NEOFORGE_FML4) return;
-		ModLauncherEarlyServiceBridge.forEachTransformationService("onLoad", service -> service.onLoad(env, otherServices));
+		ModLauncherEarlyServiceBridge.onLoad(env, otherServices);
+	}
+
+	@Override
+	public void arguments(BiFunction<String, String, OptionSpecBuilder> argumentBuilder) {
+		if (!GenerationProbes.NEOFORGE_FML4) return;
+		ModLauncherEarlyServiceBridge.arguments(argumentBuilder);
+	}
+
+	@Override
+	public void argumentValues(OptionResult option) {
+		if (!GenerationProbes.NEOFORGE_FML4) return;
+		ModLauncherEarlyServiceBridge.argumentValues(option);
 	}
 
 	@Override

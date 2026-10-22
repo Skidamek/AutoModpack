@@ -9,6 +9,7 @@ import java.net.URL;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.Enumeration;
 import java.util.HashSet;
@@ -19,14 +20,18 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import cpw.mods.cl.JarModuleFinder;
 import cpw.mods.cl.ModuleClassLoader;
 import cpw.mods.jarhandling.SecureJar;
+import cpw.mods.modlauncher.api.IEnvironment;
 import cpw.mods.modlauncher.api.IModuleLayerManager;
 import cpw.mods.modlauncher.api.ITransformationService;
+import cpw.mods.modlauncher.api.IncompatibleEnvironmentException;
+import joptsimple.OptionSpecBuilder;
 
 /**
  * The ModLauncher-family half of both loaders' {@code EarlyServiceLayer} (legacy Forge and NeoForge
@@ -194,53 +199,81 @@ public final class ModLauncherEarlyServiceBridge {
 		TRANSFORMATION_SERVICES.computeIfAbsent(jar, k -> new ArrayList<>()).add(service);
 	}
 
+	/** Each test starts from no registered service; a launch registers once and never forgets. */
+	static void clearTransformationServices() {
+		TRANSFORMATION_SERVICES.clear();
+	}
+
 	public interface ServiceAction {
-		void run(ITransformationService service) throws Throwable;
+		void run(ITransformationService service);
 	}
 
 	public interface ServiceQuery<R> {
-		List<R> run(ITransformationService service) throws Throwable;
+		List<R> run(ITransformationService service);
 	}
 
 	/**
-	 * Runs {@code action} against every in-place transformation service, isolated in its own try/catch
-	 * - one misbehaving in-place service (e.g. throwing {@code IncompatibleEnvironmentException} from
-	 * {@code onLoad}) must not mark OUR service invalid and abort ModLauncher's {@code
-	 * validateTransformationServices} for everyone.
+	 * Runs {@code action} against every in-place transformation service with ModLauncher's own semantics: it catches
+	 * nothing around a stage, so whatever a service throws fails the launch, here after one line naming that service.
 	 */
 	public static void forEachTransformationService(String verb, ServiceAction action) {
-		for (Map.Entry<Path, List<ITransformationService>> entry : TRANSFORMATION_SERVICES.entrySet()) {
-			for (ITransformationService service : entry.getValue()) {
-				try {
-					action.run(service);
-					LOGGER.debug("[AutoModpack] Ran in-place transformation-service {} for {} ({})", verb, service.getClass().getName(),
-							entry.getKey().getFileName());
-				} catch (Throwable t) {
-					LOGGER.error("[AutoModpack] In-place transformation service {} {} failed ({})", service.getClass().getName(), verb,
-							entry.getKey().getFileName(), t);
-				}
+		TRANSFORMATION_SERVICES.forEach((jar, services) -> services.forEach(service -> {
+			try {
+				action.run(service);
+			} catch (Throwable t) {
+				LOGGER.error("[AutoModpack] In-place transformation service {} ({}) failed in {}", service.name(), jar.getFileName(), verb);
+				throw t;
 			}
-		}
+			LOGGER.debug("[AutoModpack] Ran in-place transformation-service {} for {} ({})", verb, service.getClass().getName(), jar.getFileName());
+		}));
 	}
 
-	/** Same isolation as {@link #forEachTransformationService}, collecting and logging each non-empty result. */
+	/**
+	 * ModLauncher hands every service's {@code onLoad} the names of all services it discovered, so one can stand down for
+	 * another (mixin-booster for Connector's {@code connector_loader}). It never discovered the in-place ones, so their
+	 * names join its own here: otherwise two in-place services that coordinate by name both take over Mixin.
+	 */
+	public static void onLoad(IEnvironment environment, Set<String> nativeServices) {
+		Set<String> services = new HashSet<>(nativeServices);
+		TRANSFORMATION_SERVICES.values().forEach(inPlace -> inPlace.forEach(service -> services.add(service.name())));
+		Set<String> allServices = Collections.unmodifiableSet(services);
+		// As TransformationServiceDecorator.onLoad and TransformationServicesHandler.validateTransformationServices: an
+		// incompatible environment marks the service invalid, and any invalid service fails the launch by name.
+		List<String> invalid = new ArrayList<>();
+		forEachTransformationService("onLoad", service -> {
+			try {
+				service.onLoad(environment, allServices);
+			} catch (IncompatibleEnvironmentException e) {
+				LOGGER.error("[AutoModpack] In-place transformation service {} failed to load", service.name(), e);
+				invalid.add(service.name());
+			}
+		});
+		if (!invalid.isEmpty()) throw new IllegalStateException("Invalid Services found " + String.join(",", invalid));
+	}
+
+	/**
+	 * ModLauncher offers its command-line options only to the services it discovered, so an in-place service's options
+	 * ride under the forwarding service's prefix, scoped by its own name; its values then come back through the same
+	 * option result, which is never null where an in-place service expects one.
+	 */
+	public static void arguments(BiFunction<String, String, OptionSpecBuilder> argumentBuilder) {
+		forEachTransformationService("arguments",
+				service -> service.arguments((option, description) -> argumentBuilder.apply(service.name() + "." + option, description)));
+	}
+
+	public static void argumentValues(ITransformationService.OptionResult option) {
+		forEachTransformationService("argumentValues", service -> service.argumentValues(option));
+	}
+
+	/** {@link #forEachTransformationService}, collecting and logging each non-empty result. */
 	public static <R> List<R> collectFromTransformationServices(String verb, ServiceQuery<R> query) {
 		List<R> results = new ArrayList<>();
-		for (Map.Entry<Path, List<ITransformationService>> entry : TRANSFORMATION_SERVICES.entrySet()) {
-			for (ITransformationService service : entry.getValue()) {
-				try {
-					List<R> produced = query.run(service);
-					if (produced != null && !produced.isEmpty()) {
-						results.addAll(produced);
-						LOGGER.debug("[AutoModpack] Forwarded {} {} result(s) from in-place transformation service {} ({})", produced.size(), verb,
-								service.getClass().getName(), entry.getKey().getFileName());
-					}
-				} catch (Throwable t) {
-					LOGGER.error("[AutoModpack] In-place transformation service {} {} failed ({})", service.getClass().getName(), verb,
-							entry.getKey().getFileName(), t);
-				}
-			}
-		}
+		forEachTransformationService(verb, service -> {
+			List<R> produced = query.run(service);
+			if (produced == null || produced.isEmpty()) return;
+			results.addAll(produced);
+			LOGGER.debug("[AutoModpack] Forwarded {} {} result(s) from in-place transformation service {}", produced.size(), verb, service.getClass().getName());
+		});
 		return results;
 	}
 

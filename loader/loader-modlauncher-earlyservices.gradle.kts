@@ -19,10 +19,21 @@ legacyForge {
 		forgeVersion = selectedForgeVersion
 		isDisableRecompilation = true
 	}
+	addModdingDependenciesTo(sourceSets.test.get())
 }
+
+val junitVersion = versionProperty("versionJunit")
 
 dependencies {
 	compileOnly(project(":core"))
+
+	testImplementation(project(":core")) { isTransitive = false }
+	testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
+	testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitVersion")
+}
+
+tasks.test {
+	useJUnitPlatform()
 }
 
 java {

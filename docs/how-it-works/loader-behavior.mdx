@@ -59,6 +59,17 @@ copies it into `mods/` so the loader finds it in time, and asks for a restart:
 This is the only case where a pack mod is copied into `mods/` on Forge or NeoForge, and
 it applies whether AutoModpack is online or syncing offline from the stored generation.
 
+## Early-service mods (Forge and NeoForge)
+
+Mods that ship a ModLauncher transformation service (Sinytra Connector, mixin-booster) also run in place: AutoModpack
+loads them itself and forwards each launch stage to them, so they see each other's names as they would in `mods/`.
+
+- A command-line option such a mod reads is given as `--automodpack_early_services.<service>.<option>`
+  (`--automodpack_early_services_neoforge.<service>.<option>` on NeoForge).
+- Such a mod you install yourself in `mods/` only sees the services the loader found itself, so it cannot
+  coordinate with a pack mod running in place (mixin-booster in `mods/` does not stand down for a pack's
+  Connector); keep such mods in the pack.
+
 ## Why your mods folder stays clean
 
 | Loader | Pack mods live in | What can appear in `mods/` |
