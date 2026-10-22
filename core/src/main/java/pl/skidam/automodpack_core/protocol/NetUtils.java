@@ -38,6 +38,7 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 import java.util.Base64;
+import java.time.Duration;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.EnumSet;
@@ -46,9 +47,13 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static pl.skidam.automodpack_core.GlobalVariables.AM_VERSION;
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class NetUtils {
+
+    public static final String USER_AGENT = "github/skidamek/automodpack/" + AM_VERSION;
+    public static final Duration NETWORK_TIMEOUT = Duration.ofSeconds(15);
 
     // Magic numbers
     public static final int MAGIC_AMMH = 0x414D4D48;
@@ -275,5 +280,14 @@ public class NetUtils {
             sb.append("\n");
         }
         return sb.toString();
+    }
+
+    /** Closes and swallows the failure: teardown paths never have a better story than the error they are already telling. */
+    public static void closeQuietly(AutoCloseable closeable) {
+        if (closeable == null) return;
+        try {
+            closeable.close();
+        } catch (Exception ignored) {
+        }
     }
 }
