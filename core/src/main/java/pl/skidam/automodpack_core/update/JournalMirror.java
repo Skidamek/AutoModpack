@@ -17,6 +17,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.Journal;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.utils.DurableFiles;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * The client's per-pack replica of the server journal file. The mirror is only ever replaced whole
@@ -73,16 +74,28 @@ public final class JournalMirror {
 	/** Verifies the fetched journal file parses completely, then swaps it in as the pack's mirror under the mutation lock. */
 	public void replaceFrom(String modpackId, Path fetchedFile) throws IOException {
 		ModpackId.requireValid(modpackId);
+		FileCache.StatSnapshot beforeParse = FileCache.statSnapshot(fetchedFile);
+		if (!beforeParse.isTrackedRegularFile()) throw new IOException("Fetched journal is not a regular file: " + fetchedFile);
 		List<JournalEntry> entries = Journal.openComplete(fetchedFile).entries();
+		FileCache.StatSnapshot afterParse = FileCache.statSnapshot(fetchedFile);
+		if (!sameContentStat(beforeParse, afterParse)) throw new IOException("Fetched journal changed while it was parsed");
 		ClientStorageMutation.run(storage, () -> {
-			replaceFromLocked(modpackId, entries.size(), fetchedFile);
+			replaceFromLocked(modpackId, entries, fetchedFile, afterParse);
 			return null;
 		});
 	}
 
-	private void replaceFromLocked(String modpackId, int verifiedEntries, Path fetchedFile) throws IOException {
-		List<JournalEntry> entries = Journal.openComplete(fetchedFile).entries();
-		if (entries.size() != verifiedEntries) throw new IOException("Fetched journal changed while it was swapped into the mirror");
+	/**
+	 * Whether the file's content could have changed between two stats: its identity, size or modification time moved.
+	 * The change time is left out because antivirus scanners and sync clients touch it on a fresh file without writing.
+	 */
+	private static boolean sameContentStat(FileCache.StatSnapshot a, FileCache.StatSnapshot b) {
+		FileCache.FileFingerprint x = a.fingerprint(), y = b.fingerprint();
+		return x.size() == y.size() && x.lastModifiedNanos() == y.lastModifiedNanos() && java.util.Objects.equals(x.fileKey(), y.fileKey());
+	}
+
+	private void replaceFromLocked(String modpackId, List<JournalEntry> entries, Path fetchedFile, FileCache.StatSnapshot parsed) throws IOException {
+		if (!sameContentStat(parsed, FileCache.statSnapshot(fetchedFile))) throw new IOException("Fetched journal changed while it was swapped into the mirror");
 		Path mirror = storage.historyJournalFile(modpackId);
 		Files.createDirectories(mirror.getParent());
 		DurableFiles.replace(fetchedFile, mirror);
