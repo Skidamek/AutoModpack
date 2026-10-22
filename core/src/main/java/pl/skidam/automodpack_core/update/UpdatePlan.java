@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -14,6 +15,8 @@ import java.util.stream.Collectors;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.launchers.LauncherVersionSwapper;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
@@ -24,6 +27,8 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * deserialize records, and this object is the durable plan on {@link UpdateTransaction}.
  */
 public final class UpdatePlan {
+	private static final String LAUNCHER_SWITCH = "launcher.switch";
+
 	private String modpackId;
 	private String contentToken;
 	private String policySha1;
@@ -161,6 +166,28 @@ public final class UpdatePlan {
 		return plan;
 	}
 
+	/**
+	 * Adds the launcher switch this plan lands at finalization: its axes ride the restart reasons, and the versions it
+	 * writes ride one consequence effect, so whatever action carries the switch on, it lands the same versions.
+	 */
+	public UpdatePlan withLauncherSwitch(LauncherVersionSwapper.Switch launcherSwitch) {
+		UpdatePlan plan = withRestartReasons(launcherSwitch.axes().stream().map(RestartReason::of).toList());
+		return new UpdatePlan(modpackId, packTarget(), operations, projectedFinalState, plannedClientConfig, plannedSelectedModpackId, plan.restartReasons, preservations, baselineCaptures, conflicts,
+				generatedCopies, plan.consequences.withEffects(List.of(new ChangeSet.Effect(LAUNCHER_SWITCH, launcherSwitch.versions().encode()))));
+	}
+
+	/** The launcher switch this plan lands, or null when it switches nothing; journals older than v5 record no versions, and theirs are their own {@code target}'s. */
+	public LauncherVersionSwapper.Switch launcherSwitch(ModpackJsons.ModpackContentFields target) {
+		EnumSet<LauncherVersionSwapper.Axis> axes = EnumSet.noneOf(LauncherVersionSwapper.Axis.class);
+		for (RestartReason reason : restartReasons) if (reason.axis != null) axes.add(reason.axis);
+		if (axes.isEmpty()) return null;
+		LauncherVersionSwapper.Versions recorded = null;
+		for (ChangeSet.Effect effect : consequences == null ? List.<ChangeSet.Effect>of() : consequences.effects())
+			if (LAUNCHER_SWITCH.equals(effect.category())) recorded = LauncherVersionSwapper.Versions.decode(effect.value());
+		LauncherVersionSwapper.Versions versions = recorded != null ? recorded : LauncherVersionSwapper.Versions.advertisedBy(target);
+		return versions == null ? null : new LauncherVersionSwapper.Switch(axes, versions);
+	}
+
 	private static <T> Set<T> stableSet(Set<T> values) {
 		if (values == null || values.isEmpty()) return Set.of();
 		return Collections.unmodifiableSet(new LinkedHashSet<>(values));
@@ -189,17 +216,29 @@ public final class UpdatePlan {
 		FIXED_NESTED_MODS(true),
 		REMOVED_DUPLICATE_MODS(true),
 		REMOVED_STANDARD_MODS(true),
-		CHANGED_LOADER_VERSION(true),
-		CHANGED_LOADER_TYPE(true),
-		CHANGED_GAME_VERSION(true),
+		CHANGED_LOADER_VERSION(true, LauncherVersionSwapper.Axis.LOADER_VERSION),
+		CHANGED_LOADER_TYPE(true, LauncherVersionSwapper.Axis.LOADER_TYPE),
+		CHANGED_GAME_VERSION(true, LauncherVersionSwapper.Axis.GAME_VERSION),
 		MANUAL_VERSION_SWITCH(true),
 		CHANGED_GROUP_SELECTION(false),
 		SELECTED_MODPACK(false);
 
 		private final boolean blocksHotLoad;
+		/** The launcher axis this reason switches, or null when it is no launcher switch. */
+		private final LauncherVersionSwapper.Axis axis;
 
 		RestartReason(boolean blocksHotLoad) {
+			this(blocksHotLoad, null);
+		}
+
+		RestartReason(boolean blocksHotLoad, LauncherVersionSwapper.Axis axis) {
 			this.blocksHotLoad = blocksHotLoad;
+			this.axis = axis;
+		}
+
+		static RestartReason of(LauncherVersionSwapper.Axis axis) {
+			for (RestartReason reason : values()) if (reason.axis == axis) return reason;
+			throw new IllegalArgumentException("No restart reason switches " + axis);
 		}
 
 		/** True when preload cannot absorb this change in the same boot. */

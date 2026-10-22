@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
@@ -18,6 +19,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 
 /**
  * The launcher-metadata half of a modpack switch: which launcher instance this game directory belongs to, which
@@ -76,6 +78,60 @@ public class LauncherVersionSwapper {
 		}
 	}
 
+	/** The versions a launcher instance is switched to; any of them may be blank, which leaves that part as it stands. */
+	public record Versions(String loader, String loaderVersion, String mcVersion) {
+		/** What a pack advertises, or null when it advertises nothing and syncs as files only. */
+		public static Versions advertisedBy(ModpackJsons.ModpackContentFields pack) {
+			return of(pack.loader, pack.loaderVersion, pack.mcVersion);
+		}
+
+		/** Each part {@code first} leaves blank taken from {@code fallback}, a loader version only for its own loader; null when neither names any. */
+		public static Versions merge(Versions first, Versions fallback) {
+			if (first == null || fallback == null) return first == null ? fallback : first;
+			String loader = blank(first.loader) ? fallback.loader : first.loader;
+			boolean sameLoader = loader != null && loader.equalsIgnoreCase(fallback.loader);
+			return of(loader, blank(first.loaderVersion) && sameLoader ? fallback.loaderVersion : first.loaderVersion, blank(first.mcVersion) ? fallback.mcVersion : first.mcVersion);
+		}
+
+		/** The {@code key=value} words {@link #decode} reads back; blank parts are left out. */
+		public String encode() {
+			StringBuilder words = new StringBuilder();
+			if (!blank(loader)) words.append(" loader=").append(loader);
+			if (!blank(loaderVersion)) words.append(" loaderVersion=").append(loaderVersion);
+			if (!blank(mcVersion)) words.append(" mcVersion=").append(mcVersion);
+			return words.toString().strip();
+		}
+
+		/** Reads {@link #encode} back, skipping words it does not know; null when no part survives. */
+		public static Versions decode(String encoded) {
+			Map<String, String> parts = new HashMap<>();
+			for (String word : encoded == null ? new String[0] : encoded.strip().split("\\s+")) {
+				int separator = word.indexOf('=');
+				if (separator > 0) parts.put(word.substring(0, separator), word.substring(separator + 1));
+			}
+			return of(parts.get("loader"), parts.get("loaderVersion"), parts.get("mcVersion"));
+		}
+
+		private static Versions of(String loader, String loaderVersion, String mcVersion) {
+			if (blank(loader) && blank(loaderVersion) && blank(mcVersion)) return null;
+			return new Versions(loader, loaderVersion, mcVersion);
+		}
+	}
+
+	/** A launcher switch already planned: the axes it writes and the versions it writes them to. */
+	public record Switch(EnumSet<Axis> axes, Versions versions) {
+		public Switch {
+			axes = EnumSet.copyOf(axes);
+		}
+
+		/** Whether planning this switch already checked {@code version} of the Prism meta component {@code uid}: only an axis it writes was. */
+		public boolean vouchesFor(String uid, String version) {
+			if (MC_UID.equals(uid)) return axes.contains(Axis.GAME_VERSION) && version.equals(versions.mcVersion());
+			return (axes.contains(Axis.LOADER_TYPE) || axes.contains(Axis.LOADER_VERSION)) && !blank(versions.loader())
+					&& uid.equals(LOADER_UIDS.get(versions.loader().toLowerCase(Locale.ROOT))) && version.equals(versions.loaderVersion());
+		}
+	}
+
 	/** Modloaders a launcher instance can be switched to; quilt and vanilla packs are refused. */
 	private static final Set<String> SWITCHABLE_LOADERS = Set.of("fabric", "forge", "neoforge");
 
@@ -90,11 +146,6 @@ public class LauncherVersionSwapper {
 	 * A pack that publishes no version metadata at all is files-only: no switch and no refusal.
 	 */
 	public static SwitchPlan planSwitch(String serverLoader, String serverLoaderVersion, String serverMcVersion, boolean syncVersions, String clientLoader,
-			String clientMcVersion) {
-		return planSwitch(serverLoader, serverLoaderVersion, serverMcVersion, syncVersions, clientLoader, clientMcVersion, detect(), PrismMeta::isVersionResolvable);
-	}
-
-	static SwitchPlan planSwitch(String serverLoader, String serverLoaderVersion, String serverMcVersion, boolean syncVersions, String clientLoader,
 			String clientMcVersion, LauncherAdapter adapter, BiPredicate<String, String> versionKnown) {
 		if (blank(serverLoader) && blank(serverLoaderVersion) && blank(serverMcVersion)) {
 			// The pack publishes no version metadata (advertise-versions-to-sync: false): the pack syncs as files and
@@ -144,16 +195,32 @@ public class LauncherVersionSwapper {
 		return SwitchPlan.of(axes);
 	}
 
-	/** Writes the planned axes through the detected launcher's metadata; returns only once the metadata converged to the target. */
-	public static void apply(EnumSet<Axis> axes, String serverLoader, String serverLoaderVersion, String serverMcVersion) throws IOException {
-		if (axes == null || axes.isEmpty()) return;
-		LauncherAdapter adapter = detect();
-		if (adapter == null) throw new IOException("No supported launcher metadata found for the version switch");
-		adapter.apply(axes, serverLoader, serverLoaderVersion, serverMcVersion);
+	/**
+	 * Writes the planned axes through the launcher metadata of the instance around {@code gameDirectory}; returns only once
+	 * the metadata converged to the target, and whether a record had to change for it.
+	 */
+	public static boolean apply(Switch launcherSwitch, Path gameDirectory) throws IOException {
+		Versions target = launcherSwitch.versions();
+		return writableAdapter(gameDirectory).apply(launcherSwitch.axes(), target.loader(), target.loaderVersion(), target.mcVersion());
 	}
 
-	private static LauncherAdapter detect() {
-		List<LauncherAdapter> adapters = List.of(new MultiMCMeta(), new PandoraMeta());
+	/** Throws unless the instance around {@code gameDirectory} holds launcher metadata this switch can be written to and read back. */
+	public static void requireWritable(Switch launcherSwitch, Path gameDirectory) throws IOException {
+		Versions target = launcherSwitch.versions();
+		writableAdapter(gameDirectory).requiredAxes(target.loader(), target.loaderVersion(), target.mcVersion());
+	}
+
+	private static LauncherAdapter writableAdapter(Path gameDirectory) throws IOException {
+		LauncherAdapter adapter = detect(gameDirectory);
+		if (adapter == null) throw new IOException("No supported launcher metadata found for the version switch");
+		return adapter;
+	}
+
+	/** The launcher whose instance layout holds {@code gameDirectory}, or null when no supported one does. */
+	public static LauncherAdapter detect(Path gameDirectory) {
+		Path instance = gameDirectory.toAbsolutePath().normalize().getParent();
+		if (instance == null) return null;
+		List<LauncherAdapter> adapters = List.of(new MultiMCMeta(instance.resolve("mmc-pack.json")), new PandoraMeta(instance.resolve("info_v1.json")));
 		for (LauncherAdapter adapter : adapters) {
 			if (adapter.detected()) return adapter;
 		}

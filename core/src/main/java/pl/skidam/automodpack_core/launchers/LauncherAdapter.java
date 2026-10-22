@@ -20,9 +20,9 @@ public interface LauncherAdapter {
 	EnumSet<LauncherVersionSwapper.Axis> requiredAxes(String targetLoader, String targetLoaderVersion, String targetMcVersion) throws IOException;
 
 	/**
-	 * Writes the axes and re-reads the launcher's records: returns only once the metadata converged to the target,
-	 * otherwise throws. The target loader is one of fabric/forge/neoforge; the version strings are the mod's own
-	 * unprefixed loader version and Minecraft version.
+	 * Writes the axes and re-reads the launcher's records: returns whether a record had to change, only once the
+	 * metadata converged to the target, otherwise throws. The target loader is one of fabric/forge/neoforge; the
+	 * version strings are the mod's own unprefixed loader version and Minecraft version.
 	 */
-	void apply(EnumSet<LauncherVersionSwapper.Axis> axes, String targetLoader, String targetLoaderVersion, String targetMcVersion) throws IOException;
+	boolean apply(EnumSet<LauncherVersionSwapper.Axis> axes, String targetLoader, String targetLoaderVersion, String targetMcVersion) throws IOException;
 }

@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.launchers;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -32,7 +33,7 @@ class LauncherVersionSwapperTest {
 
 	@Test
 	void noAdapterGoesManualOnGameVersionChange() {
-		LauncherVersionSwapper.SwitchPlan plan = LauncherVersionSwapper.planSwitch("fabric", "0.16.14", "1.21.1", true, "fabric", "1.20.1");
+		LauncherVersionSwapper.SwitchPlan plan = LauncherVersionSwapper.planSwitch("fabric", "0.16.14", "1.21.1", true, "fabric", "1.20.1", null, (uid, version) -> true);
 		assertFalse(plan.refused());
 		assertTrue(plan.manual());
 		assertTrue(plan.required());
@@ -41,7 +42,7 @@ class LauncherVersionSwapperTest {
 
 	@Test
 	void noAdapterGoesManualOnLoaderTypeChange() {
-		LauncherVersionSwapper.SwitchPlan plan = LauncherVersionSwapper.planSwitch("neoforge", "21.1.215", "1.20.1", true, "forge", "1.20.1");
+		LauncherVersionSwapper.SwitchPlan plan = LauncherVersionSwapper.planSwitch("neoforge", "21.1.215", "1.20.1", true, "forge", "1.20.1", null, (uid, version) -> true);
 		assertFalse(plan.refused());
 		assertTrue(plan.manual());
 		assertEquals(Set.of(Axis.LOADER_TYPE), plan.axes());
@@ -79,7 +80,7 @@ class LauncherVersionSwapperTest {
 	@Test
 	void noAdapterIgnoresLoaderVersionBump() {
 		// Launchers without metadata manage their own loader; a same-type version bump stays their business.
-		LauncherVersionSwapper.SwitchPlan plan = LauncherVersionSwapper.planSwitch("fabric", "0.17.0", "1.20.1", true, "fabric", "1.20.1");
+		LauncherVersionSwapper.SwitchPlan plan = LauncherVersionSwapper.planSwitch("fabric", "0.17.0", "1.20.1", true, "fabric", "1.20.1", null, (uid, version) -> true);
 		assertFalse(plan.refused());
 		assertFalse(plan.required());
 		assertFalse(plan.manual());
@@ -199,5 +200,34 @@ class LauncherVersionSwapperTest {
 		assertEquals("forge", persisted.get("loader").getAsString());
 		assertEquals("1.20.1-47.4.0", persisted.get("preferred_loader_version").getAsString());
 		assertEquals(EnumSet.noneOf(Axis.class), meta.requiredAxes("forge", "47.4.0", "1.20.1"));
+	}
+
+	// --- the versions a planned switch writes ---
+
+	@Test
+	void versionsDecodeWhatTheyEncodeAndNothingFromAnEmptyOrMalformedValue() {
+		LauncherVersionSwapper.Versions versions = new LauncherVersionSwapper.Versions("fabric", "0.16.5", "");
+		assertEquals("loader=fabric loaderVersion=0.16.5", versions.encode());
+		assertEquals(new LauncherVersionSwapper.Versions("fabric", "0.16.5", null), LauncherVersionSwapper.Versions.decode(versions.encode()));
+		assertNull(LauncherVersionSwapper.Versions.decode(""));
+		assertNull(LauncherVersionSwapper.Versions.decode("  junk =x  "));
+		assertEquals(new LauncherVersionSwapper.Versions(null, null, "1.21.1"), LauncherVersionSwapper.Versions.decode("junk mcVersion=1.21.1"));
+	}
+
+	@Test
+	void mergeFillsEachBlankPartAndALoaderVersionOnlyForItsOwnLoader() {
+		LauncherVersionSwapper.Versions owed = new LauncherVersionSwapper.Versions("fabric", "0.16.5", "1.21.1");
+		assertEquals(new LauncherVersionSwapper.Versions("Fabric", "0.16.5", "1.21.4"), LauncherVersionSwapper.Versions.merge(new LauncherVersionSwapper.Versions("Fabric", "", "1.21.4"), owed));
+		assertEquals(new LauncherVersionSwapper.Versions("neoforge", "", "1.21.1"), LauncherVersionSwapper.Versions.merge(new LauncherVersionSwapper.Versions("neoforge", "", ""), owed));
+		assertEquals(owed, LauncherVersionSwapper.Versions.merge(null, owed));
+		assertNull(LauncherVersionSwapper.Versions.merge(null, null));
+	}
+
+	@Test
+	void aPlannedSwitchVouchesOnlyForTheAxesItWrites() {
+		LauncherVersionSwapper.Switch loaderOnly = new LauncherVersionSwapper.Switch(EnumSet.of(Axis.LOADER_VERSION), new LauncherVersionSwapper.Versions("fabric", "0.16.5", "1.21.4"));
+		assertTrue(loaderOnly.vouchesFor("net.fabricmc.fabric-loader", "0.16.5"));
+		assertFalse(loaderOnly.vouchesFor("net.minecraft", "1.21.4"), "the game version was never checked");
+		assertFalse(loaderOnly.vouchesFor("net.fabricmc.fabric-loader", "0.17.0"));
 	}
 }

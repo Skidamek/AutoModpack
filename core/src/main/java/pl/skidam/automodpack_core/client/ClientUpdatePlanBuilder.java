@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.security.DigestOutputStream;
 import java.util.*;
 import java.util.HexFormat;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -21,6 +22,7 @@ import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.launchers.LauncherVersionSwapper;
+import pl.skidam.automodpack_core.launchers.PrismMeta;
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.GeneratedBundle;
 import pl.skidam.automodpack_core.loader.ModFileCache;
@@ -83,11 +85,18 @@ final class ClientUpdatePlanBuilder {
 	private final ClientStorage storage;
 	private final ModpackLoaderService modpackLoader;
 	private final String loaderType;
+	private final BiPredicate<String, String> launcherVersionKnown;
 
 	ClientUpdatePlanBuilder(ClientStorage storage, ModpackLoaderService modpackLoader, String loaderType) {
+		this(storage, modpackLoader, loaderType, PrismMeta::isVersionResolvable);
+	}
+
+	/** {@code launcherVersionKnown}: whether the launcher's meta server resolves a component version, the one network question planning asks. */
+	ClientUpdatePlanBuilder(ClientStorage storage, ModpackLoaderService modpackLoader, String loaderType, BiPredicate<String, String> launcherVersionKnown) {
 		this.storage = Objects.requireNonNull(storage, "storage");
 		this.modpackLoader = Objects.requireNonNull(modpackLoader, "modpackLoader");
 		this.loaderType = Objects.requireNonNull(loaderType, "loaderType");
+		this.launcherVersionKnown = Objects.requireNonNull(launcherVersionKnown, "launcherVersionKnown");
 	}
 
 	record Input(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo,
@@ -160,25 +169,29 @@ final class ClientUpdatePlanBuilder {
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, input.target(), files, forceCopyServices, targetMods, standardMods,
 				previousCopies, nestedCandidates, selection, plannedConfig, input.consentedLocalModFiles(), projection.owed())).withPlannedSelectedModpackId(input.target().modpackId);
-		return new PreparedPlan(withSwitchConsequences(plan, input.target(), logicalConfig.syncVersions), files, targetOverlay.digest(),
+		return new PreparedPlan(withSwitchConsequences(plan, LauncherVersionSwapper.Versions.advertisedBy(input.target()), projection, logicalConfig.syncVersions), files, targetOverlay.digest(),
 				new PlannedAgainst(expectedClientConfig, expectedSelectedModpackId, installed == null ? null : installed.ownershipLedger));
 	}
 
-	/** Refuses a pack this client cannot run, plans the launcher-metadata switch (with its restart demand) when it can, and marks the manual switches. */
-	private UpdatePlan withSwitchConsequences(UpdatePlan plan, ModpackJsons.ModpackContentFields target, boolean syncVersions) throws IOException {
-		LauncherVersionSwapper.SwitchPlan switchPlan = LauncherVersionSwapper.planSwitch(target.loader, target.loaderVersion, target.mcVersion, syncVersions, loaderType, MC_VERSION);
+	/**
+	 * Refuses a pack this client cannot run, plans the launcher-metadata switch (with its restart demand) when it can, and
+	 * marks the manual switches. Every action plans on top of the result of the ones before it: each version the pack
+	 * leaves blank is the one an owed switch still lands, and a switch that ends up the owed one is carried on as it was
+	 * planned, so a removal, a deactivation, or a pack advertising no versions needs no launcher or network check.
+	 */
+	private UpdatePlan withSwitchConsequences(UpdatePlan plan, LauncherVersionSwapper.Versions advertised, ClientProjectionView.Snapshot projection, boolean syncVersions)
+			throws IOException {
+		LauncherVersionSwapper.Switch owed = projection.owedLauncherSwitch();
+		LauncherVersionSwapper.Versions target = LauncherVersionSwapper.Versions.merge(advertised, owed == null ? null : owed.versions());
+		if (target == null) return plan;
+		if (owed != null && target.equals(owed.versions())) return plan.withLauncherSwitch(owed);
+		BiPredicate<String, String> versionKnown = (uid, version) -> owed != null && owed.vouchesFor(uid, version) || launcherVersionKnown.test(uid, version);
+		LauncherVersionSwapper.SwitchPlan switchPlan = LauncherVersionSwapper.planSwitch(target.loader(), target.loaderVersion(), target.mcVersion(), syncVersions, loaderType, MC_VERSION,
+				LauncherVersionSwapper.detect(storage.gameDirectory()), versionKnown);
 		if (switchPlan.refused()) throw new IOException(switchPlan.refusedReason());
 		if (!switchPlan.required()) return plan;
 		if (switchPlan.manual()) return plan.withRestartReason(UpdatePlan.RestartReason.MANUAL_VERSION_SWITCH);
-		return plan.withRestartReasons(switchReasons(switchPlan.axes()));
-	}
-
-	private static Set<UpdatePlan.RestartReason> switchReasons(EnumSet<LauncherVersionSwapper.Axis> axes) {
-		Set<UpdatePlan.RestartReason> reasons = new LinkedHashSet<>();
-		if (axes.contains(LauncherVersionSwapper.Axis.GAME_VERSION)) reasons.add(UpdatePlan.RestartReason.CHANGED_GAME_VERSION);
-		if (axes.contains(LauncherVersionSwapper.Axis.LOADER_TYPE)) reasons.add(UpdatePlan.RestartReason.CHANGED_LOADER_TYPE);
-		if (axes.contains(LauncherVersionSwapper.Axis.LOADER_VERSION)) reasons.add(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION);
-		return reasons;
+		return plan.withLauncherSwitch(new LauncherVersionSwapper.Switch(switchPlan.axes(), target));
 	}
 
 	RemovalPreparation prepareRemoval() throws Exception {
@@ -205,6 +218,7 @@ final class ClientUpdatePlanBuilder {
 			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, availablePreInstall.priorGameDir(), files, availablePreInstall.objectHashes(), generatedCopies, plannedConfig,
 					projection.owed()))
 					.withPlannedSelectedModpackId(plannedSelectedModpackId);
+			plan = withSwitchConsequences(plan, null, projection, currentConfig.syncVersions);
 			// A removal plans the installed generation away, so the projection it planned against is the one it carries.
 			return new RemovalPreparation(plan, installed, availablePreInstall.priorGameDir(), expectedPriorIntent, currentConfig, plannedConfig, files,
 					new PlannedAgainst(expectedClientConfig, expectedSelectedModpackId, installed.ownershipLedger));

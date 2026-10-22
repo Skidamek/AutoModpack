@@ -17,6 +17,7 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
+import pl.skidam.automodpack_core.launchers.LauncherVersionSwapper;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -294,6 +295,15 @@ public final class ClientProjectionView {
 		public UpdatePlanner.Owed owed() {
 			if (pending == null || !mutationStarted(storage, pending)) return UpdatePlanner.Owed.NOTHING;
 			return new UpdatePlanner.Owed(pending.plan().modpackId(), publicationStarted(storage, pending) ? List.of() : pending.plan().operations());
+		}
+
+		/**
+		 * The launcher switch the pending transaction still owes: every switch lands only when its transaction finalizes,
+		 * so while one is owed the instance's launcher records are not yet the result of the actions taken. Null when none is owed.
+		 */
+		public LauncherVersionSwapper.Switch owedLauncherSwitch() {
+			if (pending == null || !mutationStarted(storage, pending)) return null;
+			return pending.plan().launcherSwitch(target);
 		}
 
 		/** Returns whether the observed live state is one of the states already owned by a pending transaction. */

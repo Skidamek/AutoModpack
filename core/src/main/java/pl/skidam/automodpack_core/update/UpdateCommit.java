@@ -16,11 +16,9 @@ import java.nio.file.NotDirectoryException;
 import java.nio.file.NotLinkException;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
@@ -32,7 +30,6 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
-import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
@@ -428,6 +425,7 @@ public final class UpdateCommit {
 	private List<Lock> applyModpackTransaction(UpdateTransaction transaction, AtomicReference<Operation> current, boolean started, boolean preserveNewerSelection) throws IOException {
 		if (!started) {
 			if (validator.mutableInputDrift(transaction, fileCache).configuration()) throw new UpdateReplanRequiredException(null, "Client configuration changed after planning the update");
+			requireLauncherWritable(transaction);
 			capturePinnedBytes(transaction);
 		}
 		snapshotBefore(transaction);
@@ -564,7 +562,7 @@ public final class UpdateCommit {
 	}
 
 	/**
-	 * The durable finalization: planned config, pack state, active-state pointer, and the launcher-metadata tail. The
+	 * The durable finalization: planned config, selection, launcher switch, and pack state with its active-state pointer. The
 	 * planned config is rebased on the stored one, so a setting the player changed since planning keeps their value.
 	 */
 	private void finalizeModpackState(UpdateTransaction transaction, boolean preserveNewerSelection) throws IOException {
@@ -579,8 +577,8 @@ public final class UpdateCommit {
 				throw new ConfigTools.ConfigException("Failed to save client configuration", e);
 			}
 		if (!preserveNewerSelection) storage.writeSelectedModpackId(UpdateTransactionValidator.plannedFollow(transaction));
+		applyLauncherSwitch(transaction, resolved);
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
-			applyLauncherMetadata(transaction, resolved.flatTarget());
 			storage.writeActiveState(resolved.document(), resolved.selection().intent());
 		} else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
 			GeneratedCopyState.removeGeneration(storage, transaction.plan().modpackId(), transaction.plan().packTarget().contentToken());
@@ -591,22 +589,24 @@ public final class UpdateCommit {
 	}
 
 	/**
-	 * The launcher-metadata tail, previously a caller-supplied callback with one implementation: the planned switch
-	 * axes ride the transaction's restart reasons, so no session state is needed to apply them.
+	 * The launcher switch lands only here, with the files it belongs to, so the launcher never starts versions the
+	 * installed mods were not made for, and a boot replay that changed a record relaunches. The pre-write gate already
+	 * proved the metadata writable, so a failure here is the metadata changing under a started apply, which stays owed.
 	 */
-	private void applyLauncherMetadata(UpdateTransaction transaction, ModpackJsons.ModpackContentFields manifest) throws IOException {
-		EnumSet<LauncherVersionSwapper.Axis> axes = switchAxes(transaction.plan().restartReasons());
-		if (axes.isEmpty()) return;
-		LauncherVersionSwapper.apply(axes, manifest.loader, manifest.loaderVersion, manifest.mcVersion);
-		scannedChanges.add("wrote launcher metadata");
+	private void applyLauncherSwitch(UpdateTransaction transaction, SelectedModpackTarget resolved) throws IOException {
+		LauncherVersionSwapper.Switch launcherSwitch = transaction.plan().launcherSwitch(resolved.flatTarget());
+		if (launcherSwitch != null && LauncherVersionSwapper.apply(launcherSwitch, storage.gameDirectory())) scannedChanges.add("wrote launcher metadata");
 	}
 
-	private static EnumSet<LauncherVersionSwapper.Axis> switchAxes(Set<RestartReason> reasons) {
-		EnumSet<LauncherVersionSwapper.Axis> axes = EnumSet.noneOf(LauncherVersionSwapper.Axis.class);
-		if (reasons.contains(RestartReason.CHANGED_GAME_VERSION)) axes.add(LauncherVersionSwapper.Axis.GAME_VERSION);
-		if (reasons.contains(RestartReason.CHANGED_LOADER_TYPE)) axes.add(LauncherVersionSwapper.Axis.LOADER_TYPE);
-		if (reasons.contains(RestartReason.CHANGED_LOADER_VERSION)) axes.add(LauncherVersionSwapper.Axis.LOADER_VERSION);
-		return axes;
+	/** The gate before the first write: a switch whose launcher metadata is gone or unreadable replans instead of landing files the launcher cannot follow. */
+	private void requireLauncherWritable(UpdateTransaction transaction) throws IOException {
+		LauncherVersionSwapper.Switch launcherSwitch = transaction.plan().launcherSwitch(validator.resolvedTarget(transaction, validator.targetDocument(transaction)).flatTarget());
+		if (launcherSwitch == null) return;
+		try {
+			LauncherVersionSwapper.requireWritable(launcherSwitch, storage.gameDirectory());
+		} catch (IOException e) {
+			throw new UpdateReplanRequiredException(null, "Launcher metadata for the planned version switch is unusable: " + e.getMessage(), e);
+		}
 	}
 
 	/** Persists the terminal result fields of an interrupted transaction onto its journal record. */

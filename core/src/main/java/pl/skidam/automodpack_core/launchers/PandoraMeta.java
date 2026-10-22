@@ -13,7 +13,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import pl.skidam.automodpack_core.launchers.LauncherVersionSwapper.Axis;
-import pl.skidam.automodpack_core.storage.GameDirectory;
 
 // Pandora launcher: the instance's info_v1.json is the full version record (crates/schema/src/instance.rs in Pandora's sources).
 final class PandoraMeta implements LauncherAdapter {
@@ -22,10 +21,6 @@ final class PandoraMeta implements LauncherAdapter {
 	private static final Set<String> SWITCHABLE_LOADERS = Set.of("fabric", "forge", "neoforge");
 
 	private final Path infoJsonPath;
-
-	PandoraMeta() {
-		this(GameDirectory.current().getParent().resolve("info_v1.json"));
-	}
 
 	PandoraMeta(Path infoJsonPath) {
 		this.infoJsonPath = infoJsonPath;
@@ -53,7 +48,7 @@ final class PandoraMeta implements LauncherAdapter {
 	}
 
 	@Override
-	public void apply(EnumSet<Axis> axes, String targetLoader, String targetLoaderVersion, String targetMcVersion) throws IOException {
+	public boolean apply(EnumSet<Axis> axes, String targetLoader, String targetLoaderVersion, String targetMcVersion) throws IOException {
 		JsonObject json = LauncherVersionSwapper.readJsonStrict(infoJsonPath);
 		if (json == null) throw new IOException("Unreadable Pandora launcher metadata at: " + infoJsonPath);
 		boolean changed = false;
@@ -82,6 +77,7 @@ final class PandoraMeta implements LauncherAdapter {
 			if (!satisfied(persisted, axis, targetLoader, targetLoaderVersion, targetMcVersion))
 				throw new IOException("Pandora launcher metadata did not converge for " + axis);
 		}
+		return changed;
 	}
 
 	private boolean satisfied(JsonObject json, Axis axis, String targetLoader, String targetLoaderVersion, String targetMcVersion) {

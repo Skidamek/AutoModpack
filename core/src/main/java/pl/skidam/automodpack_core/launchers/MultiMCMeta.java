@@ -15,7 +15,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import pl.skidam.automodpack_core.launchers.LauncherVersionSwapper.Axis;
-import pl.skidam.automodpack_core.storage.GameDirectory;
 
 // MultiMC and forks like Prism and forks of forks like Fjord etc.
 final class MultiMCMeta implements LauncherAdapter {
@@ -26,10 +25,6 @@ final class MultiMCMeta implements LauncherAdapter {
 			"net.minecraftforge", "neoforge", "net.neoforged");
 
 	private final Path mmcPackPath;
-
-	MultiMCMeta() {
-		this(GameDirectory.current().getParent().resolve("mmc-pack.json"));
-	}
 
 	MultiMCMeta(Path mmcPackPath) {
 		this.mmcPackPath = mmcPackPath;
@@ -59,7 +54,7 @@ final class MultiMCMeta implements LauncherAdapter {
 	}
 
 	@Override
-	public void apply(EnumSet<Axis> axes, String targetLoader, String targetLoaderVersion, String targetMcVersion) throws IOException {
+	public boolean apply(EnumSet<Axis> axes, String targetLoader, String targetLoaderVersion, String targetMcVersion) throws IOException {
 		JsonObject json = LauncherVersionSwapper.readJsonStrict(mmcPackPath);
 		if (!isSupported(json)) throw new IOException("Unsupported MultiMC/Prism launcher metadata at: " + mmcPackPath);
 		String targetUid = componentUid(targetLoader);
@@ -78,6 +73,7 @@ final class MultiMCMeta implements LauncherAdapter {
 			if (!satisfied(persisted, axis, targetUid, targetLoaderVersion, targetMcVersion))
 				throw new IOException("MultiMC/Prism launcher metadata did not converge for " + axis);
 		}
+		return changed;
 	}
 
 	private boolean satisfied(JsonObject json, Axis axis, String targetUid, String targetLoaderVersion, String targetMcVersion) {
