@@ -14,6 +14,8 @@ You can use tools like [Certbot](https://eff-certbot.readthedocs.io/en/stable/in
 After obtaining the certificate, on the server in the `~/automodpack/.private/` directory, replace the `cert.crt` (with the full chain certificate) and `key.pem` files ([key has to be in PKCS#8 (PEM) format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html)) - here be cautious as interception of these files may result in impersonation of the server, [read more](https://security.stackexchange.com/a/16694).
 If you're hosting modpack on different sub/domain than your minecraft server, make sure that your certificate verifies both of the sub/domains.
 
+AutoModpack never overwrites these files. Without both of them, it generates a self-signed pair on start. If only `key.pem` exists, it keeps that key and issues a new self-signed `cert.crt` for it; if only `cert.crt` exists, modpack hosting refuses to start until you restore the key or remove the certificate.
+
 ### Little tutorial on how to obtain a certificate using Certbot
 
 Install Certbot on your pc or server, then run the example command and follow further certbot instructions to obtain a certificate for your domain:

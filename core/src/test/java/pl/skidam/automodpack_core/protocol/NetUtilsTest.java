@@ -12,6 +12,9 @@ import java.nio.file.attribute.AclEntryType;
 import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipal;
+import java.security.PrivateKey;
+import java.security.Signature;
+import java.security.cert.X509Certificate;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -53,5 +56,68 @@ class NetUtilsTest {
             if (entry.type() == AclEntryType.ALLOW) assertEquals(owner, entry.principal(), entry::toString);
         }
         assertTrue(view.getAcl().stream().anyMatch(entry -> entry.type() == AclEntryType.ALLOW && owner.equals(entry.principal())));
+    }
+
+    @Test
+    void ensureSelfSignedTlsPairWritesAMatchingPairAndLeavesItAlone(@TempDir Path directory) throws Exception {
+        Path certFile = directory.resolve("cert.crt");
+        Path keyFile = directory.resolve("key.pem");
+        NetUtils.ensureSelfSignedTlsPair(certFile, keyFile);
+        assertTrue(Files.isRegularFile(certFile));
+        assertTrue(Files.isRegularFile(keyFile));
+        assertPairMatches(NetUtils.loadPrivateKey(keyFile), NetUtils.loadCertificate(certFile));
+
+        String fingerprint = NetUtils.getFingerprint(NetUtils.loadCertificate(certFile));
+        NetUtils.ensureSelfSignedTlsPair(certFile, keyFile);
+        assertEquals(fingerprint, NetUtils.getFingerprint(NetUtils.loadCertificate(certFile)));
+    }
+
+    @Test
+    void ensureSelfSignedTlsPairKeepsAnExistingKeyAndSignsACertificateWithIt(@TempDir Path directory) throws Exception {
+        Path certFile = directory.resolve("cert.crt");
+        Path keyFile = directory.resolve("key.pem");
+        NetUtils.savePrivateKey(NetUtils.generateKeyPair().getPrivate(), keyFile);
+        byte[] existingKey = Files.readAllBytes(keyFile);
+
+        NetUtils.ensureSelfSignedTlsPair(certFile, keyFile);
+        assertArrayEquals(existingKey, Files.readAllBytes(keyFile));
+        assertPairMatches(NetUtils.loadPrivateKey(keyFile), NetUtils.loadCertificate(certFile));
+    }
+
+    @Test
+    void ensureSelfSignedTlsPairRefusesAnUnreadableKeyWithoutTouchingIt(@TempDir Path directory) throws Exception {
+        Path certFile = directory.resolve("cert.crt");
+        Path keyFile = directory.resolve("key.pem");
+        Files.writeString(keyFile, "not a key");
+
+        assertThrows(IllegalStateException.class, () -> NetUtils.ensureSelfSignedTlsPair(certFile, keyFile));
+        assertEquals("not a key", Files.readString(keyFile));
+        assertFalse(Files.exists(certFile));
+    }
+
+    @Test
+    void ensureSelfSignedTlsPairRefusesWhenOnlyTheCertExists(@TempDir Path directory) throws Exception {
+        Path certFile = directory.resolve("cert.crt");
+        Path keyFile = directory.resolve("key.pem");
+        NetUtils.ensureSelfSignedTlsPair(certFile, keyFile);
+        String fingerprint = NetUtils.getFingerprint(NetUtils.loadCertificate(certFile));
+        Files.delete(keyFile);
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> NetUtils.ensureSelfSignedTlsPair(certFile, keyFile));
+        assertTrue(failure.getMessage().contains("without a private key"));
+        assertFalse(Files.exists(keyFile));
+        assertEquals(fingerprint, NetUtils.getFingerprint(NetUtils.loadCertificate(certFile)));
+    }
+
+    private static void assertPairMatches(PrivateKey key, X509Certificate certificate) throws Exception {
+        byte[] challenge = "automodpack".getBytes();
+        Signature signer = Signature.getInstance("SHA256withRSA");
+        signer.initSign(key);
+        signer.update(challenge);
+        byte[] signature = signer.sign();
+        Signature verifier = Signature.getInstance("SHA256withRSA");
+        verifier.initVerify(certificate.getPublicKey());
+        verifier.update(challenge);
+        assertTrue(verifier.verify(signature), "the certificate does not belong to the key");
     }
 }

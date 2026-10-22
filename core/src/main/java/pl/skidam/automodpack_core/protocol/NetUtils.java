@@ -33,7 +33,10 @@ import java.security.*;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.security.interfaces.RSAPrivateCrtKey;
+import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.RSAPublicKeySpec;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.Date;
@@ -142,6 +145,63 @@ public class NetUtils {
                 + formatBase64(Base64.getEncoder().encodeToString(keySpec.getEncoded()))
                 + "-----END PRIVATE KEY-----";
         writeOwnerOnly(path, keyPem.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** Reads the PKCS#8 PEM {@link #savePrivateKey} writes; null when the file is missing. */
+    public static PrivateKey loadPrivateKey(Path path) throws Exception {
+        if (!Files.exists(path)) return null;
+        String pem = Files.readString(path, StandardCharsets.UTF_8);
+        String base64 = pem.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "").replaceAll("\\s", "");
+        byte[] der = Base64.getMimeDecoder().decode(base64);
+        for (String algorithm : List.of("RSA", "EC")) {
+            try {
+                return KeyFactory.getInstance(algorithm).generatePrivate(new PKCS8EncodedKeySpec(der));
+            } catch (InvalidKeySpecException notThisKeyType) {
+            }
+        }
+        throw new GeneralSecurityException("Unsupported private key format in " + path);
+    }
+
+    /**
+     * Makes sure the server has a TLS pair without ever replacing a file the operator put there. A pair that exists is
+     * left alone. A certificate without a key refuses, because it may be the operator's CA certificate and clients may
+     * already trust it. A key without a certificate keeps the key and gets a fresh self-signed certificate built from it.
+     * A fresh pair writes the key first, so a crash in between leaves that recoverable shape.
+     */
+    public static void ensureSelfSignedTlsPair(Path certFile, Path privateKeyFile) throws IOException {
+        boolean certExists = Files.exists(certFile);
+        boolean keyExists = Files.exists(privateKeyFile);
+        if (certExists && keyExists) {
+            return;
+        }
+        if (certExists) {
+            throw new IllegalStateException("The TLS certificate exists without a private key (" + certFile + ", " + privateKeyFile + "); make the pair whole or remove both files manually");
+        }
+
+        KeyPair keyPair;
+        try {
+            keyPair = keyExists ? existingRsaKeyPair(privateKeyFile) : generateKeyPair();
+        } catch (Exception e) {
+            throw new IllegalStateException("The TLS private key " + privateKeyFile + " has no certificate and cannot be given a self-signed one; put its certificate at " + certFile, e);
+        }
+
+        try {
+            if (!keyExists) savePrivateKey(keyPair.getPrivate(), privateKeyFile);
+            saveCertificate(selfSign(keyPair), certFile);
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("Failed to write the TLS pair", e);
+        }
+    }
+
+    // The pair behind an existing PKCS#8 RSA key: the CRT form carries the public exponent, so the public key needs no other file.
+    private static KeyPair existingRsaKeyPair(Path privateKeyFile) throws Exception {
+        if (!(loadPrivateKey(privateKeyFile) instanceof RSAPrivateCrtKey key)) {
+            throw new GeneralSecurityException("only an RSA private key can sign the self-signed certificate");
+        }
+        PublicKey publicKey = KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(key.getModulus(), key.getPublicExponent()));
+        return new KeyPair(publicKey, key);
     }
 
     /**

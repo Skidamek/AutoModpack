@@ -16,9 +16,7 @@ import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AttributeKey;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.KeyPair;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -90,15 +88,8 @@ public class NettyServer {
                     LOGGER.error("Internal TLS cannot be disabled. You have to bind modpack host on a separate port, preferably also on a loopback address or atleast some private one.");
                 }
 
-                if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
-                    // Create a self-signed certificate
-                    KeyPair keyPair = NetUtils.generateKeyPair();
-                    X509Certificate cert = NetUtils.selfSign(keyPair);
-
-                    // save it to the file
-                    NetUtils.saveCertificate(cert, serverCertFile);
-                    NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
-                }
+                // Creates a self-signed pair when there is none, never replacing an existing key or certificate
+                NetUtils.ensureSelfSignedTlsPair(serverCertFile, serverPrivateKeyFile);
 
                 NetUtils.warnIfPrivateKeyIsTooOpen(serverPrivateKeyFile);
 
