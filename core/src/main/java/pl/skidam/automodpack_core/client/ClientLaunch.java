@@ -31,17 +31,17 @@ import pl.skidam.automodpack_core.utils.DurableFiles;
 public final class ClientLaunch {
 	private final ClientStorage storage;
 	private final boolean trustedBootstrapApply;
-	private final boolean rolledBackStuckUpdate;
+	private final boolean bootAsIs;
 
-	public ClientLaunch(ClientStorage storage, boolean trustedBootstrapApply, boolean rolledBackStuckUpdate) {
+	public ClientLaunch(ClientStorage storage, boolean trustedBootstrapApply, boolean bootAsIs) {
 		this.storage = storage;
 		this.trustedBootstrapApply = trustedBootstrapApply;
-		this.rolledBackStuckUpdate = rolledBackStuckUpdate;
+		this.bootAsIs = bootAsIs;
 	}
 
 	public void run() throws Exception {
-		if (rolledBackStuckUpdate) {
-			LOGGER.info("Booting the restored modpack without contacting the server");
+		if (bootAsIs) {
+			LOGGER.info("Booting the installed modpack without contacting the server");
 			boolean projectionActive = hasActiveProjection();
 			if (projectionActive) loadLocalModpack(null, null, projectionActive);
 			return;

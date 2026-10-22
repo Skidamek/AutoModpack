@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "transactionId": "94a54f41-7412-4cf4-835e-384c0adf0f71",
+  "purpose": "MODPACK_UPDATE",
+  "phase": "DEFERRED",
+  "plan": {
+    "modpackId": "abc1234",
+    "contentToken": "14a0bae9439c8e7b7275e3e0da53941892979630",
+    "policySha1": "f1f81de80d00237d1c512619ac72076912222065",
+    "ledgerDigest": "45923ccfd88a239884df0e31e160f90a110320e1",
+    "operations": [
+      {
+        "root": "PROJECTION",
+        "relativePath": "config/jeed-client.toml",
+        "operation": "INSTALL_OBJECT",
+        "expectedObjectHash": "19b8c84fa61c5cb38adb7147aa12575b54dca5aa",
+        "expectedSize": 12
+      },
+      {
+        "root": "GAME_DIR",
+        "relativePath": "config/jeed-client.toml",
+        "operation": "INSTALL_OBJECT",
+        "expectedObjectHash": "19b8c84fa61c5cb38adb7147aa12575b54dca5aa",
+        "expectedSize": 12,
+        "expectedExistingHash": "efed95db3ef3da91bca06cff30c5cce90fbe18d7"
+      },
+      {
+        "root": "PROJECTION",
+        "relativePath": "mods/old.jar",
+        "operation": "DELETE",
+        "expectedSize": -1,
+        "expectedExistingHash": "afc2733c51503a1f85bdb01120f1b7a8abd695dd"
+      }
+    ],
+    "projectedFinalState": [
+      {
+        "root": "PROJECTION",
+        "relativePath": "config/jeed-client.toml",
+        "present": true,
+        "expectedHash": "19b8c84fa61c5cb38adb7147aa12575b54dca5aa",
+        "expectedSize": 12
+      },
+      {
+        "root": "PROJECTION",
+        "relativePath": "mods/old.jar",
+        "present": false,
+        "expectedSize": -1
+      },
+      {
+        "root": "GAME_DIR",
+        "relativePath": "config/jeed-client.toml",
+        "present": true,
+        "expectedHash": "19b8c84fa61c5cb38adb7147aa12575b54dca5aa",
+        "expectedSize": 12
+      }
+    ],
+    "plannedClientConfig": {
+      "update-selected-modpack-on-launch": true,
+      "self-updater": false,
+      "sync-automodpack-version": true,
+      "sync-versions": true,
+      "play-music": true,
+      "show-modpack-settings-button": true,
+      "pinned-mod-ids": []
+    },
+    "plannedSelectedModpackId": "abc1234",
+    "restartReasons": [
+      "SELECTED_MODPACK"
+    ],
+    "preservations": [],
+    "baselineCaptures": [],
+    "conflicts": [],
+    "generatedCopies": [],
+    "consequences": {
+      "changes": [],
+      "effects": []
+    }
+  },
+  "targetPlatform": "linux",
+  "expectedPriorSelectionPresent": true,
+  "expectedPriorRequestedGroups": [
+    "main"
+  ],
+  "expectedPriorRequestedCategories": [],
+  "expectedPriorExcludedGroups": [],
+  "requestedGroups": [
+    "main"
+  ],
+  "requestedCategories": [],
+  "excludedGroups": [],
+  "overlayDigest": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+  "expectedClientConfig": {
+    "update-selected-modpack-on-launch": true,
+    "self-updater": false,
+    "sync-automodpack-version": true,
+    "sync-versions": true,
+    "play-music": true,
+    "show-modpack-settings-button": true,
+    "pinned-mod-ids": []
+  },
+  "expectedSelectedModpackId": "",
+  "ownershipLedger": {
+    "modpackId": "abc1234",
+    "entries": [
+      {
+        "logicalPath": "config/jeed-client.toml",
+        "historicalHashes": [
+          {
+            "sha1": "19b8c84fa61c5cb38adb7147aa12575b54dca5aa",
+            "size": 12
+          }
+        ],
+        "historicalGroupIds": [
+          "main"
+        ],
+        "currentStatus": "PRESENT"
+      },
+      {
+        "logicalPath": "mods/old.jar",
+        "historicalHashes": [
+          {
+            "sha1": "afc2733c51503a1f85bdb01120f1b7a8abd695dd",
+            "size": 7
+          }
+        ],
+        "historicalGroupIds": [
+          "main"
+        ],
+        "currentStatus": "TOMBSTONE"
+      }
+    ],
+    "digest": "45923ccfd88a239884df0e31e160f90a110320e1"
+  },
+  "expectedInstalledLedger": {
+    "modpackId": "abc1234",
+    "entries": [
+      {
+        "logicalPath": "mods/old.jar",
+        "historicalHashes": [
+          {
+            "sha1": "afc2733c51503a1f85bdb01120f1b7a8abd695dd",
+            "size": 7
+          }
+        ],
+        "historicalGroupIds": [
+          "main"
+        ],
+        "currentStatus": "PRESENT"
+      }
+    ],
+    "digest": "48233242773853bf1dc39c0cd8b3d17a063df642"
+  },
+  "stateKind": "",
+  "resultStatus": "DEFERRED_LOCKED",
+  "resultMessage": "The process cannot access the file because it is being used by another process"
+}

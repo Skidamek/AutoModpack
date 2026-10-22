@@ -8,15 +8,15 @@ import java.nio.file.Path;
 
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.PublicationRollback;
+import pl.skidam.automodpack_core.update.PublicationSweep;
 import pl.skidam.automodpack_core.update.UpdateCommit;
 import pl.skidam.automodpack_core.update.UpdateLoopDetector;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 
 /**
  * The blocked-transaction recovery policy, shared by the game process, the helper process, and boot: how long the
- * helper retries, how long boot waits out a running helper, when a deferred restart becomes a revert to the last
- * finalized generation, and what the player is told. The process mechanics (lease files, helper launch, restarts)
+ * helper retries, how long boot waits out a running helper, when deferred restarts stop and the game boots as it
+ * stands, and what the player is told. The process mechanics (lease files, helper launch, restarts)
  * stay with {@link DetachedUpdateHelper}, {@link UpdateHelperMain}, and {@link ReLauncher}; this module owns only
  * the decisions and the numbers behind them.
  */
@@ -27,8 +27,10 @@ public final class UpdateRecovery {
 	static final int MAX_ATTEMPTS = 20;
 	static final long INITIAL_BACKOFF_MILLIS = 500;
 	static final long MAX_BACKOFF_MILLIS = 5_000;
-	// Two deferred restarts for the same transaction id; the third failed recover rolls back to the last finalized generation. The id is the episode; the count does not expire.
+	// Two deferred restarts for the same transaction id; past them each launch retries once and boots as it stands. The id is the episode; the count does not expire.
 	static final int MAX_DEFERRED_RESTARTS = 2;
+	// From the third launch that boots as installed, the player is told too, not only the log.
+	static final int BOOTS_AS_INSTALLED_BEFORE_NOTICE = 3;
 
 	private UpdateRecovery() {}
 
@@ -48,8 +50,8 @@ public final class UpdateRecovery {
 		deferredGuard(storage).clear();
 	}
 
-	/** One failed recovery attempt of a pending transaction and the policy's verdict on it. */
-	public record RecoveryAttempt(UpdateCommit.Outcome outcome, UpdateTransaction deferred, boolean reverted) {}
+	/** One failed recovery attempt of a pending transaction and the policy's verdict on it; {@code bootAsIs}: stop restarting and boot what is installed without contacting the server. */
+	public record RecoveryAttempt(UpdateCommit.Outcome outcome, UpdateTransaction deferred, boolean bootAsIs) {}
 
 	/** One bounded recovery attempt against the pending transaction; IOException propagates to the caller's quarantine handling. */
 	@FunctionalInterface
@@ -59,9 +61,11 @@ public final class UpdateRecovery {
 
 	/**
 	 * The verdict on a failed recovery of a pending transaction: wait out a running helper and retry recovery once;
-	 * otherwise evaluate the deferred-restart guard and either revert to the last finalized generation ({@code reverted},
-	 * boot proceeds without the update) or launch a fresh helper and leave the deferral to the caller, which restarts
-	 * with {@link #deferredPopupMessage}. The returned outcome and transaction are the ones the caller finishes with.
+	 * otherwise evaluate the deferred-restart guard and either boot as it stands ({@code bootAsIs}) or launch a fresh
+	 * helper and leave the deferral to the caller, which restarts with {@link #deferredPopupMessage}. Nothing is rolled
+	 * back: a started journal keeps what it still owes and every later launch retries it, while restoring its baselines
+	 * would mix generations the way only a finished apply can untangle. The returned outcome and transaction are the
+	 * ones the caller finishes with.
 	 */
 	public static RecoveryAttempt blockedRecovery(ClientStorage storage, UpdateTransaction deferred, UpdateCommit.Outcome outcome, RecoveryRetry recover) throws IOException {
 		if (DetachedUpdateHelper.awaitRunningHelper()) {
@@ -71,22 +75,24 @@ public final class UpdateRecovery {
 			if (outcome.settled()) return new RecoveryAttempt(outcome, deferred, false);
 		}
 		if (outcome.status() == UpdateTransaction.Status.REPLAN_REQUIRED && outcome instanceof UpdateCommit.Blocked blocked) {
-			// The pending plan no longer means what the player approved, and no restart can re-approve it - only the
-			// next sync's fresh review can - so the revert is immediate instead of deferred-restart counted.
-			Path stuckJournal = new PublicationRollback(storage).abandonStuckPublication(deferred);
+			// Only a journal that never wrote anything replans, and no restart can re-approve it - only the next sync's
+			// fresh review can - so it retires at once instead of being deferred-restart counted.
+			Path stuckJournal = PublicationSweep.retireJournal(storage);
 			clearDeferredGuard(storage);
-			LOGGER.error("The pending update {} needs a fresh review a restart cannot give ({}); kept the last finalized generation and retired the transaction to {}", deferred.transactionId,
-					blocked.message(), stuckJournal == null ? "its already-retired journal" : stuckJournal.toAbsolutePath().normalize());
+			LOGGER.error("The pending update {} needs a fresh review a restart cannot give ({}); retired the transaction to {}", deferred.transactionId, blocked.message(),
+					stuckJournal == null ? "its already-retired journal" : stuckJournal.toAbsolutePath().normalize());
 			return new RecoveryAttempt(outcome, deferred, true);
 		}
 		UpdateLoopDetector.Outcome loop = deferredGuard(storage).evaluateAndRecord(deferred.transactionId);
 		logDeferredRecovery(storage, deferred, outcome, loop);
 		if (loop.decision() == UpdateLoopDetector.Decision.SUPPRESS) {
-			Path stuckJournal = new PublicationRollback(storage).abandonStuckPublication(deferred);
-			clearDeferredGuard(storage);
-			LOGGER.error("The same update transaction {} failed after {} deferred restarts; kept the last finalized generation and retired the transaction to {}", deferred.transactionId,
-					loop.restarts(), stuckJournal == null ? "its already-retired journal" : stuckJournal.toAbsolutePath().normalize());
-			LOGGER.error("If the update keeps failing, send that file together with {} and the latest log", GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());
+			LOGGER.error("The same update transaction {} stayed blocked after {} deferred restarts and {} launches as installed; booting as installed, and every launch retries it",
+					deferred.transactionId, loop.restarts(), loop.suppressed());
+			if (loop.suppressed() >= BOOTS_AS_INSTALLED_BEFORE_NOTICE)
+				SessionNotices.post("AutoModpack update not finished", "The modpack update has not finished for " + loop.suppressed()
+						+ " launches, so the game runs the installed files. Close any program holding modpack files, or send AutoModpack's logs to the modpack author.");
+			LOGGER.error("If the update keeps failing, send {} together with {} and the latest log", storage.transactionFile().toAbsolutePath().normalize(),
+					GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());
 			return new RecoveryAttempt(outcome, deferred, true);
 		}
 		handoffToHelper();
@@ -115,7 +121,7 @@ public final class UpdateRecovery {
 		LOGGER.error("The full transaction journal is at {}", storage.transactionFile().toAbsolutePath().normalize());
 		LOGGER.error("The detached helper's own log, with its per-attempt recovery failures, is at {}", GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());
 		if (loop.decision() == UpdateLoopDetector.Decision.RESTART)
-			LOGGER.error("This is deferred restart {} of {} for the transaction; when they run out, the next failed launch rolls back to the last finalized generation", loop.restarts(), loop.maxRestarts());
+			LOGGER.error("This is deferred restart {} of {} for the transaction; when they run out, each launch retries once and boots as installed", loop.restarts(), loop.maxRestarts());
 	}
 
 	/** AWT preload dialog; Minecraft locale files are not loaded yet. */

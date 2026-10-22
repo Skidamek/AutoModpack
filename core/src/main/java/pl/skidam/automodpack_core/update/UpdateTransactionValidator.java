@@ -62,21 +62,6 @@ final class UpdateTransactionValidator {
 		}
 	}
 
-	void validatePendingReplacementEnvelope(UpdateTransaction pending) throws IOException {
-		try {
-			if (pending.schemaVersion != UpdateTransaction.CURRENT_SCHEMA_VERSION) throw new IOException("Unsupported deferred transaction schema");
-			UUID.fromString(pending.transactionId);
-			if (pending.purpose == null || pending.plan().projectedFinalState() == null)
-				throw new IOException("Deferred transaction envelope is incomplete");
-			ModpackId.requireValid(pending.plan().modpackId());
-			validateFinalState(pending.plan().projectedFinalState(), pending.plan().modpackId());
-		} catch (IOException e) {
-			throw e;
-		} catch (RuntimeException e) {
-			throw new IOException("Deferred transaction envelope is invalid", e);
-		}
-	}
-
 	void validateUnchecked(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs, FileCache fileCache) throws IOException {
 		if (transaction == null) throw new IOException("Transaction is missing");
 		if (transaction.schemaVersion != UpdateTransaction.CURRENT_SCHEMA_VERSION) throw new IOException("Unsupported transaction schema");

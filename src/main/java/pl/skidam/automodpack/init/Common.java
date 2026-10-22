@@ -5,7 +5,7 @@ import net.minecraft.server.MinecraftServer;
 import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.auth.ProvisioningSecretStore;
-import pl.skidam.automodpack_core.client.ClientHostState;
+import pl.skidam.automodpack_core.client.SessionNotices;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
@@ -120,7 +120,7 @@ public class Common {
 				e.addSuppressed(stopFailure);
 			}
 			String reason = e.getMessage() == null ? e.toString() : e.getMessage();
-			ClientHostState.hostingFailed(reason);
+			SessionNotices.post("AutoModpack hosting failed", reason);
 			LOGGER.error("AutoModpack hosting is unavailable this session", e);
 		}
 	}

@@ -12,9 +12,10 @@ import pl.skidam.automodpack_core.config.BootstrapInstaller;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
+import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.GeneratedCopyState;
-import pl.skidam.automodpack_core.update.PublicationRollback;
+import pl.skidam.automodpack_core.update.PublicationSweep;
 import pl.skidam.automodpack_core.update.UpdateCommit;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
@@ -31,14 +32,14 @@ public final class BootRecovery {
 	private final ClientStorage storage;
 	private ClientConfigJsons.ClientConfigFieldsV3 clientConfig;
 	private boolean trustedBootstrapApply;
-	private boolean rolledBackStuckUpdate;
+	private boolean bootAsIs;
 
 	public BootRecovery(ClientStorage storage) {
 		this.storage = storage;
 	}
 
 	/** What the boot phase needs to decide how the launch proceeds. */
-	public record BootDecision(ClientConfigJsons.ClientConfigFieldsV3 clientConfig, boolean trustedBootstrapApply, boolean rolledBackStuckUpdate) {}
+	public record BootDecision(ClientConfigJsons.ClientConfigFieldsV3 clientConfig, boolean trustedBootstrapApply, boolean bootAsIs) {}
 
 	public BootDecision recover() throws IOException {
 		loadClientConfig();
@@ -46,7 +47,7 @@ public final class BootRecovery {
 		recoverPendingTransaction();
 		rebuildGeneratedCopies();
 		importBootstrap();
-		return new BootDecision(clientConfig, trustedBootstrapApply, rolledBackStuckUpdate);
+		return new BootDecision(clientConfig, trustedBootstrapApply, bootAsIs);
 	}
 
 	private void loadClientConfig() {
@@ -72,7 +73,7 @@ public final class BootRecovery {
 	private void recoverPendingTransaction() throws IOException {
 		if (!Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) {
 			UpdateRecovery.clearDeferredGuard(storage);
-			PublicationRollback.sweepUnpinnedDirectories(storage);
+			PublicationSweep.sweepUnpinnedDirectories(storage);
 			return;
 		}
 
@@ -80,15 +81,15 @@ public final class BootRecovery {
 		UpdateTransaction transaction = UpdateTransaction.read(storage.transactionFile());
 		if (transaction == null) {
 			UpdateRecovery.clearDeferredGuard(storage);
-			PublicationRollback.sweepUnpinnedDirectories(storage);
+			PublicationSweep.sweepUnpinnedDirectories(storage);
 			return;
 		}
 
 		LOGGER.info("Recovering pending update transaction {} (purpose {}, phase {}, recorded result {}, operation {}, path {}, message {})", transaction.transactionId, transaction.purpose,
 				transaction.phase, transaction.resultStatus, transaction.resultOperation, transaction.resultPath, transaction.resultMessage);
 
+		UpdateCommit commits = new UpdateCommit(storage);
 		try {
-			UpdateCommit commits = new UpdateCommit(storage);
 			UpdateCommit.Outcome outcome = commits.run(new UpdateCommit.Recover(failure -> rebuildPending(failure.transaction())));
 			finishPendingRecovery(outcome, transaction, commits);
 		} catch (UpdateDeferredException e) {
@@ -97,16 +98,23 @@ public final class BootRecovery {
 			// handoff the deferred path intentionally kept.
 			throw e;
 		} catch (IOException | RuntimeException e) {
-			// Retiring a mid-apply journal without restoring the last good tree would let the next boot sweep backup/, the only full copy of it.
+			UpdateTransaction failed = UpdateTransaction.read(storage.transactionFile());
+			if (failed != null && ClientProjectionView.mutationStarted(storage, failed)) {
+				// Only a finished apply untangles a started one: it stays owed, every boot rolls it forward again without a
+				// restart, and the next sync plans on top of it, which also retires a journal no replay can ever finish.
+				LOGGER.error("The pending update {} failed part-way and stays owed; booting what is installed until a replay or the next sync finishes it", failed.transactionId, e);
+				nameUnscannedChanges(commits);
+				return;
+			}
 			// A detached helper from a deferred restart may still be retrying; the aside makes its next attempt see nothing pending, so the race converges.
-			new PublicationRollback(storage).revertUnfinalizedPublication(transaction);
 			DurableFiles.setAside(storage.transactionFile(), "Persisted update transaction", e);
+			PublicationSweep.sweepUnpinnedDirectories(storage);
 		}
 	}
 
 	/**
 	 * The generated-copy record of the active generation, rebuilt from what is installed. It runs after the pending
-	 * transaction is settled, because a replayed apply writes the record itself and a reverted one leaves the last
+	 * transaction is settled, because a replayed apply writes the record itself and a still-owed one leaves the last
 	 * committed generation as the truth.
 	 */
 	private void rebuildGeneratedCopies() throws IOException {
@@ -132,8 +140,9 @@ public final class BootRecovery {
 			outcome = attempt.outcome();
 			deferred = attempt.deferred();
 			done = outcome.settled();
-			if (attempt.reverted()) {
-				rolledBackStuckUpdate = true;
+			if (attempt.bootAsIs()) {
+				bootAsIs = true;
+				nameUnscannedChanges(commits);
 				return;
 			}
 			if (!done && outcome instanceof UpdateCommit.Blocked blocked) {
@@ -147,6 +156,20 @@ public final class BootRecovery {
 					.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing"));
 		}
 		LOGGER.info("Recovered update transaction {}", deferred.transactionId);
+		// The journal is retired, so this relaunch into what the loader should have scanned cannot repeat.
+		if (outcome instanceof UpdateCommit.Applied applied && applied.scannedFilesChanged()) {
+			LOGGER.info("The recovered update changed files this boot already scanned; restarting");
+			new ReLauncher(UpdateType.UPDATE).restart(true);
+		}
+	}
+
+	/**
+	 * A boot that goes on without relaunching after a replay changed what its loader already scanned, so that a replay
+	 * that never finishes cannot loop the game: this session runs without those changes, and the log says which.
+	 */
+	private static void nameUnscannedChanges(UpdateCommit commits) {
+		if (!commits.scannedChanges().isEmpty())
+			LOGGER.warn("This session runs on what the loader scanned before the replay changed it; the next launch loads: {}", String.join(", ", commits.scannedChanges()));
 	}
 
 	private void importBootstrap() {

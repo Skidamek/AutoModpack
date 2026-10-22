@@ -47,20 +47,25 @@ public final class UpdateLoopDetector {
 
 	/**
 	 * One same-fingerprint event. {@code restarts} is the 1-based count the event recorded, or the reached cap
-	 * when the decision is SUPPRESS. A null or blank fingerprint counts as the first restart.
+	 * when the decision is SUPPRESS, and {@code suppressed} counts the suppressed events so far, this one included.
+	 * A null or blank fingerprint counts as the first restart.
 	 */
 	public Outcome evaluateAndRecord(String fingerprint) throws IOException {
-		if (fingerprint == null || fingerprint.isBlank()) return new Outcome(Decision.RESTART, 1, maxAllowedRestarts);
+		if (fingerprint == null || fingerprint.isBlank()) return new Outcome(Decision.RESTART, 1, maxAllowedRestarts, 0);
 
 		long now = currentTimeMillis.getAsLong();
 		State state = load();
 		boolean matches = state != null && state.fingerprint.equals(fingerprint) && isWithinWindow(state.lastAllowedRestartMillis, now);
 
-		if (matches && state.allowedRestarts >= maxAllowedRestarts) return new Outcome(Decision.SUPPRESS, maxAllowedRestarts, maxAllowedRestarts);
+		if (matches && state.allowedRestarts >= maxAllowedRestarts) {
+			// The persisted count keeps counting suppressed events; the window still runs from the last allowed restart.
+			write(new State(fingerprint, state.allowedRestarts + 1, state.lastAllowedRestartMillis));
+			return new Outcome(Decision.SUPPRESS, maxAllowedRestarts, maxAllowedRestarts, state.allowedRestarts + 1 - maxAllowedRestarts);
+		}
 
 		int allowedRestarts = matches ? state.allowedRestarts + 1 : 1;
 		write(new State(fingerprint, allowedRestarts, now));
-		return new Outcome(Decision.RESTART, allowedRestarts, maxAllowedRestarts);
+		return new Outcome(Decision.RESTART, allowedRestarts, maxAllowedRestarts, 0);
 	}
 
 	public void clear() {
@@ -80,7 +85,7 @@ public final class UpdateLoopDetector {
 	/** The persisted suppression state, or null when none is persisted; unusable content is set aside as evidence and reads as absent. */
 	private State load() throws IOException {
 		return ConfigTools.readState(stateFile, State.class, "Restart-loop state", state -> {
-			if (!isValid(this, state)) throw new IllegalArgumentException("Restart-loop state is invalid");
+			if (!isValid(state)) throw new IllegalArgumentException("Restart-loop state is invalid");
 			return state;
 		}).orElse(null);
 	}
@@ -93,16 +98,15 @@ public final class UpdateLoopDetector {
 		}
 	}
 
-	private static boolean isValid(UpdateLoopDetector detector, State state) {
-		return state != null && state.version == STATE_VERSION && state.fingerprint != null && !state.fingerprint.isBlank() && state.allowedRestarts > 0
-				&& state.allowedRestarts <= detector.maxAllowedRestarts && state.lastAllowedRestartMillis >= 0;
+	private static boolean isValid(State state) {
+		return state != null && state.version == STATE_VERSION && state.fingerprint != null && !state.fingerprint.isBlank() && state.allowedRestarts > 0 && state.lastAllowedRestartMillis >= 0;
 	}
 
 	public enum Decision {
 		RESTART, SUPPRESS
 	}
 
-	public record Outcome(Decision decision, int restarts, int maxRestarts) {}
+	public record Outcome(Decision decision, int restarts, int maxRestarts, int suppressed) {}
 
 	private static final class State {
 		private final int version = STATE_VERSION;

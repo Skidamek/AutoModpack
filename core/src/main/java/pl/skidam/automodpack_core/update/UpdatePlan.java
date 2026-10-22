@@ -10,6 +10,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
@@ -106,6 +107,21 @@ public final class UpdatePlan {
 	public UpdatePlan withPlannedSelectedModpackId(String selectedModpackId) {
 		return new UpdatePlan(modpackId, packTarget(), operations, projectedFinalState, plannedClientConfig, selectedModpackId, restartReasons, preservations, baselineCaptures, conflicts, generatedCopies,
 				consequences);
+	}
+
+	/**
+	 * The same plan with only the given operations left - the work a partly applied transaction still owes. A conflict
+	 * or consent preservation is the proof of one game-directory operation, so it leaves with the operation it proves.
+	 */
+	UpdatePlan withOperations(List<Operation> remaining) {
+		Set<String> owedGamePaths = remaining.stream().filter(operation -> operation.root() == Root.GAME_DIR)
+				.map(operation -> LogicalPath.normalize(operation.relativePath())).collect(Collectors.toSet());
+		List<Conflict> owedConflicts = conflicts().stream().filter(conflict -> owedGamePaths.contains(conflict.sourcePath())).toList();
+		List<Preservation> owedPreservations = preservations().stream()
+				.filter(preservation -> preservation.proof() != PreservationProof.PLAYER_CONSENT || owedGamePaths.contains(LogicalPath.normalize(preservation.relativePath())))
+				.toList();
+		return new UpdatePlan(modpackId, packTarget(), remaining, projectedFinalState, plannedClientConfig, plannedSelectedModpackId, restartReasons(), owedPreservations, baselineCaptures(),
+				owedConflicts, generatedCopies(), consequences());
 	}
 
 	public Set<RestartReason> restartReasons() {

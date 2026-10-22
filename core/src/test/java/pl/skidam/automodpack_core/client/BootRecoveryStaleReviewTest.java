@@ -67,7 +67,7 @@ class BootRecoveryStaleReviewTest {
 			new ClientSelectionStore(storage.selectionFile()).remove(modpackId);
 			BootRecovery.BootDecision decision = new BootRecovery(storage).recover();
 
-			assertTrue(decision.rolledBackStuckUpdate());
+			assertTrue(decision.bootAsIs());
 			assertFalse(Files.exists(storage.transactionFile()));
 			try (Stream<Path> files = Files.list(storage.clientDirectory())) {
 				assertTrue(files.anyMatch(path -> path.getFileName().toString().startsWith("update-transaction.stuck-")));

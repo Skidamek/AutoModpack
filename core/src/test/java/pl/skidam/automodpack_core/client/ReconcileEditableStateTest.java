@@ -27,13 +27,14 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
+import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
-/** The tombstone semantics of editable files: removal survives until the pack replaces the content, then it comes back. */
+/** Reconciliation after an apply: an editable file's removal or edit is the player's, a pack-owned file's drift is reset. */
 class ReconcileEditableStateTest {
 	@TempDir
 	Path temporaryDirectory;
@@ -90,6 +91,29 @@ class ReconcileEditableStateTest {
 		assertEquals(List.of(EDITABLE_PATH), storage.readOverlayState(PACK_ID).deletedPaths);
 	}
 
+	@Test
+	void aPackOwnedFileAModRewroteAfterItsUpdateIsResetWhileAnEditableOneIsKept() throws Exception {
+		// The in-game apply landed both files; the running game then rewrote them on its way out.
+		ClientStorage storage = storage();
+		ModpackJsons.ModpackContentFields packTarget = install(storage, false);
+		byte[] rewrite = "rewritten-by-mod".getBytes(StandardCharsets.UTF_8);
+		write(storage.gamePath(EDITABLE_PATH), rewrite);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			builder(storage).reconcileEditableState(cache, ClientProjectionView.observe(storage), packTarget);
+		}
+		assertTrue(Arrays.equals("server-default".getBytes(StandardCharsets.UTF_8), Files.readAllBytes(storage.gamePath(EDITABLE_PATH))));
+		assertTrue(Files.isRegularFile(storage.objectFile(HashUtils.sha1(rewrite))), "the rewrite is kept in the object store for history");
+
+		ClientStorage editable = TestDataRoot.open(temporaryDirectory.resolve("editable-game"), temporaryDirectory.resolve("editable-data"));
+		ModpackJsons.ModpackContentFields editableTarget = install(editable, true);
+		write(editable.gamePath(EDITABLE_PATH), rewrite);
+		try (FileCache cache = FileCache.open(editable.fileCacheDirectory())) {
+			builder(editable).reconcileEditableState(cache, ClientProjectionView.observe(editable), editableTarget);
+		}
+		assertTrue(Arrays.equals(rewrite, Files.readAllBytes(editable.gamePath(EDITABLE_PATH))));
+		assertTrue(Arrays.equals(rewrite, Files.readAllBytes(editable.overlayFile(PACK_ID, EDITABLE_PATH))));
+	}
+
 	private ClientStorage storage() throws Exception {
 		ClientStorage storage = TestDataRoot.open(temporaryDirectory.resolve("game"), temporaryDirectory.resolve("data"));
 		Files.createDirectories(storage.modsDirectory());
@@ -104,7 +128,12 @@ class ReconcileEditableStateTest {
 	}
 
 	private static ModpackJsons.ModpackContentFields install(ClientStorage storage) throws Exception {
+		return install(storage, true);
+	}
+
+	private static ModpackJsons.ModpackContentFields install(ClientStorage storage, boolean editable) throws Exception {
 		byte[] packBytes = "server-default".getBytes(StandardCharsets.UTF_8);
+		ClientObjectStore.storeObject(storage, HashUtils.sha1(packBytes), packBytes);
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = PACK_ID;
 		fields.modpackName = "Test";
@@ -112,7 +141,7 @@ class ReconcileEditableStateTest {
 		group.required = true;
 		group.defaultSelected = true;
 		Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
-		files.put(EDITABLE_PATH, new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(packBytes.length), "config", true, HashUtils.sha1(packBytes), "0"));
+		files.put(EDITABLE_PATH, new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(packBytes.length), "config", editable, HashUtils.sha1(packBytes), "0"));
 		group.files = files;
 		fields.categories = Map.of("General", Map.of("main", group));
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
@@ -120,12 +149,16 @@ class ReconcileEditableStateTest {
 		SelectedModpackTarget target = SelectedModpackTarget.prepare(document, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
 		new ClientSelectionStore(storage.selectionFile()).put(document.manifest().modpackId(), target.selection().intent());
 		storage.writeActiveState(document);
-		return flatTarget(HashUtils.sha1(packBytes));
+		return flatTarget(HashUtils.sha1(packBytes), editable);
 	}
 
 	private static ModpackJsons.ModpackContentFields flatTarget(String sha1) {
+		return flatTarget(sha1, true);
+	}
+
+	private static ModpackJsons.ModpackContentFields flatTarget(String sha1, boolean editable) {
 		ModpackJsons.ModpackContentFields target = new ModpackJsons.ModpackContentFields(Set.of(
-				new ModpackJsons.ModpackContentFields.ModpackContentItem(EDITABLE_PATH, 14, "config", true, sha1, "0")));
+				new ModpackJsons.ModpackContentFields.ModpackContentItem(EDITABLE_PATH, 14, "config", editable, sha1, "0")));
 		target.modpackId = PACK_ID;
 		target.contentToken = "1".repeat(40);
 		return target;

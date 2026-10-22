@@ -88,6 +88,21 @@ class UpdateLoopDetectorTest {
 		assertEquals(UpdateLoopDetector.Decision.SUPPRESS, new UpdateLoopDetector(stateFile, now::get, 3, null).evaluateAndRecord("stuck-transaction").decision());
 	}
 
+	@Test
+	void suppressedEventsKeepCountingWithoutExtendingTheWindow() throws IOException {
+		Path stateFile = tempDir.resolve("restart-state.json");
+		AtomicLong now = new AtomicLong(1_000);
+		detector(stateFile, now).evaluateAndRecord("same-state");
+		detector(stateFile, now).evaluateAndRecord("same-state");
+		now.addAndGet(Duration.ofMinutes(2).toMillis());
+		assertEquals(1, detector(stateFile, now).evaluateAndRecord("same-state").suppressed());
+		assertEquals(2, detector(stateFile, now).evaluateAndRecord("same-state").suppressed());
+		now.addAndGet(Duration.ofMinutes(2).toMillis());
+		UpdateLoopDetector.Outcome afterWindow = detector(stateFile, now).evaluateAndRecord("same-state");
+		assertEquals(UpdateLoopDetector.Decision.RESTART, afterWindow.decision());
+		assertEquals(0, afterWindow.suppressed());
+	}
+
 	private UpdateLoopDetector detector(Path stateFile, AtomicLong now) {
 		return new UpdateLoopDetector(stateFile, now::get);
 	}

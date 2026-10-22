@@ -28,7 +28,7 @@ class BootRecoveryTest {
 		assertNotNull(decision.clientConfig());
 		assertTrue(storage.selectedModpackId().isBlank());
 		assertFalse(decision.trustedBootstrapApply());
-		assertFalse(decision.rolledBackStuckUpdate());
+		assertFalse(decision.bootAsIs());
 		assertFalse(Files.exists(guardFile));
 	}
 }

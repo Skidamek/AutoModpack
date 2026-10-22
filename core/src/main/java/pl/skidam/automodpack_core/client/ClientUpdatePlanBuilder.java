@@ -159,7 +159,7 @@ final class ClientUpdatePlanBuilder {
 		String expectedSelectedModpackId = storage.selectedModpackId();
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, input.target(), files, forceCopyServices, targetMods, standardMods,
-				previousCopies, nestedCandidates, selection, plannedConfig, input.consentedLocalModFiles())).withPlannedSelectedModpackId(input.target().modpackId);
+				previousCopies, nestedCandidates, selection, plannedConfig, input.consentedLocalModFiles(), projection.owed())).withPlannedSelectedModpackId(input.target().modpackId);
 		return new PreparedPlan(withSwitchConsequences(plan, input.target(), logicalConfig.syncVersions), files, targetOverlay.digest(),
 				new PlannedAgainst(expectedClientConfig, expectedSelectedModpackId, installed == null ? null : installed.ownershipLedger));
 	}
@@ -202,7 +202,8 @@ final class ClientUpdatePlanBuilder {
 			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null, projection,
 					generatedCopies == null ? List.of() : generatedCopies.nestedCopies(), cache,
 					Map.of(installed.modpackId, storage.overlaySnapshot(installed.modpackId, cache)));
-			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, availablePreInstall.priorGameDir(), files, availablePreInstall.objectHashes(), generatedCopies, plannedConfig))
+			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, availablePreInstall.priorGameDir(), files, availablePreInstall.objectHashes(), generatedCopies, plannedConfig,
+					projection.owed()))
 					.withPlannedSelectedModpackId(plannedSelectedModpackId);
 			// A removal plans the installed generation away, so the projection it planned against is the one it carries.
 			return new RemovalPreparation(plan, installed, availablePreInstall.priorGameDir(), expectedPriorIntent, currentConfig, plannedConfig, files,

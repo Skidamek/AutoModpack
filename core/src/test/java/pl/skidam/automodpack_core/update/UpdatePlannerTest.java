@@ -828,6 +828,39 @@ class UpdatePlannerTest {
 		assertTrue(withoutLive.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR));
 	}
 
+	@Test
+	void everyPlanOnTopOfAnOwedOneInheritsTheDeletesOnlyItsJournalStillNames() {
+		// The owed action removed a duplicate of a pack mod, but a process held it: no manifest or ledger names the jar, only the journal.
+		String kept = "config/kept.toml";
+		String duplicate = "mods/duplicate.jar";
+		String foreignOverlay = "config/other-pack.toml";
+		ModpackJsons.ModpackContentFields previous = manifest(Map.of(kept, item(kept, TARGET_HASH, 4, "config")), ledger(entry(kept, TARGET_HASH, 4, OwnershipLedger.Status.PRESENT)));
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(kept, item(kept, TARGET_HASH, 4, "config")), ledger(entry(kept, TARGET_HASH, 4, OwnershipLedger.Status.PRESENT)));
+		UpdatePlanner.Owed owed = new UpdatePlanner.Owed(target.modpackId, List.of(new Operation(Root.GAME_DIR, duplicate, OperationType.DELETE, null, -1, OTHER_HASH)));
+		UpdatePlanner.Owed foreign = new UpdatePlanner.Owed("other99", List.of(new Operation(Root.OVERLAY, foreignOverlay, OperationType.DELETE, null, -1, OTHER_HASH)));
+		Map<FileKey, FileState> files = new LinkedHashMap<>(Map.of(new FileKey(Root.PROJECTION, kept), new FileState(TARGET_HASH, 4, true),
+				new FileKey(Root.GAME_DIR, kept), new FileState(TARGET_HASH, 4, true), new FileKey(Root.OVERLAY, foreignOverlay), new FileState(OTHER_HASH, 4, true)));
+
+		files.put(new FileKey(Root.GAME_DIR, duplicate), new FileState(OTHER_HASH, 4, true));
+		UpdatePlan update = UpdatePlanner.plan(stackedInput(previous, target, files, owed));
+		UpdatePlan removal = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(previous, Map.of(), files, Set.of(), null, new ClientConfigJsons.ClientConfigFieldsV3(), owed));
+		UpdatePlan otherPack = UpdatePlanner.plan(stackedInput(previous, target, files, foreign));
+		files.put(new FileKey(Root.GAME_DIR, duplicate), new FileState(TARGET_HASH, 4, true));
+		UpdatePlan playerReplacedIt = UpdatePlanner.plan(stackedInput(previous, target, files, owed));
+
+		for (UpdatePlan plan : List.of(update, removal))
+			assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(duplicate)
+					&& operation.operation() == OperationType.DELETE && OTHER_HASH.equals(operation.expectedExistingHash())));
+		assertTrue(otherPack.operations().stream().noneMatch(operation -> operation.relativePath().equals(foreignOverlay)), "an overlay path means nothing to another pack");
+		assertTrue(playerReplacedIt.operations().stream().noneMatch(operation -> operation.relativePath().equals(duplicate)));
+	}
+
+	private static UpdatePlanner.Input stackedInput(ModpackJsons.ModpackContentFields previous, ModpackJsons.ModpackContentFields target, Map<FileKey, FileState> files,
+			UpdatePlanner.Owed owed) {
+		return new UpdatePlanner.Input(previous, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), new UpdatePlanner.SelectionContext(target.modpackId, previous),
+				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of(), owed);
+	}
+
 	private static UpdatePlanner.Input input(ModpackJsons.ModpackContentFields target, Map<FileKey, FileState> files) {
 		return new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3());
 	}

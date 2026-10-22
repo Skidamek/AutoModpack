@@ -69,12 +69,26 @@ final class ProjectionPublication {
 		Path active = storage.activeDirectory();
 		Path incoming = storage.incomingDirectory();
 		Path backup = storage.backupDirectory();
+		boolean movedAside = false;
 		if (Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
 			FileTrees.delete(active);
 		} else if (Files.exists(active, LinkOption.NOFOLLOW_LINKS)) {
 			FileTrees.moveRecoverableDirectory(active, backup);
+			movedAside = true;
 		}
-		FileTrees.moveRecoverableDirectory(incoming, active);
+		try {
+			FileTrees.moveRecoverableDirectory(incoming, active);
+		} catch (IOException e) {
+			// A held incoming tree must not leave the game without a projection until the next attempt.
+			if (movedAside && !Files.exists(active, LinkOption.NOFOLLOW_LINKS)) {
+				try {
+					FileTrees.moveRecoverableDirectory(backup, active);
+				} catch (IOException restore) {
+					e.addSuppressed(restore);
+				}
+			}
+			throw e;
+		}
 		seedRecords(transaction);
 	}
 

@@ -281,7 +281,7 @@ class UpdateCommitTest {
 	}
 
 	@Test
-	void abandonRestoresBackupWhenFinalizeHasNotCommitted() throws Exception {
+	void retiringAJournalMidSwapPutsTheOnlyProjectionBack() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
 		byte[] oldBytes = "old-projection".getBytes(StandardCharsets.UTF_8);
 		String oldHash = store(storage, oldBytes);
@@ -296,18 +296,15 @@ class UpdateCommitTest {
 		UpdatePlan newPlan = UpdateTestFixtures.plan(newTarget, clientConfig(newTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, newHash, newBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
-		UpdateTransaction transaction = UpdateTestFixtures.createTransaction(storage, newPlan, newTarget);
-		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
+		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, newPlan, newTarget));
+		// The swap moved active aside and stopped before incoming moved in.
 		Files.move(storage.activeDirectory(), storage.backupDirectory());
-		Files.createDirectories(storage.activeDirectory().resolve("mods"));
-		Files.writeString(storage.activePath("mods/partial.jar"), "partial", StandardCharsets.UTF_8);
-		Files.createDirectories(storage.incomingDirectory());
-		Files.writeString(storage.incomingDirectory().resolve("stale.txt"), "stale", StandardCharsets.UTF_8);
+		Files.createDirectories(storage.incomingDirectory().resolve("mods"));
+		Files.write(storage.incomingDirectory().resolve("mods/new.jar"), newBytes);
 
-		Path stuckJournal = new PublicationRollback(storage).abandonStuckPublication(transaction);
+		Path stuckJournal = PublicationSweep.retireJournal(storage);
 
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/old.jar"), oldBytes.length, oldHash));
-		assertFalse(Files.exists(storage.activePath("mods/partial.jar")));
 		assertFalse(Files.exists(storage.backupDirectory()));
 		assertFalse(Files.exists(storage.incomingDirectory()));
 		assertFalse(Files.exists(storage.transactionFile()));
@@ -316,7 +313,7 @@ class UpdateCommitTest {
 	}
 
 	@Test
-	void abandonKeepsActiveWhenFinalizeAlreadyCommitted() throws Exception {
+	void retiringAJournalAfterItsSwapKeepsTheSwappedProjection() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
 		byte[] oldBytes = "old-projection".getBytes(StandardCharsets.UTF_8);
 		String oldHash = store(storage, oldBytes);
@@ -331,19 +328,16 @@ class UpdateCommitTest {
 		UpdatePlan newPlan = UpdateTestFixtures.plan(newTarget, clientConfig(newTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, newHash, newBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
-		UpdateTransaction transaction = UpdateTestFixtures.createTransaction(storage, newPlan, newTarget);
-		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
+		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, newPlan, newTarget));
 		Files.move(storage.activeDirectory(), storage.backupDirectory());
 		Files.createDirectories(storage.activePath("mods"));
 		Files.write(storage.activePath("mods/new.jar"), newBytes);
-		storage.writeActiveState(newTarget.document());
 
-		new PublicationRollback(storage).abandonStuckPublication(transaction);
+		PublicationSweep.retireJournal(storage);
 
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/new.jar"), newBytes.length, newHash));
 		assertFalse(Files.exists(storage.backupDirectory()));
 		assertFalse(Files.exists(storage.transactionFile()));
-		assertEquals(newTarget.packTarget().contentToken(), storage.readActiveState().contentToken);
 	}
 
 	@Test
@@ -356,7 +350,7 @@ class UpdateCommitTest {
 
 		// Boot recovery with no usable journal sweeps them: left in place, the directories read as a publication
 		// already started and the next update's live operations are silently skipped over a successful verdict.
-		PublicationRollback.sweepUnpinnedDirectories(storage);
+		PublicationSweep.sweepUnpinnedDirectories(storage);
 		assertFalse(Files.exists(storage.incomingDirectory()));
 		assertFalse(Files.exists(storage.backupDirectory()));
 

@@ -31,7 +31,7 @@ import pl.skidam.automodpack_core.utils.*;
 public class Preload {
 	private ClientStorage storage;
 	private boolean trustedBootstrapApply;
-	private boolean rolledBackStuckUpdate;
+	private boolean bootAsIs;
 
 	public Preload(LoaderManagerService loaderManager, ModpackLoaderService modpackLoader) {
 		try {
@@ -47,7 +47,7 @@ public class Preload {
 				BootRecovery.BootDecision decision = new BootRecovery(storage).recover();
 				clientConfig = decision.clientConfig();
 				trustedBootstrapApply = decision.trustedBootstrapApply();
-				rolledBackStuckUpdate = decision.rolledBackStuckUpdate();
+				bootAsIs = decision.bootAsIs();
 			} else {
 				serverConfig = ConfigUtils.loadOrCreateServerConfig();
 			}
@@ -74,7 +74,7 @@ public class Preload {
 			SelfUpdater.update();
 			return;
 		}
-		new ClientLaunch(storage, trustedBootstrapApply, rolledBackStuckUpdate).run();
+		new ClientLaunch(storage, trustedBootstrapApply, bootAsIs).run();
 	}
 
 	private void initializeConstants(LoaderManagerService loaderManager, ModpackLoaderService modpackLoader) {

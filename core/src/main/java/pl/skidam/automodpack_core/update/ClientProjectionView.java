@@ -61,7 +61,7 @@ public final class ClientProjectionView {
 
 	/** Returns the target represented by the published projection. */
 	public ModpackJsons.ModpackContentFields target() throws IOException {
-		if (publicationStarted(storage, pending)) {
+		if (mutationStarted(storage, pending)) {
 			ModpackJsons.ModpackContentFields staged = stagedTarget(pending);
 			if (staged != null) return staged;
 		}
@@ -117,7 +117,7 @@ public final class ClientProjectionView {
 	/** Captures the projection observation for one planning pass. */
 	public Snapshot snapshot(FileCache cache) throws IOException {
 		Objects.requireNonNull(cache, "cache");
-		if (publicationStarted(storage, pending)) return stagedSnapshot(pending);
+		if (mutationStarted(storage, pending)) return stagedSnapshot(pending);
 		if (liveSnapshotMemo != null) return liveSnapshotMemo;
 		liveSnapshotMemo = liveSnapshot(cache, isProjectionTransaction(pending) ? pending : null);
 		return liveSnapshotMemo;
@@ -138,7 +138,10 @@ public final class ClientProjectionView {
 		return readLiveFiles(storage, cache, committedTarget(storage));
 	}
 
-	/** Whether the journal records that its apply began writing: every apply persists PREPARING before its first write. */
+	/**
+	 * Whether the pending transaction may already have written something: every apply persists PREPARING before its first
+	 * write and never returns to PLANNED, so from here on the pending target is what the instance converges to.
+	 */
 	public static boolean mutationStarted(ClientStorage storage, UpdateTransaction transaction) {
 		UpdateTransaction.Phase phase = transaction == null ? null : transaction.phase;
 		if (phase == UpdateTransaction.Phase.PREPARING || phase == UpdateTransaction.Phase.PROJECTED || phase == UpdateTransaction.Phase.SWAPPING
@@ -285,6 +288,12 @@ public final class ClientProjectionView {
 
 		public Map<String, UpdatePlan.FileState> files() {
 			return files;
+		}
+
+		/** What the pending transaction owes once it started writing: until its projection publishes, its live operations may not all have landed. */
+		public UpdatePlanner.Owed owed() {
+			if (pending == null || !mutationStarted(storage, pending)) return UpdatePlanner.Owed.NOTHING;
+			return new UpdatePlanner.Owed(pending.plan().modpackId(), publicationStarted(storage, pending) ? List.of() : pending.plan().operations());
 		}
 
 		/** Returns whether the observed live state is one of the states already owned by a pending transaction. */

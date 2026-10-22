@@ -1,10 +1,13 @@
 package pl.skidam.automodpack_core.client;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import pl.skidam.automodpack_core.screen.PreviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.RestartDemand;
 import pl.skidam.automodpack_core.update.RestartPolicy;
+import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 
 /**
@@ -58,6 +61,11 @@ final class LifecycleFlow {
 			// Navigation happens only when nothing supersedes it: a restart demand takes the screen.
 			finishedWithoutRestart = removed != null && demand == RestartDemand.NONE;
 			afterApply(result, demand);
+		} catch (UpdateDeferredException e) {
+			// The game keeps running on what landed; the held files finish after it exits, so the restart screen asks for that exit.
+			LOGGER.warn("Lifecycle transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
+			UpdateRecovery.handoffToHelper();
+			new ReLauncher(UpdateType.UPDATE, changelogs).restart(false);
 		} catch (Exception e) {
 			ModpackUpdater.showUpdateFailure(e);
 		} finally {

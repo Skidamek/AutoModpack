@@ -19,6 +19,7 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.ReviewedUpdatePlan;
 import pl.skidam.automodpack_core.update.UpdateCommit;
+import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
@@ -84,15 +85,9 @@ final class RemovalAttempt implements UpdateAttempt {
 		UpdatePreview applied = removalPreview(prepared, remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION);
 		UpdateCommit.Outcome outcome = new UpdateCommit(storage).run(new UpdateCommit.Fresh(() -> UpdateCommit.Built.of(transactionOf(prepared, kind, storage.overlayDigest(prepared.installed().modpackId))), null));
 		if (outcome instanceof UpdateCommit.ReplanRequired replan) throw new UpdateReplanRequiredException(replan.blockedPath(), replan.message());
+		if (outcome instanceof UpdateCommit.Deferred deferred) throw new UpdateDeferredException(deferred.transaction().transactionId, deferred.blockedPath(), deferred.message());
 		if (!(outcome instanceof UpdateCommit.Applied)) throw new IOException(remove ? "Modpack removal did not complete" : "Modpack deactivation did not complete");
 		review.complete();
-		if (remove) {
-			try {
-				new ClientGenerationStore(storage).forgetModpack(prepared.installed().modpackId);
-			} catch (Exception e) {
-				LOGGER.warn("Modpack removal committed, but retained client state cleanup was deferred and can be retried", e);
-			}
-		}
 		changelogs.replaceWith(applied);
 		ApplyResult applyResult = RestartDecision.applyResult(prepared.plan());
 		changelogs.setRestartReasons(applyResult.reasonIds());

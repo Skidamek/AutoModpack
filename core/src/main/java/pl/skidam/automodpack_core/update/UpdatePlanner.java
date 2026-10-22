@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
@@ -50,7 +51,8 @@ public final class UpdatePlanner {
 			List<NestedCandidate> nestedCandidates,
 			SelectionContext selection,
 			ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig,
-			Map<String, FileState> consentedLocalModFiles) {
+			Map<String, FileState> consentedLocalModFiles,
+			Owed owed) {
 		public Input {
 			if (installedManifest != null && consentedLocalModFiles != null && !consentedLocalModFiles.isEmpty())
 				throw new IllegalArgumentException("First-install consent cannot be used after a modpack is installed");
@@ -64,6 +66,15 @@ public final class UpdatePlanner {
 			for (var entry : (consentedLocalModFiles == null ? Map.<String, FileState>of() : consentedLocalModFiles).entrySet())
 				normalizedConsent.put(LogicalPath.normalize(entry.getKey()), entry.getValue());
 			consentedLocalModFiles = Collections.unmodifiableMap(normalizedConsent);
+			owed = owed == null ? Owed.NOTHING : owed;
+		}
+
+		public Input(ModpackJsons.ModpackContentFields installedManifest, ModpackJsons.ModpackContentFields targetManifest, Map<FileKey, FileState> files,
+				Set<String> forceCopyServicePaths, List<ModInfo> targetMods, List<ModInfo> standardMods,
+				List<NestedCopy> previousNestedCopies, List<NestedCandidate> nestedCandidates, SelectionContext selection,
+				ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig, Map<String, FileState> consentedLocalModFiles) {
+			this(installedManifest, targetManifest, files, forceCopyServicePaths, targetMods, standardMods, previousNestedCopies, nestedCandidates, selection,
+					plannedClientConfig, consentedLocalModFiles, Owed.NOTHING);
 		}
 
 		public Input(ModpackJsons.ModpackContentFields installedManifest, ModpackJsons.ModpackContentFields targetManifest, Map<FileKey, FileState> files,
@@ -110,9 +121,28 @@ public final class UpdatePlanner {
 		}
 	}
 
+	/**
+	 * What a pending transaction that started writing still owes, which every plan replacing it is built on top of: the
+	 * landed part of its work is already on disk and observed as such, so only its operations are left to carry over.
+	 */
+	public record Owed(String modpackId, List<Operation> operations) {
+		public static final Owed NOTHING = new Owed(null, List.of());
+
+		public Owed {
+			operations = List.copyOf(operations);
+		}
+	}
+
 	public record RemovalInput(ModpackJsons.ModpackContentFields installedManifest, Map<String, InstanceTree.TrackedFile> priorGameDir,
-			Map<FileKey, FileState> files, Set<String> availableBaselineObjects, GeneratedCopyState generatedCopies, ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig) {
+			Map<FileKey, FileState> files, Set<String> availableBaselineObjects, GeneratedCopyState generatedCopies, ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig,
+			Owed owed) {
+		public RemovalInput(ModpackJsons.ModpackContentFields installedManifest, Map<String, InstanceTree.TrackedFile> priorGameDir, Map<FileKey, FileState> files,
+				Set<String> availableBaselineObjects, GeneratedCopyState generatedCopies, ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig) {
+			this(installedManifest, priorGameDir, files, availableBaselineObjects, generatedCopies, plannedClientConfig, Owed.NOTHING);
+		}
+
 		public RemovalInput {
+			owed = owed == null ? Owed.NOTHING : owed;
 			priorGameDir = Map.copyOf(priorGameDir == null ? Map.of() : priorGameDir);
 			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
 			Set<String> normalizedObjects = new LinkedHashSet<>();
@@ -179,6 +209,7 @@ public final class UpdatePlanner {
 			restoreOwnedLiveFile(key, state, prior, input.availableBaselineObjects(), true, session);
 		}
 
+		inheritOwed(input.owed(), installed.modpackId, Set.of(), path -> false, session);
 		return session.finalState(installed.modpackId, packTarget, input.plannedClientConfig(), input.files(), installed, ledger, true, priorGameDir, List.of());
 	}
 
@@ -215,8 +246,29 @@ public final class UpdatePlanner {
 		planDuplicates(target.modpackId, input.targetMods(), input.standardMods(), liveCopyPaths, installedLedger, session, listedPins);
 		List<NestedCopy> generatedCopies = survivingNestedCandidates(input.nestedCandidates(), session).stream().map(NestedCandidate::copy).sorted(Comparator.comparing(NestedCopy::relativePath)).toList();
 		planNestedCopies(input.previousNestedCopies(), generatedCopies, session);
+		inheritOwed(input.owed(), target.modpackId, targetItems.keySet(), path -> pinnedLiveMod(listedPins, standardModsByPath, path), session);
 		planBaselineCaptures(input.files(), session);
 		return session.finalState(target.modpackId, packTarget, input.plannedClientConfig(), input.files(), target, ledger, false, null, generatedCopies);
+	}
+
+	/**
+	 * The one step every planner entry ends its own decisions with: an owed delete of a file this plan neither ships nor
+	 * already decides carries over while the path still holds the bytes it was planned to remove, so no stacked action
+	 * leaves it behind. An owed install needs no carrying: the plan decides its path from the target either way. Overlay
+	 * paths only mean something within the modpack they were planned for.
+	 */
+	private static void inheritOwed(Owed owed, String modpackId, Set<String> shipped, Predicate<String> pinned, PlanningSession session) {
+		for (Operation operation : owed.operations()) {
+			if (operation.operation() != OperationType.DELETE || operation.expectedExistingHash() == null || operation.root() == Root.PROJECTION) continue;
+			if (operation.root() == Root.OVERLAY && !modpackId.equals(owed.modpackId())) continue;
+			FileKey key = new FileKey(operation.root(), LogicalPath.normalize(operation.relativePath()));
+			if (shipped.contains(key.relativePath()) || session.hasOperation(key)) continue;
+			FileState state = session.projected(key);
+			if (state == null || !state.regularFile() || !hashesEqual(state.sha1(), operation.expectedExistingHash())) continue;
+			if (key.root() == Root.GAME_DIR && pinned.test(key.relativePath())) continue;
+			session.delete(key, state.sha1());
+			noteStandardModsMutation(key, true, session);
+		}
 	}
 
 	/** A tombstone records the player's removal of a file the pack ships as editable; for any other path it is spent. */
