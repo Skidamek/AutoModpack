@@ -9,8 +9,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
@@ -25,7 +23,6 @@ import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
-import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
@@ -221,13 +218,8 @@ final class UpdateSession implements UpdateAttempt {
 		UpdatePlan plan = new UpdateCommit(storage).commit(() -> commitPlanObjects(prepared()), cause -> commitPlanObjects(replanFromMutableInputs(prepared(), cause)));
 		review().complete();
 		this.appliedPlan = plan;
-		try {
-			cleanupOverlayState(plan, target.manifest().modpackId());
-		} catch (IOException e) {
-			LOGGER.warn("Modpack update committed, but stale overlay tombstones could not be cleaned", e);
-		}
-		// The transaction is committed and its journal retired, so these are bookkeeping tails like the overlay
-		// cleanup above: a failure must warn, not invert a durable commit into a reported failure - that would
+		// The transaction is committed and its journal retired, so these are bookkeeping tails: a failure must warn,
+		// not invert a durable commit into a reported failure - that would
 		// skip the restart ask for a generation that did land and show a failure screen over applied bytes.
 		if (connectionInfo != null && connectionInfo.isComplete()) {
 			try {
@@ -309,14 +301,6 @@ final class UpdateSession implements UpdateAttempt {
 	private void ensureSelectedModpackUnchanged(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
 		if (!Objects.equals(storage.selectedModpackId(), prepared.plannedAgainst().selectedModpackId()))
 			throw new UpdateReplanRequiredException(null, "Selected modpack changed while the update was being applied");
-	}
-
-	private void cleanupOverlayState(UpdatePlan plan, String modpackId) throws IOException {
-		Set<String> deletedPaths = new TreeSet<>(storage.readOverlayState(modpackId).deletedPaths);
-		for (UpdatePlan.Operation operation : plan.operations())
-			if (operation.root() == UpdatePlan.Root.OVERLAY && operation.operation() == UpdatePlan.OperationType.DELETE)
-				deletedPaths.remove(LogicalPath.normalize(operation.relativePath()));
-		storage.writeOverlayState(modpackId, deletedPaths);
 	}
 
 	private ClientUpdatePlanBuilder.Input planInput(boolean prepareObjects) {

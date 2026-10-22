@@ -388,8 +388,12 @@ public final class UpdateCommit {
 		beforeFirstMutation(transaction, publicationStarted);
 		capturePinnedBytes(transaction);
 		snapshotBefore(transaction);
-		if (!liveAlreadyApplied) applyOperations(transaction, current);
+		if (!liveAlreadyApplied) {
+			persistPhase(transaction, UpdateTransaction.Phase.PREPARING);
+			applyOperations(transaction, current);
+		}
 		current.set(null);
+		applyOverlayTombstones(transaction);
 		if (!publicationStarted) {
 			verifyManagedFinalState(transaction);
 			afterLiveOperations(transaction);
@@ -425,10 +429,10 @@ public final class UpdateCommit {
 		boolean atDestination = operation.operation() == OperationType.DELETE
 				? snapshot == null
 				: snapshot != null && FileIntegrity.observeNamed(live, operation.expectedSize(), operation.expectedObjectHash(), fileCache);
-		boolean atBaseline = atBaseline(operation, snapshot, live);
-		if (atDestination && !atBaseline) return InFlight.DESTINATION;
-		if (atBaseline) return InFlight.BASELINE;
-		return InFlight.DRIFT;
+		// The destination wins a tie: an operation whose target already holds its after-state is complete, whatever its
+		// baseline was. Its before-bytes are either pinned by the attempt that moved them or are the destination object.
+		if (atDestination) return InFlight.DESTINATION;
+		return atBaseline(operation, snapshot, live) ? InFlight.BASELINE : InFlight.DRIFT;
 	}
 
 	private static FileCache.StatSnapshot snapshotIfPresent(Path live) throws IOException {
@@ -626,16 +630,31 @@ public final class UpdateCommit {
 		if (finalized.selection() || finalized.configuration()) throw new UpdateReplanRequiredException(null, "Mutable client configuration changed before update finalization");
 	}
 
-	/** The overlay half of the recovery question: the live overlay tombstones must still equal the plan's projected overlay rows. */
+	/**
+	 * The overlay half of the recovery question: the physical overlay files must still be exactly the plan's present
+	 * overlay rows. Tombstones are not compared - they are this transaction's own step, re-applied by every replay.
+	 */
 	private boolean overlayStateMatches(UpdateTransaction transaction) throws IOException {
 		Map<String, UpdatePlan.FileState> expected = new TreeMap<>();
-		for (ProjectedFile projected : transaction.plan().projectedFinalState()) {
-			if (projected.root() != Root.OVERLAY) continue;
-			expected.put(UpdateTransactionValidator.normalizeOperationPath(projected.relativePath()), projected.present()
-					? new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true)
-					: new UpdatePlan.FileState(null, -1, false));
-		}
-		return expected.equals(ClientOverlaySnapshot.capture(storage, transaction.plan().modpackId(), fileCache).files());
+		for (ProjectedFile projected : transaction.plan().projectedFinalState())
+			if (projected.root() == Root.OVERLAY && projected.present())
+				expected.put(UpdateTransactionValidator.normalizeOperationPath(projected.relativePath()), new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true));
+		Map<String, UpdatePlan.FileState> physical = new TreeMap<>();
+		ClientOverlaySnapshot.capture(storage, transaction.plan().modpackId(), fileCache).files().forEach((path, state) -> {
+			if (state.regularFile()) physical.put(path, state);
+		});
+		return expected.equals(physical);
+	}
+
+	/**
+	 * The tombstone step: a modpack update leaves behind only the tombstones its target still ships as editable,
+	 * written the same way by the live apply and every replay, rc journals included.
+	 */
+	private void applyOverlayTombstones(UpdateTransaction transaction) throws IOException {
+		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE) return;
+		String modpackId = transaction.plan().modpackId();
+		ModpackJsons.ModpackContentFields target = validator.resolvedTarget(transaction, validator.targetDocument(transaction)).flatTarget();
+		storage.writeOverlayState(modpackId, UpdatePlanner.retainedTombstones(storage.readOverlayState(modpackId).deletedPaths, target));
 	}
 
 	private Path resolve(Operation operation, UpdateTransaction transaction) throws IOException {

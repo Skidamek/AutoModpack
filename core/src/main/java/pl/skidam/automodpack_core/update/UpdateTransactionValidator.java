@@ -54,6 +54,7 @@ final class UpdateTransactionValidator {
 	void validate(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs, FileCache fileCache) throws IOException {
 		try {
 			validateUnchecked(transaction, selectedTarget, verifyMutableInputs, fileCache);
+			requireDeleteBaselines(transaction);
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
@@ -155,8 +156,18 @@ final class UpdateTransactionValidator {
 	 * editable overlays) drifted since the transaction was planned. Evaluated once per stage boundary; the caller owns the throw.
 	 */
 	MutableInputDrift mutableInputDrift(UpdateTransaction transaction, FileCache fileCache) throws IOException {
-		return new MutableInputDrift(configurationChanged(transaction), selectionChanged(transaction),
-				!Objects.equals(transaction.overlayDigest, storage.overlayDigest(transaction.plan().modpackId(), fileCache)));
+		return new MutableInputDrift(configurationChanged(transaction), selectionChanged(transaction), overlayChanged(transaction, fileCache));
+	}
+
+	/**
+	 * The overlay digest is the planned-against snapshot only until the transaction's own overlay steps may have run:
+	 * once its first write may have happened, the overlay operations' baseline-or-destination classification and the
+	 * exact final-state check own the overlay, and a digest compare would call this transaction's own progress drift.
+	 * A journal deferred or sent back for a replan before that write is still only a plan.
+	 */
+	private boolean overlayChanged(UpdateTransaction transaction, FileCache fileCache) throws IOException {
+		if (ClientProjectionView.mutationStarted(storage, transaction)) return false;
+		return !Objects.equals(transaction.overlayDigest, storage.overlayDigest(transaction.plan().modpackId(), fileCache));
 	}
 
 	private boolean configurationChanged(UpdateTransaction transaction) throws IOException {
@@ -494,6 +505,17 @@ final class UpdateTransactionValidator {
 		Path source = storage.objectFile(operation.expectedObjectHash()).normalize();
 		if (!source.startsWith(storage.objectsDirectory()) || !FileIntegrity.matchesNamed(source, operation.expectedSize(), operation.expectedObjectHash(), fileCache))
 			throw new IOException("Required CAS object is missing or corrupt: " + operation.expectedObjectHash());
+	}
+
+	/**
+	 * A fresh plan names the bytes every physical delete removes; a delete with no baseline has nothing to remove. Only
+	 * the fresh door asks: journals from before this rule (rc.4 and rc.5 planned tombstone deletes) still replay, and the
+	 * destination-wins rule completes them.
+	 */
+	private static void requireDeleteBaselines(UpdateTransaction transaction) throws IOException {
+		for (Operation operation : transaction.plan().operations())
+			if (operation.operation() == OperationType.DELETE && operation.root() != Root.PROJECTION && operation.expectedExistingHash() == null)
+				throw new IOException("Delete operation has no baseline: " + operation.root() + " " + operation.relativePath());
 	}
 
 	private static void validateDelete(Operation operation, ProjectedFile projected) throws IOException {

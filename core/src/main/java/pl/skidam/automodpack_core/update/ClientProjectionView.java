@@ -138,6 +138,16 @@ public final class ClientProjectionView {
 		return readLiveFiles(storage, cache, committedTarget(storage));
 	}
 
+	/** Whether the journal records that its apply began writing: every apply persists PREPARING before its first write. */
+	public static boolean mutationStarted(ClientStorage storage, UpdateTransaction transaction) {
+		UpdateTransaction.Phase phase = transaction == null ? null : transaction.phase;
+		if (phase == UpdateTransaction.Phase.PREPARING || phase == UpdateTransaction.Phase.PROJECTED || phase == UpdateTransaction.Phase.SWAPPING
+				|| phase == UpdateTransaction.Phase.COMMITTED)
+			return true;
+		return publicationStarted(storage, transaction);
+	}
+
+	/** Whether the projection swap may have begun, which proves every live operation landed: a projection is built only after them. */
 	public static boolean publicationStarted(ClientStorage storage, UpdateTransaction transaction) {
 		if (!isProjectionTransaction(transaction)) return false;
 		if (transaction.phase == UpdateTransaction.Phase.PROJECTED || transaction.phase == UpdateTransaction.Phase.SWAPPING

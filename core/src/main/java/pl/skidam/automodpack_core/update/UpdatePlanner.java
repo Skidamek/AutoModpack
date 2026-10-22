@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.update;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -216,6 +217,15 @@ public final class UpdatePlanner {
 		planNestedCopies(input.previousNestedCopies(), generatedCopies, session);
 		planBaselineCaptures(input.files(), session);
 		return session.finalState(target.modpackId, packTarget, input.plannedClientConfig(), input.files(), target, ledger, false, null, generatedCopies);
+	}
+
+	/** A tombstone records the player's removal of a file the pack ships as editable; for any other path it is spent. */
+	public static Set<String> retainedTombstones(Collection<String> deletedPaths, ModpackJsons.ModpackContentFields target) {
+		Set<String> editable = new HashSet<>();
+		if (target != null && target.list != null) for (var item : target.list) if (item.editable) editable.add(LogicalPath.normalize(item.file));
+		Set<String> retained = new TreeSet<>(deletedPaths);
+		retained.retainAll(editable);
+		return retained;
 	}
 
 	/** Removes installed content the target no longer ships: its projection entry, its overlay, and its player-edited live copy - unless a pin keeps the live jar. */
@@ -655,6 +665,7 @@ public final class UpdatePlanner {
 	 * immediately updates the projection - so they live here instead of being threaded through passes as parallel parameters.
 	 */
 	static final class PlanningSession {
+		private final Map<FileKey, FileState> observed;
 		private final Map<FileKey, FileState> projected;
 		private final Set<FileKey> projectedScope;
 		private final Map<FileKey, Operation> operations = new HashMap<>();
@@ -664,6 +675,7 @@ public final class UpdatePlanner {
 		private final List<Conflict> conflicts = new ArrayList<>();
 
 		PlanningSession(Map<FileKey, FileState> files) {
+			observed = Map.copyOf(files);
 			projected = new HashMap<>(files);
 			projectedScope = new HashSet<>(files.keySet());
 		}
@@ -719,10 +731,25 @@ public final class UpdatePlanner {
 			projected.put(key, new FileState(hash, size, true));
 		}
 
+		/**
+		 * A physical delete names the bytes it removes. A path absent before this plan (missing, or a tombstone) is already at
+		 * its destination and gets no operation; a present one without a known hash keeps its baseline-less delete, which
+		 * the commit's validation refuses loudly.
+		 */
 		void delete(FileKey key, String expectedHash) {
 			String safeExpectedHash = expectedHash != null ? expectedHash : expectedExistingHash(key);
+			if (safeExpectedHash == null && key.root() != Root.PROJECTION && absentBefore(key)) {
+				operations.remove(key);
+				projected.remove(key);
+				return;
+			}
 			operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.DELETE, null, -1, safeExpectedHash));
 			projected.remove(key);
+		}
+
+		private boolean absentBefore(FileKey key) {
+			FileState existing = observed.get(key);
+			return existing == null || !existing.regularFile();
 		}
 
 		private String expectedExistingHash(FileKey key) {

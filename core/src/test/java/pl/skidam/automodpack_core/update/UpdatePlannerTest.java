@@ -772,6 +772,62 @@ class UpdatePlannerTest {
 		assertTrue(plan.restartReasons().contains(RestartReason.REMOVED_DUPLICATE_MODS));
 	}
 
+	@Test
+	void aSpentTombstoneNeverPlansABaselineFreeDelete() {
+		// #580 failure 1: dropping a tombstone used to plan an overlay delete of a file that never existed.
+		String removed = "config/example-client.toml";
+		String demoted = "config/demoted.toml";
+		String kept = "config/kept.toml";
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of(removed, editableItem(removed, OLD_HASH, 4, "config"), demoted, editableItem(demoted, OLD_HASH, 4, "config"),
+				kept, editableItem(kept, OLD_HASH, 4, "config")), ledger());
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(demoted, item(demoted, TARGET_HASH, 4, "config"), kept, editableItem(kept, OLD_HASH, 4, "config")), ledger());
+		Map<FileKey, FileState> files = new HashMap<>();
+		for (String path : List.of(removed, demoted, kept)) {
+			files.put(new FileKey(Root.PROJECTION, path), new FileState(OLD_HASH, 4, true));
+			files.put(new FileKey(Root.OVERLAY, path), new FileState(null, -1, false));
+		}
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(),
+				new UpdatePlanner.SelectionContext(installed.modpackId, installed), new ClientConfigJsons.ClientConfigFieldsV3(), Map.of()));
+
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.OVERLAY), plan.operations().toString());
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.operation() == OperationType.DELETE && operation.root() != Root.PROJECTION && operation.expectedExistingHash() == null));
+		// The removed and the no-longer-editable paths spend their tombstones; the still-editable one keeps suppressing its live copy.
+		assertEquals(Set.of(kept), UpdatePlanner.retainedTombstones(List.of(removed, demoted, kept), target));
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(demoted)));
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(kept)));
+	}
+
+	@Test
+	void onlyAPathAbsentBeforeThePlanLosesItsBaselineFreeDelete() {
+		FileKey tombstone = new FileKey(Root.OVERLAY, "config/a.toml");
+		FileKey missing = new FileKey(Root.GAME_DIR, "config/b.toml");
+		FileKey unhashed = new FileKey(Root.GAME_DIR, "config/c.toml");
+		UpdatePlanner.PlanningSession session = new UpdatePlanner.PlanningSession(Map.of(tombstone, new FileState(null, -1, false), unhashed, new FileState(null, 4, true)));
+
+		for (FileKey key : List.of(tombstone, missing, unhashed)) session.delete(key, null);
+
+		// A present file whose bytes the plan cannot name is a planner bug: its delete stays for the commit's validation to refuse.
+		assertEquals(List.of(new Operation(Root.GAME_DIR, "config/c.toml", OperationType.DELETE, null, -1, null)), session.operations());
+	}
+
+	@Test
+	void aTombstoneDeletesTheLiveCopyItObservesAndNothingElse() {
+		String path = "config/example-client.toml";
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(path, editableItem(path, TARGET_HASH, 4, "config")), ledger());
+		FileKey tombstone = new FileKey(Root.OVERLAY, path);
+		Map<FileKey, FileState> live = Map.of(tombstone, new FileState(null, -1, false), new FileKey(Root.GAME_DIR, path), new FileState(OTHER_HASH, 4, true));
+
+		UpdatePlan withLive = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, live, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of()));
+		UpdatePlan withoutLive = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(tombstone, new FileState(null, -1, false)), Set.of(), List.of(), List.of(), List.of(),
+				List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3(), Map.of()));
+
+		assertTrue(withLive.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.operation() == OperationType.DELETE
+				&& OTHER_HASH.equals(operation.expectedExistingHash())));
+		assertTrue(withoutLive.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR));
+	}
+
 	private static UpdatePlanner.Input input(ModpackJsons.ModpackContentFields target, Map<FileKey, FileState> files) {
 		return new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3());
 	}

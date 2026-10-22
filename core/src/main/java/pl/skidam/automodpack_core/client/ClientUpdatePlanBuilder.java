@@ -293,8 +293,8 @@ final class ClientUpdatePlanBuilder {
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = new HashMap<>();
 		if (target != null && target.list != null) target.list.forEach(item -> targetItems.put(LogicalPath.normalize(item.file), item));
 		boolean sameModpackTarget = target != null && target.modpackId.equals(activeTarget.modpackId);
-		Set<String> deletedPaths = new TreeSet<>(storage.readOverlayState(activeTarget.modpackId).deletedPaths);
-		Set<String> initialDeletedPaths = Set.copyOf(deletedPaths);
+		Set<String> initialDeletedPaths = Set.copyOf(storage.readOverlayState(activeTarget.modpackId).deletedPaths);
+		Set<String> deletedPaths = new TreeSet<>(UpdatePlanner.retainedTombstones(initialDeletedPaths, activeTarget));
 		boolean mutated = false;
 		for (var item : activeTarget.list) {
 			if (!item.editable) {

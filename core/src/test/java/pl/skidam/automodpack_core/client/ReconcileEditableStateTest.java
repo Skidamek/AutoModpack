@@ -77,6 +77,19 @@ class ReconcileEditableStateTest {
 		}
 	}
 
+	@Test
+	void reconciliationDropsTombstonesThePackNoLongerShipsAsEditable() throws Exception {
+		// #580: a tombstone left behind by a recovered update (rc.4/rc.5 only cleaned them on the live path) must not
+		// suppress the file once a later generation ships the path again.
+		ClientStorage storage = storage();
+		ModpackJsons.ModpackContentFields packTarget = install(storage);
+		storage.writeOverlayState(PACK_ID, Set.of(EDITABLE_PATH, "config/removed-long-ago.toml"));
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			builder(storage).reconcileEditableState(cache, ClientProjectionView.observe(storage), packTarget);
+		}
+		assertEquals(List.of(EDITABLE_PATH), storage.readOverlayState(PACK_ID).deletedPaths);
+	}
+
 	private ClientStorage storage() throws Exception {
 		ClientStorage storage = TestDataRoot.open(temporaryDirectory.resolve("game"), temporaryDirectory.resolve("data"));
 		Files.createDirectories(storage.modsDirectory());
