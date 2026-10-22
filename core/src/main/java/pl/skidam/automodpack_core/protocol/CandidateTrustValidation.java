@@ -113,14 +113,9 @@ public final class CandidateTrustValidation {
 
 		X509Certificate certificate = trustManager.getDeferredCertificate(candidate.socket());
 
-		CompletableFuture<Void> validation;
-		try {
-			certificate.checkValidity();
-			validation = judge(candidate, certificate);
-		} catch (CertificateException e) {
-			validation = CompletableFuture.failedFuture(new IOException("Untrusted certificate is not valid", e));
-		}
-		return validation.whenComplete((ignored, error) -> {
+		// The JDK already checked a CA-vouched chain's dates. A pin, a published fingerprint, or the player trusts the
+		// leaf itself, and an expired self-signed certificate must keep those paths working.
+		return judge(candidate, certificate).whenComplete((ignored, error) -> {
 			// The deferral is spent once the ladder has judged this socket, pass or fail; the entry dies with the decision.
 			candidate.trustManager().forget(candidate.socket());
 			if (error != null) closeQuietly(candidate.socket());

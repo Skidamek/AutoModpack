@@ -11,6 +11,17 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.AclEntry;
+import java.nio.file.attribute.AclEntryPermission;
+import java.nio.file.attribute.AclEntryType;
+import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -20,6 +31,7 @@ public final class DurableFiles {
 	public static final String TEMPORARY_SUFFIX = ".tmp";
 	/** Infix of {@link #setAside} evidence names; the sweepers that must recognize set-aside state match this spelling. */
 	public static final String CORRUPT_ASIDE_MARKER = ".corrupt-";
+	private static final Set<PosixFilePermission> OWNER_ONLY = PosixFilePermissions.fromString("rw-------");
 
 	private static final AtomicBoolean NON_ATOMIC_RENAME_WARNED = new AtomicBoolean();
 
@@ -89,13 +101,29 @@ public final class DurableFiles {
 	 * and forces the parent directory entry. The temporary is always removed, even on failure.
 	 */
 	public static void writeAtomic(Path target, byte[] bytes) throws IOException {
+		writeAtomic(target, bytes, false);
+	}
+
+	/**
+	 * Same contract as {@link #writeAtomic}, but the temporary is owner-only before any bytes land, so the secret never
+	 * exists under a group- or world-readable name: POSIX creates it {@code rw-------}, and Windows replaces its DACL
+	 * with one owner-allow entry. A rename keeps both, so the published file stays owner-only.
+	 */
+	public static void writeAtomicPrivate(Path target, byte[] bytes) throws IOException {
+		writeAtomic(target, bytes, true);
+	}
+
+	private static void writeAtomic(Path target, byte[] bytes, boolean ownerOnly) throws IOException {
 		Path parent = target.toAbsolutePath().normalize().getParent();
 		if (parent == null) throw new IOException("Path has no parent: " + target);
 		Files.createDirectories(parent);
 
 		Path temporary = parent.resolve("." + target.getFileName() + "." + UUID.randomUUID() + TEMPORARY_SUFFIX);
+		boolean posix = Files.getFileAttributeView(parent, PosixFileAttributeView.class) != null;
+		FileAttribute<?>[] attributes = ownerOnly && posix ? new FileAttribute<?>[]{PosixFilePermissions.asFileAttribute(OWNER_ONLY)} : new FileAttribute<?>[0];
 		try {
-			try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+			try (FileChannel channel = FileChannel.open(temporary, Set.of(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE), attributes)) {
+				if (ownerOnly && !posix) restrictAclToOwner(temporary);
 				ByteBuffer buffer = ByteBuffer.wrap(bytes);
 				while (buffer.hasRemaining()) channel.write(buffer);
 				channel.force(true);
@@ -104,6 +132,18 @@ public final class DurableFiles {
 			FileTrees.forceDirectory(parent);
 		} finally {
 			Files.deleteIfExists(temporary);
+		}
+	}
+
+	/** Windows: a single owner-allow DACL. Where the filesystem has no ACL view or the ACL APIs fail, the file keeps what the filesystem gave it. */
+	private static void restrictAclToOwner(Path file) {
+		AclFileAttributeView acl = Files.getFileAttributeView(file, AclFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+		if (acl == null) return;
+		try {
+			AclEntry ownerAllow = AclEntry.newBuilder().setType(AclEntryType.ALLOW).setPrincipal(Files.getOwner(file, LinkOption.NOFOLLOW_LINKS)).setPermissions(EnumSet.allOf(AclEntryPermission.class)).build();
+			acl.setAcl(List.of(ownerAllow));
+		} catch (UnsupportedOperationException | SecurityException | IOException e) {
+			LOGGER.warn("Could not restrict {} to the owner: {}", file, e.toString());
 		}
 	}
 

@@ -262,6 +262,25 @@ class DownloadClientTest {
 	}
 
 	@Test
+	void expiredSelfSignedCertificateCanStillBeAcceptedByThePlayer(@TempDir Path directory) throws Exception {
+		KeyPair keyPair = NetUtils.generateKeyPair();
+		X500Name name = new X500Name("CN=Expired AutoModpack Certificate");
+		X509Certificate expired = issueCertificate(name, name, null, keyPair, keyPair, Instant.now().minusSeconds(7200), Instant.now().minusSeconds(3600));
+		CompletableFuture<Boolean> decision = new CompletableFuture<>();
+
+		try (TransferServer server = new TransferServer(keyPair, expired)) {
+			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.MAGIC, null);
+			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, null, ignored -> decision);
+			decision.complete(true);
+
+			try (DownloadClient client = clientFuture.get(AWAIT_SECONDS, TimeUnit.SECONDS)) {
+				client.downloadSmallObject("hash".getBytes(StandardCharsets.UTF_8), directory.resolve("first"), -1L, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
+			}
+		}
+	}
+
+	@Test
 	void rejectedDeferredTrustClosesWithoutReconnect() throws Exception {
 		KeyPair keyPair = NetUtils.generateKeyPair();
 		X509Certificate certificate = NetUtils.selfSign(keyPair);

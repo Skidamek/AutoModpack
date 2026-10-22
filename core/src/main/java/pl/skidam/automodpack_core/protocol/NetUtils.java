@@ -4,6 +4,7 @@ import static pl.skidam.automodpack_core.Constants.AM_VERSION;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigInteger;
@@ -14,8 +15,10 @@ import java.security.*;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.RSAPublicKeySpec;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Calendar;
@@ -31,6 +34,8 @@ import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
+
+import pl.skidam.automodpack_core.utils.DurableFiles;
 
 public class NetUtils {
 	public static final String USER_AGENT = "github/skidamek/automodpack/" + AM_VERSION;
@@ -117,6 +122,8 @@ public class NetUtils {
 
 	private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
 	private static final AlgorithmIdentifier SIGNATURE_ALGORITHM_IDENTIFIER = new AlgorithmIdentifier(PKCSObjectIdentifiers.sha256WithRSAEncryption, DERNull.INSTANCE);
+	// A self-signed leaf is trusted by its pin, DNS record, or the player, never by its dates; this only has to outlive the server.
+	private static final int SELF_SIGNED_VALIDITY_YEARS = 100;
 
 	public static String getFingerprint(X509Certificate cert) throws CertificateEncodingException {
 		byte[] certificate = cert.getEncoded();
@@ -161,7 +168,7 @@ public class NetUtils {
 
 		Calendar calendar = Calendar.getInstance();
 		calendar.setTime(startDate);
-		calendar.add(Calendar.YEAR, 1);
+		calendar.add(Calendar.YEAR, SELF_SIGNED_VALIDITY_YEARS);
 		Date endDate = calendar.getTime();
 
 		ContentSigner contentSigner = createContentSigner(keyPair.getPrivate());
@@ -206,8 +213,7 @@ public class NetUtils {
 
 	public static void saveCertificate(X509Certificate cert, Path path) throws Exception {
 		String certPem = "-----BEGIN CERTIFICATE-----\n" + formatBase64(cert.getEncoded()) + "-----END CERTIFICATE-----\n";
-		if (path.getParent() != null) Files.createDirectories(path.getParent());
-		Files.writeString(path, certPem, StandardCharsets.UTF_8);
+		DurableFiles.writeAtomic(path, certPem.getBytes(StandardCharsets.UTF_8));
 	}
 
 	public static X509Certificate loadCertificate(Path path) throws Exception {
@@ -221,8 +227,7 @@ public class NetUtils {
 	public static void savePrivateKey(PrivateKey key, Path path) throws Exception {
 		PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(key.getEncoded());
 		String keyPem = "-----BEGIN PRIVATE KEY-----\n" + formatBase64(keySpec.getEncoded()) + "-----END PRIVATE KEY-----\n";
-		if (path.getParent() != null) Files.createDirectories(path.getParent());
-		Files.writeString(path, keyPem, StandardCharsets.UTF_8);
+		DurableFiles.writeAtomicPrivate(path, keyPem.getBytes(StandardCharsets.UTF_8));
 	}
 
 	/** Closes and swallows the failure: teardown paths never have a better story than the error they are already telling. */
@@ -247,6 +252,51 @@ public class NetUtils {
 			}
 		}
 		throw new GeneralSecurityException("Unsupported private key format in " + path);
+	}
+
+	/**
+	 * A matching pair is left alone. A certificate without a key refuses, because clients may already pin it. A key
+	 * without a certificate keeps the key and gets a fresh self-signed certificate built from it, so an operator's key
+	 * is never replaced. A fresh pair writes the key first, so a crash in between leaves that recoverable shape.
+	 */
+	public static void ensureSelfSignedTlsPair(Path certFile, Path privateKeyFile) throws IOException {
+		boolean certExists = Files.exists(certFile);
+		boolean keyExists = Files.exists(privateKeyFile);
+		if (certExists && !keyExists)
+			throw new IllegalStateException("The TLS certificate exists without a private key (" + certFile + ", " + privateKeyFile + "); make the pair whole or remove both files manually");
+		if (certExists) {
+			try {
+				X509Certificate cert = loadCertificate(certFile);
+				PrivateKey key = loadPrivateKey(privateKeyFile);
+				if (cert == null || key == null) throw new GeneralSecurityException("the certificate or the private key is unreadable");
+				validateKeyMatchesCertificate(key, cert);
+			} catch (Exception e) {
+				throw new IllegalStateException("The TLS pair is corrupt (" + certFile + ", " + privateKeyFile + "); fix or remove both files manually - regenerating it would invalidate every client's certificate pin",
+						e);
+			}
+			return;
+		}
+		KeyPair keyPair;
+		try {
+			keyPair = keyExists ? existingRsaKeyPair(privateKeyFile) : generateKeyPair();
+		} catch (Exception e) {
+			throw new IllegalStateException("The TLS private key " + privateKeyFile + " has no certificate and cannot be given a self-signed one; put its certificate at " + certFile, e);
+		}
+		try {
+			if (!keyExists) savePrivateKey(keyPair.getPrivate(), privateKeyFile);
+			saveCertificate(selfSign(keyPair), certFile);
+		} catch (IOException e) {
+			throw e;
+		} catch (Exception e) {
+			throw new IOException("Failed to write the TLS pair", e);
+		}
+	}
+
+	/** The pair behind an existing PKCS#8 RSA key: the CRT form carries the public exponent, so the public key needs no other file. */
+	private static KeyPair existingRsaKeyPair(Path privateKeyFile) throws Exception {
+		if (!(loadPrivateKey(privateKeyFile) instanceof RSAPrivateCrtKey key)) throw new GeneralSecurityException("only an RSA private key can sign the self-signed certificate");
+		PublicKey publicKey = KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(key.getModulus(), key.getPublicExponent()));
+		return new KeyPair(publicKey, key);
 	}
 
 	/** Proves the key pairs with the certificate by signing a fresh random challenge and verifying it with the certificate's public key. */

@@ -21,8 +21,8 @@ The one-shot client drop-in is `~/automodpack/automodpack-bootstrap.json`. Put a
 | `host-modpack/<group>/` | Pack files the server itself does not need; the folder name is the group id, and `main` is the default group |
 | `host-modpack/patch-notes.md` | Notes for the next published generation; cleared when it publishes |
 | `host-modpack/waiting-music.ogg` | Optional custom waiting track. Publish it with `/automodpack generate` (or a start with `generate-modpack-on-start`). Clients stream it during downloads and can play the advertised track from pack details |
-| `credentials/certificate.crt` | TLS certificate chain |
-| `credentials/private-key.pem` | TLS private key, PKCS#8 PEM |
+| `credentials/certificate.crt` | TLS certificate chain. A key without a certificate gets a new self-signed certificate for that key; a certificate without a key refuses to start |
+| `credentials/private-key.pem` | TLS private key, PKCS#8 PEM. New keys are owner-only (`chmod 600` on POSIX, owner-only ACL on Windows). Existing keys stay as they are; on POSIX the server logs a warning when they are group- or world-readable |
 | `credentials/provisioning-secret` | Bootstrap provisioning secret; keep this folder out of support dumps |
 | `credentials/secrets.json` | Per-player download secrets; several server processes may share the folder |
 

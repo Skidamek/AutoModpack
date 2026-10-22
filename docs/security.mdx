@@ -28,7 +28,7 @@ A renewal, a move to a new host, or a new proxy front changes the certificate th
 
 Two shapes exist. On a direct deployment, origin and endpoint share a name, and a certificate a public authority signed for that name covers the typed hostname: the first connection trusts silently, because the CA's vouch is anchored to the address the player typed. On a tunnel or reverse-proxy front, the certificate names the front and not the typed hostname, so the CA vouches for a name the server chose; only a published record or the player's confirmation can trust such a first contact. For fronts a CA does not cover, a published AMP1 record verifies them silently on every connection.
 
-Put the full chain in `automodpack/credentials/certificate.crt` and the private key in `automodpack/credentials/private-key.pem` in [PKCS#8 PEM format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html). Without these files, AutoModpack generates a self-signed certificate on first start.
+Put the full chain in `automodpack/credentials/certificate.crt` and the private key in `automodpack/credentials/private-key.pem` in [PKCS#8 PEM format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html). Without these files, AutoModpack generates a self-signed certificate on first start, valid for 100 years. Current clients never check a self-signed certificate's dates: a pin, a DNS record, or the player trusts the certificate itself, so a one-year certificate from an earlier build keeps working, and players on an older AutoModpack that still checks expiry only need to update. If only `private-key.pem` exists, AutoModpack keeps that key and issues a new self-signed certificate for it; if only `certificate.crt` exists, the server refuses to start. Regenerating the pair yourself changes the certificate, which locks out every player who pinned the old one until they remove the pin or get a new pinned join address; only a published AMP1 record follows the change on its own.
 
 One way to obtain a certificate is [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html):
 
@@ -37,7 +37,15 @@ certbot certonly --manual --preferred-challenges dns -d <minecraft-server-domain
 ```
 
 <Callout variant="warning">
-Read the documentation of any tool before running its commands. Use `fullchain.pem` as `certificate.crt` and `privkey.pem` as `private-key.pem`, and protect the private key: anyone holding it can impersonate your server.
+Read the documentation of any tool before running its commands. Use `fullchain.pem` as `certificate.crt` and `privkey.pem` as `private-key.pem`. Anyone holding the private key can impersonate your server. A new `private-key.pem` is owner-only: `600` on Linux and macOS, and an owner-only ACL on Windows. If you copied an existing key in, lock it down yourself:
+
+```bash
+chmod 600 automodpack/credentials/private-key.pem
+```
+
+```powershell
+icacls automodpack\credentials\private-key.pem /inheritance:r /grant:r "$($env:USERNAME):F"
+```
 </Callout>
 
 ### DNSSEC AMP1

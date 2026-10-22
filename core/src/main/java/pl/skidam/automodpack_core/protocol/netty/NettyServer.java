@@ -9,9 +9,7 @@ import java.net.SocketAddress;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.security.GeneralSecurityException;
-import java.security.KeyPair;
-import java.security.PrivateKey;
+import java.nio.file.attribute.PosixFilePermission;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
@@ -296,34 +294,23 @@ public class NettyServer {
 	 */
 	private void ensureTlsMaterial(Path certFile, Path privateKeyFile) throws IOException {
 		FileLocks.withLock(certFile.resolveSibling("tls.lock"), () -> {
-			boolean certExists = Files.exists(certFile);
-			boolean keyExists = Files.exists(privateKeyFile);
-			if (certExists != keyExists)
-				throw new IllegalStateException(
-						"The TLS material is inconsistent: exactly one of " + certFile + " and " + privateKeyFile + " exists; make the pair whole or remove both files manually");
-			if (!certExists) {
-				try {
-					KeyPair keyPair = NetUtils.generateKeyPair();
-					NetUtils.saveCertificate(NetUtils.selfSign(keyPair), certFile);
-					NetUtils.savePrivateKey(keyPair.getPrivate(), privateKeyFile);
-				} catch (IOException e) {
-					throw e;
-				} catch (Exception e) {
-					throw new IOException("Failed to generate the TLS pair", e);
-				}
-				return null;
-			}
-			try {
-				X509Certificate cert = NetUtils.loadCertificate(certFile);
-				PrivateKey key = NetUtils.loadPrivateKey(privateKeyFile);
-				if (cert == null || key == null) throw new GeneralSecurityException("the certificate or the private key is unreadable");
-				NetUtils.validateKeyMatchesCertificate(key, cert);
-			} catch (Exception e) {
-				throw new IllegalStateException(
-						"The TLS pair is corrupt (" + certFile + ", " + privateKeyFile + "); fix or remove both files manually - regenerating it would invalidate every client's certificate pin", e);
-			}
+			NetUtils.ensureSelfSignedTlsPair(certFile, privateKeyFile);
+			warnIfPrivateKeyIsTooOpen(privateKeyFile);
 			return null;
 		});
+	}
+
+	/** New keys are created owner-only; an existing world-readable key is left as-is and called out so the operator can chmod 600. */
+	private static void warnIfPrivateKeyIsTooOpen(Path privateKeyFile) {
+		Set<PosixFilePermission> permissions;
+		try {
+			permissions = Files.getPosixFilePermissions(privateKeyFile);
+		} catch (UnsupportedOperationException | IOException e) {
+			return;
+		}
+		boolean shared = permissions.contains(PosixFilePermission.GROUP_READ) || permissions.contains(PosixFilePermission.GROUP_WRITE) || permissions.contains(PosixFilePermission.GROUP_EXECUTE)
+				|| permissions.contains(PosixFilePermission.OTHERS_READ) || permissions.contains(PosixFilePermission.OTHERS_WRITE) || permissions.contains(PosixFilePermission.OTHERS_EXECUTE);
+		if (shared) LOGGER.warn("{} is readable by group or others; chmod 600 so only the server user can read the private key", privateKeyFile);
 	}
 
 	public boolean isSharedMagicEnabled() {
