@@ -15,7 +15,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -39,6 +41,8 @@ class FetchCacheTest {
 	private HttpServer server;
 	private final AtomicInteger requests = new AtomicInteger();
 	private final AtomicReference<String> answer = new AtomicReference<>("ok:first");
+	private final AtomicInteger trickled = new AtomicInteger();
+	private final AtomicBoolean trickling = new AtomicBoolean(true);
 	private final AtomicReference<CountDownLatch> gate = new AtomicReference<>(new CountDownLatch(0));
 
 	@BeforeEach
@@ -59,6 +63,28 @@ class FetchCacheTest {
 			}
 			exchange.close();
 		});
+		server.createContext("/trickle", exchange -> {
+			trickled.incrementAndGet();
+			if (!trickling.get()) {
+				byte[] body = "ok:whole".getBytes(StandardCharsets.UTF_8);
+				exchange.sendResponseHeaders(200, body.length);
+				try (OutputStream out = exchange.getResponseBody()) {
+					out.write(body);
+				}
+				return;
+			}
+			exchange.sendResponseHeaders(200, 0);
+			try (OutputStream out = exchange.getResponseBody()) {
+				out.write("ok:".getBytes(StandardCharsets.UTF_8));
+				while (true) {
+					out.write('o');
+					out.flush();
+					Thread.sleep(200);
+				}
+			} catch (IOException | InterruptedException closedByTheClient) {
+			}
+		});
+		server.setExecutor(Executors.newCachedThreadPool());
 		server.start();
 	}
 
@@ -119,6 +145,21 @@ class FetchCacheTest {
 		assertEquals("ok:first", first.get(10, TimeUnit.SECONDS));
 		assertEquals("ok:first", second.get(10, TimeUnit.SECONDS));
 		assertEquals(1, requests.get());
+	}
+
+	/** A body that drips forever ends at the exchange deadline as a refusal, never as the cut body it looks like, unretried, and the next request for the URL starts a fetch of its own. */
+	@Test
+	void aTricklingBodyEndsAtTheDeadlineAndFreesTheSharedFetch() throws Exception {
+		FetchCache cache = new FetchCache(null);
+		List<String> trickle = List.of("http://127.0.0.1:" + server.getAddress().getPort() + "/trickle");
+		long start = System.nanoTime();
+		assertNull(cache.get(trickle, TEXT, Duration.ofMillis(200)).get(10, TimeUnit.SECONDS));
+		trickling.set(false);
+		String answer = null;
+		while (answer == null && System.nanoTime() - start < HttpClientPool.EXCHANGE_DEADLINE.plusSeconds(10).toNanos())
+			answer = cache.get(trickle, TEXT, Duration.ofSeconds(1)).get(10, TimeUnit.SECONDS);
+		assertEquals("ok:whole", answer);
+		assertEquals(2, trickled.get(), "the dripping body is a verdict, not a retry");
 	}
 
 	private static void age(Path directory) throws IOException {

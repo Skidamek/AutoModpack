@@ -16,6 +16,9 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSession;
@@ -30,7 +33,8 @@ import pl.skidam.automodpack_core.protocol.WireCodec;
  * connection reuse instead of the per-call proxy connections raw HttpURLConnection produced. {@link #request} adds the
  * User-Agent, the timeout policy, the content codings and the retry discipline: exactly one retry, only on 429 (honoring
  * a seconds-form Retry-After clamped to the network timeout, so a hostile header cannot park a worker), any 5xx, or a
- * transport failure; every other answered status is a verdict that never retries. The returned body is decoded, so
+ * transport failure; every other answered status is a verdict that never retries, and so is a body past its size cap
+ * or its deadline. The returned body is decoded, so
  * callers never see zstd or gzip bytes; the original Content-Encoding header stays visible for diagnostics.
  */
 public final class HttpClientPool {
@@ -42,6 +46,14 @@ public final class HttpClientPool {
 	 * {@code HttpFileDownloader}.
 	 */
 	static final int MAX_BODY_BYTES = 8 * 1024 * 1024;
+	/**
+	 * The request timeout covers the response head only. One deadline from the request start bounds the whole exchange
+	 * and closes the body under its reader, so a trickling server cannot hold a caller, or the fetch every waiter of one
+	 * URL shares, forever; twice the network timeout still reads a full {@link #MAX_BODY_BYTES} body at about 2.2 Mbit/s.
+	 */
+	static final Duration EXCHANGE_DEADLINE = NetUtils.NETWORK_TIMEOUT.multipliedBy(2);
+	private static final ScheduledExecutorService EXCHANGE_DEADLINES = Executors.newSingleThreadScheduledExecutor(
+			new CustomThreadFactoryBuilder().setNameFormat("AutoModpackHttpExchangeDeadline").setDaemon(true).build());
 	private static final SSLContext HTTPS_CONTEXT = httpsContext();
 	private static final HttpClient DIRECT_CLIENT = client(HttpClient.Redirect.NEVER);
 	private static final HttpClient REDIRECT_CLIENT = client(HttpClient.Redirect.NORMAL);
@@ -60,12 +72,21 @@ public final class HttpClientPool {
 
 	/** One pooled API exchange; the body is fully read and decoded so the connection is reused. See the class doc for the retry discipline. */
 	public static HttpResponse<byte[]> request(String url, Map<String, String> headers, byte[] body, boolean followRedirects) throws IOException {
-		HttpClient client = followRedirects ? REDIRECT_CLIENT : DIRECT_CLIENT;
+		try {
+			return requestWithRetry(url, headers, body, followRedirects ? REDIRECT_CLIENT : DIRECT_CLIENT);
+		} catch (BodyRefusedException refused) {
+			LOGGER.warn("{}: past AutoModpack's {} MiB / {} s cap, so this answer is unavailable; a CA CRL refused here leaves the server certificate's revocation undecided", refused.getMessage(),
+					MAX_BODY_BYTES / (1024 * 1024), EXCHANGE_DEADLINE.toSeconds());
+			throw refused;
+		}
+	}
+
+	private static HttpResponse<byte[]> requestWithRetry(String url, Map<String, String> headers, byte[] body, HttpClient client) throws IOException {
 		BufferedResponse response;
 		try {
 			response = exchange(url, headers, body, client);
 		} catch (IOException transportFailure) {
-			if (Thread.currentThread().isInterrupted() || transportFailure instanceof BodyTooLargeException) throw transportFailure;
+			if (Thread.currentThread().isInterrupted() || transportFailure instanceof BodyRefusedException) throw transportFailure;
 			LOGGER.warn("HTTP request to {} failed: {}, retrying once", url, transportFailure.toString());
 			return decode(exchange(url, headers, body, client));
 		}
@@ -78,7 +99,7 @@ public final class HttpClientPool {
 	/** At most {@link #MAX_BODY_BYTES} from the stream; a longer body is a verdict, never retried. */
 	private static byte[] readCapped(InputStream in, URI uri) throws IOException {
 		byte[] bytes = in.readNBytes(MAX_BODY_BYTES + 1);
-		if (bytes.length > MAX_BODY_BYTES) throw new BodyTooLargeException("HTTP body from " + uri + " exceeded " + MAX_BODY_BYTES + " bytes");
+		if (bytes.length > MAX_BODY_BYTES) throw new BodyRefusedException("HTTP body from " + uri + " exceeded " + MAX_BODY_BYTES + " bytes");
 		return bytes;
 	}
 
@@ -116,19 +137,55 @@ public final class HttpClientPool {
 		headers.forEach(request::setHeader);
 		if (body != null) request.POST(HttpRequest.BodyPublishers.ofByteArray(body));
 		else request.GET();
-		HttpResponse<InputStream> response;
+		ExchangeDeadline deadline = new ExchangeDeadline();
+		ScheduledFuture<?> timer = EXCHANGE_DEADLINES.schedule(deadline::expire, EXCHANGE_DEADLINE.toMillis(), TimeUnit.MILLISECONDS);
 		try {
-			response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			throw new IOException("HTTP request interrupted: " + url, e);
-		} catch (IOException e) {
-			throw e;
-		} catch (Exception e) {
-			throw new IOException("HTTP client protocol error for " + url, e);
+			HttpResponse<InputStream> response;
+			try {
+				response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				throw new IOException("HTTP request interrupted: " + url, e);
+			} catch (IOException e) {
+				throw e;
+			} catch (Exception e) {
+				throw new IOException("HTTP client protocol error for " + url, e);
+			}
+			// The JDK body stream fails every read once closed, so a body the deadline cut never reads as a whole one.
+			try (InputStream in = deadline.watch(response.body())) {
+				return new BufferedResponse(response, readCapped(in, response.uri()));
+			} catch (IOException e) {
+				if (deadline.expired() && !(e instanceof BodyRefusedException)) throw deadline.refusal(response.uri());
+				throw e;
+			}
+		} finally {
+			timer.cancel(false);
 		}
-		try (InputStream in = response.body()) {
-			return new BufferedResponse(response, readCapped(in, response.uri()));
+	}
+
+	/** Whether the exchange deadline fired, and the body it closes when it does, whichever comes first. */
+	private static final class ExchangeDeadline {
+		private volatile boolean expired;
+		private volatile InputStream body;
+
+		InputStream watch(InputStream in) {
+			body = in;
+			if (expired) NetUtils.closeQuietly(in);
+			return in;
+		}
+
+		void expire() {
+			expired = true;
+			InputStream in = body;
+			if (in != null) NetUtils.closeQuietly(in);
+		}
+
+		boolean expired() {
+			return expired;
+		}
+
+		BodyRefusedException refusal(URI uri) {
+			return new BodyRefusedException("HTTP exchange with " + uri + " did not finish within " + EXCHANGE_DEADLINE.toSeconds() + " s");
 		}
 	}
 
@@ -141,8 +198,9 @@ public final class HttpClientPool {
 		}
 	}
 
-	private static final class BodyTooLargeException extends IOException {
-		BodyTooLargeException(String message) {
+	/** A body the pool refuses by its own rule, size or deadline: a verdict on the answer, never retried. */
+	private static final class BodyRefusedException extends IOException {
+		BodyRefusedException(String message) {
 			super(message);
 		}
 	}
