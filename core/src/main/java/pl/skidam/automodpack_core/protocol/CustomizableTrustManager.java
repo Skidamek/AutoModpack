@@ -23,7 +23,7 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
     private final X509Certificate[] cachedAcceptedIssuers;
 
     public CustomizableTrustManager(KeyStore customStore, Consumer<X509Certificate[]> onValidating) throws KeyStoreException {
-        this.defaultTrustManager = createTrustManager(null);
+        this.defaultTrustManager = RevokingTrustManager.wrap(null);
         this.customTrustManager = (customStore != null && customStore.size() > 0) ? createTrustManager(customStore) : null;
         this.onValidating = onValidating;
 

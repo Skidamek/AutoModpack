@@ -5,6 +5,7 @@ import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.protocol.OneCrl;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
@@ -29,6 +30,8 @@ public class Preload {
             LOGGER.info("Prelaunching AutoModpack...");
             initializeGlobalVariables();
             loadConfigs();
+            FetchCache.useDirectory(automodpackDir.resolve("fetch-cache"));
+            OneCrl.startRefresh();
             updateAll();
             LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
         } catch (Exception e) {

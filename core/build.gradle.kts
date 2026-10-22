@@ -64,3 +64,9 @@ tasks.named<ShadowJar>("shadowJar") {
 tasks.named("assemble") {
     dependsOn("shadowJar")
 }
+
+tasks.named<ProcessResources>("processResources") {
+    from("src/main/onecrl/onecrl.json") {
+        into("/")
+    }
+}

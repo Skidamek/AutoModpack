@@ -4,7 +4,9 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
+import pl.skidam.automodpack_core.protocol.OneCrl;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.utils.FetchCache;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -21,6 +23,9 @@ public class Server {
             LOGGER.error("Modpack id not provided!");
             return;
         }
+
+        FetchCache.useDirectory(Path.of(System.getProperty("user.dir")).resolve("automodpack").resolve("fetch-cache"));
+        OneCrl.startRefresh();
 
         NettyServer server = new NettyServer();
         hostServer = server;
