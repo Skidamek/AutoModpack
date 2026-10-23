@@ -34,9 +34,9 @@ flow:
         - log:
             file: "../launcher-meta/mmc-pack.json"
             matches_all:
-              - '"uid":"net.minecraft"'
-              - '"version":"${target.minecraft}"'
-            not_matches: '"uid":"net.minecraftforge","version":"47.4.0"'
+              - '"uid":\s*"net.minecraft"'
+              - '"version":\s*"${target.minecraft}"'
+            not_matches: '"uid":\s*"net.minecraftforge",\s*"version":\s*"47.4.0"'
   - use: restart_client
   - use: rejoin
   - do: assert
@@ -45,14 +45,13 @@ flow:
       all:
         - log:
             container: client
-            matches: 'MultiMC/Prism: switched launcher metadata to'
-            count: 1
+            not_matches: 'MultiMC/Prism: switched launcher metadata to'
         - log:
             file: "../launcher-meta/mmc-pack.json"
             matches_all:
-              - '"uid":"net.minecraft"'
-              - '"version":"${target.minecraft}"'
-            not_matches: '"uid":"net.minecraftforge","version":"47.4.0"'
+              - '"uid":\s*"net.minecraft"'
+              - '"version":\s*"${target.minecraft}"'
+            not_matches: '"uid":\s*"net.minecraftforge",\s*"version":\s*"47.4.0"'
   - do: quit
     name: quit the client
 

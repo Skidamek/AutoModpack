@@ -146,7 +146,7 @@ def _start_client_container(ctx: Context, name: str, *, prepare_only: bool = Fal
         sysctls=shaped_tcp_sysctls(ctx.netem, ctx.server_netem),
         env={
             "AM_AUTOTEST_BRIDGE_TOKEN": ctx.token,
-            "AM_AUTOTEST_GAME_DIR": "/work/game",
+            "AM_AUTOTEST_GAME_DIR": "/work/inst/game",
             "AM_AUTOTEST_HMC_CACHE_DIR": "/work/hmc-cache",
             "AM_AUTOTEST_HMC_PREPARED": str(prepared).lower(),
             "AM_AUTOTEST_PREPARE_ONLY": str(prepare_only).lower(),
@@ -156,14 +156,10 @@ def _start_client_container(ctx: Context, name: str, *, prepare_only: bool = Fal
             "JAVA_TOOL_OPTIONS": "-Xmx2G",
         },
         mounts=[
-            (ctx.game_dir, "/work/game", False),
+            (_launcher_meta_dir(ctx), "/work/inst", False),
+            (ctx.game_dir, "/work/inst/game", False),
             (hmc_cache_root, "/work/hmc-cache", False),
             (shared_versions, "/work/hmc-shared-versions", False),
-            *[
-                (path, f"/work/{path.name}", False)
-                for path in _launcher_meta_dir(ctx).iterdir()
-                if path.is_file()
-            ],
         ],
         command=[
             "/opt/automodpack/run-headlessmc-client",
