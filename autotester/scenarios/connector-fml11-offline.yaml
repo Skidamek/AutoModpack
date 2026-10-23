@@ -25,8 +25,8 @@ flow:
         sha512: 5ac8d51761db794ae3125895a22824961fe3611e544a82749a3d5c6f3ee40c1257652652f77d00f00870134a97cc81d51f0471b72e301d0caf2e828af3c59a58
       - url: https://cdn.modrinth.com/data/voWgQoWV/versions/nWdOZVsP/launchpad-1.8.0%2B26.1.2-full.jar
         sha512: a863fc9e8b229c2f2d952c6ccacd3db7afe20654fff3335b4a6d23cc78dbd625121dd0c3ac61199d6027bdc4d06dde6473b52094676d2356914e6d191f2faf75
-      - url: https://cdn.modrinth.com/data/Aqlf1Shp/versions/rG5Z7yD5/forgified-fabric-api-0.155.0%2B26.1.2%2B3.4.2.jar
-        sha512: f226f179b767a590453502c61a155363429b4f90fe43ba1d3401e130080784f739b2d7a61fddc205afa346875d2be90119ad3d78205e688981f53796b69a9fe1
+      - url: https://cdn.modrinth.com/data/Aqlf1Shp/versions/qg2tQe8K/forgified-fabric-api-0.155.3%2B26.1.2%2B3.5.9.jar
+        sha512: 59fda08585bb3ae0602f8b45abbe9ee71d55606297d4f2c3c592b885e6c4616a41ec66e4320aaf1c1c78ff47d7b427833faf9d8644f8f8c82bac61fde332cd4f
       - url: https://cdn.modrinth.com/data/FYpiwiBR/versions/X0aO2A0t/ConnectorExtras-2.0.0%2B26.1.2.jar
         sha512: f9076afe74dc474146997ceb82cde5ee9fdc49411201d8a003666321c5d5d784f7bb98782837ac6eb835d916031bc18887c238f16d7305658a952b50663151fc
   - do: launch_client
