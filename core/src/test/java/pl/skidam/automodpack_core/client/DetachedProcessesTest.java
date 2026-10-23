@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,14 +45,13 @@ class DetachedProcessesTest {
 					.directory(temp.toFile()).redirectErrorStream(true).redirectOutput(parentLog.toFile()).start();
 			assertTrue(parent.waitFor(30, TimeUnit.SECONDS), "parent spawn timed out");
 			assertEquals(0, parent.exitValue(), () -> readIfPresent(parentLog) + readIfPresent(childLog));
-			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-			while (System.nanoTime() < deadline && !Files.isRegularFile(childPid)) Thread.sleep(50);
-			assertTrue(Files.isRegularFile(childPid), "detached child did not start; parent=" + readIfPresent(parentLog) + " child=" + readIfPresent(childLog));
-			child = ProcessHandle.of(Long.parseLong(Files.readString(childPid, StandardCharsets.UTF_8))).orElseThrow();
+			String pidText = awaitNonEmpty(childPid, 10);
+			assertTrue(!pidText.isEmpty(), "detached child did not start; parent=" + readIfPresent(parentLog) + " child=" + readIfPresent(childLog));
+			child = ProcessHandle.of(Long.parseLong(pidText)).orElseThrow();
 			assertTrue(child.isAlive(), "detached child exited before the parent");
 			Files.writeString(parentExited, "exit", StandardCharsets.UTF_8);
-			while (System.nanoTime() < deadline && !Files.isRegularFile(marker)) Thread.sleep(50);
-			assertEquals("alive", Files.isRegularFile(marker) ? Files.readString(marker, StandardCharsets.UTF_8).trim() : "missing; parent=" + readIfPresent(parentLog) + " child=" + readIfPresent(childLog));
+			String alive = awaitNonEmpty(marker, 10);
+			assertEquals("alive", alive.isEmpty() ? "missing; parent=" + readIfPresent(parentLog) + " child=" + readIfPresent(childLog) : alive);
 			Files.writeString(stopChild, "stop", StandardCharsets.UTF_8);
 			child.onExit().get(10, TimeUnit.SECONDS);
 		} finally {
@@ -63,6 +63,22 @@ class DetachedProcessesTest {
 			Files.writeString(stopChild, "stop", StandardCharsets.UTF_8);
 			if (child != null && child.isAlive()) child.onExit().get(10, TimeUnit.SECONDS);
 		}
+	}
+
+	/** Windows can expose a 0-byte file after create and before the write lands; wait for bytes, not existence. */
+	private static String awaitNonEmpty(Path file, long seconds) throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(seconds);
+		while (System.nanoTime() < deadline) {
+			try {
+				if (Files.isRegularFile(file)) {
+					String text = Files.readString(file, StandardCharsets.UTF_8).trim();
+					if (!text.isEmpty()) return text;
+				}
+			} catch (IOException ignored) {
+			}
+			Thread.sleep(50);
+		}
+		return "";
 	}
 
 	private static String readIfPresent(Path file) {
