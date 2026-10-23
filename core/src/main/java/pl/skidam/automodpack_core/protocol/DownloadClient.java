@@ -92,12 +92,30 @@ public class DownloadClient implements AutoCloseable {
         AtomicReference<X509Certificate[]> capturedChain = new AtomicReference<>();
         SSLContext context = createSSLContext(keyStore, capturedChain::set);
 
+        return withProbeTrustRecovery(
+                () -> getPreValidationConnection(addresses, context),
+                error -> recoverProbeConnection(error, addresses, keyStore, trustCallback, capturedChain.get()),
+                conn -> afterCaVouch(conn, context, addresses, keyStore, trustCallback));
+    }
+
+    @FunctionalInterface
+    interface IoSupplier<T> {
+        T get() throws IOException;
+    }
+
+    @FunctionalInterface
+    interface IoFunction<T, R> {
+        R apply(T value) throws IOException;
+    }
+
+    static <T, R> R withProbeTrustRecovery(IoSupplier<T> handshake, IoFunction<IOException, R> recovery, IoFunction<T, R> afterHandshake) throws IOException {
+        T connection;
         try {
-            PreValidationConnection conn = getPreValidationConnection(addresses, context);
-            return afterCaVouch(conn, context, addresses, keyStore, trustCallback);
-        } catch (IOException e) { // Invalid/Selfsigned certificate, prompt user for trust.
-            return recoverProbeConnection(e, addresses, keyStore, trustCallback, capturedChain.get());
+            connection = handshake.get();
+        } catch (IOException handshakeFailure) {
+            return recovery.apply(handshakeFailure);
         }
+        return afterHandshake.apply(connection);
     }
 
     /**

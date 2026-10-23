@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
@@ -19,6 +20,40 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 class DownloadClientTest {
 
     private static final byte[] HASH = "hash".getBytes(StandardCharsets.UTF_8);
+
+    @Test
+    void aRevokedCertificateCannotEnterHandshakeTrustRecovery() {
+        IOException revoked = new IOException("CA revoked this certificate");
+        AtomicBoolean recovered = new AtomicBoolean();
+
+        IOException thrown = assertThrows(IOException.class, () -> DownloadClient.withProbeTrustRecovery(
+                () -> "connected",
+                failure -> {
+                    recovered.set(true);
+                    return "trusted retry";
+                },
+                connection -> { throw revoked; }));
+
+        assertSame(revoked, thrown);
+        assertFalse(recovered.get());
+    }
+
+    @Test
+    void anUntrustedHandshakeStillEntersTrustRecovery() throws Exception {
+        IOException untrusted = new IOException("untrusted certificate");
+        AtomicBoolean validated = new AtomicBoolean();
+
+        String result = DownloadClient.<String, String>withProbeTrustRecovery(
+                () -> { throw untrusted; },
+                failure -> "trusted retry",
+                connection -> {
+                    validated.set(true);
+                    return connection;
+                });
+
+        assertEquals("trusted retry", result);
+        assertFalse(validated.get());
+    }
 
     @Test
     void aBodyWithinTheObjectSizeIsWritten(@TempDir Path directory) throws Exception {
