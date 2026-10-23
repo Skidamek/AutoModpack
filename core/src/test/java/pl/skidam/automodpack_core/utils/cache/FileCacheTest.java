@@ -242,6 +242,22 @@ class FileCacheTest {
 	}
 
 	@Test
+	void namedObjectTripwireRehashesARacyRecordEvenWhenTheRewriteKeptEveryStatField() throws Exception {
+		Path object = temporaryDirectory.resolve("object.bin");
+		Files.writeString(object, "named-bytes", StandardCharsets.UTF_8);
+		// A modification time not older than the proof stands in for a rewrite landing in the same timestamp tick.
+		FileTime racy = FileTime.from(Instant.now().plusSeconds(3600));
+		Files.setLastModifiedTime(object, racy);
+		try (FileCache cache = FileCache.open(temporaryDirectory.resolve("file-cache"))) {
+			String sha1 = cache.getOrComputeHash(object);
+			assertTrue(cache.matchesImmutable(object, Files.size(object), sha1));
+			Files.writeString(object, "other-bytes", StandardCharsets.UTF_8);
+			Files.setLastModifiedTime(object, racy);
+			assertFalse(cache.matchesImmutable(object, Files.size(object), sha1));
+		}
+	}
+
+	@Test
 	void namedObjectTripwireTrustsChangeTimeBumpsFromOurOwnHardlinks() throws Exception {
 		Path object = temporaryDirectory.resolve("object.bin");
 		Files.writeString(object, "named-bytes", StandardCharsets.UTF_8);

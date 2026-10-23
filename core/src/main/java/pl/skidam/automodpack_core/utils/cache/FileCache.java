@@ -12,7 +12,9 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiPredicate;
 
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
@@ -24,7 +26,8 @@ import pl.skidam.automodpack_core.utils.PlatformUtils;
  * {@code is_racy_timestamp} (mtime not older than the record → rehash). Named immutable objects
  * (CAS store) use a narrower tripwire of only size, mtime, and inode, because {@code link()} and
  * {@code chmod()} bump inode ctime on every publication and ctime-only disturb would force full
- * rehashes of multi-gigabyte objects.
+ * rehashes of multi-gigabyte objects. Both are racy-guarded against a record's {@code validatedAtNanos},
+ * a stamp from the filesystem's own clock, so a same-size rewrite within one timestamp tick is rehashed.
  * </p>
  *
  * <p>
@@ -37,6 +40,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 
 	private static final SharedCacheRegistry<FileCache> REGISTRY = new SharedCacheRegistry<>();
 	private static final long UNAVAILABLE_CHANGE_TIME_NANOS = Long.MIN_VALUE;
+	private volatile long clockStamp = Long.MIN_VALUE;
 
 	public static final class CachedFile {
 		private String path;
@@ -157,23 +161,22 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 			ComputedHash computed = computeStableHash(absPath, fingerprint);
 			if (computed == null) return null;
 
-			return publishComputed(pathKey, computed);
+			return publishComputed(pathKey, computed, FileCache::statsMatch);
 		}
 	}
 
-	private String publishComputed(String pathKey, ComputedHash computed) {
+	/**
+	 * Records a stable hash. A re-proof that leaves the hash and everything {@code tripwire} compares unchanged only
+	 * refreshes the warm record's stamp, so a racy rehash never rewrites the persisted record.
+	 */
+	private String publishComputed(String pathKey, ComputedHash computed, BiPredicate<CachedFile, FileFingerprint> tripwire) {
 		FileFingerprint stableFingerprint = computed.fingerprint();
 		CachedFile previous = hotRecords.get(pathKey);
-		String murmur = previous != null && Objects.equals(previous.contentHash(), computed.hash()) ? previous.murmur() : null;
+		boolean sameHash = previous != null && Objects.equals(previous.contentHash(), computed.hash());
 		CachedFile record = new CachedFile(pathKey, computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.changeTimeNanos(), stableFingerprint.size(),
-				stableFingerprint.fileKey(), validationTimeNanos(), murmur);
-		if (previous != null && Objects.equals(previous.contentHash(), record.contentHash()) && previous.lastModifiedNanos() == record.lastModifiedNanos()
-				&& previous.creationTimeNanos() == record.creationTimeNanos() && previous.changeTimeNanos() == record.changeTimeNanos() && previous.size() == record.size()
-				&& Objects.equals(previous.fileKey(), record.fileKey()) && Objects.equals(previous.murmur(), record.murmur())) {
-			hotRecords.put(pathKey, record);
-			return computed.hash();
-		}
-		writeRecord(pathKey, record);
+				stableFingerprint.fileKey(), validatedAt(stableFingerprint.lastModifiedNanos()), sameHash ? previous.murmur() : null);
+		if (sameHash && tripwire.test(previous, stableFingerprint)) hotRecords.put(pathKey, record);
+		else writeRecord(pathKey, record);
 		return computed.hash();
 	}
 
@@ -217,8 +220,8 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	}
 
 	/**
-	 * Whether {@code file} is still the named immutable bytes. A matching record is trusted without
-	 * reading content; a missing or disturbed record forces one stable full read that is published
+	 * Whether {@code file} is still the named immutable bytes. A matching record that is not racy is
+	 * trusted without reading content; a missing or disturbed record forces one stable full read that is published
 	 * either way, so every answer - true or false - reflects bytes seen at the current fingerprint
 	 * and repeated asks of unchanged disturbed bytes are answered by stat alone. The tripwire
 	 * compares only what a content write changes (size, mtime, inode): our own publication
@@ -240,9 +243,9 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		synchronized (lock(pathKey)) {
 			CachedFile cached = readRecord(pathKey, CachedFile.class);
 			FileFingerprint fingerprint = snapshot.fingerprint();
-			if (immutableStatsMatch(cached, fingerprint)) return sha1.equalsIgnoreCase(cached.contentHash());
-			String observed = getOrComputeHashWithFingerprint(absPath, fingerprint);
-			return observed != null && sha1.equalsIgnoreCase(observed);
+			if (immutableStatsMatch(cached, fingerprint) && !isRacyTimestamp(cached, fingerprint)) return sha1.equalsIgnoreCase(cached.contentHash());
+			ComputedHash computed = computeStableHash(absPath, fingerprint);
+			return computed != null && sha1.equalsIgnoreCase(publishComputed(pathKey, computed, FileCache::immutableStatsMatch));
 		}
 	}
 
@@ -323,9 +326,30 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		return time.to(TimeUnit.NANOSECONDS);
 	}
 
-	private static long validationTimeNanos() {
-		Instant now = Instant.now();
-		return now.getEpochSecond() * 1_000_000_000L + now.getNano();
+	/**
+	 * The racy reference for a proof of a file last modified at {@code lastModifiedNanos}: a reading of the records
+	 * filesystem's own clock taken no later than now. Filesystems stamp mtime from a coarse clock (a jiffy, an NTFS tick,
+	 * FAT's two seconds), so a precise wall clock would run ahead of a write that lands after the proof in the same tick.
+	 * An earlier reading stays valid, so the clock is only read again when the file is not older than the last one.
+	 */
+	private long validatedAt(long lastModifiedNanos) {
+		long stamp = clockStamp;
+		if (lastModifiedNanos < stamp) return stamp;
+		try {
+			Files.createDirectories(recordsDirectory);
+			Path probe = Files.createTempFile(recordsDirectory, ".clock-", DurableFiles.TEMPORARY_SUFFIX);
+			try {
+				stamp = toNanos(Files.getLastModifiedTime(probe, LinkOption.NOFOLLOW_LINKS));
+			} finally {
+				Files.deleteIfExists(probe);
+			}
+		} catch (IOException e) {
+			// An unwritable cache keeps only warm records; the wall clock keeps them usable as before.
+			Instant now = Instant.now();
+			return now.getEpochSecond() * 1_000_000_000L + now.getNano();
+		}
+		clockStamp = stamp;
+		return stamp;
 	}
 
 	private ComputedHash computeStableHash(Path file, FileFingerprint initialFingerprint) {
@@ -369,8 +393,9 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	}
 
 	/**
-	 * Git {@code is_racy_timestamp}: the file's mtime is not strictly older than when the cache
-	 * record was written. Worktree identity then rehashes. A racily-clean stat is not tamper.
+	 * Git {@code is_racy_timestamp}: the file's mtime is not strictly older than the filesystem-clock stamp of its proof,
+	 * so a same-size rewrite in the same tick could share every stat field. Both tripwires then rehash; a racily-clean
+	 * stat is not tamper.
 	 */
 	private static boolean isRacyTimestamp(CachedFile cached, FileFingerprint fingerprint) {
 		return fingerprint.lastModifiedNanos() >= cached.validatedAtNanos();
@@ -403,7 +428,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 			CachedFile previous = readRecord(pathKey, CachedFile.class);
 			String storedMurmur = murmur != null ? murmur : previous != null && Objects.equals(previous.contentHash(), hash) ? previous.murmur() : null;
 			CachedFile record = new CachedFile(pathKey, hash, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
-					validationTimeNanos(), storedMurmur);
+					validatedAt(fingerprint.lastModifiedNanos()), storedMurmur);
 			writeRecord(pathKey, record);
 		}
 	}
