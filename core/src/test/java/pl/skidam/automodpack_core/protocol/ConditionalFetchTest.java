@@ -680,6 +680,7 @@ class ConditionalFetchTest {
 			while (!closed) {
 				try {
 					SSLSocket socket = MagicTls.accept(server, context);
+					openConnections.add(socket);
 					connections.incrementAndGet();
 					executor.execute(() -> serve(socket));
 				} catch (IOException e) {
@@ -689,7 +690,6 @@ class ConditionalFetchTest {
 		}
 
 		private void serve(SSLSocket socket) {
-			openConnections.add(socket);
 			// Responses serialize on one thread per connection, in read order; the read loop never waits on a response, so pipelined requests are all read the moment they arrive.
 			ExecutorService responder = Executors.newSingleThreadExecutor();
 			try {
