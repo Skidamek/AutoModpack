@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.asn1.x509.BasicConstraints;
 import org.bouncycastle.asn1.x509.CRLDistPoint;
 import org.bouncycastle.asn1.x509.CRLNumber;
 import org.bouncycastle.asn1.x509.CRLReason;
@@ -24,6 +25,7 @@ import org.bouncycastle.asn1.x509.DistributionPointName;
 import org.bouncycastle.asn1.x509.Extension;
 import org.bouncycastle.asn1.x509.GeneralName;
 import org.bouncycastle.asn1.x509.GeneralNames;
+import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.cert.X509v2CRLBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
@@ -43,12 +45,14 @@ import pl.skidam.automodpack_core.utils.FetchCache;
 
 class LeafRevocationTest {
 
+	private static final X500Name CA_NAME = new X500Name("CN=Test CA");
+
 	@Test
 	void aLeafWithNoHttpCrlDistributionPointIsGood() throws Exception {
 		KeyPair ca = NetUtils.generateKeyPair();
 		KeyPair leafKeys = NetUtils.generateKeyPair();
 		X509Certificate issuer = caCert(ca);
-		X509Certificate leaf = leafCert(issuer, ca, leafKeys, null);
+		X509Certificate leaf = leafCert(ca, leafKeys, null);
 		assertEquals(LeafRevocation.Status.GOOD, LeafRevocation.check(leaf, new X509Certificate[]{leaf, issuer}, new FetchCache(null), Duration.ofSeconds(1)).get(2, TimeUnit.SECONDS));
 	}
 
@@ -59,8 +63,8 @@ class LeafRevocationTest {
 		X509Certificate issuer = caCert(ca);
 		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 		String crlUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/crl";
-		X509Certificate leaf = leafCert(issuer, ca, leafKeys, crlUrl);
-		byte[] crl = crl(ca, issuer, leaf.getSerialNumber(), 1);
+		X509Certificate leaf = leafCert(ca, leafKeys, crlUrl);
+		byte[] crl = crl(ca, leaf.getSerialNumber(), 1);
 		server.createContext("/crl", exchange -> {
 			exchange.sendResponseHeaders(200, crl.length);
 			try (OutputStream out = exchange.getResponseBody()) { out.write(crl); }
@@ -69,7 +73,7 @@ class LeafRevocationTest {
 		server.start();
 		try {
 			FetchCache cache = new FetchCache(directory);
-			assertEquals(LeafRevocation.Status.REVOKED, LeafRevocation.check(leaf, new X509Certificate[]{leaf, issuer}, cache, Duration.ofSeconds(4)).get(8, TimeUnit.SECONDS));
+			assertEquals(LeafRevocation.Status.REVOKED, LeafRevocation.check(leaf, new X509Certificate[]{leaf, issuer}, List.of(crlUrl), cache, Duration.ofSeconds(4)).get(8, TimeUnit.SECONDS));
 		} finally {
 			server.stop(0);
 		}
@@ -82,9 +86,9 @@ class LeafRevocationTest {
 		X509Certificate issuer = caCert(ca);
 		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 		String crlUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/crl";
-		X509Certificate leaf = leafCert(issuer, ca, leafKeys, crlUrl);
-		byte[] fresh = crl(ca, issuer, null, 2);
-		byte[] older = crl(ca, issuer, leaf.getSerialNumber(), 1);
+		X509Certificate leaf = leafCert(ca, leafKeys, crlUrl);
+		byte[] fresh = crl(ca, null, 2);
+		byte[] older = crl(ca, leaf.getSerialNumber(), 1);
 		// Seed the cache with the fresh (non-revoking) CRL
 		FetchCache cache = new FetchCache(directory);
 		server.createContext("/crl", exchange -> {
@@ -94,7 +98,7 @@ class LeafRevocationTest {
 		server.setExecutor(Executors.newCachedThreadPool());
 		server.start();
 		try {
-			assertEquals(LeafRevocation.Status.GOOD, LeafRevocation.check(leaf, new X509Certificate[]{leaf, issuer}, cache, Duration.ofSeconds(4)).get(8, TimeUnit.SECONDS));
+			assertEquals(LeafRevocation.Status.GOOD, LeafRevocation.check(leaf, new X509Certificate[]{leaf, issuer}, List.of(crlUrl), cache, Duration.ofSeconds(4)).get(8, TimeUnit.SECONDS));
 			server.removeContext("/crl");
 			server.createContext("/crl", exchange -> {
 				exchange.sendResponseHeaders(200, older.length);
@@ -106,7 +110,7 @@ class LeafRevocationTest {
 			java.nio.file.Files.write(directory.resolve(java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(crlUrl.getBytes(java.nio.charset.StandardCharsets.UTF_8)))), fresh);
 			// Age the file so get() refetches
 			directory.resolve(java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(crlUrl.getBytes(java.nio.charset.StandardCharsets.UTF_8)))).toFile().setLastModified(System.currentTimeMillis() - FetchCache.MAX_AGE.toMillis() - 60_000);
-			assertEquals(LeafRevocation.Status.GOOD, LeafRevocation.check(leaf, new X509Certificate[]{leaf, issuer}, cache, Duration.ofSeconds(4)).get(8, TimeUnit.SECONDS),
+			assertEquals(LeafRevocation.Status.GOOD, LeafRevocation.check(leaf, new X509Certificate[]{leaf, issuer}, List.of(crlUrl), cache, Duration.ofSeconds(4)).get(8, TimeUnit.SECONDS),
 					"a replayed older CRL that revokes must not beat the cached newer copy");
 		} finally {
 			server.stop(0);
@@ -120,28 +124,26 @@ class LeafRevocationTest {
 	}
 
 	private static X509Certificate caCert(KeyPair ca) throws Exception {
-		X500Name name = new X500Name("CN=Test CA");
-		return new JcaX509CertificateConverter().getCertificate(new JcaX509v3CertificateBuilder(name, BigInteger.ONE, Date.from(Instant.now().minusSeconds(3600)), Date.from(Instant.now().plusSeconds(86_400)), name, ca.getPublic())
-				.addExtension(Extension.basicConstraints, true, new org.bouncycastle.asn1.x509.BasicConstraints(true))
+		return new JcaX509CertificateConverter().getCertificate(new JcaX509v3CertificateBuilder(CA_NAME, BigInteger.ONE, Date.from(Instant.now().minusSeconds(3600)), Date.from(Instant.now().plusSeconds(86_400)), CA_NAME, ca.getPublic())
+				.addExtension(Extension.basicConstraints, true, new BasicConstraints(true))
+				.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.keyCertSign | KeyUsage.cRLSign))
 				.build(new JcaContentSignerBuilder("SHA256withRSA").build(ca.getPrivate())));
 	}
 
-	private static X509Certificate leafCert(X509Certificate issuer, KeyPair ca, KeyPair leafKeys, String crlUrl) throws Exception {
-		X500Name issuerName = new X500Name(issuer.getSubjectX500Principal().getName());
+	private static X509Certificate leafCert(KeyPair ca, KeyPair leafKeys, String crlUrl) throws Exception {
 		X500Name subject = new X500Name("CN=leaf.example");
-		var builder = new JcaX509v3CertificateBuilder(issuerName, BigInteger.TEN, Date.from(Instant.now().minusSeconds(3600)), Date.from(Instant.now().plusSeconds(86_400)), subject, leafKeys.getPublic());
+		var builder = new JcaX509v3CertificateBuilder(CA_NAME, BigInteger.TEN, Date.from(Instant.now().minusSeconds(3600)), Date.from(Instant.now().plusSeconds(86_400)), subject, leafKeys.getPublic());
 		if (crlUrl != null) {
 			builder.addExtension(Extension.cRLDistributionPoints, false, new CRLDistPoint(new DistributionPoint[]{new DistributionPoint(new DistributionPointName(new GeneralNames(new GeneralName(GeneralName.uniformResourceIdentifier, crlUrl))), null, null)}));
 		}
 		return new JcaX509CertificateConverter().getCertificate(builder.build(new JcaContentSignerBuilder("SHA256withRSA").build(ca.getPrivate())));
 	}
 
-	private static byte[] crl(KeyPair ca, X509Certificate issuer, BigInteger revokedSerial, int number) throws Exception {
-		X500Name issuerName = new X500Name(issuer.getSubjectX500Principal().getName());
-		X509v2CRLBuilder builder = new X509v2CRLBuilder(issuerName, Date.from(Instant.now().minusSeconds(60).minusSeconds(number == 1 ? 3600 : 0)));
+	private static byte[] crl(KeyPair ca, BigInteger revokedSerial, int number) throws Exception {
+		X509v2CRLBuilder builder = new X509v2CRLBuilder(CA_NAME, Date.from(Instant.now().minusSeconds(60).minusSeconds(number == 1 ? 3600 : 0)));
 		builder.setNextUpdate(Date.from(Instant.now().plusSeconds(86_400)));
 		builder.addExtension(Extension.cRLNumber, false, new CRLNumber(BigInteger.valueOf(number)));
-		if (revokedSerial != null) builder.addCRLEntry(revokedSerial, Date.from(Instant.now().minusSeconds(30)), CRLReason.privilegeWithdrawn);
+		if (revokedSerial != null) builder.addCRLEntry(revokedSerial, Date.from(Instant.now().minusSeconds(600)), CRLReason.keyCompromise);
 		return builder.build(new JcaContentSignerBuilder("SHA256withRSA").build(ca.getPrivate())).getEncoded();
 	}
 }
