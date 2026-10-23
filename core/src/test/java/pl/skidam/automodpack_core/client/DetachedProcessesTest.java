@@ -29,17 +29,40 @@ class DetachedProcessesTest {
 	@Test
 	void grandchildSurvivesParentExit(@TempDir Path temp) throws Exception {
 		Path marker = temp.resolve("alive.txt");
+		Path childPid = temp.resolve("child.pid");
+		Path parentExited = temp.resolve("parent-exited");
+		Path stopChild = temp.resolve("stop-child");
 		Path childLog = temp.resolve("child.log");
 		Path parentLog = temp.resolve("parent.log");
 		String classpath = System.getProperty("java.class.path");
 		Path java = DetachedProcesses.javaExecutable();
-		Process parent = new ProcessBuilder(java.toString(), "-Xmx64M", "-cp", classpath, ParentExits.class.getName(), marker.toAbsolutePath().toString(), childLog.toAbsolutePath().toString(),
-				temp.toAbsolutePath().toString(), classpath).directory(temp.toFile()).redirectErrorStream(true).redirectOutput(parentLog.toFile()).start();
-		assertTrue(parent.waitFor(30, TimeUnit.SECONDS), "parent spawn timed out");
-		assertEquals(0, parent.exitValue(), () -> readIfPresent(parentLog) + readIfPresent(childLog));
-		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-		while (System.nanoTime() < deadline && !Files.isRegularFile(marker)) Thread.sleep(50);
-		assertEquals("alive", Files.isRegularFile(marker) ? Files.readString(marker, StandardCharsets.UTF_8).trim() : "missing; parent=" + readIfPresent(parentLog) + " child=" + readIfPresent(childLog));
+		Process parent = null;
+		ProcessHandle child = null;
+		try {
+			parent = new ProcessBuilder(java.toString(), "-Xmx64M", "-cp", classpath, ParentExits.class.getName(), marker.toAbsolutePath().toString(), childPid.toAbsolutePath().toString(),
+					parentExited.toAbsolutePath().toString(), stopChild.toAbsolutePath().toString(), childLog.toAbsolutePath().toString(), temp.toAbsolutePath().toString(), classpath)
+					.directory(temp.toFile()).redirectErrorStream(true).redirectOutput(parentLog.toFile()).start();
+			assertTrue(parent.waitFor(30, TimeUnit.SECONDS), "parent spawn timed out");
+			assertEquals(0, parent.exitValue(), () -> readIfPresent(parentLog) + readIfPresent(childLog));
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+			while (System.nanoTime() < deadline && !Files.isRegularFile(childPid)) Thread.sleep(50);
+			assertTrue(Files.isRegularFile(childPid), "detached child did not start; parent=" + readIfPresent(parentLog) + " child=" + readIfPresent(childLog));
+			child = ProcessHandle.of(Long.parseLong(Files.readString(childPid, StandardCharsets.UTF_8))).orElseThrow();
+			assertTrue(child.isAlive(), "detached child exited before the parent");
+			Files.writeString(parentExited, "exit", StandardCharsets.UTF_8);
+			while (System.nanoTime() < deadline && !Files.isRegularFile(marker)) Thread.sleep(50);
+			assertEquals("alive", Files.isRegularFile(marker) ? Files.readString(marker, StandardCharsets.UTF_8).trim() : "missing; parent=" + readIfPresent(parentLog) + " child=" + readIfPresent(childLog));
+			Files.writeString(stopChild, "stop", StandardCharsets.UTF_8);
+			child.onExit().get(10, TimeUnit.SECONDS);
+		} finally {
+			if (parent != null && parent.isAlive()) {
+				parent.destroyForcibly();
+				parent.waitFor(10, TimeUnit.SECONDS);
+			}
+			Files.writeString(parentExited, "exit", StandardCharsets.UTF_8);
+			Files.writeString(stopChild, "stop", StandardCharsets.UTF_8);
+			if (child != null && child.isAlive()) child.onExit().get(10, TimeUnit.SECONDS);
+		}
 	}
 
 	private static String readIfPresent(Path file) {
@@ -57,17 +80,22 @@ class DetachedProcessesTest {
 	public static final class ParentExits {
 		public static void main(String[] args) throws Exception {
 			Path marker = Path.of(args[0]);
-			Path log = Path.of(args[1]);
-			Path dir = Path.of(args[2]);
-			DetachedProcesses.start(ChildLives.class, List.of("-Xmx64M"), List.of(marker.toString()), dir, log, classpath(args[3]));
+			Path childPid = Path.of(args[1]);
+			Path parentExited = Path.of(args[2]);
+			Path stopChild = Path.of(args[3]);
+			Path log = Path.of(args[4]);
+			Path dir = Path.of(args[5]);
+			DetachedProcesses.start(ChildLives.class, List.of("-Xmx64M"), List.of(marker.toString(), childPid.toString(), parentExited.toString(), stopChild.toString()), dir, log, classpath(args[6]));
 		}
 	}
 
 	public static final class ChildLives {
 		public static void main(String[] args) throws Exception {
 			DetachedProcesses.ignoreHangup();
-			Thread.sleep(1500);
+			Files.writeString(Path.of(args[1]), Long.toString(ProcessHandle.current().pid()), StandardCharsets.UTF_8);
+			while (!Files.exists(Path.of(args[2]))) Thread.sleep(50);
 			Files.writeString(Path.of(args[0]), "alive", StandardCharsets.UTF_8);
+			while (!Files.exists(Path.of(args[3]))) Thread.sleep(50);
 		}
 	}
 }
