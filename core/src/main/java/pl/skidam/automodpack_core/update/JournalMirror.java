@@ -91,7 +91,7 @@ public final class JournalMirror {
 	 */
 	private static boolean sameContentStat(FileCache.StatSnapshot a, FileCache.StatSnapshot b) {
 		FileCache.FileFingerprint x = a.fingerprint(), y = b.fingerprint();
-		return x.size() == y.size() && x.lastModifiedNanos() == y.lastModifiedNanos() && java.util.Objects.equals(x.fileKey(), y.fileKey());
+		return x.size() == y.size() && x.lastModifiedNanos() == y.lastModifiedNanos() && Objects.equals(x.fileKey(), y.fileKey());
 	}
 
 	private void replaceFromLocked(String modpackId, List<JournalEntry> entries, Path fetchedFile, FileCache.StatSnapshot parsed) throws IOException {
