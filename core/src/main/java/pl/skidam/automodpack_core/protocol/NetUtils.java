@@ -85,6 +85,8 @@ public class NetUtils {
     public static final int DEFAULT_CHUNK_SIZE = 256 * 1024; // 256 KB
     public static final int MIN_CHUNK_SIZE = 8 * 1024; // 8 KB
     public static final int MAX_CHUNK_SIZE = 512 * 1024; // 512 KB
+    // The modpack content list has no size to check against beforehand; this bound is far above any real pack's list.
+    public static final long MAX_MODPACK_CONTENT_BYTES = 64L * 1024 * 1024;
 
     private static final Set<PosixFilePermission> OWNER_ONLY = PosixFilePermissions.fromString("rw-------");
 

@@ -223,8 +223,9 @@ public class DownloadClient implements AutoCloseable {
         throw new IllegalStateException("No available connections");
     }
 
-    public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
-        return getFreeConnection().sendDownloadFile(fileHash, destination, chunkCallback);
+    /** Downloads one object of at most {@code maxBytes}; a server declaring a longer body is refused before a byte reaches the disk. */
+    public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, long maxBytes, IntConsumer chunkCallback) {
+        return getFreeConnection().sendDownloadFile(fileHash, destination, maxBytes, chunkCallback);
     }
 
     public CompletableFuture<Path> requestRefresh(byte[][] fileHashes, Path destination) {
@@ -342,6 +343,15 @@ class Connection implements AutoCloseable {
         }
     }
 
+    /** A connection over already negotiated streams, for tests of the framing. */
+    Connection(DataInputStream in, DataOutputStream out, byte[] secretBytes, byte compressionType) {
+        this.socket = null;
+        this.secretBytes = secretBytes;
+        this.in = in;
+        this.out = out;
+        this.compressionType = compressionType;
+    }
+
     public boolean isActive() {
         return !socket.isClosed();
     }
@@ -358,7 +368,7 @@ class Connection implements AutoCloseable {
         return CompressionFactory.getCodec(compressionType);
     }
 
-    public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
+    public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, long maxBytes, IntConsumer chunkCallback) {
         if (destination == null) throw new IllegalArgumentException("Destination cannot be null");
 
         return CompletableFuture.supplyAsync(() -> {
@@ -373,7 +383,7 @@ class Connection implements AutoCloseable {
                 dos.write(fileHash);
 
                 writeProtocolMessage(baos.toByteArray());
-                return readFileResponse(destination, chunkCallback);
+                return readFileResponse(destination, maxBytes, chunkCallback);
             } catch (Exception e) {
                 exception = e;
                 throw new CompletionException(e);
@@ -401,7 +411,7 @@ class Connection implements AutoCloseable {
                 }
 
                 writeProtocolMessage(baos.toByteArray());
-                return readFileResponse(destination, null);
+                return readFileResponse(destination, MAX_MODPACK_CONTENT_BYTES, null);
             } catch (Exception e) {
                 exception = e;
                 throw new CompletionException(e);
@@ -475,13 +485,14 @@ class Connection implements AutoCloseable {
     /**
      * Processes the server response stream. Expects Header -> Data Frames -> EOT.
      */
-    private Path readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {
+    private Path readFileResponse(Path destination, long maxBytes, IntConsumer chunkCallback) throws IOException {
         try (DataInputStream headerIn = new DataInputStream(new ByteArrayInputStream(readProtocolMessageFrame()))) {
             byte version = headerIn.readByte();
             byte messageType = headerIn.readByte();
 
             if (messageType == ERROR) {
                 int errLen = headerIn.readInt();
+                if (errLen < 0 || errLen > headerIn.available()) throw new IOException("Server error message length (" + errLen + ") runs past its frame");
                 byte[] errBytes = new byte[errLen];
                 headerIn.readFully(errBytes);
                 throw new IOException("Server error: " + new String(errBytes, StandardCharsets.UTF_8));
@@ -496,6 +507,10 @@ class Connection implements AutoCloseable {
             }
 
             long expectedFileSize = headerIn.readLong();
+            // The bound is the object asked for, not the server's word: a longer body is refused before a byte reaches the disk.
+            if (expectedFileSize < 0 || expectedFileSize > maxBytes) {
+                throw new IOException("Server declared a " + expectedFileSize + "-byte body for an object of at most " + maxBytes + " bytes");
+            }
             long receivedBytes = 0;
 
             try (OutputStream fos = new BufferedOutputStream(Files.newOutputStream(destination,

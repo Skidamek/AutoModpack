@@ -43,10 +43,11 @@ public class DownloadManager {
          this.downloadClient = downloadClient;
     }
 
-    public void download(Path file, String sha1, List<String> urls, Runnable successCallback, Runnable failureCallback) {
+    /** Queues one object of {@code size} bytes; a source whose body runs past that size fails the attempt. */
+    public void download(Path file, String sha1, long size, List<String> urls, Runnable successCallback, Runnable failureCallback) {
         FileInspection.HashPathPair hashPathPair = new FileInspection.HashPathPair(sha1, file);
         if (queuedDownloads.containsKey(hashPathPair)) return;
-        queuedDownloads.put(hashPathPair, new QueuedDownload(file, urls, 0, successCallback, failureCallback));
+        queuedDownloads.put(hashPathPair, new QueuedDownload(file, size, urls, 0, successCallback, failureCallback));
         addedToQueue++;
         downloadNext();
     }
@@ -150,7 +151,7 @@ public class DownloadManager {
 
         CustomFileUtils.setupFilePaths(outFile);
 
-        var future = downloadClient.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), outFile, (bytes) -> {
+        var future = downloadClient.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), outFile, queuedDownload.size, (bytes) -> {
             bytesDownloaded += bytes;
             speedMeter.addDownloadedBytes(bytes);
         });
@@ -179,8 +180,13 @@ public class DownloadManager {
                      new GZIPInputStream(rawInputStream) : rawInputStream) {
 
             byte[] buffer = new byte[NetUtils.DEFAULT_CHUNK_SIZE];
+            long written = 0;
             int bytesRead;
             while ((bytesRead = inputStream.read(buffer)) != -1) {
+                if (written + bytesRead > queuedDownload.size) {
+                    throw new IOException("Platform body ran past the " + queuedDownload.size + "-byte object " + outFile.getFileName());
+                }
+                written += bytesRead;
                 bytesDownloaded += bytesRead;
                 speedMeter.addDownloadedBytes(bytesRead);
                 outputStream.write(buffer, 0, bytesRead);
@@ -311,12 +317,14 @@ public class DownloadManager {
 
     public static class QueuedDownload {
         private final Path file;
+        private final long size;
         private final List<String> urls;
         private int attempts;
         private final Runnable successCallback;
         private final Runnable failureCallback;
-        public QueuedDownload(Path file, List<String> urls, int attempts, Runnable successCallback, Runnable failureCallback) {
+        public QueuedDownload(Path file, long size, List<String> urls, int attempts, Runnable successCallback, Runnable failureCallback) {
             this.file = file;
+            this.size = size;
             this.urls = urls;
             this.attempts = attempts;
             this.successCallback = successCallback;

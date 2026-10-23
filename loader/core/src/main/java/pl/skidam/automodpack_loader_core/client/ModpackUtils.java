@@ -545,7 +545,7 @@ public class ModpackUtils {
 
     public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, boolean allowAskingUser) {
         return fetchModpackContent(modpackAddresses, secret,
-                (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
+                (client) -> client.downloadFile(new byte[0], modpackContentTempFile, NetUtils.MAX_MODPACK_CONTENT_BYTES, null),
                 "Fetched", allowAskingUser);
     }
 

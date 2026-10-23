@@ -170,6 +170,7 @@ public class SelfUpdater {
             downloadManager.download(
                     automodpackUpdateJar,
                     automodpack.SHA1Hash(),
+                    automodpack.fileSize(),
                     List.of(automodpack.downloadUrl()),
                     () -> LOGGER.info("Downloaded update for AutoModpack."),
                     () -> LOGGER.error("Failed to download update for AutoModpack.")

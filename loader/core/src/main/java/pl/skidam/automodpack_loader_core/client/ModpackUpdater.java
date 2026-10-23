@@ -313,7 +313,7 @@ public class ModpackUpdater {
                     };
 
 
-                    downloadManager.download(downloadFile, serverHash, urls, successCallback, failureCallback);
+                    downloadManager.download(downloadFile, serverHash, Long.parseLong(serverItem.size), urls, successCallback, failureCallback);
                 }
 
                 downloadManager.joinAll();
@@ -397,7 +397,7 @@ public class ModpackUpdater {
                                 ClientCacheUtils.updateCache(downloadFile, serverHash);
                             };
 
-                            downloadManager.download(downloadFile, serverHash, List.of(), successCallback, failureCallback);
+                            downloadManager.download(downloadFile, serverHash, Long.parseLong(serverItem.size), List.of(), successCallback, failureCallback);
                         }
 
                         downloadManager.joinAll();
