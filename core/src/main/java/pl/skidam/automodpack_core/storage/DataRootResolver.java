@@ -182,7 +182,7 @@ public final class DataRootResolver {
 		}
 		Path clientRoot = gameRoot.resolve(StoragePaths.CLIENT_DATA_DIR).normalize();
 		if (sharedFailure != null) LOGGER.warn("Shared AutoModpack data root {} is unusable ({}); falling back to instance-local {}", sharedRoot, sharedFailure, clientRoot);
-		else LOGGER.info("Shared AutoModpack data root {} is on another volume than the instance; using the instance-local data root {} so installs can hard-link", sharedRoot, clientRoot);
+		else logRootOnce("Shared AutoModpack data root " + sharedRoot + " is on another volume than the instance; using the instance-local data root {} so installs can hard-link", clientRoot);
 		return clientRoot;
 	}
 
