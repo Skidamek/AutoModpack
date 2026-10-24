@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -12,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -46,6 +48,37 @@ class ModFileCacheTest {
 			assertEquals(firstMod.hash(), secondMod.hash());
 			assertEquals(second.toAbsolutePath().normalize(), secondMod.path());
 			assertEquals("example", secondMod.IDs().iterator().next());
+		}
+	}
+
+	@Test
+	void cachedNestedMetadataKeepsItsEntryPathForDependencyCopies() throws Exception {
+		Path pack = temporaryDirectory.resolve("pack.jar");
+		Path dependent = temporaryDirectory.resolve("dependent.jar");
+		Path records = temporaryDirectory.resolve("mod-cache");
+		writeNestedPack(pack);
+		writeFabricMod(dependent, "nesteddep_user", "\"nesteddep_lib\":\"*\"");
+		String packHash;
+
+		try (FileCache hashCache = FileCache.open(temporaryDirectory.resolve("file-cache")); ModFileCache modCache = ModFileCache.open(records)) {
+			packHash = modCache.getOrComputeMod(pack, hashCache).hash();
+			modCache.getOrComputeMod(dependent, hashCache);
+		}
+		Path packRecord = records.resolve(packHash.substring(0, 2)).resolve(packHash.substring(2) + ".json");
+		JsonObject oldRecord = JsonParser.parseString(Files.readString(packRecord, StandardCharsets.UTF_8)).getAsJsonObject();
+		oldRecord.getAsJsonArray("nestedMods").get(0).getAsJsonObject().remove("entryPath");
+		Files.writeString(packRecord, oldRecord.toString(), StandardCharsets.UTF_8);
+
+		try (FileCache hashCache = FileCache.open(temporaryDirectory.resolve("file-cache")); ModFileCache modCache = ModFileCache.open(records)) {
+			FileInspection.Mod cachedPack = modCache.getOrComputeMod(pack, hashCache);
+			FileInspection.Mod cachedDependent = modCache.getOrComputeMod(dependent, hashCache);
+			FileInspection.Mod nested = cachedPack.nestedMods().iterator().next();
+
+			assertEquals(Path.of("META-INF/jars/nesteddep-lib.jar"), nested.path());
+			assertEquals(List.of(), setAsideCopies(records));
+			assertEquals(List.of("mods/pack.jar/META-INF/jars/nesteddep-lib.jar"), NestedConflicts.detect(
+					List.of(new NestedConflicts.PackRoot("mods/pack.jar", cachedPack)),
+					List.of(new NestedConflicts.StandardRoot("mods/dependent.jar", cachedDependent)), cachedPack.IDs()).stream().map(NestedConflicts.Candidate::entryName).toList());
 		}
 	}
 
@@ -179,5 +212,37 @@ class ModFileCacheTest {
 			jar.write("{\"id\":\"example\",\"version\":\"1.0.0\"}".getBytes(StandardCharsets.UTF_8));
 			jar.closeEntry();
 		}
+	}
+
+	private static void writeNestedPack(Path path) throws Exception {
+		byte[] nested = jar(Map.of("fabric.mod.json", "{\"id\":\"nesteddep_lib\",\"version\":\"1.0.0\"}".getBytes(StandardCharsets.UTF_8)));
+		try (OutputStream output = Files.newOutputStream(path); JarOutputStream zip = new JarOutputStream(output)) {
+			zip.putNextEntry(new JarEntry("fabric.mod.json"));
+			zip.write("{\"id\":\"nesteddep_pack\",\"version\":\"1.0.0\",\"jars\":[{\"file\":\"META-INF/jars/nesteddep-lib.jar\"}]}".getBytes(StandardCharsets.UTF_8));
+			zip.closeEntry();
+			zip.putNextEntry(new JarEntry("META-INF/jars/nesteddep-lib.jar"));
+			zip.write(nested);
+			zip.closeEntry();
+		}
+	}
+
+	private static void writeFabricMod(Path path, String modId, String dependencies) throws Exception {
+		try (OutputStream output = Files.newOutputStream(path); JarOutputStream zip = new JarOutputStream(output)) {
+			zip.putNextEntry(new JarEntry("fabric.mod.json"));
+			zip.write(("{\"id\":\"" + modId + "\",\"version\":\"1.0.0\",\"depends\":{" + dependencies + "}}").getBytes(StandardCharsets.UTF_8));
+			zip.closeEntry();
+		}
+	}
+
+	private static byte[] jar(Map<String, byte[]> entries) throws IOException {
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+		try (JarOutputStream zip = new JarOutputStream(bytes)) {
+			for (Map.Entry<String, byte[]> entry : entries.entrySet()) {
+				zip.putNextEntry(new JarEntry(entry.getKey()));
+				zip.write(entry.getValue());
+				zip.closeEntry();
+			}
+		}
+		return bytes.toByteArray();
 	}
 }

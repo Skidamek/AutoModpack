@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -90,10 +91,23 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		return record != null && key.equalsIgnoreCase(record.hash);
 	}
 
-	/** Metadata without a readable side, a record from before the is-mod verdict, and a record from before the client-presence fact or declared-only environment were stored, are rebuilt rather than answered. */
+	/** Incomplete metadata records and records without cached nested entry paths are rebuilt rather than answered. */
 	@Override
 	protected boolean isCurrent(ModRecord record) {
-		return record.services != null && clientPresenceOf(record.clientPresence) != null && record.environmentFromJarKnown && (record.id == null || (record.isMod && environmentOf(record.environment) != null));
+		return record.services != null && clientPresenceOf(record.clientPresence) != null && record.environmentFromJarKnown
+				&& (record.id == null || (record.isMod && environmentOf(record.environment) != null && nestedPathsCurrent(record)));
+	}
+
+	private static boolean nestedPathsCurrent(ModRecord record) {
+		if (record.nestedMods == null) return false;
+		for (ModRecord nested : record.nestedMods) {
+			try {
+				if (nested.entryPath == null || !LogicalPath.requireCanonical(nested.entryPath).equals(nested.entryPath) || !nestedPathsCurrent(nested)) return false;
+			} catch (IllegalArgumentException e) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	@Override
@@ -108,6 +122,7 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		private String version;
 		private Set<String> deps;
 		private Set<ModRecord> nestedMods;
+		private String entryPath;
 		private String id;
 		private Set<String> services;
 		private String environment;
@@ -118,7 +133,12 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		private ModRecord() {}
 
 		private ModRecord(String contentHash, FileInspection.Inspection inspection) {
+			this(contentHash, inspection, null);
+		}
+
+		private ModRecord(String contentHash, FileInspection.Inspection inspection, String entryPath) {
 			hash = contentHash;
+			this.entryPath = entryPath;
 			isMod = inspection.mod();
 			services = inspection.services();
 			environmentFromJarKnown = true;
@@ -128,7 +148,8 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 			IDs = mod.IDs();
 			version = mod.version();
 			deps = mod.deps();
-			nestedMods = mod.nestedMods().stream().map(nested -> new ModRecord(nested.hash(), new FileInspection.Inspection(true, nested, Set.of()))).collect(Collectors.toSet());
+			nestedMods = mod.nestedMods().stream().map(nested -> new ModRecord(nested.hash(), new FileInspection.Inspection(true, nested, Set.of()),
+					nested.path() == null ? null : LogicalPath.normalize(nested.path().toString()))).collect(Collectors.toSet());
 			id = mod.id();
 			environment = mod.environment().name();
 		}
@@ -138,7 +159,9 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 			if (id == null) return new FileInspection.Inspection(isMod, null, shipped);
 			Set<String> modIds = IDs == null ? Set.of() : IDs;
 			Set<String> modDeps = deps == null ? Set.of() : deps;
-			Set<FileInspection.Mod> nested = nestedMods == null ? Set.of() : nestedMods.stream().map(record -> record.at(null).metadata()).collect(Collectors.toSet());
+			Set<FileInspection.Mod> nested = nestedMods == null
+					? Set.of()
+					: nestedMods.stream().map(record -> record.at(record.entryPath == null ? null : Path.of(record.entryPath)).metadata()).collect(Collectors.toSet());
 			return new FileInspection.Inspection(true, new FileInspection.Mod(modIds, hash, version, path, modDeps, nested, id, environmentOf(environment), clientPresenceOf(clientPresence)), shipped);
 		}
 	}
