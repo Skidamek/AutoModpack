@@ -41,13 +41,17 @@ flow:
     name: kotlinforforge loaded in place and its Kotlin entrypoint actually ran (no copy)
     timeout: 600s
     until:
-      log:
-        container: client
-        matches_all:
-          - 'AutoModpack prelaunched'
-          # KFF's own entrypoint log - it only appears if the language provider was
-          # discovered (from the active projection, uncopied) and the mod constructed through it
-          - 'Kotlin For Forge Enabled'
+      all:
+        # DEBUG-only, and Forge 1.20.1's console appender drops DEBUG while 1.18.2's keeps it,
+        # so read the file rather than the container stdout.
+        - log:
+            file: logs/debug.log
+            matches: 'AutoModpack prelaunched'
+        - log:
+            container: client
+            # KFF's own entrypoint log - it only appears if the language provider was
+            # discovered (from the active projection, uncopied) and the mod constructed through it
+            matches: 'Kotlin For Forge Enabled'
   - do: wait_for
     name: NeoForge additionally logs the in-place library discovery and the mod-list entry
     when:
