@@ -18,9 +18,7 @@ public class ModpackLoader implements ModpackLoaderService {
 
 	@Override
 	public Set<String> forceCopyServices() {
-		// Forge claims the early-window provider from standard mods/ before mod discovery and runs it in
-		// the SERVICE layer - out of reach of anything hosted in the projection - so a mod needing it
-		// must be copied to standard mods/, like the fml4 neoforge twin.
+		// Forge discovers this provider from standard mods/ before AutoModpack's in-place hook.
 		return Set.of(LoaderServicePaths.FORGE_IMMEDIATE_WINDOW_PROVIDER);
 	}
 

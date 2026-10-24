@@ -1,18 +1,8 @@
-id: fakedate-issue569
+id: fakedate
 description: |
-  Reproduction and regression for issue #569. FakeDate is an early-service wrapper jar: the
-  outer jar holds a transformation service, a mod locator, a dependency locator and an
-  early-window provider, the real mod lives in the inner fakedate-forge-mod.jar, and the outer
-  MANIFEST advertises MixinConfigs: fakedate.mixins.json - a file that exists nowhere in the
-  jar. A plain install never reads that manifest: FML excludes service-claimed jars from mod
-  discovery and the jar's own locator loads the inner jar instead. Staged into the active
-  projection the wrapper is outside that machinery, so the early-window rule must force-copy
-  it into standard mods/. Without the copy FML parses the outer jar as a mod, Mixin registers
-  the missing config and the client dies with MixinInitialisationError (the reported crash).
-
-  First boot: the launch apply copies the jar into standard mods/ and asks for a restart.
-  Second boot: FML excludes the wrapper from mod discovery, the jar's own locator loads the
-  inner jar, and the game launches with no MixinInitialisationError in either boot's log.
+  FakeDate ships a Forge ImmediateWindowProvider and wraps its mod in an outer jar whose manifest
+  names a missing Mixin config. Forge only discovers the provider from standard mods/, so the
+  launch apply must copy the wrapper there before FML scans the active projection.
 
 network: host
 mode: client-only
@@ -25,16 +15,16 @@ targets:
 
 flow:
   - do: stage_modpack
-    name: stage FakeDate into the active projection (NOT standard mods/)
+    name: stage FakeDate into the active projection
     config:
       updateSelectedModpackOnLaunch: true
     mods:
       - url: https://cdn.modrinth.com/data/lW22drsL/versions/s23frY6x/fakedate-1.1.0%2B1.20.1-forge.jar
         sha512: 20865478765993bdcd65cf7b5a2f1e2d88f1cad77e3bdaef0bfae8c2d309dee6fa9b87bbe0859a6e4b144f5a52c3daf1b9e610100a301d4431d3dcf7347f194b
   - do: launch_client
-    name: first boot - the apply path must force-copy the wrapper into standard mods/
+    name: first boot - apply the provider copy
   - do: wait_for
-    name: force-copy completed, restart requested, no mixin crash
+    name: copy landed and restart requested
     timeout: 420s
     until:
       all:
@@ -61,12 +51,14 @@ flow:
     name: Preload passes through and ModLauncher launches the game
     timeout: 420s
     until:
-      log:
-        container: client
-        matches_all:
-          - 'AutoModpack prelaunched'
-          - "Launching target 'forgeclient'"
-        not_matches: 'MixinInitialisationError'
+      all:
+        - log:
+            file: logs/debug.log
+            matches: 'AutoModpack prelaunched'
+        - log:
+            container: client
+            matches: "Launching target 'forgeclient'"
+            not_matches: 'MixinInitialisationError'
   - use: finish_client_only
   - do: assert
     name: the wrapper manifest never reaches Mixin (second boot)

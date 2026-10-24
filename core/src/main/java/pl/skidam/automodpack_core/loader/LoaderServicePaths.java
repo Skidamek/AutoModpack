@@ -38,7 +38,7 @@ public final class LoaderServicePaths {
 
 	// Broad, cross-version set of Forge service files, used to tell a service mod apart from a
 	// plain mod before the running loader/version is known.
-	public static final Set<String> FORGE_SERVICES = Set.of(FORGE_MOD_LOCATOR, FORGE_DEPENDENCY_LOCATOR, FORGE_LANGUAGE_PROVIDER, TRANSFORMATION_SERVICE);
+	public static final Set<String> FORGE_SERVICES = Set.of(FORGE_MOD_LOCATOR, FORGE_DEPENDENCY_LOCATOR, FORGE_LANGUAGE_PROVIDER, FORGE_IMMEDIATE_WINDOW_PROVIDER, TRANSFORMATION_SERVICE);
 
 	// Broad, cross-version set of NeoForge service files, same purpose as FORGE_SERVICES.
 	public static final Set<String> NEOFORGE_SERVICES = Set.of(NEOFORGE_MOD_LOCATOR, NEOFORGE_DEPENDENCY_LOCATOR, NEOFORGE_MOD_FILE_READER,

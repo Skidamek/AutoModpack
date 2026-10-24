@@ -19,14 +19,14 @@ flow:
     timeout: 300s
     until:
       log:
-        container: client
+        # DEBUG-only on Forge 1.20.1 / NeoForge console appenders; the file has it on every generation.
+        file: logs/debug.log
         matches: 'AutoModpack prelaunched'
   - do: assert
     name: AutoModpack loaded cleanly (no classloading failure)
     that:
       log:
-        container: client
-        # Whole-log match by default: early lines can't scroll out of a tail window.
+        file: logs/debug.log
         matches_all:
           - 'Prelaunching AutoModpack'
           - 'AutoModpack prelaunched'

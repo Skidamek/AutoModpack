@@ -77,11 +77,14 @@ flow:
     name: Preload passes through (no re-copy) and ModLauncher launches the game
     timeout: 420s
     until:
-      log:
-        container: client
-        matches_all:
-          - 'AutoModpack prelaunched'
-          - "Launching target 'forgeclient'"
+      all:
+        # DEBUG-only on this generation's console appender; the file has it.
+        - log:
+            file: logs/debug.log
+            matches: 'AutoModpack prelaunched'
+        - log:
+            container: client
+            matches: "Launching target 'forgeclient'"
   - use: finish_client_only
   - do: assert
     name: the copy is stable and the jar still never loads in place (second boot)

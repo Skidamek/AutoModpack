@@ -226,6 +226,19 @@ class FileInspectionTest {
 	}
 
 	@Test
+	void forgeEarlyWindowServiceIsVisibleToCopyPlanning() throws IOException {
+		Path jar = Files.createTempDirectory("forge-window-service-").resolve("provider.jar");
+
+		try {
+			Files.write(jar, jar(Map.of(LoaderServicePaths.FORGE_IMMEDIATE_WINDOW_PROVIDER, new byte[0])));
+
+			assertTrue(inspection(jar).providesAny(Set.of(LoaderServicePaths.FORGE_IMMEDIATE_WINDOW_PROVIDER)));
+		} finally {
+			Files.deleteIfExists(jar);
+		}
+	}
+
+	@Test
 	void incompleteMetadataWithoutServicesIsNotAMod() throws IOException {
 		Path jar = Files.createTempDirectory("incomplete-").resolve("broken.jar");
 
