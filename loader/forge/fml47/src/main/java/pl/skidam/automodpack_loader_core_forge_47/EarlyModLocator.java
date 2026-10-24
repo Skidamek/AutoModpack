@@ -30,6 +30,11 @@ public class EarlyModLocator extends EarlyModLocatorBase implements EarlyModLoca
 				results.add((IModLocator.ModFileOrException) o);
 			}
 		}
+
+		// Only after every hosted candidate locator ran: one of them may reorder FML's dependency
+		// list (Connector puts its own provider last), and the hosted dependency pass must not be
+		// inserted ahead of that reordering.
+		EarlyServiceLayer.appendHostedDependencyLocator();
 		return results;
 	}
 }

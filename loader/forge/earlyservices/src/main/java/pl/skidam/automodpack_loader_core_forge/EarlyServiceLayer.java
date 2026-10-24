@@ -13,6 +13,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import cpw.mods.modlauncher.api.ITransformationService;
+import net.minecraftforge.fml.loading.FMLLoader;
+import net.minecraftforge.forgespi.locating.IDependencyLocator;
 import net.minecraftforge.forgespi.locating.IModFile;
 
 import pl.skidam.automodpack_core.Constants;
@@ -238,6 +240,16 @@ public final class EarlyServiceLayer {
 	}
 
 	/**
+	 * Replays every registered early-service jar's dependency locators into {@code out} - the whole
+	 * hosted dependency pass, for callers that do not care which jar contributed what.
+	 */
+	public static void runHostedDependencyLocators(Iterable<IModFile> loadedMods, List<IModFile> out) {
+		for (Path jar : registeredJars()) {
+			runDependencyLocators(jar, loadedMods, out);
+		}
+	}
+
+	/**
 	 * Instantiates {@code impl} and invokes its {@code scanMods(Iterable)} dependency hook, appending
 	 * any located mod files to {@code out}. Returns false, leaving {@code out} untouched, when the
 	 * class exposes no such method - the discriminator that keeps a plain candidate {@code
@@ -268,6 +280,43 @@ public final class EarlyServiceLayer {
 	/** Every currently-registered early-service jar path (for replay loops in the locators). */
 	public static Set<Path> registeredJars() {
 		return ModLauncherEarlyServiceBridge.registeredJars();
+	}
+
+	/**
+	 * Appends {@link HostedDependencyLocator} to FML's ordered dependency pass, so the hosted jars'
+	 * locators run after every native one instead of at AutoModpack's own earlier position.
+	 *
+	 * <p>
+	 * FML hands each dependency locator a snapshot of the mod files found so far, so the order decides
+	 * what a locator can see. Forge's {@code JarInJarDependencyLocator} contributes the nested
+	 * {@code META-INF/jarjar} modules that Fabric mods often hard-depend on (Forgified Fabric API's
+	 * module jars are one example). Connector resolves the whole Fabric graph from the Forge mod list
+	 * and needs those modules present; natively it enforces that by moving its own provider to the end
+	 * of this same list from its candidate locator. A hosted jar is not in FML's list, so its sort can
+	 * never move it. Appending this locator reproduces the only guarantee a hosted locator can rely
+	 * on: run after every native locator, against the complete native mod list.
+	 *
+	 * <p>
+	 * The early {@link DependencyLocatorDispatcher} keeps contributing the embedded impl mod file,
+	 * which must stay before JarInJar so its nested MixinExtras is expanded - splitting the two jobs
+	 * is why this is a second locator instead of moving the first one.
+	 */
+	public static void appendHostedDependencyLocator() {
+		if (registeredJars().stream().noneMatch(jar -> !serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE).isEmpty())) return;
+		try {
+			Method getDiscoverer = FMLLoader.class.getDeclaredMethod("getModDiscoverer");
+			getDiscoverer.setAccessible(true);
+			Object discoverer = getDiscoverer.invoke(null);
+			Field field = discoverer.getClass().getDeclaredField("dependencyLocatorList");
+			field.setAccessible(true);
+			@SuppressWarnings("unchecked")
+			List<IDependencyLocator> locators = (List<IDependencyLocator>) field.get(discoverer);
+			if (locators.stream().anyMatch(HostedDependencyLocator.class::isInstance)) return;
+			locators.add(new HostedDependencyLocator());
+			LOGGER.debug("[AutoModpack] Appended the hosted dependency locator after {} existing locator(s)", locators.size() - 1);
+		} catch (Throwable t) {
+			throw new IllegalStateException("[AutoModpack] Could not run hosted dependency locators after the loader's own; refusing to resolve them against an incomplete mod list", t);
+		}
 	}
 
 	/**

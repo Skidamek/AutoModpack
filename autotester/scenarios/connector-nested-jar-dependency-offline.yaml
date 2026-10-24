@@ -1,0 +1,73 @@
+id: connector-nested-jar-dependency-offline
+description: |
+  Forge 1.20.1 + Sinytra Connector regression for hosted dependency-locator ordering.
+  Presence Footsteps 1.10.1 nests Kirin UI 1.15.6 in META-INF/jars and depends on
+  it; Kirin depends on fabric-api-base and fabric-lifecycle-events-v1, which only
+  exist as jar-in-jar modules of Forgified Fabric API. Connector resolves the
+  Fabric graph from the Forge mod list, so it must run after Forge's JarInJar
+  locator - natively it moves its own provider to the end of FML's dependency
+  locator list. AutoModpack hosts Connector in place, where that sort cannot see
+  it, so the hosted dependency pass has to run after the native locators instead.
+  Without that, Connector resolves too early and fails with "Kirin UI ... can't be
+  loaded due to other constraints".
+
+  Nothing is copied to standard mods/ and no restart is used - Connector sees the
+  same projection AutoModpack bootstrapped it from.
+
+network: host
+mode: client-only
+
+timeouts:
+  clientStartSeconds: 1200
+
+targets:
+  - 1.20.1-forge
+
+flow:
+  - do: stage_modpack
+    name: stage Connector, Forgified Fabric API and Presence Footsteps into the active projection
+    mods:
+      - url: https://cdn.modrinth.com/data/u58R1TMW/versions/1MQDrKN7/Connector-1.0.0-beta.49%2B1.20.1.jar
+        sha512: c6f029b95bbb868a37eb3fe1dc71d696e7016584b10cadec36357b03c710f0f715d57c0bba5c467c0679bc32e6e5d8e366cf4edbb7d7b3edcf47f7794191e626
+      - url: https://cdn.modrinth.com/data/Aqlf1Shp/versions/g0MxcWXy/fabric-api-0.92.6%2B1.11.15%2B1.20.1.jar
+        sha512: da1e59fa754edb24d8a3b6023ef648d6431a8297a9e873d18bfe866aca9384f491af1b438c2c4b75dbf9bd4b9a11daf717a8d1469e9efaed145e5c53f9cbcf37
+      - url: https://cdn.modrinth.com/data/rcTfTZr3/versions/k0t6DSmw/PresenceFootsteps-1.10.1%2B1.20.1.jar
+        sha512: c306f96496aadc30abcaac0bd35e22f870e974fe532eaf1f2b66bfd5e7e5e7f6276d58b393bcd6521e8ea74b38a52b54246e2cd0344d9acf8ed4cb233f9a1e1d
+  - do: launch_client
+    name: boot the client against the staged modpack
+  - do: wait_for
+    name: wait until Connector fully resolved (including Kirin loading) or logged the constraint failure
+    timeout: 600s
+    until:
+      any:
+        - all:
+            - log:
+                container: client
+                matches: 'Dependency resolution found 2 candidates to load'
+            - log:
+                file: logs/debug.log
+                matches: 'Mixing .* from kirin\.mixin\.json'
+        - log:
+            container: client
+            matches: "can't be loaded due to other constraints"
+  - do: assert
+    name: Connector saw the jar-in-jar modules, Kirin actually loaded, and nothing was copied to standard mods/
+    that:
+      all:
+        - log:
+            container: client
+            matches: 'Dependency resolution found 2 candidates to load'
+        - log:
+            file: logs/debug.log
+            matches: 'Mixing .* from kirin\.mixin\.json'
+        # Connector caches its transformed jars under mods/.connector; what must not appear is a
+        # copy of any jar AutoModpack staged into the projection.
+        - file_gone: mods/Connector-1.0.0-beta.49+1.20.1.jar
+        - file_gone: mods/fabric-api-0.92.6+1.11.15+1.20.1.jar
+        - file_gone: mods/PresenceFootsteps-1.10.1+1.20.1.jar
+        - log:
+            container: client
+            not_matches:
+              - "can't be loaded due to other constraints"
+              - 'Some of your mods are incompatible'
+  - use: finish_client_only
