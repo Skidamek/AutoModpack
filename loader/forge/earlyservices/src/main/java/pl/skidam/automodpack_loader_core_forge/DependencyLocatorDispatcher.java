@@ -9,11 +9,11 @@ import net.minecraftforge.forgespi.locating.IModFile;
 /**
  * The universal outer jar's single {@code IDependencyLocator} provider, forwarding FML 1.19+'s
  * early dependency pass to {@code ..._forge_47.LazyModLocator}. That pass contributes only the
- * embedded impl mod file: its nested MixinExtras has to reach Forge's JarInJar locator, which runs
- * later in the same pass. The hosted jars' dependency locators run from
- * {@link HostedDependencyLocator}, appended after every native locator by
- * {@link EarlyServiceLayer#appendHostedDependencyLocator()}. The interface exists only in 1.19+'s
- * forgespi, so ServiceLoader can only ever read this services file - and this class load - on Forge
+ * embedded impl mod file; {@link EarlyServiceLayer#orderDependencyLocators()} moves this provider
+ * ahead of every native locator so Forge's JarInJar locator expands the impl's nested MixinExtras.
+ * The hosted jars' dependency locators run from {@link HostedDependencyLocator}, appended after
+ * every native locator by that same call. The interface exists only in 1.19+'s forgespi, so
+ * ServiceLoader can only ever read this services file - and this class load - on Forge
  * 1.19.2/1.20.1: on 1.18.2 the interface name is unknown (the file is never read), and NeoForge
  * renamed the whole package. No generation guard is needed.
  */

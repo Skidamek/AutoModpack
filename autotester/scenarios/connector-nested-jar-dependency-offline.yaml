@@ -66,6 +66,9 @@ flow:
         - file_gone: mods/fabric-api-0.92.6+1.11.15+1.20.1.jar
         - file_gone: mods/PresenceFootsteps-1.10.1+1.20.1.jar
         - log:
+            file: logs/debug.log
+            matches: 'Dependency locators ordered: embedded impl first, hosted pass last'
+        - log:
             container: client
             not_matches:
               - "can't be loaded due to other constraints"

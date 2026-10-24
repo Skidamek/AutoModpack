@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -59,6 +60,11 @@ public final class ModLauncherEarlyServiceBridge {
 	// bootstrapper (NeoForge fml4's EarlyServiceBootstrapper, Forge's bootstrap()).
 	private static final Map<Path, JarService> JAR_SERVICES = new ConcurrentHashMap<>();
 
+	// Registration order, kept beside JAR_SERVICES because a ConcurrentHashMap cannot preserve it.
+	// Replay order is the projection's order, so two launches of the same pack do the same work in
+	// the same sequence instead of following a hash map's whim.
+	private static final List<Path> REGISTRATION_ORDER = new CopyOnWriteArrayList<>();
+
 	// ITransformationService instances instantiated in place per jar, kept so the forwarding service
 	// injected into ModLauncher (each loader's AutoModpackTransformationService) can run their
 	// completeScan at the native, post-discovery time - when its returned resources still reach the
@@ -80,7 +86,9 @@ public final class ModLauncherEarlyServiceBridge {
 
 	/** Registers a handled jar's child SERVICE layer classloader/layer and its own module name on it. */
 	public static void register(Path jar, ClassLoader serviceClassLoader, ModuleLayer childLayer, String moduleName) {
-		JAR_SERVICES.put(canonical(jar), new JarService(serviceClassLoader, childLayer, moduleName));
+		Path key = canonical(jar);
+		JAR_SERVICES.put(key, new JarService(serviceClassLoader, childLayer, moduleName));
+		if (!REGISTRATION_ORDER.contains(key)) REGISTRATION_ORDER.add(key);
 	}
 
 	public static boolean isEarlyServiceJar(Path jar) {
@@ -93,15 +101,16 @@ public final class ModLauncherEarlyServiceBridge {
 		return service == null ? null : service.classLoader();
 	}
 
-	/** Every currently-registered early-service jar path (for replay loops in the locators). */
-	public static Set<Path> registeredJars() {
-		return Set.copyOf(JAR_SERVICES.keySet());
+	/** Every currently-registered early-service jar path, in the order the bootstrapper registered them. */
+	public static List<Path> registeredJars() {
+		return List.copyOf(REGISTRATION_ORDER);
 	}
 
-	/** Runs {@code consumer} against every registered jar and its child-layer classloader. */
+	/** Runs {@code consumer} against every registered jar and its child-layer classloader, in registration order. */
 	public static void forEachRegistered(BiConsumer<Path, ClassLoader> consumer) {
-		for (Map.Entry<Path, JarService> entry : JAR_SERVICES.entrySet()) {
-			consumer.accept(entry.getKey(), entry.getValue().classLoader());
+		for (Path jar : REGISTRATION_ORDER) {
+			JarService service = JAR_SERVICES.get(jar);
+			if (service != null) consumer.accept(jar, service.classLoader());
 		}
 	}
 

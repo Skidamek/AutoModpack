@@ -26,7 +26,9 @@ public abstract class EarlyModLocatorBase extends AbstractJarFileModLocator {
 	}
 
 	@Override
-	public void initArguments(Map<String, ?> arguments) {}
+	public void initArguments(Map<String, ?> arguments) {
+		EarlyServiceLayer.captureLaunchArguments(arguments);
+	}
 
 	@Override
 	public String name() {

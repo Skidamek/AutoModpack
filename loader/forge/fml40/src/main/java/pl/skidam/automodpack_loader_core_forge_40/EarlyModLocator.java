@@ -23,6 +23,11 @@ public class EarlyModLocator extends EarlyModLocatorBase implements EarlyModLoca
 	public List<IModFile> scanMods() {
 		if (!GenerationProbes.FORGE_FML40) return List.of();
 
+		// 1.18.2 serves both discovery passes from this one list, so the embedded impl added by
+		// the dependency pass must be reachable before JarInJar expands nested jars there. Swapping
+		// inside FML's iteration is safe (see EarlyServiceLayer#pinLegacyModLocatorFirst).
+		EarlyServiceLayer.pinLegacyModLocatorFirst();
+
 		List<IModFile> results = new ArrayList<>(super.scanMods());
 		for (var jar : EarlyServiceLayer.registeredJars()) {
 			List<Object> extra = new ArrayList<>();

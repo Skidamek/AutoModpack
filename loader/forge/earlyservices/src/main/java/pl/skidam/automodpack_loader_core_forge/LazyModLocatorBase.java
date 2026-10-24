@@ -13,10 +13,16 @@ import pl.skidam.automodpack_core.loader.ImplStore;
 /**
  * Surfaces the one jar's impl for this forge target as a mod file. On Forge 1.18.2 it also replays
  * the early-service jars' dependency locators (see {@link EarlyServiceLayer}), because that
- * generation's dependency pass is this same hook. On 1.19+ the hosted locators must run after the
- * loader's own ones, so {@link HostedDependencyLocator} replays them and this pass contributes only
- * the embedded impl - which has to stay early so Forge's JarInJar locator still expands its nested
- * MixinExtras.
+ * generation's dependency pass is this same hook and calls it on the same instance as the candidate
+ * pass. On 1.19+ the hosted locators must run after the loader's own ones, so
+ * {@link HostedDependencyLocator} replays them and this pass contributes only the embedded impl -
+ * which is pinned ahead of Forge's JarInJar locator so its nested MixinExtras is expanded.
+ *
+ * <p>
+ * On 1.18.2 the hosted dependency locators necessarily run here as well, i.e. before JarInJar:
+ * FML's mod locator list is iterated only once and cannot be extended from inside a locator. That
+ * generation has no Connector, whose need for JarInJar's modules is what forces the late pass on
+ * 1.19+, but a 1.18.2 hosted locator likewise gets no JarInJar expansion of its own output.
  *
  * <p>
  * Lives here because it is version-agnostic; the one forgespi-seamed call, {@code createMod} -
@@ -35,7 +41,7 @@ public abstract class LazyModLocatorBase extends AbstractJarFileDependencyLocato
 	public List<IModFile> scanMods(Iterable<IModFile> loadedMods) {
 		var list = new ArrayList<IModFile>(1);
 		addEmbeddedMod(list);
-		EarlyServiceLayer.runHostedDependencyLocators(loadedMods, list);
+		EarlyServiceLayer.runLegacyHostedDependencyLocators(loadedMods, list);
 		return list;
 	}
 
@@ -54,7 +60,9 @@ public abstract class LazyModLocatorBase extends AbstractJarFileDependencyLocato
 	}
 
 	@Override
-	public void initArguments(Map<String, ?> arguments) {}
+	public void initArguments(Map<String, ?> arguments) {
+		EarlyServiceLayer.captureLaunchArguments(arguments);
+	}
 
 	/** Selects this target's impl into the instance's impl cache and mounts it - {@code createMod} works on plain file paths. */
 	private IModFile embeddedMod() throws Exception {

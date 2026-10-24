@@ -5,9 +5,12 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -16,6 +19,7 @@ import cpw.mods.modlauncher.api.ITransformationService;
 import net.minecraftforge.fml.loading.FMLLoader;
 import net.minecraftforge.forgespi.locating.IDependencyLocator;
 import net.minecraftforge.forgespi.locating.IModFile;
+import net.minecraftforge.forgespi.locating.IModLocator;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
@@ -102,6 +106,23 @@ public final class EarlyServiceLayer {
 
 	// bootstrap() must run exactly once; EarlyModLocator#scanMods() can be invoked more than once.
 	private static final AtomicBoolean BOOTSTRAPPED = new AtomicBoolean(false);
+
+	// FML's launch argument map, captured from our dispatchers' initArguments so hosted locators get
+	// the same call natively-visible ones get. Null before FML's discovery setup; replaying without it
+	// would run a locator with incomplete state, so that is a hard failure (see runInitArguments).
+	private static volatile Map<String, ?> launchArguments;
+
+	// Candidate locator instances, keyed by jar and impl. Forge 1.18.2 serves its candidate and
+	// dependency passes from the same IModLocator list and calls both hooks on one instance; reusing
+	// them here keeps a stateful locator from seeing a second, empty one.
+	private static final Map<LocatorKey, Object> CANDIDATE_INSTANCES = new ConcurrentHashMap<>();
+
+	private record LocatorKey(Path jar, String impl) {}
+
+	/** Captures the loader's launch arguments; both dispatchers forward their initArguments here. */
+	public static void captureLaunchArguments(Map<String, ?> arguments) {
+		launchArguments = arguments;
+	}
 
 	/**
 	 * Builds one shared child SERVICE layer for every eligible modpack-folder early-service jar,
@@ -195,6 +216,11 @@ public final class EarlyServiceLayer {
 	 * Invoked by reflection, not a static cast: {@code scanMods()}'s return type differs between
 	 * Forge 1.18.2 and ~1.19+ ({@code ModFileOrException} doesn't exist pre-1.19), and this module
 	 * compiles once against a single forgespi version for both.
+	 *
+	 * <p>
+	 * Each instance is also kept for 1.18.2's dependency pass (see
+	 * {@link #runLegacyHostedDependencyLocators}), and gets {@code initArguments} first, exactly as
+	 * FML calls it on the natively-discovered instance before discovery.
 	 */
 	public static void runCandidateLocators(Path jar, List<Object> out) {
 		ClassLoader cl = ModLauncherEarlyServiceBridge.classLoaderFor(jar);
@@ -202,6 +228,8 @@ public final class EarlyServiceLayer {
 		for (String impl : serviceImpls(jar, CANDIDATE_LOCATOR_SERVICE)) {
 			try {
 				Object locator = Class.forName(impl, true, cl).getDeclaredConstructor().newInstance();
+				runInitArguments(locator, impl, jar);
+				CANDIDATE_INSTANCES.put(new LocatorKey(jar, impl), locator);
 				LOGGER.debug("[AutoModpack] Running in-place candidate locator {} from {}", impl, jar.getFileName());
 				List<?> result = (List<?>) locator.getClass().getMethod("scanMods").invoke(locator);
 				out.addAll(result);
@@ -212,36 +240,9 @@ public final class EarlyServiceLayer {
 	}
 
 	/**
-	 * Runs an early-service jar's post-discovery dependency locators, merging their results into
-	 * {@code out} - how a modpack-folder split-jar mod pulls in its real (inner) mod jar once the
-	 * base mod set is known. Two forgespi shapes are handled, both reflectively, so this module
-	 * compiles once against a single version:
-	 * <ul>
-	 * <li>Forge ~1.19+: a standalone {@code IDependencyLocator} with {@code scanMods(Iterable)}.</li>
-	 * <li>Forge 1.18.2: no standalone {@code IDependencyLocator} exists - a dependency locator is
-	 * declared under {@code IModLocator} and carries its logic in {@code scanMods(Iterable)}
-	 * (its no-arg {@code scanMods()}, run in the candidate phase, finds nothing). We replay
-	 * that hook here too. On ~1.19+ {@code IModLocator} has no {@code scanMods(Iterable)}, so
-	 * the lookup misses and this second pass is a no-op.</li>
-	 * </ul>
-	 */
-	public static void runDependencyLocators(Path jar, Iterable<IModFile> loadedMods, List<IModFile> out) {
-		ClassLoader cl = ModLauncherEarlyServiceBridge.classLoaderFor(jar);
-		if (cl == null) return;
-		Set<String> handled = new HashSet<>();
-		for (String impl : serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE)) {
-			if (runScanModsIterable(cl, impl, jar, loadedMods, out)) handled.add(impl);
-		}
-		// Forge 1.18.2: dependency locators live under IModLocator (see method doc). Skipped on
-		// ~1.19+, where these impls have no scanMods(Iterable), and deduped against the pass above.
-		for (String impl : serviceImpls(jar, CANDIDATE_LOCATOR_SERVICE)) {
-			if (!handled.contains(impl)) runScanModsIterable(cl, impl, jar, loadedMods, out);
-		}
-	}
-
-	/**
-	 * Replays every registered early-service jar's dependency locators into {@code out} - the whole
-	 * hosted dependency pass, for callers that do not care which jar contributed what.
+	 * Replays every registered early-service jar's declared dependency locators into {@code out} - the
+	 * whole hosted dependency pass for Forge 1.19+, whose forgespi has a standalone
+	 * {@code IDependencyLocator} with {@code scanMods(Iterable)}.
 	 */
 	public static void runHostedDependencyLocators(Iterable<IModFile> loadedMods, List<IModFile> out) {
 		for (Path jar : registeredJars()) {
@@ -250,59 +251,118 @@ public final class EarlyServiceLayer {
 	}
 
 	/**
-	 * Instantiates {@code impl} and invokes its {@code scanMods(Iterable)} dependency hook, appending
-	 * any located mod files to {@code out}. Returns false, leaving {@code out} untouched, when the
-	 * class exposes no such method - the discriminator that keeps a plain candidate {@code
-	 * IModLocator} (Forge ~1.19+, no {@code scanMods(Iterable)}) out of the dependency pass.
+	 * Forge 1.19+ only. Replays exactly the {@code IDependencyLocator} services a jar declares - the
+	 * set FML would have ServiceLoaded natively. A class merely exposing {@code scanMods(Iterable)}
+	 * is not enough: on ~1.19+ the candidate {@code IModLocator} interface has no such method, so a
+	 * provider that happens to carry one is not a provider FML would ever run.
 	 */
-	private static boolean runScanModsIterable(ClassLoader cl, String impl, Path jar, Iterable<IModFile> loadedMods, List<IModFile> out) {
-		Object locator;
+	private static void runDependencyLocators(Path jar, Iterable<IModFile> loadedMods, List<IModFile> out) {
+		ClassLoader cl = ModLauncherEarlyServiceBridge.classLoaderFor(jar);
+		if (cl == null) return;
+		for (String impl : serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE)) {
+			Object locator;
+			try {
+				locator = Class.forName(impl, true, cl).getDeclaredConstructor().newInstance();
+			} catch (Throwable t) {
+				throw new IllegalStateException("[AutoModpack] Dependency locator " + impl + " from " + jar.getFileName() + " failed to load; refusing to continue with the mod silently missing", t);
+			}
+			runInitArguments(locator, impl, jar);
+			LOGGER.debug("[AutoModpack] Running in-place dependency locator {} from {}", impl, jar.getFileName());
+			invokeScanModsIterable(locator, impl, jar, loadedMods, out);
+		}
+	}
+
+	/**
+	 * Forge 1.18.2's dependency pass: that generation has no standalone {@code IDependencyLocator},
+	 * so a dependency locator is an {@code IModLocator} that carries its logic in
+	 * {@code scanMods(Iterable)} (its no-arg {@code scanMods()}, run in the candidate phase, finds
+	 * nothing). FML calls both hooks on the same instance, so the candidate instance is reused here
+	 * with the state and arguments it already received. Instances without the hook are plain
+	 * candidate locators and are skipped, exactly as FML skips them.
+	 */
+	public static void runLegacyHostedDependencyLocators(Iterable<IModFile> loadedMods, List<IModFile> out) {
+		for (Path jar : registeredJars()) {
+			if (ModLauncherEarlyServiceBridge.classLoaderFor(jar) == null) continue;
+			for (String impl : serviceImpls(jar, CANDIDATE_LOCATOR_SERVICE)) {
+				Object locator = CANDIDATE_INSTANCES.get(new LocatorKey(jar, impl));
+				if (locator == null)
+					throw new IllegalStateException(
+							"[AutoModpack] Candidate locator " + impl + " from " + jar.getFileName() + " did not run in the candidate pass; refusing to skip the dependency hook FML would have run");
+				Method scanMods;
+				try {
+					scanMods = locator.getClass().getMethod("scanMods", Iterable.class);
+				} catch (NoSuchMethodException e) {
+					continue; // candidate-only IModLocator: nothing to run in the dependency pass
+				} catch (Throwable t) {
+					throw new IllegalStateException("[AutoModpack] Dependency locator " + impl + " from " + jar.getFileName() + " failed; refusing to continue with the mod silently missing", t);
+				}
+				LOGGER.debug("[AutoModpack] Running in-place dependency locator {} (candidate instance) from {}", impl, jar.getFileName());
+				invokeScanMods(scanMods, locator, impl, jar, loadedMods, out);
+			}
+		}
+	}
+
+	private static void runInitArguments(Object locator, String impl, Path jar) {
+		Map<String, ?> arguments = launchArguments;
+		if (arguments == null)
+			throw new IllegalStateException("[AutoModpack] FML never supplied launch arguments before replaying " + impl + " from " + jar.getFileName() + "; refusing to run it with incomplete state");
+		try {
+			locator.getClass().getMethod("initArguments", Map.class).invoke(locator, arguments);
+		} catch (Throwable t) {
+			throw new IllegalStateException("[AutoModpack] initArguments failed for in-place locator " + impl + " from " + jar.getFileName() + "; refusing to continue", t);
+		}
+	}
+
+	private static void invokeScanModsIterable(Object locator, String impl, Path jar, Iterable<IModFile> loadedMods, List<IModFile> out) {
 		Method scanMods;
 		try {
-			locator = Class.forName(impl, true, cl).getDeclaredConstructor().newInstance();
 			scanMods = locator.getClass().getMethod("scanMods", Iterable.class);
-		} catch (NoSuchMethodException e) {
-			return false; // a candidate-only IModLocator: nothing to run in the dependency phase
 		} catch (Throwable t) {
-			throw new IllegalStateException("[AutoModpack] Dependency locator " + impl + " from " + jar.getFileName() + " failed; refusing to continue with the mod silently missing", t);
+			throw new IllegalStateException("[AutoModpack] Dependency locator " + impl + " from " + jar.getFileName() + " does not implement scanMods(Iterable); refusing to skip the mod it supplies", t);
 		}
+		invokeScanMods(scanMods, locator, impl, jar, loadedMods, out);
+	}
+
+	private static void invokeScanMods(Method scanMods, Object locator, String impl, Path jar, Iterable<IModFile> loadedMods, List<IModFile> out) {
 		try {
-			LOGGER.debug("[AutoModpack] Running in-place dependency locator {} from {}", impl, jar.getFileName());
 			@SuppressWarnings("unchecked")
 			List<IModFile> result = (List<IModFile>) scanMods.invoke(locator, loadedMods);
 			if (result != null) out.addAll(result);
-			return true;
 		} catch (Throwable t) {
 			throw new IllegalStateException("[AutoModpack] Dependency locator " + impl + " from " + jar.getFileName() + " failed; refusing to continue with the mod silently missing", t);
 		}
 	}
 
-	/** Every currently-registered early-service jar path (for replay loops in the locators). */
-	public static Set<Path> registeredJars() {
+	/** Every currently-registered early-service jar path, in projection order (for replay loops in the locators). */
+	public static List<Path> registeredJars() {
 		return ModLauncherEarlyServiceBridge.registeredJars();
 	}
 
 	/**
-	 * Appends {@link HostedDependencyLocator} to FML's ordered dependency pass, so the hosted jars'
-	 * locators run after every native one instead of at AutoModpack's own earlier position.
+	 * Fixes both ends of FML's dependency pass on Forge 1.19+.
 	 *
 	 * <p>
-	 * FML hands each dependency locator a snapshot of the mod files found so far, so the order decides
-	 * what a locator can see. Forge's {@code JarInJarDependencyLocator} contributes the nested
-	 * {@code META-INF/jarjar} modules that Fabric mods often hard-depend on (Forgified Fabric API's
-	 * module jars are one example). Connector resolves the whole Fabric graph from the Forge mod list
-	 * and needs those modules present; natively it enforces that by moving its own provider to the end
-	 * of this same list from its candidate locator. A hosted jar is not in FML's list, so its sort can
-	 * never move it. Appending this locator reproduces the only guarantee a hosted locator can rely
-	 * on: run after every native locator, against the complete native mod list.
+	 * Front: the embedded impl mod file is moved ahead of every other dependency locator, in
+	 * particular Forge's {@code JarInJarDependencyLocator}, which expands its nested MixinExtras.
+	 * Natively that impl is a candidate-phase mod file, so every dependency locator sees it; the
+	 * in-place flow adds it during the dependency pass, and only an explicit move reproduces that
+	 * guarantee. Failing to establish it crashes: a mixin class missing its library fails far from
+	 * the cause.
 	 *
 	 * <p>
-	 * The early {@link DependencyLocatorDispatcher} keeps contributing the embedded impl mod file,
-	 * which must stay before JarInJar so its nested MixinExtras is expanded - splitting the two jobs
-	 * is why this is a second locator instead of moving the first one.
+	 * Back: {@link HostedDependencyLocator} is appended after every native locator, so the hosted
+	 * jars' dependency locators run against the complete native mod list, including the jar-in-jar
+	 * modules JarInJar just contributed. Connector natively enforces the same position for itself
+	 * by sorting this list from its candidate locator; a hosted Connector is not in the list, so
+	 * its sort can never move it. A locator at this position does not get its own output expanded
+	 * by JarInJar - native locators after JarInJar, Connector included, have the same boundary.
+	 *
+	 * <p>
+	 * Both ends are handled in one reflection step so they cannot straddle a native locator's own
+	 * reordering, and the front move happens even when no hosted dependency locator exists.
 	 */
-	public static void appendHostedDependencyLocator() {
-		if (registeredJars().stream().noneMatch(jar -> !serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE).isEmpty())) return;
+	public static void orderDependencyLocators() {
+		boolean hostedDependencyPass = registeredJars().stream().anyMatch(jar -> !serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE).isEmpty());
 		try {
 			Method getDiscoverer = FMLLoader.class.getDeclaredMethod("getModDiscoverer");
 			getDiscoverer.setAccessible(true);
@@ -311,12 +371,55 @@ public final class EarlyServiceLayer {
 			field.setAccessible(true);
 			@SuppressWarnings("unchecked")
 			List<IDependencyLocator> locators = (List<IDependencyLocator>) field.get(discoverer);
-			if (locators.stream().anyMatch(HostedDependencyLocator.class::isInstance)) return;
-			locators.add(new HostedDependencyLocator());
-			LOGGER.debug("[AutoModpack] Appended the hosted dependency locator after {} existing locator(s)", locators.size() - 1);
+
+			int index = indexOf(locators, DependencyLocatorDispatcher.class);
+			if (index < 0) throw new IllegalStateException("AutoModpack's own dependency locator is missing from FML's list");
+			if (index > 0) {
+				Collections.swap(locators, 0, index);
+				LOGGER.debug("[AutoModpack] Moved the embedded impl dependency locator to the front (was at position {})", index);
+			}
+
+			if (hostedDependencyPass && locators.stream().noneMatch(HostedDependencyLocator.class::isInstance)) locators.add(new HostedDependencyLocator());
+			LOGGER.debug("[AutoModpack] Dependency locators ordered: embedded impl first{} ({} locator(s))", hostedDependencyPass ? ", hosted pass last" : "", locators.size());
 		} catch (Throwable t) {
-			throw new IllegalStateException("[AutoModpack] Could not run hosted dependency locators after the loader's own; refusing to resolve them against an incomplete mod list", t);
+			throw new IllegalStateException("[AutoModpack] Could not order FML's dependency locators; refusing to launch with the embedded impl or hosted locators in an unproven position", t);
 		}
+	}
+
+	/**
+	 * Forge 1.18.2's dependency pass is its mod locator list, and this locator's dependency hook runs
+	 * during FML's iteration of that same list. Moving the dispatcher to the front makes the embedded
+	 * impl mod file visible to {@code JarInJarDependencyLocator} there too, matching
+	 * {@link #orderDependencyLocators()} on 1.19+. A {@link Collections#swap} leaves the list's mod
+	 * count untouched, so it is safe while FML iterates it; the element moved back is one FML has
+	 * already visited, so no candidate locator is skipped.
+	 */
+	public static void pinLegacyModLocatorFirst() {
+		try {
+			Method getDiscoverer = FMLLoader.class.getDeclaredMethod("getModDiscoverer");
+			getDiscoverer.setAccessible(true);
+			Object discoverer = getDiscoverer.invoke(null);
+			Field field = discoverer.getClass().getDeclaredField("modLocatorList");
+			field.setAccessible(true);
+			@SuppressWarnings("unchecked")
+			List<IModLocator> locators = (List<IModLocator>) field.get(discoverer);
+			int index = indexOf(locators, ModLocatorDispatcher.class);
+			if (index < 0) throw new IllegalStateException("AutoModpack's own mod locator is missing from FML's list");
+			if (index > 0) {
+				Collections.swap(locators, 0, index);
+				LOGGER.debug("[AutoModpack] Moved the embedded impl mod locator to the front (was at position {})", index);
+			}
+			LOGGER.debug("[AutoModpack] Embedded impl mod locator pinned first ({} locator(s))", locators.size());
+		} catch (Throwable t) {
+			throw new IllegalStateException("[AutoModpack] Could not move the embedded impl mod locator ahead of JarInJar; refusing to launch with its nested MixinExtras unexpanded", t);
+		}
+	}
+
+	private static int indexOf(List<?> locators, Class<?> type) {
+		for (int i = 0; i < locators.size(); i++) {
+			if (type.isInstance(locators.get(i))) return i;
+		}
+		return -1;
 	}
 
 	/**

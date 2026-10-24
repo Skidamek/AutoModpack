@@ -77,6 +77,21 @@ flow:
         # bridge bookkeeping is routine per-launch noise now logged at DEBUG only
         file: logs/debug.log
         matches: 'Bridged \d+ outer package.*CrashAssistant'
+  # 1.18.2 reuses the candidate IModLocator for the dependency pass and pins the
+  # embedded impl first so JarInJar still expands its nested MixinExtras.
+  - do: wait_for
+    name: 1.18.2 reused the candidate locator instance and pinned the embedded impl first
+    when:
+      target: [1.18.2-forge]
+    timeout: 60s
+    until:
+      all:
+        - log:
+            file: logs/debug.log
+            matches: 'Running in-place dependency locator .* \(candidate instance\).*CrashAssistant'
+        - log:
+            file: logs/debug.log
+            matches: 'Embedded impl mod locator pinned first'
   # The inner mod actually made it into the mod list.
   - do: wait_for
     name: the inner crash_assistant mod loaded

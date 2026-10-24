@@ -32,9 +32,10 @@ public class EarlyModLocator extends EarlyModLocatorBase implements EarlyModLoca
 		}
 
 		// Only after every hosted candidate locator ran: one of them may reorder FML's dependency
-		// list (Connector puts its own provider last), and the hosted dependency pass must not be
-		// inserted ahead of that reordering.
-		EarlyServiceLayer.appendHostedDependencyLocator();
+		// list (Connector puts its own provider last), and neither end of our ordering may be
+		// inserted ahead of that reordering. The call also moves the embedded impl to the front,
+		// so JarInJar expands its nested MixinExtras regardless of ServiceLoader order.
+		EarlyServiceLayer.orderDependencyLocators();
 		return results;
 	}
 }

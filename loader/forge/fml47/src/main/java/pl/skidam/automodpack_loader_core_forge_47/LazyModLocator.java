@@ -17,10 +17,10 @@ public class LazyModLocator extends LazyModLocatorBase implements LazyModLocator
 	public List<IModFile> scanMods(Iterable<IModFile> loadedMods) {
 		// Second line of defense behind ModLocatorDispatcher's generation pick; only 1.19+ may act.
 		if (!GenerationProbes.FORGE_FML47) return List.of();
-		// Only the embedded impl belongs to this early pass: Forge's JarInJar locator runs after it
-		// and has to expand the impl's nested MixinExtras. The hosted jars' dependency locators run
-		// from HostedDependencyLocator, appended after every native locator - see
-		// EarlyServiceLayer#appendHostedDependencyLocator.
+		// Only the embedded impl belongs to this early pass. EarlyServiceLayer#orderDependencyLocators
+		// moves it ahead of Forge's JarInJar locator, which then expands the impl's nested
+		// MixinExtras. The hosted jars' dependency locators run from HostedDependencyLocator,
+		// appended after every native locator by that same call.
 		var list = new ArrayList<IModFile>(1);
 		addEmbeddedMod(list);
 		return list;
