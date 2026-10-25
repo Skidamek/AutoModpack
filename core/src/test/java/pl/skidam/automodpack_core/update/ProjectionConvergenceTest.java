@@ -296,6 +296,87 @@ class ProjectionConvergenceTest {
 		}
 	}
 
+	/** Finder, Explorer and NFS litter alone is no work, never part of a fallback, and a held one never keeps an update owed. */
+	@Test
+	void operatingSystemLitterIsNoWorkAndNeverHeld() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, OLD);
+			long revision = ProjectionState.read(storage).revision();
+			for (String junk : List.of("mods/.DS_Store", "mods/Thumbs.db", "config/desktop.ini", "mods/._alpha-1.0.jar", "mods/.nfs000000001234", "litter/.DS_Store"))
+				Files.createDirectories(storage.activePath(junk).getParent());
+			for (String junk : List.of("mods/.DS_Store", "mods/Thumbs.db", "config/desktop.ini", "mods/._alpha-1.0.jar", "mods/.nfs000000001234", "litter/.DS_Store"))
+				Files.writeString(storage.activePath(junk), "litter", StandardCharsets.UTF_8);
+			Files.createDirectories(storage.activePath("empty/nested"));
+
+			assertFalse(converge(storage, cache, OLD, ProjectionConvergence.Writes.NONE).changed(), "litter alone makes no work");
+			assertEquals(revision, ProjectionState.read(storage).revision());
+
+			Path held = storage.activePath("mods/Thumbs.db");
+			ProjectionConvergence.Result result = converge(storage, cache, NEW, holding(path -> path.equals(held)));
+			assertTrue(result.converged(), "litter is never owed: " + result.held());
+			assertFalse(Files.exists(storage.activePath("mods/.DS_Store")));
+			assertFalse(Files.exists(storage.activePath("litter")));
+			assertFalse(Files.exists(storage.activePath("empty")));
+			assertTrue(ProjectionState.read(storage).fallback().stream().noneMatch(row -> ProjectionJunk.isJunk(row.path())), "litter is no fallback content");
+		}
+	}
+
+	@Test
+	void litterTheViewDoesNotReport() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, OLD);
+			Files.writeString(storage.activePath("mods/.DS_Store"), "litter", StandardCharsets.UTF_8);
+			assertNull(ClientProjectionView.observe(storage).snapshot(cache).files().get("mods/.DS_Store"));
+			assertNotNull(ClientProjectionView.observe(storage).snapshot(cache).files().get("mods/beta.jar"));
+		}
+	}
+
+	/** V3 where links are not supported: a verified copy with its seeded record is converged, not copied again. */
+	@Test
+	void aVerifiedCopyWithItsRecordIsConverged() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, OLD);
+			Path jar = storage.activePath("mods/beta.jar");
+			Path copy = temporaryDirectory.resolve("copy.jar");
+			Files.copy(jar, copy);
+			Files.delete(jar);
+			Files.move(copy, jar);
+			assertFalse(pl.skidam.automodpack_core.utils.FileIntegrity.sameInode(jar, storage.objectFile(rows(storage, Map.of("mods/beta.jar", "beta")).get(0).sha1())));
+			cache.overwriteCache(jar, rows(storage, Map.of("mods/beta.jar", "beta")).get(0).sha1());
+
+			assertFalse(converge(storage, cache, OLD, ProjectionConvergence.Writes.NONE).changed());
+		}
+	}
+
+	/** Downgrade: an older version committed a generation while the state was converging; the restore keeps that generation, not the older fallback. */
+	@Test
+	void aGenerationCommittedSinceTheMarkIsWhatARestoreKeeps() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, OLD);
+			assertThrows(Crash.class, () -> converge(storage, cache, NEW, new ProjectionConvergence.Writes() {
+				int seen;
+
+				@Override
+				public void beforeWrite(Path target) {
+					if (seen++ == 2) throw new Crash();
+				}
+			}));
+		}
+		byte[] bytes = "committed".getBytes(StandardCharsets.UTF_8);
+		String hash = OverlayTombstoneCommitTest.store(storage, bytes);
+		var target = UpdateTestFixtures.target(storage, "mods/committed.jar", "mod", false, hash, bytes.length);
+		storage.writeActiveState(target.document(), target.selection().intent());
+
+		PublicationSweep.sweepUnpinnedDirectories(storage);
+
+		assertEquals(Map.of("mods/committed.jar", "committed"), tree(storage));
+		assertFalse(ProjectionState.owed(storage));
+	}
+
 	private int countWrites(ClientStorage storage, FileCache cache) throws Exception {
 		Path probe = temporaryDirectory.resolve("count");
 		ClientStorage scratch = UpdateTestFixtures.storage(probe);

@@ -4,6 +4,7 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
 import java.nio.file.AccessDeniedException;
+import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -119,12 +120,15 @@ final class ProjectionConvergence {
 	boolean restoreFallback() throws IOException {
 		ProjectionState state = ProjectionState.repairing(storage, this::committedRows);
 		if (!state.converging()) return true;
-		Result result = execute(plan(observe(), state.fallback()));
+		// A generation committed since the fallback was taken (an older version ran after a downgrade) is the complete one now.
+		boolean moved = !Objects.equals(state.committedToken(), ProjectionState.committedToken(storage));
+		if (moved) LOGGER.warn("The committed generation changed while the projection converged; restoring that generation's projection");
+		Result result = execute(plan(observe(), moved ? committedRows() : state.fallback()));
 		if (!result.converged()) {
 			LOGGER.error("The fallback projection could not be restored: {} paths are held open, first {}", result.held().size(), result.held().get(0).path(), result.held().get(0).cause());
 			return false;
 		}
-		if (state.fallback().isEmpty()) deleteEmptyActiveDirectory();
+		if (!moved && state.fallback().isEmpty()) deleteEmptyActiveDirectory();
 		ProjectionState.settled(storage, null);
 		return true;
 	}
@@ -189,8 +193,11 @@ final class ProjectionConvergence {
 		return relative.toString();
 	}
 
-	/** Removals and prunes are the walked paths themselves, never re-resolved from a name, so a link is removed as itself. */
-	private record Work(List<Path> removals, List<Path> prunes, List<ProjectionState.Row> installs) {
+	/**
+	 * Removals and prunes are the walked paths themselves, never re-resolved from a name, so a link is removed as itself.
+	 * Junk ({@link ProjectionJunk}) the target does not ship goes best effort and alone never makes work.
+	 */
+	private record Work(List<Path> removals, List<Path> junk, List<Path> prunes, List<Path> junkPrunes, List<ProjectionState.Row> installs) {
 		boolean isEmpty() {
 			return removals.isEmpty() && prunes.isEmpty() && installs.isEmpty();
 		}
@@ -203,16 +210,48 @@ final class ProjectionConvergence {
 			wanted.put(row.path(), row);
 			for (String parent = parentOf(row.path()); parent != null; parent = parentOf(parent)) neededDirectories.add(parent);
 		}
-		List<Path> removals = new ArrayList<>(observed.others().values());
-		for (var file : observed.files().entrySet()) if (!wanted.containsKey(file.getKey())) removals.add(file.getValue().path());
-		List<Path> prunes = observed.directories().entrySet().stream().filter(directory -> !neededDirectories.contains(directory.getKey()))
-				.sorted(Comparator.comparing((Map.Entry<String, Path> directory) -> directory.getKey().length()).reversed()).map(Map.Entry::getValue).toList();
+		List<Path> removals = new ArrayList<>();
+		List<Path> junk = new ArrayList<>();
+		// Directories with something beneath that is not junk: only those make pruning work.
+		Set<String> substantive = new HashSet<>();
+		for (var other : observed.others().entrySet()) {
+			removals.add(other.getValue());
+			markAncestors(other.getKey(), substantive);
+		}
+		for (var file : observed.files().entrySet()) {
+			if (wanted.containsKey(file.getKey())) {
+				markAncestors(file.getKey(), substantive);
+				continue;
+			}
+			if (ProjectionJunk.isJunk(file.getKey())) {
+				junk.add(file.getValue().path());
+				continue;
+			}
+			removals.add(file.getValue().path());
+			markAncestors(file.getKey(), substantive);
+		}
+		List<Path> prunes = new ArrayList<>();
+		List<Path> junkPrunes = new ArrayList<>();
+		observed.directories().entrySet().stream().filter(directory -> !neededDirectories.contains(directory.getKey()))
+				.sorted(Comparator.comparing((Map.Entry<String, Path> directory) -> directory.getKey().length()).reversed())
+				.forEach(directory -> (substantive.contains(directory.getKey()) ? prunes : junkPrunes).add(directory.getValue()));
 		List<ProjectionState.Row> installs = new ArrayList<>();
 		for (ProjectionState.Row row : wanted.values()) {
 			Observed current = observed.files().get(row.path());
 			if (current == null || !isObject(current, row)) installs.add(row);
 		}
-		return new Work(removals, prunes, installs);
+		// A junk-only directory standing where the target needs a file is in the way, so it is real work.
+		for (ProjectionState.Row row : installs)
+			if (observed.directories().containsKey(row.path()) && !substantive.contains(row.path())) {
+				Path directory = observed.directories().get(row.path());
+				junkPrunes.remove(directory);
+				if (!prunes.contains(directory)) prunes.add(directory);
+			}
+		return new Work(removals, junk, prunes, junkPrunes, installs);
+	}
+
+	private static void markAncestors(String path, Set<String> directories) {
+		for (String parent = parentOf(path); parent != null; parent = parentOf(parent)) directories.add(parent);
 	}
 
 	private static String parentOf(String path) {
@@ -225,7 +264,8 @@ final class ProjectionConvergence {
 		if (current.attributes().size() != row.size()) return false;
 		Object key = current.attributes().fileKey();
 		Object objectKey = objectKey(row.sha1());
-		if (key != null && objectKey != null) return key.equals(objectKey);
+		if (key != null && key.equals(objectKey)) return true;
+		// A verified copy (no hard links on FAT, or a store on another volume) answers to the record seeded when it landed.
 		return FileIntegrity.matchesObject(current.path(), storage.objectFile(row.sha1()), row.size(), row.sha1(), cache);
 	}
 
@@ -249,6 +289,7 @@ final class ProjectionConvergence {
 		List<ProjectionState.Row> rows = new ArrayList<>();
 		for (Map.Entry<String, Observed> entry : observed.files().entrySet()) {
 			Observed current = entry.getValue();
+			if (ProjectionJunk.isJunk(entry.getKey())) continue;
 			if (!isLogicalName(entry.getKey())) {
 				LOGGER.warn("Not keeping {} in the projection fallback: its name is no pack path", current.path());
 				continue;
@@ -279,6 +320,7 @@ final class ProjectionConvergence {
 		Path active = storage.activeDirectory();
 		Set<Path> touched = new LinkedHashSet<>();
 		List<Held> held = new ArrayList<>();
+		List<Held> stuck = new ArrayList<>();
 		List<Map.Entry<Path, String>> installed = new ArrayList<>();
 		for (Path path : work.removals()) {
 			try {
@@ -290,16 +332,38 @@ final class ProjectionConvergence {
 				held.add(new Held(path, e));
 			}
 		}
+		for (Path junk : work.junk()) {
+			try {
+				Files.deleteIfExists(junk);
+				touched.add(junk.getParent());
+			} catch (IOException e) {
+				LOGGER.debug("Leaving {} in the projection: it is no pack content and cannot be removed now", junk, e);
+			}
+		}
+		// Junk-only directories hold nothing substantive, so they can go before the deepest-first prunes.
+		for (Path directory : work.junkPrunes()) {
+			try {
+				if (Files.deleteIfExists(directory)) touched.add(directory.getParent());
+			} catch (IOException e) {
+				LOGGER.debug("Leaving {} in the projection: only junk is left in it", directory, e);
+			}
+		}
 		for (Path directory : work.prunes()) {
 			if (heldBeneath(held, directory)) continue;
 			writes.beforeWrite(directory);
-			Files.deleteIfExists(directory);
-			touched.add(directory.getParent());
+			try {
+				Files.deleteIfExists(directory);
+				touched.add(directory.getParent());
+			} catch (DirectoryNotEmptyException e) {
+				// Only junk that could not go is left inside; it blocks a file the target needs at this path, nothing else.
+				stuck.add(new Held(directory, e));
+			}
 		}
 		for (ProjectionState.Row row : work.installs()) {
 			Path target = resolve(active, row.path());
-			if (heldBeneath(held, target) || heldAbove(held, target)) {
-				held.add(new Held(target, held.get(0).cause()));
+			Held blocker = blocker(held, stuck, target);
+			if (blocker != null) {
+				held.add(new Held(target, blocker.cause()));
 				continue;
 			}
 			try {
@@ -318,20 +382,24 @@ final class ProjectionConvergence {
 		return new Result(!touched.isEmpty(), List.copyOf(held));
 	}
 
-	private static boolean heldBeneath(List<Held> held, Path path) {
-		for (Held entry : held) if (entry.path().startsWith(path) && !entry.path().equals(path)) return true;
-		return false;
+	/** What keeps an install from landing: a held path beneath or above it, or a directory at it only junk keeps. */
+	private static Held blocker(List<Held> held, List<Held> stuck, Path target) {
+		for (Held entry : held)
+			if (!entry.path().equals(target) && (entry.path().startsWith(target) || target.startsWith(entry.path()))) return entry;
+		for (Held entry : stuck)
+			if (entry.path().equals(target) || target.startsWith(entry.path())) return entry;
+		return null;
 	}
 
-	private static boolean heldAbove(List<Held> held, Path path) {
-		for (Held entry : held) if (path.startsWith(entry.path()) && !entry.path().equals(path)) return true;
+	private static boolean heldBeneath(List<Held> held, Path path) {
+		for (Held entry : held) if (entry.path().startsWith(path) && !entry.path().equals(path)) return true;
 		return false;
 	}
 
 	/**
 	 * A target path under {@code active/}. Lexical confinement suffices: the walk this run planned on followed no link,
 	 * every link it found was removed before the first install, and an install beneath a link that could not be removed
-	 * stays owed ({@link #heldAbove}); the mutation lock keeps every other writer of ours out.
+	 * stays owed ({@link #blocker}); the mutation lock keeps every other writer of ours out.
 	 */
 	private static Path resolve(Path active, String relative) throws IOException {
 		Path resolved = active.resolve(LogicalPath.normalize(relative)).normalize();

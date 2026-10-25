@@ -210,8 +210,9 @@ public final class UpdateTransaction {
 	public enum Phase {
 		PLANNED,
 		PREPARING,
-		/** No longer persisted by the executor, but older journals carry it and it still means publication started on read. */
+		/** Every live operation landed and the projection convergence may have begun: persisted before its first write. */
 		PROJECTED,
+		/** Written only by older versions, between the two moves of their incoming/backup swap; read as PROJECTED. */
 		SWAPPING,
 		COMMITTED,
 		DEFERRED

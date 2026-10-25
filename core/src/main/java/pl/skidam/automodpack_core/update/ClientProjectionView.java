@@ -194,8 +194,10 @@ public final class ClientProjectionView {
 		try (var paths = Files.walk(active)) {
 			for (Path path : paths.filter(candidate -> Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)).toList()) {
 				String relative = LogicalPath.normalize(active.relativize(path).toString());
-				long size = Files.size(path);
 				var item = published.get(relative);
+				// Finder, Explorer and NFS litter is no drift: the convergence clears it best effort, and it never makes an update.
+				if (item == null && ProjectionJunk.isJunk(relative)) continue;
+				long size = Files.size(path);
 				if (item != null && item.size == size && FileIntegrity.matchesObject(path, storage.objectFile(item.sha1), item.size, item.sha1, cache)) {
 					files.put(relative, new UpdatePlan.FileState(HashUtils.normalizeSha1(item.sha1), size, true));
 					continue;

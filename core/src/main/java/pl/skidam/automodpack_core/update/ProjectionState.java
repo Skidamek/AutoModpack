@@ -76,6 +76,7 @@ public final class ProjectionState {
 		Phase phase;
 		long revision;
 		String transactionId;
+		String committedToken;
 		List<RowFields> fallback;
 	}
 
@@ -86,18 +87,29 @@ public final class ProjectionState {
 	}
 
 	/** The state of an instance without a document: older versions only ever left a complete projection behind. */
-	private static final ProjectionState LEGACY = new ProjectionState(Phase.SETTLED, 0, null, List.of());
+	private static final ProjectionState LEGACY = new ProjectionState(Phase.SETTLED, 0, null, null, List.of());
 
 	private final Phase phase;
 	private final long revision;
 	private final String transactionId;
+	private final String committedToken;
 	private final List<Row> fallback;
 
-	private ProjectionState(Phase phase, long revision, String transactionId, List<Row> fallback) {
+	private ProjectionState(Phase phase, long revision, String transactionId, String committedToken, List<Row> fallback) {
 		this.phase = Objects.requireNonNull(phase, "phase");
 		this.revision = revision;
 		this.transactionId = transactionId;
+		this.committedToken = committedToken;
 		this.fallback = List.copyOf(fallback);
+	}
+
+	/**
+	 * While converging: the content token the active state named when the fallback was taken. A different one at restore
+	 * time means another writer - an older version after a downgrade - committed a generation since, so the fallback is
+	 * that generation's projection instead ({@code ProjectionConvergence.restoreFallback}).
+	 */
+	public String committedToken() {
+		return committedToken;
 	}
 
 	public Phase phase() {
@@ -147,7 +159,7 @@ public final class ProjectionState {
 			throw new UnreadableException("Projection state fallback is invalid: " + file, e);
 		}
 		if (fields.phase == Phase.SETTLED && !rows.isEmpty()) throw new UnreadableException("Settled projection state carries a fallback: " + file, null);
-		return new ProjectionState(fields.phase, fields.revision, fields.transactionId, rows);
+		return new ProjectionState(fields.phase, fields.revision, fields.transactionId, fields.committedToken, rows);
 	}
 
 	/**
@@ -184,7 +196,7 @@ public final class ProjectionState {
 			LOGGER.error("The projection state is unreadable; rebuilding the projection of the committed generation from CAS", e);
 			List<Row> rows = committed.rows();
 			DurableFiles.setAside(storage.projectionStateFile(), "Projection state", e);
-			return write(storage, new ProjectionState(Phase.CONVERGING, System.currentTimeMillis(), null, rows));
+			return write(storage, new ProjectionState(Phase.CONVERGING, System.currentTimeMillis(), null, committedToken(storage), rows));
 		}
 	}
 
@@ -193,7 +205,8 @@ public final class ProjectionState {
 		ProjectionState current = read(storage);
 		// Callers act on the state repairing() returned, so an unreadable document here is a write that raced it; refuse.
 		List<Row> kept = current.converging() ? current.fallback() : fallback;
-		return write(storage, new ProjectionState(Phase.CONVERGING, current.revision() + 1, transactionId, kept));
+		String token = current.converging() ? current.committedToken() : committedToken(storage);
+		return write(storage, new ProjectionState(Phase.CONVERGING, current.revision() + 1, transactionId, token, kept));
 	}
 
 	/** Back to loadable (P1); a no-op when already settled by this transaction, so a replayed tail does not bump the revision. */
@@ -204,10 +217,16 @@ public final class ProjectionState {
 		} catch (UnreadableException e) {
 			// Only a complete tree is settled, and a complete tree needs no evidence of how the document broke beyond the aside.
 			DurableFiles.setAside(storage.projectionStateFile(), "Projection state", e);
-			return write(storage, new ProjectionState(Phase.SETTLED, System.currentTimeMillis(), transactionId, List.of()));
+			return write(storage, new ProjectionState(Phase.SETTLED, System.currentTimeMillis(), transactionId, null, List.of()));
 		}
 		if (!current.converging() && Objects.equals(current.transactionId(), transactionId) && Files.exists(storage.projectionStateFile(), LinkOption.NOFOLLOW_LINKS)) return current;
-		return write(storage, new ProjectionState(Phase.SETTLED, current.revision() + 1, transactionId, List.of()));
+		return write(storage, new ProjectionState(Phase.SETTLED, current.revision() + 1, transactionId, null, List.of()));
+	}
+
+	/** The content token the active state names now, or null without one. */
+	static String committedToken(ClientStorage storage) throws IOException {
+		var active = storage.readActiveState();
+		return active == null ? null : active.contentToken;
 	}
 
 	private static ProjectionState write(ClientStorage storage, ProjectionState state) throws IOException {
@@ -216,6 +235,7 @@ public final class ProjectionState {
 		fields.revision = state.revision;
 		fields.transactionId = state.transactionId;
 		if (state.converging()) {
+			fields.committedToken = state.committedToken;
 			fields.fallback = new ArrayList<>();
 			for (Row row : state.fallback) {
 				RowFields persisted = new RowFields();
