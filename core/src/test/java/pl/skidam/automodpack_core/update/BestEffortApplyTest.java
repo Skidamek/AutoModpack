@@ -185,6 +185,27 @@ class BestEffortApplyTest {
 		assertNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()));
 	}
 
+	/** R2-2: the same in any language: the store decides, not the message. */
+	@Test
+	void aFullDiskInAnyLanguageFailsInsteadOfDeferring() throws Exception {
+		Fixture fixture = twoGenerations();
+		UpdateCommit full = new UpdateCommit(fixture.storage, new UpdateCommit.Probe() {
+			@Override
+			public void beforeWrite(Path target) throws IOException {
+				if (target.equals(fixture.storage.activePath("mods/old.jar"))) throw new java.nio.file.FileSystemException(target.toString(), null, "Brak miejsca na urządzeniu");
+			}
+		});
+		StorageConditions.Stores real = StorageConditions.stores;
+		try {
+			StorageConditions.stores = existing -> new StorageConditions.Store(false, 4096);
+			UpdateExecutionException failure = assertThrows(UpdateExecutionException.class, () -> full.run(new UpdateCommit.Fresh(() -> built(fixture.storage, fixture.plan, fixture.target), null)));
+			assertTrue(failure.getMessage().contains("the disk is full"), failure.getMessage());
+		} finally {
+			StorageConditions.stores = real;
+		}
+		assertEquals(UpdateTransaction.Status.FAILED, UpdateTransaction.read(fixture.storage.transactionFile()).resultStatus);
+	}
+
 	/** F3: a full disk is a failure the player can act on, named as such, never a held file that defers and restarts. */
 	@Test
 	void aFullDiskFailsWithItsReasonInsteadOfDeferring() throws Exception {

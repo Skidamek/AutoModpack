@@ -505,7 +505,7 @@ final class ProjectionConvergence {
 				touched.add(target.getParent());
 				installed.add(Map.entry(target, row.sha1()));
 			} catch (IOException e) {
-				if (!UpdateCommit.isLockFailure(e)) throw e;
+				if (!UpdateCommit.isLockFailure(e, row.size())) throw StorageConditions.classified(e, row.size());
 				held.add(new Held(target, e));
 			}
 		}

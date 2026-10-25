@@ -460,6 +460,32 @@ class ProjectionRepairTest {
 		assertEquals(1, asides(storage).size(), "the unreadable document is kept aside");
 	}
 
+	/** R2-2: full and read-only are decided by the store, in any language; the same message on a store with room is a held file. */
+	@Test
+	void aFullDiskIsDecidedByTheStoreInAnyLanguage() throws Exception {
+		Path file = Files.createFile(temporaryDirectory.resolve("a.jar"));
+		List<String> localized = List.of("Brak miejsca na urządzeniu", "Za mało miejsca na dysku.", "Kein Speicherplatz mehr verfügbar");
+		StorageConditions.Stores real = StorageConditions.stores;
+		try {
+			StorageConditions.stores = existing -> new StorageConditions.Store(false, 512 * 1024);
+			for (String reason : localized) {
+				FileSystemException failure = new FileSystemException(file.toString(), null, reason);
+				assertFalse(UpdateCommit.isLockFailure(failure, false, 64 * 1024), reason);
+				assertFalse(UpdateCommit.isLockFailure(failure, true, 64 * 1024), reason);
+				assertTrue(StorageConditions.condition(failure, 64 * 1024).startsWith("the disk is full"));
+			}
+			StorageConditions.stores = existing -> new StorageConditions.Store(false, 10L << 30);
+			assertTrue(StorageConditions.condition(new FileSystemException(file.toString(), null, "Brak miejsca na urządzeniu"), 64 * 1024) == null, "room on the store: not full");
+			assertTrue(UpdateCommit.isLockFailure(new FileSystemException(file.toString(), null, "Proces nie może uzyskać dostępu do pliku, ponieważ jest on używany przez inny proces."), true));
+			assertNotNull(StorageConditions.condition(new FileSystemException(file.toString(), null, "Brak miejsca"), (10L << 30)), "a write larger than the free space is full");
+			assertTrue(UpdateCommit.isLockFailure(new FileSystemException(file.toString(), null, "Locking not supported by this driver"), true), "no bare substring decides");
+			StorageConditions.stores = existing -> new StorageConditions.Store(true, 10L << 30);
+			assertEquals("the filesystem is read-only", StorageConditions.condition(new FileSystemException(file.toString(), null, "System plików tylko do odczytu")));
+		} finally {
+			StorageConditions.stores = real;
+		}
+	}
+
 	private static void commit(ClientStorage storage) throws Exception {
 		byte[] bytes = "committed".getBytes(StandardCharsets.UTF_8);
 		String hash = OverlayTombstoneCommitTest.store(storage, bytes);

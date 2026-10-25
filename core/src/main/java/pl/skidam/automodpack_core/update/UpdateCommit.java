@@ -337,11 +337,12 @@ public final class UpdateCommit {
 				recordResult(transaction, UpdateTransaction.Status.REPLAN_REQUIRED, operationName, blockedPath, e.getMessage(), e);
 				return new ReplanRequired(transaction, operationName, blockedPath, e.getMessage());
 			}
-			if (isLockFailure(e)) return defer(transaction, List.of(new Lock(currentOperation, blockedPath != null ? blockedPath : storage.activeDirectory(), e)));
-			String condition = StorageConditions.condition(e);
-			if (condition != null) {
+			long required = currentOperation == null || currentOperation.operation() == OperationType.DELETE ? 0 : Math.max(0, currentOperation.expectedSize());
+			if (isLockFailure(e, required)) return defer(transaction, List.of(new Lock(currentOperation, blockedPath != null ? blockedPath : storage.activeDirectory(), e)));
+			IOException classified = StorageConditions.classified(e, required);
+			if (classified != e) {
 				// No wait fixes it, so it is a failure with the reason the player can act on, never a deferral that restarts.
-				e = new IOException(StorageConditions.describe(condition, e), e);
+				e = classified;
 				LOGGER.error(e.getMessage());
 			}
 			recordResult(transaction, UpdateTransaction.Status.FAILED, operationName, blockedPath, e.getMessage(), e);
@@ -547,7 +548,8 @@ public final class UpdateCommit {
 				String path = UpdateTransactionValidator.normalizeOperationPath(operation.relativePath());
 				if (operation.root() == Root.GAME_DIR && ModpackPathPolicy.isModPath(path)) scannedChanges.add((operation.operation() == OperationType.DELETE ? "deleted " : "wrote ") + path);
 			} catch (IOException e) {
-				if (!isLockFailure(e)) throw e;
+				long required = operation.operation() == OperationType.DELETE ? 0 : Math.max(0, operation.expectedSize());
+				if (!isLockFailure(e, required)) throw StorageConditions.classified(e, required);
 				locks.add(new Lock(operation, target, e));
 				owed.add(operation);
 			}
@@ -735,7 +737,12 @@ public final class UpdateCommit {
 	 * storage conditions no wait fixes ({@link StorageConditions}: full, read-only, unsupported), stay failures.
 	 */
 	static boolean isLockFailure(IOException exception, boolean windows) {
-		if (StorageConditions.condition(exception) != null) return false;
+		return isLockFailure(exception, windows, 0);
+	}
+
+	/** {@link #isLockFailure(IOException, boolean)} for a failed write of {@code requiredBytes}, the size the store must still hold. */
+	static boolean isLockFailure(IOException exception, boolean windows, long requiredBytes) {
+		if (StorageConditions.condition(exception, requiredBytes) != null) return false;
 		Throwable current = exception;
 		while (current != null) {
 			// The projection state is ours alone; no game holds it, so its failures are never a held file (P8).
@@ -753,6 +760,10 @@ public final class UpdateCommit {
 	}
 
 	static boolean isLockFailure(IOException exception) {
-		return isLockFailure(exception, PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS);
+		return isLockFailure(exception, 0);
+	}
+
+	static boolean isLockFailure(IOException exception, long requiredBytes) {
+		return isLockFailure(exception, PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS, requiredBytes);
 	}
 }
