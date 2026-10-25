@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
-import io.airlift.compress.zstd.ZstdInputStream;
 import io.airlift.compress.zstd.ZstdOutputStream;
 
 /**
@@ -27,7 +26,8 @@ public enum WireCodec {
 
 		@Override
 		public InputStream unwrap(InputStream source) throws IOException {
-			return new ZstdInputStream(source);
+			// a pooled decoder: one stream per downloaded file would otherwise allocate a fresh ~400 KB decoder each time
+			return ZstdDecoderPool.open(source);
 		}
 	},
 	GZIP("gzip") {
