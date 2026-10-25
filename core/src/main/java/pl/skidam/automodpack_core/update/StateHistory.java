@@ -28,6 +28,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.PathFold;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -295,7 +296,8 @@ public final class StateHistory {
 	 * The player's own game-directory bytes under every {@code leaving} path the pack layer holds now: for each path, its row
 	 * in the newest snapshot before the run of snapshots in which the pack layer held it, whichever packs those were, so bytes
 	 * an earlier pack put there are never mistaken for the player's and a pack removed and reinstalled measures from the
-	 * reinstall. Missing path means a pack created it. The walk ends once every path is resolved.
+	 * reinstall. Missing path means a pack created it. An older spelling counts as the path when the filesystem resolves both
+	 * to the one file there now, as after a case-only rename on a folding disk. The walk ends once every path is resolved.
 	 */
 	public static Map<String, TrackedFile> priorGameDir(ClientStorage storage, Predicate<String> leaving) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
@@ -304,24 +306,36 @@ public final class StateHistory {
 			if (!entries.isEmpty())
 				for (TrackedFile file : InstanceTree.read(storage, entries.get(entries.size() - 1).treeSha1()).files())
 					if (file.root() == Root.PROJECTION && leaving.test(file.path())) held.add(file.path());
+			Map<String, String> folded = new HashMap<>();
+			Set<String> keys = new HashSet<>();
+			for (String path : held) keys.add(folded.computeIfAbsent(path, PathFold::key));
 			Map<String, TrackedFile> files = new TreeMap<>();
 			for (int index = entries.size() - 2; index >= 0 && !held.isEmpty(); index--) {
-				Set<String> holding = new HashSet<>();
-				Map<String, TrackedFile> game = new HashMap<>();
+				Map<String, List<TrackedFile>> holding = new HashMap<>();
+				Map<String, List<TrackedFile>> game = new HashMap<>();
 				for (TrackedFile file : InstanceTree.read(storage, entries.get(index).treeSha1()).files()) {
-					if (!held.contains(file.path())) continue;
-					if (file.root() == Root.PROJECTION) holding.add(file.path());
-					else if (file.root() == Root.GAME_DIR) game.put(file.path(), file);
+					if (file.root() != Root.PROJECTION && file.root() != Root.GAME_DIR) continue;
+					String key = folded.computeIfAbsent(file.path(), PathFold::key);
+					if (keys.contains(key)) (file.root() == Root.PROJECTION ? holding : game).computeIfAbsent(key, ignored -> new ArrayList<>()).add(file);
 				}
 				for (var released = held.iterator(); released.hasNext();) {
 					String path = released.next();
-					if (holding.contains(path)) continue;
+					if (spelledAs(storage, path, holding.get(folded.get(path))) != null) continue;
 					released.remove();
-					if (game.containsKey(path)) files.put(path, game.get(path));
+					TrackedFile prior = spelledAs(storage, path, game.get(folded.get(path)));
+					if (prior != null) files.put(path, prior);
 				}
 			}
 			return Map.copyOf(files);
 		});
+	}
+
+	/** The row for {@code path} under its own spelling, else under one the filesystem resolves to the same file. */
+	private static TrackedFile spelledAs(ClientStorage storage, String path, List<TrackedFile> candidates) throws IOException {
+		if (candidates == null) return null;
+		for (TrackedFile file : candidates) if (file.path().equals(path)) return file;
+		for (TrackedFile file : candidates) if (PathFold.sameFile(storage.gameDirectory(), path, file.path())) return file;
+		return null;
 	}
 
 	/** Every location the plan touches, as tree keys: the plan is single-pack, so its overlay rows belong to the plan's pack. */

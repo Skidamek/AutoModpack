@@ -10,6 +10,7 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.OsPaths;
+import pl.skidam.automodpack_core.utils.PathFold;
 
 public final class GroupManifestValidator {
 	private static final Pattern ID = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
@@ -21,6 +22,18 @@ public final class GroupManifestValidator {
 	private GroupManifestValidator() {}
 
 	public static GroupManifest validate(ModpackJsons.CompleteModpackContentFields fields) {
+		return validate(fields, false);
+	}
+
+	/**
+	 * A manifest about to be published must keep apart every two names some case-insensitive filesystem may join; one
+	 * already published keeps loading under the narrower rule it was published under.
+	 */
+	public static GroupManifest validateForPublish(ModpackJsons.CompleteModpackContentFields fields) {
+		return validate(fields, true);
+	}
+
+	private static GroupManifest validate(ModpackJsons.CompleteModpackContentFields fields, boolean publishing) {
 		List<String> errors = new ArrayList<>();
 		if (fields == null) throw new GroupValidationException(List.of("Complete modpack catalogue is missing"));
 		if (!ModpackId.isValid(fields.modpackId)) errors.add("Invalid modpack ID");
@@ -67,7 +80,7 @@ public final class GroupManifestValidator {
 		GroupManifest manifest = new GroupManifest(fields.modpackId, value(fields.modpackName), value(fields.automodpackVersion), value(fields.loader),
 				value(fields.loaderVersion), value(fields.mcVersion), groups);
 		PairMemo pairs = new PairMemo(manifest);
-		validatePlatformPaths(manifest, errors, pairs);
+		validatePlatformPaths(manifest, publishing, errors, pairs);
 		validateDefaultAndIndividualSelections(manifest, errors);
 		validateObjectSizes(manifest, errors);
 		validateOverlaps(manifest, errors, pairs);
@@ -118,7 +131,7 @@ public final class GroupManifestValidator {
 		return true;
 	}
 
-	private static void validatePlatformPaths(GroupManifest manifest, List<String> errors, PairMemo pairs) {
+	private static void validatePlatformPaths(GroupManifest manifest, boolean publishing, List<String> errors, PairMemo pairs) {
 		for (ClientPlatform platform : coveredPlatforms(manifest)) {
 			Map<String, List<PathOwner>> aliases = new LinkedHashMap<>();
 			Map<String, List<PathOwner>> modBasenameAliases = new LinkedHashMap<>();
@@ -128,9 +141,9 @@ public final class GroupManifestValidator {
 				if (!group.supports(platform)) continue;
 				for (String path : group.files().keySet()) {
 					if (ClientPlatform.WINDOWS.equals(platform)) validateWindowsPath(groupId, path, errors);
-					aliases.computeIfAbsent(platformPathKey(path, platform), ignored -> new ArrayList<>()).add(new PathOwner(groupId, path));
+					aliases.computeIfAbsent(platformPathKey(path, platform, publishing), ignored -> new ArrayList<>()).add(new PathOwner(groupId, path));
 					if (ModpackPathPolicy.isActiveMod(path))
-						modBasenameAliases.computeIfAbsent(platformPathKey(path.substring(path.lastIndexOf('/') + 1), platform), ignored -> new ArrayList<>())
+						modBasenameAliases.computeIfAbsent(platformPathKey(path.substring(path.lastIndexOf('/') + 1), platform, publishing), ignored -> new ArrayList<>())
 								.add(new PathOwner(groupId, path));
 				}
 			}
@@ -171,7 +184,7 @@ public final class GroupManifestValidator {
 	private static void validateAliasOwners(ClientPlatform platform, GroupManifest manifest, Map<String, List<PathOwner>> aliases, boolean modBasenames,
 			List<String> errors, PairMemo pairs) {
 		String prefix = modBasenames ? "mod files" : "paths";
-		String suffix = modBasenames ? " share a basename in the live mods directory" : " alias on this platform";
+		String suffix = modBasenames ? " share a basename in the live mods directory" : " differ only in letter case or Unicode form, so case-insensitive filesystems would make them one file";
 		for (List<PathOwner> owners : aliases.values()) {
 			for (int i = 0; i < owners.size(); i++) for (int j = i + 1; j < owners.size(); j++) {
 				PathOwner first = owners.get(i);
@@ -185,9 +198,9 @@ public final class GroupManifestValidator {
 		}
 	}
 
-	private static String platformPathKey(String path, ClientPlatform platform) {
+	private static String platformPathKey(String path, ClientPlatform platform, boolean publishing) {
 		if (!ClientPlatform.WINDOWS.equals(platform) && !ClientPlatform.MACOS.equals(platform)) return path;
-		return Normalizer.normalize(path, Normalizer.Form.NFD).toLowerCase(Locale.ROOT);
+		return publishing ? PathFold.key(path) : Normalizer.normalize(path, Normalizer.Form.NFD).toLowerCase(Locale.ROOT);
 	}
 
 	private static void validateWindowsPath(String groupId, String path, List<String> errors) {

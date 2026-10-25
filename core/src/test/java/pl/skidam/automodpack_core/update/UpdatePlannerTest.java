@@ -798,7 +798,7 @@ class UpdatePlannerTest {
 		FileKey tombstone = new FileKey(Root.OVERLAY, "config/a.toml");
 		FileKey missing = new FileKey(Root.GAME_DIR, "config/b.toml");
 		FileKey unhashed = new FileKey(Root.GAME_DIR, "config/c.toml");
-		UpdatePlanner.PlanningSession session = new UpdatePlanner.PlanningSession(Map.of(tombstone, new FileState(null, -1, false), unhashed, new FileState(null, 4, true)));
+		UpdatePlanner.PlanningSession session = new UpdatePlanner.PlanningSession(Map.of(tombstone, new FileState(null, -1, false), unhashed, new FileState(null, 4, true)), Map.of());
 
 		for (FileKey key : List.of(tombstone, missing, unhashed)) session.delete(key, null);
 
@@ -838,7 +838,7 @@ class UpdatePlannerTest {
 
 		files.put(new FileKey(Root.GAME_DIR, duplicate), new FileState(OTHER_HASH, 4, true));
 		UpdatePlan update = UpdatePlanner.plan(stackedInput(previous, target, files, owed));
-		UpdatePlan removal = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(previous, Map.of(), files, Set.of(), null, new ClientConfigJsons.ClientConfigFieldsV3(), owed));
+		UpdatePlan removal = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(previous, Map.of(), files, Set.of(), null, new ClientConfigJsons.ClientConfigFieldsV3(), owed, Map.of()));
 		UpdatePlan otherPack = UpdatePlanner.plan(stackedInput(previous, target, files, foreign));
 		files.put(new FileKey(Root.GAME_DIR, duplicate), new FileState(TARGET_HASH, 4, true));
 		UpdatePlan playerReplacedIt = UpdatePlanner.plan(stackedInput(previous, target, files, owed));

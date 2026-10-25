@@ -177,7 +177,7 @@ public final class ModpackCandidateScanner {
 			}
 			fields.categories = categories;
 			auditEditableRules(declarations, filesByGroup);
-			GroupManifest manifest = GroupManifestValidator.validate(fields);
+			GroupManifest manifest = GroupManifestValidator.validateForPublish(fields);
 			return new ModpackCandidate(manifest, new TreeMap<>(objects), new TreeMap<>(provenance), exclusions);
 		} catch (Exception e) {
 			cleanup(results, e);

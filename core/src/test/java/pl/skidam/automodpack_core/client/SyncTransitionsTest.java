@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -520,6 +521,28 @@ class SyncTransitionsTest {
 		assertEquals("player", client.read(E));
 	}
 
+	/**
+	 * A Linux-only pack may ship two names that differ only in case; with equal bytes both projection rows are hard links
+	 * to one store object, so the filesystem calls them the same file although they are two directory entries.
+	 */
+	@Test
+	void twoCaseDistinctPackFilesWithEqualBytesStayTwoFilesAcrossAnUpdate() throws Exception {
+		Assumptions.assumeTrue(ClientPlatform.LINUX.equals(ClientPlatform.current()));
+		Client client = client();
+		Files.createDirectories(client.storage.gamePath("config"));
+		Assumptions.assumeFalse(Files.exists(client.storage.gamePath("CONFIG")), "needs a case-sensitive filesystem");
+		SelectedModpackTarget first = generation(client.storage, "packaa1", null, Map.of("config/Dup.toml", file("x"), "config/dup.toml", file("x")), 0, true);
+		client.apply(first);
+		assertEquals("x", client.read("config/Dup.toml"));
+		assertEquals("x", client.read("config/dup.toml"));
+
+		client.apply(generation(client.storage, "packaa1", first, Map.of("config/Dup.toml", file("x"), "config/dup.toml", file("x"), G, file("g")), 1, true));
+
+		assertEquals("x", client.read("config/Dup.toml"));
+		assertEquals("x", client.read("config/dup.toml"));
+		assertEquals("g", client.read(G));
+	}
+
 	/** Deselecting the group that holds a path is leaving it: the player's own file comes back. */
 	@Test
 	void deselectingTheGroupGivesThePlayersFileBack() throws Exception {
@@ -534,6 +557,24 @@ class SyncTransitionsTest {
 				Set.of("main")));
 
 		assertEquals("player", client.read(F));
+	}
+
+	/** The server respelling the path in the very update that deselects its group is still leaving it: the player's file comes back. */
+	@Test
+	void deselectingTheGroupInTheUpdateThatRespellsThePathGivesThePlayersFileBack() throws Exception {
+		Client client = client();
+		String lower = "config/respell.toml";
+		String upper = "config/Respell.toml";
+		client.write(lower, "player");
+		SelectedModpackTarget both = grouped(client.storage, "packaa1", null, Map.of("main", group(true, Set.of(), Map.of(G, file("g"))), "extra", group(false, Set.of(), Map.of(lower, file("a")))), 0,
+				Set.of("main", "extra"));
+		client.apply(both);
+		assertEquals("a", client.read(lower));
+
+		client.apply(grouped(client.storage, "packaa1", both, Map.of("main", group(true, Set.of(), Map.of(G, file("g"))), "extra", group(false, Set.of(), Map.of(upper, file("a")))), 1,
+				Set.of("main")));
+
+		assertEquals("player", client.read(lower), "leaving the group must give the original back whatever the server now calls the path");
 	}
 
 	/** Deselecting the group also gives the player's file back over their edits to the pack's editable copy. */
@@ -789,6 +830,10 @@ class SyncTransitionsTest {
 	}
 
 	private static SelectedModpackTarget generation(ClientStorage storage, String modpackId, SelectedModpackTarget parent, Map<String, Spec> specs, int version) throws Exception {
+		return generation(storage, modpackId, parent, specs, version, false);
+	}
+
+	private static SelectedModpackTarget generation(ClientStorage storage, String modpackId, SelectedModpackTarget parent, Map<String, Spec> specs, int version, boolean linuxOnly) throws Exception {
 		Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
 		for (var entry : specs.entrySet()) {
 			byte[] content = entry.getValue().content().getBytes(StandardCharsets.UTF_8);
@@ -805,7 +850,15 @@ class SyncTransitionsTest {
 		group.required = true;
 		group.defaultSelected = true;
 		group.files = files;
-		fields.categories = Map.of("General", Map.of("main", group));
+		if (linuxOnly) {
+			ModpackJsons.CompleteModpackContentFields.ModpackGroupFields linux = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+			linux.required = false;
+			linux.defaultSelected = true;
+			linux.compatiblePlatforms = Set.of(ClientPlatform.LINUX.id());
+			linux.files = files;
+			group.files = Map.of();
+			fields.categories = Map.of("General", Map.of("main", group, "linux", linux));
+		} else fields.categories = Map.of("General", Map.of("main", group));
 		var manifest = GroupManifestValidator.validate(fields);
 		PackDocument document = parent == null ? TestPacks.document(manifest) : TestPacks.document(manifest, parent.document().ownershipLedger(), TestPacks.CREATED.plusSeconds(version));
 		TestPacks.stageGeneration(storage, document);
@@ -814,6 +867,7 @@ class SyncTransitionsTest {
 			Journal journal = Journal.open(storage.historyJournalFile(modpackId));
 			journal.append(new JournalEntry(journal.head().seq() + 1, document.contentToken(), document.policySha1(), document.createdAt(), "", JournalEntry.NO_RESTORE, List.of()));
 		}
-		return SelectedModpackTarget.prepare(document, parent == null ? null : MAIN, MAIN, ClientPlatform.current());
+		SelectionIntent intent = linuxOnly ? new SelectionIntent(Set.of("main", "linux")) : MAIN;
+		return SelectedModpackTarget.prepare(document, parent == null ? null : intent, intent, ClientPlatform.current());
 	}
 }

@@ -440,6 +440,22 @@ class GroupManifestValidatorTest {
 		assertTrue(failure.getMessage().contains("android"), failure.getMessage());
 	}
 
+	/** A stored pack keeps loading under the rule it was published by; a new one may not ship names a casefolding disk joins. */
+	@Test
+	void publishingRefusesNamesOnlyABroaderCaseFoldJoinsWhileLoadingKeepsThem() {
+		var fields = catalogue();
+		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.required = true;
+		group.defaultSelected = true;
+		group.files = Map.of("config/stra\u00DFe.toml", fileOfType("config"), "config/strasse.toml", fileOfType("config"));
+		fields.categories = oneCategory("main", group);
+
+		GroupManifestValidator.validate(fields);
+		GroupValidationException failure = assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validateForPublish(fields));
+		assertTrue(failure.getMessage().contains("config/stra\u00DFe.toml") && failure.getMessage().contains("config/strasse.toml")
+				&& failure.getMessage().contains("case-insensitive filesystems would make them one file"), failure.getMessage());
+	}
+
 	private static ModpackJsons.CompleteModpackContentFields catalogue() {
 		var fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";

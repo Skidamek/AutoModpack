@@ -50,6 +50,7 @@ import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JarUtils;
+import pl.skidam.automodpack_core.utils.PathFold;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -167,7 +168,8 @@ final class ClientUpdatePlanBuilder {
 		String expectedSelectedModpackId = storage.selectedModpackId();
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, input.target(), files, forceCopyServices, targetMods, standardMods,
-				previousCopies, nestedCandidates, selection, plannedConfig, input.consentedLocalModFiles(), projection.owed())).withPlannedSelectedModpackId(input.target().modpackId);
+				previousCopies, nestedCandidates, selection, plannedConfig, input.consentedLocalModFiles(), projection.owed(), sameFiles(files, input.target().modpackId)))
+				.withPlannedSelectedModpackId(input.target().modpackId);
 		UpdatePlan planned = withSwitchConsequences(plan, LauncherVersionSwapper.Versions.advertisedBy(input.target()), projection, logicalConfig.syncVersions);
 		return new PreparedPlan(planned, files, UnownedLocalMods.of(storage, installed, files, planned, standardMods, input.currentConfig()), targetOverlay.digest(),
 				new PlannedAgainst(expectedClientConfig, expectedSelectedModpackId, installed == null ? null : installed.ownershipLedger));
@@ -216,7 +218,7 @@ final class ClientUpdatePlanBuilder {
 					generatedCopies == null ? List.of() : generatedCopies.nestedCopies(), cache,
 					Map.of(installed.modpackId, storage.overlaySnapshot(installed.modpackId, cache)));
 			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, availablePreInstall.priorGameDir(), files, availablePreInstall.objectHashes(), generatedCopies, plannedConfig,
-					projection.owed()))
+					projection.owed(), sameFiles(files, installed.modpackId)))
 					.withPlannedSelectedModpackId(plannedSelectedModpackId);
 			plan = withSwitchConsequences(plan, null, projection, currentConfig.syncVersions);
 			// A removal plans the installed generation away, so the projection it planned against is the one it carries.
@@ -281,11 +283,13 @@ final class ClientUpdatePlanBuilder {
 			overlaySnapshots.put(previousId, snapshot);
 		}
 		Set<String> deselected = deselectedPaths(previousManifest, target);
+		Set<String> leavingKeys = new HashSet<>();
+		for (String path : deselected) leavingKeys.add(PathFold.key(path));
 		boolean switches = !previousId.equals(target.manifest().modpackId());
 		// Only a path the player leaves gets its original back, so a plan that leaves nothing never walks the history.
 		AvailablePreInstall preInstall = !switches && deselected.isEmpty()
 				? new AvailablePreInstall(Map.of(), Set.of())
-				: readAvailablePreInstall(path -> switches || deselected.contains(path), cache);
+				: readAvailablePreInstall(path -> switches || leavingKeys.contains(PathFold.key(path)), cache);
 		return new UpdatePlanner.SelectionContext(previousId, previousManifest, snapshot.files(), preInstall.priorGameDir(), preInstall.objectHashes(), deselected);
 	}
 
@@ -498,6 +502,29 @@ final class ClientUpdatePlanBuilder {
 		UpdatePlan.FileState advertised = advertisedLive.get(relative);
 		String hash = advertised != null && advertised.regularFile() ? FileIntegrity.observedHash(path, advertised.size(), advertised.sha1(), cache) : cache.getOrComputeHash(path);
 		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, size, true));
+	}
+
+	/**
+	 * Observed spellings the filesystem itself resolves to one file, each mapped to the first spelling of that file. Only
+	 * names a broad fold joins are asked about, and only the filesystem's answer joins them: no volume, directory or
+	 * normalization rule is assumed.
+	 */
+	private Map<UpdatePlan.FileKey, UpdatePlan.FileKey> sameFiles(Map<UpdatePlan.FileKey, UpdatePlan.FileState> files, String modpackId) throws IOException {
+		Map<UpdatePlan.FileKey, List<UpdatePlan.FileKey>> candidates = new HashMap<>();
+		for (UpdatePlan.FileKey key : files.keySet().stream().sorted(UpdatePlan.FileKey.ORDER).toList())
+			candidates.computeIfAbsent(new UpdatePlan.FileKey(key.root(), PathFold.key(key.relativePath())), ignored -> new ArrayList<>()).add(key);
+		Map<UpdatePlan.FileKey, UpdatePlan.FileKey> sameFiles = new HashMap<>();
+		for (List<UpdatePlan.FileKey> spellings : candidates.values()) for (int index = 1; index < spellings.size(); index++) {
+			UpdatePlan.FileKey spelling = spellings.get(index);
+			for (UpdatePlan.FileKey first : spellings.subList(0, index)) {
+				if (sameFiles.containsKey(first)) continue;
+				if (PathFold.sameFile(storage.root(first.root(), modpackId), first.relativePath(), spelling.relativePath())) {
+					sameFiles.put(spelling, first);
+					break;
+				}
+			}
+		}
+		return sameFiles;
 	}
 
 	private Path resolvedObject(ModpackJsons.ModpackContentFields.ModpackContentItem item, ClientProjectionView.Snapshot projection, FileCache cache) {
