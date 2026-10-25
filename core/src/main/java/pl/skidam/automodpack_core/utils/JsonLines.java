@@ -42,6 +42,15 @@ public final class JsonLines {
 	 * {@link IllegalArgumentException} is an entry-contract break and is corruption anywhere, tail included.
 	 */
 	public static <T> List<T> read(Path file, String description, Function<String, T> parser, boolean tolerateTornTail) throws IOException {
+		return read(file, description, parser, tolerateTornTail, tolerateTornTail);
+	}
+
+	/** Reads the intact prefix and leaves the file as it is: a torn final line is ignored in memory, never repaired, for readers that may race a locked append. */
+	public static <T> List<T> readIgnoringTornTail(Path file, String description, Function<String, T> parser) throws IOException {
+		return read(file, description, parser, true, false);
+	}
+
+	private static <T> List<T> read(Path file, String description, Function<String, T> parser, boolean tolerateTornTail, boolean repair) throws IOException {
 		if (!Files.exists(file)) return List.of();
 		byte[] bytes = Files.readAllBytes(file);
 		List<T> values = new ArrayList<>();
@@ -62,13 +71,14 @@ public final class JsonLines {
 				throw new UnusableContentException(values.size() + 1, "Corrupt " + description + " line " + (values.size() + 1) + " in " + file, e);
 			} catch (JsonParseException e) {
 				if (!finalLine || !tolerateTornTail) throw new UnusableContentException(values.size() + 1, "Malformed " + description + " line " + (values.size() + 1) + " in " + file, e);
+				if (!repair) break;
 				LOGGER.warn("{} {} ends in a torn line after {} intact entries; dropping the last {} bytes and keeping the intact prefix", description, file, values.size(), bytes.length - droppedFrom);
 				truncate(file, droppedFrom);
 				intactBytes = droppedFrom;
 				break;
 			}
 		}
-		if (tolerateTornTail && intactBytes > 0 && bytes[intactBytes - 1] != '\n') {
+		if (repair && intactBytes > 0 && bytes[intactBytes - 1] != '\n') {
 			// A crash can land after the entry's bytes but before its newline; the entry parsed fine, so restore the newline before the next append fuses two entries into one line.
 			Files.writeString(file, "\n", StandardCharsets.UTF_8, StandardOpenOption.WRITE, StandardOpenOption.APPEND);
 		}

@@ -60,6 +60,7 @@ public final class StoragePaths {
 	public static final Path SERVER_DIR = AUTOMODPACK_DIR.resolve("server");
 	public static final Path SERVER_PROJECTION_FILE = SERVER_DIR.resolve("current-projection.json");
 	public static final Path SERVER_JOURNAL_FILE = SERVER_DIR.resolve("journal.jsonl");
+	public static final Path SERVER_GENERATION_LOCK_FILE = SERVER_DIR.resolve("generation.lock");
 	public static final Path SERVER_STAGING_DIR = SERVER_DIR.resolve("staging");
 
 	/** The dedicated server's own cache: visible, deletable with the folder, never derived from HOME. */

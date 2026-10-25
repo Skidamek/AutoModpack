@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_GENERATION_LOCK_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_JOURNAL_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_PROJECTION_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.WAITING_MUSIC_MAX_BYTES;
@@ -8,6 +9,7 @@ import static pl.skidam.automodpack_core.storage.StoragePaths.WAITING_MUSIC_MAX_
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -16,6 +18,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
@@ -29,6 +34,7 @@ import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance;
 import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.FileLocks;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -38,10 +44,12 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  */
 public final class GenerationStore {
 	private static final String OWNERSHIP_COMPONENT = "server";
+	private static final ConcurrentHashMap<Path, ReentrantLock> JVM_LOCKS = new ConcurrentHashMap<>();
 
 	private final Path root;
 	private final Path journalFile;
 	private final Path projectionFile;
+	private final Path lockFile;
 	private final ServerObjectStore objectStore;
 	private final Path objectsDirectory;
 	private final Path waitingMusicSource;
@@ -70,6 +78,7 @@ public final class GenerationStore {
 		this.root = root.toAbsolutePath().normalize();
 		this.journalFile = this.root.resolve(SERVER_JOURNAL_FILE.getFileName().toString());
 		this.projectionFile = this.root.resolve(SERVER_PROJECTION_FILE.getFileName().toString());
+		this.lockFile = this.root.resolve(SERVER_GENERATION_LOCK_FILE.getFileName().toString());
 		this.objectsDirectory = objectsDirectory.toAbsolutePath().normalize();
 		this.waitingMusicSource = waitingMusicSource == null ? null : waitingMusicSource.toAbsolutePath().normalize();
 		this.objectStore = new ServerObjectStore(this.objectsDirectory, this.root.resolve("staging"));
@@ -86,12 +95,43 @@ public final class GenerationStore {
 
 	/** The current generation: the journal head's content with its policy document and ledger. */
 	public Optional<Current> loadCurrent() throws IOException {
+		return reading(this::peek);
+	}
+
+	/** {@link #loadCurrent} that also pins the head's objects, for a host that serves a generation it did not publish this run. */
+	public Optional<Current> loadPinned() throws IOException {
+		return locked(() -> {
+			Optional<Current> head = head();
+			if (head.isPresent()) publishReceipt(reachable(head.get()));
+			return head;
+		});
+	}
+
+	/**
+	 * A read's cold load, which writes nothing: a torn journal tail is ignored and a stale projection is rebuilt in
+	 * memory only. State that needs repair (unusable content, an unreadable projection) is loaded again under the
+	 * store's lock, where the repair cannot cut another process's append.
+	 */
+	private Optional<Current> peek() throws IOException {
+		if (current != null) return Optional.of(current);
+		try {
+			journal = Journal.openWithoutRepair(journalFile);
+			if (journal.isEmpty()) return Optional.empty();
+			Current projected = loadFromProjection(false);
+			current = projected != null ? projected : rebuild(storedWaitingMusicObject());
+			return Optional.of(current);
+		} catch (IOException needsRepair) {
+			return locked(this::head);
+		}
+	}
+
+	/** The cold load of a locked write path, repairing a torn tail, archiving unusable state, and rewriting a stale projection. */
+	private Optional<Current> head() throws IOException {
 		if (current != null) return Optional.of(current);
 		journal = openJournal();
 		if (journal.isEmpty()) return Optional.empty();
 		current = loadCurrentSetAsideOnFailure();
-		if (current != null) publishReceipt(reachable(current));
-		return current == null ? Optional.empty() : Optional.of(current);
+		return Optional.ofNullable(current);
 	}
 
 	/** Journal.open with the store-level heal: unusable *content* is archived aside and reopened empty. Physical IO of a readable journal propagates. */
@@ -111,18 +151,22 @@ public final class GenerationStore {
 	 * files. Unchanged content keeps its content token, so clients never re-download for that heal.
 	 */
 	private Current loadCurrentSetAsideOnFailure() throws IOException {
-		Current projected = loadFromProjection();
+		Current projected = loadFromProjection(true);
 		if (projected != null) return projected;
 		try {
-			JournalEntry head = journal.head();
-			Current rebuilt = new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), verifiedPolicy(head), replayLedger(head.seq()),
-					journal.treeAt(head.seq()), publishWaitingMusicObject(null));
+			Current rebuilt = rebuild(publishWaitingMusicObject(null));
 			writeProjection(rebuilt);
 			return rebuilt;
 		} catch (Journal.UnusableContentException e) {
 			archiveUnusableState(e);
 			return null;
 		}
+	}
+
+	private Current rebuild(String waitingMusicSha1) throws IOException {
+		JournalEntry head = journal.head();
+		return new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), verifiedPolicy(head), replayLedger(head.seq()), journal.treeAt(head.seq()),
+				waitingMusicSha1);
 	}
 
 	/** Archives generation state that cannot be loaded, preserving the evidence next to where it lived. */
@@ -140,12 +184,14 @@ public final class GenerationStore {
 	 * view is the normal cache miss and reads as absent; unreadable content is set aside with a
 	 * loud log before the rebuild below recreates the projection.
 	 */
-	private Current loadFromProjection() throws IOException {
-		GenerationJsons.HeadDocumentFields fields = ConfigTools.readState(projectionFile, GenerationJsons.HeadDocumentFields.class, "Server generation projection",
-				document -> {
-					if (document.policy == null || document.ownershipLedger == null) throw new IllegalArgumentException("Projection document is missing its policy or ownership ledger");
-					return document;
-				}).orElse(null);
+	private Current loadFromProjection(boolean repairing) throws IOException {
+		Function<GenerationJsons.HeadDocumentFields, GenerationJsons.HeadDocumentFields> complete = document -> {
+			if (document.policy == null || document.ownershipLedger == null) throw new IllegalArgumentException("Projection document is missing its policy or ownership ledger");
+			return document;
+		};
+		GenerationJsons.HeadDocumentFields fields = (repairing
+				? ConfigTools.readState(projectionFile, GenerationJsons.HeadDocumentFields.class, "Server generation projection", complete)
+				: ConfigTools.readUnique(projectionFile, GenerationJsons.HeadDocumentFields.class, "Server generation projection", complete)).orElse(null);
 		if (fields == null) return null;
 		JournalEntry head = journal.head();
 		if (fields.journalHead != head.seq() || !fields.contentToken.equals(head.contentToken()) || !fields.policySha1.equals(head.policySha1())) return null;
@@ -168,7 +214,11 @@ public final class GenerationStore {
 	 * must be reachable from it or the next boot rebuilds the old one. True no-change leaves the head untouched.
 	 */
 	public Publication publish(ModpackCandidate candidate, String notes, FileCache fileCache) throws IOException {
-		Current current = loadCurrent().orElse(null);
+		return locked(() -> publishLocked(candidate, notes, fileCache));
+	}
+
+	private Publication publishLocked(ModpackCandidate candidate, String notes, FileCache fileCache) throws IOException {
+		Current current = head().orElse(null);
 		GroupManifest manifest = candidate.manifest();
 		ContentTree tree = ContentTree.fromManifest(manifest);
 		String token = tree.token();
@@ -212,13 +262,19 @@ public final class GenerationStore {
 
 	/** Replaces notes on the live head journal entry. Content, policy, and seq stay; callers rebind hosting so the served journal size matches. */
 	public JournalEntry replaceHeadNotes(String notes) throws IOException {
-		if (loadCurrent().isEmpty()) throw new IOException("No modpack generation is published");
-		return journal.replaceHeadNotes(notes);
+		return locked(() -> {
+			if (head().isEmpty()) throw new IOException("No modpack generation is published");
+			return journal.replaceHeadNotes(notes);
+		});
 	}
 
 	/** Restores the exact content and policy of a past journal entry as a new head entry. */
 	public Publication publishRestore(long targetSeq, String notes) throws IOException {
-		Current current = loadCurrent().orElseThrow(() -> new IOException("Nothing to restore before the root generation is published"));
+		return locked(() -> publishRestoreLocked(targetSeq, notes));
+	}
+
+	private Publication publishRestoreLocked(long targetSeq, String notes) throws IOException {
+		Current current = head().orElseThrow(() -> new IOException("Nothing to restore before the root generation is published"));
 		if (targetSeq == current.seq()) throw new IllegalArgumentException("Generation " + targetSeq + " is already the current generation");
 		JournalEntry target = journal.entryAt(targetSeq);
 		ContentTree targetTree = journal.treeAt(targetSeq);
@@ -241,10 +297,12 @@ public final class GenerationStore {
 
 	/** Recent journal entries, oldest first, at most {@code limit} of them. */
 	public List<JournalEntry> history(int limit) throws IOException {
-		loadCurrent();
-		List<JournalEntry> entries = journal.entries();
-		int from = Math.max(0, entries.size() - Math.max(1, limit));
-		return entries.subList(from, entries.size());
+		return reading(() -> {
+			peek();
+			List<JournalEntry> entries = journal.entries();
+			int from = Math.max(0, entries.size() - Math.max(1, limit));
+			return List.copyOf(entries.subList(from, entries.size()));
+		});
 	}
 
 	/**
@@ -253,7 +311,7 @@ public final class GenerationStore {
 	 * is still stored. Everything else stays on disk until an explicit collect.
 	 */
 	public GenerationHosting hosting() throws IOException {
-		return hosting(loadCurrent().orElseThrow(() -> new IOException("No modpack generation is published")));
+		return reading(() -> hosting(peek().orElseThrow(() -> new IOException("No modpack generation is published"))));
 	}
 
 	private GenerationHosting hosting(Current current) {
@@ -269,7 +327,11 @@ public final class GenerationStore {
 	 * reusing the same object store never collect each other's pinned bytes.
 	 */
 	public CollectionSummary collectUnreachable() throws IOException {
-		Current current = loadCurrent().orElse(null);
+		return locked(this::collectUnreachableLocked);
+	}
+
+	private CollectionSummary collectUnreachableLocked() throws IOException {
+		Current current = head().orElse(null);
 		return SharedObjectOwnership.withGlobalReferences(dataLocation, OWNERSHIP_COMPONENT, reachable(current), globallyReferenced -> {
 			List<Path> objects = ObjectStoreMaintenance.objectFiles(objectsDirectory);
 			long beforeBytes = 0;
@@ -277,6 +339,46 @@ public final class GenerationStore {
 			ObjectStoreMaintenance.DeletionReceipt deletion = ObjectStoreMaintenance.deleteUnreachable(objectsDirectory, globallyReferenced);
 			return new CollectionSummary(objects.size(), beforeBytes, deletion.deletedCount(), deletion.deletedBytes());
 		});
+	}
+
+	/**
+	 * Runs one change of this store's journal under the store's lock, so two generators on one instance (a world and the
+	 * menu, or two processes) never append over each other. The cached head is dropped first: another writer may have moved it.
+	 */
+	private <T> T locked(FileLocks.LockedOperation<T> operation) throws IOException {
+		Files.createDirectories(root);
+		return reading(() -> FileLocks.withLock(lockFile, LinkOption.NOFOLLOW_LINKS, () -> {
+			current = null;
+			journal = null;
+			return operation.run();
+		}));
+	}
+
+	/** Runs a read under this JVM's lock for the store, so it never sees a write's dropped cache or pins a head mid-publish. */
+	private <T> T reading(FileLocks.LockedOperation<T> operation) throws IOException {
+		ReentrantLock jvmLock = JVM_LOCKS.computeIfAbsent(lockKey(), ignored -> new ReentrantLock());
+		jvmLock.lock();
+		try {
+			return operation.run();
+		} finally {
+			jvmLock.unlock();
+		}
+	}
+
+	private Path lockKey() {
+		return lockKey(root);
+	}
+
+	/** The real path a root has or will have: its nearest existing ancestor resolved through links, plus the segments not yet created. */
+	static Path lockKey(Path root) {
+		Path existing = root;
+		while (existing != null && !Files.exists(existing)) existing = existing.getParent();
+		if (existing == null) return root;
+		try {
+			return existing.toRealPath().resolve(existing.relativize(root)).normalize();
+		} catch (IOException vanished) {
+			return root;
+		}
 	}
 
 	/** Every policy document in the journal plus the objects the head serves: what collection keeps and what the receipt pins. */
@@ -309,7 +411,11 @@ public final class GenerationStore {
 	public record CollectionSummary(long objectsBefore, long bytesBefore, long deletedObjects, long deletedBytes) {}
 
 	public StorageReport measureStorage() throws IOException {
-		loadCurrent();
+		return reading(this::measureStorageLocked);
+	}
+
+	private StorageReport measureStorageLocked() throws IOException {
+		peek();
 		long journalBytes = Files.exists(journalFile) ? Files.size(journalFile) : 0;
 		long objectCount = 0;
 		long objectBytes = 0;
@@ -384,6 +490,13 @@ public final class GenerationStore {
 		head.ownershipLedger = current.ledger().toFields();
 		head.policy = current.manifest().toFields();
 		ConfigTools.writeAtomic(projectionFile, head);
+	}
+
+	/** The convention track's object when it is already stored, without promoting anything: what a read may advertise. */
+	private String storedWaitingMusicObject() throws IOException {
+		if (waitingMusicSource == null || !Files.isRegularFile(waitingMusicSource) || Files.size(waitingMusicSource) > WAITING_MUSIC_MAX_BYTES) return "";
+		String sha1 = HashUtils.normalizeSha1(HashUtils.getHash(waitingMusicSource));
+		return FileIntegrity.matchesNamed(DataRootResolver.objectFile(objectsDirectory, sha1), Files.size(waitingMusicSource), sha1, null) ? sha1 : "";
 	}
 
 	/** Publishes the convention track through the object store's discipline when present; empty means this generation serves none, and a changed file lands at the next publish. */

@@ -54,6 +54,10 @@ public final class HostRole {
 		return new HostRole(new HostSource.None(new PackAbsence(PackAbsence.Kind.HOST_UNAVAILABLE, "AutoModpack hosting is unavailable this session: " + reason)), null, null, true);
 	}
 
+	public HostSource source() {
+		return source;
+	}
+
 	/** Whether this host lives inside a player's game, whose address is only good for one session. */
 	public boolean integrated() {
 		return integrated;

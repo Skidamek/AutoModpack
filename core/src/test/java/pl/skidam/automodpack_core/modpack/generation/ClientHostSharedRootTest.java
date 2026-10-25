@@ -92,7 +92,7 @@ class ClientHostSharedRootTest {
 		assertEquals(List.of(legacyReceipt(objects)), receipts(ownRoot));
 
 		DataRootResolver.Location own = new DataRootResolver.Location(ownRoot, HashUtils.sha1("server"), instance);
-		new GenerationStore(state, objects, own, null).loadCurrent();
+		new GenerationStore(state, objects, own, null).loadPinned();
 		assertEquals(List.of(own.ownerId() + ".server.json"), receipts(ownRoot));
 
 		Path shared = tmp.resolve("shared-data");
@@ -100,7 +100,7 @@ class ClientHostSharedRootTest {
 		Path clientState = tmp.resolve("client/automodpack/server");
 		new GenerationStore(clientState, sharedObjects, (Path) null).publish(candidate(clientState, "eeeeeee", "client-bytes"), "root", null);
 		new GenerationStore(clientState, sharedObjects, (Path) null).collectUnreachable();
-		new GenerationStore(clientState, sharedObjects, location(shared, "client"), null).loadCurrent();
+		new GenerationStore(clientState, sharedObjects, location(shared, "client"), null).loadPinned();
 		assertTrue(receipts(shared).contains(legacyReceipt(sharedObjects)), "a shared root keeps the receipt another instance may still rely on");
 	}
 

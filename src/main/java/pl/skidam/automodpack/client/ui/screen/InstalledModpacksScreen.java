@@ -62,7 +62,8 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		ActionRow management = actionRow(ActionAreaLayout.RowKind.AUXILIARY,
 				optionalAction(VersionedText.text("automodpack.management.stateHistory"), press -> controller.openStateHistory(this, this::reloadEntries)),
 				optionalAction(VersionedText.text("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller))),
-				optionalAction(VersionedText.text("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this))));
+				optionalAction(VersionedText.text("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this))),
+				optionalAction(VersionedText.text("automodpack.hosting.button"), press -> ScreenImpl.setScreen(new HostingScreen(this))));
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.text("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
 		ActionRow[] actionRows = {management, footer};
 		int rowWidth = panelWidth(PANEL_WIDTH) - TEXT_MARGIN * 2;

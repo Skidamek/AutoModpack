@@ -40,6 +40,15 @@ public final class Journal {
 		return new Journal(file, parse(file, true));
 	}
 
+	/** Opens the journal exactly as it is on disk: a torn final line is ignored, never repaired, so a reader cannot cut another process's append. */
+	public static Journal openWithoutRepair(Path file) throws IOException {
+		try {
+			return new Journal(file, JsonLines.readIgnoringTornTail(file, "journal", Journal::parseLine));
+		} catch (JsonLines.UnusableContentException e) {
+			throw new UnusableContentException(e.getMessage(), e);
+		}
+	}
+
 	/** Parses every line; verifying fetched journal artifacts, where a torn tail means a bad transfer instead of a crash. */
 	public static Journal openComplete(Path file) throws IOException {
 		return new Journal(file, parse(file, false));
@@ -47,10 +56,14 @@ public final class Journal {
 
 	private static List<JournalEntry> parse(Path file, boolean tolerateTornTail) throws IOException {
 		try {
-			return JsonLines.read(file, "journal", line -> JournalEntry.fromFields(ConfigTools.COMPACT.fromJson(line, GenerationJsons.JournalEntryFields.class)), tolerateTornTail);
+			return JsonLines.read(file, "journal", Journal::parseLine, tolerateTornTail);
 		} catch (JsonLines.UnusableContentException e) {
 			throw new UnusableContentException(e.getMessage(), e);
 		}
+	}
+
+	private static JournalEntry parseLine(String line) {
+		return JournalEntry.fromFields(ConfigTools.COMPACT.fromJson(line, GenerationJsons.JournalEntryFields.class));
 	}
 
 	public List<JournalEntry> entries() {

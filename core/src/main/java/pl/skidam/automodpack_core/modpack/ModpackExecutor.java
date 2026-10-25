@@ -318,7 +318,7 @@ public class ModpackExecutor {
 	public LoadResult loadLast() {
 		ServerConfigJsons.ServerConfigFieldsV3 serverConfig = config.get();
 		try (OperationLocks.Lease operation = locks.acquire(OperationLocks.Operation.SCAN)) {
-			GenerationStore.Current current = generationStore.loadCurrent().orElse(null);
+			GenerationStore.Current current = generationStore.loadPinned().orElse(null);
 			if (current == null) {
 				PackAbsence absence = new PackAbsence(Kind.NEVER_PUBLISHED, "No modpack has been published yet. Run /automodpack generate, or leave generate-modpack-on-start enabled to publish one at startup.");
 				packAbsence = absence;

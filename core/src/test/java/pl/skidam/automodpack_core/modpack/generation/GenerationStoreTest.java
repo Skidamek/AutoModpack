@@ -1,15 +1,25 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -97,6 +107,154 @@ class GenerationStoreTest {
 		long after = Files.size(state.resolve("journal.jsonl"));
 		assertTrue(after > before);
 		assertEquals(after, store.hosting().hosted(GenerationHosting.JOURNAL_KEY).orElseThrow().size());
+	}
+
+	@Test
+	void twoStoresOnOneRootNeverPublishOverEachOther() throws Exception {
+		Path objects = tempDir.resolve("objects");
+		Path state = tempDir.resolve("state");
+		int perWriter = 8;
+		List<List<ModpackCandidate>> batches = new ArrayList<>();
+		for (String writer : List.of("world", "menu")) {
+			List<ModpackCandidate> batch = new ArrayList<>();
+			for (int i = 0; i < perWriter; i++) batch.add(candidate(writer + i, "content-" + writer + i));
+			batches.add(batch);
+		}
+		ExecutorService pool = Executors.newFixedThreadPool(2);
+		try {
+			CountDownLatch start = new CountDownLatch(1);
+			List<Future<?>> writers = new ArrayList<>();
+			for (List<ModpackCandidate> batch : batches) {
+				GenerationStore store = new GenerationStore(state, objects);
+				writers.add(pool.submit(() -> {
+					start.await();
+					for (ModpackCandidate candidate : batch) store.publish(candidate, "", null);
+					return null;
+				}));
+			}
+			start.countDown();
+			for (Future<?> writer : writers) writer.get(60, TimeUnit.SECONDS);
+		} finally {
+			pool.shutdownNow();
+		}
+
+		List<JournalEntry> history = new GenerationStore(state, objects).history(100);
+		assertEquals(2 * perWriter, history.size());
+		for (int i = 0; i < history.size(); i++) assertEquals(i + 1, history.get(i).seq());
+	}
+
+	@Test
+	void readsDuringPublishesNeverFailNorUnpinTheNewHead() throws Exception {
+		Path objects = tempDir.resolve("objects");
+		Path state = tempDir.resolve("state");
+		GenerationStore store = new GenerationStore(state, objects);
+		store.publish(candidate("seed", "content-seed"), "", null);
+		List<ModpackCandidate> batch = new ArrayList<>();
+		for (int i = 0; i < 40; i++) batch.add(candidate("w" + i, "content-w" + i));
+		AtomicBoolean done = new AtomicBoolean();
+		ConcurrentLinkedQueue<Throwable> failures = new ConcurrentLinkedQueue<>();
+		ExecutorService pool = Executors.newFixedThreadPool(3);
+		try {
+			Future<?> writer = pool.submit(() -> {
+				try {
+					for (ModpackCandidate candidate : batch) {
+						GenerationStore.Publication publication = store.publish(candidate, "", null);
+						String receipt = receipt(objects);
+						for (ContentTree.ContentFile file : ContentTree.fromManifest(publication.manifest()).files().values())
+							assertTrue(receipt.contains(file.sha1()), "the receipt pins the head a publish just promoted");
+					}
+				} finally {
+					done.set(true);
+				}
+				return null;
+			});
+			for (int reader = 0; reader < 2; reader++) {
+				pool.submit(() -> {
+					while (!done.get()) {
+						try {
+							store.history(5);
+							store.hosting();
+							store.measureStorage();
+							new GenerationStore(state, objects).loadCurrent();
+						} catch (Throwable failure) {
+							failures.add(failure);
+						}
+					}
+					return null;
+				});
+			}
+			writer.get(120, TimeUnit.SECONDS);
+		} finally {
+			done.set(true);
+			pool.shutdown();
+			assertTrue(pool.awaitTermination(60, TimeUnit.SECONDS), "readers stop before the store is deleted");
+		}
+		assertEquals(List.of(), List.copyOf(failures));
+	}
+
+	private static String receipt(Path objects) throws IOException {
+		try (var receipts = Files.list(objects.getParent().resolve("object-owners"))) {
+			Path receipt = receipts.filter(path -> path.getFileName().toString().endsWith(".server.json")).findFirst().orElseThrow();
+			return Files.readString(receipt);
+		}
+	}
+
+	@Test
+	void aReadLeavesATornJournalTailAsItIsAndTheNextLockedWriteRepairsIt() throws Exception {
+		Path objects = tempDir.resolve("objects");
+		Path state = tempDir.resolve("state");
+		GenerationStore writer = new GenerationStore(state, objects);
+		writer.publish(candidate("one", "content-one"), "First", null);
+		writer.publish(candidate("two", "content-two"), "Second", null);
+		Path journal = state.resolve("journal.jsonl");
+		Files.writeString(journal, "{\"seq\":3,\"conte", StandardCharsets.UTF_8, StandardOpenOption.APPEND);
+		byte[] torn = Files.readAllBytes(journal);
+
+		GenerationStore reader = new GenerationStore(state, objects);
+		assertEquals(2, reader.loadCurrent().orElseThrow().seq());
+		assertEquals(List.of(1L, 2L), reader.history(10).stream().map(JournalEntry::seq).toList());
+		reader.hosting();
+		reader.measureStorage();
+		assertArrayEquals(torn, Files.readAllBytes(journal), "a read never truncates what may be another process's append");
+
+		new GenerationStore(state, objects).publish(candidate("three", "content-three"), "Third", null);
+		assertEquals(List.of(1L, 2L, 3L), Journal.openComplete(journal).entries().stream().map(JournalEntry::seq).toList());
+	}
+
+	@Test
+	void aReadCreatesAndRewritesNothing() throws Exception {
+		Path objects = tempDir.resolve("objects");
+		Path state = tempDir.resolve("state");
+		assertTrue(new GenerationStore(state, objects).loadCurrent().isEmpty());
+		assertFalse(Files.exists(state));
+
+		new GenerationStore(state, objects).publish(candidate("one", "content-one"), "First", null);
+		Files.delete(state.resolve("generation.lock"));
+		GenerationStore reader = new GenerationStore(state, objects);
+		reader.loadCurrent();
+		reader.history(5);
+		reader.hosting();
+		assertFalse(Files.exists(state.resolve("generation.lock")), "a read of intact state never takes the write path");
+		Files.delete(state.resolve("current-projection.json"));
+		assertEquals(1, new GenerationStore(state, objects).loadCurrent().orElseThrow().seq());
+		assertFalse(Files.exists(state.resolve("current-projection.json")), "a read rebuilds a missing projection in memory only");
+	}
+
+	@Test
+	void aRootUnderALinkedAncestorKeysOneLockBeforeAndAfterItExists() throws Exception {
+		Path real = Files.createDirectories(tempDir.resolve("real"));
+		Path link = tempDir.resolve("link");
+		try {
+			Files.createSymbolicLink(link, real);
+		} catch (UnsupportedOperationException | IOException unsupported) {
+			assumeTrue(false, "this filesystem cannot create symbolic links");
+		}
+		Path root = link.resolve("instance/automodpack/server");
+		Path before = GenerationStore.lockKey(root);
+		Files.createDirectories(root);
+
+		assertEquals(root.toRealPath(), before);
+		assertEquals(before, GenerationStore.lockKey(root));
 	}
 
 	@Test
