@@ -51,6 +51,8 @@ public final class ClientStorage {
 	private static final Map<Path, WeakReference<ClientStorage>> OPEN_STORAGE = new HashMap<>();
 	private static volatile IOException scanTimeStateFailure;
 	private static volatile DirectoryScan directoryScan;
+	private static final int SCAN_READ_ATTEMPTS = 5;
+	private static final long SCAN_READ_RETRY_MILLIS = 100;
 
 	/**
 	 * What the scan-time gate decided in this process, from one read of the projection state: the state it read (null
@@ -505,14 +507,28 @@ public final class ClientStorage {
 	 */
 	public static Path loadableProjectionModsDirectory(Path gameDirectory) {
 		// One read decides the gate and is what the latch remembers, so recovery compares against exactly what was decided.
-		ProjectionState projection;
-		String refusal;
-		try {
-			projection = ProjectionState.read(ProjectionState.file(gameDirectory));
-			refusal = ProjectionState.refusal(projection);
-		} catch (IOException e) {
-			projection = null;
-			refusal = "the projection state cannot be read (" + e.getMessage() + ")";
+		// A physical read failure this early is usually a startup scanner holding the file: it is retried for a while
+		// rather than refusing Kilt the projection and spending a relaunch on it.
+		ProjectionState projection = null;
+		String refusal = null;
+		for (int attempt = 1;; attempt++) {
+			try {
+				projection = ProjectionState.read(ProjectionState.file(gameDirectory));
+				refusal = ProjectionState.refusal(projection);
+				break;
+			} catch (ProjectionState.UnreadableException e) {
+				refusal = "the projection state cannot be read (" + e.getMessage() + ")";
+				break;
+			} catch (IOException e) {
+				refusal = "the projection state cannot be read (" + e.getMessage() + ")";
+				if (attempt >= SCAN_READ_ATTEMPTS) break;
+				try {
+					Thread.sleep(SCAN_READ_RETRY_MILLIS);
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+					break;
+				}
+			}
 		}
 		directoryScan = new DirectoryScan(projection, false, false);
 		Path activeDirectory = gameDirectory.resolve(CLIENT_ACTIVE_DIR).normalize();

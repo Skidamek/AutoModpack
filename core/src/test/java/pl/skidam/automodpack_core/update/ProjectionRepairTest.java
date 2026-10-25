@@ -486,6 +486,63 @@ class ProjectionRepairTest {
 		}
 	}
 
+	/** R2-3: the guard is keyed to what it relaunched for, cleared by every boot that needs no relaunch, and never stale. */
+	@Test
+	void theRelaunchGuardIsKeyedToItsRelaunchAndClearedByAnyBootThatNeedsNone() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, OLD);
+		}
+		ProjectionState state = ProjectionState.read(storage);
+		ClientStorage.DirectoryScan refused = new ClientStorage.DirectoryScan(state, true, false);
+		assertTrue(ProjectionRelaunch.required(storage, refused));
+		assertFalse(ProjectionRelaunch.required(storage, refused), "the same need right after its relaunch does not relaunch again");
+		assertTrue(Files.exists(storage.projectionRelaunchFile()));
+
+		assertFalse(ProjectionRelaunch.required(storage, null), "a boot without a directory scan needs none");
+		assertFalse(Files.exists(storage.projectionRelaunchFile()), "and clears the guard");
+		assertTrue(ProjectionRelaunch.required(storage, refused), "so a later need relaunches");
+
+		// A guard for other content from long ago never suppresses; one from a moment ago does (one relaunch in a row).
+		Files.writeString(storage.projectionRelaunchFile(), "{\"content\":\"digest:other\",\"at\":" + (System.currentTimeMillis() - 2 * ProjectionRelaunch.CONSECUTIVE_MILLIS) + "}");
+		assertTrue(ProjectionRelaunch.required(storage, refused));
+		Files.writeString(storage.projectionRelaunchFile(), "{\"content\":\"digest:other\",\"at\":" + System.currentTimeMillis() + "}");
+		assertFalse(ProjectionRelaunch.required(storage, refused));
+		assertFalse(ProjectionRelaunch.required(storage, new ClientStorage.DirectoryScan(state, false, true)));
+		assertFalse(Files.exists(storage.projectionRelaunchFile()), "a clean scan clears it");
+	}
+
+	/** R2-3: a transient read failure at scan time is retried, so it neither refuses Kilt nor spends a relaunch. */
+	@Test
+	void aTransientReadFailureAtScanTimeIsRetried() throws Exception {
+		Assumptions.assumeTrue(Files.getFileAttributeView(temporaryDirectory, PosixFileAttributeView.class) != null);
+		Assumptions.assumeFalse("root".equals(System.getProperty("user.name")));
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, OLD);
+		}
+		Path state = storage.projectionStateFile();
+		Files.setPosixFilePermissions(state, PosixFilePermissions.fromString("---------"));
+		Assumptions.assumeFalse(Files.isReadable(state), "this filesystem ignores permissions");
+		Thread release = new Thread(() -> {
+			try {
+				Thread.sleep(150);
+				Files.setPosixFilePermissions(state, PosixFilePermissions.fromString("rw-r--r--"));
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		});
+		release.start();
+		try {
+			assertNotNull(ClientStorage.loadableProjectionModsDirectory(storage.gameDirectory()));
+			assertTrue(ClientStorage.directoryScan().exposed());
+		} finally {
+			release.join();
+			Files.setPosixFilePermissions(state, PosixFilePermissions.fromString("rw-r--r--"));
+		}
+		assertFalse(ProjectionRelaunch.required(storage, ClientStorage.directoryScan()));
+	}
+
 	private static void commit(ClientStorage storage) throws Exception {
 		byte[] bytes = "committed".getBytes(StandardCharsets.UTF_8);
 		String hash = OverlayTombstoneCommitTest.store(storage, bytes);
