@@ -66,6 +66,21 @@ def _load_ver(t):
     return ""
 
 
+def _hmc_build(t):
+    # HeadlessMC 3 IDs are platform/minecraft/build. Fabric's loader version is already that
+    # build; Forge is stripped at Target load; NeoForge Maven versions still carry the MC
+    # prefix that HMC's NeoForgeVersionService peels (21.1.259 → 259, 26.2.0.90 → 0.90).
+    version = _load_ver(t)
+    if t.loader != "neoforge" or not version:
+        return version
+    mc = t.minecraft
+    if version.startswith(mc):
+        return version[len(mc) + 1 :]
+    if f"1.{version}".startswith(mc):
+        return version[len(mc) - 1 :]
+    return version
+
+
 def _seed_client_options(game_dir: Path) -> None:
     """Keep the client's options and suppress the one-time vanilla warning."""
     options_path = game_dir / "options.txt"
@@ -170,7 +185,7 @@ def _start_client_container(ctx: Context, name: str, *, prepare_only: bool = Fal
             "localhost",
             "25565",
             str(ctx.target.java),
-            _load_ver(ctx.target),
+            _hmc_build(ctx.target),
         ],
         user=f"{_uid()}:{_gid()}",
         entrypoint=["/usr/bin/tini", "--"],

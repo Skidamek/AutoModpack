@@ -80,9 +80,10 @@ hmc.jline.enabled=false
 hmc.xvfb.check=$render_client
 EOF
 
-# Materialise and launch the exact configured loader profile. Launching the generic
-# `<loader> <mc>` target lets HMC pick a different build (for example NeoForge 26.1.0
-# for a configured 26.1.2 target), which makes version-specific service tests invalid.
+# Materialise and launch the exact configured loader profile. The third arg is HMC 3's
+# build id (NeoForge Maven 21.1.259 → 259). Launching the generic `<loader> <mc>` target
+# lets HMC pick a different build (for example NeoForge 26.1.0 for a configured 26.1.2
+# target), which makes version-specific service tests invalid.
 launch_profile=("$loader" "$minecraft")
 if [ -n "$loader_version" ]; then
     launch_profile+=("$loader_version")

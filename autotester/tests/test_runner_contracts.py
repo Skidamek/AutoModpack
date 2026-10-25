@@ -552,6 +552,35 @@ def test_client_container_caps_java_heap(make_ctx, monkeypatch):
     assert seen["env"]["JAVA_TOOL_OPTIONS"] == "-Xmx2G"
 
 
+@pytest.mark.parametrize(
+    "target, expected",
+    [
+        (_target(neoforge_version="21.1.259"), "259"),
+        (_target(id="26.2-neoforge", minecraft="26.2", neoforge_version="26.2.0.90"), "0.90"),
+        (_target(id="26.1-neoforge", minecraft="26.1.2", neoforge_version="26.1.2.116"), "116"),
+        (_target(id="1.21.10-neoforge", minecraft="1.21.10", neoforge_version="21.10.64"), "64"),
+        (_target(id="1.20.1-forge", minecraft="1.20.1", loader="forge", forge_version="47.4.26"), "47.4.26"),
+        (_target(id="26.2-fabric", minecraft="26.2", loader="fabric", fabric_loader="0.20.1"), "0.20.1"),
+        (_target(neoforge_version="259"), "259"),
+    ],
+)
+def test_hmc_build_is_headlessmc_three_build_id(target, expected):
+    assert client_steps._hmc_build(target) == expected
+
+
+def test_client_container_passes_hmc_neoforge_build(make_ctx, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(client_steps, "_client_profile_is_prepared", lambda *_args: True)
+    monkeypatch.setattr(client_steps, "_run_container", lambda **kwargs: seen.update(kwargs))
+    ctx = make_ctx(target=_target(neoforge_version="21.1.259"))
+    ctx.out_dir.mkdir(parents=True, exist_ok=True)
+
+    client_steps._start_client_container(ctx, "cli")
+
+    assert seen["command"][-1] == "259"
+    assert "21.1.259" not in seen["command"]
+
+
 def test_run_stops_gradle_daemons(monkeypatch, tmp_path):
     wrapper = tmp_path / "gradlew"
     wrapper.write_text("#!/bin/sh\n", encoding="utf-8")
