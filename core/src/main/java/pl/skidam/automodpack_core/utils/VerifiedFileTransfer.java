@@ -158,12 +158,28 @@ public final class VerifiedFileTransfer {
 	 */
 	public static void promoteHashed(Path temporary, Path targetFile, long expectedSize, String expectedSha1, String actualSha1, FileCache cache) throws IOException {
 		FileTrees.forceFile(temporary);
-		if (Files.size(temporary) != expectedSize || actualSha1 == null || !expectedSha1.equalsIgnoreCase(actualSha1))
-			throw new VerificationMismatchException("Downloaded file failed size/SHA-1 verification: " + temporary);
+		requireHashed(temporary, expectedSize, expectedSha1, actualSha1);
 		publishVerified(temporary, targetFile, expectedSize, expectedSha1, cache);
 	}
 
+	/** The size and caller-taken hash check of {@link #promoteHashed}, for a caller that forces and publishes later. */
+	public static void requireHashed(Path temporary, long expectedSize, String expectedSha1, String actualSha1) throws IOException {
+		if (Files.size(temporary) != expectedSize || actualSha1 == null || !expectedSha1.equalsIgnoreCase(actualSha1))
+			throw new VerificationMismatchException("Downloaded file failed size/SHA-1 verification: " + temporary);
+	}
+
 	private static void publishVerified(Path temporary, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
+		Path targetParent = publishForced(temporary, targetFile, expectedSize, expectedSha1);
+		FileTrees.forceDirectory(targetParent);
+		record(cache, targetFile, expectedSha1);
+	}
+
+	/**
+	 * Swaps a verified temporary the caller already forced to stable storage into place and returns the directory whose
+	 * entry still has to be forced. The caller forces it before recording the target in any cache, so a record never
+	 * outlives a power cut that loses the object it names.
+	 */
+	public static Path publishForced(Path temporary, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
 		ImmutableFiles.protect(temporary);
 		Path targetParent = OsPaths.requirePublishableParent(targetFile, "Target path");
 		boolean crossFileSystem = false;
@@ -173,10 +189,9 @@ public final class VerifiedFileTransfer {
 			promoteAcrossFileSystems(temporary, targetFile, targetParent, expectedSize, expectedSha1, crossFileSystemFailure);
 			crossFileSystem = true;
 		}
-		FileTrees.forceDirectory(targetParent);
 		if (crossFileSystem) ImmutableFiles.deleteIfExists(temporary);
 		ImmutableFiles.protect(targetFile);
-		record(cache, targetFile, expectedSha1);
+		return targetParent;
 	}
 
 	private static void promoteAcrossFileSystems(Path temporary, Path targetFile, Path targetParent, long expectedSize, String expectedSha1,

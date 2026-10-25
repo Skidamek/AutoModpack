@@ -21,9 +21,16 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 final class ObjectPromotion {
 
 	private final DataRootResolver.Layout dataLayout;
+	private final ObjectBatch batch;
 
 	ObjectPromotion(DataRootResolver.Layout dataLayout) {
+		this(dataLayout, null);
+	}
+
+	/** With a batch, verified objects are held for its one sync instead of each being forced into the store on its own. */
+	ObjectPromotion(DataRootResolver.Layout dataLayout, ObjectBatch batch) {
 		this.dataLayout = dataLayout;
+		this.batch = batch;
 	}
 
 	/** Creates the task's slice directory {@code staging/<sha1>/}; null with the failure recorded means the attempt cannot start. */
@@ -47,7 +54,8 @@ final class ObjectPromotion {
 	 * so either way the bytes are written once more at most and read exactly once before they are published.
 	 */
 	boolean promote(String sha1, QueuedDownload task, Path partial, FileCache cache) {
-		Path assembled = dataLayout.stagingDirectory().resolve("." + sha1 + "." + UUID.randomUUID() + ".obj");
+		Path assembled = batch != null ? PartialResume.newHeldFile(partial) : dataLayout.stagingDirectory().resolve("." + sha1 + "." + UUID.randomUUID() + ".obj");
+		boolean held = false;
 		try {
 			String hashed;
 			if (PartialResume.adoptSoleTile(partial, assembled, task.fileSize)) {
@@ -55,7 +63,16 @@ final class ObjectPromotion {
 			} else {
 				hashed = PartialResume.assembleHashing(partial, assembled, task.fileSize);
 			}
-			VerifiedFileTransfer.promoteHashed(assembled, dataLayout.objectFile(sha1), task.fileSize, sha1, hashed, cache);
+			if (batch != null) {
+				VerifiedFileTransfer.requireHashed(assembled, task.fileSize, sha1, hashed);
+				PartialResume.deleteTiles(partial, task.fileSize);
+				batch.hold(new ObjectBatch.Held(sha1, task.fileSize, assembled, partial, task));
+				held = true;
+				// The batch owns the slice directory from here: it deletes it once the object is durable in the store.
+				task.partialFile = null;
+			} else {
+				VerifiedFileTransfer.promoteHashed(assembled, dataLayout.objectFile(sha1), task.fileSize, sha1, hashed, cache);
+			}
 		} catch (VerifiedFileTransfer.VerificationMismatchException e) {
 			task.lastFailureCategory = DownloadManager.FailureCategory.REMOTE_SOURCE;
 			LOGGER.warn("Size or hash mismatch for downloaded file {}", task.file.getFileName());
@@ -67,7 +84,7 @@ final class ObjectPromotion {
 			deletePartial(task);
 			return false;
 		} finally {
-			try {
+			if (!held) try {
 				ImmutableFiles.deleteIfExists(assembled);
 			} catch (IOException ignored) {
 			}
@@ -75,6 +92,34 @@ final class ObjectPromotion {
 		deletePartial(task);
 		task.lastFailureCategory = DownloadManager.FailureCategory.UNKNOWN;
 		return true;
+	}
+
+	/**
+	 * Publishes an object an earlier run verified and held but may have lost to a power cut before its sync. The held bytes
+	 * are untrusted, so they are hashed again and forced like any download; true means the store now has the object.
+	 */
+	boolean adoptHeld(String sha1, QueuedDownload task, FileCache cache) {
+		Path directory = PartialResume.directory(dataLayout.stagingDirectory(), sha1);
+		try {
+			for (Path heldFile : PartialResume.heldFiles(directory)) {
+				if (batch != null && batch.holds(heldFile)) continue;
+				Path adopted = dataLayout.stagingDirectory().resolve("." + sha1 + "." + UUID.randomUUID() + ".obj");
+				try {
+					Files.move(heldFile, adopted);
+					VerifiedFileTransfer.promoteHashed(adopted, dataLayout.objectFile(sha1), task.fileSize, sha1, HashUtils.hashFile(adopted), cache);
+					PartialResume.delete(directory);
+					return true;
+				} catch (VerifiedFileTransfer.VerificationMismatchException torn) {
+					LOGGER.info("Dropping a held copy of {} that did not survive to its sync", task.file.getFileName());
+				} finally {
+					ImmutableFiles.deleteIfExists(adopted);
+					ImmutableFiles.deleteIfExists(heldFile);
+				}
+			}
+		} catch (IOException e) {
+			LOGGER.debug("Could not adopt a held copy of {}; downloading it again", task.file.getFileName(), e);
+		}
+		return false;
 	}
 
 	/** Deletes the task's slice directory; the next attempt, if any, starts from zero. */

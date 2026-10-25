@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -36,6 +37,9 @@ public final class PartialResume {
 	private static final Logger LOGGER = LogManager.getLogger();
 
 	private static final int ASSEMBLY_BUFFER = 256 * 1024;
+
+	private static final String HELD_PREFIX = ".held.";
+	private static final String HELD_SUFFIX = ".obj";
 
 	private static final String HOST_SUFFIX = ".host" + DurableFiles.TEMPORARY_SUFFIX;
 
@@ -251,6 +255,29 @@ public final class PartialResume {
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * A fresh name inside the slice directory for a verified object waiting for its batched sync. Held objects are never
+	 * tiles, so no reader counts them as progress, and the sweepers that drop slice directories drop them too.
+	 */
+	public static Path newHeldFile(Path directory) {
+		return directory.resolve(HELD_PREFIX + UUID.randomUUID() + HELD_SUFFIX);
+	}
+
+	/** Objects an earlier run verified but may not have synced: untrusted bytes, to be hashed again before any use. */
+	public static List<Path> heldFiles(Path directory) throws IOException {
+		List<Path> held = new ArrayList<>();
+		if (!Files.isDirectory(directory)) return held;
+		try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, HELD_PREFIX + "*" + HELD_SUFFIX)) {
+			for (Path file : files) if (Files.isRegularFile(file)) held.add(file);
+		}
+		return held;
+	}
+
+	/** Drops the named tiles once their bytes live in a stitched copy, so a held object does not keep its size twice. */
+	public static void deleteTiles(Path directory, long fileSize) throws IOException {
+		for (long start = 0; start < fileSize; start += NetUtils.WIRE_CHUNK_BYTES) Files.deleteIfExists(sliceFile(directory, start));
 	}
 
 	/** Sequential writer that fills tiles from {@code absStart} onward; each completed tile is just that file. */

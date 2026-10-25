@@ -74,6 +74,8 @@ public class DownloadManager implements DownloadView {
 	private final HostProbe probe;
 	private final DownloadQueue queue = new DownloadQueue();
 	private final ObjectPromotion promotion;
+	/** Verified objects of this run waiting for one sync; {@link #joinAll} publishes them before anyone reads the store. */
+	private final ObjectBatch batch;
 	private final PlatformAttempt platform;
 	private final DataRootResolver.Layout dataLayout;
 
@@ -113,7 +115,8 @@ public class DownloadManager implements DownloadView {
 		// host-routed task holds its thread only until the take is submitted, and a platform download parked on a slow
 		// body can never starve a host dispatch of its thread.
 		this.downloadExecutor = Executors.newCachedThreadPool(new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
-		this.promotion = new ObjectPromotion(this.dataLayout);
+		this.batch = new ObjectBatch(this.dataLayout);
+		this.promotion = new ObjectPromotion(this.dataLayout, batch);
 		// Owns the batched platform-metadata refetch of this run: concurrent dead links share the bulk API calls.
 		this.platform = new PlatformAttempt(httpDownloader, new FetchManager(List.of(), Objects.requireNonNull(platformCache, "platformCache")));
 		this.probe = new HostProbe(scheduler, rescue);
@@ -301,6 +304,11 @@ public class DownloadManager implements DownloadView {
 				cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.COMPLETED);
 				return;
 			}
+			if (promotion.adoptHeld(hashPathPair.hash(), task, cache)) {
+				totalBytesDownloaded.addAndGet(task.fileSize);
+				cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.COMPLETED);
+				return;
+			}
 			// DOWNLOAD REQUIRED. A corrupt object is never a cache hit.
 			// An empty file is its own source: there are no bytes to fetch from anyone, so materialize it locally and let the
 			// normal promotion judge it.
@@ -470,10 +478,29 @@ public class DownloadManager implements DownloadView {
 		speedometer.addBytes(bytes);
 	}
 
+	/**
+	 * Waits for every queued file, then makes the run's verified objects durable in the store with one batched sync. A
+	 * cancelled run publishes what it verified too; an object that cannot be made durable fails its task like any local
+	 * storage failure.
+	 */
 	public void joinAll() throws InterruptedException {
 		semaphore.acquire(totalFilesAdded);
+		try {
+			flushVerifiedObjects();
+		} finally {
+			semaphore.release(totalFilesAdded);
+		}
 		if (downloadExecutor.isShutdown()) throw new InterruptedException();
-		semaphore.release(totalFilesAdded);
+	}
+
+	private void flushVerifiedObjects() {
+		for (QueuedDownload task : batch.flush()) {
+			acquiredFiles.updateAndGet(count -> Math.max(0, count - 1));
+			downloadedCount.updateAndGet(count -> Math.max(0, count - 1));
+			failedFiles.incrementAndGet();
+			LOGGER.error("Permanently failed to download {} ({})", task.file.getFileName(), task.lastFailureCategory);
+			task.failureCallback.accept(task.lastFailureCategory);
+		}
 	}
 
 	// --- UI Helpers ---
