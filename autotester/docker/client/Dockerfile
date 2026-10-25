@@ -1,40 +1,21 @@
-# Git repository and ref the HeadlessMC launcher is built from. These are
-# normally supplied by `autotester build-images` from settings.yaml
-# (headlessmc.repo/ref). The defaults also use the pinned upstream release.
-ARG HEADLESSMC_REPO=https://github.com/headlesshq/headlessmc.git
-ARG HEADLESSMC_REF=2.10.0
+# GitHub repo and release tag the HeadlessMC launcher is downloaded from.
+# These are normally supplied by `autotester build-images` from settings.yaml
+# (headlessmc.repo/ref). HeadlessMC 3 publishes OS binaries on the release.
+ARG HEADLESSMC_REPO=https://github.com/headlesshq/headlessmc
+ARG HEADLESSMC_REF=3.0.0-RC8
 
-# ── Builder: compile the HeadlessMC launcher wrapper jar ──────────────
-# HeadlessMC must be built with JDK 21 (its Gradle build rejects newer JDKs).
-FROM eclipse-temurin:21-jdk AS hmc
+FROM ubuntu:26.04
+
 ARG HEADLESSMC_REPO
 ARG HEADLESSMC_REF
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-WORKDIR /build
-# Fetch by ref so HEADLESSMC_REF can be a branch, tag, or commit SHA (a shallow
-# `clone --branch` only accepts branch/tag names - fetching FETCH_HEAD also takes SHAs).
-RUN git init -q . \
-    && git remote add origin "${HEADLESSMC_REPO}" \
-    && git fetch --depth 1 origin "${HEADLESSMC_REF}" \
-    && git checkout -q FETCH_HEAD \
-    && ./gradlew --no-daemon headlessmc-launcher-wrapper:build -x test \
-    && jar="$(find headlessmc-launcher-wrapper/build/libs -maxdepth 1 \
-                -name 'headlessmc-launcher-wrapper-*.jar' \
-                ! -name '*-dev.jar' ! -name '*-javadoc.jar' ! -name '*-sources.jar' \
-                | head -n1)" \
-    && test -n "$jar" \
-    && cp "$jar" /headlessmc-launcher-wrapper.jar
-
-# ── Runtime client image ──────────────────────────────────────────────
-FROM ubuntu:26.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 # A POSIX locale makes the JDK encode file paths as ASCII, so any non-ASCII
 # mod file name cannot exist in the game directory; UTF-8 is the mod's contract.
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 ENV HMC_HOME=/work/hmc-cache
+ENV HOME=/work
+ENV XDG_CONFIG_HOME=/work/.config
 
 # Most runs use HeadlessMC's LWJGL transformer. UI screenshot scenarios opt into
 # Xvfb and Mesa so Minecraft renders the real interface in a virtual display;
@@ -69,14 +50,20 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /opt/headlessmc /opt/automodpack /work/game /work/hmc-cache \
-        /work/HeadlessMC /work/hmc-shared-versions \
-    && chmod a+rwx /work/HeadlessMC /work/hmc-shared-versions
+        /work/HeadlessMC /work/hmc-shared-versions /work/.config/headlessmc \
+    && chmod a+rwx /work /work/HeadlessMC /work/hmc-shared-versions /work/.config /work/.config/headlessmc
 
-# Install the HeadlessMC launcher built above as the `hmc` command.
-COPY --from=hmc /headlessmc-launcher-wrapper.jar \
-     /opt/headlessmc/headlessmc-launcher-wrapper.jar
-RUN printf '#!/usr/bin/env bash\nexec java -Xmx2G -jar /opt/headlessmc/headlessmc-launcher-wrapper.jar "$@"\n' \
-        > /usr/local/bin/hmc \
+# HeadlessMC 3 ships a native launcher; the game still uses the JREs above.
+# uname -m keeps this working with the Python docker builder (no buildx TARGETARCH).
+RUN set -eu \
+    && repo="${HEADLESSMC_REPO%.git}" \
+    && arch="$(uname -m)" \
+    && case "$arch" in \
+         x86_64) hmc_arch=x64 ;; \
+         aarch64|arm64) hmc_arch=arm64 ;; \
+         *) echo "unsupported architecture: $arch" >&2; exit 1 ;; \
+       esac \
+    && curl -fsSL -o /usr/local/bin/hmc "${repo}/releases/download/${HEADLESSMC_REF}/headlessmc-launcher-linux-${hmc_arch}" \
     && chmod +x /usr/local/bin/hmc
 
 COPY run-headlessmc-client /opt/automodpack/run-headlessmc-client

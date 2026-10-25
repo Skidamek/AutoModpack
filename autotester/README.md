@@ -90,13 +90,12 @@ The client image builds its HeadlessMC launcher from the git repo and ref in
 ```yaml
 headlessmc:
   repo: "https://github.com/headlesshq/headlessmc.git"
-  ref: "2.10.0"  # branch, tag, or commit SHA
+  ref: "3.0.0-RC8"  # published release tag
 ```
 
-`ref` may be a branch, tag, or commit SHA; the default uses the immutable
-upstream 2.10.0 release for reproducible image builds and Minecraft 26.2
-support. Point `repo`/`ref` at another HeadlessMC build and rebuild the image
-with `uv --project autotester run autotester build-images`.
+`ref` is a HeadlessMC 3 GitHub release tag. The client image downloads the
+matching `headlessmc-launcher-linux-*` binary. Point `repo`/`ref` at another
+release and rebuild the image with `uv --project autotester run autotester build-images`.
 
 ## Scenarios
 

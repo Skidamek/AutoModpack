@@ -16,7 +16,9 @@ prepared_profile="${AM_AUTOTEST_HMC_PREPARED:-false}"
 prepare_only="${AM_AUTOTEST_PREPARE_ONLY:-false}"
 display_start_seconds="${AM_AUTOTEST_DISPLAY_START_SECONDS:-5}"
 
-mkdir -p "$game_dir" "$cache_dir" /work/HeadlessMC
+export HOME="${HOME:-/work}"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+mkdir -p "$game_dir" "$cache_dir" "$XDG_CONFIG_HOME/headlessmc" /work/HeadlessMC
 
 # ── Share client-jar cache across targets ──────────────────────────────
 shared_versions="/work/hmc-shared-versions"
@@ -65,55 +67,36 @@ fi
 gameargs="--width ${viewport_width} --height 480"
 
 # ── Write HMC config ──────────────────────────────────────────────
-cat > /work/HeadlessMC/config.properties <<EOF
-hmc.mcdir=$cache_dir
-hmc.gamedir=$game_dir
-hmc.offline=true
-hmc.offline.username=AutoTest
-hmc.auto.download.java=false
+# HeadlessMC 3 reads XDG config. One shared game dir is required so AutoModpack
+# and the scenario see the same instance; per-version game dirs are the default.
+cat > "$XDG_CONFIG_HOME/headlessmc/config.properties" <<EOF
+hmc.files.mc=$cache_dir
+hmc.files.game=$game_dir
+hmc.files.game-for-each-version=false
+hmc.java.download=false
 hmc.java.versions=$JAVA_HOME/bin/java
-hmc.java.require.exact=false
-hmc.crash.report.watcher=true
-hmc.exit.on.failed.command=true
-hmc.check.xvfb=$render_client
-hmc.gameargs=$gameargs
+hmc.launcher.crash-report-watcher=true
+hmc.jline.enabled=false
+hmc.xvfb.check=$render_client
 EOF
 
-# ── Install loader if needed ──────────────────────────────────────
 # Materialise and launch the exact configured loader profile. Launching the generic
-# `<loader>:<mc>` target lets HMC pick a different build (for example NeoForge 26.1.0
+# `<loader> <mc>` target lets HMC pick a different build (for example NeoForge 26.1.0
 # for a configured 26.1.2 target), which makes version-specific service tests invalid.
+launch_profile=("$loader" "$minecraft")
 if [ -n "$loader_version" ]; then
+    launch_profile+=("$loader_version")
+fi
+if [ "$prepared_profile" != "true" ] && [ -n "$loader_version" ]; then
     case "$loader" in
-        fabric)
-            launch_target="fabric-loader-${loader_version}-${minecraft}"
-            ;;
-        forge)
-            launch_target="${minecraft}-forge-${loader_version}"
-            ;;
-        neoforge)
-            launch_target="neoforge-${loader_version}"
-            ;;
+        fabric) install_timeout=60 ;;
+        forge|neoforge) install_timeout=180 ;;
         *)
             echo "ERROR: unsupported loader ${loader}" >&2
             exit 1
             ;;
     esac
-else
-    launch_target="${loader}:${minecraft}"
-fi
-if [ "$prepared_profile" != "true" ] && [ -n "$loader_version" ]; then
-    case "$loader" in
-        fabric)
-            timeout 60 hmc --command "fabric ${minecraft} --uid ${loader_version}"
-            ;;
-        forge)
-            timeout 180 hmc --command "forge ${minecraft} --uid ${loader_version}"
-            ;;
-        neoforge)
-            timeout 180 hmc --command "neoforge ${minecraft} --uid ${loader_version}"
-            ;;
-    esac
+    timeout "$install_timeout" hmc version install "${launch_profile[@]}"
 fi
 
 # ── Disable Neo/Forge early display window (may cause crash in CI) ──
@@ -154,10 +137,6 @@ EOF
         ;;
 esac
 
-if [ "$prepared_profile" != "true" ]; then
-    hmc --command "config -refresh" 2>/dev/null || true
-fi
-
 if [ "$prepare_only" = "true" ]; then
     exit 0
 fi
@@ -187,7 +166,7 @@ if [ "$render_client" = "true" ]; then
     export DISPLAY=":$(<"$display_receipt")"
     rm -f "$display_receipt"
 
-    hmc --command "launch ${launch_target} -offline --jvm \"${jvmargs}\" ${gameargs}" &
+    hmc launch "${launch_profile[@]}" --offline --jvm "${jvmargs}" --game "${gameargs}" --resolution "${viewport_width}x480" &
     hmc_pid=$!
     cleanup() {
         kill "$hmc_pid" "$xvfb_pid" 2>/dev/null || true
@@ -201,5 +180,4 @@ if [ "$render_client" = "true" ]; then
     exit "$status"
 fi
 
-exec hmc \
-  --command "launch ${launch_target} -lwjgl -offline --jvm \"${jvmargs}\" ${gameargs}"
+exec hmc launch "${launch_profile[@]}" --offline -lwjgl --jvm "${jvmargs}" --game "${gameargs}" --resolution "${viewport_width}x480"

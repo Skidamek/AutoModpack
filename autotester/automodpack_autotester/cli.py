@@ -291,7 +291,7 @@ def main(argv: list[str] | None = None) -> int:
             s.get("images", {}).get("client", "automodpack-autotest-client:local")
         )
         # Pass through only what settings provide; the Dockerfile falls back to
-        # upstream HeadlessMC for anything unset.
+        # the upstream HeadlessMC 3 release for anything unset.
         buildargs = {}
         if hmc.get("repo"):
             buildargs["HEADLESSMC_REPO"] = str(hmc["repo"])

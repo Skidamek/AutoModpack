@@ -39,10 +39,10 @@ serverTypes:
   neoforge: NEOFORGE
 
 headlessmc:
-  # Git repository and ref the HeadlessMC launcher is built from. ref may be a
-  # branch, tag, or commit SHA; pin the upstream release for reproducible builds.
-  repo: "https://github.com/Skidamek/headlessmc.git"
-  ref: "2.10.0-26.3"
+  # GitHub repository and release tag the HeadlessMC 3 launcher binary is
+  # downloaded from. ref must be a published release tag.
+  repo: "https://github.com/headlesshq/headlessmc.git"
+  ref: "3.0.0-RC8"
 
 timeouts:
   serverStartSeconds: 180

@@ -131,7 +131,7 @@ publish_versions = "1.18\n1.18.1\n1.18.2"
 
 
 ["fabric"]
-deps.fabric-loader = "0.19.5"
+deps.fabric-loader = "0.20.1"
 
 ["loader-modules"]
 fabric = "0.16.1"
