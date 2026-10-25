@@ -79,6 +79,13 @@ final class ProjectionLoader {
 			LOGGER.error("The scan-time projection gate could not read the client active state, so directory-scanning loaders did not receive the projection; not loading it through the loader API either", scanFailure);
 			return;
 		}
+		// The same for a projection the scan-time gate refused by its state: recovery relaunches when it settled it, so a
+		// boot that gets here without that relaunch never hands the loader API what the directory scanners were denied.
+		ClientStorage.DirectoryScan scan = ClientStorage.directoryScan();
+		if (scan != null && scan.refusedByState()) {
+			LOGGER.error("Directory-scanning loaders were refused the projection at scan time and this boot did not relaunch into it; not loading it through the loader API either");
+			return;
+		}
 		loadModpack();
 	}
 

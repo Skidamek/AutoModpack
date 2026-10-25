@@ -40,7 +40,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * The review findings on the in-place projection, each asserting the fixed behaviour: repair never destroys on doubt,
- * every fallback names bytes the store holds, and storage conditions are failures. Runs on a case-insensitive filesystem too: set {@value UpdateTestFixtures#GAME_ROOT_ENVIRONMENT}.
+ * every fallback names bytes the store holds, the Kilt gate decides once and relaunches once, and storage conditions
+ * are failures. Runs on a case-insensitive filesystem too: set {@value UpdateTestFixtures#GAME_ROOT_ENVIRONMENT}.
  */
 class ProjectionRepairTest {
 	@TempDir
@@ -129,6 +130,7 @@ class ProjectionRepairTest {
 				assertFalse(physical instanceof ProjectionState.UnreadableException);
 				assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()));
 				assertNull(ClientStorage.loadableProjectionModsDirectory(storage.gameDirectory()));
+				assertTrue(ClientStorage.directoryScan().refusedByState());
 				IOException writer = assertThrows(IOException.class, () -> new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).restoreFallback());
 				assertFalse(writer instanceof ProjectionState.UnreadableException);
 				PublicationSweep.sweepUnpinnedDirectories(storage);
@@ -265,6 +267,58 @@ class ProjectionRepairTest {
 		assertEquals("the filesystem is read-only", StorageConditions.condition(new FileSystemException(file, null, "Read-only file system")));
 		assertTrue(UpdateCommit.isLockFailure(new FileSystemException(file, null, "The process cannot access the file because it is being used by another process"), true));
 		assertTrue(UpdateCommit.isLockFailure(new FileSystemException(file, null, "Text file busy"), false));
+	}
+
+	/**
+	 * F5: the scan-time gate decides from one read; a boot whose recovery settled what the gate refused relaunches once,
+	 * a persisted guard bounds it, and a boot that matches what its gate decided clears the guard.
+	 */
+	@Test
+	void aRefusedScanRelaunchesOnceWhenRecoverySettlesIt() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, OLD);
+			Path held = storage.activePath("config/alpha.toml");
+			assertFalse(converge(storage, cache, NEW, Map.of(), holding(held::equals)).converged());
+
+			assertNull(ClientStorage.loadableProjectionModsDirectory(storage.gameDirectory()));
+			ClientStorage.DirectoryScan refused = ClientStorage.directoryScan();
+			assertTrue(refused.refusedByState());
+			assertFalse(refused.exposed());
+			assertFalse(ProjectionRelaunch.required(storage, refused), "still converging: a relaunch would load nothing more");
+
+			assertTrue(PublicationSweep.restoreFallback(storage));
+			assertTrue(ProjectionRelaunch.required(storage, refused));
+			assertTrue(Files.exists(storage.projectionRelaunchFile()));
+			assertFalse(ProjectionRelaunch.required(storage, refused), "the guard allows one relaunch in a row");
+
+			assertNotNull(ClientStorage.loadableProjectionModsDirectory(storage.gameDirectory()));
+			ClientStorage.DirectoryScan exposed = ClientStorage.directoryScan();
+			assertTrue(exposed.exposed());
+			assertFalse(ProjectionRelaunch.required(storage, exposed));
+			assertFalse(Files.exists(storage.projectionRelaunchFile()), "a stable boot clears the guard");
+		}
+	}
+
+	/** F5: what the scanner took is compared by content: a restore to the same tree needs no relaunch, a new tree does. */
+	@Test
+	void anExposedScanRelaunchesOnlyWhenTheContentMoved() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, OLD);
+			assertNotNull(ClientStorage.loadableProjectionModsDirectory(storage.gameDirectory()));
+			ClientStorage.DirectoryScan scan = ClientStorage.directoryScan();
+			assertTrue(scan.exposed());
+
+			Path held = storage.activePath("config/alpha.toml");
+			assertFalse(converge(storage, cache, NEW, Map.of(), holding(held::equals)).converged());
+			assertTrue(PublicationSweep.restoreFallback(storage));
+			assertTrue(ProjectionState.read(storage).revision() > scan.revision());
+			assertFalse(ProjectionRelaunch.required(storage, scan), "the same tree came back");
+
+			settle(storage, cache, NEW);
+			assertTrue(ProjectionRelaunch.required(storage, scan));
+		}
 	}
 
 	/** F6: the parent of every directory a run creates is forced before the run returns. */

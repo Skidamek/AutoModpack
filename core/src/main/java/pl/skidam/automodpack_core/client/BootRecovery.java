@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.GeneratedCopyState;
+import pl.skidam.automodpack_core.update.ProjectionRelaunch;
 import pl.skidam.automodpack_core.update.ProjectionState;
 import pl.skidam.automodpack_core.update.PublicationSweep;
 import pl.skidam.automodpack_core.update.UpdateCommit;
@@ -71,28 +72,16 @@ public final class BootRecovery {
 	}
 
 	/**
-	 * A directory-scanning loader (Kilt) takes {@code active/mods} before preload, so it scanned the projection revision
-	 * the scan-time gate recorded. When recovery - this boot's, or a detached helper's that finished meanwhile - left a
-	 * different revision behind, this boot would run on files that are gone or not the ones loaded, so it relaunches into
-	 * them once; the relaunch scans the revision it then finds. A boot that runs as installed keeps going and says so.
+	 * A directory-scanning loader (Kilt) takes {@code active/mods} before preload, so it got what the scan-time gate
+	 * decided from its one read of the projection state. When recovery - this boot's, or a detached helper's that
+	 * finished meanwhile - left a settled projection behind whose content is not what that gate handed out (it moved,
+	 * or the gate refused a projection that is loadable now), this boot relaunches into it, once: a persisted one-shot
+	 * guard bounds the relaunches whatever recovery keeps doing, and a boot that needs none clears it
+	 * ({@link ProjectionRelaunch}). A boot that cannot relaunch never half-loads: {@code ProjectionLoader} refuses the
+	 * projection the gate refused.
 	 */
 	private void relaunchIfScannedProjectionMoved() {
-		Long scanned = ClientStorage.directoryScanRevision();
-		if (scanned == null) return;
-		long now;
-		try {
-			now = ProjectionState.read(storage).revision();
-		} catch (IOException e) {
-			LOGGER.error("The projection state is unreadable after recovery; the projection does not load this boot", e);
-			return;
-		}
-		if (now == scanned) return;
-		if (bootAsIs || Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) {
-			LOGGER.warn("A directory-scanning loader took the projection before recovery changed it (revision {} -> {}); this session runs without what it missed", scanned, now);
-			return;
-		}
-		LOGGER.info("Recovery changed the projection a directory-scanning loader already scanned (revision {} -> {}); restarting", scanned, now);
-		new ReLauncher(UpdateType.UPDATE).restart(true);
+		if (ProjectionRelaunch.required(storage, ClientStorage.directoryScan())) new ReLauncher(UpdateType.UPDATE).restart(true);
 	}
 
 	private void loadClientConfig() {

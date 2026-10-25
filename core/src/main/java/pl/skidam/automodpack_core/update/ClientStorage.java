@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
+import pl.skidam.automodpack_core.storage.StoragePaths;
+
 import static pl.skidam.automodpack_core.Constants.LOADER_MANAGER;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.*;
@@ -48,7 +50,18 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 public final class ClientStorage {
 	private static final Map<Path, WeakReference<ClientStorage>> OPEN_STORAGE = new HashMap<>();
 	private static volatile IOException scanTimeStateFailure;
-	private static volatile Long directoryScanRevision;
+	private static volatile DirectoryScan directoryScan;
+
+	/**
+	 * What the scan-time gate decided in this process, from one read of the projection state: the state it read (null
+	 * when it could not be read), whether that state refused the projection, and whether {@code active/mods} went to
+	 * the directory-scanning loaders.
+	 */
+	public record DirectoryScan(ProjectionState state, boolean refusedByState, boolean exposed) {
+		public long revision() {
+			return state == null ? -1 : state.revision();
+		}
+	}
 	private final Path gameDirectory;
 	private final Path automodpackDirectory;
 	private final Path clientDirectory;
@@ -255,6 +268,11 @@ public final class ClientStorage {
 
 	public Path transactionFile() {
 		return transactionFile;
+	}
+
+	/** The one-shot guard of the relaunch after recovery changed what a directory-scanning loader took (P5). */
+	public Path projectionRelaunchFile() {
+		return gameDirectory.resolve(StoragePaths.CLIENT_PROJECTION_RELAUNCH_FILE).normalize();
 	}
 
 	/** The projection state document: whether {@code active/} is loadable as it stands ({@link ProjectionState}). */
@@ -486,21 +504,24 @@ public final class ClientStorage {
 	 * projection revision it decided on, so boot recovery can relaunch when it then changes what was scanned.
 	 */
 	public static Path loadableProjectionModsDirectory(Path gameDirectory) {
-		Path stateFile = ProjectionState.file(gameDirectory);
-		long revision;
+		// One read decides the gate and is what the latch remembers, so recovery compares against exactly what was decided.
+		ProjectionState projection;
+		String refusal;
 		try {
-			revision = ProjectionState.read(stateFile).revision();
+			projection = ProjectionState.read(ProjectionState.file(gameDirectory));
+			refusal = ProjectionState.refusal(projection);
 		} catch (IOException e) {
-			revision = -1;
+			projection = null;
+			refusal = "the projection state cannot be read (" + e.getMessage() + ")";
 		}
-		directoryScanRevision = revision;
+		directoryScan = new DirectoryScan(projection, false, false);
 		Path activeDirectory = gameDirectory.resolve(CLIENT_ACTIVE_DIR).normalize();
 		if (!Files.isDirectory(activeDirectory, LinkOption.NOFOLLOW_LINKS)) return null;
 		Path activeModsDirectory = activeDirectory.resolve(ModpackPathPolicy.MODS_ROOT);
 		if (!Files.isDirectory(activeModsDirectory, LinkOption.NOFOLLOW_LINKS)) return null;
-		String refusal = ProjectionState.loadRefusal(gameDirectory);
 		if (refusal != null) {
 			LOGGER.warn("Not exposing the projection to directory-scanning loaders before recovery: {}", refusal);
+			directoryScan = new DirectoryScan(projection, true, false);
 			return null;
 		}
 
@@ -518,7 +539,13 @@ public final class ClientStorage {
 		}
 		ClientConfigJsons.SelectedModpackFields selected = ConfigTools.read(gameDirectory.resolve(CLIENT_SELECTED_FILE).normalize(), ClientConfigJsons.SelectedModpackFields.class).orElse(null);
 		if (activeSelectionMismatch(selected, state) != null) return null;
+		directoryScan = new DirectoryScan(projection, false, true);
 		return activeModsDirectory;
+	}
+
+	/** What the scan-time gate decided in this process, or null when no directory-scanning loader asked. */
+	public static DirectoryScan directoryScan() {
+		return directoryScan;
 	}
 
 	/**
@@ -526,12 +553,13 @@ public final class ClientStorage {
 	 * asked; -1 when the state file was unreadable. Boot recovery compares it with the revision it leaves behind.
 	 */
 	public static Long directoryScanRevision() {
-		return directoryScanRevision;
+		DirectoryScan scan = directoryScan;
+		return scan == null ? null : scan.revision();
 	}
 
 	/** Test seam: the latch is process state, so a test that drove the scan-time gate forgets it again. */
 	static void forgetDirectoryScan() {
-		directoryScanRevision = null;
+		directoryScan = null;
 	}
 
 	/** Why selected and active-state disagree, or null when the projection may load (matching pointer, or no pointer). */
