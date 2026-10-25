@@ -76,6 +76,8 @@ public final class UpdateCommit {
 	private ProjectionPublication projection;
 	/** The loader-scanned paths this committer changed, in order: a boot that does not relaunch after them names them. */
 	private final List<String> scannedChanges = new ArrayList<>();
+	/** The scanned change of a projection a directory-scanning loader took before preload. */
+	static final String PROJECTION_SCANNED_CHANGE = "changed the modpack projection";
 
 	/** The loader-scanned paths every run of this committer changed so far, a failed one's included. */
 	public List<String> scannedChanges() {
@@ -559,7 +561,17 @@ public final class UpdateCommit {
 			return new Lock(null, storage.activeDirectory(), e);
 		}
 		probe.reached(Step.SWAPPED);
+		projectionChanged(transaction);
 		return null;
+	}
+
+	/**
+	 * Every change of what {@code active/} holds raises the projection revision (P5 of {@link ProjectionState}), and a
+	 * directory-scanning loader that already took the directory this boot learns it through the scanned changes.
+	 */
+	private void projectionChanged(UpdateTransaction transaction) throws IOException {
+		ProjectionState.settled(storage, transaction.transactionId);
+		if (ClientStorage.directoryScanRevision() != null && !scannedChanges.contains(PROJECTION_SCANNED_CHANGE)) scannedChanges.add(PROJECTION_SCANNED_CHANGE);
 	}
 
 	/**

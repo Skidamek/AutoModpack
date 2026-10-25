@@ -21,6 +21,7 @@ import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.ProjectionState;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -52,6 +53,11 @@ final class ProjectionLoader {
 	void loadModpack() throws Exception {
 
 		if (!Files.exists(storage.activeDirectory())) return;
+		String refusal = ProjectionState.loadRefusal(storage.gameDirectory());
+		if (refusal != null) {
+			LOGGER.error("Not loading the modpack projection because {}", refusal);
+			return;
+		}
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			loadModpackMods(cache, modCache);
 		}

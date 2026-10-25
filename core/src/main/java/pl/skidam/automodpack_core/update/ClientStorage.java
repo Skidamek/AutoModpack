@@ -48,6 +48,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 public final class ClientStorage {
 	private static final Map<Path, WeakReference<ClientStorage>> OPEN_STORAGE = new HashMap<>();
 	private static volatile IOException scanTimeStateFailure;
+	private static volatile Long directoryScanRevision;
 	private final Path gameDirectory;
 	private final Path automodpackDirectory;
 	private final Path clientDirectory;
@@ -62,6 +63,7 @@ public final class ClientStorage {
 	private final Path backupDirectory;
 	private final Path stateFile;
 	private final Path transactionFile;
+	private final Path projectionStateFile;
 	private final Path repairJournalFile;
 	private final Path mutationLockFile;
 	private final Path selectionFile;
@@ -97,6 +99,7 @@ public final class ClientStorage {
 		this.backupDirectory = this.gameDirectory.resolve(CLIENT_BACKUP_DIR).normalize();
 		this.stateFile = this.gameDirectory.resolve(CLIENT_ACTIVE_STATE_FILE).normalize();
 		this.transactionFile = this.gameDirectory.resolve(CLIENT_TRANSACTION_FILE).normalize();
+		this.projectionStateFile = ProjectionState.file(this.gameDirectory);
 		this.repairJournalFile = this.gameDirectory.resolve(CLIENT_REPAIR_FILE).normalize();
 		this.mutationLockFile = this.gameDirectory.resolve(CLIENT_MUTATION_LOCK_FILE).normalize();
 		this.selectionFile = this.gameDirectory.resolve(CLIENT_SELECTION_FILE).normalize();
@@ -248,6 +251,11 @@ public final class ClientStorage {
 
 	public Path transactionFile() {
 		return transactionFile;
+	}
+
+	/** The projection state document: whether {@code active/} is loadable as it stands ({@link ProjectionState}). */
+	public Path projectionStateFile() {
+		return projectionStateFile;
 	}
 
 	public Path repairJournalFile() {
@@ -468,15 +476,29 @@ public final class ClientStorage {
 
 	/**
 	 * Scan-time twin of the projection loader gate: whether {@code active/mods} should be handed to loaders that
-	 * discover mods by directory. The directory loads when it exists, unless selected and active-state disagree or
-	 * the state file was unreadable. A missing pointer with files on disk still loads. Runs before preload, so it
-	 * reads files only.
+	 * discover mods by directory. The directory loads when it exists, its projection state is settled (P3 of
+	 * {@link ProjectionState}), and selected and active-state do not disagree; an unreadable state file refuses. A
+	 * missing pointer with files on disk still loads. Runs before preload, so it reads files only, and it records the
+	 * projection revision it decided on, so boot recovery can relaunch when it then changes what was scanned.
 	 */
 	public static Path loadableProjectionModsDirectory(Path gameDirectory) {
+		Path stateFile = ProjectionState.file(gameDirectory);
+		long revision;
+		try {
+			revision = ProjectionState.read(stateFile).revision();
+		} catch (IOException e) {
+			revision = -1;
+		}
+		directoryScanRevision = revision;
 		Path activeDirectory = gameDirectory.resolve(CLIENT_ACTIVE_DIR).normalize();
 		if (!Files.isDirectory(activeDirectory, LinkOption.NOFOLLOW_LINKS)) return null;
 		Path activeModsDirectory = activeDirectory.resolve(ModpackPathPolicy.MODS_ROOT);
 		if (!Files.isDirectory(activeModsDirectory, LinkOption.NOFOLLOW_LINKS)) return null;
+		String refusal = ProjectionState.loadRefusal(gameDirectory);
+		if (refusal != null) {
+			LOGGER.warn("Not exposing the projection to directory-scanning loaders before recovery: {}", refusal);
+			return null;
+		}
 
 		ClientStorageJsons.ClientGenerationStateFields state;
 		try {
@@ -493,6 +515,19 @@ public final class ClientStorage {
 		ClientConfigJsons.SelectedModpackFields selected = ConfigTools.read(gameDirectory.resolve(CLIENT_SELECTED_FILE).normalize(), ClientConfigJsons.SelectedModpackFields.class).orElse(null);
 		if (activeSelectionMismatch(selected, state) != null) return null;
 		return activeModsDirectory;
+	}
+
+	/**
+	 * The projection revision the scan-time gate decided on in this process, or null when no directory-scanning loader
+	 * asked; -1 when the state file was unreadable. Boot recovery compares it with the revision it leaves behind.
+	 */
+	public static Long directoryScanRevision() {
+		return directoryScanRevision;
+	}
+
+	/** Test seam: the latch is process state, so a test that drove the scan-time gate forgets it again. */
+	static void forgetDirectoryScan() {
+		directoryScanRevision = null;
 	}
 
 	/** Why selected and active-state disagree, or null when the projection may load (matching pointer, or no pointer). */
@@ -619,7 +654,7 @@ public final class ClientStorage {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
 		validateWithin(clientDirectory, overlaysDirectory, generatedCopiesDirectory, generatedCopiesFile, activeDirectory, incomingDirectory, backupDirectory,
-				historyDirectory, stateHistoryDirectory, stateHistoryTreesDirectory(), stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, selectedModpackFile, restartLoopStateFile,
+				historyDirectory, stateHistoryDirectory, stateHistoryTreesDirectory(), stateFile, transactionFile, projectionStateFile, repairJournalFile, mutationLockFile, selectionFile, selectedModpackFile, restartLoopStateFile,
 				stuckTransactionStateFile,
 				modpackContentTempFile,
 				journalTempFile);

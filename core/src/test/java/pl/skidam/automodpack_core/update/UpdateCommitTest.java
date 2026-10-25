@@ -246,6 +246,41 @@ class UpdateCommitTest {
 	}
 
 	@Test
+	void everyProjectionChangeRaisesTheRevisionAndIsAScannedChangeOnceADirectoryScanTookIt() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		byte[] keepBytes = "kept-pack-file".getBytes(StandardCharsets.UTF_8);
+		String keepHash = store(storage, keepBytes);
+		byte[] goneBytes = "removed-pack-file".getBytes(StandardCharsets.UTF_8);
+		String goneHash = store(storage, goneBytes);
+		SelectedModpackTarget installed = twoFileTarget(storage, "mods/keep.jar", "mods/gone.jar", keepHash, keepBytes.length, goneHash, goneBytes.length);
+		UpdatePlan installedPlan = UpdateTestFixtures.plan(installed, clientConfig(installed.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/gone.jar", OperationType.INSTALL_OBJECT, goneHash, goneBytes.length, null),
+				new Operation(Root.PROJECTION, "mods/keep.jar", OperationType.INSTALL_OBJECT, keepHash, keepBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/gone.jar", true, goneHash, goneBytes.length),
+						new ProjectedFile(Root.PROJECTION, "mods/keep.jar", true, keepHash, keepBytes.length)));
+		assertTrue(UpdateTestFixtures.commit(storage, installedPlan, installed) instanceof UpdateCommit.Applied applied && !applied.scannedFilesChanged());
+		long installedRevision = ProjectionState.read(storage).revision();
+		assertTrue(installedRevision > 0);
+
+		try {
+			ClientStorage.loadableProjectionModsDirectory(storage.gameDirectory());
+			SelectedModpackTarget next = nextTarget(storage, installed, "mods/keep.jar", keepHash, keepBytes.length, Instant.parse("2026-01-02T00:00:00Z"));
+			UpdatePlan update = UpdateTestFixtures.plan(next, clientConfig(next.manifest().modpackId()), List.of(
+					new Operation(Root.PROJECTION, "mods/gone.jar", OperationType.DELETE, null, -1, goneHash)),
+					List.of(new ProjectedFile(Root.PROJECTION, "mods/gone.jar", false, null, -1),
+							new ProjectedFile(Root.PROJECTION, "mods/keep.jar", true, keepHash, keepBytes.length)));
+			UpdateCommit.Outcome outcome = UpdateTestFixtures.commit(storage, update, next);
+
+			UpdateCommit.Applied applied = assertInstanceOf(UpdateCommit.Applied.class, outcome);
+			assertTrue(applied.scannedChanges().contains(UpdateCommit.PROJECTION_SCANNED_CHANGE));
+			assertTrue(ProjectionState.read(storage).revision() > installedRevision);
+			assertFalse(ProjectionState.read(storage).converging());
+		} finally {
+			ClientStorage.forgetDirectoryScan();
+		}
+	}
+
+	@Test
 	void recoveryRebuildsAPartialProjectionSwapFromCas() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
 		byte[] oldBytes = "old-projection".getBytes(StandardCharsets.UTF_8);

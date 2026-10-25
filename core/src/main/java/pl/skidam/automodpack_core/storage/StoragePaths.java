@@ -20,6 +20,8 @@ public final class StoragePaths {
 	public static final Path CLIENT_ACTIVE_DIR = CLIENT_DIR.resolve("active");
 	public static final Path CLIENT_INCOMING_DIR = CLIENT_DIR.resolve("incoming");
 	public static final Path CLIENT_BACKUP_DIR = CLIENT_DIR.resolve("backup");
+	/** Whether {@code active/} is the complete projection a loader may scan, or a convergence that has not finished yet. */
+	public static final Path CLIENT_PROJECTION_STATE_FILE = CLIENT_DIR.resolve("projection-state.json");
 	public static final Path CLIENT_HISTORY_DIR = CLIENT_DIR.resolve("history");
 	public static final Path CLIENT_STATE_HISTORY_DIR = CLIENT_DIR.resolve("state-history");
 	public static final Path RECOVERED_DIR = AUTOMODPACK_DIR.resolve("recovered");
