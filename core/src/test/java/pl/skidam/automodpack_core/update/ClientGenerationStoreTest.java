@@ -666,12 +666,28 @@ class ClientGenerationStoreTest {
 		writeHead(storage, FIRST_PACK, document);
 		storage.writeActiveState(document);
 
-		GenerationHosting hosting = new ClientGenerationStore(storage).hosting();
+		GenerationHosting hosting = new ClientGenerationStore(storage).hosting(FIRST_PACK);
 
 		assertEquals(storage.historyHeadFile(FIRST_PACK), hosting.get(GenerationHosting.HEAD_DOCUMENT_KEY));
 		assertEquals(storage.historyJournalFile(FIRST_PACK), hosting.get(GenerationHosting.JOURNAL_KEY));
 		assertEquals(storage.objectFile(document.policySha1()), hosting.get(document.policySha1()));
 		assertEquals(storage.objectFile(hash), hosting.get(hash));
+	}
+
+	@Test
+	void hostingAndItsDocumentRefuseWhenTheActivePackIsNotTheOneDecidedOn() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "projection-object");
+		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
+		TestPacks.stageGeneration(storage, document);
+		writeHead(storage, FIRST_PACK, document);
+		storage.writeActiveState(document);
+
+		IOException refused = assertThrows(IOException.class, () -> new ClientGenerationStore(storage).hosting(SECOND_PACK));
+		assertTrue(refused.getMessage().contains(SECOND_PACK));
+		IOException refusedDocument = assertThrows(IOException.class, () -> new ClientGenerationStore(storage).activeDocument(SECOND_PACK));
+		assertTrue(refusedDocument.getMessage().contains(SECOND_PACK));
+		assertEquals(document.contentToken(), new ClientGenerationStore(storage).activeDocument(FIRST_PACK).contentToken());
 	}
 
 	@Test
@@ -684,13 +700,13 @@ class ClientGenerationStoreTest {
 		storage.writeActiveState(document);
 		Files.delete(storage.objectFile(hash));
 
-		assertThrows(IOException.class, () -> new ClientGenerationStore(storage).hosting());
+		assertThrows(IOException.class, () -> new ClientGenerationStore(storage).hosting(FIRST_PACK));
 	}
 
 	@Test
 	void hostingWithoutAnActivePackFails() throws Exception {
 		ClientStorage storage = storage();
-		assertThrows(IOException.class, () -> new ClientGenerationStore(storage).hosting());
+		assertThrows(IOException.class, () -> new ClientGenerationStore(storage).hosting(FIRST_PACK));
 	}
 
 	private static void writeHead(ClientStorage storage, String modpackId, PackDocument document) throws IOException {

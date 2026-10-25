@@ -71,7 +71,7 @@ public class HandshakeS2CPacket {
 		// Nothing local to serve is this process's problem only when this process is the one that would serve it. An
 		// externally handled endpoint is fed by a proxy, a separate host or an exported tree whose current generation
 		// this server never sees, so an empty local store says nothing about what a client will fetch there.
-		PackAbsence absence = modpackExecutor.packAbsence();
+		PackAbsence absence = hostRole.absence();
 		boolean nothingToServeHere = absence != null && hostServer.endpointOwner() == NettyServer.EndpointOwner.BUILT_IN;
 
 		if (!understood) {

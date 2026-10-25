@@ -20,7 +20,11 @@ public record PackAbsence(Kind kind, String detail) {
 		/** The modpack holds files, but no group is required or recommended, so no client would receive any. */
 		NOTHING_SELECTED,
 		/** Nothing was ever published and this attempt did not ask for a publication. */
-		NEVER_PUBLISHED
+		NEVER_PUBLISHED,
+		/** This instance runs an installed modpack its player has not chosen to share with players joining their world. */
+		NOT_SHARED,
+		/** The process could not settle what it hosts this session. */
+		HOST_UNAVAILABLE
 	}
 
 	public PackAbsence {

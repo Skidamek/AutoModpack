@@ -101,7 +101,13 @@ public final class ClientGenerationStore {
 		return state == null ? Optional.empty() : Optional.of(document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger)));
 	}
 
-	/** Whether an active pack pointer exists; {@link #hosting()} resolves the rest. */
+	/** The active pack's document, refused when the active pack is not {@code modpackId}, as {@link #hosting(String)} refuses. */
+	public PackDocument activeDocument(String modpackId) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = requireActive(modpackId);
+		return document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger));
+	}
+
+	/** Whether an active pack pointer exists; {@link #hosting(String)} resolves the rest. */
 	public boolean hasActivePack() throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		return state != null && state.modpackId != null && !state.modpackId.isBlank();
@@ -110,11 +116,11 @@ public final class ClientGenerationStore {
 	/**
 	 * The active pack's full hosting surface: the mirrored head and journal plus every object the policy references, so
 	 * joining players get byte-exactly what this client runs. Every mapped file must exist; a missing object means the
-	 * host cannot keep its promise and fails loudly instead of starving a download halfway.
+	 * host cannot keep its promise and fails loudly instead of starving a download halfway. The caller names the pack
+	 * it decided to serve, so an active pack that changed since is refused instead of served in its place.
 	 */
-	public GenerationHosting hosting() throws IOException {
-		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-		if (state == null || state.modpackId == null || state.modpackId.isBlank()) throw new IOException("No active modpack is selected");
+	public GenerationHosting hosting(String modpackId) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = requireActive(modpackId);
 		Path head = storage.historyHeadFile(state.modpackId);
 		Path journal = storage.historyJournalFile(state.modpackId);
 		if (!Files.isRegularFile(head, LinkOption.NOFOLLOW_LINKS) || !Files.isRegularFile(journal, LinkOption.NOFOLLOW_LINKS))
@@ -129,6 +135,14 @@ public final class ClientGenerationStore {
 			if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("The active modpack is missing a hosted object: " + path);
 		}
 		return hosting;
+	}
+
+	private ClientStorageJsons.ClientGenerationStateFields requireActive(String modpackId) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+		if (state == null || state.modpackId == null || state.modpackId.isBlank()) throw new IOException("No active modpack is selected");
+		if (!state.modpackId.equals(ModpackId.requireValid(modpackId)))
+			throw new IOException("The active modpack is " + state.modpackId + ", not the shared " + modpackId);
+		return state;
 	}
 
 	/** Reconstructs the active target from the active document and the persisted selection intent, without server access. */

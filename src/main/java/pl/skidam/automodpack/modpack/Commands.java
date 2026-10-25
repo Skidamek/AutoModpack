@@ -317,7 +317,7 @@ public class Commands {
 
 	private static String requirePublishedModpackId() {
 		try {
-			PackDocument current = modpackExecutor.currentDocument().orElseThrow(() -> new IllegalArgumentException("No published modpack is available; generate the modpack first"));
+			PackDocument current = hostRole.currentDocument().orElseThrow(() -> new IllegalArgumentException("No published modpack is available; generate the modpack first"));
 			return ModpackId.requireValid(current.manifest().modpackId());
 		} catch (IOException e) {
 			throw new IllegalArgumentException("The published modpack is invalid; check the server logs", e);
@@ -468,6 +468,7 @@ public class Commands {
 	}
 
 	private static int startModpackHost(CommandContext<CommandSourceStack> context) {
+		if (refusedHostStart(context)) return 0;
 		runAsync(context, "Host start", () -> {
 			if (hostServer.isRunning()) {
 				send(context, "Modpack hosting is already running!", ChatFormatting.RED, false);
@@ -499,6 +500,7 @@ public class Commands {
 	}
 
 	private static int restartModpackHost(CommandContext<CommandSourceStack> context) {
+		if (refusedHostStart(context)) return 0;
 		runAsync(context, "Host restart", () -> {
 			send(context, "Restarting modpack hosting...", ChatFormatting.YELLOW, true);
 			if (!hostServer.stop()) {
@@ -511,6 +513,14 @@ public class Commands {
 		});
 
 		return Command.SINGLE_SUCCESS;
+	}
+
+	/** A host start with nothing bound would serve an empty map, so the role's absence answers instead. */
+	private static boolean refusedHostStart(CommandContext<CommandSourceStack> context) {
+		var absence = hostRole == null ? null : hostRole.absence();
+		if (hostRole != null && absence == null) return false;
+		send(context, "FAILED: " + (absence == null ? "The modpack host is not running" : absence.detail()), ChatFormatting.RED, false);
+		return true;
 	}
 
 	private static void reportHostStart(CommandContext<CommandSourceStack> context, String action) {
@@ -561,6 +571,7 @@ public class Commands {
 	}
 
 	private static int runGeneration(CommandContext<CommandSourceStack> context, boolean preview, boolean guarded) {
+		if (refusedGeneration(context)) return 0;
 		String notes = optionalArgument(context, "notes");
 		String expectedToken = guarded ? StringArgumentType.getString(context, "content-token") : null;
 		runAsync(context, preview ? "Modpack preview" : "Modpack generation", () -> {
@@ -570,6 +581,13 @@ public class Commands {
 			else reportPublication(context, start, guarded ? modpackExecutor.publishIfContent(expectedToken, notes) : modpackExecutor.publish(notes));
 		});
 		return Command.SINGLE_SUCCESS;
+	}
+
+	/** Generation commands act on this world's own generation, which a session hosting something else must not touch. */
+	private static boolean refusedGeneration(CommandContext<CommandSourceStack> context) {
+		Optional<String> refusal = hostRole == null ? Optional.of("The modpack host is not running") : hostRole.generationRefusal();
+		refusal.ifPresent(reason -> send(context, "FAILED: " + reason, ChatFormatting.RED, false));
+		return refusal.isPresent();
 	}
 
 	/** A preview answers what the scan found, so an unpublishable candidate previews truthfully and says next to itself that publishing it is refused. */
@@ -616,6 +634,7 @@ public class Commands {
 	}
 
 	private static int previewRevertGeneration(CommandContext<CommandSourceStack> context) {
+		if (refusedGeneration(context)) return 0;
 		long targetSeq = parseSeq(context);
 		if (targetSeq < 1) return 0;
 		if (!resolveAndReportRevertTarget(context, targetSeq)) return 0;
@@ -624,6 +643,7 @@ public class Commands {
 	}
 
 	private static int revertGeneration(CommandContext<CommandSourceStack> context) {
+		if (refusedGeneration(context)) return 0;
 		long targetSeq = parseSeq(context);
 		if (targetSeq < 1) return 0;
 		String notes = optionalArgument(context, "notes");
@@ -697,6 +717,7 @@ public class Commands {
 	}
 
 	private static int exportHttpTree(CommandContext<CommandSourceStack> context, boolean includeAll) {
+		if (refusedGeneration(context)) return 0;
 		String directory = StringArgumentType.getString(context, "directory");
 		runAsync(context, "HTTP export", () -> {
 			send(context, "Exporting the HTTP contract tree...", ChatFormatting.YELLOW, true);
@@ -715,6 +736,7 @@ public class Commands {
 	}
 
 	private static int replaceNotes(CommandContext<CommandSourceStack> context) {
+		if (refusedGeneration(context)) return 0;
 		String notes = optionalArgument(context, "notes");
 		runAsync(context, "Patch notes replacement", () -> {
 			send(context, "Replacing patch notes...", ChatFormatting.YELLOW, true);
@@ -757,7 +779,7 @@ public class Commands {
 	private static int modpackGroups(CommandContext<CommandSourceStack> context) {
 		runAsync(context, "Group overview", () -> {
 			try {
-				Optional<PackDocument> published = modpackExecutor.currentDocument();
+				Optional<PackDocument> published = hostRole.currentDocument();
 				for (String line : GroupInspector.overview(serverConfig.modpack.categories, published.map(PackDocument::manifest).orElse(null)))
 					send(context, line, ChatFormatting.WHITE, false);
 			} catch (IOException e) {
@@ -771,7 +793,7 @@ public class Commands {
 		String groupId = StringArgumentType.getString(context, "group-id");
 		runAsync(context, "Group detail", () -> {
 			try {
-				Optional<PackDocument> published = modpackExecutor.currentDocument();
+				Optional<PackDocument> published = hostRole.currentDocument();
 				Optional<List<String>> lines = GroupInspector.detail(serverConfig.modpack.categories, groupId, published.map(PackDocument::manifest).orElse(null));
 				if (lines.isEmpty()) {
 					send(context, "Unknown group id: " + groupId + ". Run /automodpack groups for the list.", ChatFormatting.RED, false);

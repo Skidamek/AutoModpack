@@ -10,12 +10,11 @@ import pl.skidam.automodpack_core.Deferred;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
+import pl.skidam.automodpack_core.modpack.host.HostRole;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.storage.StorageLeftovers;
 import pl.skidam.automodpack_core.storage.StoragePaths;
-import pl.skidam.automodpack_core.update.ClientGenerationStore;
-import pl.skidam.automodpack_core.update.ClientStorage;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -37,7 +36,12 @@ public class Common {
 	private static void prepareServerRuntime() {
 		if (serverRuntimePrepared) return;
 		prepareRuntime();
-		runGeneration();
+		try {
+			hostRole = HostRole.open(LoaderManagerService.EnvironmentType.SERVER, GameDirectory.current(), modpackExecutor);
+			hostRole.bind(hostServer);
+		} catch (IOException e) {
+			throw new IllegalStateException("Failed to prepare the modpack host", e);
+		}
 	}
 
 	private static void prepareRuntime() {
@@ -51,36 +55,6 @@ public class Common {
 		hostServer = new NettyServer();
 		modpackExecutor = new ModpackExecutor();
 		serverRuntimePrepared = true;
-	}
-
-	/**
-	 * A server with nothing to sync is a state, not a failure: it boots, hosts nothing, and the operator gets the one
-	 * line that says why. Only a genuine failure - a corrupt store, an unreadable config, a broken disk - takes the
-	 * world down with it, because a half-published modpack is worse than a loud crash.
-	 */
-	private static void runGeneration() {
-		long genStart = System.currentTimeMillis();
-		if (serverConfig.generateModpackOnStart) {
-			LOGGER.info("Generating modpack...");
-			var generation = modpackExecutor.publish();
-			if (generation instanceof ModpackExecutor.Published || generation instanceof ModpackExecutor.NoChanges) {
-				LOGGER.info("Modpack generation completed! took {}ms", System.currentTimeMillis() - genStart);
-			} else if (generation instanceof ModpackExecutor.PublishResult.NothingToPublish nothing) {
-				LOGGER.warn("{}", nothing.absence().detail());
-			} else if (generation instanceof ModpackExecutor.Rejected rejected) {
-				throw new IllegalStateException("Failed to generate modpack: " + rejected.detail(), rejected.cause());
-			}
-		} else {
-			LOGGER.info("Loading last modpack...");
-			var generation = modpackExecutor.loadLast();
-			if (generation instanceof ModpackExecutor.Loaded loaded) {
-				LOGGER.info("Modpack loaded at content {}! took {}ms", loaded.current().contentToken(), System.currentTimeMillis() - genStart);
-			} else if (generation instanceof ModpackExecutor.LoadResult.NothingPublished nothing) {
-				LOGGER.warn("{}", nothing.absence().detail());
-			} else if (generation instanceof ModpackExecutor.Rejected rejected) {
-				throw new IllegalStateException("Failed to load modpack: " + rejected.detail(), rejected.cause());
-			}
-		}
 	}
 
 	public static void init() {
@@ -99,21 +73,21 @@ public class Common {
 
 	/** A host with no generation has nothing to start; the absence line from the generation attempt is the receipt. */
 	private static void startHostWhenOneIsBound() {
-		if (modpackExecutor.packAbsence() != null) return;
+		if (hostRole.absence() != null) return;
 		hostServer.start();
 	}
 
 	/**
 	 * A client host is a courtesy, not the world's purpose: a failure costs the hosting for this session and is
-	 * announced to the player, never the world start. When the client runs a downloaded pack, that pack is hosted
-	 * byte-exactly from the client's own store; without one the game directory generates a pack like a server's.
+	 * announced to the player, never the world start. What it serves is the {@link HostRole}'s one decision.
 	 * Once the runtime is built, its failure costs only serving: commands and the joiner handshake keep a stable
 	 * target, and the next world start retries.
 	 */
 	private static synchronized void prepareClientHostBestEffort() {
 		try {
 			prepareRuntime();
-			if (!adoptActivePack()) runGeneration();
+			hostRole = HostRole.open(LoaderManagerService.EnvironmentType.CLIENT, GameDirectory.current(), modpackExecutor);
+			hostRole.bind(hostServer);
 			startHostWhenOneIsBound();
 		} catch (Exception e) {
 			try {
@@ -122,18 +96,10 @@ public class Common {
 				e.addSuppressed(stopFailure);
 			}
 			String reason = e.getMessage() == null ? e.toString() : e.getMessage();
+			hostRole = HostRole.unavailable(reason);
 			SessionNotices.post("AutoModpack hosting failed", reason);
 			LOGGER.error("AutoModpack hosting is unavailable this session", e);
 		}
-	}
-
-	private static boolean adoptActivePack() throws IOException {
-		ClientStorage storage = ClientStorage.open(GameDirectory.current());
-		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		if (!generations.hasActivePack()) return false;
-		hostServer.replacePaths(generations.hosting());
-		LOGGER.info("Hosting this client's active modpack to joining players");
-		return true;
 	}
 
 	public static synchronized void beforeShutdownServer() {
@@ -142,6 +108,7 @@ public class Common {
 		modpackExecutor.stop();
 		hostServer = null;
 		modpackExecutor = null;
+		hostRole = null;
 		serverRuntimePrepared = false;
 	}
 

@@ -12,6 +12,7 @@ import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.loader.NullGameCall;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
+import pl.skidam.automodpack_core.modpack.host.HostRole;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 /** Process-wide runtime state retained for loader compatibility. */
@@ -30,6 +31,7 @@ public final class Constants {
 	public static Path THIS_MOD_JAR;
 	public static ModpackExecutor modpackExecutor;
 	public static NettyServer hostServer;
+	public static volatile HostRole hostRole;
 	public static volatile ServerConfigJsons.ServerConfigFieldsV3 serverConfig;
 	/** The process config document: boot owns loading it, flows land committed snapshots through one seam, screens only read. */
 	public static volatile ClientConfigJsons.ClientConfigFieldsV3 clientConfig;
