@@ -1136,7 +1136,7 @@ class UpdateCommitTest {
 				new UpdatePlan.FileKey(Root.PROJECTION, restoredPath), new UpdatePlan.FileState(serverHash, serverBytes.length, true),
 				new UpdatePlan.FileKey(Root.GAME_DIR, restoredPath), new UpdatePlan.FileState(serverHash, serverBytes.length, true));
 		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.manifest().modpackId(), installed.flatTarget(), Map.of(), baseline,
-				Set.of(baselineHash));
+				Set.of(baselineHash), Set.of());
 		UpdatePlan switchPlan = UpdatePlanner.plan(new UpdatePlanner.Input(installed.flatTarget(), target.flatTarget(), files, Set.of(), List.of(), List.of(),
 				List.of(), List.of(), selection, clientConfig(target.manifest().modpackId())));
 

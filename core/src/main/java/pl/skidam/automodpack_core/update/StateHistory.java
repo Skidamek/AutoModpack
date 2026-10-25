@@ -13,10 +13,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
-import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.ContentTree;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
@@ -291,23 +291,34 @@ public final class StateHistory {
 		});
 	}
 
-	/** Game-directory files from the parent of this pack's first install snapshot. Missing path means the pack created it. */
-	public static Map<String, TrackedFile> priorGameDir(ClientStorage storage, String modpackId) throws IOException {
-		ModpackId.requireValid(modpackId);
+	/**
+	 * The player's own game-directory bytes under every {@code leaving} path the pack layer holds now: for each path, its row
+	 * in the newest snapshot before the run of snapshots in which the pack layer held it, whichever packs those were, so bytes
+	 * an earlier pack put there are never mistaken for the player's and a pack removed and reinstalled measures from the
+	 * reinstall. Missing path means a pack created it. The walk ends once every path is resolved.
+	 */
+	public static Map<String, TrackedFile> priorGameDir(ClientStorage storage, Predicate<String> leaving) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
-			ClientStateJournal journal = ClientStateJournal.open(storage);
-			Snapshot install = null;
-			for (Snapshot entry : journal.entries())
-				if (entry.kind() == Kind.INSTALL && entry.modpackId().equals(modpackId)) {
-					install = entry;
-					break;
-				}
-			if (install == null || install.parentSeq() == ClientStateJournal.NO_PARENT) return Map.of();
-			InstanceTree parent = InstanceTree.read(storage, journal.require(install.parentSeq()).treeSha1());
+			List<Snapshot> entries = ClientStateJournal.open(storage).entries();
+			Set<String> held = new TreeSet<>();
+			if (!entries.isEmpty())
+				for (TrackedFile file : InstanceTree.read(storage, entries.get(entries.size() - 1).treeSha1()).files())
+					if (file.root() == Root.PROJECTION && leaving.test(file.path())) held.add(file.path());
 			Map<String, TrackedFile> files = new TreeMap<>();
-			for (TrackedFile file : parent.files()) {
-				if (file.root() != Root.GAME_DIR) continue;
-				files.putIfAbsent(file.path(), file);
+			for (int index = entries.size() - 2; index >= 0 && !held.isEmpty(); index--) {
+				Set<String> holding = new HashSet<>();
+				Map<String, TrackedFile> game = new HashMap<>();
+				for (TrackedFile file : InstanceTree.read(storage, entries.get(index).treeSha1()).files()) {
+					if (!held.contains(file.path())) continue;
+					if (file.root() == Root.PROJECTION) holding.add(file.path());
+					else if (file.root() == Root.GAME_DIR) game.put(file.path(), file);
+				}
+				for (var released = held.iterator(); released.hasNext();) {
+					String path = released.next();
+					if (holding.contains(path)) continue;
+					released.remove();
+					if (game.containsKey(path)) files.put(path, game.get(path));
+				}
 			}
 			return Map.copyOf(files);
 		});

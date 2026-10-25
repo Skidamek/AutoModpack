@@ -102,14 +102,15 @@ public final class UpdatePlanner {
 		}
 	}
 
+	/** {@code deselectedPaths}: paths the player lets go of by deselecting groups of the same pack that still ship them. */
 	public record SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest, Map<String, FileState> previousEditableOverlays,
-			Map<String, InstanceTree.TrackedFile> priorGameDir, Set<String> availableBaselineObjects) {
+			Map<String, InstanceTree.TrackedFile> priorGameDir, Set<String> availableBaselineObjects, Set<String> deselectedPaths) {
 		public SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest) {
-			this(previousModpackId, previousManifest, Map.of(), null, Set.of());
+			this(previousModpackId, previousManifest, Map.of(), null, Set.of(), Set.of());
 		}
 
 		public SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest, Map<String, FileState> previousEditableOverlays) {
-			this(previousModpackId, previousManifest, previousEditableOverlays, null, Set.of());
+			this(previousModpackId, previousManifest, previousEditableOverlays, null, Set.of(), Set.of());
 		}
 
 		public SelectionContext {
@@ -119,6 +120,7 @@ public final class UpdatePlanner {
 			for (String value : availableBaselineObjects == null ? Set.<String>of() : availableBaselineObjects)
 				if (value != null) normalizedObjects.add(value.toLowerCase(Locale.ROOT));
 			availableBaselineObjects = Collections.unmodifiableSet(normalizedObjects);
+			deselectedPaths = Set.copyOf(deselectedPaths == null ? Set.of() : deselectedPaths);
 		}
 	}
 
@@ -210,6 +212,16 @@ public final class UpdatePlanner {
 			restoreOwnedLiveFile(key, state, prior, input.availableBaselineObjects(), true, session);
 		}
 
+		if (installed.list != null) for (var item : installed.list) {
+			if (!item.editable) continue;
+			FileKey liveKey = liveKey(item);
+			FileState live = session.projected(liveKey);
+			FileState overlay = input.files().get(new FileKey(Root.OVERLAY, LogicalPath.normalize(item.file)));
+			if (session.hasOperation(liveKey) || overlay == null || !overlay.regularFile() || live == null || !hashesEqual(live.sha1(), overlay.sha1())) continue;
+			InstanceTree.TrackedFile prior = priorGameDir.get(LogicalPath.normalize(item.file));
+			if (!matches(live, prior)) retireEditedCopy(liveKey, live.sha1(), prior, input.availableBaselineObjects(), session);
+		}
+
 		inheritOwed(input.owed(), installed.modpackId, Set.of(), path -> false, session);
 		return session.finalState(installed.modpackId, packTarget, input.plannedClientConfig(), input.files(), installed, ledger, true, priorGameDir, List.of());
 	}
@@ -232,10 +244,16 @@ public final class UpdatePlanner {
 		Map<String, ModInfo> targetModsByPath = modsByPath(input.targetMods());
 		Map<String, ModInfo> standardModsByPath = modsByPath(input.standardMods());
 		Set<String> listedPins = listedPins(input);
+		boolean switchesPack = input.installedManifest() != null && !input.installedManifest().modpackId.equals(target.modpackId);
+		Map<String, InstanceTree.TrackedFile> priorGameDir = input.selection() == null || input.selection().priorGameDir() == null ? Map.of() : input.selection().priorGameDir();
+		Set<String> deselectedPaths = input.selection() == null ? Set.of() : input.selection().deselectedPaths();
+		// The player's own file comes back only when the player leaves the path, by switching packs or deselecting its group; a path the pack dropped or moved away is just dropped.
+		Function<String, InstanceTree.TrackedFile> baselines = path -> switchesPack || deselectedPaths.contains(path) ? priorGameDir.get(path) : null;
+		Set<String> baselineObjects = input.selection() == null ? Set.of() : input.selection().availableBaselineObjects();
 		planConsentedLocalMods(input, standardModsByPath, session);
-		planInstalledRemovals(input, target.modpackId, targetItems, installedItems, listedPins, standardModsByPath, session);
+		planInstalledRemovals(input, target.modpackId, targetItems, installedItems, baselines, baselineObjects, listedPins, standardModsByPath, session);
 		if (installedLedger != null)
-			planLedgerCleanup(installedLedger, installedItems.keySet(), targetItems.keySet(), input.selection(), !input.installedManifest().modpackId.equals(target.modpackId), listedPins, standardModsByPath, session);
+			planLedgerCleanup(installedLedger, installedItems.keySet(), targetItems.keySet(), baselines, baselineObjects, switchesPack, listedPins, standardModsByPath, session);
 		else
 			planServerKnownCleanup(ledger, targetItems.keySet(), listedPins, standardModsByPath, session);
 		planSelectionChange(input, target, session);
@@ -281,9 +299,13 @@ public final class UpdatePlanner {
 		return retained;
 	}
 
-	/** Removes installed content the target no longer ships: its projection entry, its overlay, and its player-edited live copy - unless a pin keeps the live jar. */
+	/**
+	 * Removes installed content the target no longer ships: its projection entry, its overlay, and its player-edited live copy, which gives way to the
+	 * player's own file {@code baselines} gives back for it, if any - unless a pin keeps the live jar.
+	 */
 	private static void planInstalledRemovals(Input input, String targetModpackId, Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems,
-			Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> installedItems, Set<String> listedPins, Map<String, ModInfo> standardModsByPath, PlanningSession session) {
+			Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> installedItems, Function<String, InstanceTree.TrackedFile> baselines, Set<String> baselineObjects,
+			Set<String> listedPins, Map<String, ModInfo> standardModsByPath, PlanningSession session) {
 		for (var entry : installedItems.entrySet()) {
 			if (targetItems.containsKey(entry.getKey())) continue;
 			FileKey modpackKey = new FileKey(Root.PROJECTION, LogicalPath.normalize(entry.getKey()));
@@ -297,8 +319,7 @@ public final class UpdatePlanner {
 			FileState previousOverlay = input.selection() == null ? null : input.selection().previousEditableOverlays().get(entry.getKey());
 			if (previousOverlay != null && previousOverlay.regularFile() && live != null && hashesEqual(live.sha1(), previousOverlay.sha1())) {
 				if (pinnedLiveMod(listedPins, standardModsByPath, entry.getKey())) continue;
-				session.delete(liveKey, previousOverlay.sha1());
-				noteStandardModsMutation(liveKey, true, session);
+				retireEditedCopy(liveKey, previousOverlay.sha1(), baselines.apply(entry.getKey()), baselineObjects, session);
 			}
 		}
 		for (FileKey key : session.projectedKeys()) {
@@ -477,9 +498,8 @@ public final class UpdatePlanner {
 		session.captures().addAll(planned.values());
 	}
 
-	private static void planLedgerCleanup(OwnershipLedger ledger, Set<String> installedPaths, Set<String> targetPaths, SelectionContext selection, boolean preserveReplacedBytes,
-			Set<String> listedPins, Map<String, ModInfo> standardModsByPath, PlanningSession session) {
-		Map<String, InstanceTree.TrackedFile> priorGameDir = selection == null || selection.priorGameDir() == null ? Map.of() : selection.priorGameDir();
+	private static void planLedgerCleanup(OwnershipLedger ledger, Set<String> installedPaths, Set<String> targetPaths, Function<String, InstanceTree.TrackedFile> baselines,
+			Set<String> baselineObjects, boolean preserveReplacedBytes, Set<String> listedPins, Map<String, ModInfo> standardModsByPath, PlanningSession session) {
 		for (OwnershipLedger.Entry entry : ledger.entries().values()) {
 			if (!installedPaths.contains(entry.logicalPath()) || targetPaths.contains(entry.logicalPath())) continue;
 			if (pinnedLiveMod(listedPins, standardModsByPath, entry.logicalPath())) continue;
@@ -490,15 +510,21 @@ public final class UpdatePlanner {
 			if (state == null || !state.regularFile() || state.sha1() == null) continue;
 			OwnershipLedger.Content content = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
 			if (!entry.historicalHashes().contains(content)) continue;
-			InstanceTree.TrackedFile prior = priorGameDir.get(entry.logicalPath());
-			if (selection == null || selection.priorGameDir() == null) {
-				session.preserve(new Preservation(key.root(), key.relativePath(), state.sha1().toLowerCase(Locale.ROOT), state.size()));
-				session.delete(key, state.sha1());
-				noteStandardModsMutation(key, true, session);
-				continue;
-			}
-			restoreOwnedLiveFile(key, state, prior, selection.availableBaselineObjects(), preserveReplacedBytes, session);
+			restoreOwnedLiveFile(key, state, baselines.apply(entry.logicalPath()), baselineObjects, preserveReplacedBytes, session);
 		}
+	}
+
+	/** The pack's copy of an editable file, edited or not, leaves with the pack: the player's own file from before takes its place, or nothing does. */
+	private static void retireEditedCopy(FileKey liveKey, String copyHash, InstanceTree.TrackedFile prior, Set<String> baselineObjects, PlanningSession session) {
+		if (originalLost(prior, baselineObjects)) return;
+		if (prior != null) session.install(liveKey, prior.sha1(), prior.size(), copyHash);
+		else session.delete(liveKey, copyHash);
+		noteStandardModsMutation(liveKey, prior == null, session);
+	}
+
+	/** The player had a file here but the store can no longer give it back, so the copy on disk is all that is left of it and stays. */
+	private static boolean originalLost(InstanceTree.TrackedFile prior, Set<String> baselineObjects) {
+		return prior != null && !baselineObjects.contains(prior.sha1());
 	}
 
 	private static boolean restoreOwnedLiveFile(FileKey key, FileState state, InstanceTree.TrackedFile prior,
@@ -511,8 +537,8 @@ public final class UpdatePlanner {
 			noteStandardModsMutation(key, true, session);
 			return true;
 		}
+		if (originalLost(prior, availableBaselineObjects)) return false;
 		String priorHash = prior.sha1();
-		if (!availableBaselineObjects.contains(priorHash)) return false;
 		if (preserveReplacedBytes) session.preserve(new Preservation(key.root(), key.relativePath(), currentHash, state.size()));
 		session.install(key, priorHash, prior.size(), currentHash);
 		noteStandardModsMutation(key, false, session);

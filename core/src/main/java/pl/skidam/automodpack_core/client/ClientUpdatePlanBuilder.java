@@ -13,6 +13,7 @@ import java.util.*;
 import java.util.HexFormat;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -148,7 +149,7 @@ final class ClientUpdatePlanBuilder {
 		Map<String, ClientOverlaySnapshot> overlaySnapshots = new HashMap<>();
 		ClientOverlaySnapshot targetOverlay = storage.overlaySnapshot(input.target().modpackId, cache);
 		overlaySnapshots.put(input.target().modpackId, targetOverlay);
-		UpdatePlanner.SelectionContext selection = selectionContext(projection, cache, overlaySnapshots);
+		UpdatePlanner.SelectionContext selection = selectionContext(projection, input.selectedTarget(), cache, overlaySnapshots);
 		GeneratedCopyState previousGeneratedState = installed == null ? null : projection.generatedCopies();
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(input.target(), installed, selection, projection,
 				previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies(), cache, overlaySnapshots);
@@ -207,7 +208,7 @@ final class ClientUpdatePlanBuilder {
 		SelectionIntent expectedPriorIntent = new ClientGenerationStore(storage).appliedSelection(installed.modpackId).orElse(null);
 
 		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
-			AvailablePreInstall availablePreInstall = readAvailablePreInstall(installed.modpackId, cache);
+			AvailablePreInstall availablePreInstall = readAvailablePreInstall(path -> true, cache);
 			reconcileEditableState(cache, projectionView, null);
 			ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
 			GeneratedCopyState generatedCopies = projection.generatedCopies();
@@ -269,7 +270,7 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	private UpdatePlanner.SelectionContext selectionContext(ClientProjectionView.Snapshot projection, FileCache cache,
+	private UpdatePlanner.SelectionContext selectionContext(ClientProjectionView.Snapshot projection, SelectedModpackTarget target, FileCache cache,
 			Map<String, ClientOverlaySnapshot> overlaySnapshots) throws IOException {
 		ModpackJsons.ModpackContentFields previousManifest = projection.target();
 		if (previousManifest == null) return null;
@@ -279,12 +280,31 @@ final class ClientUpdatePlanBuilder {
 			snapshot = storage.overlaySnapshot(previousId, cache);
 			overlaySnapshots.put(previousId, snapshot);
 		}
-		AvailablePreInstall preInstall = readAvailablePreInstall(previousId, cache);
-		return new UpdatePlanner.SelectionContext(previousId, previousManifest, snapshot.files(), preInstall.priorGameDir(), preInstall.objectHashes());
+		Set<String> deselected = deselectedPaths(previousManifest, target);
+		boolean switches = !previousId.equals(target.manifest().modpackId());
+		// Only a path the player leaves gets its original back, so a plan that leaves nothing never walks the history.
+		AvailablePreInstall preInstall = !switches && deselected.isEmpty()
+				? new AvailablePreInstall(Map.of(), Set.of())
+				: readAvailablePreInstall(path -> switches || deselected.contains(path), cache);
+		return new UpdatePlanner.SelectionContext(previousId, previousManifest, snapshot.files(), preInstall.priorGameDir(), preInstall.objectHashes(), deselected);
 	}
 
-	private AvailablePreInstall readAvailablePreInstall(String modpackId, FileCache cache) throws IOException {
-		Map<String, InstanceTree.TrackedFile> priorGameDir = StateHistory.priorGameDir(storage, modpackId);
+	/**
+	 * Paths the target still places in a group the installed selection had and this one does not: the player let go of
+	 * them. An installed manifest that recorded no selection lets go of nothing, so its dropped paths are just dropped.
+	 */
+	private static Set<String> deselectedPaths(ModpackJsons.ModpackContentFields installed, SelectedModpackTarget target) {
+		if (installed.selectedGroups == null || !installed.modpackId.equals(target.manifest().modpackId())) return Set.of();
+		Set<String> paths = new HashSet<>();
+		target.manifest().groups().forEach((groupId, group) -> {
+			if (installed.selectedGroups.contains(groupId) && !target.selection().selectedGroups().contains(groupId))
+				group.files().keySet().forEach(path -> paths.add(LogicalPath.normalize(path)));
+		});
+		return paths;
+	}
+
+	private AvailablePreInstall readAvailablePreInstall(Predicate<String> leaving, FileCache cache) throws IOException {
+		Map<String, InstanceTree.TrackedFile> priorGameDir = StateHistory.priorGameDir(storage, leaving);
 		Set<String> availableObjects = new HashSet<>();
 		for (InstanceTree.TrackedFile file : priorGameDir.values())
 			if (FileIntegrity.matchesNamed(storage.objectFile(file.sha1()), file.size(), file.sha1(), cache)) availableObjects.add(file.sha1());

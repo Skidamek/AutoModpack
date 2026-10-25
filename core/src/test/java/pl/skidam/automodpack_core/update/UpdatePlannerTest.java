@@ -16,8 +16,8 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 
 class UpdatePlannerTest {
-	private static final String TARGET_HASH = "1111111111111111111111111111111111111111";
-	private static final String OLD_HASH = "2222222222222222222222222222222222222222";
+	static final String TARGET_HASH = "1111111111111111111111111111111111111111";
+	static final String OLD_HASH = "2222222222222222222222222222222222222222";
 	private static final String OTHER_HASH = "3333333333333333333333333333333333333333";
 
 	@Test
@@ -527,40 +527,6 @@ class UpdatePlannerTest {
 	}
 
 	@Test
-	void deselectedGroupFileAlreadyMatchingBaselineIsLeftAlone() {
-		ModpackJsons.ModpackContentFields installed = manifest(Map.of("config/connector.json", item("config/connector.json", OLD_HASH, 8, "config")),
-				ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
-		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
-		Map<String, InstanceTree.TrackedFile> baseline = Map.of("config/connector.json", new InstanceTree.TrackedFile(Root.GAME_DIR, "", "config/connector.json", OLD_HASH, 8));
-		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/connector.json"), new FileState(OLD_HASH, 8, true));
-		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.modpackId, installed, Map.of(), baseline, Set.of(OLD_HASH));
-
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), selection,
-				new ClientConfigJsons.ClientConfigFieldsV3()));
-
-		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("config/connector.json")));
-		assertTrue(plan.preservations().isEmpty());
-	}
-
-	@Test
-	void deselectedGroupFileRestoredFromBaselineIsNotAlsoPreserved() {
-		ModpackJsons.ModpackContentFields installed = manifest(Map.of("config/connector.json", item("config/connector.json", OLD_HASH, 8, "config")),
-				ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
-		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
-		String baselineHash = "4444444444444444444444444444444444444444";
-		Map<String, InstanceTree.TrackedFile> baseline = Map.of("config/connector.json", new InstanceTree.TrackedFile(Root.GAME_DIR, "", "config/connector.json", baselineHash, 8));
-		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.modpackId, installed, Map.of(), baseline, Set.of(baselineHash));
-
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target,
-				Map.of(new FileKey(Root.GAME_DIR, "config/connector.json"), new FileState(OLD_HASH, 8, true)), Set.of(), List.of(), List.of(), List.of(), List.of(), selection,
-				new ClientConfigJsons.ClientConfigFieldsV3()));
-
-		assertEquals(List.of(), plan.preservations());
-		assertEquals(baselineHash, plan.operations().stream().filter(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("config/connector.json"))
-				.findFirst().orElseThrow().expectedObjectHash());
-	}
-
-	@Test
 	void freshClientMayRemoveOnlyExactServerKnownTombstoneBytes() {
 		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("mods/removed.jar", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/removed.jar"), new FileState(OLD_HASH, 8, true),
@@ -899,7 +865,7 @@ class UpdatePlannerTest {
 				generated.stream().map(UpdatePlanner.NestedCandidate::previous).toList(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
 	}
 
-	private static ModpackJsons.ModpackContentFields manifest(Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> items,
+	static ModpackJsons.ModpackContentFields manifest(Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> items,
 			GenerationJsons.OwnershipLedgerFields ownershipLedger) {
 		ModpackJsons.ModpackContentFields target = new ModpackJsons.ModpackContentFields(new LinkedHashSet<>(items.values()));
 		target.modpackId = "abc1234";
@@ -909,7 +875,7 @@ class UpdatePlannerTest {
 		return target;
 	}
 
-	private static ModpackJsons.ModpackContentFields.ModpackContentItem item(String path, String hash, long size, String type) {
+	static ModpackJsons.ModpackContentFields.ModpackContentItem item(String path, String hash, long size, String type) {
 		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, size, false, hash, "0");
 	}
 
@@ -951,7 +917,7 @@ class UpdatePlannerTest {
 				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (first, second) -> first, LinkedHashMap::new));
 	}
 
-	private static GenerationJsons.OwnershipLedgerFields ledger(OwnershipLedger.Entry... entries) {
+	static GenerationJsons.OwnershipLedgerFields ledger(OwnershipLedger.Entry... entries) {
 		return ledgerFor("abc1234", entries);
 	}
 
@@ -961,7 +927,7 @@ class UpdatePlannerTest {
 		return new OwnershipLedger(modpackId, values).toFields();
 	}
 
-	private static OwnershipLedger.Entry entry(String path, String hash, long size, OwnershipLedger.Status status) {
+	static OwnershipLedger.Entry entry(String path, String hash, long size, OwnershipLedger.Status status) {
 		NavigableSet<OwnershipLedger.Content> hashes = new TreeSet<>(Comparator.comparing(OwnershipLedger.Content::sha1).thenComparingLong(OwnershipLedger.Content::size));
 		hashes.add(new OwnershipLedger.Content(hash, size));
 		return new OwnershipLedger.Entry(path, hashes, new TreeSet<>(Set.of("main")), status);
