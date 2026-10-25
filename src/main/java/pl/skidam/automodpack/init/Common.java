@@ -53,7 +53,8 @@ public class Common {
 		ProvisioningSecretStore.ensure();
 
 		hostServer = new NettyServer();
-		modpackExecutor = new ModpackExecutor();
+		LoaderManagerService.EnvironmentType environment = LOADER_MANAGER == null ? null : LOADER_MANAGER.getEnvironmentType();
+		modpackExecutor = new ModpackExecutor(GameDirectory.current(), HostRole.ownedElsewhere(environment, GameDirectory.current()));
 		serverRuntimePrepared = true;
 	}
 

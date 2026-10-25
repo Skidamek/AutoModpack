@@ -11,6 +11,7 @@ public record ExcludedCandidate(CandidateSource source, Reason reason, String me
 		EXCLUDED_BY_RULE,
 		RESERVED_WINDOWS_NAME,
 		SERVER_SIDE_MOD,
-		INTERNAL_FILE
+		INTERNAL_FILE,
+		INSTALLED_PACK_FILE
 	}
 }

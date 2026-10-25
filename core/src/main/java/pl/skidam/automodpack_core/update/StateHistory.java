@@ -17,6 +17,7 @@ import java.util.function.Predicate;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.modpack.candidate.PackOwnedFiles;
 import pl.skidam.automodpack_core.modpack.generation.ContentTree;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
@@ -104,6 +105,20 @@ public final class StateHistory {
 				}
 				return List.copyOf(views);
 			}
+		});
+	}
+
+	/**
+	 * Every pack-held row of every snapshot: the bytes a pack layer projected, whichever pack and whatever kind of
+	 * snapshot. Game-directory rows are the player's, even ones an apply put back. Removed packs stay known until the
+	 * player forgets that history.
+	 */
+	static void addPackHeldRows(ClientStorage storage, PackOwnedFiles.Builder owned) throws IOException {
+		ClientStorageMutation.run(storage, () -> {
+			for (Snapshot snapshot : ClientStateJournal.open(storage).entries())
+				for (TrackedFile file : InstanceTree.read(storage, snapshot.treeSha1()).files())
+					if (file.root() == Root.PROJECTION) owned.historic(file.path(), file.sha1());
+			return null;
 		});
 	}
 

@@ -22,6 +22,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.candidate.PackOwnedFiles;
 import pl.skidam.automodpack_core.modpack.generation.ContentTree;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
@@ -31,6 +32,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.ExpectedSizes;
@@ -93,6 +95,73 @@ public final class ClientGenerationStore {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		if (activeState != null && normalizedModpackId.equals(activeState.modpackId)) return true;
 		return selections.get(normalizedModpackId).isPresent();
+	}
+
+	/**
+	 * What a generation on this instance must never publish as the player's own. Only an update not yet committed
+	 * manages paths here whatever their bytes: every game-directory path its generation ships and its plan holds.
+	 * Everything else is owned only at the exact bytes a pack held, from every snapshot's pack-held rows and every
+	 * installed pack's ledger, so the files a deactivation or removal gave back to the player still ship. An instance
+	 * running a pack has no answer: its files are that pack's.
+	 */
+	public PackOwnedFiles packOwnedFiles() throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
+		if (activeState != null && activeState.modpackId != null && !activeState.modpackId.isBlank())
+			throw new IOException("This instance runs installed modpack " + activeState.modpackId + ", so it cannot generate a pack of its own");
+		PackOwnedFiles.Builder owned = PackOwnedFiles.builder();
+		StateHistory.addPackHeldRows(storage, owned);
+		for (String modpackId : installedPackIds(activeState, new ClientSelectionStore(storage.selectionFile()))) {
+			PackDocument newest = readableNewest(modpackId, activeState);
+			if (newest == null) continue;
+			for (OwnershipLedger.Entry entry : newest.ownershipLedger().entries().values())
+				for (OwnershipLedger.Content content : entry.historicalHashes()) owned.historic(entry.logicalPath(), content.sha1());
+		}
+		addPendingPaths(owned, activeState);
+		for (GeneratedCopyState copies : GeneratedCopyState.loadAll(storage))
+			for (GeneratedCopyState.Entry entry : copies.entries()) owned.historic(entry.logicalPath(), entry.sha1());
+		return owned.build();
+	}
+
+	private PackDocument readableNewest(String modpackId, ClientStorageJsons.ClientGenerationStateFields activeState) {
+		try {
+			return newestDocument(modpackId, activeState);
+		} catch (IOException | RuntimeException unreadable) {
+			LOGGER.warn("Modpack {} has no document this instance can read; only the bytes a pack held here stay out of generated packs", modpackId, unreadable);
+			return null;
+		}
+	}
+
+	/**
+	 * Every game-directory path of its own generation an update not yet committed plans to hold: the active state still
+	 * names the generation before it, and a deferred journal keeps only the operations still owed, so its whole final
+	 * state is what says which files it may already have put here. The journal is read without setting anything aside,
+	 * since recovery owns it; one that cannot be read leaves out, with a warning, every path any mirrored pack ships.
+	 */
+	private void addPendingPaths(PackOwnedFiles.Builder owned, ClientStorageJsons.ClientGenerationStateFields activeState) throws IOException {
+		Set<String> planned = new TreeSet<>();
+		try {
+			UpdateTransaction pending = UpdateTransaction.readWithoutRepair(storage.transactionFile());
+			if (pending == null) return;
+			Set<String> ships = pending.ownershipLedger == null ? Set.of() : shippedPaths(OwnershipLedger.fromFields(pending.ownershipLedger));
+			for (UpdatePlan.ProjectedFile row : pending.plan().projectedFinalState()) {
+				String path = LogicalPath.normalize(row.relativePath());
+				if (row.root() == UpdatePlan.Root.GAME_DIR && row.present() && ships.contains(path)) planned.add(path);
+			}
+		} catch (IOException | RuntimeException unreadable) {
+			LOGGER.warn("The pending update transaction cannot be read; every path a mirrored modpack ships stays out of generated packs", unreadable);
+			for (String modpackId : mirroredPackIds()) {
+				PackDocument newest = readableNewest(modpackId, activeState);
+				if (newest != null) planned.addAll(shippedPaths(newest.ownershipLedger()));
+			}
+		}
+		for (String path : planned) owned.managed(path);
+	}
+
+	private static Set<String> shippedPaths(OwnershipLedger ledger) {
+		Set<String> paths = new TreeSet<>();
+		for (OwnershipLedger.Entry entry : ledger.entries().values())
+			if (entry.currentStatus() == OwnershipLedger.Status.PRESENT) paths.add(entry.logicalPath());
+		return paths;
 	}
 
 	/** The active pack's document: active-state identity and ledger, its mirror entry, and its policy document from the CAS. */

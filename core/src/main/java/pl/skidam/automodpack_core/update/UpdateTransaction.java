@@ -2,6 +2,9 @@ package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -63,6 +66,19 @@ public final class UpdateTransaction {
 	 */
 	public static UpdateTransaction read(Path path) throws IOException {
 		return ConfigTools.readState(path, UpdateTransaction.class, "Persisted update transaction", UpdateTransaction::validated).orElse(null);
+	}
+
+	/**
+	 * Reads the persisted transaction for an observer: unusable content throws and stays where recovery will find it,
+	 * and a journal a finishing commit retires during the read is no pending update.
+	 */
+	public static UpdateTransaction readWithoutRepair(Path path) throws IOException {
+		try {
+			return ConfigTools.readUnique(path, UpdateTransaction.class, "Persisted update transaction", UpdateTransaction::validated).orElse(null);
+		} catch (IOException e) {
+			if (e instanceof NoSuchFileException || !Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return null;
+			throw e;
+		}
 	}
 
 	/**

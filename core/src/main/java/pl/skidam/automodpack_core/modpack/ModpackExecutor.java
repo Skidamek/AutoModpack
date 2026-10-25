@@ -27,6 +27,7 @@ import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
 import pl.skidam.automodpack_core.modpack.candidate.ExcludedCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
+import pl.skidam.automodpack_core.modpack.candidate.PackOwnedFiles;
 import pl.skidam.automodpack_core.modpack.generation.ContentTree;
 import pl.skidam.automodpack_core.modpack.generation.GenerationDiff;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
@@ -60,10 +61,17 @@ public class ModpackExecutor {
 	private final HostingBinder hostingBinder;
 	private final Supplier<ServerConfigJsons.ServerConfigFieldsV3> config;
 	private final HttpExporter httpExporter;
+	private final OwnedFiles ownedElsewhere;
 	private volatile PackAbsence packAbsence;
 
 	public ModpackExecutor() {
-		this(GameDirectory.current(), HOST_MODPACK_DIR, GameDirectory.current().resolve(SERVER_DIR), PlatformSourceLookup.resolving());
+		this(GameDirectory.current(), () -> PackOwnedFiles.NONE);
+	}
+
+	/** An instance's executor whose scans leave out every file {@code ownedElsewhere} owns. */
+	public ModpackExecutor(Path gameDirectory, OwnedFiles ownedElsewhere) {
+		this(gameDirectory, gameDirectory.resolve(HOST_MODPACK_DIR), gameDirectory.resolve(SERVER_DIR),
+				productionDeps(gameDirectory, gameDirectory.resolve(SERVER_DIR), PlatformSourceLookup.resolving(), ownedElsewhere));
 	}
 
 	public ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot) {
@@ -71,17 +79,19 @@ public class ModpackExecutor {
 	}
 
 	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, PlatformSourceLookup platformSourceLookup) {
-		this(serverRoot, groupRoot, generationRoot, productionDeps(serverRoot, generationRoot, platformSourceLookup));
+		this(serverRoot, groupRoot, generationRoot, productionDeps(serverRoot, generationRoot, platformSourceLookup, () -> PackOwnedFiles.NONE));
 	}
 
-	private static Deps productionDeps(Path serverRoot, Path generationRoot, PlatformSourceLookup platformSourceLookup) {
+	private static Deps productionDeps(Path serverRoot, Path generationRoot, PlatformSourceLookup platformSourceLookup, OwnedFiles ownedElsewhere) {
 		DataRootResolver.Location location = DataRootResolver.resolve(serverRoot);
 		DataRootResolver.Layout layout = location.layout();
 		return new Deps(new GenerationStore(generationRoot, layout.objectsDirectory(), location, serverRoot.resolve(HOST_MODPACK_DIR).resolve(WAITING_MUSIC_FILE)),
 				new ModpackCandidateScanner(new PlatformSideVerdicts(layout.platformCacheDirectory()))::scan,
 				(ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2),
 						new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build()),
-				platformSourceLookup);
+				hosting -> {
+					if (hostServer != null) hostServer.replacePaths(hosting);
+				}, () -> serverConfig, platformSourceLookup, ownedElsewhere);
 	}
 
 	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, Deps deps) {
@@ -96,15 +106,21 @@ public class ModpackExecutor {
 		this.hostingBinder = Objects.requireNonNull(deps.hostingBinder());
 		this.config = Objects.requireNonNull(deps.config());
 		this.httpExporter = new HttpExporter(this.serverRoot, Objects.requireNonNull(deps.platformSourceLookup()));
+		this.ownedElsewhere = Objects.requireNonNull(deps.ownedElsewhere());
+	}
+
+	/** The files another manager owns on this instance, read fresh for every scan. */
+	@FunctionalInterface
+	public interface OwnedFiles {
+		PackOwnedFiles read() throws IOException;
 	}
 
 	/** One executor's collaborators; production fills them from the roots, tests swap any of them. */
 	record Deps(GenerationStore generationStore, CandidateScan candidateScan, ThreadPoolExecutor creationExecutor, HostingBinder hostingBinder,
-			Supplier<ServerConfigJsons.ServerConfigFieldsV3> config, PlatformSourceLookup platformSourceLookup) {
-		Deps(GenerationStore generationStore, CandidateScan candidateScan, ThreadPoolExecutor creationExecutor, PlatformSourceLookup platformSourceLookup) {
-			this(generationStore, candidateScan, creationExecutor, hosting -> {
-				if (hostServer != null) hostServer.replacePaths(hosting);
-			}, () -> serverConfig, platformSourceLookup);
+			Supplier<ServerConfigJsons.ServerConfigFieldsV3> config, PlatformSourceLookup platformSourceLookup, OwnedFiles ownedElsewhere) {
+		Deps(GenerationStore generationStore, CandidateScan candidateScan, ThreadPoolExecutor creationExecutor, HostingBinder hostingBinder,
+				Supplier<ServerConfigJsons.ServerConfigFieldsV3> config, PlatformSourceLookup platformSourceLookup) {
+			this(generationStore, candidateScan, creationExecutor, hostingBinder, config, platformSourceLookup, () -> PackOwnedFiles.NONE);
 		}
 
 		Deps(GenerationStore generationStore, CandidateScan candidateScan, ThreadPoolExecutor creationExecutor) {
@@ -370,7 +386,7 @@ public class ModpackExecutor {
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpack.name, AM_VERSION,
 					advertiseVersions ? LOADER : null, advertiseVersions ? LOADER_VERSION : null, advertiseVersions ? MC_VERSION : null, serverRoot, groupRoot,
 					serverConfig.modpack.categories, materializeMissingObjects, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()),
-					creationExecutor, generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects);
+					creationExecutor, generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects, ownedElsewhere.read());
 			ModpackCandidate candidate = candidateScan.scan(request);
 			for (ExcludedCandidate exclusion : candidate.exclusions())
 				LOGGER.info("Excluded from the modpack: {}/{} - {} ({})", exclusion.source().groupId(), exclusion.source().logicalPath(),

@@ -198,6 +198,9 @@ public final class ModpackCandidateScanner {
 					request.stagingDirectory(), request.fileCache(), request.modFileCache(), request.objectStoreDirectory(), request.materializeMissingObjects());
 			if (snapshot.exclusion() != null) {
 				exclusions.add(excluded(candidate, snapshot.exclusion()));
+			} else if (ownedByInstalledPack(candidate, snapshot, request)) {
+				deleteStaged(snapshot.object(), candidate);
+				exclusions.add(new ExcludedCandidate(candidate, ExcludedCandidate.Reason.INSTALLED_PACK_FILE, "belongs to a modpack installed on this instance"));
 			} else if (snapshot.file() != null) {
 				selected = candidate;
 				file = snapshot.file();
@@ -213,6 +216,21 @@ public final class ModpackCandidateScanner {
 		return new PathResult(selected, file, object, provenance, exclusions, pair.explicit != null ? pair.explicit : pair.synced, snapshot == null ? null : snapshot.environment(),
 				snapshot == null || snapshot.clientMayBeAbsent(), file != null && HashUtils.isSha1(file.sha1()) ? HashUtils.normalizeSha1(file.sha1()) : null, exclusion,
 				snapshot != null && snapshot.mod());
+	}
+
+	/** A file the host placed in a group folder is the host's choice; only a synced file can be an installed pack's leftover. */
+	private static boolean ownedByInstalledPack(CandidateSource candidate, StableSourceSnapshotter.Snapshot snapshot, Request request) {
+		if (snapshot.file() == null || candidate.kind() != CandidateSource.SourceKind.SYNCED_ROOT) return false;
+		return request.packOwnedFiles().owns(candidate.logicalPath(), snapshot.file().sha1());
+	}
+
+	private static void deleteStaged(StagedObject object, CandidateSource source) {
+		if (object == null) return;
+		try {
+			object.delete();
+		} catch (IOException e) {
+			LOGGER.error("Could not delete the staged object of {}", source.logicalPath(), e);
+		}
 	}
 
 	/**
@@ -443,8 +461,10 @@ public final class ModpackCandidateScanner {
 			Path objectStoreDirectory,
 			FileCache fileCache,
 			ModFileCache modFileCache,
-			boolean materializeMissingObjects) {
+			boolean materializeMissingObjects,
+			PackOwnedFiles packOwnedFiles) {
 		public Request {
+			if (packOwnedFiles == null) packOwnedFiles = PackOwnedFiles.NONE;
 			serverRoot = serverRoot.toAbsolutePath().normalize();
 			groupRoot = groupRoot.toAbsolutePath().normalize();
 			stagingDirectory = stagingDirectory.toAbsolutePath().normalize();

@@ -348,6 +348,37 @@ class ModpackCandidateScannerTest {
 		}
 	}
 
+	@Test
+	void filesAnInstalledPackOwnsAreNeverGeneratedAsThisInstancesOwn() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(server.resolve("config"));
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.writeString(server.resolve("config/leftover.txt"), "from an installed pack", StandardCharsets.UTF_8);
+		Files.writeString(server.resolve("config/edited.txt"), "edited by the player", StandardCharsets.UTF_8);
+		Files.writeString(server.resolve("config/own.txt"), "the host's own", StandardCharsets.UTF_8);
+		Files.writeString(server.resolve("config/managed.txt"), "edited by the player", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/explicit.txt"), "from an installed pack", StandardCharsets.UTF_8);
+		PackOwnedFiles owned = PackOwnedFiles.builder().historic("config/leftover.txt", HashUtils.sha1("from an installed pack".getBytes(StandardCharsets.UTF_8)))
+				.historic("config/edited.txt", HashUtils.sha1("as the pack shipped it".getBytes(StandardCharsets.UTF_8)))
+				.historic("config/explicit.txt", HashUtils.sha1("from an installed pack".getBytes(StandardCharsets.UTF_8))).managed("config/managed.txt").build();
+
+		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, Map.of("General", Map.of("main", group("/config/**"))), true,
+				tempDir.resolve("staging"), Runnable::run, null, null, null, true, owned);
+		ModpackCandidate candidate = new ModpackCandidateScanner(null).scan(request);
+
+		var files = candidate.manifest().groups().get("main").files();
+		assertFalse(files.containsKey("config/leftover.txt"));
+		assertTrue(files.containsKey("config/edited.txt"), "other bytes at a path a pack only once held are the host's");
+		assertFalse(files.containsKey("config/managed.txt"), "a path an installed pack manages stays out whatever its bytes");
+		assertTrue(files.containsKey("config/own.txt"));
+		assertTrue(files.containsKey("config/explicit.txt"), "a file the host placed in a group folder is the host's choice");
+		assertEquals(List.of(ExcludedCandidate.Reason.INSTALLED_PACK_FILE, ExcludedCandidate.Reason.INSTALLED_PACK_FILE), candidate.exclusions().stream().map(ExcludedCandidate::reason).toList());
+		try (var staged = Files.list(tempDir.resolve("staging"))) {
+			assertEquals(candidate.objects().size(), staged.count());
+		}
+	}
+
 	private ModpackCandidate scan(Path server, Path groups, Map<String, ServerConfigJsons.GroupDeclaration> declarations) throws Exception {
 		return scan(server, groups, declarations, true, null);
 	}
@@ -356,7 +387,7 @@ class ModpackCandidateScannerTest {
 			throws Exception {
 		Executor direct = Runnable::run;
 		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, Map.of("General", declarations), applyPlatformExclusions, tempDir.resolve("staging"),
-				direct, null, null, null, true);
+				direct, null, null, null, true, PackOwnedFiles.NONE);
 		return new ModpackCandidateScanner(sideVerdicts).scan(request);
 	}
 

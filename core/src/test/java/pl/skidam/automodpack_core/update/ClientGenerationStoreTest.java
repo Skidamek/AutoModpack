@@ -10,7 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -37,6 +39,7 @@ import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -69,6 +72,53 @@ class ClientGenerationStoreTest {
 		assertEquals(new SelectionIntent(Set.of("main")), target.selection().intent());
 		assertEquals(document.contentToken(), target.flatTarget().contentToken);
 		assertEquals(document.ownershipLedger(), target.document().ownershipLedger());
+	}
+
+	@Test
+	void aDeactivatedPackOwnsOnlyItsOwnBytes() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "pack-jar");
+		PackDocument document = republished(FIRST_PACK, "mods/test.jar", hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
+		TestPacks.stageGeneration(storage, document);
+		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
+		String fetched = store(storage, "fetched-only");
+		TestPacks.stageGeneration(storage, republished(SECOND_PACK, "mods/fetched.jar", fetched, 12, TestPacks.CREATED));
+
+		var owned = new ClientGenerationStore(storage).packOwnedFiles();
+		assertTrue(owned.owns("mods/test.jar", hash));
+		assertFalse(owned.owns("mods/test.jar", HashUtils.sha1("edited by the player".getBytes(StandardCharsets.UTF_8))), "the player's file at a deactivated pack's path is theirs");
+		assertFalse(owned.owns("mods/fetched.jar", fetched), "a pack only fetched, never installed, owns nothing here");
+	}
+
+	@Test
+	void anInstanceRunningAPackHasNoOwnedFiles() throws Exception {
+		ClientStorage storage = storage();
+		PackDocument applied = TestPacks.document(withOptionalGroup(FIRST_PACK, Map.of("mods/test.jar", "pack-jar"), Map.of()));
+		TestPacks.stageGeneration(storage, applied);
+		storage.writeActiveState(applied);
+
+		assertThrows(IOException.class, () -> new ClientGenerationStore(storage).packOwnedFiles());
+	}
+
+	@Test
+	void aRemovedPacksHeldFilesStayOwnedButThePlayersFilesItKeptDoNot() throws Exception {
+		ClientStorage storage = storage();
+		String packBytes = HashUtils.sha1("written by the pack".getBytes(StandardCharsets.UTF_8));
+		String playerBytes = HashUtils.sha1("the player's own".getBytes(StandardCharsets.UTF_8));
+		InstanceTree.TrackedFile player = new InstanceTree.TrackedFile(UpdatePlan.Root.GAME_DIR, "", "config/player.txt", playerBytes, 16);
+		InstanceTree before = InstanceTree.of(InstanceTree.LiveIdentity.empty(), List.of(player));
+		InstanceTree installed = InstanceTree.of(InstanceTree.LiveIdentity.empty(),
+				List.of(player, new InstanceTree.TrackedFile(UpdatePlan.Root.PROJECTION, "", "config/pack.txt", packBytes, 19)));
+		InstanceTree removed = InstanceTree.of(InstanceTree.LiveIdentity.empty(), List.of(player));
+		ClientStateJournal journal = ClientStateJournal.open(storage);
+		for (InstanceTree tree : List.of(before, installed, removed)) tree.write(storage);
+		journal.append(before.sha1(), ClientStateJournal.Kind.LIVE, FIRST_PACK, "before");
+		journal.append(installed.sha1(), ClientStateJournal.Kind.INSTALL, FIRST_PACK, "install");
+		journal.append(removed.sha1(), ClientStateJournal.Kind.REMOVAL, FIRST_PACK, "removal");
+
+		var owned = new ClientGenerationStore(storage).packOwnedFiles();
+		assertTrue(owned.owns("config/pack.txt", packBytes), "a removed pack's bytes never become the player's");
+		assertFalse(owned.owns("config/player.txt", playerBytes));
 	}
 
 	@Test
@@ -191,10 +241,129 @@ class ClientGenerationStoreTest {
 		assertEquals(second.createdAt(), target.document().createdAt());
 	}
 
+	@Test
+	void aPlayersEditOfAFileACrashedUpdateWroteStaysOut() throws Exception {
+		assertPendingUpdateManagesItsFiles(new UpdateCommit.Probe() {
+			@Override
+			public void reached(UpdateCommit.Step step) {
+				if (step == UpdateCommit.Step.LIVE_APPLIED) throw new IllegalStateException("crash");
+			}
+		});
+	}
+
+	@Test
+	void aPlayersEditOfAFileADeferredUpdateWroteStaysOut() throws Exception {
+		assertPendingUpdateManagesItsFiles(new UpdateCommit.Probe() {
+			@Override
+			public void beforeWrite(Path target) throws IOException {
+				if (target.toString().contains("active")) throw new FileSystemException(target.toString(), null, "held by another process");
+			}
+		});
+	}
+
+	private void assertPendingUpdateManagesItsFiles(UpdateCommit.Probe probe) throws Exception {
+		ClientStorage storage = storage();
+		String config = "config/new.toml";
+		String pack = store(storage, "pack-config");
+		GroupManifest manifest = GroupManifestValidator.validate(UpdateTestFixtures.fields(config, "config", true, pack, 11));
+		PackDocument next = PackDocument.create(manifest, TestPacks.policySha1(manifest), TestPacks.CREATED, null);
+		TestPacks.stageGeneration(storage, next);
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(next, new SelectionIntent(Set.of("main")), new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		UpdatePlan plan = UpdateTestFixtures.plan(target, List.of(new UpdatePlan.Operation(UpdatePlan.Root.GAME_DIR, config, UpdatePlan.OperationType.INSTALL_OBJECT, pack, 11, null),
+				new UpdatePlan.Operation(UpdatePlan.Root.PROJECTION, config, UpdatePlan.OperationType.INSTALL_OBJECT, pack, 11, null)).stream().sorted(UpdatePlan.Operation.ORDER).toList(),
+				List.of(new UpdatePlan.ProjectedFile(UpdatePlan.Root.PROJECTION, config, true, pack, 11), new UpdatePlan.ProjectedFile(UpdatePlan.Root.GAME_DIR, config, true, pack, 11)));
+		UpdateTransaction transaction = UpdateTestFixtures.createTransaction(storage, plan, target);
+		try {
+			new UpdateCommit(storage, probe).run(new UpdateCommit.Fresh(() -> new UpdateCommit.Built(transaction, target), null));
+		} catch (RuntimeException crashed) {
+			// The crash probe ends the run where a killed process would.
+		}
+
+		assertTrue(Files.exists(storage.transactionFile()), "the update is still owed");
+		assertNull(storage.readActiveState(), "the first install is still owed");
+		assertEquals("pack-config", Files.readString(storage.gamePath(config), StandardCharsets.UTF_8));
+		Files.writeString(storage.gamePath(config), "edited by the player", StandardCharsets.UTF_8);
+		assertTrue(new ClientGenerationStore(storage).packOwnedFiles().owns(config, sha1("edited by the player")));
+	}
+
+	@Test
+	void anUnreadablePendingUpdateLeavesOutEveryPathAMirroredPackShipsAndStaysInPlace() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "pack-jar");
+		TestPacks.stageGeneration(storage, republished(FIRST_PACK, "mods/test.jar", hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED));
+		assertFalse(new ClientGenerationStore(storage).packOwnedFiles().owns("mods/test.jar", sha1("the player's own")));
+		Files.writeString(storage.transactionFile(), "{", StandardCharsets.UTF_8);
+
+		assertTrue(new ClientGenerationStore(storage).packOwnedFiles().owns("mods/test.jar", sha1("the player's own")));
+		assertEquals("{", Files.readString(storage.transactionFile(), StandardCharsets.UTF_8), "an observer never sets the journal aside");
+	}
+
+	@Test
+	void aMirrorWithoutItsDocumentsIsSkippedWhenThePendingUpdateCannotBeRead() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "pack-jar");
+		TestPacks.stageGeneration(storage, republished(FIRST_PACK, "mods/test.jar", hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED));
+		PackDocument fetched = republished(SECOND_PACK, "mods/fetched.jar", store(storage, "fetched-only"), 12, TestPacks.CREATED);
+		TestPacks.stageGeneration(storage, fetched);
+		Files.delete(storage.objectFile(fetched.policySha1()));
+		Files.writeString(storage.transactionFile(), "{", StandardCharsets.UTF_8);
+
+		var owned = new ClientGenerationStore(storage).packOwnedFiles();
+		assertTrue(owned.owns("mods/test.jar", sha1("the player's own")));
+		assertFalse(owned.owns("mods/fetched.jar", sha1("the player's own")));
+	}
+
+	@Test
+	void aJournalRetiredDuringTheReadIsNoPendingUpdate() throws Exception {
+		ClientStorage storage = storage();
+		Path journal = storage.transactionFile();
+		String old = store(storage, "old-jar");
+		SelectedModpackTarget target = UpdateTestFixtures.target(storage, "mods/old.jar", "mod", false, old, 7);
+		ConfigTools.writeAtomicCompact(journal, UpdateTestFixtures.createTransaction(storage, UpdateTestFixtures.plan(target, List.of(new UpdatePlan.Operation(UpdatePlan.Root.PROJECTION,
+				"mods/old.jar", UpdatePlan.OperationType.INSTALL_OBJECT, old, 7, null)), List.of(new UpdatePlan.ProjectedFile(UpdatePlan.Root.PROJECTION, "mods/old.jar", true, old, 7))), target));
+		byte[] pending = Files.readAllBytes(journal);
+		assertNotNull(UpdateTransaction.readWithoutRepair(journal));
+		for (int attempt = 0; attempt < 500; attempt++) {
+			Files.write(journal, pending);
+			Thread retire = new Thread(() -> {
+				try {
+					Files.deleteIfExists(journal);
+				} catch (IOException e) {
+					throw new UncheckedIOException(e);
+				}
+			});
+			retire.start();
+			UpdateTransaction.readWithoutRepair(journal);
+			retire.join();
+		}
+		assertNull(UpdateTransaction.readWithoutRepair(journal));
+	}
+
+	private static GroupManifest withOptionalGroup(String modpackId, Map<String, String> main, Map<String, String> extra) {
+		TreeMap<String, GroupManifest.Group> groups = new TreeMap<>();
+		groups.put("main", group(GroupSelectionMode.REQUIRED, main));
+		if (!extra.isEmpty()) groups.put("extra", group(GroupSelectionMode.OPTIONAL, extra));
+		return new GroupManifest(modpackId, "Test optional groups", "", "", "", "", groups);
+	}
+
+	private static GroupManifest.Group group(GroupSelectionMode mode, Map<String, String> contents) {
+		TreeMap<String, GroupManifest.GroupFile> files = new TreeMap<>();
+		contents.forEach((path, content) -> files.put(path, new GroupManifest.GroupFile(content.length(), false, sha1(content), null)));
+		return new GroupManifest.Group("", "", "General", mode, new TreeSet<>(), new TreeSet<>(), Set.of(), files);
+	}
+
+	private static String sha1(String content) {
+		return HashUtils.sha1(content.getBytes(StandardCharsets.UTF_8));
+	}
+
 	private static PackDocument republished(String modpackId, String hash, long size, Instant createdAt) {
+		return republished(modpackId, "mods/test.jar", hash, size, createdAt);
+	}
+
+	private static PackDocument republished(String modpackId, String path, String hash, long size, Instant createdAt) {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, false, hash, null);
 		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
-				new TreeMap<>(Map.of("mods/test.jar", file)));
+				new TreeMap<>(Map.of(path, file)));
 		GroupManifest manifest = new GroupManifest(modpackId, "Test republished", "", "", "", "", new TreeMap<>(Map.of("main", group)));
 		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, null);
 	}

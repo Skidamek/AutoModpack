@@ -11,6 +11,7 @@ import java.util.Optional;
 import pl.skidam.automodpack_core.loader.LoaderManagerService.EnvironmentType;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.PackAbsence;
+import pl.skidam.automodpack_core.modpack.candidate.PackOwnedFiles;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
@@ -40,6 +41,12 @@ public final class HostRole {
 		String active = new ClientGenerationStore(storage).hasActivePack() ? storage.readActiveState().modpackId : null;
 		boolean shared = active != null && RelayConsent.isRelayed(storage, active);
 		return new HostRole(HostSourcePolicy.select(environment, active, shared), executor, storage, true);
+	}
+
+	/** What an executor on this instance must leave out of its scans: nothing on a server, every installed pack's files on a client. */
+	public static ModpackExecutor.OwnedFiles ownedElsewhere(EnvironmentType environment, Path gameDirectory) {
+		if (environment != EnvironmentType.CLIENT) return () -> PackOwnedFiles.NONE;
+		return () -> new ClientGenerationStore(ClientStorage.open(gameDirectory)).packOwnedFiles();
 	}
 
 	/** A session whose role could not be settled hosts nothing and says why. */
