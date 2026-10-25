@@ -738,6 +738,8 @@ public final class UpdateCommit {
 		if (StorageConditions.condition(exception) != null) return false;
 		Throwable current = exception;
 		while (current != null) {
+			// The projection state is ours alone; no game holds it, so its failures are never a held file (P8).
+			if (current instanceof ProjectionState.UnavailableException) return false;
 			if (current instanceof AccessDeniedException) return windows;
 			if (current instanceof FileSystemException fileSystemException && !definiteNonLock(fileSystemException)) return true;
 			current = current.getCause();

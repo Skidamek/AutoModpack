@@ -15,6 +15,7 @@ import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 import com.google.gson.Gson;
@@ -58,9 +59,23 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * one left only complete projections behind and an upgrade must keep loading them. The one way a document of this
  * version goes missing - a filesystem without atomic rename replacing it - leaves its temporary behind, and that
  * reads as unreadable instead.</li>
+ * <li><b>P8 (a persistent read failure heals).</b> A physical read failure a writer meets is retried within the read,
+ * then reported by name and recorded; when it has persisted across a boot the document is set aside and the P6 repair
+ * runs, so a broken ACL or bad sector never refuses the projection forever ({@link #readForWriter}). It is never a
+ * held file.</li>
  * </ul>
  */
 public final class ProjectionState {
+	/**
+	 * A writer cannot read the document for a physical reason (permissions, I/O). Never a held file: no game process
+	 * holds this file, so {@link UpdateCommit#isLockFailure} stops here and the update fails with this message.
+	 */
+	public static final class UnavailableException extends IOException {
+		UnavailableException(String message, Throwable cause) {
+			super(message, cause);
+		}
+	}
+
 	/** The document exists but its content proves nothing: a torn or foreign write. Never a physical read failure. */
 	public static final class UnreadableException extends IOException {
 		UnreadableException(String message, Throwable cause) {
@@ -109,6 +124,22 @@ public final class ProjectionState {
 	}
 
 	private static final Gson GSON = new Gson();
+
+	/** This process: a boot. A read failure recorded by another one has persisted across a restart (P8). */
+	private static volatile String process = UUID.randomUUID().toString();
+
+	/** Test seam: the next calls behave as a later boot. */
+	static void assumeNextBoot() {
+		process = UUID.randomUUID().toString();
+	}
+
+	static final String READ_FAILURE_FILE = "projection-state.read-failure.json";
+
+	static final class ReadFailureFields {
+		String process;
+		String reason;
+		long at;
+	}
 
 	/** The state of an instance without a document: older versions only ever left a complete projection behind. */
 	private static final ProjectionState LEGACY = new ProjectionState(Phase.SETTLED, 0, null, null, Fallback.RECORDED, null, null, List.of());
@@ -279,6 +310,68 @@ public final class ProjectionState {
 			return read(storage).converging();
 		} catch (UnreadableException e) {
 			return true;
+		}
+	}
+
+	/**
+	 * P8: the read a writer makes. A physical failure is recorded beside the document; while it is this boot's own it
+	 * propagates as {@link UnavailableException} naming the file, so the gates keep refusing and nothing is repaired on
+	 * what may be a transient hold. Once it has persisted across a boot, the document is renamed aside (which needs only
+	 * the directory) and reported as unreadable, so the caller runs the repair P6 makes safe. A read that succeeds clears
+	 * the record.
+	 */
+	static ProjectionState readForWriter(ClientStorage storage) throws IOException {
+		Path file = storage.projectionStateFile();
+		Path record = file.resolveSibling(READ_FAILURE_FILE);
+		ProjectionState state;
+		try {
+			state = read(file);
+		} catch (UnreadableException unreadable) {
+			throw unreadable;
+		} catch (IOException physical) {
+			String earlier = recordedProcess(record);
+			if (earlier == null || earlier.equals(process)) {
+				recordReadFailure(record, physical);
+				throw new UnavailableException("Cannot read the projection state " + file + " (" + physical + "); fix its permissions or delete it."
+						+ " If it is still unreadable at the next boot it is set aside and repaired without touching the projection.", physical);
+			}
+			Path aside = file.resolveSibling(file.getFileName() + DurableFiles.CORRUPT_ASIDE_MARKER + UUID.randomUUID());
+			try {
+				Files.move(file, aside);
+			} catch (IOException stuck) {
+				stuck.addSuppressed(physical);
+				throw new UnavailableException("Cannot read the projection state " + file + " since an earlier boot, and cannot set it aside (" + stuck + "); fix its permissions or delete it", stuck);
+			}
+			Files.deleteIfExists(record);
+			throw new UnreadableException("The projection state " + file + " stayed unreadable across boots (" + physical + "); set aside to " + aside, physical);
+		}
+		Files.deleteIfExists(record);
+		return state;
+	}
+
+	private static String recordedProcess(Path record) {
+		try {
+			ReadFailureFields fields = GSON.fromJson(Files.readString(record, StandardCharsets.UTF_8), ReadFailureFields.class);
+			return fields == null || fields.process == null ? "unknown" : fields.process;
+		} catch (NoSuchFileException missing) {
+			return null;
+		} catch (IOException | RuntimeException unusable) {
+			// A record nobody can read was still written by some earlier run.
+			return "unknown";
+		}
+	}
+
+	private static void recordReadFailure(Path record, IOException physical) {
+		ReadFailureFields fields = new ReadFailureFields();
+		fields.process = process;
+		fields.reason = String.valueOf(physical);
+		fields.at = System.currentTimeMillis();
+		try {
+			if (process.equals(recordedProcess(record))) return;
+			ConfigTools.writeAtomicCompact(record, fields);
+		} catch (IOException | RuntimeException unwritable) {
+			// Then the document cannot be set aside either; the failure stays reported by name on every boot.
+			physical.addSuppressed(unwritable);
 		}
 	}
 

@@ -425,6 +425,41 @@ class ProjectionRepairTest {
 		}
 	}
 
+	/**
+	 * R2-1: a read failure that persists is never a held file and never bricks: this boot refuses and names the file,
+	 * and the next boot sets the document aside and runs the non-destructive repair.
+	 */
+	@Test
+	void aPersistentReadFailureIsRepairedAtTheNextBootAndIsNeverAHeldFile() throws Exception {
+		Assumptions.assumeTrue(Files.getFileAttributeView(temporaryDirectory, PosixFileAttributeView.class) != null);
+		Assumptions.assumeFalse("root".equals(System.getProperty("user.name")));
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, OLD);
+		}
+		Path state = storage.projectionStateFile();
+		Files.setPosixFilePermissions(state, PosixFilePermissions.fromString("---------"));
+		Assumptions.assumeFalse(Files.isReadable(state), "this filesystem ignores permissions");
+
+		new pl.skidam.automodpack_core.client.BootRecovery(storage).recover();
+		assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()), "the first boot that meets it refuses");
+		assertTrue(Files.exists(state.resolveSibling(ProjectionState.READ_FAILURE_FILE)), "and records it");
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			IOException update = assertThrows(IOException.class, () -> converge(storage, cache, NEW, Map.of(), ProjectionConvergence.Writes.NONE));
+			assertInstanceOf(ProjectionState.UnavailableException.class, update);
+			assertTrue(update.getMessage().contains(state.toString()), update.getMessage());
+			assertFalse(UpdateCommit.isLockFailure(update, true), "never a held file, not even on Windows");
+			assertFalse(UpdateCommit.isLockFailure(update, false));
+		}
+
+		ProjectionState.assumeNextBoot();
+		new pl.skidam.automodpack_core.client.BootRecovery(storage).recover();
+		assertNull(ProjectionState.loadRefusal(storage.gameDirectory()), "the next boot repaired it");
+		assertEquals(OLD, tree(storage), "without touching the projection");
+		assertFalse(Files.exists(state.resolveSibling(ProjectionState.READ_FAILURE_FILE)));
+		assertEquals(1, asides(storage).size(), "the unreadable document is kept aside");
+	}
+
 	private static void commit(ClientStorage storage) throws Exception {
 		byte[] bytes = "committed".getBytes(StandardCharsets.UTF_8);
 		String hash = OverlayTombstoneCommitTest.store(storage, bytes);

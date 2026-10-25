@@ -137,11 +137,12 @@ final class ProjectionConvergence {
 	 * P6 of {@link ProjectionState}: unreadable contents are set aside and repaired without destroying anything. With no
 	 * journal nothing can be converging (every convergence runs under one), and a detached pack is the player's, so the
 	 * tree is vouched for as it stands. With a journal the projection may be mixed: it stays converging, falling back to
-	 * the committed generation, while the journal rolls forward. A physical read failure propagates untouched.
+	 * the committed generation, while the journal rolls forward. A physical read failure propagates until it has
+	 * persisted across a boot, then is repaired the same way (P8).
 	 */
 	private ProjectionState repairing() throws IOException {
 		try {
-			return ProjectionState.read(storage);
+			return ProjectionState.readForWriter(storage);
 		} catch (ProjectionState.UnreadableException e) {
 			ProjectionState.setAsideUnreadable(storage, e);
 			if (activeDetached()) {

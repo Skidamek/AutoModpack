@@ -33,8 +33,13 @@ public final class PublicationSweep {
 			try {
 				owed = ProjectionState.owed(storage);
 			} catch (IOException e) {
-				// A physical read failure proves nothing about the tree: defer, and every gate refuses meanwhile (P3, P6).
-				LOGGER.error("The projection state cannot be read now; leaving the projection untouched until it can", e);
+				// A physical read failure proves nothing about the tree: the writer's read records it, and repairs it only
+				// once it has persisted across a boot (P8); every gate refuses meanwhile (P3).
+				try {
+					restoreFallback(storage);
+				} catch (IOException unavailable) {
+					LOGGER.error(unavailable.getMessage(), unavailable.getCause());
+				}
 				return null;
 			}
 			if (owed) {

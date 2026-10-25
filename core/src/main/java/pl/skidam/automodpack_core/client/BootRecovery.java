@@ -63,7 +63,14 @@ public final class BootRecovery {
 	 */
 	private void settleProjection() {
 		try {
-			if (!ProjectionState.owed(storage)) return;
+			boolean owed;
+			try {
+				owed = ProjectionState.owed(storage);
+			} catch (IOException physical) {
+				// The writer's read records it and, once it has persisted across a boot, repairs it (P8).
+				owed = true;
+			}
+			if (!owed) return;
 			LOGGER.warn("The pending update still owes projection work; booting the complete projection it started from");
 			if (!PublicationSweep.restoreFallback(storage)) LOGGER.error("The projection could not be restored; this boot runs without the modpack projection");
 		} catch (IOException | RuntimeException e) {
