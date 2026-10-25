@@ -75,8 +75,9 @@ public class ModpackExecutor {
 	}
 
 	private static Deps productionDeps(Path serverRoot, Path generationRoot, PlatformSourceLookup platformSourceLookup) {
-		DataRootResolver.Layout layout = DataRootResolver.resolve(serverRoot).layout();
-		return new Deps(new GenerationStore(generationRoot, layout.objectsDirectory(), serverRoot.resolve(HOST_MODPACK_DIR).resolve(WAITING_MUSIC_FILE)),
+		DataRootResolver.Location location = DataRootResolver.resolve(serverRoot);
+		DataRootResolver.Layout layout = location.layout();
+		return new Deps(new GenerationStore(generationRoot, layout.objectsDirectory(), location, serverRoot.resolve(HOST_MODPACK_DIR).resolve(WAITING_MUSIC_FILE)),
 				new ModpackCandidateScanner(new PlatformSideVerdicts(layout.platformCacheDirectory()))::scan,
 				(ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2),
 						new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build()),

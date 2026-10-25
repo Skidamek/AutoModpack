@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -36,6 +37,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * content changes. The journal is the only truth; the projection document is a rebuilt view.
  */
 public final class GenerationStore {
+	private static final String OWNERSHIP_COMPONENT = "server";
 
 	private final Path root;
 	private final Path journalFile;
@@ -49,7 +51,7 @@ public final class GenerationStore {
 	private Current current;
 
 	public GenerationStore(Path root, Path objectsDirectory) {
-		this(root, objectsDirectory, new DataRootResolver.Location(objectsDirectory.getParent(), HashUtils.sha1("generation-store:" + objectsDirectory.toAbsolutePath().normalize()),
+		this(root, objectsDirectory, new DataRootResolver.Location(objectsDirectory.getParent(), legacyOwnerId(objectsDirectory),
 				objectsDirectory.getParent()), null);
 	}
 
@@ -59,11 +61,12 @@ public final class GenerationStore {
 
 	/** {@code waitingMusicSource} is the convention track file; when present at publish it joins the object store and the head document. */
 	public GenerationStore(Path root, Path objectsDirectory, Path waitingMusicSource) {
-		this(root, objectsDirectory, new DataRootResolver.Location(objectsDirectory.getParent(), HashUtils.sha1("generation-store:" + objectsDirectory.toAbsolutePath().normalize()),
+		this(root, objectsDirectory, new DataRootResolver.Location(objectsDirectory.getParent(), legacyOwnerId(objectsDirectory),
 				objectsDirectory.getParent()), waitingMusicSource);
 	}
 
-	private GenerationStore(Path root, Path objectsDirectory, DataRootResolver.Location dataLocation, Path waitingMusicSource) {
+	/** The production shape: {@code dataLocation} names this instance as the owner of the objects its generations pin. */
+	public GenerationStore(Path root, Path objectsDirectory, DataRootResolver.Location dataLocation, Path waitingMusicSource) {
 		this.root = root.toAbsolutePath().normalize();
 		this.journalFile = this.root.resolve(SERVER_JOURNAL_FILE.getFileName().toString());
 		this.projectionFile = this.root.resolve(SERVER_PROJECTION_FILE.getFileName().toString());
@@ -87,6 +90,7 @@ public final class GenerationStore {
 		journal = openJournal();
 		if (journal.isEmpty()) return Optional.empty();
 		current = loadCurrentSetAsideOnFailure();
+		if (current != null) publishReceipt(reachable(current));
 		return current == null ? Optional.empty() : Optional.of(current);
 	}
 
@@ -178,6 +182,12 @@ public final class GenerationStore {
 
 		// Promotion runs before the no-change check: a corrupted object the fresh snapshot repaired
 		// must be replaced even when the candidate ends up matching the current generation.
+		TreeSet<String> pinned = reachable(current);
+		pinned.add(policySha1);
+		for (ContentTree.ContentFile file : tree.files().values()) pinned.add(file.sha1());
+		if (waitingMusicSource != null && Files.isRegularFile(waitingMusicSource))
+			pinned.add(HashUtils.normalizeSha1(fileCache == null ? HashUtils.getHash(waitingMusicSource) : fileCache.getOrComputeHash(waitingMusicSource)));
+		publishReceipt(pinned);
 		objectStore.promoteAll(candidate.objects(), fileCache);
 
 		if (current != null && current.contentToken().equals(token) && current.policySha1().equals(policySha1)) {
@@ -218,6 +228,9 @@ public final class GenerationStore {
 
 		List<JournalEntry.Change> changes = diffTrees(current.tree(), targetTree);
 		JournalEntry entry = new JournalEntry(current.seq() + 1, target.contentToken(), target.policySha1(), Instant.now(), notes, targetSeq, changes);
+		TreeSet<String> pinned = reachable(current);
+		for (ContentTree.ContentFile file : targetTree.files().values()) pinned.add(file.sha1());
+		publishReceipt(pinned);
 		journal.append(entry);
 
 		Current updated = new Current(entry.seq(), target.contentToken(), target.policySha1(), entry.createdAt(), manifest, ledger, targetTree, publishWaitingMusicObject(null));
@@ -257,19 +270,40 @@ public final class GenerationStore {
 	 */
 	public CollectionSummary collectUnreachable() throws IOException {
 		Current current = loadCurrent().orElse(null);
-		TreeSet<String> reachable = new TreeSet<>();
-		for (JournalEntry entry : journal.entries()) reachable.add(entry.policySha1());
-		if (current != null) {
-			for (ContentTree.ContentFile file : current.tree().files().values()) reachable.add(file.sha1());
-			if (HashUtils.isSha1(current.waitingMusicSha1())) reachable.add(HashUtils.normalizeSha1(current.waitingMusicSha1()));
-		}
-		return SharedObjectOwnership.withGlobalReferences(dataLocation, "server", reachable, globallyReferenced -> {
+		return SharedObjectOwnership.withGlobalReferences(dataLocation, OWNERSHIP_COMPONENT, reachable(current), globallyReferenced -> {
 			List<Path> objects = ObjectStoreMaintenance.objectFiles(objectsDirectory);
 			long beforeBytes = 0;
 			for (Path file : objects) beforeBytes = ObjectStoreMaintenance.addExact(beforeBytes, Files.size(file), "object store bytes");
 			ObjectStoreMaintenance.DeletionReceipt deletion = ObjectStoreMaintenance.deleteUnreachable(objectsDirectory, globallyReferenced);
 			return new CollectionSummary(objects.size(), beforeBytes, deletion.deletedCount(), deletion.deletedBytes());
 		});
+	}
+
+	/** Every policy document in the journal plus the objects the head serves: what collection keeps and what the receipt pins. */
+	private TreeSet<String> reachable(Current head) throws IOException {
+		TreeSet<String> reachable = new TreeSet<>();
+		if (journal != null) for (JournalEntry entry : journal.entries()) reachable.add(entry.policySha1());
+		if (head != null) {
+			for (ContentTree.ContentFile file : head.tree().files().values()) reachable.add(file.sha1());
+			if (HashUtils.isSha1(head.waitingMusicSha1())) reachable.add(HashUtils.normalizeSha1(head.waitingMusicSha1()));
+		}
+		return reachable;
+	}
+
+	/**
+	 * Pins this instance's objects on the data root before any state depends on them, so another owner's collect
+	 * keeps them. The receipt older builds wrote under a store-derived owner is retired only where the data root is
+	 * this instance's own; on a shared root it may be another instance's, so it stays and merely over-retains.
+	 */
+	private void publishReceipt(Set<String> pinned) throws IOException {
+		SharedObjectOwnership.publish(dataLocation, OWNERSHIP_COMPONENT, pinned);
+		String legacyOwner = legacyOwnerId(objectsDirectory);
+		if (!legacyOwner.equals(dataLocation.ownerId()) && dataLocation.root().startsWith(dataLocation.ownerPath()))
+			SharedObjectOwnership.retire(dataLocation, legacyOwner, OWNERSHIP_COMPONENT);
+	}
+
+	private static String legacyOwnerId(Path objectsDirectory) {
+		return HashUtils.sha1("generation-store:" + objectsDirectory.toAbsolutePath().normalize());
 	}
 
 	public record CollectionSummary(long objectsBefore, long bytesBefore, long deletedObjects, long deletedBytes) {}

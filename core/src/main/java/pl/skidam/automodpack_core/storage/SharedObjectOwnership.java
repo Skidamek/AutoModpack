@@ -39,6 +39,15 @@ public final class SharedObjectOwnership {
 		});
 	}
 
+	/** Deletes another owner's receipt that {@code location}'s owner has superseded. */
+	public static void retire(DataRootResolver.Location location, String ownerId, String component) throws IOException {
+		String receipt = requireOwnerId(HashUtils.normalizeSha1(ownerId)) + "." + requireComponent(component) + ".json";
+		withLock(location, () -> {
+			Files.deleteIfExists(location.layout().objectOwnersDirectory().resolve(receipt));
+			return null;
+		});
+	}
+
 	/** Updates this owner and runs one collection decision against one locked global snapshot. */
 	public static <T> T withGlobalReferences(DataRootResolver.Location location, String component, Set<String> referencedHashes, ReferencedOperation<T> operation) throws IOException {
 		Set<String> canonical = canonical(referencedHashes);
