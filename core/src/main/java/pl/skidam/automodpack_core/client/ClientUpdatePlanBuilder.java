@@ -48,6 +48,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.PathFold;
@@ -170,6 +171,7 @@ final class ClientUpdatePlanBuilder {
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, input.target(), files, forceCopyServices, targetMods, standardMods,
 				previousCopies, nestedCandidates, selection, plannedConfig, input.consentedLocalModFiles(), projection.owed(), sameFiles(files, input.target().modpackId)))
 				.withPlannedSelectedModpackId(input.target().modpackId);
+		requireFileSlots(plan);
 		UpdatePlan planned = withSwitchConsequences(plan, LauncherVersionSwapper.Versions.advertisedBy(input.target()), projection, logicalConfig.syncVersions);
 		return new PreparedPlan(planned, files, UnownedLocalMods.of(storage, installed, files, planned, standardMods, input.currentConfig()), targetOverlay.digest(),
 				new PlannedAgainst(expectedClientConfig, expectedSelectedModpackId, installed == null ? null : installed.ownershipLedger));
@@ -220,10 +222,24 @@ final class ClientUpdatePlanBuilder {
 			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, availablePreInstall.priorGameDir(), files, availablePreInstall.objectHashes(), generatedCopies, plannedConfig,
 					projection.owed(), sameFiles(files, installed.modpackId)))
 					.withPlannedSelectedModpackId(plannedSelectedModpackId);
+			requireFileSlots(plan);
 			plan = withSwitchConsequences(plan, null, projection, currentConfig.syncVersions);
 			// A removal plans the installed generation away, so the projection it planned against is the one it carries.
 			return new RemovalPreparation(plan, installed, availablePreInstall.priorGameDir(), expectedPriorIntent, currentConfig, plannedConfig, files,
 					new PlannedAgainst(expectedClientConfig, expectedSelectedModpackId, installed.ownershipLedger));
+		}
+	}
+
+	/**
+	 * Every game-directory path the plan names must hold a file or nothing, reached without a symbolic link, exactly as the
+	 * commit will require: anything else refuses the plan before a single byte moves.
+	 */
+	private void requireFileSlots(UpdatePlan plan) throws IOException {
+		for (UpdatePlan.ProjectedFile file : plan.projectedFinalState()) {
+			if (file.root() != UpdatePlan.Root.GAME_DIR) continue;
+			Path path = FileTrees.resolveConfined(storage.gameDirectory(), file.relativePath(), "Pack path");
+			if (Files.exists(path, LinkOption.NOFOLLOW_LINKS) && !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+				throw new IOException("Pack path is taken by a directory or another non-file, move it away to sync: " + path);
 		}
 	}
 

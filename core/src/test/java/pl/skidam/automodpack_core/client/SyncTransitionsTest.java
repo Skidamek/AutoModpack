@@ -3,7 +3,10 @@ package pl.skidam.automodpack_core.client;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -541,6 +544,60 @@ class SyncTransitionsTest {
 		assertEquals("x", client.read("config/Dup.toml"));
 		assertEquals("x", client.read("config/dup.toml"));
 		assertEquals("g", client.read(G));
+	}
+
+	@Test
+	void aDirectoryAtAPackPathRefusesThePlanAndChangesNothing() throws Exception {
+		Client client = client();
+		Files.createDirectories(client.storage.gamePath(F).resolve("inside"));
+
+		IOException refused = assertThrows(IOException.class, () -> client.apply(pack(client, "packaa1", Map.of(F, file("a"), G, file("g")))));
+
+		assertTrue(refused.getMessage().startsWith("Pack path is taken by a directory") && refused.getMessage().endsWith("shared.toml"), refused.getMessage());
+		assertTrue(Files.isDirectory(client.storage.gamePath(F).resolve("inside")));
+		assertNull(client.read(G));
+		assertNull(client.storage.readActiveState());
+	}
+
+	@Test
+	void aSymbolicLinkAtAPackPathRefusesThePlanAndLeavesItsTargetAlone() throws Exception {
+		Client client = client();
+		Path elsewhere = Files.writeString(temporaryDirectory.resolve("dotfiles.toml"), "mine");
+		Files.createDirectories(client.storage.gamePath("config"));
+		Files.createSymbolicLink(client.storage.gamePath(F), elsewhere);
+
+		IOException refused = assertThrows(IOException.class, () -> client.apply(pack(client, "packaa1", Map.of(F, file("a"), G, file("g")))));
+
+		assertTrue(refused.getMessage().startsWith("Pack path contains a symbolic link"), refused.getMessage());
+		assertTrue(Files.isSymbolicLink(client.storage.gamePath(F)));
+		assertEquals("mine", Files.readString(elsewhere));
+		assertNull(client.read(G));
+	}
+
+	@Test
+	void aSymbolicallyLinkedPackDirectoryRefusesThePlanAndLeavesItsTargetAlone() throws Exception {
+		Client client = client();
+		Path shared = Files.createDirectories(temporaryDirectory.resolve("shared-config"));
+		Files.createSymbolicLink(client.storage.gamePath("config"), shared);
+
+		IOException refused = assertThrows(IOException.class, () -> client.apply(pack(client, "packaa1", Map.of(F, file("a")))));
+
+		assertTrue(refused.getMessage().startsWith("Pack path contains a symbolic link"), refused.getMessage());
+		try (var left = Files.list(shared)) {
+			assertEquals(0, left.count());
+		}
+		assertNull(client.storage.readActiveState());
+	}
+
+	/** An instance moved to another drive and reached through a link syncs like any other. */
+	@Test
+	void aSymbolicallyLinkedGameDirectorySyncs() throws Exception {
+		Files.createSymbolicLink(temporaryDirectory.resolve("game"), Files.createDirectories(temporaryDirectory.resolve("real-game")));
+		Client client = client();
+
+		client.apply(pack(client, "packaa1", Map.of(F, file("a"))));
+
+		assertEquals("a", client.read(F));
 	}
 
 	/** Deselecting the group that holds a path is leaving it: the player's own file comes back. */
