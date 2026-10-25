@@ -2,11 +2,13 @@ package pl.skidam.automodpack_core.protocol;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -142,7 +144,7 @@ class PartialResumeTest {
 	@Test
 	void stitchingReturnsTheHashOfExactlyTheBytesItWrote(@TempDir Path directory) throws Exception {
 		byte[] object = new byte[NetUtils.WIRE_CHUNK_BYTES * 2 + 3];
-		new java.util.Random(9).nextBytes(object);
+		new Random(9).nextBytes(object);
 		Path dir = PartialResume.directory(directory, HashUtils.sha1(object));
 		try (var out = PartialResume.writer(dir, object.length, 0)) {
 			out.write(object);
@@ -150,7 +152,7 @@ class PartialResumeTest {
 		Path assembled = directory.resolve("assembled");
 		assertEquals(HashUtils.sha1(object), PartialResume.assembleHashing(dir, assembled, object.length));
 		assertArrayEquals(object, Files.readAllBytes(assembled));
-		assertThrows(java.io.IOException.class, () -> PartialResume.assembleHashing(PartialResume.directory(directory, HashUtils.sha1("missing")), directory.resolve("other"), 10));
+		assertThrows(IOException.class, () -> PartialResume.assembleHashing(PartialResume.directory(directory, HashUtils.sha1("missing")), directory.resolve("other"), 10));
 	}
 
 	@Test

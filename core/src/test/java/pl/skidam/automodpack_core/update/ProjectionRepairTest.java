@@ -14,10 +14,10 @@ import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -32,9 +32,11 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.client.BootRecovery;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.StorageJsons;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -346,7 +348,7 @@ class ProjectionRepairTest {
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			settle(storage, cache, OLD);
 			Files.writeString(storage.activePath("mods/players.jar"), "player added", StandardCharsets.UTF_8);
-			String hash = pl.skidam.automodpack_core.utils.HashUtils.sha1("player added".getBytes(StandardCharsets.UTF_8));
+			String hash = HashUtils.sha1("player added".getBytes(StandardCharsets.UTF_8));
 			boolean[] seen = {false};
 			converge(storage, cache, NEW, Map.of(), new ProjectionConvergence.Writes() {
 				@Override
@@ -441,7 +443,7 @@ class ProjectionRepairTest {
 		Files.setPosixFilePermissions(state, PosixFilePermissions.fromString("---------"));
 		Assumptions.assumeFalse(Files.isReadable(state), "this filesystem ignores permissions");
 
-		new pl.skidam.automodpack_core.client.BootRecovery(storage).recover();
+		new BootRecovery(storage).recover();
 		assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()), "the first boot that meets it refuses");
 		assertTrue(Files.exists(state.resolveSibling(ProjectionState.READ_FAILURE_FILE)), "and records it");
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
@@ -453,7 +455,7 @@ class ProjectionRepairTest {
 		}
 
 		ProjectionState.assumeNextBoot();
-		new pl.skidam.automodpack_core.client.BootRecovery(storage).recover();
+		new BootRecovery(storage).recover();
 		assertNull(ProjectionState.loadRefusal(storage.gameDirectory()), "the next boot repaired it");
 		assertEquals(OLD, tree(storage), "without touching the projection");
 		assertFalse(Files.exists(state.resolveSibling(ProjectionState.READ_FAILURE_FILE)));
@@ -611,8 +613,8 @@ class ProjectionRepairTest {
 			ProjectionRepairBackups.limitBytes = 20;
 			Path other = temporaryDirectory.resolve("other.jar");
 			Files.writeString(other, "another unknown file", StandardCharsets.UTF_8);
-			String otherHash = pl.skidam.automodpack_core.utils.HashUtils.sha1("another unknown file".getBytes(StandardCharsets.UTF_8));
-			Files.setLastModifiedTime(ProjectionRepairBackups.directory(storage).resolve(entries.get(0).sha1()), java.nio.file.attribute.FileTime.fromMillis(0));
+			String otherHash = HashUtils.sha1("another unknown file".getBytes(StandardCharsets.UTF_8));
+			Files.setLastModifiedTime(ProjectionRepairBackups.directory(storage).resolve(entries.get(0).sha1()), FileTime.fromMillis(0));
 			assertNotNull(ProjectionRepairBackups.keep(storage, other, "mods/other.jar", otherHash, Files.size(other)));
 			ProjectionRepairBackups.bound(storage, Set.of(otherHash));
 			assertEquals(Map.of("mods/other.jar", "another unknown file"), repairBackups(storage), "the oldest entry went, the newest stayed");

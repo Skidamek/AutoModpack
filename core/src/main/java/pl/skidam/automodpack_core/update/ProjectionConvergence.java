@@ -257,7 +257,6 @@ final class ProjectionConvergence {
 		if (backup != null) kept.add(backup);
 	}
 
-
 	/** The projection of the generation the active state names: the tree its COMMITTED marker vouched for. */
 	private List<ProjectionState.Row> committedRows() throws IOException {
 		List<ProjectionState.Row> rows = new ArrayList<>();

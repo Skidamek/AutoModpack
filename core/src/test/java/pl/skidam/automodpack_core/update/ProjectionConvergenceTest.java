@@ -14,8 +14,10 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
@@ -25,6 +27,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import pl.skidam.automodpack_core.client.BootRecovery;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** V1-V5 of {@link ProjectionConvergence}: one whole-tree convergence from CAS, re-runnable from any crash, in either direction. */
@@ -226,7 +230,7 @@ class ProjectionConvergenceTest {
 			settle(storage, cache, OLD);
 			converge(storage, cache, NEW, ProjectionConvergence.Writes.NONE);
 		}
-		ClientObjectStore.collectUnreachableObjects(storage, java.util.Set.of());
+		ClientObjectStore.collectUnreachableObjects(storage, Set.of());
 		for (ProjectionState.Row row : ProjectionState.read(storage).fallback()) assertTrue(Files.isRegularFile(storage.objectFile(row.sha1())), row.path());
 	}
 
@@ -267,7 +271,7 @@ class ProjectionConvergenceTest {
 		}
 		assertFalse(Files.exists(storage.transactionFile()));
 
-		new pl.skidam.automodpack_core.client.BootRecovery(storage).recover();
+		new BootRecovery(storage).recover();
 
 		assertNull(ProjectionState.loadRefusal(storage.gameDirectory()));
 		assertEquals(OLD, tree(storage));
@@ -321,7 +325,7 @@ class ProjectionConvergenceTest {
 			Files.copy(jar, copy);
 			Files.delete(jar);
 			Files.move(copy, jar);
-			assertFalse(pl.skidam.automodpack_core.utils.FileIntegrity.sameInode(jar, storage.objectFile(rows(storage, Map.of("mods/beta.jar", "beta")).get(0).sha1())));
+			assertFalse(FileIntegrity.sameInode(jar, storage.objectFile(rows(storage, Map.of("mods/beta.jar", "beta")).get(0).sha1())));
 			cache.overwriteCache(jar, rows(storage, Map.of("mods/beta.jar", "beta")).get(0).sha1());
 
 			assertFalse(converge(storage, cache, OLD, ProjectionConvergence.Writes.NONE).changed());
@@ -398,7 +402,7 @@ class ProjectionConvergenceTest {
 	}
 
 	private static List<ProjectionState.Row> sorted(List<ProjectionState.Row> rows) {
-		return rows.stream().sorted(java.util.Comparator.comparing(ProjectionState.Row::path)).toList();
+		return rows.stream().sorted(Comparator.comparing(ProjectionState.Row::path)).toList();
 	}
 
 	private static Map<String, String> tree(ClientStorage storage) throws IOException {

@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import pl.skidam.automodpack_core.storage.StoragePaths;
-
 import static pl.skidam.automodpack_core.Constants.LOADER_MANAGER;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.*;
@@ -32,6 +30,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.StorageLeftovers;
+import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -702,7 +701,8 @@ public final class ClientStorage {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
 		validateWithin(clientDirectory, overlaysDirectory, generatedCopiesDirectory, generatedCopiesFile, activeDirectory, legacyIncomingDirectory, legacyBackupDirectory,
-				historyDirectory, stateHistoryDirectory, stateHistoryTreesDirectory(), stateFile, transactionFile, projectionStateFile, repairJournalFile, mutationLockFile, selectionFile, selectedModpackFile, restartLoopStateFile,
+				historyDirectory, stateHistoryDirectory, stateHistoryTreesDirectory(), stateFile, transactionFile, projectionStateFile, repairJournalFile, mutationLockFile, selectionFile, selectedModpackFile,
+				restartLoopStateFile,
 				stuckTransactionStateFile,
 				modpackContentTempFile,
 				journalTempFile);

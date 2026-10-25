@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -23,6 +24,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -53,7 +56,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * one game process stack on each other, and the next boot converges on the latest one.
  */
 class BestEffortApplyTest {
-	@org.junit.jupiter.api.AfterEach
+	@AfterEach
 	void forgetScan() {
 		ClientStorage.forgetDirectoryScan();
 	}
@@ -192,7 +195,7 @@ class BestEffortApplyTest {
 		UpdateCommit full = new UpdateCommit(fixture.storage, new UpdateCommit.Probe() {
 			@Override
 			public void beforeWrite(Path target) throws IOException {
-				if (target.equals(fixture.storage.activePath("mods/old.jar"))) throw new java.nio.file.FileSystemException(target.toString(), null, "Brak miejsca na urządzeniu");
+				if (target.equals(fixture.storage.activePath("mods/old.jar"))) throw new FileSystemException(target.toString(), null, "Brak miejsca na urządzeniu");
 			}
 		});
 		StorageConditions.Stores real = StorageConditions.stores;
@@ -213,7 +216,7 @@ class BestEffortApplyTest {
 		UpdateCommit full = new UpdateCommit(fixture.storage, new UpdateCommit.Probe() {
 			@Override
 			public void beforeWrite(Path target) throws IOException {
-				if (target.equals(fixture.storage.activePath("mods/old.jar"))) throw new java.nio.file.FileSystemException(target.toString(), null, "No space left on device");
+				if (target.equals(fixture.storage.activePath("mods/old.jar"))) throw new FileSystemException(target.toString(), null, "No space left on device");
 			}
 		});
 

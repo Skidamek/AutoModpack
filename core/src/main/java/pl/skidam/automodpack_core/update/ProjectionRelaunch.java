@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 
 import com.google.gson.Gson;
@@ -83,7 +84,7 @@ public final class ProjectionRelaunch {
 		try {
 			GuardFields fields = GSON.fromJson(Files.readString(guard, StandardCharsets.UTF_8), GuardFields.class);
 			if (fields != null && fields.content != null) return fields;
-		} catch (java.nio.file.NoSuchFileException missing) {
+		} catch (NoSuchFileException missing) {
 			return null;
 		} catch (IOException | RuntimeException unusable) {
 			// An unreadable guard still marks a relaunch that happened; treat it as a recent one.
