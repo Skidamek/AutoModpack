@@ -37,7 +37,8 @@ val deps =
 		"org.apache.logging.log4j:log4j-core:$log4jVersion",
 		"com.google.code.gson:gson:$gsonVersion",
 		"org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion",
-		"io.airlift:aircompressor:$aircompressorVersion",
+		// zstd-only, Unsafe-free fork of io.airlift:aircompressor, vendored in libs/ like mcholepunch and reconf
+		":aircompressor:$aircompressorVersion",
 	)
 
 dependencies {

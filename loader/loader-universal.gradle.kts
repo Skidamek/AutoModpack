@@ -47,7 +47,9 @@ val aircompressorVersion = versionProperty("versionAircompressor")
 
 dependencies {
 	// Stuff to actually bundle
-	implementation("io.airlift:aircompressor:$aircompressorVersion")
+	// zstd-only, Unsafe-free fork of io.airlift:aircompressor from libs/ (its Apache-2.0 license and NOTICE ride along
+	// in META-INF/licenses/aircompressor/)
+	implementation(":aircompressor:$aircompressorVersion")
 	implementation("org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion")
 	// Disable transitives so netty-buffer/common/transport aren't pulled in
 	implementation("io.netty:netty-codec-haproxy:$nettyVersion") {
