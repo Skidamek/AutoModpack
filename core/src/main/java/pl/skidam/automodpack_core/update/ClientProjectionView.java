@@ -163,8 +163,8 @@ public final class ClientProjectionView {
 				|| transaction.phase == UpdateTransaction.Phase.COMMITTED)
 			return true;
 		try {
-			return Files.exists(storage.incomingDirectory(), LinkOption.NOFOLLOW_LINKS)
-					|| Files.exists(storage.backupDirectory(), LinkOption.NOFOLLOW_LINKS);
+			return Files.exists(storage.legacyIncomingDirectory(), LinkOption.NOFOLLOW_LINKS)
+					|| Files.exists(storage.legacyBackupDirectory(), LinkOption.NOFOLLOW_LINKS);
 		} catch (RuntimeException e) {
 			return false;
 		}

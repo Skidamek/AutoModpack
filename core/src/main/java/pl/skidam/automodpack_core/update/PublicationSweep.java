@@ -44,8 +44,8 @@ public final class PublicationSweep {
 	 */
 	static void settleLegacyDirectories(ClientStorage storage) throws IOException {
 		ClientStorageMutation.run(storage, () -> {
-			FileTrees.delete(storage.incomingDirectory());
-			Path backup = storage.backupDirectory();
+			FileTrees.delete(storage.legacyIncomingDirectory());
+			Path backup = storage.legacyBackupDirectory();
 			if (Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
 				if (Files.exists(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) FileTrees.delete(backup);
 				else FileTrees.moveRecoverableDirectory(backup, storage.activeDirectory());

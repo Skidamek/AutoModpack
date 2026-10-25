@@ -75,7 +75,7 @@ class BestEffortApplyTest {
 	@ValueSource(strings = {"rc.4", "rc.5"})
 	void aReleaseCandidateDeferredPublicationRollsForwardAndKeepsTheModsRewrite(String release) throws Exception {
 		Fixture fixture = twoGenerations();
-		Files.createDirectories(fixture.storage.incomingDirectory());
+		Files.createDirectories(fixture.storage.legacyIncomingDirectory());
 		OverlayTombstoneCommitTest.installFixture(fixture.storage, release + "-deferred-publication.json");
 		write(fixture.storage.gamePath(CONFIG), CRLF);
 
@@ -133,8 +133,8 @@ class BestEffortApplyTest {
 
 		assertInstanceOf(UpdateCommit.Applied.class, recovered, String.valueOf(recovered));
 		assertFalse(Files.exists(fixture.storage.transactionFile()));
-		assertFalse(Files.exists(fixture.storage.incomingDirectory()));
-		assertFalse(Files.exists(fixture.storage.backupDirectory()));
+		assertFalse(Files.exists(fixture.storage.legacyIncomingDirectory()));
+		assertFalse(Files.exists(fixture.storage.legacyBackupDirectory()));
 		assertArrayEquals(LF, Files.readAllBytes(fixture.storage.gamePath(CONFIG)));
 		assertArrayEquals(LF, Files.readAllBytes(fixture.storage.activePath(CONFIG)));
 		assertFalse(Files.exists(fixture.storage.activePath("mods/old.jar")));
@@ -276,8 +276,8 @@ class BestEffortApplyTest {
 		assertArrayEquals(edit, Files.readAllBytes(storage.gamePath(EDITABLE)), "an editable file changed after its write landed stays the player's");
 		assertArrayEquals(bytes(MOD, actions), Files.readAllBytes(storage.activePath(MOD)));
 		assertEquals(current.target.packTarget().contentToken(), storage.readActiveState().contentToken);
-		assertFalse(Files.exists(storage.incomingDirectory()));
-		assertFalse(Files.exists(storage.backupDirectory()));
+		assertFalse(Files.exists(storage.legacyIncomingDirectory()));
+		assertFalse(Files.exists(storage.legacyBackupDirectory()));
 		assertInstanceOf(UpdateCommit.Idle.class, UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null)));
 	}
 

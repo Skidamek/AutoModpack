@@ -297,8 +297,8 @@ class StackedInGameActionsTest {
 			}));
 			assertInstanceOf(UpdateCommit.Applied.class, outcome, String.valueOf(outcome));
 			assertFalse(Files.exists(storage.transactionFile()));
-			assertFalse(Files.exists(storage.incomingDirectory()));
-			assertFalse(Files.exists(storage.backupDirectory()));
+			assertFalse(Files.exists(storage.legacyIncomingDirectory()));
+			assertFalse(Files.exists(storage.legacyBackupDirectory()));
 			assertInstanceOf(UpdateCommit.Idle.class, boot.run(new UpdateCommit.Recover(null)));
 			return (UpdateCommit.Applied) outcome;
 		}

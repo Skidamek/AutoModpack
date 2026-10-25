@@ -125,15 +125,10 @@ public final class ClientObjectStore {
 			long metadataFileCount,
 			long metadataBytes,
 			long overlayFileCount,
-			long overlayBytes,
-			long incomingFileCount,
-			long incomingBytes,
-			long backupFileCount,
-			long backupBytes) {
+			long overlayBytes) {
 		public StorageReport {
 			if (List.of(objectCount, objectBytes, referencedObjectCount, referencedObjectBytes, validReferencedObjectCount, validReferencedObjectBytes, missingReferencedObjectCount, invalidReferencedObjectCount,
-					metadataFileCount, metadataBytes, overlayFileCount, overlayBytes, incomingFileCount, incomingBytes, backupFileCount,
-					backupBytes).stream().anyMatch(value -> value < 0))
+					metadataFileCount, metadataBytes, overlayFileCount, overlayBytes).stream().anyMatch(value -> value < 0))
 				throw new IllegalArgumentException("Client storage report values cannot be negative");
 			if (validReferencedObjectCount > referencedObjectCount || missingReferencedObjectCount > referencedObjectCount || invalidReferencedObjectCount > referencedObjectCount - missingReferencedObjectCount)
 				throw new IllegalArgumentException("Client storage reference counts are inconsistent");
@@ -251,11 +246,8 @@ public final class ClientObjectStore {
 		ObjectStoreMaintenance.FileTotals active = fileTotals(regularFiles(storage.activeDirectory(), "client active projection"));
 		ObjectStoreMaintenance.FileTotals metadata = metadataTotals(storage);
 		ObjectStoreMaintenance.FileTotals overlays = fileTotals(regularFiles(storage.overlaysDirectory(), "client overlays"));
-		ObjectStoreMaintenance.FileTotals incoming = fileTotals(regularFiles(storage.incomingDirectory(), "client incoming projection"));
-		ObjectStoreMaintenance.FileTotals backup = fileTotals(regularFiles(storage.backupDirectory(), "client projection backups"));
 		return new StorageReport(objects.count(), objects.bytes(), references.hashes().size(), referenceTotals.expectedBytes(), referenceTotals.validCount(), referenceTotals.validBytes(),
-				referenceTotals.missingCount(), referenceTotals.invalidCount(), active.count(), active.bytes(), metadata.count(), metadata.bytes(), overlays.count(), overlays.bytes(),
-				incoming.count(), incoming.bytes(), backup.count(), backup.bytes());
+				referenceTotals.missingCount(), referenceTotals.invalidCount(), active.count(), active.bytes(), metadata.count(), metadata.bytes(), overlays.count(), overlays.bytes());
 	}
 
 	private static ExpectedSizes collectReferences(ClientStorage storage) throws IOException {

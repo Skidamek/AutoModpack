@@ -59,8 +59,8 @@ public final class ClientStorage {
 	private final Path generatedCopiesDirectory;
 	private final Path generatedCopiesFile;
 	private final Path activeDirectory;
-	private final Path incomingDirectory;
-	private final Path backupDirectory;
+	private final Path legacyIncomingDirectory;
+	private final Path legacyBackupDirectory;
 	private final Path stateFile;
 	private final Path transactionFile;
 	private final Path projectionStateFile;
@@ -95,8 +95,8 @@ public final class ClientStorage {
 		this.generatedCopiesDirectory = this.gameDirectory.resolve(CLIENT_GENERATED_COPIES_DIR).normalize();
 		this.generatedCopiesFile = this.gameDirectory.resolve(CLIENT_GENERATED_COPIES_FILE).normalize();
 		this.activeDirectory = this.gameDirectory.resolve(CLIENT_ACTIVE_DIR).normalize();
-		this.incomingDirectory = this.gameDirectory.resolve(CLIENT_INCOMING_DIR).normalize();
-		this.backupDirectory = this.gameDirectory.resolve(CLIENT_BACKUP_DIR).normalize();
+		this.legacyIncomingDirectory = this.gameDirectory.resolve(CLIENT_LEGACY_INCOMING_DIR).normalize();
+		this.legacyBackupDirectory = this.gameDirectory.resolve(CLIENT_LEGACY_BACKUP_DIR).normalize();
 		this.stateFile = this.gameDirectory.resolve(CLIENT_ACTIVE_STATE_FILE).normalize();
 		this.transactionFile = this.gameDirectory.resolve(CLIENT_TRANSACTION_FILE).normalize();
 		this.projectionStateFile = ProjectionState.file(this.gameDirectory);
@@ -229,12 +229,16 @@ public final class ClientStorage {
 		};
 	}
 
-	public Path incomingDirectory() {
-		return incomingDirectory;
+	/**
+	 * The two working directories of an older version's projection swap. Nothing writes them any more; they are read
+	 * only to roll a journal that version left behind forward, and swept ({@link PublicationSweep#settleLegacyDirectories}).
+	 */
+	public Path legacyIncomingDirectory() {
+		return legacyIncomingDirectory;
 	}
 
-	public Path backupDirectory() {
-		return backupDirectory;
+	public Path legacyBackupDirectory() {
+		return legacyBackupDirectory;
 	}
 
 	public Path recoveredDirectory() {
@@ -653,7 +657,7 @@ public final class ClientStorage {
 	private void validateLayout() {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
-		validateWithin(clientDirectory, overlaysDirectory, generatedCopiesDirectory, generatedCopiesFile, activeDirectory, incomingDirectory, backupDirectory,
+		validateWithin(clientDirectory, overlaysDirectory, generatedCopiesDirectory, generatedCopiesFile, activeDirectory, legacyIncomingDirectory, legacyBackupDirectory,
 				historyDirectory, stateHistoryDirectory, stateHistoryTreesDirectory(), stateFile, transactionFile, projectionStateFile, repairJournalFile, mutationLockFile, selectionFile, selectedModpackFile, restartLoopStateFile,
 				stuckTransactionStateFile,
 				modpackContentTempFile,

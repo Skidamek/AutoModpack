@@ -303,7 +303,7 @@ class UpdateCommitTest {
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
 		UpdateTransaction transaction = UpdateTestFixtures.createTransaction(storage, newPlan, newTarget);
 		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
-		Files.move(storage.activeDirectory(), storage.backupDirectory());
+		Files.move(storage.activeDirectory(), storage.legacyBackupDirectory());
 		Files.createDirectories(storage.activeDirectory().resolve("mods"));
 		Files.writeString(storage.activePath("mods/partial.jar"), "partial", StandardCharsets.UTF_8);
 
@@ -311,7 +311,7 @@ class UpdateCommitTest {
 
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/new.jar"), newBytes.length, newHash));
 		assertFalse(Files.exists(storage.activePath("mods/partial.jar")));
-		assertFalse(Files.exists(storage.backupDirectory()));
+		assertFalse(Files.exists(storage.legacyBackupDirectory()));
 		assertFalse(Files.exists(storage.transactionFile()));
 	}
 
@@ -333,15 +333,15 @@ class UpdateCommitTest {
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
 		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, newPlan, newTarget));
 		// The swap moved active aside and stopped before incoming moved in.
-		Files.move(storage.activeDirectory(), storage.backupDirectory());
-		Files.createDirectories(storage.incomingDirectory().resolve("mods"));
-		Files.write(storage.incomingDirectory().resolve("mods/new.jar"), newBytes);
+		Files.move(storage.activeDirectory(), storage.legacyBackupDirectory());
+		Files.createDirectories(storage.legacyIncomingDirectory().resolve("mods"));
+		Files.write(storage.legacyIncomingDirectory().resolve("mods/new.jar"), newBytes);
 
 		Path stuckJournal = PublicationSweep.retireJournal(storage);
 
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/old.jar"), oldBytes.length, oldHash));
-		assertFalse(Files.exists(storage.backupDirectory()));
-		assertFalse(Files.exists(storage.incomingDirectory()));
+		assertFalse(Files.exists(storage.legacyBackupDirectory()));
+		assertFalse(Files.exists(storage.legacyIncomingDirectory()));
 		assertFalse(Files.exists(storage.transactionFile()));
 		assertTrue(Files.isRegularFile(stuckJournal));
 		assertEquals(oldTarget.packTarget().contentToken(), storage.readActiveState().contentToken);
@@ -364,30 +364,30 @@ class UpdateCommitTest {
 				new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, newHash, newBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
 		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, newPlan, newTarget));
-		Files.move(storage.activeDirectory(), storage.backupDirectory());
+		Files.move(storage.activeDirectory(), storage.legacyBackupDirectory());
 		Files.createDirectories(storage.activePath("mods"));
 		Files.write(storage.activePath("mods/new.jar"), newBytes);
 
 		PublicationSweep.retireJournal(storage);
 
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/new.jar"), newBytes.length, newHash));
-		assertFalse(Files.exists(storage.backupDirectory()));
+		assertFalse(Files.exists(storage.legacyBackupDirectory()));
 		assertFalse(Files.exists(storage.transactionFile()));
 	}
 
 	@Test
 	void orphanedPublicationDirectoriesAreSweptSoTheNextUpdateAppliesItsLiveOperations() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
-		Files.createDirectories(storage.incomingDirectory().resolve("mods"));
-		Files.writeString(storage.incomingDirectory().resolve("mods/stale.jar"), "stale", StandardCharsets.UTF_8);
-		Files.createDirectories(storage.backupDirectory());
-		Files.writeString(storage.backupDirectory().resolve("old.jar"), "old", StandardCharsets.UTF_8);
+		Files.createDirectories(storage.legacyIncomingDirectory().resolve("mods"));
+		Files.writeString(storage.legacyIncomingDirectory().resolve("mods/stale.jar"), "stale", StandardCharsets.UTF_8);
+		Files.createDirectories(storage.legacyBackupDirectory());
+		Files.writeString(storage.legacyBackupDirectory().resolve("old.jar"), "old", StandardCharsets.UTF_8);
 
 		// Boot recovery with no usable journal sweeps them: left in place, the directories read as a publication
 		// already started and the next update's live operations are silently skipped over a successful verdict.
 		PublicationSweep.sweepUnpinnedDirectories(storage);
-		assertFalse(Files.exists(storage.incomingDirectory()));
-		assertFalse(Files.exists(storage.backupDirectory()));
+		assertFalse(Files.exists(storage.legacyIncomingDirectory()));
+		assertFalse(Files.exists(storage.legacyBackupDirectory()));
 
 		byte[] bytes = "live-object".getBytes(StandardCharsets.UTF_8);
 		String hash = store(storage, bytes);
@@ -854,8 +854,8 @@ class UpdateCommitTest {
 			assertTrue(view.sourceCandidates("mods/mailbox-deferred.jar").contains(storage.objectFile(deferredHash)));
 		}
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/mailbox-old.jar"), oldBytes.length, oldHash));
-		Files.createDirectories(storage.incomingDirectory());
-		Files.writeString(storage.incomingDirectory().resolve("stale.txt"), "stale", StandardCharsets.UTF_8);
+		Files.createDirectories(storage.legacyIncomingDirectory());
+		Files.writeString(storage.legacyIncomingDirectory().resolve("stale.txt"), "stale", StandardCharsets.UTF_8);
 
 		byte[] latestBytes = "mailbox-latest".getBytes(StandardCharsets.UTF_8);
 		String latestHash = store(storage, latestBytes);
@@ -867,9 +867,9 @@ class UpdateCommitTest {
 		assertTrue(UpdateTestFixtures.commit(storage, latestPlan, latestTarget) instanceof UpdateCommit.Applied);
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/mailbox-latest.jar"), latestBytes.length, latestHash));
 		assertFalse(Files.exists(storage.activePath("mods/mailbox-deferred.jar")));
-		assertFalse(Files.exists(storage.incomingDirectory().resolve("stale.txt")));
-		assertFalse(Files.exists(storage.incomingDirectory()));
-		assertFalse(Files.exists(storage.backupDirectory()));
+		assertFalse(Files.exists(storage.legacyIncomingDirectory().resolve("stale.txt")));
+		assertFalse(Files.exists(storage.legacyIncomingDirectory()));
+		assertFalse(Files.exists(storage.legacyBackupDirectory()));
 		assertFalse(Files.exists(storage.transactionFile()));
 	}
 
