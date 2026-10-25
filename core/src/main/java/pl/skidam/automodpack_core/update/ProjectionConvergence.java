@@ -60,16 +60,22 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * receipt before it exists, and stays pinned by the converging state after, so no instance sharing the store
  * collects it ({@link #fallback}).</li>
  * <li><b>V7 (a restore keeps what CAS cannot give back).</b> A restore whose fallback CAS cannot complete falls back to
- * the committed generation; before it removes or replaces anything, the files the store holds no copy of are kept in a
- * repair backup ({@link #restoreFallback}).</li>
+ * the committed generation - for a detached pack, never: what the store can no longer give back keeps it refused
+ * ({@link #restoreDetached}). Each file a restore or post-repair roll-forward actually removes or replaces whose bytes
+ * the store holds no copy of is kept right before that write, content-addressed and bounded
+ * ({@link ProjectionRepairBackups}).</li>
  * </ul>
  */
 final class ProjectionConvergence {
 	/** A path another process held: the owed part of the run. */
 	record Held(Path path, IOException cause) {}
 
-	/** What one run did: whether {@code active/} changed, and what stays owed. */
-	record Result(boolean changed, List<Held> held) {
+	/** What one run did: whether {@code active/} changed, what stays owed, and the files it kept in a repair backup (V7). */
+	record Result(boolean changed, List<Held> held, List<Path> kept) {
+		Result(boolean changed, List<Held> held) {
+			this(changed, held, List.of());
+		}
+
 		boolean converged() {
 			return held.isEmpty();
 		}
@@ -120,17 +126,16 @@ final class ProjectionConvergence {
 		ProjectionState state = repairing();
 		Observation observed = observe();
 		Work work = plan(observed, target);
-		if (work.isEmpty()) return new Result(false, List.of());
-		// A repaired document fell back to the committed generation, so the tree it found is in no fallback: what the
-		// store cannot give back is kept before the roll-forward replaces it (V7).
-		if (state.fallbackSource() == ProjectionState.Fallback.COMMITTED) keepUnrecoverable(observed, work);
+		if (work.isEmpty()) return new Result(false, List.of(), List.of());
 		Set<String> acquired = new HashSet<>();
 		List<ProjectionState.Row> fallback = state.converging() ? List.of() : fallback(observed, hints, acquired);
 		ProjectionState.converging(storage, transactionId, fallback, ProjectionState.digest(target));
 		// V6: the state now pins what the fallback acquired, so the in-flight pins can retire into it.
 		if (!acquired.isEmpty()) ClientObjectStore.publishOwnership(storage);
 		writes.marked();
-		return execute(work);
+		// A repaired document fell back to the committed generation, so the tree it found is in no fallback: what the
+		// store cannot give back is kept before the roll-forward replaces it (V7).
+		return execute(work, state.fallbackSource() == ProjectionState.Fallback.COMMITTED);
 	}
 
 	/**
@@ -171,6 +176,7 @@ final class ProjectionConvergence {
 		ProjectionState state = repairing();
 		if (!state.converging()) return true;
 		Observation observed = observe();
+		if (activeDetached()) return restoreDetached(state, observed);
 		boolean committed = state.fallbackSource() == ProjectionState.Fallback.COMMITTED;
 		// A generation committed since the fallback was taken (an older version ran after a downgrade) is the complete one now.
 		if (!committed && !Objects.equals(state.committedToken(), ProjectionState.committedToken(storage))) {
@@ -182,26 +188,48 @@ final class ProjectionConvergence {
 			LOGGER.warn("The projection fallback names objects the store no longer holds; restoring the committed generation's projection");
 			committed = true;
 		}
-		if (committed && activeDetached()) {
-			// A detached pack's tree is the player's, never rebuilt from a generation it detached from.
-			LOGGER.error("A detached pack's projection cannot fall back to its recorded tree; keeping the projection exactly as it is");
-			ProjectionState.restored(storage, null);
-			return true;
-		}
 		List<ProjectionState.Row> rows = committed ? committedRows() : state.fallback();
 		if (!restorable(observed, rows)) {
 			LOGGER.error("Neither the projection fallback nor the committed generation is complete in the store; the projection stays refused until an update converges it");
 			return false;
 		}
-		Work work = plan(observed, rows);
-		keepUnrecoverable(observed, work);
-		Result result = execute(work);
+		Result result = execute(plan(observed, rows), true);
 		if (!result.converged()) {
 			LOGGER.error("The fallback projection could not be restored: {} paths are held open, first {}", result.held().size(), result.held().get(0).path(), result.held().get(0).cause());
 			return false;
 		}
 		if (!committed && state.fallback().isEmpty()) deleteEmptyActiveDirectory();
 		ProjectionState.restored(storage, rows);
+		return true;
+	}
+
+	/**
+	 * A detached pack's tree is the player's: it falls back only to the tree recorded at the mark, never to a generation
+	 * it detached from. Everything the store still holds is put back and every unknown file is kept first (V7); a row
+	 * the store can no longer give back leaves the projection converging - refused, never vouched for as a mixed tree.
+	 */
+	private boolean restoreDetached(ProjectionState state, Observation observed) throws IOException {
+		if (state.fallbackSource() == ProjectionState.Fallback.COMMITTED) {
+			LOGGER.error("A detached pack's projection has no recorded tree to fall back to (the state was repaired before the pack detached); it stays refused until the pack is attached and updated");
+			return false;
+		}
+		Work work = plan(observed, state.fallback());
+		List<ProjectionState.Row> installs = new ArrayList<>();
+		List<ProjectionState.Row> missing = new ArrayList<>();
+		for (ProjectionState.Row row : work.installs())
+			(FileIntegrity.matchesNamed(storage.objectFile(row.sha1()), row.size(), row.sha1(), cache) ? installs : missing).add(row);
+		Result result = execute(new Work(work.removals(), work.junk(), work.prunes(), work.junkPrunes(), installs), true);
+		if (!result.converged()) {
+			LOGGER.error("The detached projection could not be restored: {} paths are held open, first {}", result.held().size(), result.held().get(0).path(), result.held().get(0).cause());
+			return false;
+		}
+		if (!missing.isEmpty()) {
+			LOGGER.error("The detached pack's recorded projection cannot be completed: the store no longer holds {} of its files, first {}; it stays refused instead of loading a mixed tree."
+					+ " Put those files back or attach the pack again", missing.size(), missing.get(0).path());
+			return false;
+		}
+		if (state.fallback().isEmpty()) deleteEmptyActiveDirectory();
+		ProjectionState.restored(storage, state.fallback());
 		return true;
 	}
 
@@ -216,35 +244,19 @@ final class ProjectionConvergence {
 	}
 
 	/**
-	 * Before a restore destroys anything, every file it would remove or replace whose bytes the store cannot give back -
-	 * one the player added or edited - is copied, durably, into a repair backup beside {@code active/}. Junk is not kept.
+	 * V7, per path, right before the write that destroys it: a regular file whose bytes no CAS object holds - a player's
+	 * file or edit - is kept in the content-addressed repair backup, once however many attempts meet it. A file that
+	 * cannot even be read for the copy is held like its write would be.
 	 */
-	private void keepUnrecoverable(Observation observed, Work work) throws IOException {
-		Path active = storage.activeDirectory();
-		List<Path> destroyed = new ArrayList<>(work.removals());
-		for (ProjectionState.Row row : work.installs()) {
-			Observed current = observed.files().get(row.path());
-			if (current != null) destroyed.add(current.path());
-		}
-		Path backup = null;
-		Set<Path> touched = new LinkedHashSet<>();
-		for (Path path : destroyed) {
-			if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
-			String hash = HashUtils.normalizeSha1(cache.getOrComputeHash(path));
-			if (FileIntegrity.matchesNamed(storage.objectFile(hash), Files.size(path), hash, cache)) continue;
-			if (backup == null) backup = storage.clientDirectory().resolve(REPAIR_BACKUP_PREFIX + System.currentTimeMillis());
-			Path kept = backup.resolve(active.relativize(path).toString());
-			Files.createDirectories(kept.getParent());
-			Files.copy(path, kept, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-			FileTrees.forceFile(kept);
-			for (Path directory = kept.getParent(); directory != null && directory.startsWith(storage.clientDirectory()); directory = directory.getParent()) touched.add(directory);
-			LOGGER.warn("Kept {} in {} before restoring the projection: the store holds no copy of it", path, backup);
-		}
-		for (Path directory : touched) FileTrees.forceDirectory(directory);
+	private void keep(Path path, List<Path> kept) throws IOException {
+		if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return;
+		long size = Files.size(path);
+		String hash = HashUtils.normalizeSha1(cache.getOrComputeHash(path));
+		if (FileIntegrity.matchesNamed(storage.objectFile(hash), size, hash, cache)) return;
+		Path backup = ProjectionRepairBackups.keep(storage, path, relative(storage.activeDirectory(), path), hash, size);
+		if (backup != null) kept.add(backup);
 	}
 
-	/** Where a restore keeps the files it would destroy that the store cannot give back. */
-	static final String REPAIR_BACKUP_PREFIX = "projection-repair-backup-";
 
 	/** The projection of the generation the active state names: the tree its COMMITTED marker vouched for. */
 	private List<ProjectionState.Row> committedRows() throws IOException {
@@ -449,15 +461,17 @@ final class ProjectionConvergence {
 		}
 	}
 
-	private Result execute(Work work) throws IOException {
+	private Result execute(Work work, boolean keepUnknown) throws IOException {
 		Path active = storage.activeDirectory();
 		Set<Path> touched = new LinkedHashSet<>();
 		List<Held> held = new ArrayList<>();
 		List<Held> stuck = new ArrayList<>();
 		List<Map.Entry<Path, String>> installed = new ArrayList<>();
+		List<Path> kept = new ArrayList<>();
 		for (Path path : work.removals()) {
 			try {
 				writes.beforeWrite(path);
+				if (keepUnknown) keep(path, kept);
 				removeProjectionFile(path);
 				touched.add(path.getParent());
 			} catch (IOException e) {
@@ -501,6 +515,7 @@ final class ProjectionConvergence {
 			}
 			try {
 				writes.beforeWrite(target);
+				if (keepUnknown) keep(target, kept);
 				install(target, row, touched);
 				touched.add(target.getParent());
 				installed.add(Map.entry(target, row.sha1()));
@@ -515,7 +530,14 @@ final class ProjectionConvergence {
 			FileTrees.forceDirectory(directory);
 			writes.forced(directory);
 		}
-		return new Result(!touched.isEmpty(), List.copyOf(held));
+		if (!kept.isEmpty()) {
+			Set<String> fresh = new HashSet<>();
+			for (Path backup : kept) fresh.add(ProjectionRepairBackups.directory(storage).relativize(backup).getName(0).toString());
+			ProjectionRepairBackups.bound(storage, fresh);
+			LOGGER.warn("{} files the store held no copy of were kept in {} before the projection replaced them; {} lists them", kept.size(), ProjectionRepairBackups.directory(storage),
+					ProjectionRepairBackups.INDEX);
+		}
+		return new Result(!touched.isEmpty(), List.copyOf(held), List.copyOf(kept));
 	}
 
 	/** What keeps an install from landing: a held path beneath or above it, or a directory at it only junk keeps. */

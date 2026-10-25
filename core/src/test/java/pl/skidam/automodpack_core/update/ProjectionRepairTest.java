@@ -543,6 +543,84 @@ class ProjectionRepairTest {
 		assertFalse(ProjectionRelaunch.required(storage, ClientStorage.directoryScan()));
 	}
 
+	/** R2-4: a detached pack whose recorded tree the store cannot complete stays refused, never settled mixed; restored once the bytes are back. */
+	@Test
+	void aDetachedPackWithAnIncompleteFallbackStaysRefused() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		commit(storage);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, Map.of("mods/committed.jar", "committed"));
+		}
+		new ClientGenerationStore(storage).declareDetached(storage.readActiveState().modpackId);
+		Map<String, String> before = Map.of("mods/committed.jar", "committed", "mods/old-1.0.jar", "old one");
+		Map<String, String> after = Map.of("mods/committed.jar", "committed", "mods/old-1.1.jar", "old two");
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			String oldOne = rows(storage, Map.of("mods/old-1.0.jar", "old one")).get(0).sha1();
+			Files.copy(storage.objectFile(oldOne), storage.activePath("mods/old-1.0.jar"));
+			assertEquals(before, tree(storage));
+			Path held = storage.activePath("mods/old-1.0.jar");
+			assertFalse(converge(storage, cache, after, Map.of(), holding(held::equals)).converged());
+			String committed = rows(storage, Map.of("mods/committed.jar", "committed")).get(0).sha1();
+			Files.delete(storage.activePath("mods/committed.jar"));
+			dropObject(storage, committed);
+
+			assertFalse(new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).restoreFallback());
+			assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()), "refused, not vouched for");
+			assertFalse(tree(storage).containsKey("mods/old-1.1.jar"), "what the store holds is put back: " + tree(storage));
+			assertTrue(tree(storage).containsKey("mods/old-1.0.jar"));
+
+			rows(storage, Map.of("mods/committed.jar", "committed"));
+			assertTrue(new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).restoreFallback());
+			assertEquals(before, tree(storage));
+			assertNull(ProjectionState.loadRefusal(storage.gameDirectory()));
+		}
+	}
+
+	/** R2-5: a held unknown file is kept only when it actually goes, once per content, listed, and the backups are bounded. */
+	@Test
+	void repairBackupsAreKeptOnceListedAndBounded() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		commit(storage);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, Map.of("mods/committed.jar", "committed"));
+		}
+		Path unknown = storage.activePath("mods/unknown.jar");
+		Files.writeString(unknown, "nobody has me", StandardCharsets.UTF_8);
+		Files.writeString(storage.transactionFile(), "{}", StandardCharsets.UTF_8);
+		Files.writeString(storage.projectionStateFile(), "{torn", StandardCharsets.UTF_8);
+		for (int attempt = 0; attempt < 3; attempt++) {
+			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+				assertFalse(new ProjectionConvergence(storage, cache, holding(unknown::equals)).restoreFallback());
+			}
+		}
+		assertEquals(Map.of(), repairBackups(storage), "a held file is not removed, so nothing is copied for it");
+		for (int attempt = 0; attempt < 2; attempt++) {
+			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+				new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).restoreFallback();
+			}
+			if (!Files.exists(unknown)) Files.writeString(unknown, "nobody has me", StandardCharsets.UTF_8);
+			ProjectionState.converging(storage, "again", rows(storage, Map.of("mods/committed.jar", "committed")));
+		}
+		assertEquals(Map.of("mods/unknown.jar", "nobody has me"), repairBackups(storage));
+		List<ProjectionRepairBackups.Entry> entries = ProjectionRepairBackups.entries(storage);
+		assertEquals(1, entries.size(), "the same bytes at the same path are kept once: " + entries);
+		assertEquals("mods/unknown.jar", entries.get(0).path());
+
+		long limit = ProjectionRepairBackups.limitBytes;
+		try {
+			ProjectionRepairBackups.limitBytes = 20;
+			Path other = temporaryDirectory.resolve("other.jar");
+			Files.writeString(other, "another unknown file", StandardCharsets.UTF_8);
+			String otherHash = pl.skidam.automodpack_core.utils.HashUtils.sha1("another unknown file".getBytes(StandardCharsets.UTF_8));
+			Files.setLastModifiedTime(ProjectionRepairBackups.directory(storage).resolve(entries.get(0).sha1()), java.nio.file.attribute.FileTime.fromMillis(0));
+			assertNotNull(ProjectionRepairBackups.keep(storage, other, "mods/other.jar", otherHash, Files.size(other)));
+			ProjectionRepairBackups.bound(storage, Set.of(otherHash));
+			assertEquals(Map.of("mods/other.jar", "another unknown file"), repairBackups(storage), "the oldest entry went, the newest stayed");
+		} finally {
+			ProjectionRepairBackups.limitBytes = limit;
+		}
+	}
+
 	private static void commit(ClientStorage storage) throws Exception {
 		byte[] bytes = "committed".getBytes(StandardCharsets.UTF_8);
 		String hash = OverlayTombstoneCommitTest.store(storage, bytes);
@@ -610,10 +688,13 @@ class ProjectionRepairTest {
 		return files(storage.activeDirectory());
 	}
 
-	private static Map<String, String> repairBackups(ClientStorage storage) throws IOException {
+	/** The kept files by projection path, from the content-addressed backup directory ({@code <sha1>/<path>}). */
+	static Map<String, String> repairBackups(ClientStorage storage) throws IOException {
 		Map<String, String> kept = new TreeMap<>();
-		try (Stream<Path> entries = Files.list(storage.clientDirectory())) {
-			for (Path backup : entries.filter(path -> path.getFileName().toString().startsWith(ProjectionConvergence.REPAIR_BACKUP_PREFIX)).toList()) kept.putAll(files(backup));
+		Path root = ProjectionRepairBackups.directory(storage);
+		if (!Files.isDirectory(root)) return kept;
+		try (Stream<Path> buckets = Files.list(root)) {
+			for (Path bucket : buckets.filter(Files::isDirectory).toList()) kept.putAll(files(bucket));
 		}
 		return kept;
 	}
@@ -624,7 +705,7 @@ class ProjectionRepairTest {
 		}
 	}
 
-	private static Map<String, String> files(Path root) throws IOException {
+	static Map<String, String> files(Path root) throws IOException {
 		Map<String, String> files = new TreeMap<>();
 		if (!Files.exists(root)) return files;
 		try (Stream<Path> walk = Files.walk(root)) {
