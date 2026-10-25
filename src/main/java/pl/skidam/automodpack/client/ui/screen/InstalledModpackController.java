@@ -57,6 +57,7 @@ import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.OfflineRepair;
 import pl.skidam.automodpack_core.update.RecoveredFiles;
+import pl.skidam.automodpack_core.update.RelayConsent;
 import pl.skidam.automodpack_core.update.RestartDemand;
 import pl.skidam.automodpack_core.update.StateHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -112,6 +113,23 @@ final class InstalledModpackController {
 			return new SelectionChange(next, null, null, preferredGroups.isEmpty()
 					? VersionedText.str("automodpack.selection.changeInvalid")
 					: VersionedText.str("automodpack.selection.cannotSelect", preferredName));
+		}
+	}
+
+	boolean relayed(InstalledPacks.Pack pack) {
+		try {
+			return RelayConsent.isRelayed(storage, pack.modpackId());
+		} catch (IOException | RuntimeException e) {
+			discoveryFailure = e;
+			return false;
+		}
+	}
+
+	void setRelayed(InstalledPacks.Pack pack, boolean relayed) {
+		try {
+			RelayConsent.setRelayed(storage, pack.modpackId(), relayed);
+		} catch (IOException | RuntimeException e) {
+			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 		}
 	}
 

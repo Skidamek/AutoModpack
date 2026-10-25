@@ -306,6 +306,7 @@ public final class ClientGenerationStore {
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
 		if (activeState != null && normalizedModpackId.equals(activeState.modpackId)) throw new IOException("Cannot forget the active modpack");
 		new ClientSelectionStore(storage.selectionFile()).remove(normalizedModpackId);
+		RelayConsent.setRelayed(storage, normalizedModpackId, false);
 		GeneratedCopyState.removePack(storage, normalizedModpackId);
 		storage.clearOverlay(normalizedModpackId);
 		if (!StateHistory.referencedModpackIdsLocked(storage).contains(normalizedModpackId)) FileTrees.delete(storage.historyPackDirectory(normalizedModpackId));

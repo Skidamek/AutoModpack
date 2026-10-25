@@ -84,6 +84,9 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 		actions.add(new Action("automodpack.management.groups", this::openGroups));
 		actions.add(new Action("automodpack.management.packFiles", this::openFiles));
 		actions.add(new Action("automodpack.management.history", this::openHistory));
+		boolean shared = controller.relayed(pack);
+		actions.add(new Action(null, this::toggleSharing, VersionedText.text("automodpack.management.shareTooltip"),
+				VersionedText.text(shared ? "automodpack.management.shareOn" : "automodpack.management.shareOff")));
 		if (pack.active()) actions.add(new Action("automodpack.management.deactivate", this::deactivate, VersionedText.text("automodpack.management.deactivateTooltip")));
 		actions.add(new Action("automodpack.management.remove", this::remove, VersionedText.text("automodpack.management.removeTooltip")));
 		int columns = actionColumns(actions.size());
@@ -177,6 +180,12 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 	private void openFiles() {
 		if (busy) return;
 		controller.openFiles(this, pack);
+	}
+
+	private void toggleSharing() {
+		if (busy) return;
+		controller.setRelayed(pack, !controller.relayed(pack));
+		rebuild();
 	}
 
 	private void remove() {

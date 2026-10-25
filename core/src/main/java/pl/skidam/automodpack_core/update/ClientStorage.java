@@ -193,6 +193,10 @@ public final class ClientStorage {
 		return layout.selectionFile();
 	}
 
+	public Path relayConsentFile() {
+		return layout.relayConsentFile();
+	}
+
 	public Path stuckTransactionStateFile() {
 		return layout.stuckTransactionStateFile();
 	}

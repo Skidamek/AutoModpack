@@ -1,6 +1,8 @@
 package pl.skidam.automodpack_core.config;
 
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 public class ClientStorageJsons {
 	public static class ClientGeneratedCopiesIndexFields {
@@ -88,6 +90,11 @@ public class ClientStorageJsons {
 			public String sha1 = "";
 			public long size = -1;
 		}
+	}
+
+	public static class RelayConsentFields {
+		public int DO_NOT_CHANGE_IT = 1; // file version
+		public Set<String> modpackIds = new TreeSet<>();
 	}
 
 	public static class ClientOverlayFields {

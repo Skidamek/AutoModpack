@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.RelayConsent;
 
 /**
  * The publisher half of a process, fixed for one world session. Startup, commands, the handshake and bootstrap ask
@@ -37,7 +38,8 @@ public final class HostRole {
 		if (environment != EnvironmentType.CLIENT) return new HostRole(HostSourcePolicy.select(environment, null, false), executor, null, false);
 		ClientStorage storage = ClientStorage.open(gameDirectory);
 		String active = new ClientGenerationStore(storage).hasActivePack() ? storage.readActiveState().modpackId : null;
-		return new HostRole(HostSourcePolicy.select(environment, active, false), executor, storage, true);
+		boolean shared = active != null && RelayConsent.isRelayed(storage, active);
+		return new HostRole(HostSourcePolicy.select(environment, active, shared), executor, storage, true);
 	}
 
 	/** A session whose role could not be settled hosts nothing and says why. */

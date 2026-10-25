@@ -40,6 +40,7 @@ public final class ClientLayout {
 	private final Path repairJournalFile;
 	private final Path mutationLockFile;
 	private final Path selectionFile;
+	private final Path relayConsentFile;
 	private final Path restartLoopStateFile;
 	private final Path stuckTransactionStateFile;
 	private final Path clientConfigFile;
@@ -79,6 +80,7 @@ public final class ClientLayout {
 		this.repairJournalFile = this.gameDirectory.resolve(CLIENT_REPAIR_FILE).normalize();
 		this.mutationLockFile = this.gameDirectory.resolve(CLIENT_MUTATION_LOCK_FILE).normalize();
 		this.selectionFile = this.gameDirectory.resolve(CLIENT_SELECTION_FILE).normalize();
+		this.relayConsentFile = this.gameDirectory.resolve(CLIENT_RELAY_FILE).normalize();
 		this.restartLoopStateFile = this.gameDirectory.resolve(CLIENT_RESTART_LOOP_STATE_FILE).normalize();
 		this.stuckTransactionStateFile = this.gameDirectory.resolve(CLIENT_STUCK_TRANSACTION_STATE_FILE).normalize();
 		this.clientConfigFile = this.gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize();
@@ -227,6 +229,10 @@ public final class ClientLayout {
 		return selectionFile;
 	}
 
+	public Path relayConsentFile() {
+		return relayConsentFile;
+	}
+
 	public Path stuckTransactionStateFile() {
 		return stuckTransactionStateFile;
 	}
@@ -355,7 +361,7 @@ public final class ClientLayout {
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
 		validateWithin(clientDirectory, overlaysDirectory, generatedCopiesDirectory, generatedCopiesFile, activeDirectory, legacyIncomingDirectory, legacyBackupDirectory,
 				historyDirectory, stateHistoryDirectory, stateHistoryTreesDirectory(), stateFile, transactionFile, projectionStateFile, projectionRelaunchFile, projectionRepairBackupsDirectory,
-				repairJournalFile, mutationLockFile, selectionFile, selectedModpackFile,
+				repairJournalFile, mutationLockFile, selectionFile, relayConsentFile, selectedModpackFile,
 				restartLoopStateFile,
 				stuckTransactionStateFile,
 				modpackContentTempFile,

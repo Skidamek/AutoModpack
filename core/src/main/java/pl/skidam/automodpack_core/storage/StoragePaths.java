@@ -30,6 +30,7 @@ public final class StoragePaths {
 	public static final Path CLIENT_ACTIVE_STATE_FILE = CLIENT_DIR.resolve("active-state.json");
 	public static final Path CLIENT_SELECTED_FILE = CLIENT_DIR.resolve("selected.json");
 	public static final Path CLIENT_SELECTION_FILE = CLIENT_DIR.resolve("selections.json");
+	public static final Path CLIENT_RELAY_FILE = CLIENT_DIR.resolve("relayed-packs.json");
 	public static final Path CLIENT_RESTART_LOOP_STATE_FILE = CLIENT_DIR.resolve("restart-state.json");
 	public static final Path CLIENT_STUCK_TRANSACTION_STATE_FILE = CLIENT_DIR.resolve("stuck-transaction-state.json");
 	public static final Path CLIENT_TRANSACTION_FILE = CLIENT_DIR.resolve("update-transaction.json");
