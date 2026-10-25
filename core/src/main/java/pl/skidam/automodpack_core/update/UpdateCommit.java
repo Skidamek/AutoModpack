@@ -338,6 +338,12 @@ public final class UpdateCommit {
 				return new ReplanRequired(transaction, operationName, blockedPath, e.getMessage());
 			}
 			if (isLockFailure(e)) return defer(transaction, List.of(new Lock(currentOperation, blockedPath != null ? blockedPath : storage.activeDirectory(), e)));
+			String condition = StorageConditions.condition(e);
+			if (condition != null) {
+				// No wait fixes it, so it is a failure with the reason the player can act on, never a deferral that restarts.
+				e = new IOException(StorageConditions.describe(condition, e), e);
+				LOGGER.error(e.getMessage());
+			}
 			recordResult(transaction, UpdateTransaction.Status.FAILED, operationName, blockedPath, e.getMessage(), e);
 			throw new UpdateExecutionException(operationName, blockedPath, e);
 		}
@@ -725,9 +731,11 @@ public final class UpdateCommit {
 
 	/**
 	 * AccessDeniedException is a sharing violation only on Windows. A generic FileSystemException is a lock on every OS
-	 * because the kernel reason is localized (FormatMessage, strerror); named subtypes that cannot be a lock stay failures.
+	 * because the kernel reason is localized (FormatMessage, strerror); named subtypes that cannot be a lock, and the
+	 * storage conditions no wait fixes ({@link StorageConditions}: full, read-only, unsupported), stay failures.
 	 */
 	static boolean isLockFailure(IOException exception, boolean windows) {
+		if (StorageConditions.condition(exception) != null) return false;
 		Throwable current = exception;
 		while (current != null) {
 			if (current instanceof AccessDeniedException) return windows;

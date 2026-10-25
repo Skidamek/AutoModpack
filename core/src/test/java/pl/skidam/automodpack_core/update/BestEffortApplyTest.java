@@ -185,6 +185,24 @@ class BestEffortApplyTest {
 		assertNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()));
 	}
 
+	/** F3: a full disk is a failure the player can act on, named as such, never a held file that defers and restarts. */
+	@Test
+	void aFullDiskFailsWithItsReasonInsteadOfDeferring() throws Exception {
+		Fixture fixture = twoGenerations();
+		UpdateCommit full = new UpdateCommit(fixture.storage, new UpdateCommit.Probe() {
+			@Override
+			public void beforeWrite(Path target) throws IOException {
+				if (target.equals(fixture.storage.activePath("mods/old.jar"))) throw new java.nio.file.FileSystemException(target.toString(), null, "No space left on device");
+			}
+		});
+
+		UpdateExecutionException failure = assertThrows(UpdateExecutionException.class, () -> full.run(new UpdateCommit.Fresh(() -> built(fixture.storage, fixture.plan, fixture.target), null)));
+		assertTrue(failure.getMessage().contains("the disk is full"), failure.getMessage());
+		UpdateTransaction journal = UpdateTransaction.read(fixture.storage.transactionFile());
+		assertEquals(UpdateTransaction.Status.FAILED, journal.resultStatus);
+		assertTrue(journal.resultMessage.contains("the disk is full"), journal.resultMessage);
+	}
+
 	/**
 	 * Windows in-game: the running game holds the old jar, so the projection stays owed with the state converging. Every
 	 * gate refuses the mixed tree, a boot that cannot finish restores the complete old projection from CAS, and the next
