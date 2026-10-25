@@ -219,6 +219,7 @@ public final class OfflineRepair {
 
 		Analysis withRepairedCas = analyze(request, fileCache);
 		long repairedFiles = 0;
+		boolean projectionRelinked = false;
 		for (Expected expected : withRepairedCas.expected().values().stream().filter(value -> value.place() != Place.CAS).sorted(Expected.ORDER).toList()) {
 			Observation observation = withRepairedCas.observations().get(expected.path());
 			if (matches(observation, expected.content()) || observation != null && observation.unsupported()) continue;
@@ -232,7 +233,10 @@ public final class OfflineRepair {
 					: VerifiedFileTransfer.copyAtomic(object, expected.path(), expected.content().size(), expected.content().hash(), fileCache);
 			if (expected.place() == Place.PROJECTION) fileCache.overwriteCache(expected.path(), expected.content().hash());
 			if (repaired) repairedFiles++;
+			if (repaired && expected.place() == Place.PROJECTION) projectionRelinked = true;
 		}
+		// P5 of ProjectionState: re-linking the same projection still changes what a loader that scanned before sees.
+		if (projectionRelinked) ProjectionState.touched(storage);
 		return new RepairCounts(repairedCas, repairedFiles);
 	}
 

@@ -54,7 +54,14 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * its cache record is seeded from that identity. No run re-reads the pack.</li>
  * <li><b>V4 (held stays owed).</b> A path another process holds is reported and the rest of the work goes on; the
  * state stays converging, so no gate loads the mixed tree, and the next run finishes it.</li>
- * <li><b>V5 (durable before done).</b> Every directory whose entries changed is forced once before the run returns.</li>
+ * <li><b>V5 (durable before done).</b> Every directory whose entries changed, the parent of every directory the run
+ * created included, is forced once before the run returns.</li>
+ * <li><b>V6 (no unowned window).</b> An object the fallback acquires into CAS is pinned in this instance's ownership
+ * receipt before it exists, and stays pinned by the converging state after, so no instance sharing the store
+ * collects it ({@link #fallback}).</li>
+ * <li><b>V7 (a restore keeps what CAS cannot give back).</b> A restore whose fallback CAS cannot complete falls back to
+ * the committed generation; before it removes or replaces anything, the files the store holds no copy of are kept in a
+ * repair backup ({@link #restoreFallback}).</li>
  * </ul>
  */
 final class ProjectionConvergence {
@@ -76,6 +83,12 @@ final class ProjectionConvergence {
 		default void beforeWrite(Path target) throws IOException {}
 
 		default void marked() throws IOException {}
+
+		/** V6: the hashes the fallback is about to acquire are pinned in this instance's receipt. */
+		default void acquiring(Set<String> hashes) throws IOException {}
+
+		/** V5: a directory's entries were forced. */
+		default void forced(Path directory) {}
 	}
 
 	private final ClientStorage storage;
@@ -104,13 +117,49 @@ final class ProjectionConvergence {
 	 * (the committed generation, the plan's baselines), so the fallback answers by identity before any hash.
 	 */
 	Result converge(String transactionId, List<ProjectionState.Row> target, Map<String, String> hints) throws IOException {
-		ProjectionState state = ProjectionState.repairing(storage, this::committedRows);
+		ProjectionState state = repairing();
 		Observation observed = observe();
 		Work work = plan(observed, target);
 		if (work.isEmpty()) return new Result(false, List.of());
-		ProjectionState.converging(storage, transactionId, state.converging() ? List.of() : fallback(observed, hints));
+		// A repaired document fell back to the committed generation, so the tree it found is in no fallback: what the
+		// store cannot give back is kept before the roll-forward replaces it (V7).
+		if (state.fallbackSource() == ProjectionState.Fallback.COMMITTED) keepUnrecoverable(observed, work);
+		Set<String> acquired = new HashSet<>();
+		List<ProjectionState.Row> fallback = state.converging() ? List.of() : fallback(observed, hints, acquired);
+		ProjectionState.converging(storage, transactionId, fallback, ProjectionState.digest(target));
+		// V6: the state now pins what the fallback acquired, so the in-flight pins can retire into it.
+		if (!acquired.isEmpty()) ClientObjectStore.publishOwnership(storage);
 		writes.marked();
 		return execute(work);
+	}
+
+	/**
+	 * P6 of {@link ProjectionState}: unreadable contents are set aside and repaired without destroying anything. With no
+	 * journal nothing can be converging (every convergence runs under one), and a detached pack is the player's, so the
+	 * tree is vouched for as it stands. With a journal the projection may be mixed: it stays converging, falling back to
+	 * the committed generation, while the journal rolls forward. A physical read failure propagates untouched.
+	 */
+	private ProjectionState repairing() throws IOException {
+		try {
+			return ProjectionState.read(storage);
+		} catch (ProjectionState.UnreadableException e) {
+			ProjectionState.setAsideUnreadable(storage, e);
+			if (activeDetached()) {
+				LOGGER.error("The projection state of a detached pack was unreadable; keeping the projection exactly as it is");
+				return ProjectionState.repairSettled(storage);
+			}
+			if (!Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) {
+				LOGGER.warn("The projection state was unreadable and no update is pending; keeping the projection as it is");
+				return ProjectionState.repairSettled(storage);
+			}
+			LOGGER.warn("The projection state was unreadable while an update is pending; the update rolls forward over the projection");
+			return ProjectionState.repairConverging(storage);
+		}
+	}
+
+	private boolean activeDetached() throws IOException {
+		var active = storage.readActiveState();
+		return active != null && active.detached;
 	}
 
 	/**
@@ -118,22 +167,85 @@ final class ProjectionConvergence {
 	 * before leaves no {@code active/} behind. Returns false while a held path keeps it converging.
 	 */
 	boolean restoreFallback() throws IOException {
-		ProjectionState state = ProjectionState.repairing(storage, this::committedRows);
+		ProjectionState state = repairing();
 		if (!state.converging()) return true;
+		Observation observed = observe();
+		boolean committed = state.fallbackSource() == ProjectionState.Fallback.COMMITTED;
 		// A generation committed since the fallback was taken (an older version ran after a downgrade) is the complete one now.
-		boolean moved = !Objects.equals(state.committedToken(), ProjectionState.committedToken(storage));
-		if (moved) LOGGER.warn("The committed generation changed while the projection converged; restoring that generation's projection");
-		Result result = execute(plan(observe(), moved ? committedRows() : state.fallback()));
+		if (!committed && !Objects.equals(state.committedToken(), ProjectionState.committedToken(storage))) {
+			LOGGER.warn("The committed generation changed while the projection converged; restoring that generation's projection");
+			committed = true;
+		}
+		// F1: a fallback CAS can no longer give back in full is no complete tree; the committed generation is.
+		if (!committed && !restorable(observed, state.fallback())) {
+			LOGGER.warn("The projection fallback names objects the store no longer holds; restoring the committed generation's projection");
+			committed = true;
+		}
+		if (committed && activeDetached()) {
+			// A detached pack's tree is the player's, never rebuilt from a generation it detached from.
+			LOGGER.error("A detached pack's projection cannot fall back to its recorded tree; keeping the projection exactly as it is");
+			ProjectionState.restored(storage, null);
+			return true;
+		}
+		List<ProjectionState.Row> rows = committed ? committedRows() : state.fallback();
+		if (!restorable(observed, rows)) {
+			LOGGER.error("Neither the projection fallback nor the committed generation is complete in the store; the projection stays refused until an update converges it");
+			return false;
+		}
+		Work work = plan(observed, rows);
+		keepUnrecoverable(observed, work);
+		Result result = execute(work);
 		if (!result.converged()) {
 			LOGGER.error("The fallback projection could not be restored: {} paths are held open, first {}", result.held().size(), result.held().get(0).path(), result.held().get(0).cause());
 			return false;
 		}
-		if (!moved && state.fallback().isEmpty()) deleteEmptyActiveDirectory();
-		ProjectionState.settled(storage, null);
+		if (!committed && state.fallback().isEmpty()) deleteEmptyActiveDirectory();
+		ProjectionState.restored(storage, rows);
 		return true;
 	}
 
-	/** P6: the projection of the generation the active state names, the one a document that broke still guarantees. */
+	/** Whether every row is already in place, or its object is in the store to put it back. */
+	private boolean restorable(Observation observed, List<ProjectionState.Row> rows) throws IOException {
+		for (ProjectionState.Row row : rows) {
+			Observed current = observed.files().get(row.path());
+			if (current != null && isObject(current, row)) continue;
+			if (!FileIntegrity.matchesNamed(storage.objectFile(row.sha1()), row.size(), row.sha1(), cache)) return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Before a restore destroys anything, every file it would remove or replace whose bytes the store cannot give back -
+	 * one the player added or edited - is copied, durably, into a repair backup beside {@code active/}. Junk is not kept.
+	 */
+	private void keepUnrecoverable(Observation observed, Work work) throws IOException {
+		Path active = storage.activeDirectory();
+		List<Path> destroyed = new ArrayList<>(work.removals());
+		for (ProjectionState.Row row : work.installs()) {
+			Observed current = observed.files().get(row.path());
+			if (current != null) destroyed.add(current.path());
+		}
+		Path backup = null;
+		Set<Path> touched = new LinkedHashSet<>();
+		for (Path path : destroyed) {
+			if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
+			String hash = HashUtils.normalizeSha1(cache.getOrComputeHash(path));
+			if (FileIntegrity.matchesNamed(storage.objectFile(hash), Files.size(path), hash, cache)) continue;
+			if (backup == null) backup = storage.clientDirectory().resolve(REPAIR_BACKUP_PREFIX + System.currentTimeMillis());
+			Path kept = backup.resolve(active.relativize(path).toString());
+			Files.createDirectories(kept.getParent());
+			Files.copy(path, kept, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+			FileTrees.forceFile(kept);
+			for (Path directory = kept.getParent(); directory != null && directory.startsWith(storage.clientDirectory()); directory = directory.getParent()) touched.add(directory);
+			LOGGER.warn("Kept {} in {} before restoring the projection: the store holds no copy of it", path, backup);
+		}
+		for (Path directory : touched) FileTrees.forceDirectory(directory);
+	}
+
+	/** Where a restore keeps the files it would destroy that the store cannot give back. */
+	static final String REPAIR_BACKUP_PREFIX = "projection-repair-backup-";
+
+	/** The projection of the generation the active state names: the tree its COMMITTED marker vouched for. */
 	private List<ProjectionState.Row> committedRows() throws IOException {
 		List<ProjectionState.Row> rows = new ArrayList<>();
 		var target = new ClientGenerationStore(storage).readActiveTarget();
@@ -285,8 +397,9 @@ final class ProjectionConvergence {
 	 * its hinted object, then by its cache record. A file whose bytes are in no object is acquired into CAS first, so the
 	 * restore can always put it back; a symbolic link or special file is not projection content and has no row.
 	 */
-	private List<ProjectionState.Row> fallback(Observation observed, Map<String, String> hints) throws IOException {
+	private List<ProjectionState.Row> fallback(Observation observed, Map<String, String> hints, Set<String> acquired) throws IOException {
 		List<ProjectionState.Row> rows = new ArrayList<>();
+		Map<Path, ProjectionState.Row> acquisitions = new LinkedHashMap<>();
 		for (Map.Entry<String, Observed> entry : observed.files().entrySet()) {
 			Observed current = entry.getValue();
 			if (ProjectionJunk.isJunk(entry.getKey())) continue;
@@ -296,16 +409,35 @@ final class ProjectionConvergence {
 			}
 			long size = current.attributes().size();
 			String hint = hints.get(entry.getKey());
+			ProjectionState.Row row;
 			if (HashUtils.isSha1(hint) && isObject(current, new ProjectionState.Row(entry.getKey(), hint, size))) {
-				rows.add(new ProjectionState.Row(entry.getKey(), hint, size));
-				continue;
+				row = new ProjectionState.Row(entry.getKey(), hint, size);
+				// F1: a cache record can vouch for a file whose object is gone; the row must name bytes the store holds.
+				if (!isObjectInode(current, row) && !FileIntegrity.matchesNamed(storage.objectFile(row.sha1()), size, row.sha1(), cache)) acquisitions.put(current.path(), row);
+			} else {
+				String hash = HashUtils.normalizeSha1(cache.getOrComputeHash(current.path()));
+				row = new ProjectionState.Row(entry.getKey(), hash, size);
+				if (!FileIntegrity.matchesNamed(storage.objectFile(hash), size, hash, cache)) acquisitions.put(current.path(), row);
 			}
-			String hash = HashUtils.normalizeSha1(cache.getOrComputeHash(current.path()));
-			Path object = storage.objectFile(hash);
-			if (!FileIntegrity.matchesNamed(object, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(current.path(), object, size, hash, cache);
-			rows.add(new ProjectionState.Row(entry.getKey(), hash, size));
+			rows.add(row);
+		}
+		if (acquisitions.isEmpty()) return rows;
+		// V6: objects no generation owns yet are pinned in this instance's receipt before they exist, so a concurrent
+		// instance's collection cannot take them in the window before the converging state names them.
+		for (ProjectionState.Row row : acquisitions.values()) acquired.add(row.sha1());
+		ClientObjectStore.publishOwnership(storage, acquired);
+		writes.acquiring(Set.copyOf(acquired));
+		for (Map.Entry<Path, ProjectionState.Row> acquisition : acquisitions.entrySet()) {
+			ProjectionState.Row row = acquisition.getValue();
+			Path object = storage.objectFile(row.sha1());
+			if (!FileIntegrity.matchesNamed(object, row.size(), row.sha1(), cache)) VerifiedFileTransfer.copyAtomicImmutable(acquisition.getKey(), object, row.size(), row.sha1(), cache);
 		}
 		return rows;
+	}
+
+	private boolean isObjectInode(Observed current, ProjectionState.Row row) {
+		Object key = current.attributes().fileKey();
+		return key != null && key.equals(objectKey(row.sha1()));
 	}
 
 	private static boolean isLogicalName(String relative) {
@@ -368,7 +500,7 @@ final class ProjectionConvergence {
 			}
 			try {
 				writes.beforeWrite(target);
-				install(target, row);
+				install(target, row, touched);
 				touched.add(target.getParent());
 				installed.add(Map.entry(target, row.sha1()));
 			} catch (IOException e) {
@@ -378,7 +510,10 @@ final class ProjectionConvergence {
 		}
 		// V3: the records go in one pass after the links, so the cache batches its writes instead of flushing between lookups.
 		for (Map.Entry<Path, String> entry : installed) cache.overwriteCache(entry.getKey(), entry.getValue());
-		for (Path directory : touched) FileTrees.forceDirectory(directory);
+		for (Path directory : touched) {
+			FileTrees.forceDirectory(directory);
+			writes.forced(directory);
+		}
 		return new Result(!touched.isEmpty(), List.copyOf(held));
 	}
 
@@ -412,10 +547,10 @@ final class ProjectionConvergence {
 	 * filesystem refuses to replace because it is read-only (FAT's DOS attribute) is unprotected and retried once, and the
 	 * object it shared an inode with is protected again.
 	 */
-	private void install(Path target, ProjectionState.Row row) throws IOException {
+	private void install(Path target, ProjectionState.Row row, Set<Path> touched) throws IOException {
 		Path object = storage.objectFile(row.sha1());
 		Path parent = target.getParent();
-		if (parent != null && ensuredDirectories.add(parent)) Files.createDirectories(parent);
+		if (parent != null && ensuredDirectories.add(parent)) createDirectories(parent, touched);
 		try {
 			VerifiedFileTransfer.linkAtomic(object, target, row.size(), row.sha1(), cache);
 		} catch (AccessDeniedException denied) {
@@ -427,6 +562,18 @@ final class ProjectionConvergence {
 				reprotect(shared);
 			}
 		}
+	}
+
+	/**
+	 * V5 for directories: every directory this run creates is named in its parent's entries, so each created
+	 * directory's parent is forced with the rest before the run returns, and a crash never loses a directory whose
+	 * files were forced.
+	 */
+	private static void createDirectories(Path directory, Set<Path> touched) throws IOException {
+		List<Path> missing = new ArrayList<>();
+		for (Path current = directory; current != null && !Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS); current = current.getParent()) missing.add(current);
+		Files.createDirectories(directory);
+		for (Path created : missing) if (created.getParent() != null) touched.add(created.getParent());
 	}
 
 	/** Deletes a projection entry; a read-only refusal is retried once, and the object the file shared is protected again. */

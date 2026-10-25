@@ -28,7 +28,16 @@ public final class PublicationSweep {
 	public static void sweepUnpinnedDirectories(ClientStorage storage) throws IOException {
 		ClientStorageMutation.run(storage, () -> {
 			settleLegacyDirectories(storage);
-			if (!Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS) && ProjectionState.owed(storage)) {
+			if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) return null;
+			boolean owed;
+			try {
+				owed = ProjectionState.owed(storage);
+			} catch (IOException e) {
+				// A physical read failure proves nothing about the tree: defer, and every gate refuses meanwhile (P3, P6).
+				LOGGER.error("The projection state cannot be read now; leaving the projection untouched until it can", e);
+				return null;
+			}
+			if (owed) {
 				LOGGER.warn("A projection convergence has no journal left to finish it; restoring the projection it started from");
 				restoreFallback(storage);
 			}

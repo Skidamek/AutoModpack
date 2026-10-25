@@ -27,8 +27,20 @@ import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 final class UpdateTestFixtures {
 	private UpdateTestFixtures() {}
 
+	/**
+	 * A game directory under {@value #GAME_ROOT_ENVIRONMENT} when set, so the projection suites run on another filesystem
+	 * (a case-insensitive mount); the data root and its CAS stay in the temporary directory, as on a separate volume.
+	 */
+	static final String GAME_ROOT_ENVIRONMENT = "AUTOMODPACK_TEST_GAME_ROOT";
+
+	static Path gameDirectory(Path temporaryDirectory) throws Exception {
+		String root = System.getenv(GAME_ROOT_ENVIRONMENT);
+		if (root == null || root.isBlank()) return temporaryDirectory.resolve("game");
+		return Files.createTempDirectory(Path.of(root), "game");
+	}
+
 	static ClientStorage storage(Path temporaryDirectory) throws Exception {
-		ClientStorage storage = TestDataRoot.open(temporaryDirectory.resolve("game"), temporaryDirectory.resolve("data"));
+		ClientStorage storage = TestDataRoot.open(gameDirectory(temporaryDirectory), temporaryDirectory.resolve("data"));
 		Files.createDirectories(storage.modsDirectory());
 		return storage;
 	}

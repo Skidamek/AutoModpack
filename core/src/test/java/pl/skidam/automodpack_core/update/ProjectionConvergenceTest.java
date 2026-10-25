@@ -273,29 +273,6 @@ class ProjectionConvergenceTest {
 		assertEquals(OLD, tree(storage));
 	}
 
-	/** P6: an unreadable state is owed work, and its repair rebuilds the projection of the generation the active state names. */
-	@Test
-	void anUnreadableStateRebuildsTheCommittedGeneration() throws Exception {
-		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
-		byte[] bytes = "committed".getBytes(StandardCharsets.UTF_8);
-		String hash = OverlayTombstoneCommitTest.store(storage, bytes);
-		var target = UpdateTestFixtures.target(storage, "mods/committed.jar", "mod", false, hash, bytes.length);
-		storage.writeActiveState(target.document(), target.selection().intent());
-		Files.createDirectories(storage.activePath("mods"));
-		Files.writeString(storage.activePath("mods/stray.jar"), "half an update", StandardCharsets.UTF_8);
-		Files.writeString(storage.projectionStateFile(), "{torn", StandardCharsets.UTF_8);
-		assertTrue(ProjectionState.owed(storage));
-		assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()));
-
-		assertTrue(PublicationSweep.restoreFallback(storage));
-
-		assertEquals(Map.of("mods/committed.jar", "committed"), tree(storage));
-		assertFalse(ProjectionState.owed(storage));
-		try (Stream<Path> aside = Files.list(storage.projectionStateFile().getParent())) {
-			assertTrue(aside.anyMatch(path -> path.getFileName().toString().startsWith("projection-state.json.")), "the unreadable document is kept as evidence");
-		}
-	}
-
 	/** Finder, Explorer and NFS litter alone is no work, never part of a fallback, and a held one never keeps an update owed. */
 	@Test
 	void operatingSystemLitterIsNoWorkAndNeverHeld() throws Exception {

@@ -62,6 +62,25 @@ class OfflineRepairTest {
 		assertTrue(FileIntegrity.matches(storage.gamePath("config/settings.json"), expectedBytes.length, hash));
 	}
 
+	/** F8: re-linking a damaged projection file moves the projection revision, so a loader that scanned before can tell. */
+	@Test
+	void relinkingTheProjectionMovesItsRevision() throws Exception {
+		ClientStorage storage = storage();
+		byte[] expectedBytes = "mod-bytes".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(expectedBytes);
+		SelectedModpackTarget target = install(storage, new FileSpec("mods/a.jar", "mod", false, hash, expectedBytes.length));
+		write(storage.objectFile(hash), expectedBytes);
+		write(storage.activePath("mods/a.jar"), "damaged".getBytes(StandardCharsets.UTF_8));
+		long before = ProjectionState.read(storage).revision();
+		OfflineRepair repair = new OfflineRepair(storage);
+
+		OfflineRepair.Receipt receipt = repair.apply(repair.inspect(new OfflineRepair.Request(target, Set.of(), null)));
+
+		assertEquals(1, receipt.repairedMaterializedFiles());
+		assertTrue(FileIntegrity.matches(storage.activePath("mods/a.jar"), expectedBytes.length, hash));
+		assertTrue(ProjectionState.read(storage).revision() > before);
+	}
+
 	@Test
 	void editableModCopiesAreNotOfferedForArchive() throws Exception {
 		ClientStorage storage = storage();
