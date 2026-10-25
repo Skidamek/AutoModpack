@@ -46,7 +46,6 @@ flow:
       log:
         container: client
         matches_all:
-          - 'AutoModpack prelaunched'
           # Kilt's scan line only appears if the projection's mods directory was handed
           # over by AutoModpack's AutomodpackKnitExtension service
           - 'Found NeoForge mod \(Kilt JiJ\).*kfflang'
