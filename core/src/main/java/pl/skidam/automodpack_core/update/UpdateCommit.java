@@ -16,8 +16,10 @@ import java.nio.file.NotDirectoryException;
 import java.nio.file.NotLinkException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -73,7 +75,6 @@ public final class UpdateCommit {
 	private final UpdateTransactionValidator validator;
 	private final Probe probe;
 	private FileCache fileCache;
-	private ProjectionPublication projection;
 	/** The loader-scanned paths this committer changed, in order: a boot that does not relaunch after them names them. */
 	private final List<String> scannedChanges = new ArrayList<>();
 	/** The scanned change of a projection a directory-scanning loader took before preload. */
@@ -175,7 +176,7 @@ public final class UpdateCommit {
 
 	/** The durable steps of one apply, in order; the test probe crashes between them. */
 	enum Step {
-		JOURNALED, LIVE_APPLIED, PROJECTION_BUILT, SWAPPED, FINALIZED, COMMITTED
+		JOURNALED, LIVE_APPLIED, PROJECTION_MARKED, PROJECTION_CONVERGED, FINALIZED, COMMITTED
 	}
 
 	/** Test seam: a crash between durable steps, and a held file in front of every live write. */
@@ -188,7 +189,7 @@ public final class UpdateCommit {
 		default void beforeWrite(Path target) throws IOException {}
 	}
 
-	/** A path some process held open, and the operation that owes it; a null operation is the projection swap. */
+	/** A path some process held open, and the operation that owes it; a null operation is a path of the projection convergence. */
 	private record Lock(Operation operation, Path path, IOException cause) {}
 
 	public UpdateCommit(ClientStorage storage) {
@@ -372,7 +373,9 @@ public final class UpdateCommit {
 	 * refuse, while failing a committed apply here would report a failure over bytes that already landed.
 	 */
 	private Outcome finalizeCommitted(UpdateTransaction transaction) throws IOException {
-		cleanupTransactionDirectories();
+		// P2: the converged tree is loadable from the moment the transaction it belongs to committed; a replayed tail settles it again.
+		if (ProjectionState.owed(storage)) ProjectionState.settled(storage, transaction.transactionId);
+		PublicationSweep.settleLegacyDirectories(storage);
 		recordStateHistory(transaction);
 		Files.deleteIfExists(storage.transactionFile());
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
@@ -422,8 +425,10 @@ public final class UpdateCommit {
 
 	/**
 	 * The modpack apply sequence: the pre-mutation gates and pins, the live operations still owed, the tombstone step,
-	 * projection publication, and durable finalization. A started publication already proves every live operation
-	 * landed, so its replay goes straight to publishing. Returns the held paths that keep the transaction owed.
+	 * the durable PROJECTED marker, the projection convergence, and durable finalization. PROJECTED is persisted only
+	 * once every live operation landed and before the first projection write, so a replay of a published journal never
+	 * writes a live file again (#580: a landed editable file is the player's). Returns the held paths that keep the
+	 * transaction owed.
 	 */
 	private List<Lock> applyModpackTransaction(UpdateTransaction transaction, AtomicReference<Operation> current, boolean started, boolean preserveNewerSelection) throws IOException {
 		if (!started) {
@@ -431,10 +436,11 @@ public final class UpdateCommit {
 			requireLauncherWritable(transaction);
 			capturePinnedBytes(transaction);
 		}
+		boolean published = publicationStarted(transaction);
 		snapshotBefore(transaction);
 		if (!started) persistPhase(transaction, UpdateTransaction.Phase.PREPARING);
-		else setPhase(transaction, UpdateTransaction.Phase.PREPARING);
-		if (!publicationStarted(transaction)) {
+		else if (!published) setPhase(transaction, UpdateTransaction.Phase.PREPARING);
+		if (!published) {
 			List<Lock> owed = applyOperations(transaction, current);
 			current.set(null);
 			applyOverlayTombstones(transaction);
@@ -443,8 +449,11 @@ public final class UpdateCommit {
 		} else {
 			applyOverlayTombstones(transaction);
 		}
-		Lock swap = publishProjection(transaction);
-		if (swap != null) return List.of(swap);
+		if (transaction.phase != UpdateTransaction.Phase.PROJECTED) persistPhase(transaction, UpdateTransaction.Phase.PROJECTED);
+		// A journal of an older version proved its publication only by these directories; PROJECTED is durable now.
+		PublicationSweep.settleLegacyDirectories(storage);
+		List<Lock> held = convergeProjection(transaction);
+		if (!held.isEmpty()) return held;
 		finalizeModpackState(transaction, preserveNewerSelection);
 		probe.reached(Step.FINALIZED);
 		return List.of();
@@ -542,35 +551,49 @@ public final class UpdateCommit {
 	}
 
 	/**
-	 * Builds and swaps the incoming projection unless the active tree already matches. {@code incoming/} is this
-	 * publication's own build area, so a resumed publication that already holds exactly this plan is swapped as it
-	 * stands: the alternative deletes and re-links every projected file and walks the tree again, while proving that
-	 * tree is two stats per file and no content read. A half-built area fails the same proof and is rebuilt. A held
-	 * active tree keeps the swap owed; the built area waits for the helper or the next boot.
+	 * Converges {@code active/} onto the plan's whole final projection from CAS ({@link ProjectionConvergence}): never
+	 * an operation diff, so a stacked plan, a replay from any crash point, and an older version's half-published journal
+	 * all end in the same tree. A held path stays owed and the projection state stays converging, so no loader gate takes
+	 * the mixed tree; the projection state settles with the COMMITTED tail ({@link #finalizeCommitted}).
 	 */
-	private Lock publishProjection(UpdateTransaction transaction) throws IOException {
-		if (projection.verifyActiveQuietly(storage.activeDirectory(), transaction.plan().projectedFinalState())) return null;
-		if (!projection.verifyIncomingQuietly(storage.incomingDirectory(), transaction.plan().projectedFinalState())) projection.build(transaction);
-		probe.reached(Step.PROJECTION_BUILT);
-		setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
-		try {
-			probe.beforeWrite(storage.activeDirectory());
-			projection.swap(transaction);
-		} catch (IOException e) {
-			if (!isLockFailure(e)) throw e;
-			return new Lock(null, storage.activeDirectory(), e);
-		}
-		probe.reached(Step.SWAPPED);
-		projectionChanged(transaction);
-		return null;
+	private List<Lock> convergeProjection(UpdateTransaction transaction) throws IOException {
+		List<ProjectionState.Row> target = ProjectionConvergence.targetRows(transaction.plan());
+		ProjectionConvergence.Result result = new ProjectionConvergence(storage, fileCache, new ProjectionConvergence.Writes() {
+			@Override
+			public void beforeWrite(Path target) throws IOException {
+				probe.beforeWrite(target);
+			}
+
+			@Override
+			public void marked() throws IOException {
+				probe.reached(Step.PROJECTION_MARKED);
+			}
+		}).converge(transaction.transactionId, target, projectionHints(transaction, target));
+		if (result.changed()) noteProjectionChange();
+		if (!result.converged()) return result.held().stream().map(held -> new Lock(null, held.path(), held.cause())).toList();
+		probe.reached(Step.PROJECTION_CONVERGED);
+		return List.of();
 	}
 
 	/**
-	 * Every change of what {@code active/} holds raises the projection revision (P5 of {@link ProjectionState}), and a
-	 * directory-scanning loader that already took the directory this boot learns it through the scanned changes.
+	 * The objects the current projection files are expected to be, so the fallback answers by identity before any hash:
+	 * a file the plan does not touch is already its target object, and one it touches is the baseline its operation
+	 * names. Anything else - a player's file, a stale one - answers from its cache record.
 	 */
-	private void projectionChanged(UpdateTransaction transaction) throws IOException {
-		ProjectionState.settled(storage, transaction.transactionId);
+	private static Map<String, String> projectionHints(UpdateTransaction transaction, List<ProjectionState.Row> target) throws IOException {
+		Map<String, String> hints = new HashMap<>();
+		for (ProjectionState.Row row : target) hints.put(row.path(), row.sha1());
+		for (Operation operation : transaction.plan().operations()) {
+			if (operation.root() != Root.PROJECTION) continue;
+			String path = UpdateTransactionValidator.normalizeOperationPath(operation.relativePath());
+			if (operation.expectedExistingHash() != null) hints.put(path, operation.expectedExistingHash());
+			else hints.remove(path);
+		}
+		return hints;
+	}
+
+	/** A directory-scanning loader that already took {@code active/} this boot learns of the change through the scanned changes (P5). */
+	private void noteProjectionChange() {
 		if (ClientStorage.directoryScanRevision() != null && !scannedChanges.contains(PROJECTION_SCANNED_CHANGE)) scannedChanges.add(PROJECTION_SCANNED_CHANGE);
 	}
 
@@ -647,11 +670,6 @@ public final class UpdateCommit {
 		ConfigTools.writeAtomicCompact(storage.transactionFile(), transaction);
 	}
 
-	private void cleanupTransactionDirectories() throws IOException {
-		FileTrees.delete(storage.incomingDirectory());
-		FileTrees.delete(storage.backupDirectory());
-	}
-
 	private boolean publicationStarted(UpdateTransaction transaction) {
 		return ClientProjectionView.publicationStarted(storage, transaction);
 	}
@@ -697,12 +715,10 @@ public final class UpdateCommit {
 		if (fileCache != null) return work.run(fileCache);
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			fileCache = cache;
-			projection = new ProjectionPublication(storage, cache);
 			try {
 				return work.run(cache);
 			} finally {
 				fileCache = null;
-				projection = null;
 			}
 		}
 	}
@@ -726,7 +742,7 @@ public final class UpdateCommit {
 				|| exception instanceof AtomicMoveNotSupportedException || exception instanceof FileSystemLoopException || exception instanceof NotLinkException;
 	}
 
-	private static boolean isLockFailure(IOException exception) {
+	static boolean isLockFailure(IOException exception) {
 		return isLockFailure(exception, PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS);
 	}
 }

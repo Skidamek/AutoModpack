@@ -46,10 +46,28 @@ public final class BootRecovery {
 		loadClientConfig();
 		recoverPendingRepair();
 		recoverPendingTransaction();
+		settleProjection();
 		relaunchIfScannedProjectionMoved();
 		rebuildGeneratedCopies();
 		importBootstrap();
 		return new BootDecision(clientConfig, trustedBootstrapApply, bootAsIs);
+	}
+
+	/**
+	 * P4 of {@link ProjectionState}: whatever recovery achieved, this boot never runs on owed projection work. A journal
+	 * that still owes it - held paths after the restart budget, a failed replay, a helper that has not finished - keeps
+	 * its PROJECTED phase and is rolled forward by a later run, while this boot gets the complete projection the
+	 * convergence started from, restored from CAS. A restore that cannot finish leaves the state converging, and every
+	 * loader gate then refuses the projection for this boot instead of loading a mixed one.
+	 */
+	private void settleProjection() {
+		try {
+			if (!ProjectionState.owed(storage)) return;
+			LOGGER.warn("The pending update still owes projection work; booting the complete projection it started from");
+			if (!PublicationSweep.restoreFallback(storage)) LOGGER.error("The projection could not be restored; this boot runs without the modpack projection");
+		} catch (IOException | RuntimeException e) {
+			LOGGER.error("The projection could not be restored; this boot runs without the modpack projection", e);
+		}
 	}
 
 	/**
@@ -69,7 +87,7 @@ public final class BootRecovery {
 			return;
 		}
 		if (now == scanned) return;
-		if (bootAsIs) {
+		if (bootAsIs || Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) {
 			LOGGER.warn("A directory-scanning loader took the projection before recovery changed it (revision {} -> {}); this session runs without what it missed", scanned, now);
 			return;
 		}

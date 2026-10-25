@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,14 +45,19 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * #580 and its class: every apply lands what it can and rolls forward, a held file stays owed, any number of actions in
  * one game process stack on each other, and the next boot converges on the latest one.
  */
 class BestEffortApplyTest {
+	@org.junit.jupiter.api.AfterEach
+	void forgetScan() {
+		ClientStorage.forgetDirectoryScan();
+	}
+
 	private static final String PACK = "abc1234";
 	private static final String MOD = "mods/m.jar";
 	private static final String MANAGED = "config/managed.toml";
@@ -89,7 +96,7 @@ class BestEffortApplyTest {
 	@Test
 	void aHeldProjectionFinishesAtTheNextBootWithoutReplanningAModsRewrite() throws Exception {
 		Fixture fixture = twoGenerations();
-		UpdateCommit inGame = HeldFiles.inGame(fixture.storage, path -> path.equals(fixture.storage.activeDirectory()));
+		UpdateCommit inGame = HeldFiles.inGame(fixture.storage, path -> path.equals(fixture.storage.activePath("mods/old.jar")));
 
 		UpdateCommit.Outcome deferred = inGame.run(new UpdateCommit.Fresh(() -> built(fixture.storage, fixture.plan, fixture.target), null));
 
@@ -118,8 +125,8 @@ class BestEffortApplyTest {
 		UpdateCommit crashing = new UpdateCommit(fixture.storage, crashingAt(step));
 
 		assertThrows(Crash.class, () -> crashing.run(new UpdateCommit.Fresh(() -> built(fixture.storage, fixture.plan, fixture.target), null)));
-		// A replay passes every step again except the ones whose work it finds done: the journal, the swap, and the COMMITTED marker.
-		if (Set.of(UpdateCommit.Step.LIVE_APPLIED, UpdateCommit.Step.PROJECTION_BUILT, UpdateCommit.Step.FINALIZED).contains(step))
+		// A replay passes every step again except the ones whose work it finds done: the journal and the COMMITTED marker.
+		if (Set.of(UpdateCommit.Step.LIVE_APPLIED, UpdateCommit.Step.PROJECTION_MARKED, UpdateCommit.Step.PROJECTION_CONVERGED, UpdateCommit.Step.FINALIZED).contains(step))
 			assertThrows(Crash.class, () -> crashing.run(new UpdateCommit.Recover(null)), "the replay passes the same step again");
 
 		UpdateCommit.Outcome recovered = UpdateTestFixtures.commits(fixture.storage).run(new UpdateCommit.Recover(null));
@@ -133,7 +140,100 @@ class BestEffortApplyTest {
 		assertFalse(Files.exists(fixture.storage.activePath("mods/old.jar")));
 		assertEquals(fixture.target.packTarget().contentToken(), fixture.storage.readActiveState().contentToken);
 		assertTrue(fixture.storage.readOverlayState(PACK).deletedPaths.isEmpty());
+		assertFalse(ProjectionState.read(fixture.storage).converging());
 		assertInstanceOf(UpdateCommit.Idle.class, UpdateTestFixtures.commits(fixture.storage).run(new UpdateCommit.Recover(null)));
+	}
+
+	/**
+	 * Crash before every single write of the apply, live and projection alike, then replay: every crash point is either
+	 * before the projection was touched, so every gate loads the old projection, or after it was marked converging, so
+	 * every gate refuses until the replay or a restore makes it complete again (C3, C6).
+	 */
+	@ParameterizedTest
+	@ValueSource(ints = {0, 1, 2, 3, 4, 5, 6, 7})
+	void aCrashBeforeAnyWriteIsEitherTheOldProjectionOrARefusedOne(int crashAt) throws Exception {
+		Fixture fixture = twoGenerations();
+		int[] seen = {0};
+		boolean[] reached = {false};
+		UpdateCommit crashing = new UpdateCommit(fixture.storage, new UpdateCommit.Probe() {
+			@Override
+			public void beforeWrite(Path target) {
+				if (seen[0]++ == crashAt) {
+					reached[0] = true;
+					throw new Crash();
+				}
+			}
+		});
+		try {
+			crashing.run(new UpdateCommit.Fresh(() -> built(fixture.storage, fixture.plan, fixture.target), null));
+		} catch (Crash expected) {
+			// the crash point
+		}
+		if (!reached[0]) return;
+		boolean projectionTouched = !Files.exists(fixture.storage.activePath("mods/old.jar")) || Files.exists(fixture.storage.activePath(CONFIG));
+		if (projectionTouched) assertNotNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()), "a touched projection is refused");
+		if (ProjectionState.loadRefusal(fixture.storage.gameDirectory()) == null) {
+			assertTrue(FileIntegrity.matches(fixture.storage.activePath("mods/old.jar"), OLD_JAR.length, fixture.oldHash), "a loadable projection is the old one");
+			assertFalse(Files.exists(fixture.storage.activePath(CONFIG)));
+		}
+		UpdateTransaction owed = UpdateTransaction.read(fixture.storage.transactionFile());
+		if (ProjectionState.read(fixture.storage).converging()) assertEquals(UpdateTransaction.Phase.PROJECTED, owed.phase, "PROJECTED is durable before the first projection write");
+
+		assertInstanceOf(UpdateCommit.Applied.class, UpdateTestFixtures.commits(fixture.storage).run(new UpdateCommit.Recover(null)));
+		assertArrayEquals(LF, Files.readAllBytes(fixture.storage.activePath(CONFIG)));
+		assertFalse(Files.exists(fixture.storage.activePath("mods/old.jar")));
+		assertNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()));
+	}
+
+	/**
+	 * Windows in-game: the running game holds the old jar, so the projection stays owed with the state converging. Every
+	 * gate refuses the mixed tree, a boot that cannot finish restores the complete old projection from CAS, and the next
+	 * recovery rolls forward to the target (C1, C2, C6).
+	 */
+	@Test
+	void aHeldJarKeepsTheProjectionOwedAndABootGetsTheCompleteOldOne() throws Exception {
+		Fixture fixture = twoGenerations();
+		UpdateCommit inGame = HeldFiles.inGame(fixture.storage, path -> path.equals(fixture.storage.activePath("mods/old.jar")));
+
+		assertInstanceOf(UpdateCommit.Deferred.class, inGame.run(new UpdateCommit.Fresh(() -> built(fixture.storage, fixture.plan, fixture.target), null)));
+		assertTrue(ProjectionState.read(fixture.storage).converging());
+		assertNotNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()));
+		assertNull(ClientStorage.loadableProjectionModsDirectory(fixture.storage.gameDirectory()));
+		ClientStorage.forgetDirectoryScan();
+		assertTrue(Files.exists(fixture.storage.activePath(CONFIG)) && Files.exists(fixture.storage.activePath("mods/old.jar")), "the rest landed around the held jar");
+		assertEquals(UpdateTransaction.Phase.PROJECTED, UpdateTransaction.read(fixture.storage.transactionFile()).phase);
+
+		// A boot that must run as is, the journal still owed: the projection it loads is the complete old one.
+		assertTrue(PublicationSweep.restoreFallback(fixture.storage));
+		assertNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()));
+		assertTrue(FileIntegrity.matches(fixture.storage.activePath("mods/old.jar"), OLD_JAR.length, fixture.oldHash));
+		assertFalse(Files.exists(fixture.storage.activePath(CONFIG)));
+		assertEquals(fixture.oldTarget.packTarget().contentToken(), fixture.storage.readActiveState().contentToken);
+
+		write(fixture.storage.gamePath(CONFIG), CRLF);
+		assertInstanceOf(UpdateCommit.Applied.class, UpdateTestFixtures.commits(fixture.storage).run(new UpdateCommit.Recover(cause -> {
+			throw new AssertionError("a started journal never replans: " + cause.message());
+		})));
+		assertArrayEquals(LF, Files.readAllBytes(fixture.storage.activePath(CONFIG)));
+		assertFalse(Files.exists(fixture.storage.activePath("mods/old.jar")));
+		assertArrayEquals(CRLF, Files.readAllBytes(fixture.storage.gamePath(CONFIG)), "the landed live write is the player's");
+		assertEquals(fixture.target.packTarget().contentToken(), fixture.storage.readActiveState().contentToken);
+		assertNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()));
+	}
+
+	/** A journal retired while its projection converges leaves no owner: the sweep restores the projection it started from. */
+	@Test
+	void retiringAConvergingJournalRestoresTheProjectionItStartedFrom() throws Exception {
+		Fixture fixture = twoGenerations();
+		HeldFiles.inGame(fixture.storage, path -> path.equals(fixture.storage.activePath("mods/old.jar")))
+				.run(new UpdateCommit.Fresh(() -> built(fixture.storage, fixture.plan, fixture.target), null));
+		assertTrue(ProjectionState.read(fixture.storage).converging());
+
+		assertNotNull(PublicationSweep.retireJournal(fixture.storage));
+
+		assertNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()));
+		assertTrue(FileIntegrity.matches(fixture.storage.activePath("mods/old.jar"), OLD_JAR.length, fixture.oldHash));
+		assertFalse(Files.exists(fixture.storage.activePath(CONFIG)));
 	}
 
 	/**
@@ -206,40 +306,31 @@ class BestEffortApplyTest {
 		}).anyMatch(tree -> tree.files().stream().anyMatch(file -> file.path().equals(held) && file.sha1().equals(HashUtils.sha1(rewrite)))), "the rewrite is checkpointed before it is replaced");
 	}
 
-	/** A fresh action replaces an owed journal mid-swap: the game keeps a projection, and the new action publishes its own. */
+	/** A fresh action replaces a journal whose projection is owed: it converges from the mixed tree onto its own target and keeps the first fallback. */
 	@Test
-	void anActionReplacingAJournalStoppedMidSwapStartsFromALoadableProjection() throws Exception {
+	void anActionReplacingAJournalWithAnOwedProjectionConvergesOntoItsOwnTarget() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
 		Generation installed = install(storage, 0);
 		Generation first = generation(storage, installed, 1, 1);
 		UpdatePlan firstPlan = stackedPlan(storage, installed, first);
-		assertThrows(Crash.class, () -> new UpdateCommit(storage, crashingAt(UpdateCommit.Step.PROJECTION_BUILT))
+		assertInstanceOf(UpdateCommit.Deferred.class, HeldFiles.inGame(storage, path -> path.equals(storage.activePath(MANAGED)))
 				.run(new UpdateCommit.Fresh(() -> built(storage, firstPlan, first.target), null)));
-		// The swap moved active aside and stopped before incoming moved in.
-		Files.move(storage.activeDirectory(), storage.backupDirectory());
+		List<ProjectionState.Row> fallback = ProjectionState.read(storage).fallback();
+		assertFalse(fallback.isEmpty());
 
 		Generation second = generation(storage, first, 2, 2);
 		UpdatePlan secondPlan = stackedPlan(storage, first, second);
-		assertInstanceOf(UpdateCommit.Applied.class, UpdateTestFixtures.commits(storage).run(new UpdateCommit.Fresh(() -> built(storage, secondPlan, second.target), null)));
-
+		assertInstanceOf(UpdateCommit.Deferred.class, HeldFiles.inGame(storage, path -> path.equals(storage.activePath(MANAGED)))
+				.run(new UpdateCommit.Fresh(() -> built(storage, secondPlan, second.target), null)));
+		assertEquals(fallback, ProjectionState.read(storage).fallback(), "the fallback is the last complete projection, not a mixed one");
 		assertArrayEquals(bytes(MOD, 2), Files.readAllBytes(storage.activePath(MOD)));
+
+		assertInstanceOf(UpdateCommit.Applied.class, UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null)));
+		assertArrayEquals(bytes(MOD, 2), Files.readAllBytes(storage.activePath(MOD)));
+		assertArrayEquals(bytes(MANAGED, 2), Files.readAllBytes(storage.activePath(MANAGED)));
 		assertArrayEquals(bytes(MANAGED, 2), Files.readAllBytes(storage.gamePath(MANAGED)));
 		assertEquals(second.target.packTarget().contentToken(), storage.readActiveState().contentToken);
-	}
-
-	/** A swap whose second move fails puts the projection it moved aside back, so the game is never left without one. */
-	@Test
-	void aSwapThatCannotMoveIncomingInPutsActiveBack() throws Exception {
-		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
-		Generation installed = install(storage, 0);
-		Generation next = generation(storage, installed, 1, 1);
-		UpdateTransaction transaction = UpdateTestFixtures.createTransaction(storage, stackedPlan(storage, installed, next), next.target);
-		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-			assertThrows(IOException.class, () -> new ProjectionPublication(storage, cache).swap(transaction), "there is no incoming tree to move in");
-		}
-
-		assertArrayEquals(bytes(MOD, 0), Files.readAllBytes(storage.activePath(MOD)));
-		assertFalse(Files.exists(storage.backupDirectory()));
+		assertNull(ProjectionState.loadRefusal(storage.gameDirectory()));
 	}
 
 	/** No markers: the journals this engine writes carry only the fields rc.5 already reads, so a downgrade replays them. */

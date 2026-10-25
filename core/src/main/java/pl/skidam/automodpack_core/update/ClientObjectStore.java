@@ -333,6 +333,7 @@ public final class ClientObjectStore {
 		collectGeneratedCopies(storage, retained);
 		collectStateJournal(storage, retained);
 		collectTransaction(storage, retained);
+		collectProjectionFallback(storage, retained);
 		collectRepair(storage, retained);
 		collectWaitingMusic(storage, retained);
 		validateActiveProjection(storage);
@@ -403,6 +404,11 @@ public final class ClientObjectStore {
 			retained.optional(conflict.sourceHash(), conflict.sourceSize(), "in-flight transaction conflict source");
 			retained.require(conflict.targetHash(), conflict.targetSize(), "in-flight transaction conflict target");
 		}
+	}
+
+	/** A converging projection's fallback is the tree boot restores when the convergence cannot finish (P4), so its bytes stay. */
+	private static void collectProjectionFallback(ClientStorage storage, ExpectedSizes retained) throws IOException {
+		for (ProjectionState.Row row : ProjectionState.read(storage).fallback()) retained.require(row.sha1(), row.size(), "converging projection fallback");
 	}
 
 	private static void collectRepair(ClientStorage storage, ExpectedSizes retained) throws IOException {

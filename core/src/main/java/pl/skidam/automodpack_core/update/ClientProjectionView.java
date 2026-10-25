@@ -36,7 +36,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * <p>
  * The committed {@code active/} tree is the projection the game loads. A pending
  * transaction is only treated as that projection after publication has started
- * (incoming/backup exists, or the phase is already swapping). An unpublished
+ * (the phase is PROJECTED or later, or an older version's incoming/backup directory
+ * still marks its swap). An unpublished
  * deferred request keeps live observation so extras and missing files stay
  * visible. Game-directory mutations remain an independent observation, with
  * pending live paths attached so a replan can skip work the transaction already
@@ -151,7 +152,11 @@ public final class ClientProjectionView {
 		return publicationStarted(storage, transaction);
 	}
 
-	/** Whether the projection swap may have begun, which proves every live operation landed: a projection is built only after them. */
+	/**
+	 * Whether the projection convergence may have begun, which proves every live operation landed: PROJECTED is persisted
+	 * only after them and before the first projection write. An older version's swap marked the same point only by its
+	 * {@code incoming/} or {@code backup/} directory, so a journal it left behind is still read that way.
+	 */
 	public static boolean publicationStarted(ClientStorage storage, UpdateTransaction transaction) {
 		if (!isProjectionTransaction(transaction)) return false;
 		if (transaction.phase == UpdateTransaction.Phase.PROJECTED || transaction.phase == UpdateTransaction.Phase.SWAPPING
@@ -351,7 +356,6 @@ public final class ClientProjectionView {
 		public List<Path> sourceCandidates(String relativePath) {
 			String relative = LogicalPath.normalize(relativePath);
 			List<Path> candidates = new ArrayList<>();
-			if (pending != null) candidates.add(resolve(storage.incomingDirectory(), relative));
 			candidates.add(storage.activePath(relative));
 			UpdatePlan.FileState expected = files.get(relative);
 			if (expected != null && expected.sha1() != null) candidates.add(storage.objectFile(expected.sha1()));
@@ -363,12 +367,6 @@ public final class ClientProjectionView {
 				}
 			}
 			return List.copyOf(candidates);
-		}
-
-		private Path resolve(Path root, String relative) {
-			Path resolved = root.resolve(relative).normalize();
-			if (!resolved.startsWith(root)) throw new IllegalArgumentException("Projection source escaped its root");
-			return resolved;
 		}
 	}
 }
