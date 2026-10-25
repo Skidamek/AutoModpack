@@ -7,6 +7,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -45,6 +47,7 @@ class ClientOverlaySnapshotTest {
 		Files.createDirectories(overlay.getParent());
 		Files.writeString(overlay, "overlay", StandardCharsets.UTF_8);
 		storage.writeOverlayState("abcdefg", Set.of("config/deleted.txt"));
+		Files.setLastModifiedTime(overlay, FileTime.from(Instant.now().minusSeconds(86400)));
 
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			ClientOverlaySnapshot first = storage.overlaySnapshot("abcdefg", cache);

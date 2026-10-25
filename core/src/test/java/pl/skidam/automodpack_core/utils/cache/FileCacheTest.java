@@ -12,11 +12,15 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
@@ -258,9 +262,119 @@ class FileCacheTest {
 	}
 
 	@Test
+	void reproofOfARacyRecordPersistsTheSettledStampSoARestartTrustsIt() throws Exception {
+		Path object = temporaryDirectory.resolve("object.bin");
+		Files.writeString(object, "named-bytes", StandardCharsets.UTF_8);
+		Files.setLastModifiedTime(object, FileTime.from(Instant.ofEpochSecond(1_700_000_000L)));
+		String pathKey = object.toAbsolutePath().normalize().toString();
+		Path provingDirectory = temporaryDirectory.resolve("proving-cache");
+		String sha1;
+		Path provedRecord;
+		try (FileCache cache = FileCache.open(provingDirectory)) {
+			sha1 = cache.getOrComputeHash(object);
+			provedRecord = cache.recordPath(pathKey);
+		}
+		// The record a restart finds on disk after a proof in the object's own mtime tick (a download finishing as it was
+		// hashed), built without sleeping. A fresh cache directory has no warm records, so it reads this one like a restart.
+		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
+		Path record = cacheDirectory.resolve(provingDirectory.relativize(provedRecord));
+		JsonObject json = JsonParser.parseString(Files.readString(provedRecord, StandardCharsets.UTF_8)).getAsJsonObject();
+		json.addProperty("validatedAtNanos", json.get("lastModifiedNanos").getAsLong());
+		Files.createDirectories(record.getParent());
+		Files.writeString(record, json.toString(), StandardCharsets.UTF_8);
+		assertTrue(persistedRecordIsRacy(record));
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
+			assertEquals(record, cache.recordPath(pathKey));
+			assertTrue(cache.matchesImmutable(object, Files.size(object), sha1));
+		}
+		assertFalse(persistedRecordIsRacy(record), "the settled re-proof must reach disk, or every restart rehashes the object again");
+	}
+
+	@Test
+	void clockReadingsRewriteOnePersistentFileBesideTheRecordShards() throws Exception {
+		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
+			for (int i = 0; i < 5; i++) {
+				Path file = temporaryDirectory.resolve("file-" + i + ".bin");
+				Files.writeString(file, "bytes-" + i, StandardCharsets.UTF_8);
+				Files.setLastModifiedTime(file, FileTime.from(Instant.now().plusSeconds(3600)));
+				assertNotNull(cache.getOrComputeHash(file));
+			}
+		}
+		try (var entries = Files.list(cacheDirectory)) {
+			// Everything but the clock is a two-character record shard directory.
+			assertTrue(entries.allMatch(entry -> entry.getFileName().toString().equals(FileCache.CLOCK_FILE) ? Files.isRegularFile(entry) : Files.isDirectory(entry) && entry.getFileName().toString().length() == 2));
+		}
+		assertTrue(Files.isRegularFile(cacheDirectory.resolve(FileCache.CLOCK_FILE)));
+	}
+
+	@Test
+	void anUnwritableClockFallsBackToTheWallClock() throws Exception {
+		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
+		Files.createDirectories(cacheDirectory.resolve(FileCache.CLOCK_FILE));
+		Path file = temporaryDirectory.resolve("file.bin");
+		Files.writeString(file, "bytes", StandardCharsets.UTF_8);
+		Files.setLastModifiedTime(file, FileTime.from(Instant.ofEpochSecond(1_700_000_000L)));
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
+			String sha1 = cache.getOrComputeHash(file);
+			assertNotNull(sha1);
+			assertTrue(cache.matchesImmutable(file, Files.size(file), sha1));
+			assertFalse(persistedRecordIsRacy(cache.recordPath(file.toAbsolutePath().normalize().toString())));
+		}
+	}
+
+	@Test
+	void anUnwritableClockKeepsTheLastRecordsClockReading() throws Exception {
+		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
+			Path first = temporaryDirectory.resolve("first.bin");
+			Files.writeString(first, "first", StandardCharsets.UTF_8);
+			Files.setLastModifiedTime(first, FileTime.from(Instant.now().plusSeconds(3600)));
+			cache.getOrComputeHash(first);
+			long reading = validatedAt(cache.recordPath(first.toAbsolutePath().normalize().toString()));
+			// A concurrent open refused (a Windows sharing violation) stands in as a clock that cannot be rewritten.
+			Files.delete(cacheDirectory.resolve(FileCache.CLOCK_FILE));
+			Files.createDirectories(cacheDirectory.resolve(FileCache.CLOCK_FILE));
+			Path second = temporaryDirectory.resolve("second.bin");
+			Files.writeString(second, "second", StandardCharsets.UTF_8);
+			Files.setLastModifiedTime(second, FileTime.from(Instant.now().plusSeconds(3600)));
+			cache.getOrComputeHash(second);
+			assertEquals(reading, validatedAt(cache.recordPath(second.toAbsolutePath().normalize().toString())), "an earlier records-clock reading is the conservative stamp");
+		}
+	}
+
+	@Test
+	void aReproofThatIsStillRacyKeepsThePersistedRecord() throws Exception {
+		Path object = temporaryDirectory.resolve("object.bin");
+		Files.writeString(object, "named-bytes", StandardCharsets.UTF_8);
+		// A modification time ahead of the records clock (a skewed share, an archive's future stamp) stays racy for every proof.
+		Files.setLastModifiedTime(object, FileTime.from(Instant.now().plusSeconds(3600)));
+		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
+			String sha1 = cache.getOrComputeHash(object);
+			Path record = cache.recordPath(object.toAbsolutePath().normalize().toString());
+			Object key = Files.readAttributes(record, BasicFileAttributes.class).fileKey();
+			assumeTrue(key != null, "The filesystem does not expose file keys");
+			for (int i = 0; i < 3; i++) assertTrue(cache.matchesImmutable(object, Files.size(object), sha1));
+			assertEquals(key, Files.readAttributes(record, BasicFileAttributes.class).fileKey(), "a re-proof that cannot settle must not rewrite the record on every ask");
+		}
+	}
+
+	private static long validatedAt(Path record) throws IOException {
+		return JsonParser.parseString(Files.readString(record, StandardCharsets.UTF_8)).getAsJsonObject().get("validatedAtNanos").getAsLong();
+	}
+
+	private static boolean persistedRecordIsRacy(Path record) throws IOException {
+		JsonObject json = JsonParser.parseString(Files.readString(record, StandardCharsets.UTF_8)).getAsJsonObject();
+		return json.get("lastModifiedNanos").getAsLong() >= json.get("validatedAtNanos").getAsLong();
+	}
+
+	@Test
 	void namedObjectTripwireTrustsChangeTimeBumpsFromOurOwnHardlinks() throws Exception {
 		Path object = temporaryDirectory.resolve("object.bin");
 		Files.writeString(object, "named-bytes", StandardCharsets.UTF_8);
+		// A settled object, so the only disturbance left to answer is the link's ctime bump; a racy record is re-persisted by design.
+		Files.setLastModifiedTime(object, FileTime.from(Instant.ofEpochSecond(1_700_000_000L)));
 		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
 		try (FileCache cache = FileCache.open(cacheDirectory)) {
 			String sha1 = cache.getOrComputeHash(object);

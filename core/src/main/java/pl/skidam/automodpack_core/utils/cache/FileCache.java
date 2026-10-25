@@ -3,9 +3,11 @@ package pl.skidam.automodpack_core.utils.cache;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
@@ -14,7 +16,6 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
 
-import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
@@ -40,6 +41,8 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 
 	private static final SharedCacheRegistry<FileCache> REGISTRY = new SharedCacheRegistry<>();
 	private static final long UNAVAILABLE_CHANGE_TIME_NANOS = Long.MIN_VALUE;
+	/** Rewritten by every clock reading; its mtime is the records filesystem's current time. */
+	static final String CLOCK_FILE = ".clock";
 	private volatile long clockStamp = Long.MIN_VALUE;
 
 	public static final class CachedFile {
@@ -167,7 +170,9 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 
 	/**
 	 * Records a stable hash. A re-proof that leaves the hash and everything {@code tripwire} compares unchanged only
-	 * refreshes the warm record's stamp, so a racy rehash never rewrites the persisted record.
+	 * refreshes the warm record's stamp, unless the re-proof settles a record that was racy against its own stat: that one
+	 * is persisted again, so bytes proven in the same tick they were written are not fully rehashed after every restart,
+	 * while a proof that is still racy (an mtime ahead of the records clock) never rewrites the record on every ask.
 	 */
 	private String publishComputed(String pathKey, ComputedHash computed, BiPredicate<CachedFile, FileFingerprint> tripwire) {
 		FileFingerprint stableFingerprint = computed.fingerprint();
@@ -175,7 +180,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		boolean sameHash = previous != null && Objects.equals(previous.contentHash(), computed.hash());
 		CachedFile record = new CachedFile(pathKey, computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.changeTimeNanos(), stableFingerprint.size(),
 				stableFingerprint.fileKey(), validatedAt(stableFingerprint.lastModifiedNanos()), sameHash ? previous.murmur() : null);
-		if (sameHash && tripwire.test(previous, stableFingerprint)) hotRecords.put(pathKey, record);
+		if (sameHash && tripwire.test(previous, stableFingerprint) && (!isRacyTimestamp(previous, stableFingerprint) || isRacyTimestamp(record, stableFingerprint))) hotRecords.put(pathKey, record);
 		else writeRecord(pathKey, record);
 		return computed.hash();
 	}
@@ -330,21 +335,28 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	 * The racy reference for a proof of a file last modified at {@code lastModifiedNanos}: a reading of the records
 	 * filesystem's own clock taken no later than now. Filesystems stamp mtime from a coarse clock (a jiffy, an NTFS tick,
 	 * FAT's two seconds), so a precise wall clock would run ahead of a write that lands after the proof in the same tick.
-	 * An earlier reading stays valid, so the clock is only read again when the file is not older than the last one.
+	 * The reading is the mtime of one persistent {@value #CLOCK_FILE} file rewritten in the records directory, so it is
+	 * the records filesystem's clock: a file proven on another filesystem (a network share, another drive) gets roughly
+	 * the wall-clock guarantee instead. An earlier reading stays valid, so the clock is only read again when the file is
+	 * not older than the last one.
 	 */
 	private long validatedAt(long lastModifiedNanos) {
 		long stamp = clockStamp;
 		if (lastModifiedNanos < stamp) return stamp;
 		try {
 			Files.createDirectories(recordsDirectory);
-			Path probe = Files.createTempFile(recordsDirectory, ".clock-", DurableFiles.TEMPORARY_SUFFIX);
-			try {
-				stamp = toNanos(Files.getLastModifiedTime(probe, LinkOption.NOFOLLOW_LINKS));
-			} finally {
-				Files.deleteIfExists(probe);
+			// Records live in two-character shard directories, so this top-level dot file is never read as one. It is
+			// overwritten in place, never truncated: ext4, XFS and btrfs flush a file closed after a truncate, which costs one
+			// physical write per reading.
+			Path clock = recordsDirectory.resolve(CLOCK_FILE);
+			try (OutputStream out = Files.newOutputStream(clock, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+				out.write('0');
 			}
+			stamp = toNanos(Files.getLastModifiedTime(clock, LinkOption.NOFOLLOW_LINKS));
 		} catch (IOException e) {
-			// An unwritable cache keeps only warm records; the wall clock keeps them usable as before.
+			// An earlier reading of the records clock is still a valid, conservative stamp (a shared data root on Windows can
+			// refuse a concurrent open with a sharing violation); only a cache that never read it falls back to the wall clock.
+			if (stamp != Long.MIN_VALUE) return stamp;
 			Instant now = Instant.now();
 			return now.getEpochSecond() * 1_000_000_000L + now.getNano();
 		}
