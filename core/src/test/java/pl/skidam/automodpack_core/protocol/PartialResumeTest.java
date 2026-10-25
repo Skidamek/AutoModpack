@@ -138,4 +138,41 @@ class PartialResumeTest {
 		assertTrue(Files.isDirectory(PartialResume.directory(directory, keep)));
 		assertFalse(Files.exists(PartialResume.directory(directory, drop)));
 	}
+
+	@Test
+	void stitchingReturnsTheHashOfExactlyTheBytesItWrote(@TempDir Path directory) throws Exception {
+		byte[] object = new byte[NetUtils.WIRE_CHUNK_BYTES * 2 + 3];
+		new java.util.Random(9).nextBytes(object);
+		Path dir = PartialResume.directory(directory, HashUtils.sha1(object));
+		try (var out = PartialResume.writer(dir, object.length, 0)) {
+			out.write(object);
+		}
+		Path assembled = directory.resolve("assembled");
+		assertEquals(HashUtils.sha1(object), PartialResume.assembleHashing(dir, assembled, object.length));
+		assertArrayEquals(object, Files.readAllBytes(assembled));
+		assertThrows(java.io.IOException.class, () -> PartialResume.assembleHashing(PartialResume.directory(directory, HashUtils.sha1("missing")), directory.resolve("other"), 10));
+	}
+
+	@Test
+	void onlyAWholeSoleTileIsAdoptedAndAFailedMoveLeavesItForStitching(@TempDir Path directory) throws Exception {
+		byte[] object = "one tile".getBytes(StandardCharsets.UTF_8);
+		Path dir = PartialResume.directory(directory, HashUtils.sha1(object));
+		Files.createDirectories(dir);
+		Path tile = PartialResume.sliceFile(dir, 0);
+		Files.write(tile, object);
+
+		Path taken = Files.writeString(directory.resolve("taken"), "someone else's file");
+		assertFalse(PartialResume.adoptSoleTile(dir, taken, object.length), "a move that cannot complete falls back to stitching");
+		assertArrayEquals(object, Files.readAllBytes(tile));
+		assertEquals("someone else's file", Files.readString(taken));
+
+		assertFalse(PartialResume.adoptSoleTile(dir, directory.resolve("big"), NetUtils.WIRE_CHUNK_BYTES + 1L), "a multi-tile object is never adopted from its first tile");
+		assertFalse(PartialResume.adoptSoleTile(dir, directory.resolve("empty"), 0));
+		assertTrue(Files.exists(tile));
+
+		Path adopted = directory.resolve("adopted");
+		assertTrue(PartialResume.adoptSoleTile(dir, adopted, object.length));
+		assertArrayEquals(object, Files.readAllBytes(adopted));
+		assertFalse(Files.exists(tile));
+	}
 }

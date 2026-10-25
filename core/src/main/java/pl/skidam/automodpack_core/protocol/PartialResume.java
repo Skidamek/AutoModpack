@@ -1,12 +1,15 @@
 package pl.skidam.automodpack_core.protocol;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.security.MessageDigest;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Set;
 
@@ -31,6 +34,8 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 public final class PartialResume {
 
 	private static final Logger LOGGER = LogManager.getLogger();
+
+	private static final int ASSEMBLY_BUFFER = 256 * 1024;
 
 	private static final String HOST_SUFFIX = ".host" + DurableFiles.TEMPORARY_SUFFIX;
 
@@ -199,19 +204,53 @@ public final class PartialResume {
 	}
 
 	public static void assemble(Path directory, Path destination, long fileSize) throws IOException {
+		assembleHashing(directory, destination, fileSize);
+	}
+
+	/**
+	 * Stitches the tiles into {@code destination} like {@link #assemble} and returns the SHA-1 of exactly the bytes written,
+	 * so promotion never has to read the stitched copy back to verify it.
+	 */
+	public static String assembleHashing(Path directory, Path destination, long fileSize) throws IOException {
 		if (fileSize < 0) throw new IOException("Negative object size");
 		if (!complete(directory, fileSize)) throw new IOException("Incomplete slices for " + directory.getFileName());
 		Path parent = destination.getParent();
 		if (parent != null) Files.createDirectories(parent);
-		if (fileSize == 0) {
-			if (!Files.exists(destination)) Files.createFile(destination);
-			return;
-		}
+		MessageDigest digest = HashUtils.newSha1Digest();
+		byte[] buffer = new byte[ASSEMBLY_BUFFER];
+		long written = 0;
 		try (OutputStream out = Files.newOutputStream(destination)) {
-			for (long start = 0; start < fileSize; start += NetUtils.WIRE_CHUNK_BYTES)
-				Files.copy(sliceFile(directory, start), out);
+			for (long start = 0; start < fileSize; start += NetUtils.WIRE_CHUNK_BYTES) {
+				try (InputStream in = Files.newInputStream(sliceFile(directory, start))) {
+					int read;
+					while ((read = in.read(buffer)) != -1) {
+						digest.update(buffer, 0, read);
+						out.write(buffer, 0, read);
+						written += read;
+					}
+				}
+			}
 		}
-		if (Files.size(destination) != fileSize) throw new IOException("Assembled object size does not match " + fileSize);
+		if (written != fileSize || Files.size(destination) != fileSize) throw new IOException("Assembled object size does not match " + fileSize);
+		return HexFormat.of().formatHex(digest.digest());
+	}
+
+	/**
+	 * Moves the only tile of a one-tile object to {@code destination}, a private name on the same filesystem, so the
+	 * caller can verify and publish it without a copy. False leaves the tile where it was, and the caller stitches instead.
+	 */
+	public static boolean adoptSoleTile(Path directory, Path destination, long fileSize) throws IOException {
+		if (fileSize <= 0 || fileSize > NetUtils.WIRE_CHUNK_BYTES) return false;
+		Path tile = sliceFile(directory, 0);
+		if (presentLength(tile, fileSize) != fileSize) return false;
+		try {
+			Files.move(tile, destination);
+		} catch (IOException couldNotMove) {
+			// A scanner holding the tile open on Windows, or a filesystem without plain renames: stitching still works.
+			LOGGER.debug("Could not move sole tile {} into place, stitching it instead", tile, couldNotMove);
+			return false;
+		}
+		return true;
 	}
 
 	/** Sequential writer that fills tiles from {@code absStart} onward; each completed tile is just that file. */

@@ -91,6 +91,50 @@ class VerifiedFileTransferTest {
 	}
 
 	@Test
+	void hashedPromotionRejectsAWrongHashOrSizeAndPublishesOnlyMatchingBytes() throws IOException {
+		Path source = Files.writeString(tempDir.resolve("hashed-source"), "verified content", StandardCharsets.UTF_8);
+		Path target = tempDir.resolve("objects/hashed-target");
+		String hash = HashUtils.getHash(source);
+		long size = Files.size(source);
+
+		assertThrows(VerifiedFileTransfer.VerificationMismatchException.class,
+				() -> VerifiedFileTransfer.promoteHashed(source, target, size, hash, "0000000000000000000000000000000000000000", null));
+		assertThrows(VerifiedFileTransfer.VerificationMismatchException.class, () -> VerifiedFileTransfer.promoteHashed(source, target, size + 1, hash, hash, null));
+		assertThrows(VerifiedFileTransfer.VerificationMismatchException.class, () -> VerifiedFileTransfer.promoteHashed(source, target, size, hash, null, null));
+		assertFalse(Files.exists(target));
+		assertTrue(Files.exists(source));
+
+		try (FileCache cache = FileCache.open(tempDir.resolve("file-cache"))) {
+			VerifiedFileTransfer.promoteHashed(source, target, size, hash, hash.toUpperCase(), cache);
+			assertFalse(Files.exists(source));
+			assertTrue(FileIntegrity.matches(target, size, hash));
+			assertTrue(ImmutableFiles.isProtected(target));
+			assertTrue(cache.matchesImmutable(target, size, hash));
+		}
+	}
+
+	@Test
+	void hashedCrossFilesystemPromotionStillVerifiesTheCopy() throws IOException {
+		Path sourceDirectory = differentFileStoreDirectory(tempDir);
+		Assumptions.assumeTrue(sourceDirectory != null, "requires a writable second filesystem");
+		Path source = sourceDirectory.resolve("hashed-download");
+		try {
+			Files.writeString(source, "verified content", StandardCharsets.UTF_8);
+			Path target = tempDir.resolve("objects/hashed-cross-filesystem");
+			String hash = HashUtils.getHash(source);
+			long size = Files.size(source);
+
+			VerifiedFileTransfer.promoteHashed(source, target, size, hash, hash, null);
+
+			assertFalse(Files.exists(source));
+			assertTrue(FileIntegrity.matches(target, size, hash));
+		} finally {
+			ImmutableFiles.deleteIfExists(source);
+			if (sourceDirectory != null) Files.deleteIfExists(sourceDirectory);
+		}
+	}
+
+	@Test
 	void projectionHardlinkRefreshesNamedSourceGitStat() throws Exception {
 		Path object = Files.writeString(tempDir.resolve("object"), "named-bytes", StandardCharsets.UTF_8);
 		Path projection = tempDir.resolve("active/video.mp4");

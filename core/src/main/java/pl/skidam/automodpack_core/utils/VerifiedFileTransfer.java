@@ -149,6 +149,21 @@ public final class VerifiedFileTransfer {
 	public static void promoteAtomic(Path temporary, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
 		FileTrees.forceFile(temporary);
 		if (!FileIntegrity.matches(temporary, expectedSize, expectedSha1)) throw new VerificationMismatchException("Downloaded file failed size/SHA-1 verification: " + temporary);
+		publishVerified(temporary, targetFile, expectedSize, expectedSha1, cache);
+	}
+
+	/**
+	 * {@link #promoteAtomic} for a private temporary whose SHA-1 the caller already took over exactly the bytes it holds,
+	 * as it wrote or moved them into place: the size and that hash are checked here, and the bytes are not read again.
+	 */
+	public static void promoteHashed(Path temporary, Path targetFile, long expectedSize, String expectedSha1, String actualSha1, FileCache cache) throws IOException {
+		FileTrees.forceFile(temporary);
+		if (Files.size(temporary) != expectedSize || actualSha1 == null || !expectedSha1.equalsIgnoreCase(actualSha1))
+			throw new VerificationMismatchException("Downloaded file failed size/SHA-1 verification: " + temporary);
+		publishVerified(temporary, targetFile, expectedSize, expectedSha1, cache);
+	}
+
+	private static void publishVerified(Path temporary, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
 		ImmutableFiles.protect(temporary);
 		Path targetParent = OsPaths.requirePublishableParent(targetFile, "Target path");
 		boolean crossFileSystem = false;

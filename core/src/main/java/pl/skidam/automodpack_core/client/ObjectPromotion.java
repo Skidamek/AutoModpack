@@ -5,15 +5,18 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.UUID;
 
 import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
- * The CAS side of a finished transfer, identical for the host wire and a platform source: concatenate the stored slices,
- * hash them, and swap the result into the object store. Nothing here knows where the bytes came from.
+ * The CAS side of a finished transfer, identical for the host wire and a platform source: turn the stored slices into one
+ * private file, hash it, and swap it into the object store. Nothing here knows where the bytes came from.
  */
 final class ObjectPromotion {
 
@@ -38,13 +41,21 @@ final class ObjectPromotion {
 		}
 	}
 
-	/** Concatenates finished slices and hashes them into the CAS store; false with the failure recorded means the download is retried. */
+	/**
+	 * Verifies the finished slices and swaps them into the CAS store; false with the failure recorded means the download is
+	 * retried. A one-tile object is moved to a private name and published as is, a larger one is hashed while it is stitched,
+	 * so either way the bytes are written once more at most and read exactly once before they are published.
+	 */
 	boolean promote(String sha1, QueuedDownload task, Path partial, FileCache cache) {
-		Path assembled = null;
+		Path assembled = dataLayout.stagingDirectory().resolve("." + sha1 + "." + UUID.randomUUID() + ".obj");
 		try {
-			assembled = Files.createTempFile(dataLayout.stagingDirectory(), "." + sha1 + ".", ".obj");
-			PartialResume.assemble(partial, assembled, task.fileSize);
-			VerifiedFileTransfer.promoteAtomic(assembled, dataLayout.objectFile(sha1), task.fileSize, sha1, cache);
+			String hashed;
+			if (PartialResume.adoptSoleTile(partial, assembled, task.fileSize)) {
+				hashed = HashUtils.hashFile(assembled);
+			} else {
+				hashed = PartialResume.assembleHashing(partial, assembled, task.fileSize);
+			}
+			VerifiedFileTransfer.promoteHashed(assembled, dataLayout.objectFile(sha1), task.fileSize, sha1, hashed, cache);
 		} catch (VerifiedFileTransfer.VerificationMismatchException e) {
 			task.lastFailureCategory = DownloadManager.FailureCategory.REMOTE_SOURCE;
 			LOGGER.warn("Size or hash mismatch for downloaded file {}", task.file.getFileName());
@@ -56,8 +67,8 @@ final class ObjectPromotion {
 			deletePartial(task);
 			return false;
 		} finally {
-			if (assembled != null) try {
-				Files.deleteIfExists(assembled);
+			try {
+				ImmutableFiles.deleteIfExists(assembled);
 			} catch (IOException ignored) {
 			}
 		}
