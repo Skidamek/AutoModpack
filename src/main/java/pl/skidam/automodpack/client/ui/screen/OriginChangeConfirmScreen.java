@@ -13,7 +13,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /** Asks before an installed modpack starts being served from a new address; the flow owns what each answer does. */
-public final class OriginChangeConfirmScreen extends VersionedScreen {
+public final class OriginChangeConfirmScreen extends VersionedScreen implements LoginGate {
 	private static final int BODY = 420;
 	private final String modpackName;
 	private final String approvedOrigins;

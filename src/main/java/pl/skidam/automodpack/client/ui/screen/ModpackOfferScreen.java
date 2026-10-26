@@ -15,7 +15,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /** Offers the server's modpack before anything syncs; the flow owns what each answer does. */
-public final class ModpackOfferScreen extends VersionedScreen {
+public final class ModpackOfferScreen extends VersionedScreen implements LoginGate {
 	private static final int BODY = 420;
 	private final Screen parent;
 	private final Runnable syncModpack;

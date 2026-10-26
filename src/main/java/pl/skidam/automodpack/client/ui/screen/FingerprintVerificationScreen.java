@@ -22,7 +22,7 @@ import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
-public class FingerprintVerificationScreen extends VersionedScreen {
+public class FingerprintVerificationScreen extends VersionedScreen implements LoginGate {
 	private static final int BODY = 420;
 	private final Screen parent;
 	private final String serverFingerprint;

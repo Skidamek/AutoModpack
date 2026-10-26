@@ -23,6 +23,8 @@ import pl.skidam.automodpack_core.screen.TransientAttention;
 import pl.skidam.automodpack_core.client.UpdateType;
 import pl.skidam.automodpack_core.utils.Throwables;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.util.Optional;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
@@ -68,7 +70,7 @@ public class ScreenImpl implements ScreenService {
 	@Override
 	public void changelog(Changelogs changelogs) {
 		Screens.commitSuccessor();
-		executeOnClient(() -> Screens.changelog(Screens.getScreen(), changelogs));
+		executeOnClient(() -> Screens.changelog(changelogs));
 	}
 
 	@Override
@@ -263,9 +265,12 @@ public class ScreenImpl implements ScreenService {
 			*//*?}*/
 		}
 
-		/** Starts a transient episode: the busy screen owns the display and the screen under it is remembered as the place to return to. */
+		/** Starts a transient episode: the busy screen owns the display and a restorable hub under it is remembered as the place to return to. */
 		private static void beginTransientAttention() {
-			if (!transientAttention) interactiveParent = getScreen();
+			if (!transientAttention) {
+				Screen current = getScreen();
+				interactiveParent = isReturnTarget(current) ? current : null;
+			}
 			transientAttention = true;
 		}
 
@@ -274,9 +279,14 @@ public class ScreenImpl implements ScreenService {
 			return transientAttention ? interactiveParent : getScreen();
 		}
 
-		/** Screens with nowhere honest to return to land on the multiplayer hub. A torn-down connecting screen is the same as nowhere. */
+		/** A captured screen may be shown again only if it can still honor its buttons. Login gates, the connecting screen, and wait overlays cannot. */
+		private static boolean isReturnTarget(Screen screen) {
+			return screen != null && !(screen instanceof ConnectScreen) && !(screen instanceof LoginGate) && !isTransient(screen);
+		}
+
+		/** Succession door: unrestorable screens land on the multiplayer hub. */
 		private static Screen returnTarget(Screen parent) {
-			return parent == null || parent instanceof ConnectScreen ? multiplayerScreen() : parent;
+			return isReturnTarget(parent) ? parent : multiplayerScreen();
 		}
 
 		public static void download(DownloadView download, String modpackName, Runnable onCancel) {
@@ -286,8 +296,8 @@ public class ScreenImpl implements ScreenService {
 			}));
 		}
 
-		public static void changelog(Screen parent, Changelogs changelogs) {
-			Screens.setScreen(new ChangelogScreen(parent, changelogs));
+		public static void changelog(Changelogs changelogs) {
+			Screens.setScreen(new ChangelogScreen(returnTarget(flowParent()), changelogs));
 		}
 
 		public static void restart(UpdateType updateType, Changelogs changelogs) {
@@ -312,7 +322,7 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void history(HistoryViewRequest request) {
-			Screens.setScreen(new ContentHistoryScreen(flowParent(), request));
+			Screens.setScreen(new ContentHistoryScreen(returnTarget(flowParent()), request));
 		}
 
 		public static void failure(FailureRequest request) {
@@ -370,6 +380,7 @@ public class ScreenImpl implements ScreenService {
 			if (WAIT.successorCommitted()) return;
 			WAIT.supersede();
 			if (!transientAttention && !isTransient(getScreen())) return;
+			if (interactiveParent != null && !isReturnTarget(interactiveParent)) LOGGER.error("Refused to restore unrestorable screen {}", interactiveParent.getClass().getSimpleName());
 			Screens.setScreen(returnTarget(interactiveParent));
 		}
 	}

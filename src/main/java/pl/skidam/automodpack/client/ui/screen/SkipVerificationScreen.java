@@ -22,7 +22,7 @@ import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
-public class SkipVerificationScreen extends VersionedScreen {
+public class SkipVerificationScreen extends VersionedScreen implements LoginGate {
 	private static final int BODY = 420;
 	private final Screen verificationScreen;
 	private final Runnable validatedCallback;

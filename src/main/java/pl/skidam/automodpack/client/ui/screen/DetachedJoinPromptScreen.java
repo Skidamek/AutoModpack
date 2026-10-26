@@ -15,7 +15,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /** Warns that the join continues on a locally kept modpack state; the flow owns what each answer does. */
-public final class DetachedJoinPromptScreen extends VersionedScreen {
+public final class DetachedJoinPromptScreen extends VersionedScreen implements LoginGate {
 	private static final int BODY = 420;
 	private final Screen parent;
 	private final String modpackName;
