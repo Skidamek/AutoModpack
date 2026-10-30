@@ -6,7 +6,6 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -20,6 +19,7 @@ import pl.skidam.automodpack_core.platforms.PlatformCache;
 import pl.skidam.automodpack_core.screen.SourceCounts;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.utils.DownloadSource;
+import pl.skidam.automodpack_core.utils.JarUtils;
 
 /** Owns the Modrinth/CurseForge source lookup of one updater session and every provenance reference resolved from it. */
 final class SourceCatalogue {
@@ -81,7 +81,7 @@ final class SourceCatalogue {
 	}
 
 	static boolean gatedJar(String path) {
-		return path != null && path.toLowerCase(Locale.ROOT).endsWith(".jar");
+		return JarUtils.hasJarExtension(path);
 	}
 
 	/** A sha1 counts as first-party when the running lookup confirmed it on a platform, downloadable or not, or a previous resolution is persisted in the platform cache. */
@@ -168,7 +168,7 @@ final class SourceCatalogue {
 	}
 
 	private static void addSourceFetchData(Map<String, FetchManager.FetchData> unique, String file, String sha1, String murmur, String type) {
-		if (!ModpackContentType.isSourceFetchable(type) || sha1 == null || sha1.isBlank()) return;
+		if (!ModpackContentType.needsPlatformLookup(type, file) || sha1 == null || sha1.isBlank()) return;
 		unique.putIfAbsent(sha1, new FetchManager.FetchData(file, sha1, murmur, type));
 	}
 

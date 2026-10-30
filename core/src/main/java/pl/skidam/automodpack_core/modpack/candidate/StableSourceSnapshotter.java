@@ -54,12 +54,12 @@ public final class StableSourceSnapshotter {
 			exclusion = expectedContentExclusion(autoExcludeServerMods, inspection);
 			if (exclusion != null) return new Snapshot(null, exclusion, null, environment, clientMayBeAbsent);
 			String type = fileType(source.logicalPath(), inspection);
-			boolean fetchable = ModpackContentType.isSourceFetchable(type);
+			boolean lookup = ModpackContentType.needsPlatformLookup(type, source.logicalPath());
 			// A changed file is read once cold per need: the identity hash first, then the staging copy; the murmur
 			// rides the staged bytes - page-warm and proven equal by the copy's own SHA-1 - instead of re-reading the source.
-			if (!materializeMissing) return new Snapshot(groupFile(source, before, type, sha1, fetchable ? sourceMurmur(source, fileCache) : null, fileCache), null, null, environment, clientMayBeAbsent);
+			if (!materializeMissing) return new Snapshot(groupFile(source, before, type, sha1, lookup ? sourceMurmur(source, fileCache) : null, fileCache), null, null, environment, clientMayBeAbsent);
 			if (trustedObject(objectStoreDirectory, sha1, before.size(), fileCache))
-				return new Snapshot(groupFile(source, before, type, sha1, fetchable ? sourceMurmur(source, fileCache) : null, fileCache), null, null, environment, clientMayBeAbsent);
+				return new Snapshot(groupFile(source, before, type, sha1, lookup ? sourceMurmur(source, fileCache) : null, fileCache), null, null, environment, clientMayBeAbsent);
 
 			FileTrees.createManagedDirectory(stagingDirectory, "staging directory");
 			staged = Files.createTempFile(stagingDirectory, "snapshot-", stagingSuffix(source.sourcePath()));
@@ -71,7 +71,7 @@ public final class StableSourceSnapshotter {
 			if (size != before.size()) throw new IOException("Staged snapshot size does not match stable source size: " + source.sourcePath());
 			if (copiedSha1 == null || !sha1.equalsIgnoreCase(copiedSha1)) throw new IOException("Staged snapshot SHA-1 does not match source identity: " + source.sourcePath());
 			String murmur = null;
-			if (fetchable) {
+			if (lookup) {
 				murmur = HashUtils.getCurseforgeMurmurHash(staged);
 				if (fileCache != null && murmur != null) fileCache.publishMurmur(source.sourcePath(), murmur);
 			}
@@ -87,7 +87,7 @@ public final class StableSourceSnapshotter {
 	}
 
 	private static GroupManifest.GroupFile groupFile(CandidateSource source, FileCache.StatSnapshot before, String type, String sha1, String murmur, FileCache fileCache) throws IOException {
-		if (murmur == null && ModpackContentType.isSourceFetchable(type) && fileCache != null) murmur = sourceMurmur(source, fileCache);
+		if (murmur == null && ModpackContentType.needsPlatformLookup(type, source.logicalPath()) && fileCache != null) murmur = sourceMurmur(source, fileCache);
 		return new GroupManifest.GroupFile(before.size(), type, false, sha1, murmur);
 	}
 

@@ -51,6 +51,22 @@ class ModpackCandidateScannerTest {
 	}
 
 	@Test
+	void aJarWithoutModMetadataStillGetsAPlatformFingerprint() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Path mods = groups.resolve("main/mods");
+		Files.createDirectories(server);
+		Files.createDirectories(mods);
+		writePlainJar(mods.resolve("wrapper.jar"));
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()));
+		var file = candidate.manifest().groups().get("main").files().get("mods/wrapper.jar");
+
+		assertEquals("other", file.type());
+		assertNotNull(file.murmur());
+	}
+
+	@Test
 	void groupFolderShadowsSyncedSourceAndRecordsProvenance() throws Exception {
 		Path server = tempDir.resolve("server");
 		Path groups = tempDir.resolve("groups");
@@ -689,6 +705,14 @@ class ModpackCandidateScannerTest {
 		assertFalse(candidate.manifest().groups().get("main").files().containsKey("dedicated.jar"));
 		assertEquals(1, candidate.exclusions().size());
 		assertEquals("modrinth environment dedicated_server_only", candidate.exclusions().get(0).message());
+	}
+
+	private static void writePlainJar(Path path) throws IOException {
+		try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(path))) {
+			jar.putNextEntry(new JarEntry("readme.txt"));
+			jar.write("not a mod".getBytes(StandardCharsets.UTF_8));
+			jar.closeEntry();
+		}
 	}
 
 	private static void writeModJar(Path path) throws IOException {
