@@ -53,6 +53,8 @@ public class ConnectionJsons {
 	public static class ConnectionRecordFields {
 		public ConnectionInfo connection;
 		public Map<String, Secrets.Secret> secrets = new HashMap<>();
+		public Boolean allowUnverifiedLaunchWrites;
+		public Long unseenLaunchApplySeq;
 	}
 
 	public static class KnownHostsFields {

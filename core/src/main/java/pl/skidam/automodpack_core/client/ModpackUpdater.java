@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.client.RestartDecision.ApplyResult;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -405,18 +406,51 @@ public class ModpackUpdater implements AutoCloseable {
 					serverModpackContent.mcVersion, serverModpackContent.loader);
 			return;
 		}
-		if (review.planWritesUnverifiedJar(launch.prepared().plan())) {
+		if (review.planWritesUnverifiedJar(launch.prepared().plan()) && !launchMayWriteUnverified(applyFirstInstall)) {
 			LOGGER.warn("Launch apply aborted: unverified jars will not be written during preload; leaving the live pack unchanged");
 			return;
 		}
 		if (!review.firstConnection() && !launch.requiresReconciliation(storedTarget())) {
 			LOGGER.info("Launch apply reused the active projection");
+			if (applyFirstInstall) rememberLaunchConsent(true);
 			return;
 		}
 		launch.approve();
 		ApplyResult applyResult = commitFlow(launch);
+		if (applyFirstInstall) rememberLaunchConsent(true);
+		rememberLaunchApplyReceipt();
 		LOGGER.info("Launch apply completed; restart demand: {} Took: {}ms", RestartPolicy.atPreload(applyResult.restartReasons()), System.currentTimeMillis() - start);
 		finishLaunchApply(applyResult);
+	}
+
+	private boolean launchMayWriteUnverified(boolean applyFirstInstall) {
+		if (selectedTarget == null) return false;
+		if (applyFirstInstall) return true;
+		try {
+			return ConnectionStore.allowUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId());
+		} catch (IOException e) {
+			LOGGER.warn("The launch-consent record of {} is unreadable; launch applies keep refusing unverified jars", selectedTarget.manifest().modpackId(), e);
+			return false;
+		}
+	}
+
+	private void rememberLaunchConsent(boolean allowed) {
+		try {
+			ConnectionStore.saveAllowUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId(), allowed);
+		} catch (IOException e) {
+			LOGGER.warn("The launch-consent record of {} could not be saved", selectedTarget.manifest().modpackId(), e);
+		}
+	}
+
+	private void rememberLaunchApplyReceipt() {
+		if (!preload || changelogs.changedOrRemovedPaths().isEmpty() || selectedTarget == null) return;
+		var journal = changelogs.journal();
+		long seq = journal.isEmpty() ? 1L : journal.get(journal.size() - 1).seq();
+		try {
+			ConnectionStore.saveUnseenLaunchApplySeq(storage, selectedTarget.manifest().modpackId(), seq);
+		} catch (IOException e) {
+			LOGGER.warn("The launch-apply receipt of {} could not be saved", selectedTarget.manifest().modpackId(), e);
+		}
 	}
 
 	/** Launch apply's close handling: hot-load the active projection when preloading, then close. */
@@ -624,11 +658,33 @@ public class ModpackUpdater implements AutoCloseable {
 		ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 	}
 
+	/** The pack's durable launch consent, as the screens' checkbox should show it; nothing resolved reads as refused. */
+	public boolean launchWritesUnverified() {
+		if (selectedTarget == null || serverModpackContent == null) return false;
+		try {
+			return ConnectionStore.allowUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId());
+		} catch (IOException e) {
+			LOGGER.warn("The launch-consent record of {} is unreadable; the checkbox shows refused", selectedTarget.manifest().modpackId(), e);
+			return false;
+		}
+	}
+
+	/** The confirm screens' checkbox writes the consent the moment it moves, in either direction. */
+	public void setLaunchWritesUnverified(boolean allowed) {
+		if (selectedTarget == null || serverModpackContent == null) return;
+		try {
+			ConnectionStore.saveAllowUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId(), allowed);
+		} catch (IOException e) {
+			LOGGER.warn("The launch-consent record of {} could not be saved", selectedTarget.manifest().modpackId(), e);
+		}
+	}
+
 	/** Wraps a reviewable plan with this engine's review backing; the unverified-jar gate is precomputed, mode-gated. */
 	PreviewPayload previewPayload(UpdatePreview preview, Runnable continueAction, Runnable cancelAction) {
-		boolean writesUnverifiedJar = (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && review.planWritesUnverifiedJar(preview.plan());
+		boolean updateOrRollback = preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK;
+		boolean writesUnverifiedJar = updateOrRollback && review.planWritesUnverifiedJar(preview.plan());
 		return PreviewPayload.review(preview, getModpackName(), review.joinOrigin(), writesUnverifiedJar, getSelectedTarget(), review.unverifiedSelectedJarPaths(),
-				sourceCatalogue.selectedJarSourceCounts(getSelectedTarget()), review.reviewActions(), continueAction, cancelAction);
+				sourceCatalogue.selectedJarSourceCounts(getSelectedTarget()), updateOrRollback && launchWritesUnverified(), review.reviewActions(), continueAction, cancelAction);
 	}
 
 	boolean isCurrentAttempt(UpdateAttempt candidate) {

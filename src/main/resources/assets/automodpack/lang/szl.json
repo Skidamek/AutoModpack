@@ -38,6 +38,8 @@
   "automodpack.confirm.unverifiedCount": "%s ze %s plikōw modōw niy znŏlazło sie na Modrinth ani CurseForge.",
   "automodpack.confirm.unverifiedExplain": "Mogōm to być niyszkodliwe własne mody, zmiyniōne mody abo złośliwe mody. AutoModpack niy umie ich rozrōżnić.",
   "automodpack.confirm.ack": "Rozumiym ryzyko i ufŏm tymu serwerowi.",
+  "automodpack.confirm.launchWrites": "Apply updates when the game starts, including mods not on CurseForge or Modrinth.",
+  "automodpack.launchNotice.button": "Pack updated while starting",
   "automodpack.confirm.ackCountdown": "Pole ryzyka ôdblokuje sie za %s sekund.",
   "automodpack.confirm.ackUnlock": "Zaznacz pole ryzyka, żeby kōntynuować.",
   "automodpack.confirm.customize": "Dostosuj",

@@ -38,6 +38,8 @@
   "automodpack.confirm.matchedCurseforgeJoined": "CurseForge：%s",
   "automodpack.confirm.unverifiedExplain": "它们可能无害的自制模组、被修改过的模组，也可能是恶意模组。AutoModpack 无法分辨。",
   "automodpack.confirm.ack": "我了解风险并信任这个服务器。",
+  "automodpack.confirm.launchWrites": "Apply updates when the game starts, including mods not on CurseForge or Modrinth.",
+  "automodpack.launchNotice.button": "Pack updated while starting",
   "automodpack.confirm.ackCountdown": "风险确认框将在 %s 秒后可用。",
   "automodpack.confirm.ackUnlock": "勾选风险确认框以继续。",
   "automodpack.confirm.customize": "自定义",

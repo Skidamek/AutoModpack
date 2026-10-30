@@ -102,6 +102,25 @@ class ConnectionStoreTest {
 		assertEquals(List.of(), ConnectionStore.staleSameOriginPackIds(storage, "abc1234"));
 	}
 
+	@Test
+	void unverifiedLaunchWritesDefaultOffAndRoundTrip() throws Exception {
+		ClientStorage storage = TestDataRoot.open(Files.createDirectory(temporaryDirectory.resolve("game-consent")), Files.createDirectory(temporaryDirectory.resolve("data-consent")));
+		assertFalse(ConnectionStore.allowUnverifiedLaunchWrites(storage, "abc1234"));
+		ConnectionStore.saveAllowUnverifiedLaunchWrites(storage, "abc1234", true);
+		assertTrue(ConnectionStore.allowUnverifiedLaunchWrites(storage, "abc1234"));
+		ConnectionStore.saveAllowUnverifiedLaunchWrites(storage, "abc1234", false);
+		assertFalse(ConnectionStore.allowUnverifiedLaunchWrites(storage, "abc1234"));
+	}
+
+	@Test
+	void unseenLaunchApplySeqIsTakenOnce() throws Exception {
+		ClientStorage storage = TestDataRoot.open(Files.createDirectory(temporaryDirectory.resolve("game-receipt")), Files.createDirectory(temporaryDirectory.resolve("data-receipt")));
+		assertNull(ConnectionStore.takeUnseenLaunchApplySeq(storage, "abc1234"));
+		ConnectionStore.saveUnseenLaunchApplySeq(storage, "abc1234", 7);
+		assertEquals(7L, ConnectionStore.takeUnseenLaunchApplySeq(storage, "abc1234"));
+		assertNull(ConnectionStore.takeUnseenLaunchApplySeq(storage, "abc1234"));
+	}
+
 	private static GroupManifest manifestFor(String modpackId, String description, String path, String content) {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = modpackId;

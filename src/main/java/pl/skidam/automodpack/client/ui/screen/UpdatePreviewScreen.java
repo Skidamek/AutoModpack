@@ -17,6 +17,7 @@ import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -44,8 +45,10 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private final Runnable continueAction;
 	private final Runnable cancelAction;
 	private final ChangeSet changes;
+	private final boolean launchWrites;
 	private boolean finished;
 	private int titleTop;
+	private CheckboxWidget launchWritesCheckbox;
 
 	public UpdatePreviewScreen(Screen parent, PreviewPayload payload) {
 		super(VersionedText.text(titleKey(payload.preview().mode())));
@@ -59,6 +62,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		this.continueAction = Objects.requireNonNull(payload.continueAction(), "continueAction");
 		this.cancelAction = Objects.requireNonNull(payload.cancelAction(), "cancelAction");
 		this.changes = preview.changeSet();
+		this.launchWrites = payload.launchWritesUnverified();
 	}
 
 	@Override
@@ -67,12 +71,19 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		List<ActionRow> rows = buildRows();
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
 		List<MutableComponent> body = buildBodyLines();
+		launchWritesCheckbox = null;
+		if (showsLaunchWritesCheckbox()) {
+			launchWritesCheckbox = new CheckboxWidget(this.font, 0, 0, panelWidth(PANEL_WIDTH), PackConfirmCopy.launchWritesLabel(), launchWrites, value -> actions.setLaunchWritesUnverified().accept(value));
+			this.addRenderableWidget(launchWritesCheckbox);
+		}
+		int stack = launchWritesCheckbox == null ? 0 : ActionAreaLayout.SEAM + launchWritesCheckbox.boxHeight();
 		// The origin takes the third header line when it is known, so the pack name always names its server.
 		int headerLines = origin.isBlank() ? 2 : 3;
-		DialogLayout layout = layoutDialogWithActions(28, headerLines * LINE_HEIGHT, body.size() * LINE_HEIGHT, 0, rowArray);
+		DialogLayout layout = layoutDialogWithActions(28, headerLines * LINE_HEIGHT, body.size() * LINE_HEIGHT, stack, rowArray);
 		this.titleTop = layout.titleTop();
 		List<AbstractWidget> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 		setTooltip(buttons.get(buttons.size() - 2), ChangeSummary.diffLegend());
+		if (launchWritesCheckbox != null) launchWritesCheckbox.moveTo(panelLeft(PANEL_WIDTH), layout.actionsTop() - ActionAreaLayout.SEAM - launchWritesCheckbox.boxHeight());
 		this.addCenteredScrollBody(PANEL_WIDTH, layout.column().bodyTop(), layout.column().bodyBottom(), body);
 	}
 
@@ -86,6 +97,10 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 				optionalAction(VersionedText.text("automodpack.browser.reviewFiles"), button -> openFiles()),
 				primaryAction(VersionedText.text(actionKey(mode)), button -> continueUpdate())));
 		return rows;
+	}
+
+	private boolean showsLaunchWritesCheckbox() {
+		return (mode == UpdatePreview.Mode.UPDATE || mode == UpdatePreview.Mode.ROLLBACK) && actions != null && target != null;
 	}
 
 	private boolean canCustomize() {

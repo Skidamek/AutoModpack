@@ -38,6 +38,8 @@
   "automodpack.confirm.matchedCurseforgeJoined": "CurseForge: %s",
   "automodpack.confirm.unverifiedExplain": "Pueden ser mods propios inofensivos, mods editados o mods maliciosos. AutoModpack no puede distinguirlos.",
   "automodpack.confirm.ack": "Entiendo el riesgo y confío en este servidor.",
+  "automodpack.confirm.launchWrites": "Apply updates when the game starts, including mods not on CurseForge or Modrinth.",
+  "automodpack.launchNotice.button": "Pack updated while starting",
   "automodpack.confirm.ackCountdown": "La casilla de riesgo se desbloquea en %s segundos.",
   "automodpack.confirm.ackUnlock": "Marca la casilla de riesgo para continuar.",
   "automodpack.confirm.customize": "Personalizar",

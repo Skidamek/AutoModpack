@@ -35,6 +35,8 @@
   "automodpack.confirm.matchedCurseforgeJoined": "CurseForge: %s",
   "automodpack.confirm.unverifiedExplain": "They can be harmless custom mods, edited mods, or malicious mods. AutoModpack cannot tell which.",
   "automodpack.confirm.ack": "I understand the risk and trust this server.",
+  "automodpack.confirm.launchWrites": "Apply updates when the game starts, including mods not on CurseForge or Modrinth.",
+  "automodpack.launchNotice.button": "Pack updated while starting",
   "automodpack.confirm.ackCountdown": "The risk box unlocks in %s seconds.",
   "automodpack.confirm.ackUnlock": "Check the risk box to unlock.",
   "automodpack.confirm.customize": "Customize",

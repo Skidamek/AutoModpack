@@ -90,7 +90,7 @@ public final class SwitchFlow {
 		// One apply per review: a double confirm click must not start a second commit on the same updater.
 		AtomicBoolean applyArmed = new AtomicBoolean(true);
 		boolean shown = ScreenManager.preview(PreviewPayload.review(preview, modpackName, updater.joinOrigin(), writesUnverifiedJar, updater.getSelectedTarget(), updater.unverifiedSelectedJarPaths(),
-				updater.selectedJarSourceCounts(), updater.reviewActions(),
+				updater.selectedJarSourceCounts(), updater.launchWritesUnverified(), updater.reviewActions(),
 				(Runnable) () -> {
 					if (!applyArmed.compareAndSet(true, false)) return;
 					ModpackUpdater.executor().execute(() -> apply(updater, release, rollback));

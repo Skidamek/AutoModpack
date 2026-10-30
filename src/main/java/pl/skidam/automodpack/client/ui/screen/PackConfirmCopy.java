@@ -144,4 +144,8 @@ final class PackConfirmCopy {
 	static MutableComponent ackLabel() {
 		return VersionedText.text("automodpack.confirm.ack");
 	}
+
+	static MutableComponent launchWritesLabel() {
+		return VersionedText.text("automodpack.confirm.launchWrites");
+	}
 }

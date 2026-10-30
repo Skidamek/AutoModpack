@@ -13,16 +13,16 @@ import pl.skidam.automodpack_core.update.UpdatePreview;
  * when the session has no live connection.
  */
 public record PreviewPayload(UpdatePreview preview, String modpackName, String origin, boolean writesUnverifiedJar, SelectedModpackTarget target, List<String> unverifiedJarPaths,
-		SourceCounts sourceCounts, ReviewActions actions, Runnable continueAction, Runnable cancelAction) {
+		SourceCounts sourceCounts, boolean launchWritesUnverified, ReviewActions actions, Runnable continueAction, Runnable cancelAction) {
 
 	/** A plan a live review session stands behind: the screen can reach the review's customize actions through it. */
 	public static PreviewPayload review(UpdatePreview preview, String modpackName, String origin, boolean writesUnverifiedJar, SelectedModpackTarget target, List<String> unverifiedJarPaths,
-			SourceCounts sourceCounts, ReviewActions actions, Runnable continueAction, Runnable cancelAction) {
-		return new PreviewPayload(preview, modpackName, origin, writesUnverifiedJar, target, unverifiedJarPaths, sourceCounts, actions, continueAction, cancelAction);
+			SourceCounts sourceCounts, boolean launchWritesUnverified, ReviewActions actions, Runnable continueAction, Runnable cancelAction) {
+		return new PreviewPayload(preview, modpackName, origin, writesUnverifiedJar, target, unverifiedJarPaths, sourceCounts, launchWritesUnverified, actions, continueAction, cancelAction);
 	}
 
 	/** Removing or deactivating a stored pack: no jar re-verification question, {@code actions} null when no live review offers customize. */
 	public static PreviewPayload storageRemoval(UpdatePreview preview, String modpackName, String origin, ReviewActions actions, Runnable continueAction, Runnable cancelAction) {
-		return new PreviewPayload(preview, modpackName, origin, false, null, List.of(), null, actions, continueAction, cancelAction);
+		return new PreviewPayload(preview, modpackName, origin, false, null, List.of(), null, false, actions, continueAction, cancelAction);
 	}
 }

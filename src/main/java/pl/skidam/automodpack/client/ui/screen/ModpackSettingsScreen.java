@@ -18,6 +18,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedIconButton;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
@@ -48,7 +49,9 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 	private MutableComponent idTooltip;
 	private MutableComponent generationTooltip;
 	private Button musicButton;
+	private CheckboxWidget launchWritesCheckbox;
 	private final WaitingMusicPlayer music;
+	private boolean launchWrites;
 
 	public ModpackSettingsScreen(Screen parent, InstalledModpackController controller, InstalledModpackController.Pack pack) {
 		super(VersionedText.text("automodpack.packDetails.title"));
@@ -56,6 +59,7 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 		this.controller = controller;
 		this.pack = pack;
 		this.music = controller.waitingMusicPlayer();
+		this.launchWrites = controller.launchWritesUnverified(pack);
 	}
 
 	@Override
@@ -63,6 +67,11 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 		super.init();
 		actionButtons.clear();
 		buildHeaderLines();
+		launchWritesCheckbox = new CheckboxWidget(this.font, panelLeft(PANEL_WIDTH), generationY() + LINE_GAP, panelWidth(PANEL_WIDTH), PackConfirmCopy.launchWritesLabel(), launchWrites, value -> {
+			launchWrites = value;
+			controller.setLaunchWritesUnverified(pack, value);
+		});
+		this.addRenderableWidget(launchWritesCheckbox);
 		List<Action> actions = new ArrayList<>();
 		actions.add(new Action(pack.active() ? "automodpack.management.update" : "automodpack.management.activate", this::primaryAction));
 		if (pack.active()) actions.add(new Action("automodpack.management.repair", this::repair));
@@ -240,7 +249,9 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 
 	// The grid reads as one block of controls, not another text line: it clears the prose by the line gap plus two widget gaps.
 	private int actionGridTop() {
-		return generationY() + LINE_GAP + 2 * ActionAreaLayout.GAP;
+		int y = generationY() + LINE_GAP + 2 * ActionAreaLayout.GAP;
+		if (launchWritesCheckbox != null) y = launchWritesCheckbox.yPosition() + launchWritesCheckbox.boxHeight() + 2 * ActionAreaLayout.GAP;
+		return y;
 	}
 
 	/** Picks the widest column count whose grid stays clear of the bottom rail; 3 columns still keeps every button at or above the 88px minimum width. */

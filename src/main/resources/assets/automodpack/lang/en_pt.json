@@ -35,6 +35,8 @@
   "automodpack.confirm.unverifiedCount": "%s of %s mod files weren't found on Modrinth or CurseForge. Only mod files be checked there; every other file comes from th' server.",
   "automodpack.confirm.unverifiedExplain": "They could be harmless custom mods, tinkered mods, or cursed mods. AutoModpack can't tell which.",
   "automodpack.confirm.ack": "I know the risk and trust this crew.",
+  "automodpack.confirm.launchWrites": "Apply updates when the game starts, including mods not on CurseForge or Modrinth.",
+  "automodpack.launchNotice.button": "Pack updated while starting",
   "automodpack.confirm.ackCountdown": "Th' risk box unlocks in %s seconds.",
   "automodpack.confirm.ackUnlock": "Tick the risk box to unlock.",
   "automodpack.confirm.customize": "Pick yer own",

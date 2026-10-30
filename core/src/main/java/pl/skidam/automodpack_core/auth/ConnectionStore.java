@@ -68,6 +68,31 @@ public final class ConnectionStore {
 		});
 	}
 
+	/** Whether this pack's launch applies may write jars the platform lookup could not verify; stored absence reads as refused. */
+	public static boolean allowUnverifiedLaunchWrites(ClientStorage storage, String modpackId) throws IOException {
+		return read(storage, modpackId).allowUnverifiedLaunchWrites == Boolean.TRUE;
+	}
+
+	public static void saveAllowUnverifiedLaunchWrites(ClientStorage storage, String modpackId, boolean allowed) throws IOException {
+		ModpackId.requireValid(modpackId);
+		update(storage, modpackId, fields -> fields.allowUnverifiedLaunchWrites = allowed ? Boolean.TRUE : Boolean.FALSE);
+	}
+
+	public static void saveUnseenLaunchApplySeq(ClientStorage storage, String modpackId, long seq) throws IOException {
+		if (seq < 1) throw new IllegalArgumentException("Launch-apply receipt sequence must be positive");
+		ModpackId.requireValid(modpackId);
+		update(storage, modpackId, fields -> fields.unseenLaunchApplySeq = seq);
+	}
+
+	/** The unseen launch-apply generation, or null; taking it clears the durable pointer so the notice fires once. */
+	public static Long takeUnseenLaunchApplySeq(ClientStorage storage, String modpackId) throws IOException {
+		ModpackId.requireValid(modpackId);
+		Long seq = read(storage, modpackId).unseenLaunchApplySeq;
+		if (seq == null || seq < 1) return null;
+		update(storage, modpackId, fields -> fields.unseenLaunchApplySeq = null);
+		return seq;
+	}
+
 	/**
 	 * Installed packs whose saved connection origin equals the active pack's, excluding the active pack itself: the
 	 * leftovers of an origin that lost its modpack identity and republished under a new id. The active pack's own

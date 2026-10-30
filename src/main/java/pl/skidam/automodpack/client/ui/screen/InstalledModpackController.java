@@ -457,6 +457,23 @@ final class InstalledModpackController {
 		}
 	}
 
+	boolean launchWritesUnverified(Pack pack) {
+		try {
+			return ConnectionStore.allowUnverifiedLaunchWrites(storage, pack.modpackId());
+		} catch (IOException e) {
+			LOGGER.warn("The launch-consent record of {} is unreadable; the checkbox shows refused", pack.modpackId(), e);
+			return false;
+		}
+	}
+
+	void setLaunchWritesUnverified(Pack pack, boolean allowed) {
+		try {
+			ConnectionStore.saveAllowUnverifiedLaunchWrites(storage, pack.modpackId(), allowed);
+		} catch (IOException e) {
+			LOGGER.warn("The launch-consent record of {} could not be saved", pack.modpackId(), e);
+		}
+	}
+
 	void openHistory(Pack pack, Runnable released) {
 		ScreenManager.background(() -> {
 			try {

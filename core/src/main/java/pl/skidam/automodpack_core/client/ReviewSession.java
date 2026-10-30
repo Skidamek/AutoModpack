@@ -90,7 +90,7 @@ final class ReviewSession {
 
 	/** The actions and live polls a review-backed screen may drive; the seam type, backed by this session. */
 	ReviewActions reviewActions() {
-		return new ReviewActions(this::setFirstInstallLocalModCleanup, this::startConfirmedUpdate, this::reselectAndPreview, this::cancelConfirmation, this::cancelFromPlayer,
+		return new ReviewActions(this::setFirstInstallLocalModCleanup, this::startConfirmedUpdate, this::reselectAndPreview, updater::setLaunchWritesUnverified, this::cancelConfirmation, this::cancelFromPlayer,
 				() -> confirmationState.get() == ConfirmationState.WAITING, () -> confirmationState.get() == ConfirmationState.CANCELLED, this::isCancelledByPlayer,
 				() -> confirmationState.get() == ConfirmationState.PREVIEWING,
 				sourceCatalogue::sourceAvailability);
@@ -108,7 +108,7 @@ final class ReviewSession {
 		}
 		return new ReviewPayload(updater.getSelectedTarget(), reviewCatalogue(), getFirstInstallPatchNotes(), joinOrigin(), unverifiedSelectedJarPaths(),
 				sourceCatalogue.selectedJarSourceCounts(updater.getSelectedTarget()), firstInstallLocalModPaths(),
-				uncached < 0 ? OptionalLong.empty() : OptionalLong.of(uncached), reviewActions());
+				uncached < 0 ? OptionalLong.empty() : OptionalLong.of(uncached), updater.launchWritesUnverified(), reviewActions());
 	}
 
 	public List<JournalEntry> getFirstInstallPatchNotes() {

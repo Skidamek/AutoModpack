@@ -216,7 +216,7 @@ public final class BootRecovery {
 	private void importBootstrap() {
 		BootstrapInstaller.importIfPresent(storage, clientConfig).ifPresent(receipt -> {
 			clientConfig = receipt.clientConfig();
-			trustedBootstrapApply = receipt.installsModpack() && receipt.hasSecret();
+			trustedBootstrapApply = receipt.installsModpack();
 		});
 	}
 }

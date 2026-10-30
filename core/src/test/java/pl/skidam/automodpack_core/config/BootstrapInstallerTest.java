@@ -39,7 +39,7 @@ class BootstrapInstallerTest {
 
 		assertFalse(Files.exists(storage.bootstrapFile()));
 		assertEquals("abc1234", storage.selectedModpackId());
-		assertTrue(receipt.hasSecret());
+		assertTrue(receipt.bootstrap().hasSecret());
 		assertEquals("SEED", OriginTrustStore.get(storage, AddressHelpers.parseOrigin("play.example.com")).reason);
 		assertEquals("downloads.example.com:25564", AddressHelpers.formatAddress(ConnectionStore.getConnection(storage, "abc1234").endpoint));
 		assertEquals(secret, ConnectionStore.getClientSecret(storage, "abc1234", AddressHelpers.parseOrigin("play.example.com")).secret());

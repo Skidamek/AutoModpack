@@ -38,6 +38,8 @@
   "automodpack.confirm.matchedCurseforgeJoined": "CurseForge: %s",
   "automodpack.confirm.unverifiedExplain": "Lehetnek ártalmatlan saját modok, módosított modok vagy rosszindulatú modok. Az AutoModpack nem tudja megkülönböztetni őket.",
   "automodpack.confirm.ack": "Megértem a kockázatot, és bízom ebben a szerverben.",
+  "automodpack.confirm.launchWrites": "Apply updates when the game starts, including mods not on CurseForge or Modrinth.",
+  "automodpack.launchNotice.button": "Pack updated while starting",
   "automodpack.confirm.ackCountdown": "A kockázati mező %s másodperc múlva oldódik.",
   "automodpack.confirm.ackUnlock": "Pipáld be a kockázati mezőt a folytatáshoz.",
   "automodpack.confirm.customize": "Testreszabás",

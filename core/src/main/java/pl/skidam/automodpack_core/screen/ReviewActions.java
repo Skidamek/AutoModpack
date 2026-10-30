@@ -14,5 +14,5 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
  * in engine states.
  */
 public record ReviewActions(Consumer<Boolean> setFirstInstallLocalModCleanup, Runnable startConfirmedUpdate, Consumer<SelectionIntent> reselectAndPreview,
-		Runnable cancelConfirmation, Runnable cancelFromPlayer, BooleanSupplier reviewActive, BooleanSupplier reviewCancelled, BooleanSupplier cancelledByPlayer,
-		BooleanSupplier reviewPreviewing, Supplier<SourceAvailability> sourceAvailability) {}
+		Consumer<Boolean> setLaunchWritesUnverified, Runnable cancelConfirmation, Runnable cancelFromPlayer, BooleanSupplier reviewActive, BooleanSupplier reviewCancelled,
+		BooleanSupplier cancelledByPlayer, BooleanSupplier reviewPreviewing, Supplier<SourceAvailability> sourceAvailability) {}

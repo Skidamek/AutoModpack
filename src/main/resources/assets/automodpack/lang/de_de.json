@@ -38,6 +38,8 @@
   "automodpack.confirm.matchedCurseforgeJoined": "CurseForge: %s",
   "automodpack.confirm.unverifiedExplain": "Sie können harmlose eigene Mods, bearbeitete Mods oder bösartige Mods sein. AutoModpack kann das nicht unterscheiden.",
   "automodpack.confirm.ack": "Ich kenne das Risiko und vertraue diesem Server.",
+  "automodpack.confirm.launchWrites": "Apply updates when the game starts, including mods not on CurseForge or Modrinth.",
+  "automodpack.launchNotice.button": "Pack updated while starting",
   "automodpack.confirm.ackCountdown": "Das Kontrollkästchen wird in %s Sekunden freigeschaltet.",
   "automodpack.confirm.ackUnlock": "Setze den Haken, um fortzufahren.",
   "automodpack.confirm.customize": "Anpassen",

@@ -93,9 +93,5 @@ public final class BootstrapInstaller {
 		public boolean installsModpack() {
 			return bootstrap.installsModpack();
 		}
-
-		public boolean hasSecret() {
-			return bootstrap.hasSecret();
-		}
 	}
 }

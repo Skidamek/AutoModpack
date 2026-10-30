@@ -8,7 +8,9 @@ import java.util.TreeSet;
 import java.util.function.Consumer;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack_core.client.SwitchFlow;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
@@ -31,6 +33,10 @@ final class GenerationHistoryController {
 	private GenerationHistoryController() {}
 
 	static void open(ClientStorage storage, String modpackId, String modpackName, Runnable closed) {
+		open(null, storage, modpackId, modpackName, closed);
+	}
+
+	static void open(Screen parent, ClientStorage storage, String modpackId, String modpackName, Runnable closed) {
 		Objects.requireNonNull(storage, "storage");
 		Objects.requireNonNull(modpackId, "modpack id");
 		Objects.requireNonNull(closed, "closed callback");
@@ -52,7 +58,9 @@ final class GenerationHistoryController {
 					}
 				}
 				Consumer<JournalEntry> restore = activePack ? entry -> SwitchFlow.rollback(storage, modpackId, entry, modpackName, closed) : null;
-				ScreenManager.history(new HistoryViewRequest(journal, currentSeq, modpackName, closed, restorableSeqs, restore));
+				HistoryViewRequest request = new HistoryViewRequest(journal, currentSeq, modpackName, closed, restorableSeqs, restore);
+				if (parent == null) ScreenManager.history(request);
+				else Minecraft.getInstance().execute(() -> ScreenImpl.setScreen(new ContentHistoryScreen(parent, request)));
 			} catch (Exception e) {
 				Minecraft.getInstance().execute(closed);
 				ScreenManager.failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
