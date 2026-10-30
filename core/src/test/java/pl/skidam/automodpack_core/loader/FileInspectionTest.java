@@ -12,6 +12,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
+import java.util.jar.Attributes;
+import java.util.jar.Manifest;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -239,6 +241,76 @@ class FileInspectionTest {
 	}
 
 	@Test
+	void aGamelibraryWrapperPromotesTheNestedMod() throws IOException {
+		Path jar = Files.createTempDirectory("gamelibrary-").resolve("mezz_config-standalone.jar");
+		String nestedToml = "modLoader = \"javafml\"\n[[mods]]\nmodId = \"mezz_config\"\nversion = \"0.6.9\"\n";
+
+		try {
+			Files.write(jar, jar(Map.of("META-INF/MANIFEST.MF", manifestWithFmlModType("GAMELIBRARY"), "META-INF/jarjar/mezz_config.jar",
+					jar(Map.of("META-INF/neoforge.mods.toml", nestedToml.getBytes(StandardCharsets.UTF_8))))));
+			FileInspection.Inspection inspection = inspection(jar);
+
+			assertTrue(inspection.mod());
+			assertEquals("mezz_config", inspection.metadata().id());
+			assertEquals("0.6.9", inspection.metadata().version());
+			assertEquals(jar, inspection.metadata().path());
+			assertTrue(FileInspection.isMod(jar));
+		} finally {
+			Files.deleteIfExists(jar);
+		}
+	}
+
+	@Test
+	void aGamelibraryWithoutNestedMetadataIsStillAMod() throws IOException {
+		Path jar = Files.createTempDirectory("gamelibrary-empty-").resolve("library.jar");
+
+		try {
+			Files.write(jar, jar(Map.of("META-INF/MANIFEST.MF", manifestWithFmlModType("GAMELIBRARY"))));
+			FileInspection.Inspection inspection = inspection(jar);
+
+			assertTrue(inspection.mod());
+			assertNull(inspection.metadata());
+			assertTrue(FileInspection.isMod(jar));
+		} finally {
+			Files.deleteIfExists(jar);
+		}
+	}
+
+	@Test
+	void fmlModTypeModWithoutMetadataIsNotAMod() throws IOException {
+		Path jar = Files.createTempDirectory("fml-mod-").resolve("broken.jar");
+
+		try {
+			Files.write(jar, jar(Map.of("META-INF/MANIFEST.MF", manifestWithFmlModType("MOD"))));
+			FileInspection.Inspection inspection = inspection(jar);
+
+			assertFalse(inspection.mod());
+			assertNull(inspection.metadata());
+			assertFalse(FileInspection.isMod(jar));
+		} finally {
+			Files.deleteIfExists(jar);
+		}
+	}
+
+	@Test
+	void twoJarJarModsDoNotPromoteASingleIdentity() throws IOException {
+		Path jar = Files.createTempDirectory("jarjar-two-").resolve("bundle.jar");
+		String first = "modLoader = \"javafml\"\n[[mods]]\nmodId = \"one\"\nversion = \"1.0.0\"\n";
+		String second = "modLoader = \"javafml\"\n[[mods]]\nmodId = \"two\"\nversion = \"1.0.0\"\n";
+
+		try {
+			Files.write(jar, jar(Map.of("META-INF/jarjar/one.jar", jar(Map.of("META-INF/neoforge.mods.toml", first.getBytes(StandardCharsets.UTF_8))), "META-INF/jarjar/two.jar",
+					jar(Map.of("META-INF/neoforge.mods.toml", second.getBytes(StandardCharsets.UTF_8))))));
+			FileInspection.Inspection inspection = inspection(jar);
+
+			assertTrue(inspection.mod());
+			assertNull(inspection.metadata());
+		} finally {
+			Files.deleteIfExists(jar);
+		}
+	}
+
+	@Test
 	void incompleteMetadataWithoutServicesIsNotAMod() throws IOException {
 		Path jar = Files.createTempDirectory("incomplete-").resolve("broken.jar");
 
@@ -280,6 +352,15 @@ class FileInspectionTest {
 		} finally {
 			Files.deleteIfExists(archive);
 		}
+	}
+
+	private static byte[] manifestWithFmlModType(String type) throws IOException {
+		Manifest manifest = new Manifest();
+		manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
+		manifest.getMainAttributes().putValue("FMLModType", type);
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+		manifest.write(bytes);
+		return bytes.toByteArray();
 	}
 
 	private static String toml(String displayTestLine) {

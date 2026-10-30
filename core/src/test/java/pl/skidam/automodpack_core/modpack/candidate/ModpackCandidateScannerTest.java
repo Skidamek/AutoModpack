@@ -2,14 +2,17 @@ package pl.skidam.automodpack_core.modpack.candidate;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -63,6 +66,22 @@ class ModpackCandidateScannerTest {
 		var file = candidate.manifest().groups().get("main").files().get("mods/wrapper.jar");
 
 		assertEquals("other", file.type());
+		assertNotNull(file.murmur());
+	}
+
+	@Test
+	void aGamelibraryStandaloneJarIsAMod() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Path mods = groups.resolve("main/mods");
+		Files.createDirectories(server);
+		Files.createDirectories(mods);
+		writeGamelibraryWrapper(mods.resolve("mezz_config-standalone.jar"));
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()));
+		var file = candidate.manifest().groups().get("main").files().get("mods/mezz_config-standalone.jar");
+
+		assertEquals("mod", file.type());
 		assertNotNull(file.murmur());
 	}
 
@@ -711,6 +730,23 @@ class ModpackCandidateScannerTest {
 		try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(path))) {
 			jar.putNextEntry(new JarEntry("readme.txt"));
 			jar.write("not a mod".getBytes(StandardCharsets.UTF_8));
+			jar.closeEntry();
+		}
+	}
+
+	private static void writeGamelibraryWrapper(Path path) throws IOException {
+		Manifest manifest = new Manifest();
+		manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
+		manifest.getMainAttributes().putValue("FMLModType", "GAMELIBRARY");
+		ByteArrayOutputStream nested = new ByteArrayOutputStream();
+		try (JarOutputStream inner = new JarOutputStream(nested)) {
+			inner.putNextEntry(new JarEntry("META-INF/neoforge.mods.toml"));
+			inner.write("modLoader = \"javafml\"\n[[mods]]\nmodId = \"mezz_config\"\nversion = \"0.6.9\"\n".getBytes(StandardCharsets.UTF_8));
+			inner.closeEntry();
+		}
+		try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(path), manifest)) {
+			jar.putNextEntry(new JarEntry("META-INF/jarjar/mezz_config.jar"));
+			jar.write(nested.toByteArray());
 			jar.closeEntry();
 		}
 	}

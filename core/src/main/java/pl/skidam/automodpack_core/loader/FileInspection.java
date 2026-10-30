@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.Function;
+import java.util.jar.Manifest;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -25,6 +26,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 public class FileInspection {
 
 	private static final Gson GSON = new Gson();
+	private static final Set<String> LOADER_ARTIFACT_TYPES = Set.of("GAMELIBRARY", "LIBRARY", "LANGPROVIDER");
 
 	private static String getLoader() {
 		return Constants.LOADER;
@@ -34,8 +36,9 @@ public class FileInspection {
 
 	/**
 	 * Whether the file is a mod jar at all, the metadata when there is any, and the loader-service files this jar actually
-	 * ships. A service-only jar is a mod whose metadata is absent; {@code services} is that jar's identity. Incomplete
-	 * metadata with no services is not a mod.
+	 * ships. A service-only jar is a mod whose metadata is absent; {@code services} is that jar's identity. A NeoForge
+	 * JarJar GAMELIBRARY wrapper is a mod whose metadata may live in the nested jar. Incomplete metadata with no
+	 * services, no loader artifact type, and no JarJar nested mod is not a mod.
 	 */
 	public record Inspection(boolean mod, Mod metadata, Set<String> services) {
 		public Inspection {
@@ -130,7 +133,10 @@ public class FileInspection {
 			ModMetadata meta = getModMetadata(fs);
 			Set<String> services = getServices(fs, LoaderServicePaths.ALL_SERVICES);
 			Mod metadata = meta == null ? null : completeMod(fs, meta, hash, file);
-			return new Inspection(metadata != null || !services.isEmpty(), metadata, services);
+			if (metadata != null) return new Inspection(true, metadata, services);
+			List<Mod> jarJarMods = scanJarJarMods(fs);
+			metadata = singleCompleteJarJarMod(jarJarMods, hash, file);
+			return new Inspection(metadata != null || !services.isEmpty() || isLoaderArtifact(fs) || !jarJarMods.isEmpty(), metadata, services);
 		} catch (IOException e) {
 			LOGGER.debug("Failed to inspect mod file: {}", file);
 			return new Inspection(false, null, Set.of());
@@ -163,11 +169,58 @@ public class FileInspection {
 		}
 	}
 
+	private static boolean isLoaderArtifact(FileSystem fs) {
+		Path manifestPath = fs.getPath("META-INF", "MANIFEST.MF");
+		if (Files.notExists(manifestPath)) return false;
+		try (InputStream in = Files.newInputStream(manifestPath)) {
+			String type = new Manifest(in).getMainAttributes().getValue("FMLModType");
+			if (type == null || type.isBlank()) return false;
+			return LOADER_ARTIFACT_TYPES.contains(type.strip().toUpperCase(Locale.ROOT));
+		} catch (IOException e) {
+			LOGGER.debug("Could not read FMLModType from {}", fs, e);
+			return false;
+		}
+	}
+
+	private static boolean hasJarJarMod(FileSystem fs) {
+		return !scanJarJarMods(fs).isEmpty();
+	}
+
+	private static List<Mod> scanJarJarMods(FileSystem fs) {
+		Path jarJarDirectory = fs.getPath("META-INF", "jarjar");
+		if (Files.notExists(jarJarDirectory)) return List.of();
+		List<Mod> mods = new ArrayList<>();
+		try (DirectoryStream<Path> stream = Files.newDirectoryStream(jarJarDirectory, "*.jar")) {
+			for (Path nestedJar : stream) {
+				try (InputStream is = Files.newInputStream(nestedJar)) {
+					Mod nested = readModFromStream(nestedJar, is);
+					if (nested != null) mods.add(nested);
+				} catch (IOException e) {
+					LOGGER.debug("Skipping unreadable JarJar nested jar: {}", nestedJar, e);
+				}
+			}
+		} catch (IOException e) {
+			LOGGER.error("Error examining JarJar directory in {}", fs, e);
+		}
+		return mods;
+	}
+
+	private static Mod singleCompleteJarJarMod(List<Mod> jarJarMods, String hash, Path file) {
+		Mod complete = null;
+		for (Mod nested : jarJarMods) {
+			if (nested.id() == null || nested.version() == null) continue;
+			if (complete != null) return null;
+			complete = nested;
+		}
+		if (complete == null) return null;
+		return new Mod(complete.IDs(), hash, complete.version(), file, complete.deps(), complete.nestedMods(), complete.id(), complete.environment(), complete.clientPresence());
+	}
+
 	/** Whether the file is a mod or an early-service jar, with no cache and no metadata: for loader call sites that only need the yes. */
 	public static boolean isMod(Path file) {
 		if (isJarInvalid(file)) return false;
 		try (FileSystem fs = JarUtils.openJar(file)) {
-			return getModMetadata(fs) != null || hasSpecificServices(fs);
+			return getModMetadata(fs) != null || hasSpecificServices(fs) || isLoaderArtifact(fs) || hasJarJarMod(fs);
 		} catch (IOException e) {
 			return false;
 		}
@@ -181,7 +234,7 @@ public class FileInspection {
 
 			if (entryPathString != null && Files.exists(fs.getPath(entryPathString))) return true;
 
-			if (("forge".equals(getLoader()) || "neoforge".equals(getLoader())) && hasSpecificServices(fs)) return true;
+			if (("forge".equals(getLoader()) || "neoforge".equals(getLoader())) && (hasSpecificServices(fs) || isLoaderArtifact(fs) || hasJarJarMod(fs))) return true;
 		} catch (IOException e) {
 			LOGGER.error("Error examining JarJar in {}", e);
 		}
