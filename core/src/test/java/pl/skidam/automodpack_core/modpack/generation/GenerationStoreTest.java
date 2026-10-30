@@ -278,7 +278,7 @@ class GenerationStoreTest {
 		group.required = false;
 		group.defaultSelected = false;
 		group.description = "one";
-		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields("8", "config", false, sha1("tampered"), null));
+		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields("8", false, sha1("tampered"), null));
 		fields.categories = Map.of("General", Map.of("main", group));
 		Path policyObject = DataRootResolver.objectFile(objects, root.entry().policySha1());
 		Files.write(policyObject, ConfigTools.GSON.toJson(fields).getBytes(StandardCharsets.UTF_8));
@@ -321,7 +321,7 @@ class GenerationStoreTest {
 		group.required = false;
 		group.defaultSelected = false;
 		group.description = description;
-		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), "config", false, sha1(content), null));
+		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), false, sha1(content), null));
 		fields.categories = Map.of("General", Map.of("main", group));
 		return GroupManifestValidator.validate(fields);
 	}
@@ -343,7 +343,7 @@ class GenerationStoreTest {
 			Path stagedPath = Files.createTempFile(staging, "candidate-", ".staged");
 			Files.writeString(stagedPath, entry.getValue(), StandardCharsets.UTF_8);
 			String hash = sha1(entry.getValue());
-			entries.put(entry.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(entry.getValue().length()), "config", false, hash, null));
+			entries.put(entry.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(entry.getValue().length()), false, hash, null));
 			staged.put(hash, new StagedObject(hash, entry.getValue().length(), stagedPath));
 		}
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
@@ -368,7 +368,7 @@ class GenerationStoreTest {
 		group.required = false;
 		group.defaultSelected = false;
 		group.description = description;
-		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), "config", false, hash, null));
+		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), false, hash, null));
 		fields.categories = Map.of("General", Map.of("main", group));
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 		return new ModpackCandidate(manifest, new TreeMap<>(Map.of(hash, stagedObject(staged, hash, content.length()))), new TreeMap<>(), List.of());

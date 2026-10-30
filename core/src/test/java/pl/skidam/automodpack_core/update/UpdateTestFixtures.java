@@ -77,7 +77,6 @@ final class UpdateTestFixtures {
 		group.defaultSelected = true;
 		ModpackJsons.CompleteModpackContentFields.GroupFileFields file = new ModpackJsons.CompleteModpackContentFields.GroupFileFields();
 		file.size = String.valueOf(size);
-		file.type = type;
 		file.editable = editable;
 		file.sha1 = hash;
 		file.murmur = "0";

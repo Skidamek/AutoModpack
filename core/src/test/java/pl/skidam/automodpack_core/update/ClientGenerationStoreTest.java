@@ -192,7 +192,7 @@ class ClientGenerationStoreTest {
 	}
 
 	private static PackDocument republished(String modpackId, String hash, long size, Instant createdAt) {
-		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
+		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, false, hash, null);
 		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
 		GroupManifest manifest = new GroupManifest(modpackId, "Test republished", "", "", "", "", new TreeMap<>(Map.of("main", group)));
@@ -348,7 +348,7 @@ class ClientGenerationStoreTest {
 
 		Path pointer = storage.stateFile();
 		JsonObject written = JsonParser.parseString(Files.readString(pointer, StandardCharsets.UTF_8)).getAsJsonObject();
-		GroupManifest.GroupFile other = new GroupManifest.GroupFile(size, "mod", false, hash, null);
+		GroupManifest.GroupFile other = new GroupManifest.GroupFile(size, false, hash, null);
 		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/other.jar", other)));
 		written.add("manifest", ConfigTools.GSON.toJsonTree(new GroupManifest(FIRST_PACK, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group)))));
@@ -708,7 +708,7 @@ class ClientGenerationStoreTest {
 	}
 
 	private static PackDocument document(String modpackId, String hash, long size, Instant createdAt) {
-		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
+		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, false, hash, null);
 		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
 		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group)));
@@ -716,7 +716,7 @@ class ClientGenerationStoreTest {
 	}
 
 	private static PackDocument document(String modpackId, String hash, long size, Instant createdAt, PackDocument parent) {
-		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
+		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, false, hash, null);
 		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
 		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group)));

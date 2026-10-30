@@ -13,6 +13,7 @@ import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 
 /** Operator-facing text views of the group model: the config declarations plus whatever generation is published. */
@@ -84,10 +85,10 @@ public final class GroupInspector {
 	private static void filesSection(List<String> lines, GroupManifest.Group group) {
 		lines.add("Published files: " + group.files().size() + " files, " + ByteFormat.formatSize(totalSize(group)));
 		Map<String, long[]> byType = new TreeMap<>();
-		for (GroupManifest.GroupFile file : group.files().values()) {
-			long[] countAndBytes = byType.computeIfAbsent(file.type(), ignored -> new long[2]);
+		for (var file : group.files().entrySet()) {
+			long[] countAndBytes = byType.computeIfAbsent(ModpackContentType.kindForPath(file.getKey()), ignored -> new long[2]);
 			countAndBytes[0]++;
-			countAndBytes[1] += file.size();
+			countAndBytes[1] += file.getValue().size();
 		}
 		for (var type : byType.entrySet())
 			lines.add("  " + type.getKey() + ": " + type.getValue()[0] + " files, " + ByteFormat.formatSize(type.getValue()[1]));

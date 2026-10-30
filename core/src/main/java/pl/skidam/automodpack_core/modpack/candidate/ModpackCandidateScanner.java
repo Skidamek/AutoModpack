@@ -15,7 +15,6 @@ import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 import pl.skidam.automodpack_core.platforms.PlatformSideVerdicts;
@@ -147,8 +146,7 @@ public final class ModpackCandidateScanner {
 				exclusions.addAll(result.exclusions);
 				if (result.selected == null || result.file == null) continue;
 				GroupManifest.GroupFile file = result.file;
-				filesByGroup.get(result.selected.groupId()).put(result.selected.logicalPath(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(
-						String.valueOf(file.size()), file.type(), file.editable(), file.sha1(), file.murmur()));
+				filesByGroup.get(result.selected.groupId()).put(result.selected.logicalPath(), GroupManifest.publishedFile(result.selected.logicalPath(), file));
 				if (result.object != null) {
 					StagedObject redundant = objects.putIfAbsent(file.sha1().toLowerCase(Locale.ROOT), result.object);
 					if (redundant != null) result.object.delete();
@@ -209,11 +207,12 @@ public final class ModpackCandidateScanner {
 		CandidateProvenance provenance = null;
 		if (selected != null && file != null) {
 			PathRuleSet.Decision editable = rules.editable(selected.logicalPath());
-			file = new GroupManifest.GroupFile(file.size(), file.type(), editable.matched(), file.sha1(), file.murmur());
+			file = new GroupManifest.GroupFile(file.size(), editable.matched(), file.sha1(), file.murmur());
 			provenance = new CandidateProvenance(selected, editable.decisiveRule());
 		}
 		return new PathResult(selected, file, object, provenance, exclusions, pair.explicit != null ? pair.explicit : pair.synced, snapshot == null ? null : snapshot.environment(),
-				snapshot == null || snapshot.clientMayBeAbsent(), file != null && HashUtils.isSha1(file.sha1()) ? HashUtils.normalizeSha1(file.sha1()) : null, exclusion);
+				snapshot == null || snapshot.clientMayBeAbsent(), file != null && HashUtils.isSha1(file.sha1()) ? HashUtils.normalizeSha1(file.sha1()) : null, exclusion,
+				snapshot != null && snapshot.mod());
 	}
 
 	/**
@@ -227,7 +226,7 @@ public final class ModpackCandidateScanner {
 			if (!result.exclusionMode.asksPlatforms()) continue;
 			// A jar the loader would kick clients without (a Forge jar without a client-optional displayTest) stays whatever the platform says.
 			if (!result.clientMayBeAbsent) continue;
-			if (result.file == null || result.normalizedSha1 == null || !ModpackContentType.MOD.equals(result.file.type())) continue;
+			if (result.file == null || result.normalizedSha1 == null || !result.mod()) continue;
 			if (result.environment == ModEnvironment.CLIENT || result.environment == ModEnvironment.SERVER) continue;
 			askable.add(result.normalizedSha1);
 		}
@@ -248,10 +247,10 @@ public final class ModpackCandidateScanner {
 				} catch (IOException e) {
 					LOGGER.error("Could not delete the staged object of the platform-excluded {}", result.selected.logicalPath(), e);
 				}
-				results.set(i, new PathResult(null, null, null, null, exclusions, result.sourceForOrdering, result.environment, result.clientMayBeAbsent, null, result.exclusionMode));
+				results.set(i, new PathResult(null, null, null, null, exclusions, result.sourceForOrdering, result.environment, result.clientMayBeAbsent, null, result.exclusionMode, false));
 			} else
 				results.set(i, new PathResult(result.selected, result.file, result.object, result.provenance, exclusions, result.sourceForOrdering, result.environment, result.clientMayBeAbsent, result.normalizedSha1,
-						result.exclusionMode));
+						result.exclusionMode, result.mod()));
 		}
 	}
 
@@ -278,7 +277,7 @@ public final class ModpackCandidateScanner {
 				long matchedMods = 0;
 				for (var file : files.entrySet()) if (matcher.matches(file.getKey())) {
 					matched = true;
-					if (ModpackPathPolicy.isActiveMod(file.getKey(), file.getValue().type)) matchedMods++;
+					if (ModpackPathPolicy.isActiveMod(file.getKey())) matchedMods++;
 				}
 				if (!matched) LOGGER.warn("editable rule '{}' in group '{}' matched no pack files", rule, entry.getKey());
 				else
@@ -425,7 +424,8 @@ public final class ModpackCandidateScanner {
 			ModEnvironment environment,
 			boolean clientMayBeAbsent,
 			String normalizedSha1,
-			ServerSideModExclusion exclusionMode) {}
+			ServerSideModExclusion exclusionMode,
+			boolean mod) {}
 
 	public record Request(
 			String modpackId,

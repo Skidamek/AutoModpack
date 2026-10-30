@@ -48,9 +48,9 @@ class ModpackCandidateScannerTest {
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()));
 		var files = candidate.manifest().groups().get("main").files();
 
-		assertEquals("mod", files.get("resourcepacks/mod-shaped.jar").type());
-		assertEquals("resourcepack", files.get("resourcepacks/pack.zip").type());
-		assertEquals("shader", files.get("shaderpacks/shader.zip").type());
+		assertNotNull(files.get("resourcepacks/mod-shaped.jar").murmur());
+		assertNotNull(files.get("resourcepacks/pack.zip").murmur());
+		assertNotNull(files.get("shaderpacks/shader.zip").murmur());
 	}
 
 	@Test
@@ -65,7 +65,7 @@ class ModpackCandidateScannerTest {
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()));
 		var file = candidate.manifest().groups().get("main").files().get("mods/wrapper.jar");
 
-		assertEquals("other", file.type());
+		assertNotNull(file);
 		assertNotNull(file.murmur());
 	}
 
@@ -81,7 +81,7 @@ class ModpackCandidateScannerTest {
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()));
 		var file = candidate.manifest().groups().get("main").files().get("mods/mezz_config-standalone.jar");
 
-		assertEquals("mod", file.type());
+		assertNotNull(file);
 		assertNotNull(file.murmur());
 	}
 

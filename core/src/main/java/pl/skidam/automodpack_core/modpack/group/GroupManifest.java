@@ -52,14 +52,19 @@ public record GroupManifest(
 			Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
 			for (var fileEntry : group.files().entrySet()) {
 				GroupFile file = fileEntry.getValue();
-				files.put(fileEntry.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(file.size()), file.type(), file.editable(),
-						file.sha1(), file.murmur()));
+				files.put(fileEntry.getKey(), publishedFile(fileEntry.getKey(), file));
 			}
 			serialized.files = files;
 			serializedCategories.computeIfAbsent(group.category(), ignored -> new LinkedHashMap<>()).put(entry.getKey(), serialized);
 		}
 		fields.categories = serializedCategories;
 
+		return fields;
+	}
+
+	public static ModpackJsons.CompleteModpackContentFields.GroupFileFields publishedFile(String path, GroupFile file) {
+		ModpackJsons.CompleteModpackContentFields.GroupFileFields fields = new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(file.size()), file.editable(), file.sha1(), file.murmur());
+		fields.type = ModpackContentType.kindForPath(path);
 		return fields;
 	}
 
@@ -121,10 +126,9 @@ public record GroupManifest(
 					&& Objects.equals(requires, other.requires) && Objects.equals(compatiblePlatforms, other.compatiblePlatforms);
 		}
 	}
-	public record GroupFile(long size, String type, boolean editable, String sha1, String murmur) {
+	public record GroupFile(long size, boolean editable, String sha1, String murmur) {
 		public boolean sameEffectiveState(GroupFile other) {
-			return other != null && size == other.size && editable == other.editable
-					&& Objects.equals(type, other.type) && sha1.equalsIgnoreCase(other.sha1);
+			return other != null && size == other.size && editable == other.editable && sha1.equalsIgnoreCase(other.sha1);
 		}
 	}
 }

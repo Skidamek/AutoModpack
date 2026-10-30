@@ -40,7 +40,7 @@ public final class StableSourceSnapshotter {
 			if (!before.regularFile()) throw new IOException("Source is not a regular file");
 			FileCache.FileFingerprint beforeFingerprint = before.fingerprint();
 			Exclusion exclusion = expectedPathExclusion(source);
-			if (exclusion != null) return new Snapshot(null, exclusion, null, null, true);
+			if (exclusion != null) return new Snapshot(null, exclusion, null, null, true, false);
 
 			String sha1 = fileCache != null ? fileCache.getOrComputeHash(source.sourcePath()) : HashUtils.getHash(source.sourcePath());
 			if (sha1 == null) throw new IOException("SHA-1 calculation returned null");
@@ -52,14 +52,13 @@ public final class StableSourceSnapshotter {
 			ModEnvironment environment = inspection.environment();
 			boolean clientMayBeAbsent = inspection.clientMayBeAbsent();
 			exclusion = expectedContentExclusion(autoExcludeServerMods, inspection);
-			if (exclusion != null) return new Snapshot(null, exclusion, null, environment, clientMayBeAbsent);
-			String type = fileType(source.logicalPath(), inspection);
-			boolean lookup = ModpackContentType.needsPlatformLookup(type, source.logicalPath());
+			if (exclusion != null) return new Snapshot(null, exclusion, null, environment, clientMayBeAbsent, inspection.mod());
+			boolean lookup = ModpackContentType.needsPlatformLookup(source.logicalPath());
 			// A changed file is read once cold per need: the identity hash first, then the staging copy; the murmur
 			// rides the staged bytes - page-warm and proven equal by the copy's own SHA-1 - instead of re-reading the source.
-			if (!materializeMissing) return new Snapshot(groupFile(source, before, type, sha1, lookup ? sourceMurmur(source, fileCache) : null, fileCache), null, null, environment, clientMayBeAbsent);
+			if (!materializeMissing) return new Snapshot(groupFile(source, before, sha1, lookup ? sourceMurmur(source, fileCache) : null, fileCache), null, null, environment, clientMayBeAbsent, inspection.mod());
 			if (trustedObject(objectStoreDirectory, sha1, before.size(), fileCache))
-				return new Snapshot(groupFile(source, before, type, sha1, lookup ? sourceMurmur(source, fileCache) : null, fileCache), null, null, environment, clientMayBeAbsent);
+				return new Snapshot(groupFile(source, before, sha1, lookup ? sourceMurmur(source, fileCache) : null, fileCache), null, null, environment, clientMayBeAbsent, inspection.mod());
 
 			FileTrees.createManagedDirectory(stagingDirectory, "staging directory");
 			staged = Files.createTempFile(stagingDirectory, "snapshot-", stagingSuffix(source.sourcePath()));
@@ -75,7 +74,7 @@ public final class StableSourceSnapshotter {
 				murmur = HashUtils.getCurseforgeMurmurHash(staged);
 				if (fileCache != null && murmur != null) fileCache.publishMurmur(source.sourcePath(), murmur);
 			}
-			return new Snapshot(groupFile(source, before, type, sha1, murmur, fileCache), null, new StagedObject(sha1, size, staged), environment, clientMayBeAbsent);
+			return new Snapshot(groupFile(source, before, sha1, murmur, fileCache), null, new StagedObject(sha1, size, staged), environment, clientMayBeAbsent, inspection.mod());
 		} catch (CandidateBuildException e) {
 			delete(staged, e);
 			throw e;
@@ -86,9 +85,9 @@ public final class StableSourceSnapshotter {
 		}
 	}
 
-	private static GroupManifest.GroupFile groupFile(CandidateSource source, FileCache.StatSnapshot before, String type, String sha1, String murmur, FileCache fileCache) throws IOException {
-		if (murmur == null && ModpackContentType.needsPlatformLookup(type, source.logicalPath()) && fileCache != null) murmur = sourceMurmur(source, fileCache);
-		return new GroupManifest.GroupFile(before.size(), type, false, sha1, murmur);
+	private static GroupManifest.GroupFile groupFile(CandidateSource source, FileCache.StatSnapshot before, String sha1, String murmur, FileCache fileCache) throws IOException {
+		if (murmur == null && ModpackContentType.needsPlatformLookup(source.logicalPath()) && fileCache != null) murmur = sourceMurmur(source, fileCache);
+		return new GroupManifest.GroupFile(before.size(), false, sha1, murmur);
 	}
 
 	private static String sourceMurmur(CandidateSource source, FileCache fileCache) throws IOException {
@@ -142,10 +141,6 @@ public final class StableSourceSnapshotter {
 		return new Exclusion(ExcludedCandidate.Reason.SERVER_SIDE_MOD, "detected as a server-side mod");
 	}
 
-	private static String fileType(String logicalPath, FileInspection.Inspection inspection) {
-		return inspection.mod() ? ModpackContentType.MOD : ModpackPathPolicy.typeForPath(logicalPath);
-	}
-
 	private static String stagingSuffix(Path source) {
 		String name = source.getFileName().toString();
 		return JarUtils.hasJarExtension(name) ? ".jar" : ".staged";
@@ -165,9 +160,9 @@ public final class StableSourceSnapshotter {
 		String copy(Path source, Path staged) throws IOException;
 	}
 
-	public record Snapshot(GroupManifest.GroupFile file, Exclusion exclusion, StagedObject object, ModEnvironment environment, boolean clientMayBeAbsent) {
+	public record Snapshot(GroupManifest.GroupFile file, Exclusion exclusion, StagedObject object, ModEnvironment environment, boolean clientMayBeAbsent, boolean mod) {
 		/** The source is neither a candidate nor an exclusion event; it never reaches any report. */
-		public static final Snapshot SKIPPED = new Snapshot(null, null, null, null, true);
+		public static final Snapshot SKIPPED = new Snapshot(null, null, null, null, true, false);
 	}
 
 	public record Exclusion(ExcludedCandidate.Reason reason, String message) {}

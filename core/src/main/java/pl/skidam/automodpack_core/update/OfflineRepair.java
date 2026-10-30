@@ -406,7 +406,7 @@ public final class OfflineRepair {
 				if (overlay != null && !overlay.unsupported())
 					addExpected(expected,
 							new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectFile(overlay.hash()).normalize(), new Content(overlay.hash(), overlay.size())));
-			} else if (!ModpackPathPolicy.isActiveMod(logicalPath, item.type) || request.forceCopyPaths().contains(logicalPath)) {
+			} else if (!ModpackPathPolicy.isActiveMod(logicalPath) || request.forceCopyPaths().contains(logicalPath)) {
 				addExpected(expected, new Expected(Place.LIVE, logicalPath, storage.gameDirectory(), livePath, content));
 			}
 		}
@@ -425,7 +425,7 @@ public final class OfflineRepair {
 		// Editable mod files keep a live copy in the game directory; until the player removes one, that copy belongs to the pack, not to the unowned-mod archive.
 		for (var item : request.activeTarget().flatTarget().list) {
 			String editablePath = LogicalPath.normalize(item.file);
-			if (item.editable && !overlayState.deletedPaths.contains(editablePath) && ModpackPathPolicy.isActiveMod(editablePath, item.type)) ownedLiveMods.add(editablePath);
+			if (item.editable && !overlayState.deletedPaths.contains(editablePath) && ModpackPathPolicy.isActiveMod(editablePath)) ownedLiveMods.add(editablePath);
 		}
 		List<String> unownedMods = inspectMods(request.protectedModPath(), ownedLiveMods, fileCache, observations, observationsByFileKey);
 		for (Expected value : expected.values()) observe(value.path(), value.root(), fileCache, observations, observationsByFileKey);

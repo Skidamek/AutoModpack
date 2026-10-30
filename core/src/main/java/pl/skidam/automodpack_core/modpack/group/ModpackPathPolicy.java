@@ -8,6 +8,8 @@ import java.util.Collection;
 import java.util.Locale;
 import java.util.Set;
 
+import pl.skidam.automodpack_core.utils.JarUtils;
+
 public final class ModpackPathPolicy {
 	public static final String MODS_ROOT = "mods";
 	public static final String CONFIG_ROOT = "config";
@@ -62,8 +64,7 @@ public final class ModpackPathPolicy {
 		return ModpackContentType.OTHER;
 	}
 
-	public static boolean isValidTypeAndPath(String logicalPath, String type) {
-		if (type == null) return false;
+	public static boolean isValidPublishedPath(String logicalPath) {
 		final String normalized;
 		try {
 			normalized = LogicalPath.requireCanonical(logicalPath);
@@ -74,19 +75,13 @@ public final class ModpackPathPolicy {
 		if (isGeneratedBundlePath(normalized)) return false;
 		if (normalized.equalsIgnoreCase(MODPACK_CONTENT_FILE.toString())) return false;
 		if (normalized.equalsIgnoreCase(BOOTSTRAP_FILE.getFileName().toString())) return false;
-		if (isInvalidLiveRoot(normalized)) return false;
-		// The player's options file is only ever a minecraft-options entry, whatever a pack declares.
-		if (normalized.equalsIgnoreCase(MINECRAFT_OPTIONS_FILE) && !ModpackContentType.MINECRAFT_OPTIONS.equals(type)) return false;
-		// A mod-shaped file keeps its mod metadata regardless of where the operator stores it.
-		// Its logical path independently controls whether the client activates or only places it.
-		if (ModpackContentType.MOD.equals(type)) return true;
-		return type.equals(typeForPath(normalized));
+		return !isInvalidLiveRoot(normalized);
 	}
 
-	public static boolean isActiveMod(String logicalPath, String type) {
-		if (!ModpackContentType.MOD.equals(type)) return false;
+	public static boolean isActiveMod(String logicalPath) {
 		try {
-			return isModPath(LogicalPath.requireCanonical(logicalPath));
+			String normalized = LogicalPath.requireCanonical(logicalPath);
+			return isModPath(normalized) && JarUtils.hasJarExtension(normalized);
 		} catch (RuntimeException e) {
 			return false;
 		}

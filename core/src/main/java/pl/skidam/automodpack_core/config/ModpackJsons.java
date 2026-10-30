@@ -31,6 +31,7 @@ public class ModpackJsons {
 
 		public static class GroupFileFields {
 			public String size = "";
+			/** Written for rc.7 catalogue parse; rc.8 never reads it. */
 			public String type = "";
 			public boolean editable;
 			public String sha1 = "";
@@ -38,9 +39,8 @@ public class ModpackJsons {
 
 			public GroupFileFields() {}
 
-			public GroupFileFields(String size, String type, boolean editable, String sha1, String murmur) {
+			public GroupFileFields(String size, boolean editable, String sha1, String murmur) {
 				this.size = size;
-				this.type = type;
 				this.editable = editable;
 				this.sha1 = sha1;
 				this.murmur = murmur;
@@ -72,15 +72,13 @@ public class ModpackJsons {
 		public static class ModpackContentItem {
 			public final String file;
 			public final long size;
-			public final String type;
 			public final boolean editable;
 			public final String sha1;
 			public final String murmur;
 
-			public ModpackContentItem(String file, long size, String type, boolean editable, String sha1, String murmur) {
+			public ModpackContentItem(String file, long size, boolean editable, String sha1, String murmur) {
 				this.file = file;
 				this.size = size;
-				this.type = type;
 				this.editable = editable;
 				this.sha1 = sha1;
 				this.murmur = murmur;
@@ -88,7 +86,7 @@ public class ModpackJsons {
 
 			@Override
 			public String toString() {
-				return String.format(Locale.ROOT, "ModpackContentItems(file=%s, size=%s, type=%s, editable=%s, sha1=%s, murmur=%s)", file, size, type, editable, sha1, murmur);
+				return String.format(Locale.ROOT, "ModpackContentItems(file=%s, size=%s, editable=%s, sha1=%s, murmur=%s)", file, size, editable, sha1, murmur);
 			}
 
 			@Override
@@ -97,13 +95,13 @@ public class ModpackJsons {
 				if (obj == null || getClass() != obj.getClass()) return false;
 				ModpackContentItem that = (ModpackContentItem) obj;
 				return editable == that.editable && size == that.size
-						&& Objects.equals(file, that.file) && Objects.equals(type, that.type)
+						&& Objects.equals(file, that.file)
 						&& Objects.equals(sha1, that.sha1) && Objects.equals(murmur, that.murmur);
 			}
 
 			@Override
 			public int hashCode() {
-				return Objects.hash(file, size, type, editable, sha1, murmur);
+				return Objects.hash(file, size, editable, sha1, murmur);
 			}
 		}
 

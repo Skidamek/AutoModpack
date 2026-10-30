@@ -81,20 +81,21 @@ class UpdatePlannerTest {
 	}
 
 	@Test
-	void firstInstallConsentPreservesBeforeReplacingTheSameLivePath() {
+	void firstInstallConsentRemovesALocalJarWhenThePackTakesThatModsPath() {
 		String path = "mods/shared.jar";
 		FileState local = new FileState(OLD_HASH, 8, true);
-		ModpackJsons.ModpackContentFields target = manifest(Map.of(path, item(path, TARGET_HASH, 9, "other")),
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(path, item(path, TARGET_HASH, 9, "mod")),
 				ledger(entry(path, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, path), local);
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of(path, local)));
 
-		Operation operation = plan.operations().stream().filter(value -> value.root() == Root.GAME_DIR && value.relativePath().equals(path)).findFirst().orElseThrow();
-		assertEquals(OperationType.INSTALL_OBJECT, operation.operation());
-		assertEquals(TARGET_HASH, operation.expectedObjectHash());
-		assertEquals(OLD_HASH, operation.expectedExistingHash());
+		Operation live = plan.operations().stream().filter(value -> value.root() == Root.GAME_DIR && value.relativePath().equals(path)).findFirst().orElseThrow();
+		assertEquals(OperationType.DELETE, live.operation());
+		assertEquals(OLD_HASH, live.expectedExistingHash());
+		assertTrue(plan.operations().stream().anyMatch(value -> value.root() == Root.PROJECTION && value.relativePath().equals(path) && value.operation() == OperationType.INSTALL_OBJECT
+				&& TARGET_HASH.equals(value.expectedObjectHash())));
 		assertEquals(PreservationProof.PLAYER_CONSENT, plan.preservations().get(0).proof());
 	}
 
@@ -881,11 +882,11 @@ class UpdatePlannerTest {
 	}
 
 	private static ModpackJsons.ModpackContentFields.ModpackContentItem item(String path, String hash, long size, String type) {
-		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, size, type, false, hash, "0");
+		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, size, false, hash, "0");
 	}
 
 	private static ModpackJsons.ModpackContentFields.ModpackContentItem editableItem(String path, String hash, long size, String type) {
-		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, size, type, true, hash, "0");
+		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, size, true, hash, "0");
 	}
 
 	private static ModpackJsons.ModpackContentFields packManifest(String modpackId, Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> items,

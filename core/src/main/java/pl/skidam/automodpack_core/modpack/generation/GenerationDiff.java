@@ -5,6 +5,7 @@ import java.util.function.BiPredicate;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 
 /** A deterministic, complete-catalogue diff between two generation states. */
 public record GenerationDiff(
@@ -59,7 +60,7 @@ public record GenerationDiff(
 			GroupManifest.GroupFile before = change.before();
 			GroupManifest.GroupFile after = change.after();
 			long size = after == null ? before.size() : after.size();
-			String contentKind = after == null ? before.type() : after.type();
+			String contentKind = ModpackContentType.kindForPath(change.logicalPath());
 			ChangeSet.Occurrence occurrence = new ChangeSet.Occurrence("catalogue", change.logicalPath(), size, null,
 					before == null ? null : before.sha1(), after == null ? null : after.sha1(), contentKind, List.of(change.groupId()), List.of());
 			changes.add(new ChangeSet.Change(change.logicalPath(), canonicalKind(change.classification()), List.of(occurrence)));

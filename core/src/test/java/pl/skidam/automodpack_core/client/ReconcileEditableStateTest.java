@@ -141,7 +141,7 @@ class ReconcileEditableStateTest {
 		group.required = true;
 		group.defaultSelected = true;
 		Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
-		files.put(EDITABLE_PATH, new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(packBytes.length), "config", editable, HashUtils.sha1(packBytes), "0"));
+		files.put(EDITABLE_PATH, new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(packBytes.length), editable, HashUtils.sha1(packBytes), "0"));
 		group.files = files;
 		fields.categories = Map.of("General", Map.of("main", group));
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
@@ -158,7 +158,7 @@ class ReconcileEditableStateTest {
 
 	private static ModpackJsons.ModpackContentFields flatTarget(String sha1, boolean editable) {
 		ModpackJsons.ModpackContentFields target = new ModpackJsons.ModpackContentFields(Set.of(
-				new ModpackJsons.ModpackContentFields.ModpackContentItem(EDITABLE_PATH, 14, "config", editable, sha1, "0")));
+				new ModpackJsons.ModpackContentFields.ModpackContentItem(EDITABLE_PATH, 14, editable, sha1, "0")));
 		target.modpackId = PACK_ID;
 		target.contentToken = "1".repeat(40);
 		return target;

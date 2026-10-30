@@ -965,7 +965,7 @@ class UpdateCommitTest {
 		byte[] localBytes = "locally-modified".getBytes(StandardCharsets.UTF_8);
 		Files.write(local, localBytes);
 		String localHash = HashUtils.getHash(local);
-		SelectedModpackTarget target = UpdateTestFixtures.target(storage, "mods/shared.jar", "other", false, serverHash, serverBytes.length);
+		SelectedModpackTarget target = UpdateTestFixtures.target(storage, "mods/shared.jar", "mod", false, serverHash, serverBytes.length);
 		UpdatePlan.FileState localState = new UpdatePlan.FileState(localHash, localBytes.length, true);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/shared.jar"), localState);
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
@@ -973,7 +973,8 @@ class UpdateCommitTest {
 
 		assertTrue(UpdateTestFixtures.commit(storage, plan, target) instanceof UpdateCommit.Applied);
 
-		assertTrue(FileIntegrity.matches(local, serverBytes.length, serverHash));
+		assertFalse(Files.exists(local));
+		assertTrue(FileIntegrity.matches(storage.activePath("mods/shared.jar"), serverBytes.length, serverHash));
 		assertTrue(FileIntegrity.matches(storage.objectFile(localHash), localBytes.length, localHash));
 	}
 
@@ -1348,7 +1349,6 @@ class UpdateCommitTest {
 	private static ModpackJsons.CompleteModpackContentFields.GroupFileFields file(String path, String hash, long size) {
 		ModpackJsons.CompleteModpackContentFields.GroupFileFields file = new ModpackJsons.CompleteModpackContentFields.GroupFileFields();
 		file.size = String.valueOf(size);
-		file.type = path.endsWith(".jar") ? "mod" : "config";
 		file.editable = false;
 		file.sha1 = hash;
 		file.murmur = "0";

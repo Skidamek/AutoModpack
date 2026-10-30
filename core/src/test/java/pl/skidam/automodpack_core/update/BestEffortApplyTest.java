@@ -458,7 +458,7 @@ class BestEffortApplyTest {
 		for (var entry : files.entrySet()) {
 			String hash = OverlayTombstoneCommitTest.store(storage, entry.getValue());
 			groupFiles.put(entry.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(entry.getValue().length),
-					entry.getKey().startsWith("mods/") ? "mod" : "config", entry.getKey().equals(EDITABLE), hash, "0"));
+					entry.getKey().equals(EDITABLE), hash, "0"));
 		}
 		group.files = groupFiles;
 		fields.categories = Map.of("General", Map.of("main", group));

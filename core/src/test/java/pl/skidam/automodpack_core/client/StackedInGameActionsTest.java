@@ -39,7 +39,6 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
-import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
@@ -360,7 +359,7 @@ class StackedInGameActionsTest {
 		for (String path : paths) {
 			byte[] content = bytes(path, version);
 			ClientObjectStore.storeObject(storage, HashUtils.sha1(content), content);
-			files.put(path, new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length), ModpackPathPolicy.typeForPath(path), false, HashUtils.sha1(content), "0"));
+			files.put(path, new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length), false, HashUtils.sha1(content), "0"));
 		}
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = PACK;

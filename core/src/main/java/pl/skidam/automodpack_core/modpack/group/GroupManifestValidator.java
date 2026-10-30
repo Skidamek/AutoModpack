@@ -97,13 +97,9 @@ public final class GroupManifestValidator {
 			} catch (RuntimeException e) {
 				errors.add("Group '" + groupId + "' file '" + path + "' has invalid size");
 			}
-			if (file.type == null || !ModpackContentType.ALL.contains(file.type)) errors.add("Group '" + groupId + "' file '" + path + "' has invalid type");
-			else
-				if (!ModpackPathPolicy.isValidTypeAndPath(path, file.type))
-					errors.add("Group '" + groupId + "' file '" + path + "' has an invalid type/path combination: " + file.type);
+			if (!ModpackPathPolicy.isValidPublishedPath(path)) errors.add("Group '" + groupId + "' file '" + path + "' has an invalid path");
 			if (!HashUtils.isSha1(file.sha1)) errors.add("Group '" + groupId + "' file '" + path + "' has invalid SHA-1");
-			files.put(path, new GroupManifest.GroupFile(size, file.type, file.editable,
-					value(file.sha1).toLowerCase(Locale.ROOT), file.murmur));
+			files.put(path, new GroupManifest.GroupFile(size, file.editable, value(file.sha1).toLowerCase(Locale.ROOT), file.murmur));
 		}
 		return files;
 	}
@@ -133,7 +129,7 @@ public final class GroupManifestValidator {
 				for (String path : group.files().keySet()) {
 					if (ClientPlatform.WINDOWS.equals(platform)) validateWindowsPath(groupId, path, errors);
 					aliases.computeIfAbsent(platformPathKey(path, platform), ignored -> new ArrayList<>()).add(new PathOwner(groupId, path));
-					if (ModpackPathPolicy.isActiveMod(path, group.files().get(path).type()))
+					if (ModpackPathPolicy.isActiveMod(path))
 						modBasenameAliases.computeIfAbsent(platformPathKey(path.substring(path.lastIndexOf('/') + 1), platform), ignored -> new ArrayList<>())
 								.add(new PathOwner(groupId, path));
 				}

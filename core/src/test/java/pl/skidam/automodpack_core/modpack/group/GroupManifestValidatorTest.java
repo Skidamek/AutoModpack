@@ -213,18 +213,33 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
-	void rejectsReservedRootsAndInvalidTypePathCombinations() {
-		for (var invalid : List.of(
-				Map.entry("saves/world.dat", "other"),
-				Map.entry("logs/latest.log", "other"),
-				Map.entry("screenshots/image.png", "other"),
-				Map.entry("config/settings.json", "other"),
-				Map.entry("shaderpacks/shader.zip", "other"),
-				Map.entry("resourcepacks/pack.zip", "other"),
-				Map.entry("options.txt", "other"))) {
+	void ignoresALeftoverTypeFieldOnFileMetadata() {
+		var file = ConfigTools.GSON.fromJson("{\"size\":\"1\",\"type\":\"other\",\"editable\":false,\"sha1\":\"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8\"}",
+				ModpackJsons.CompleteModpackContentFields.GroupFileFields.class);
+		var fields = catalogue();
+		fields.categories = oneCategory("main", groupAt("mods/example.jar", file));
+		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void publishedHeadStillNamesTypeForOlderClients() {
+		var fields = catalogue();
+		var group = groupAt("mods/example.jar", file("a"));
+		group.files = Map.of("mods/example.jar", file("a"), "config/settings.json", file("a"));
+		group.required = true;
+		group.defaultSelected = true;
+		fields.categories = oneCategory("main", group);
+		var published = GroupManifestValidator.validate(fields).toFields();
+		assertEquals("mod", published.categories.get("General").get("main").files.get("mods/example.jar").type);
+		assertEquals("config", published.categories.get("General").get("main").files.get("config/settings.json").type);
+	}
+
+	@Test
+	void rejectsReservedRoots() {
+		for (String invalid : List.of("saves/world.dat", "logs/latest.log", "screenshots/image.png")) {
 			var fields = catalogue();
-			fields.categories = oneCategory("main", groupAt(invalid.getKey(), fileOfType(invalid.getValue())));
-			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), invalid.getKey());
+			fields.categories = oneCategory("main", groupAt(invalid, fileOfType("other")));
+			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), invalid);
 		}
 	}
 
@@ -454,7 +469,7 @@ class GroupManifestValidatorTest {
 	}
 
 	private static ModpackJsons.CompleteModpackContentFields.GroupFileFields fileOfType(String type, String hash) {
-		return new ModpackJsons.CompleteModpackContentFields.GroupFileFields("1", type, false, hash, null);
+		return new ModpackJsons.CompleteModpackContentFields.GroupFileFields("1", false, hash, null);
 	}
 
 	@SuppressWarnings("unchecked")

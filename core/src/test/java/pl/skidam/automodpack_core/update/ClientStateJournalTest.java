@@ -211,7 +211,7 @@ class ClientStateJournalTest {
 		byte[] bytes = "mod".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.sha1(bytes);
 		ClientObjectStore.storeObject(storage, hash, bytes);
-		GroupManifest.GroupFile mod = new GroupManifest.GroupFile(bytes.length, "mod", false, hash, null);
+		GroupManifest.GroupFile mod = new GroupManifest.GroupFile(bytes.length, false, hash, null);
 		GroupManifest.Group group = new GroupManifest.Group("", "test pack", "General", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Set.of(), Map.of("mods/test.jar", mod));
 		GroupManifest manifest = new GroupManifest("abc1234", "test pack", "", "", "", "", Map.of("main", group));
 		PackDocument document = PackDocument.create(manifest, TestPacks.policySha1(manifest), TestPacks.CREATED, null);
@@ -238,7 +238,7 @@ class ClientStateJournalTest {
 		byte[] currentBytes = "current".getBytes(StandardCharsets.UTF_8);
 		String currentHash = HashUtils.sha1(currentBytes);
 		ClientObjectStore.storeObject(storage, currentHash, currentBytes);
-		GroupManifest.GroupFile mod = new GroupManifest.GroupFile(currentBytes.length, "mod", false, currentHash, null);
+		GroupManifest.GroupFile mod = new GroupManifest.GroupFile(currentBytes.length, false, currentHash, null);
 		GroupManifest.Group group = new GroupManifest.Group("", "test pack", "General", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Set.of(), Map.of("mods/test.jar", mod));
 		GroupManifest manifest = new GroupManifest("abc1234", "test pack", "", "", "", "", Map.of("main", group));
 		PackDocument document = PackDocument.create(manifest, TestPacks.policySha1(manifest), TestPacks.CREATED, null);
@@ -277,7 +277,7 @@ class ClientStateJournalTest {
 		String hash = HashUtils.sha1(bytes);
 		ClientObjectStore.storeObject(storage, hash, bytes);
 		Path object = storage.objectFile(hash);
-		GroupManifest.GroupFile mod = new GroupManifest.GroupFile(bytes.length, "mod", false, hash, null);
+		GroupManifest.GroupFile mod = new GroupManifest.GroupFile(bytes.length, false, hash, null);
 		GroupManifest.Group group = new GroupManifest.Group("", "test pack", "General", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Set.of(), Map.of("mods/test.jar", mod));
 		GroupManifest manifest = new GroupManifest("abc1234", "test pack", "", "", "", "", Map.of("main", group));
 		PackDocument document = PackDocument.create(manifest, TestPacks.policySha1(manifest), TestPacks.CREATED, null);

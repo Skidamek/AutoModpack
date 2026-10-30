@@ -31,6 +31,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -338,7 +339,7 @@ public final class UpdatePlanner {
 		Map<String, FileState> overlays = overlaysByRelative(input.files());
 		for (var item : targetItems.values()) {
 			String relative = LogicalPath.normalize(item.file);
-			boolean activeMod = ModpackPathPolicy.isActiveMod(relative, item.type);
+			boolean activeMod = ModpackPathPolicy.isActiveMod(relative);
 			FileKey modpackKey = new FileKey(Root.PROJECTION, relative);
 			FileState existing = session.projected(modpackKey);
 			FileState overlay = item.editable ? overlays.get(relative) : null;
@@ -416,7 +417,7 @@ public final class UpdatePlanner {
 					: before == null || !before.regularFile() ? ChangeSet.Kind.ADDED : ChangeSet.Kind.MODIFIED;
 			String beforeHash = before == null || !HashUtils.isSha1(before.sha1()) ? null : before.sha1();
 			String afterHash = operation.operation() == OperationType.DELETE ? null : operation.expectedObjectHash();
-			String contentKind = after == null ? null : after.type;
+			String contentKind = after == null ? null : ModpackContentType.kindForPath(after.file);
 			List<String> featureIds = ownership == null ? List.of() : List.copyOf(ownership.historicalGroupIds());
 			long size = operation.operation() == OperationType.DELETE ? before == null ? 0 : Math.max(0, before.size()) : operation.expectedSize();
 			Long beforeSize = kind == ChangeSet.Kind.REMOVED ? null : before != null && before.regularFile() ? Math.max(0, before.size()) : null;
@@ -702,8 +703,7 @@ public final class UpdatePlanner {
 	private static String normalizedManifestPath(ModpackJsons.ModpackContentFields.ModpackContentItem item) {
 		if (item == null) throw new IllegalArgumentException("Manifest item is incomplete");
 		String normalized = LogicalPath.normalize(item.file);
-		if (!ModpackPathPolicy.isValidTypeAndPath(normalized, item.type))
-			throw new IllegalArgumentException("Invalid manifest type/path combination: " + item.type + " " + item.file);
+		if (!ModpackPathPolicy.isValidPublishedPath(normalized)) throw new IllegalArgumentException("Invalid manifest path: " + item.file);
 		return normalized;
 	}
 

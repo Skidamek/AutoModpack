@@ -298,7 +298,7 @@ final class UpdateTransactionValidator {
 			throw new IOException("Selected target identity is invalid");
 		Set<String> normalizedPaths = new HashSet<>();
 		for (var item : manifest.list) {
-			if (item == null || item.type == null || item.type.isBlank()) throw new IOException("Manifest item is incomplete");
+			if (item == null || item.file == null || item.file.isBlank()) throw new IOException("Manifest item is incomplete");
 			String relative = normalizeManifestPath(item.file);
 			if (!normalizedPaths.add(relative)) throw new IOException("Manifest contains duplicate normalized path: " + relative);
 			if (item.size < 0) throw new IOException("Manifest file has a negative size: " + relative);

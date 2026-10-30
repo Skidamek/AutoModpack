@@ -731,7 +731,7 @@ class ModpackExecutorTest {
 			Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new HashMap<>();
 			for (var file : filesByGroup.getOrDefault(entry.getKey(), Map.of()).entrySet()) {
 				String sha1 = HashUtils.sha1(file.getValue().getBytes(StandardCharsets.UTF_8));
-				files.put(file.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(file.getValue().length()), "config", false, sha1, null));
+				files.put(file.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(file.getValue().length()), false, sha1, null));
 			}
 			group.files = files;
 			category.put(entry.getKey(), group);

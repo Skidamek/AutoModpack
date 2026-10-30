@@ -26,7 +26,7 @@ final class ForceCopyPaths {
 		if (services == null || services.isEmpty()) return Set.of();
 		Set<String> paths = new TreeSet<>();
 		for (ModpackJsons.ModpackContentFields.ModpackContentItem item : items) {
-			if (!ModpackPathPolicy.isActiveMod(LogicalPath.normalize(item.file), item.type)) continue;
+			if (!ModpackPathPolicy.isActiveMod(LogicalPath.normalize(item.file))) continue;
 			Path source = resolve.apply(item);
 			if (source == null) continue;
 			try {

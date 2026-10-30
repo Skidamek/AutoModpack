@@ -4,7 +4,7 @@ import java.util.Set;
 
 import pl.skidam.automodpack_core.utils.JarUtils;
 
-/** Canonical serialized file types used by modpack manifests and download routing. */
+/** Local labels derived from a logical path. The pack does not persist these. */
 public final class ModpackContentType {
 	public static final String MOD = "mod";
 	public static final String CONFIG = "config";
@@ -16,12 +16,24 @@ public final class ModpackContentType {
 
 	private ModpackContentType() {}
 
-	public static boolean isSourceFetchable(String type) {
-		return MOD.equals(type) || SHADER.equals(type) || RESOURCEPACK.equals(type);
+	/** Path-derived kind for inspector counts, change copy, and Modrinth project URLs. */
+	public static String kindForPath(String path) {
+		if (path == null) return OTHER;
+		if (ModpackPathPolicy.isModPath(path)) return MOD;
+		return ModpackPathPolicy.typeForPath(path);
 	}
 
-	/** Files the confirm screen can call unverified, plus shaders and resource packs, are submitted to Modrinth and CurseForge so a miss is a real miss. */
-	public static boolean needsPlatformLookup(String type, String path) {
-		return isSourceFetchable(type) || JarUtils.hasJarExtension(path);
+	/** Jars plus shader and resource-pack trees are submitted to Modrinth and CurseForge. */
+	public static boolean needsPlatformLookup(String path) {
+		if (JarUtils.hasJarExtension(path)) return true;
+		String kind = kindForPath(path);
+		return SHADER.equals(kind) || RESOURCEPACK.equals(kind);
+	}
+
+	/** Modrinth project-page segment for a looked-up file. */
+	public static String platformProjectKind(String path) {
+		if (JarUtils.hasJarExtension(path)) return MOD;
+		String kind = kindForPath(path);
+		return SHADER.equals(kind) || RESOURCEPACK.equals(kind) ? kind : MOD;
 	}
 }

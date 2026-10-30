@@ -45,7 +45,7 @@ class OfflineRepairTest {
 		ClientStorage storage = storage();
 		byte[] expectedBytes = "server-default".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.sha1(expectedBytes);
-		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", "config", false, hash, expectedBytes.length));
+		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", false, hash, expectedBytes.length));
 		write(storage.activePath("config/settings.json"), expectedBytes);
 		write(storage.objectFile(hash), "broken-object".getBytes(StandardCharsets.UTF_8));
 		write(storage.gamePath("config/settings.json"), "broken-live".getBytes(StandardCharsets.UTF_8));
@@ -68,7 +68,7 @@ class OfflineRepairTest {
 		ClientStorage storage = storage();
 		byte[] expectedBytes = "mod-bytes".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.sha1(expectedBytes);
-		SelectedModpackTarget target = install(storage, new FileSpec("mods/a.jar", "mod", false, hash, expectedBytes.length));
+		SelectedModpackTarget target = install(storage, new FileSpec("mods/a.jar", false, hash, expectedBytes.length));
 		write(storage.objectFile(hash), expectedBytes);
 		write(storage.activePath("mods/a.jar"), "damaged".getBytes(StandardCharsets.UTF_8));
 		long before = ProjectionState.read(storage).revision();
@@ -86,7 +86,7 @@ class OfflineRepairTest {
 		ClientStorage storage = storage();
 		byte[] packBytes = "pack-mod".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.sha1(packBytes);
-		SelectedModpackTarget target = install(storage, new FileSpec("mods/edit.jar", "mod", true, hash, packBytes.length));
+		SelectedModpackTarget target = install(storage, new FileSpec("mods/edit.jar", true, hash, packBytes.length));
 		write(storage.activePath("mods/edit.jar"), packBytes);
 		byte[] edited = "player-mod".getBytes(StandardCharsets.UTF_8);
 		write(storage.gamePath("mods/edit.jar"), edited);
@@ -104,7 +104,7 @@ class OfflineRepairTest {
 		ClientStorage storage = storage();
 		byte[] expectedBytes = "unavailable".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.sha1(expectedBytes);
-		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", "config", false, hash, expectedBytes.length));
+		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", false, hash, expectedBytes.length));
 		byte[] corrupt = "damaged".getBytes(StandardCharsets.UTF_8);
 		write(storage.objectFile(hash), corrupt);
 		OfflineRepair repair = new OfflineRepair(storage);
@@ -124,7 +124,7 @@ class OfflineRepairTest {
 		ClientStorage storage = storage();
 		byte[] expectedBytes = "server-default".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.sha1(expectedBytes);
-		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", "config", true, hash, expectedBytes.length));
+		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", true, hash, expectedBytes.length));
 		write(storage.objectFile(hash), expectedBytes);
 		write(storage.activePath("config/settings.json"), expectedBytes);
 		Path live = storage.gamePath("config/settings.json");
@@ -145,7 +145,7 @@ class OfflineRepairTest {
 		ClientStorage storage = storage();
 		byte[] expectedBytes = "server-default".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.sha1(expectedBytes);
-		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", "config", true, hash, expectedBytes.length));
+		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", true, hash, expectedBytes.length));
 		write(storage.objectFile(hash), expectedBytes);
 		write(storage.activePath("config/settings.json"), expectedBytes);
 		Path live = write(storage.gamePath("config/settings.json"), "my-local-edit".getBytes(StandardCharsets.UTF_8));
@@ -170,7 +170,7 @@ class OfflineRepairTest {
 		ClientStorage storage = storage();
 		byte[] expectedBytes = "server-default".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.sha1(expectedBytes);
-		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", "config", true, hash, expectedBytes.length));
+		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", true, hash, expectedBytes.length));
 		write(storage.objectFile(hash), expectedBytes);
 		write(storage.activePath("config/settings.json"), expectedBytes);
 		byte[] editedBytes = "my-local-edit".getBytes(StandardCharsets.UTF_8);
@@ -199,7 +199,7 @@ class OfflineRepairTest {
 		ClientStorage storage = storage();
 		byte[] expectedBytes = "server-default".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.sha1(expectedBytes);
-		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", "config", true, hash, expectedBytes.length));
+		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", true, hash, expectedBytes.length));
 		write(storage.objectFile(hash), expectedBytes);
 		write(storage.activePath("config/settings.json"), expectedBytes);
 		byte[] editedBytes = "my-local-edit".getBytes(StandardCharsets.UTF_8);
@@ -242,7 +242,7 @@ class OfflineRepairTest {
 		ClientStorage storage = storage();
 		byte[] expectedBytes = "server-mod".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.sha1(expectedBytes);
-		SelectedModpackTarget target = install(storage, new FileSpec("mods/server.jar", "mod", false, hash, expectedBytes.length));
+		SelectedModpackTarget target = install(storage, new FileSpec("mods/server.jar", false, hash, expectedBytes.length));
 		write(storage.objectFile(hash), expectedBytes);
 		write(storage.activePath("mods/server.jar"), expectedBytes);
 		Path protectedJar = write(storage.modsDirectory().resolve("automodpack.jar"), "self".getBytes(StandardCharsets.UTF_8));
@@ -264,7 +264,7 @@ class OfflineRepairTest {
 		ClientStorage storage = storage();
 		byte[] expectedBytes = "detached-generation".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.sha1(expectedBytes);
-		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", "config", false, hash, expectedBytes.length));
+		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", false, hash, expectedBytes.length));
 		storage.setDetached(target.manifest().modpackId(), true);
 		write(storage.objectFile(hash), expectedBytes);
 		write(storage.activePath("config/settings.json"), expectedBytes);
@@ -298,10 +298,10 @@ class OfflineRepairTest {
 		String betaHash = HashUtils.sha1(beta);
 		String deltaHash = HashUtils.sha1(delta);
 		SelectedModpackTarget target = install(storage,
-				new FileSpec("config/alpha.txt", "config", false, alphaHash, alpha.length),
-				new FileSpec("config/beta.json", "config", false, betaHash, beta.length),
-				new FileSpec("config/delta.txt", "config", false, deltaHash, delta.length),
-				new FileSpec("config/shared.txt", "config", true, HashUtils.sha1(shared), shared.length));
+				new FileSpec("config/alpha.txt", false, alphaHash, alpha.length),
+				new FileSpec("config/beta.json", false, betaHash, beta.length),
+				new FileSpec("config/delta.txt", false, deltaHash, delta.length),
+				new FileSpec("config/shared.txt", true, HashUtils.sha1(shared), shared.length));
 		String modpackId = target.manifest().modpackId();
 		for (byte[] content : List.of(alpha, beta, delta, shared)) {
 			String hash = HashUtils.sha1(content);
@@ -392,7 +392,7 @@ class OfflineRepairTest {
 		group.required = true;
 		group.defaultSelected = true;
 		Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
-		for (FileSpec spec : specs) files.put(spec.path(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(spec.size()), spec.type(), spec.editable(), spec.hash(), "0"));
+		for (FileSpec spec : specs) files.put(spec.path(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(spec.size()), spec.editable(), spec.hash(), "0"));
 		group.files = files;
 		fields.categories = Map.of("General", Map.of("main", group));
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
@@ -409,5 +409,5 @@ class OfflineRepairTest {
 		return Files.write(path, bytes);
 	}
 
-	private record FileSpec(String path, String type, boolean editable, String hash, long size) {}
+	private record FileSpec(String path, boolean editable, String hash, long size) {}
 }

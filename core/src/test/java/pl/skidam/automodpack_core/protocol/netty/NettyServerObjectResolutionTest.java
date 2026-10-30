@@ -177,7 +177,7 @@ class NettyServerObjectResolutionTest {
 		group.required = false;
 		group.defaultSelected = false;
 		group.description = description;
-		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(bytes.length), "config", false, hash, null));
+		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(bytes.length), false, hash, null));
 		fields.categories = Map.of("General", Map.of("main", group));
 		return new ModpackCandidate(GroupManifestValidator.validate(fields), new TreeMap<>(Map.of(hash, new StagedObject(hash, bytes.length, staged))), new TreeMap<>(), List.of());
 	}

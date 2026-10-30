@@ -22,6 +22,7 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.platforms.FetchManager;
 import pl.skidam.automodpack_core.platforms.PlatformCache;
 import pl.skidam.automodpack_core.protocol.PackTransport;
@@ -160,7 +161,7 @@ final class ModpackObjectAcquisition {
 				failedDownloads.put(serverItem, sources.stream().map(DownloadSource::url).toList());
 				failedDownloadCategories.put(serverItem, category);
 			};
-			downloadManager.download(downloadFile, serverItem.sha1, serverItem.murmur, serverItem.type, sources, serverItem.size, () -> {}, failureCallback);
+			downloadManager.download(downloadFile, serverItem.sha1, serverItem.murmur, ModpackContentType.platformProjectKind(serverItem.file), sources, serverItem.size, () -> {}, failureCallback);
 		}
 
 		downloadManager.joinAll();

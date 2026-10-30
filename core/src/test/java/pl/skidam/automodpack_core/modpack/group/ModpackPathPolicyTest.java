@@ -7,17 +7,17 @@ import org.junit.jupiter.api.Test;
 
 class ModpackPathPolicyTest {
 	@Test
-	void activeModClassificationRequiresBothTypeAndLoaderPath() {
-		assertTrue(ModpackPathPolicy.isActiveMod("mods/main.jar", "mod"));
-		assertTrue(ModpackPathPolicy.isActiveMod("mods/nested/main.jar", "mod"));
-		assertFalse(ModpackPathPolicy.isActiveMod("mods/main.jar", "other"));
-		assertFalse(ModpackPathPolicy.isActiveMod("config/main.jar", "mod"));
-		assertFalse(ModpackPathPolicy.isActiveMod("mods/../config/main.jar", "mod"));
+	void activeModIsAJarUnderMods() {
+		assertTrue(ModpackPathPolicy.isActiveMod("mods/main.jar"));
+		assertTrue(ModpackPathPolicy.isActiveMod("mods/nested/main.jar"));
+		assertFalse(ModpackPathPolicy.isActiveMod("mods/README.txt"));
+		assertFalse(ModpackPathPolicy.isActiveMod("config/main.jar"));
+		assertFalse(ModpackPathPolicy.isActiveMod("mods/../config/main.jar"));
 	}
 
 	@Test
 	void packsCannotClaimInstanceRootBootstrapFile() {
-		assertFalse(ModpackPathPolicy.isValidTypeAndPath("automodpack-bootstrap.json", ModpackContentType.OTHER));
-		assertFalse(ModpackPathPolicy.isValidTypeAndPath("automodpack/automodpack-bootstrap.json", ModpackContentType.OTHER));
+		assertFalse(ModpackPathPolicy.isValidPublishedPath("automodpack-bootstrap.json"));
+		assertFalse(ModpackPathPolicy.isValidPublishedPath("automodpack/automodpack-bootstrap.json"));
 	}
 }

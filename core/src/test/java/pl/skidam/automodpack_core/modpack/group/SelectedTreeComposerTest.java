@@ -13,7 +13,7 @@ import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 class SelectedTreeComposerTest {
 	@Test
 	void deduplicatesSharedFileAndKeepsItWhileOneOwnerRemains() {
-		GroupManifest.GroupFile file = new GroupManifest.GroupFile(1, "mod", false,
+		GroupManifest.GroupFile file = new GroupManifest.GroupFile(1, false,
 				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
 		GroupManifest manifest = manifest(Map.of("main", group(file), "visuals", group(file)));
 
@@ -29,7 +29,7 @@ class SelectedTreeComposerTest {
 
 	@Test
 	void selectionChangeKeepsTargetIdentity() {
-		GroupManifest.GroupFile file = new GroupManifest.GroupFile(1, "mod", false,
+		GroupManifest.GroupFile file = new GroupManifest.GroupFile(1, false,
 				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
 		GroupManifest manifest = manifest(Map.of("main", group(file), "visuals", group(file)));
 		PackDocument document = TestPacks.document(manifest);
@@ -45,9 +45,9 @@ class SelectedTreeComposerTest {
 
 	@Test
 	void selectsCorrectMutuallyExclusiveVariant() {
-		GroupManifest.GroupFile first = new GroupManifest.GroupFile(1, "mod", false,
+		GroupManifest.GroupFile first = new GroupManifest.GroupFile(1, false,
 				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
-		GroupManifest.GroupFile second = new GroupManifest.GroupFile(1, "mod", false,
+		GroupManifest.GroupFile second = new GroupManifest.GroupFile(1, false,
 				"e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null);
 		GroupManifest manifest = manifest(Map.of("first", group(first), "second", group(second)));
 
@@ -59,9 +59,9 @@ class SelectedTreeComposerTest {
 
 	@Test
 	void composesCompleteCatalogueForPreloadWithoutChangingSelection() {
-		GroupManifest.GroupFile first = new GroupManifest.GroupFile(1, "config", false,
+		GroupManifest.GroupFile first = new GroupManifest.GroupFile(1, false,
 				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
-		GroupManifest.GroupFile second = new GroupManifest.GroupFile(1, "config", false,
+		GroupManifest.GroupFile second = new GroupManifest.GroupFile(1, false,
 				"e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null);
 		GroupManifest manifest = manifest(
 				Map.of("main", new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("config/first.txt", first))), "optional",
@@ -75,8 +75,8 @@ class SelectedTreeComposerTest {
 
 	@Test
 	void composesAlternativeCatalogueObjectsWithTheSamePath() {
-		GroupManifest.GroupFile first = new GroupManifest.GroupFile(1, "config", false, "base-hash", null);
-		GroupManifest.GroupFile second = new GroupManifest.GroupFile(1, "config", false, "alternative-hash", null);
+		GroupManifest.GroupFile first = new GroupManifest.GroupFile(1, false, "base-hash", null);
+		GroupManifest.GroupFile second = new GroupManifest.GroupFile(1, false, "alternative-hash", null);
 		GroupManifest manifest = manifest(Map.of("base", group(first), "alternative", group(second)));
 
 		var target = SelectedTreeComposer.composeAll(manifest, null);

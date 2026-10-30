@@ -119,7 +119,8 @@ public final class ChangeSet {
 			if (groupIds != null && !groupIds.contains(group.getKey())) continue;
 			for (var file : group.getValue().files().entrySet()) {
 				GroupManifest.GroupFile value = file.getValue();
-				changes.add(new Change(file.getKey(), kind, List.of(new Occurrence("catalogue", file.getKey(), value.size(), null, null, value.sha1(), value.type(), List.of(group.getKey()), List.of()))));
+				changes.add(new Change(file.getKey(), kind,
+						List.of(new Occurrence("catalogue", file.getKey(), value.size(), null, null, value.sha1(), ModpackContentType.kindForPath(file.getKey()), List.of(group.getKey()), List.of()))));
 			}
 		}
 		return of(changes);
