@@ -391,6 +391,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (!offline) requireLiveConnection();
 		review.firstConnection(!new ClientGenerationStore(storage).hasLocalState(selectedTarget.manifest().modpackId()));
 		review.resetLocalModConsent();
+		review.resetLaunchConsent();
 		if (review.firstConnection() && !applyFirstInstall) {
 			try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 				objectAcquisition.acquireTargetObjects(selectedTarget.flatTarget(), cache, false);
@@ -506,6 +507,8 @@ public class ModpackUpdater implements AutoCloseable {
 			result = attempt.commit();
 			clientConfig = attempt.plannedClientConfig();
 		}
+		// The confirm screens hand their answers here, so a cancelled dialog never grants anything and a confirmed one does.
+		review.applyLaunchConsent();
 		return result;
 	}
 
@@ -651,18 +654,12 @@ public class ModpackUpdater implements AutoCloseable {
 		return LaunchApplyState.allowsUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId());
 	}
 
-	/** The confirm screens' checkbox writes the consent the moment it moves, in either direction. */
-	public void setLaunchWritesUnverified(boolean allowed) {
-		if (selectedTarget == null || serverModpackContent == null) return;
-		LaunchApplyState.setAllowsUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId(), allowed);
-	}
-
 	/** Wraps a reviewable plan with this engine's review backing; the unverified-jar gate is precomputed, mode-gated. */
 	PreviewPayload previewPayload(UpdatePreview preview, Runnable continueAction, Runnable cancelAction) {
 		boolean updateOrRollback = preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK;
 		boolean writesUnverifiedJar = updateOrRollback && review.planWritesUnverifiedJar(preview.plan());
 		return PreviewPayload.review(preview, getModpackName(), review.joinOrigin(), writesUnverifiedJar, getSelectedTarget(), review.unverifiedSelectedJarPaths(),
-				sourceCatalogue.selectedJarSourceCounts(getSelectedTarget()), updateOrRollback && launchWritesUnverified(), review.reviewActions(), continueAction, cancelAction);
+				sourceCatalogue.selectedJarSourceCounts(getSelectedTarget()), launchWritesUnverified(), review.reviewActions(), continueAction, cancelAction);
 	}
 
 	boolean isCurrentAttempt(UpdateAttempt candidate) {

@@ -148,7 +148,36 @@ class ReviewSessionTest {
 		assertTrue(harness.review().consentedLocalModFiles().isEmpty());
 	}
 
-	private record Harness(ModpackUpdater updater, ReviewSession review, ReviewActions actions) {}
+	@Test
+	void launchConsentIsStagedUntilTheReviewCommits() throws Exception {
+		Harness harness = harness(false);
+		String modpackId = harness.updater().getSelectedTarget().manifest().modpackId();
+
+		harness.actions().setLaunchWritesUnverified().accept(true);
+		assertFalse(LaunchApplyState.allowsUnverifiedLaunchWrites(harness.storage(), modpackId), "an unconfirmed tick is not consent");
+
+		harness.review().applyLaunchConsent();
+		assertTrue(LaunchApplyState.allowsUnverifiedLaunchWrites(harness.storage(), modpackId));
+
+		harness.review().applyLaunchConsent();
+		assertTrue(LaunchApplyState.allowsUnverifiedLaunchWrites(harness.storage(), modpackId), "an answer is written once and only when given");
+	}
+
+	@Test
+	void anUntouchedOrResetLaunchConsentWritesNothing() throws Exception {
+		Harness harness = harness(false);
+		String modpackId = harness.updater().getSelectedTarget().manifest().modpackId();
+
+		harness.review().applyLaunchConsent();
+		assertFalse(LaunchApplyState.allowsUnverifiedLaunchWrites(harness.storage(), modpackId));
+
+		harness.actions().setLaunchWritesUnverified().accept(true);
+		harness.review().resetLaunchConsent();
+		harness.review().applyLaunchConsent();
+		assertFalse(LaunchApplyState.allowsUnverifiedLaunchWrites(harness.storage(), modpackId), "a cancelled preview's tick never reaches the next commit");
+	}
+
+	private record Harness(ModpackUpdater updater, ReviewSession review, ReviewActions actions, ClientStorage storage) {}
 
 	/** Records the screen seam so a wait episode cannot silently outlive the engine in these tests. */
 	private static final class RecordingScreens implements ScreenService {
@@ -219,7 +248,7 @@ class ReviewSessionTest {
 		GroupManifest manifest = TestPacks.manifest("test pack", "config/a.txt", "hello");
 		SelectedModpackTarget target = SelectedModpackTarget.prepareDefault(TestPacks.head(manifest), ClientPlatform.LINUX);
 		ModpackUpdater updater = new ModpackUpdater(target, null, null, storage);
-		return new Harness(updater, updater.reviewSession(), updater.reviewActions());
+		return new Harness(updater, updater.reviewSession(), updater.reviewActions(), storage);
 	}
 
 	private static void awaitTrue(BooleanSupplier condition) throws InterruptedException {

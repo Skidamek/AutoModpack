@@ -64,6 +64,7 @@ final class ReviewSession {
 	private Map<String, UpdatePlan.FileState> firstInstallLocalModFiles = Map.of();
 	private Map<String, UpdatePlan.FileState> consentedLocalModFiles = Map.of();
 	private boolean archiveLocalMods;
+	private Boolean launchConsent;
 
 	ReviewSession(ModpackUpdater updater, ClientStorage storage, SourceCatalogue sourceCatalogue, AtomicBoolean playerCancelled) {
 		this.updater = updater;
@@ -104,9 +105,29 @@ final class ReviewSession {
 		archiveLocalMods = false;
 	}
 
+	/** The confirm screens' checkbox holds the player's answer until the update it belongs to commits. */
+	void setLaunchWritesUnverified(boolean allowed) {
+		launchConsent = allowed;
+	}
+
+	/** A new review starts from the stored consent; an earlier dialog's answer is never written by this one. */
+	void resetLaunchConsent() {
+		launchConsent = null;
+	}
+
+	/** Writes the answer this review collected, once its commit landed; an untouched checkbox writes nothing. */
+	void applyLaunchConsent() {
+		Boolean allowed = launchConsent;
+		if (allowed == null) return;
+		launchConsent = null;
+		SelectedModpackTarget target = updater.getSelectedTarget();
+		if (target == null) return;
+		LaunchApplyState.setAllowsUnverifiedLaunchWrites(storage, target.manifest().modpackId(), allowed);
+	}
+
 	/** The actions and live polls a review-backed screen may drive; the seam type, backed by this session. */
 	ReviewActions reviewActions() {
-		return new ReviewActions(this::setFirstInstallLocalModCleanup, this::setLocalModCleanup, this::localModArchive, this::startConfirmedUpdate, this::reselectAndPreview, updater::setLaunchWritesUnverified,
+		return new ReviewActions(this::setFirstInstallLocalModCleanup, this::setLocalModCleanup, this::localModArchive, this::startConfirmedUpdate, this::reselectAndPreview, this::setLaunchWritesUnverified,
 				this::cancelConfirmation, this::cancelFromPlayer, () -> confirmationState.get() == ConfirmationState.WAITING, () -> confirmationState.get() == ConfirmationState.CANCELLED,
 				this::isCancelledByPlayer, () -> confirmationState.get() == ConfirmationState.PREVIEWING, sourceCatalogue::sourceAvailability);
 	}
@@ -318,6 +339,7 @@ final class ReviewSession {
 	private PreviewRequestResult requestUpdatePreview() throws Exception {
 		updater.getSelectedTarget(); // the engine's requireNonNull states the unavailable-target error
 		resetLocalModCleanup();
+		resetLaunchConsent();
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		sourceCatalogue.startSourceFetch();
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
