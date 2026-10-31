@@ -431,6 +431,66 @@ public final class ClientGenerationStore {
 	}
 
 	/**
+	 * Points the active pointer at the pack the restored tree ran, and nowhere when it ran none. Claims never move: a
+	 * restore is a file operation, so the selection store is left exactly as the player last consented it. A pack the
+	 * snapshot names but this client no longer claims is not resurrected; a generation whose policy the mirror cannot
+	 * rebuild clears the pointer instead of letting it describe a tree it does not carry. The restored pack is detached
+	 * because the restored tree is not the head the next join would sync to.
+	 */
+	public boolean reconcileActiveClaim(InstanceTree.LiveIdentity identity) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields current = storage.readActiveState();
+		String modpackId = identity.activeModpackId();
+		if (modpackId.isEmpty()) return clearActivePointer(current);
+		if (!hasLocalState(modpackId)) {
+			LOGGER.info("Timeline restore names {} but this client no longer claims it; clearing the active pointer", modpackId);
+			return clearActivePointer(current);
+		}
+		PackDocument document = snapshotDocument(modpackId, identity.contentToken());
+		if (document == null) {
+			LOGGER.warn("Timeline restore cannot rebuild the {} generation {}; clearing the active pointer so it cannot describe another tree", modpackId, identity.contentToken());
+			return clearActivePointer(current);
+		}
+		SelectionIntent applied = appliedSelection(identity, modpackId);
+		if (current != null && modpackId.equals(current.modpackId) && document.contentToken().equals(current.contentToken) && current.detached
+				&& Objects.equals(current.selectedGroups, List.copyOf(applied.requestedGroups()))
+				&& Objects.equals(current.selectedCategories, List.copyOf(applied.requestedCategories()))
+				&& Objects.equals(current.excludedGroups, List.copyOf(applied.excludedGroups())))
+			return false;
+		storage.writeActiveState(document, applied, true);
+		makeProjectionEditable();
+		return true;
+	}
+
+	private boolean clearActivePointer(ClientStorageJsons.ClientGenerationStateFields current) throws IOException {
+		if (current == null) return false;
+		storage.clearActiveState();
+		return true;
+	}
+
+	/** The generation the snapshot ran: its own mirror entry when still retained, the newest generation as the fallback. */
+	private PackDocument snapshotDocument(String modpackId, String contentToken) {
+		try {
+			if (!contentToken.isEmpty()) {
+				for (JournalEntry entry : new JournalMirror(storage).entries(modpackId))
+					if (entry.contentToken().equals(contentToken)) return document(modpackId, entry);
+				LOGGER.info("Timeline snapshot generation {} of {} is no longer in the mirror; pointing at the newest generation", contentToken, modpackId);
+			}
+			return newestDocument(modpackId);
+		} catch (IOException | RuntimeException e) {
+			LOGGER.warn("Cannot rebuild the {} generation {} from the mirror and CAS", modpackId, contentToken, e);
+			return null;
+		}
+	}
+
+	/** The restored tree's own group choice, with the platform the player's stored desire carries; claims are never rewritten here. */
+	private SelectionIntent appliedSelection(InstanceTree.LiveIdentity identity, String modpackId) {
+		SelectionIntent stored = new ClientSelectionStore(storage.selectionFile()).get(modpackId).orElse(null);
+		SelectionIntent applied = identity.selection() == null ? stored : identity.selection();
+		if (applied == null) return new SelectionIntent(Set.of());
+		return stored == null ? applied : applied.withPlatform(stored.platform());
+	}
+
+	/**
 	 * Declares local sovereignty over the active pack: no sync until an explicit attach, and the active projection
 	 * loses its immutability so the owner can edit, delete, and rearrange every file of the kept state.
 	 */

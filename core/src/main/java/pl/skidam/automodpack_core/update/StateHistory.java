@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -21,10 +19,7 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.ContentTree;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
-import pl.skidam.automodpack_core.modpack.generation.PackDocument;
-import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Kind;
 import pl.skidam.automodpack_core.update.ClientStateJournal.Snapshot;
 import pl.skidam.automodpack_core.update.InstanceTree.Key;
@@ -226,7 +221,7 @@ public final class StateHistory {
 				if (!live.sameAs(target)) snapshotIfDirty(storage, target.keys(), Kind.LIVE, snapshot.modpackId(), "checkout-" + seq);
 				if (!live.sameFiles(target)) applyTree(storage, live, target, cache);
 				uncondemnRestoredOverlays(storage, target);
-				boolean reconciled = reconcileActiveClaim(storage, target.identity());
+				boolean reconciled = new ClientGenerationStore(storage).reconcileActiveClaim(target.identity());
 				InstanceTree after = InstanceTree.observe(storage, target.keys(), cache);
 				if (!after.sameFiles(target)) throw new IOException("Instance restore did not reproduce snapshot " + seq);
 				after.write(storage);
@@ -387,69 +382,6 @@ public final class StateHistory {
 	private static void requireNoPendingUpdate(ClientStorage storage) throws IOException {
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS))
 			throw new IOException("A modpack update is still pending; finish it or restart the game before changing the instance timeline");
-	}
-
-	/**
-	 * Points the active pointer at the pack the restored tree ran, and nowhere when it ran none. Claims never move: a
-	 * restore is a file operation, so the selection store is left exactly as the player last consented it. A pack the
-	 * snapshot names but this client no longer claims is not resurrected; a generation whose policy the mirror cannot
-	 * rebuild clears the pointer instead of letting it describe a tree it does not carry. The restored pack is detached
-	 * because the restored tree is not the head the next join would sync to.
-	 */
-	private static boolean reconcileActiveClaim(ClientStorage storage, InstanceTree.LiveIdentity identity) throws IOException {
-		String modpackId = identity.activeModpackId();
-		ClientStorageJsons.ClientGenerationStateFields current = storage.readActiveState();
-		if (modpackId.isEmpty()) {
-			if (current == null) return false;
-			storage.clearActiveState();
-			return true;
-		}
-		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		if (!generations.hasLocalState(modpackId)) {
-			if (current == null) return false;
-			LOGGER.info("Timeline restore names {} but this client no longer claims it; clearing the active pointer", modpackId);
-			storage.clearActiveState();
-			return true;
-		}
-		PackDocument document = snapshotDocument(storage, generations, modpackId, identity.contentToken());
-		if (document == null) {
-			if (current == null) return false;
-			LOGGER.warn("Timeline restore cannot rebuild the {} generation {}; clearing the active pointer so it cannot describe another tree", modpackId, identity.contentToken());
-			storage.clearActiveState();
-			return true;
-		}
-		SelectionIntent applied = appliedSelection(storage, identity, modpackId);
-		if (current != null && modpackId.equals(current.modpackId) && document.contentToken().equals(current.contentToken) && current.detached
-				&& Objects.equals(current.selectedGroups, List.copyOf(applied.requestedGroups()))
-				&& Objects.equals(current.selectedCategories, List.copyOf(applied.requestedCategories()))
-				&& Objects.equals(current.excludedGroups, List.copyOf(applied.excludedGroups())))
-			return false;
-		storage.writeActiveState(document, applied, true);
-		generations.makeProjectionEditable();
-		return true;
-	}
-
-	/** The generation the snapshot ran: its own mirror entry when still retained, the newest generation as the fallback. */
-	private static PackDocument snapshotDocument(ClientStorage storage, ClientGenerationStore generations, String modpackId, String contentToken) {
-		try {
-			if (!contentToken.isEmpty()) {
-				for (JournalEntry entry : new JournalMirror(storage).entries(modpackId))
-					if (entry.contentToken().equals(contentToken)) return generations.document(modpackId, entry);
-				LOGGER.info("Timeline snapshot generation {} of {} is no longer in the mirror; pointing at the newest generation", contentToken, modpackId);
-			}
-			return generations.newestDocument(modpackId);
-		} catch (IOException | RuntimeException e) {
-			LOGGER.warn("Cannot rebuild the {} generation {} from the mirror and CAS", modpackId, contentToken, e);
-			return null;
-		}
-	}
-
-	/** The restored tree's own group choice, with the platform the player's stored desire carries; claims are never rewritten here. */
-	private static SelectionIntent appliedSelection(ClientStorage storage, InstanceTree.LiveIdentity identity, String modpackId) {
-		SelectionIntent stored = new ClientSelectionStore(storage.selectionFile()).get(modpackId).orElse(null);
-		SelectionIntent applied = identity.selection() == null ? stored : identity.selection();
-		if (applied == null) return new SelectionIntent(Set.of());
-		return stored == null ? applied : applied.withPlatform(stored.platform());
 	}
 
 	/** The timeline row is filed under the pack the restored tree ran, so a cross-pack restore is never labelled with the outgoing pack. */
