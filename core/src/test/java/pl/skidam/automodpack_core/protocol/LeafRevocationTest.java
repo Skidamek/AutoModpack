@@ -204,7 +204,10 @@ class LeafRevocationTest {
 		byte[] expired = crl(caKeys, Instant.now().minusSeconds(3600), null, leaf.getSerialNumber());
 		serve(HTTP, expired);
 		serve(TLS, expired);
-		assertEquals(Status.UNKNOWN, check(leaf, new FetchCache(null)), "a CRL past its nextUpdate decides nothing");
+		assertEquals(Status.REVOKED, check(leaf, new FetchCache(null)), "a revocation outlives the CRL that lists it");
+
+		X509Certificate unlisted = leaf(HTTP);
+		assertEquals(Status.UNKNOWN, check(unlisted, new FetchCache(null)), "an expired CRL still decides nothing about a leaf it does not list");
 	}
 
 	@Test

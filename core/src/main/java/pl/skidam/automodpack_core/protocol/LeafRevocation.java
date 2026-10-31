@@ -30,6 +30,7 @@ import org.bouncycastle.asn1.x509.DistributionPointName;
 import org.bouncycastle.asn1.x509.Extension;
 import org.bouncycastle.asn1.x509.GeneralName;
 import org.bouncycastle.asn1.x509.GeneralNames;
+import org.bouncycastle.asn1.x509.IssuingDistributionPoint;
 import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
 
 import pl.skidam.automodpack_core.utils.FetchCache;
@@ -50,6 +51,7 @@ final class LeafRevocation {
 
 	static final Duration DEADLINE = Duration.ofSeconds(4);
 	private static final String HTTP = "http://";
+	private static final String HTTPS = "https://";
 
 	private LeafRevocation() {}
 
@@ -77,7 +79,7 @@ final class LeafRevocation {
 		X509Certificate issuer = issuer(leaf, presented);
 		if (issuer == null) return CompletableFuture.completedFuture(Status.UNKNOWN);
 		X509CRL cached = crl(cache.stored(sources.get(0)));
-		return cache.get(sources, body -> settled(leaf, issuer, body, cached), deadline)
+		return cache.get(sources, body -> settled(leaf, issuer, body, cached, sources.get(0)), deadline)
 				.thenApply(status -> status == null ? Status.UNKNOWN : status)
 				.exceptionally(error -> Status.UNKNOWN);
 	}
@@ -113,10 +115,10 @@ final class LeafRevocation {
 	}
 
 	/** The leaf's status by this CRL body; null when the body is no CRL, is older than {@code cached}, or cannot settle it. */
-	private static Status settled(X509Certificate leaf, X509Certificate issuer, byte[] body, X509CRL cached) {
+	private static Status settled(X509Certificate leaf, X509Certificate issuer, byte[] body, X509CRL cached, String url) {
 		X509CRL crl = crl(body);
 		if (crl == null || cached != null && olderThan(crl, cached)) return null;
-		Status status = judge(leaf, issuer, crl);
+		Status status = judge(leaf, issuer, crl, url);
 		return status == Status.UNKNOWN ? null : status;
 	}
 
@@ -147,7 +149,8 @@ final class LeafRevocation {
 		}
 	}
 
-	private static Status judge(X509Certificate leaf, X509Certificate issuer, X509CRL crl) {
+	private static Status judge(X509Certificate leaf, X509Certificate issuer, X509CRL crl, String url) {
+		if (revokedBy(leaf, issuer, crl, url)) return Status.REVOKED;
 		try {
 			CertPathValidator validator = CertPathValidator.getInstance("PKIX");
 			PKIXRevocationChecker revocation = (PKIXRevocationChecker) validator.getRevocationChecker();
@@ -162,5 +165,44 @@ final class LeafRevocation {
 		} catch (GeneralSecurityException e) {
 			return Status.UNKNOWN;
 		}
+	}
+
+	/**
+	 * A revocation is final: an entry stays in every later CRL until the certificate expires, so a listed serial is
+	 * revoked even when the CRL itself has passed nextUpdate and PKIX would refuse to judge it. The list only speaks
+	 * for an issuer whose signature is on it, so a body another key signed never blocks a certificate.
+	 */
+	private static boolean revokedBy(X509Certificate leaf, X509Certificate issuer, X509CRL crl, String url) {
+		if (!crl.getIssuerX500Principal().equals(issuer.getSubjectX500Principal())) return false;
+		if (!covers(crl, url)) return false;
+		try {
+			crl.verify(issuer.getPublicKey());
+		} catch (GeneralSecurityException wrongKey) {
+			return false;
+		}
+		return crl.getRevokedCertificate(leaf.getSerialNumber()) != null;
+	}
+
+	/** Whether the CRL is scoped to the leaf's distribution point; a CRL without one covers every point of its issuer. */
+	private static boolean covers(X509CRL crl, String url) {
+		byte[] extension = crl.getExtensionValue(Extension.issuingDistributionPoint.getId());
+		if (extension == null) return true;
+		try {
+			DistributionPointName name = IssuingDistributionPoint.getInstance(JcaX509ExtensionUtils.parseExtensionValue(extension)).getDistributionPoint();
+			if (name == null) return true;
+			if (name.getType() != DistributionPointName.FULL_NAME) return true;
+			for (GeneralName general : GeneralNames.getInstance(name.getName()).getNames()) {
+				if (general.getTagNo() != GeneralName.uniformResourceIdentifier) continue;
+				if (bare(general.getName().toString()).equals(bare(url))) return true;
+			}
+			return false;
+		} catch (IOException | RuntimeException unreadable) {
+			return false;
+		}
+	}
+
+	private static String bare(String url) {
+		if (url.startsWith(HTTP)) return url.substring(HTTP.length());
+		return url.startsWith(HTTPS) ? url.substring(HTTPS.length()) : url;
 	}
 }
