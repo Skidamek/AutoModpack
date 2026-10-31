@@ -74,7 +74,7 @@ class PartialResumeTest {
 		Files.write(PartialResume.sliceFile(dir, NetUtils.WIRE_CHUNK_BYTES), Arrays.copyOfRange(object, NetUtils.WIRE_CHUNK_BYTES, object.length));
 
 		Path assembled = directory.resolve("out");
-		PartialResume.assemble(dir, assembled, object.length);
+		PartialResume.assembleHashing(dir, assembled, object.length);
 		assertArrayEquals(object, Files.readAllBytes(assembled));
 	}
 
@@ -91,7 +91,7 @@ class PartialResumeTest {
 		}
 		assertTrue(PartialResume.complete(dir, object.length));
 		Path assembled = directory.resolve("out");
-		PartialResume.assemble(dir, assembled, object.length);
+		PartialResume.assembleHashing(dir, assembled, object.length);
 		assertArrayEquals(object, Files.readAllBytes(assembled));
 	}
 
@@ -108,7 +108,7 @@ class PartialResumeTest {
 		}
 		assertTrue(PartialResume.complete(dir, object.length));
 		Path assembled = directory.resolve("out");
-		PartialResume.assemble(dir, assembled, object.length);
+		PartialResume.assembleHashing(dir, assembled, object.length);
 		assertArrayEquals(object, Files.readAllBytes(assembled));
 	}
 
@@ -124,7 +124,7 @@ class PartialResumeTest {
 		}
 		assertTrue(PartialResume.complete(dir, object.length));
 		Path assembled = directory.resolve("out");
-		PartialResume.assemble(dir, assembled, object.length);
+		PartialResume.assembleHashing(dir, assembled, object.length);
 		assertArrayEquals(object, Files.readAllBytes(assembled));
 	}
 

@@ -303,7 +303,7 @@ class ConditionalFetchTest {
 				client.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), partial, object.length, null).get(AWAIT_SECONDS, TimeUnit.SECONDS);
 			}
 			Path assembled = directory.resolve("assembled.bin");
-			PartialResume.assemble(partial, assembled, object.length);
+			PartialResume.assembleHashing(partial, assembled, object.length);
 			assertArrayEquals(object, Files.readAllBytes(assembled));
 			assertTrue(FileIntegrity.matches(assembled, object.length, sha1));
 
@@ -474,7 +474,7 @@ class ConditionalFetchTest {
 	private static byte[] assembledBytes(Path directory, long size) throws Exception {
 		Path assembled = Files.createTempFile(directory.getParent(), "assembled-", ".bin");
 		try {
-			PartialResume.assemble(directory, assembled, size);
+			PartialResume.assembleHashing(directory, assembled, size);
 			return Files.readAllBytes(assembled);
 		} finally {
 			Files.deleteIfExists(assembled);

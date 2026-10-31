@@ -55,15 +55,18 @@ RUN mkdir -p /opt/headlessmc /opt/automodpack /work/game /work/hmc-cache \
 
 # HeadlessMC 3 ships a native launcher; the game still uses the JREs above.
 # uname -m keeps this working with the Python docker builder (no buildx TARGETARCH).
+# The checksums pin the default 3.0.0-RC8 binaries; a settings.yaml override of
+# headlessmc.ref is an explicit choice and skips the check.
 RUN set -eu \
     && repo="${HEADLESSMC_REPO%.git}" \
     && arch="$(uname -m)" \
     && case "$arch" in \
-         x86_64) hmc_arch=x64 ;; \
-         aarch64|arm64) hmc_arch=arm64 ;; \
+         x86_64) hmc_arch=x64; sha=62bbcd85344470bc1c11e08be4eda33ce06aeff2ed2931c87964640d5a733ece ;; \
+         aarch64|arm64) hmc_arch=arm64; sha=0d5298df7f344b529cb63c1203e8e25ccb0f3bb58d6795e38ad8f3cf6c331dec ;; \
          *) echo "unsupported architecture: $arch" >&2; exit 1 ;; \
        esac \
     && curl -fsSL -o /usr/local/bin/hmc "${repo}/releases/download/${HEADLESSMC_REF}/headlessmc-launcher-linux-${hmc_arch}" \
+    && if [ "${HEADLESSMC_REF}" = "3.0.0-RC8" ]; then echo "${sha}  /usr/local/bin/hmc" | sha256sum -c -; fi \
     && chmod +x /usr/local/bin/hmc
 
 COPY run-headlessmc-client /opt/automodpack/run-headlessmc-client

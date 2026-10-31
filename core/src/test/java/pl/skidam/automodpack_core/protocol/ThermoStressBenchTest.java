@@ -181,7 +181,7 @@ class ThermoStressBenchTest {
 	private void verify(Path downloaded, Path source) throws IOException {
 		Path assembled = Files.createTempFile(downloaded.getParent(), "assembled-", ".bin");
 		try {
-			PartialResume.assemble(downloaded, assembled, Files.size(source));
+			PartialResume.assembleHashing(downloaded, assembled, Files.size(source));
 			assertArrayEquals(Files.readAllBytes(source), Files.readAllBytes(assembled), "object " + downloaded.getFileName() + " must arrive byte-exact");
 		} finally {
 			Files.deleteIfExists(assembled);

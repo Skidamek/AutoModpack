@@ -72,7 +72,6 @@ public final class HttpClientPool {
 		return REDIRECT_CLIENT;
 	}
 
-	/** One pooled API exchange; the body is fully read and decoded so the connection is reused. See the class doc for the retry discipline. */
 	/**
 	 * The revocation data's own exchange. A blocklist must never be able to block the fetch that repairs it, so the
 	 * OneCRL feed and the CA CRLs go through the platform trust manager instead of {@link #HTTPS_CONTEXT}.
@@ -81,6 +80,7 @@ public final class HttpClientPool {
 		return requestWithRetry(url, headers, body, REVOCATION_CLIENT);
 	}
 
+	/** One pooled API exchange; the body is fully read and decoded so the connection is reused. See the class doc for the retry discipline. */
 	public static HttpResponse<byte[]> request(String url, Map<String, String> headers, byte[] body, boolean followRedirects) throws IOException {
 		try {
 			return requestWithRetry(url, headers, body, followRedirects ? REDIRECT_CLIENT : DIRECT_CLIENT);

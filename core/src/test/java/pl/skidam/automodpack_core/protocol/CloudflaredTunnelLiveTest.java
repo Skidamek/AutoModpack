@@ -93,7 +93,7 @@ class CloudflaredTunnelLiveTest {
 					client.downloadObject(objectHash.getBytes(StandardCharsets.UTF_8), objectDestination, object.length, null)
 							.get(AWAIT_SECONDS, TimeUnit.SECONDS);
 					Path assembled = directory.resolve("object-assembled");
-					PartialResume.assemble(objectDestination, assembled, object.length);
+					PartialResume.assembleHashing(objectDestination, assembled, object.length);
 					assertArrayEquals(object, Files.readAllBytes(assembled));
 
 					// A resumed transfer appends exactly behind the stored prefix, through the same tunnel.
@@ -104,7 +104,7 @@ class CloudflaredTunnelLiveTest {
 					client.downloadObject(objectHash.getBytes(StandardCharsets.UTF_8), rangedDestination, object.length, null)
 							.get(AWAIT_SECONDS, TimeUnit.SECONDS);
 					Path rangedAssembled = directory.resolve("object-ranged-assembled");
-					PartialResume.assemble(rangedDestination, rangedAssembled, object.length);
+					PartialResume.assembleHashing(rangedDestination, rangedAssembled, object.length);
 					assertArrayEquals(object, Files.readAllBytes(rangedAssembled));
 				} finally {
 					client.close();

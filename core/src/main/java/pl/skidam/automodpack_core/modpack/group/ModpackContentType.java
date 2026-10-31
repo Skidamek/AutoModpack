@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.modpack.group;
 
-import java.util.Set;
-
 import pl.skidam.automodpack_core.utils.JarUtils;
 
 /** Local labels derived from a logical path. The pack does not persist these. */
@@ -12,7 +10,6 @@ public final class ModpackContentType {
 	public static final String RESOURCEPACK = "resourcepack";
 	public static final String MINECRAFT_OPTIONS = "mc_options";
 	public static final String OTHER = "other";
-	public static final Set<String> ALL = Set.of(MOD, CONFIG, SHADER, RESOURCEPACK, MINECRAFT_OPTIONS, OTHER);
 
 	private ModpackContentType() {}
 

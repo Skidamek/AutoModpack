@@ -207,12 +207,8 @@ public final class PartialResume {
 		return work.isEmpty() ? fileSize : work.get(0)[0];
 	}
 
-	public static void assemble(Path directory, Path destination, long fileSize) throws IOException {
-		assembleHashing(directory, destination, fileSize);
-	}
-
 	/**
-	 * Stitches the tiles into {@code destination} like {@link #assemble} and returns the SHA-1 of exactly the bytes written,
+	 * Stitches the tiles into {@code destination} and returns the SHA-1 of exactly the bytes written,
 	 * so promotion never has to read the stitched copy back to verify it.
 	 */
 	public static String assembleHashing(Path directory, Path destination, long fileSize) throws IOException {

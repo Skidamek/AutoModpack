@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -35,6 +34,7 @@ import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
+import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.UriOpener;
 
 /** Shared vanilla-style file browser used for installed catalogues and generation diffs. */
@@ -332,7 +332,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	/** A jar whose every occurrence lacks a platform reference: no Modrinth or CurseForge page is recorded for it. */
 	private static boolean isUnreferencedJar(ChangeBrowserProjection.FileRow file) {
-		if (!file.path().toLowerCase(Locale.ROOT).endsWith(".jar")) return false;
+		if (!JarUtils.hasJarExtension(file.path())) return false;
 		for (ChangeSet.Occurrence occurrence : file.occurrences()) if (!occurrence.references().isEmpty()) return false;
 		return true;
 	}

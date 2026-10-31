@@ -604,23 +604,27 @@ class ProjectionRepairTest {
 			ProjectionState.converging(storage, "again", rows(storage, Map.of("mods/committed.jar", "committed")));
 		}
 		assertEquals(Map.of("mods/unknown.jar", "nobody has me"), repairBackups(storage));
-		List<ProjectionRepairBackups.Entry> entries = ProjectionRepairBackups.entries(storage);
+		List<String[]> entries = indexEntries(storage);
 		assertEquals(1, entries.size(), "the same bytes at the same path are kept once: " + entries);
-		assertEquals("mods/unknown.jar", entries.get(0).path());
+		assertEquals("mods/unknown.jar", entries.get(0)[3]);
 
-		long limit = ProjectionRepairBackups.limitBytes;
-		try {
-			ProjectionRepairBackups.limitBytes = 20;
-			Path other = temporaryDirectory.resolve("other.jar");
-			Files.writeString(other, "another unknown file", StandardCharsets.UTF_8);
-			String otherHash = HashUtils.sha1("another unknown file".getBytes(StandardCharsets.UTF_8));
-			Files.setLastModifiedTime(ProjectionRepairBackups.directory(storage).resolve(entries.get(0).sha1()), FileTime.fromMillis(0));
-			assertNotNull(ProjectionRepairBackups.keep(storage, other, "mods/other.jar", otherHash, Files.size(other)));
-			ProjectionRepairBackups.bound(storage, Set.of(otherHash));
-			assertEquals(Map.of("mods/other.jar", "another unknown file"), repairBackups(storage), "the oldest entry went, the newest stayed");
-		} finally {
-			ProjectionRepairBackups.limitBytes = limit;
+		Path other = temporaryDirectory.resolve("other.jar");
+		Files.writeString(other, "another unknown file", StandardCharsets.UTF_8);
+		String otherHash = HashUtils.sha1("another unknown file".getBytes(StandardCharsets.UTF_8));
+		Files.setLastModifiedTime(ProjectionRepairBackups.directory(storage).resolve(entries.get(0)[1]), FileTime.fromMillis(0));
+		assertNotNull(ProjectionRepairBackups.keep(storage, other, "mods/other.jar", otherHash, Files.size(other)));
+		ProjectionRepairBackups.bound(storage, Set.of(otherHash), 20);
+		assertEquals(Map.of("mods/other.jar", "another unknown file"), repairBackups(storage), "the oldest entry went, the newest stayed");
+	}
+
+	/** {@code INDEX.txt} as the player reads it: time, sha1, size, original path. */
+	private static List<String[]> indexEntries(ClientStorage storage) throws IOException {
+		List<String[]> entries = new ArrayList<>();
+		for (String line : Files.readAllLines(ProjectionRepairBackups.directory(storage).resolve(ProjectionRepairBackups.INDEX), StandardCharsets.UTF_8)) {
+			String[] fields = line.split("\t", 4);
+			if (fields.length == 4) entries.add(fields);
 		}
+		return entries;
 	}
 
 	private static void commit(ClientStorage storage) throws Exception {

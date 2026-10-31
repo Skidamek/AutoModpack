@@ -23,6 +23,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
 import pl.skidam.automodpack_core.change.ChangeSet;
+import pl.skidam.automodpack_core.utils.JarUtils;
 
 /*? if >= 1.21.9 {*/
 import net.minecraft.client.input.MouseButtonEvent;
@@ -161,7 +162,7 @@ public final class ChangeBrowserWidget extends UniformList<ChangeBrowserWidget.E
 			}
 			if (modrinth) badges.add(new Badge("MR", BADGE_MODRINTH_COLOR));
 			if (curseforge) badges.add(new Badge("CF", BADGE_CURSEFORGE_COLOR));
-			if (referencesResolved && badges.isEmpty() && file.path().toLowerCase(Locale.ROOT).endsWith(".jar")) badges.add(new Badge(VersionedText.str("automodpack.browser.custom"), BADGE_CUSTOM_COLOR));
+			if (referencesResolved && badges.isEmpty() && JarUtils.hasJarExtension(file.path())) badges.add(new Badge(VersionedText.str("automodpack.browser.custom"), BADGE_CUSTOM_COLOR));
 			return badges;
 		}
 

@@ -14,6 +14,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.utils.JarUtils;
 
 /**
  * Pure projections of a canonical {@link ChangeSet} for file browsers.
@@ -141,7 +142,7 @@ public final class ChangeBrowserProjection {
 
 		private boolean matchesSource(ChangeSet.Occurrence occurrence) {
 			if (source.booleanValue()) return !occurrence.references().isEmpty();
-			return occurrence.references().isEmpty() && occurrence.logicalPath().toLowerCase(Locale.ROOT).endsWith(".jar");
+			return occurrence.references().isEmpty() && JarUtils.hasJarExtension(occurrence.logicalPath());
 		}
 
 		private boolean matchesSearch(ChangeSet.Occurrence occurrence) {

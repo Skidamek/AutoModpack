@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_core.protocol;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -10,6 +12,7 @@ import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -29,6 +32,7 @@ public final class OneCrl {
 	private static final int FETCH_PAGE_LIMIT = 10_000;
 	static final String SOURCE_URL = "https://firefox.settings.services.mozilla.com/v1/buckets/security-state/collections/onecrl/records?_limit=" + FETCH_PAGE_LIMIT;
 	private static final String SNAPSHOT_RESOURCE = "/onecrl.json.zst";
+	private static final AtomicBoolean WARNED = new AtomicBoolean();
 
 	private OneCrl() {}
 
@@ -67,6 +71,7 @@ public final class OneCrl {
 		try {
 			return parseMozilla(stored);
 		} catch (RuntimeException unusable) {
+			if (WARNED.compareAndSet(false, true)) LOGGER.warn("The cached OneCRL feed is unreadable; the bundled snapshot applies until the feed refreshes", unusable);
 			return null;
 		}
 	}

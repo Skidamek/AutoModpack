@@ -301,7 +301,7 @@ class DownloadObjectTest {
 	private static byte[] assembledBytes(Path directory, long size) throws Exception {
 		Path assembled = Files.createTempFile(directory.getParent(), "assembled-", ".bin");
 		try {
-			PartialResume.assemble(directory, assembled, size);
+			PartialResume.assembleHashing(directory, assembled, size);
 			return Files.readAllBytes(assembled);
 		} finally {
 			Files.deleteIfExists(assembled);

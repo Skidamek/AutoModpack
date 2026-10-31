@@ -64,7 +64,8 @@ if [ "$render_client" = "true" ]; then
     # GUI scale 2 turns this into Minecraft's 320x240 minimum logical canvas.
     viewport_width=640
 fi
-gameargs="--width ${viewport_width} --height 480"
+viewport_height=480
+gameargs="--width ${viewport_width} --height ${viewport_height}"
 
 # ── Write HMC config ──────────────────────────────────────────────
 # HeadlessMC 3 reads XDG config. One shared game dir is required so AutoModpack
@@ -145,7 +146,7 @@ fi
 # ── Launch ─────────────────────────────────────────────────────────
 if [ "$render_client" = "true" ]; then
     display_receipt="$(mktemp)"
-    Xvfb -displayfd 3 -screen 0 "${viewport_width}x480x24" +extension GLX +render -noreset 3>"$display_receipt" &
+    Xvfb -displayfd 3 -screen 0 "${viewport_width}x${viewport_height}x24" +extension GLX +render -noreset 3>"$display_receipt" &
     xvfb_pid=$!
     started=$SECONDS
     while [ ! -s "$display_receipt" ]; do
@@ -167,7 +168,7 @@ if [ "$render_client" = "true" ]; then
     export DISPLAY=":$(<"$display_receipt")"
     rm -f "$display_receipt"
 
-    hmc launch "${launch_profile[@]}" --offline --jvm "${jvmargs}" --game "${gameargs}" --resolution "${viewport_width}x480" &
+    hmc launch "${launch_profile[@]}" --offline --jvm "${jvmargs}" --game "${gameargs}" --resolution "${viewport_width}x${viewport_height}" &
     hmc_pid=$!
     cleanup() {
         kill "$hmc_pid" "$xvfb_pid" 2>/dev/null || true
@@ -181,4 +182,4 @@ if [ "$render_client" = "true" ]; then
     exit "$status"
 fi
 
-exec hmc launch "${launch_profile[@]}" --offline -lwjgl --jvm "${jvmargs}" --game "${gameargs}" --resolution "${viewport_width}x480"
+exec hmc launch "${launch_profile[@]}" --offline -lwjgl --jvm "${jvmargs}" --game "${gameargs}" --resolution "${viewport_width}x${viewport_height}"

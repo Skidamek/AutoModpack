@@ -4,7 +4,6 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -22,6 +21,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.FileTrees;
 
 /**
@@ -31,8 +31,9 @@ import pl.skidam.automodpack_core.utils.FileTrees;
  * <p>
  * Content-addressed and bounded: each file lands at {@code projection-repair-backups/<sha1>/<path>}, so the same bytes
  * at the same path are kept once however many attempts meet them, and {@code INDEX.txt} lists every entry with its
- * time, hash, size and original path for the player. When the directory grows past {@link #LIMIT_BYTES} (1 GiB), the oldest
- * entries other than the ones just kept are pruned, and the log says which.
+ * time, hash, size and original path for the player. When the directory grows past {@link #LIMIT_BYTES}, the oldest
+ * entries other than the ones just kept are pruned, and the log says which. The bound is a tripwire for a repair that
+ * meets more unknown files than any pack ships, so it never fires on a normal instance.
  */
 public final class ProjectionRepairBackups {
 	private ProjectionRepairBackups() {}
@@ -40,32 +41,9 @@ public final class ProjectionRepairBackups {
 	public static final String DIRECTORY = "projection-repair-backups";
 	public static final String INDEX = "INDEX.txt";
 	static final long LIMIT_BYTES = 1L << 30;
-	/** The bound in force; a test lowers it. */
-	static volatile long limitBytes = LIMIT_BYTES;
 
-	/** One kept file. */
-	public record Entry(Instant at, String sha1, long size, String path, Path file) {}
-
-	public static Path directory(ClientStorage storage) {
+	static Path directory(ClientStorage storage) {
 		return storage.clientDirectory().resolve(DIRECTORY);
-	}
-
-	/** Every kept file the index lists and that still exists, oldest first: what the installed-pack screens can show. */
-	public static List<Entry> entries(ClientStorage storage) throws IOException {
-		Path index = directory(storage).resolve(INDEX);
-		List<Entry> entries = new ArrayList<>();
-		if (!Files.isRegularFile(index, LinkOption.NOFOLLOW_LINKS)) return entries;
-		for (String line : Files.readAllLines(index, StandardCharsets.UTF_8)) {
-			String[] fields = line.split("\t", 4);
-			if (fields.length != 4) continue;
-			try {
-				Path file = directory(storage).resolve(fields[1]).resolve(fields[3]);
-				if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) entries.add(new Entry(Instant.parse(fields[0]), fields[1], Long.parseLong(fields[2]), fields[3], file));
-			} catch (RuntimeException malformed) {
-				// A line a crash cut short names nothing.
-			}
-		}
-		return entries;
 	}
 
 	/** Keeps {@code source} (bytes {@code sha1}, at projection path {@code path}) durably; returns the kept file, or null when an identical one already is. */
@@ -75,15 +53,11 @@ public final class ProjectionRepairBackups {
 		if (!kept.startsWith(root.resolve(sha1))) throw new IOException("Repair backup path escapes its directory: " + path);
 		if (Files.isRegularFile(kept, LinkOption.NOFOLLOW_LINKS) && Files.size(kept) == size) return null;
 		Files.createDirectories(kept.getParent());
-		Path temporary = kept.resolveSibling("." + kept.getFileName() + "." + UUID.randomUUID() + ".tmp");
+		Path temporary = kept.resolveSibling("." + kept.getFileName() + "." + UUID.randomUUID() + DurableFiles.TEMPORARY_SUFFIX);
 		try {
 			Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
 			FileTrees.forceFile(temporary);
-			try {
-				Files.move(temporary, kept, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-			} catch (AtomicMoveNotSupportedException unsupported) {
-				Files.move(temporary, kept, StandardCopyOption.REPLACE_EXISTING);
-			}
+			DurableFiles.replace(temporary, kept);
 		} finally {
 			Files.deleteIfExists(temporary);
 		}
@@ -94,8 +68,12 @@ public final class ProjectionRepairBackups {
 		return kept;
 	}
 
-	/** Bounds the directory to the limit, pruning the oldest entries except {@code keep}. */
 	static void bound(ClientStorage storage, Set<String> keep) throws IOException {
+		bound(storage, keep, LIMIT_BYTES);
+	}
+
+	/** Bounds the directory to {@code limitBytes}, pruning the oldest entries except {@code keep}. */
+	static void bound(ClientStorage storage, Set<String> keep, long limitBytes) throws IOException {
 		Path root = directory(storage);
 		if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) return;
 		record Bucket(Path directory, long bytes, FileTime modified) {}

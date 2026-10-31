@@ -2,7 +2,6 @@ package pl.skidam.automodpack.client.ui.screen;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 import net.minecraft.network.chat.Component;
@@ -13,6 +12,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.screen.SourceCounts;
+import pl.skidam.automodpack_core.utils.JarUtils;
 
 /** Shared copy and catalogue helpers for the pack confirm screen. */
 final class PackConfirmCopy {
@@ -124,7 +124,7 @@ final class PackConfirmCopy {
 		if (target.flatTarget().list == null) return 0;
 		int count = 0;
 		for (var item : target.flatTarget().list) {
-			if (item.file != null && item.file.toLowerCase(Locale.ROOT).endsWith(".jar")) count++;
+			if (JarUtils.hasJarExtension(item.file)) count++;
 		}
 		return count;
 	}
