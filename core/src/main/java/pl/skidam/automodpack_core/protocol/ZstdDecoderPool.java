@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import io.airlift.compress.zstd.ZstdIncrementalFrameDecompressor;
 import io.airlift.compress.zstd.ZstdInputStream;
@@ -16,17 +17,21 @@ import io.airlift.compress.zstd.ZstdInputStream;
  * A stream that is never closed just keeps its decoder, which the GC then collects with it.
  *
  * <p>
- * A pooled decoder is built with {@link #MAX_WINDOW_BYTES} as its window, so it retains at most 2 x 1 MiB + 128 KiB of
- * window buffer however large a window a frame header declares. That is the window this protocol's own compressor
- * emits (single-segment frames up to 1 MiB, windowLog 20 above it, measured over 1 KiB..32 MiB inputs), so every stream
- * a pack sends decodes on a pooled decoder, and the idle pool holds at most ~17 MiB across {@link #MAX_IDLE} decoders.
+ * A pooled decoder is built with {@link #MAX_WINDOW_BYTES} as its window, the window this protocol's own compressor
+ * emits (single-segment frames up to 1 MiB, windowLog 20 above it, measured over 1 KiB..32 MiB inputs). The buffer is
+ * sized from that declared window, not from the output, and never shrinks: measured with the fork, a decoder that saw a
+ * stream below 1 MiB holds 256 KiB and one that saw a MiB-window stream holds 1792 KiB. So the pool charges each
+ * decoder its {@link ZstdIncrementalFrameDecompressor#retainedWindowBytes() retained bytes} and keeps at most
+ * {@link #MAX_IDLE} decoders within {@link #MAX_RETAINED_BYTES}, which is the whole memory bound of the idle pool.
  */
 final class ZstdDecoderPool {
 	static final int MAX_IDLE = 8;
 	static final int MAX_WINDOW_BYTES = 1 << 20;
+	static final long MAX_RETAINED_BYTES = 8L << 20;
 
 	private static final ConcurrentLinkedQueue<ZstdIncrementalFrameDecompressor> IDLE = new ConcurrentLinkedQueue<>();
 	private static final AtomicInteger IDLE_COUNT = new AtomicInteger();
+	private static final AtomicLong IDLE_BYTES = new AtomicLong();
 
 	private ZstdDecoderPool() {}
 
@@ -36,6 +41,7 @@ final class ZstdDecoderPool {
 			decoder = new ZstdIncrementalFrameDecompressor(MAX_WINDOW_BYTES);
 		} else {
 			IDLE_COUNT.decrementAndGet();
+			IDLE_BYTES.addAndGet(-decoder.retainedWindowBytes());
 		}
 		return new PooledStream(new ZstdInputStream(source, decoder), decoder);
 	}
@@ -45,9 +51,16 @@ final class ZstdDecoderPool {
 		return IDLE_COUNT.get();
 	}
 
+	/** The window bytes the idle decoders hold, for tests. */
+	static long idleBytes() {
+		return IDLE_BYTES.get();
+	}
+
 	private static void giveBack(ZstdIncrementalFrameDecompressor decoder) {
-		if (IDLE_COUNT.incrementAndGet() > MAX_IDLE) {
+		long retained = decoder.retainedWindowBytes();
+		if (IDLE_COUNT.incrementAndGet() > MAX_IDLE || IDLE_BYTES.addAndGet(retained) > MAX_RETAINED_BYTES) {
 			IDLE_COUNT.decrementAndGet();
+			IDLE_BYTES.addAndGet(-retained);
 			return;
 		}
 		IDLE.offer(decoder);

@@ -149,6 +149,17 @@ class ZstdDecoderPoolTest {
 	}
 
 	@Test
+	void theIdlePoolIsBoundedByTheWindowBytesItsDecodersHold() throws Exception {
+		// Measured with this fork: a stream below 1 MiB leaves 256 KiB, a MiB-window stream leaves 1792 KiB, and the
+		// buffer never shrinks. Twenty big streams must not leave twenty charged decoders behind.
+		byte[] data = payload(9, 2 << 20);
+		for (int i = 0; i < 20; i++) assertArrayEquals(data, unzstd(zstd(data)));
+		assertTrue(ZstdDecoderPool.idle() <= ZstdDecoderPool.MAX_IDLE, "idle " + ZstdDecoderPool.idle());
+		assertTrue(ZstdDecoderPool.idleBytes() <= ZstdDecoderPool.MAX_RETAINED_BYTES, "retained " + ZstdDecoderPool.idleBytes());
+		assertTrue(ZstdDecoderPool.idleBytes() > 0, "a decoder that fits the budget is still reused");
+	}
+
+	@Test
 	void aBlockHeaderInTheLastThreeBufferedBytesDecodes() throws Exception {
 		// no checksum, a raw "hello" block, then an empty last raw block: the frame ends on a bare 3-byte block header,
 		// which the bounds-checked decoder must not read past
