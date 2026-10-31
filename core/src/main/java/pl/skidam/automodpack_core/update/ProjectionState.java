@@ -69,7 +69,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 public final class ProjectionState {
 	/**
 	 * A writer cannot read the document for a physical reason (permissions, I/O). Never a held file: no game process
-	 * holds this file, so {@link UpdateCommit#isLockFailure} stops here and the update fails with this message.
+	 * holds this file, so {@link StorageConditions#isLockFailure} stops here and the update fails with this message.
 	 */
 	public static final class UnavailableException extends IOException {
 		UnavailableException(String message, Throwable cause) {

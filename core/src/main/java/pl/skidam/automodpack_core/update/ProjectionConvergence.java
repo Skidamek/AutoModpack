@@ -474,7 +474,7 @@ final class ProjectionConvergence {
 				removeProjectionFile(path);
 				touched.add(path.getParent());
 			} catch (IOException e) {
-				if (!UpdateCommit.isLockFailure(e)) throw e;
+				if (!StorageConditions.isLockFailure(e)) throw e;
 				held.add(new Held(path, e));
 			}
 		}
@@ -519,7 +519,7 @@ final class ProjectionConvergence {
 				touched.add(target.getParent());
 				installed.add(Map.entry(target, row.sha1()));
 			} catch (IOException e) {
-				if (!UpdateCommit.isLockFailure(e, row.size())) throw StorageConditions.classified(e, row.size());
+				if (!StorageConditions.isLockFailure(e, row.size())) throw StorageConditions.classified(e, row.size());
 				held.add(new Held(target, e));
 			}
 		}

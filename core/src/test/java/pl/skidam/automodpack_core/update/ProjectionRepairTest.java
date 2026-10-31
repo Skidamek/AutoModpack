@@ -262,13 +262,13 @@ class ProjectionRepairTest {
 	void storageConditionsAreFailuresNotHeldFiles() {
 		String file = temporaryDirectory.resolve("a.jar").toString();
 		for (String reason : List.of("No space left on device", "Disk quota exceeded", "Read-only file system", "Operation not supported", "Function not implemented", "Input/output error"))
-			assertFalse(UpdateCommit.isLockFailure(new FileSystemException(file, null, reason), false), reason);
+			assertFalse(StorageConditions.isLockFailure(new FileSystemException(file, null, reason), false), reason);
 		for (String reason : List.of("There is not enough space on the disk", "The media is write protected", "The request is not supported"))
-			assertFalse(UpdateCommit.isLockFailure(new FileSystemException(file, null, reason), true), reason);
+			assertFalse(StorageConditions.isLockFailure(new FileSystemException(file, null, reason), true), reason);
 		assertEquals("the disk is full", StorageConditions.condition(new IOException(new FileSystemException(file, null, "No space left on device"))));
 		assertEquals("the filesystem is read-only", StorageConditions.condition(new FileSystemException(file, null, "Read-only file system")));
-		assertTrue(UpdateCommit.isLockFailure(new FileSystemException(file, null, "The process cannot access the file because it is being used by another process"), true));
-		assertTrue(UpdateCommit.isLockFailure(new FileSystemException(file, null, "Text file busy"), false));
+		assertTrue(StorageConditions.isLockFailure(new FileSystemException(file, null, "The process cannot access the file because it is being used by another process"), true));
+		assertTrue(StorageConditions.isLockFailure(new FileSystemException(file, null, "Text file busy"), false));
 	}
 
 	/**
@@ -450,8 +450,8 @@ class ProjectionRepairTest {
 			IOException update = assertThrows(IOException.class, () -> converge(storage, cache, NEW, Map.of(), ProjectionConvergence.Writes.NONE));
 			assertInstanceOf(ProjectionState.UnavailableException.class, update);
 			assertTrue(update.getMessage().contains(state.toString()), update.getMessage());
-			assertFalse(UpdateCommit.isLockFailure(update, true), "never a held file, not even on Windows");
-			assertFalse(UpdateCommit.isLockFailure(update, false));
+			assertFalse(StorageConditions.isLockFailure(update, true), "never a held file, not even on Windows");
+			assertFalse(StorageConditions.isLockFailure(update, false));
 		}
 
 		ProjectionState.assumeNextBoot();
@@ -472,15 +472,15 @@ class ProjectionRepairTest {
 			StorageConditions.stores = existing -> new StorageConditions.Store(false, 512 * 1024);
 			for (String reason : localized) {
 				FileSystemException failure = new FileSystemException(file.toString(), null, reason);
-				assertFalse(UpdateCommit.isLockFailure(failure, false, 64 * 1024), reason);
-				assertFalse(UpdateCommit.isLockFailure(failure, true, 64 * 1024), reason);
+				assertFalse(StorageConditions.isLockFailure(failure, false, 64 * 1024), reason);
+				assertFalse(StorageConditions.isLockFailure(failure, true, 64 * 1024), reason);
 				assertTrue(StorageConditions.condition(failure, 64 * 1024).startsWith("the disk is full"));
 			}
 			StorageConditions.stores = existing -> new StorageConditions.Store(false, 10L << 30);
 			assertTrue(StorageConditions.condition(new FileSystemException(file.toString(), null, "Brak miejsca na urządzeniu"), 64 * 1024) == null, "room on the store: not full");
-			assertTrue(UpdateCommit.isLockFailure(new FileSystemException(file.toString(), null, "Proces nie może uzyskać dostępu do pliku, ponieważ jest on używany przez inny proces."), true));
+			assertTrue(StorageConditions.isLockFailure(new FileSystemException(file.toString(), null, "Proces nie może uzyskać dostępu do pliku, ponieważ jest on używany przez inny proces."), true));
 			assertNotNull(StorageConditions.condition(new FileSystemException(file.toString(), null, "Brak miejsca"), (10L << 30)), "a write larger than the free space is full");
-			assertTrue(UpdateCommit.isLockFailure(new FileSystemException(file.toString(), null, "Locking not supported by this driver"), true), "no bare substring decides");
+			assertTrue(StorageConditions.isLockFailure(new FileSystemException(file.toString(), null, "Locking not supported by this driver"), true), "no bare substring decides");
 			StorageConditions.stores = existing -> new StorageConditions.Store(true, 10L << 30);
 			assertEquals("the filesystem is read-only", StorageConditions.condition(new FileSystemException(file.toString(), null, "System plików tylko do odczytu")));
 		} finally {

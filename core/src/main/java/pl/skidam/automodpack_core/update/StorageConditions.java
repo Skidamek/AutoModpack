@@ -1,19 +1,29 @@
 package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.DirectoryNotEmptyException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileStore;
 import java.nio.file.FileSystemException;
+import java.nio.file.FileSystemLoopException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
+import java.nio.file.NotLinkException;
 import java.nio.file.Path;
 import java.nio.file.ReadOnlyFileSystemException;
 import java.util.Locale;
 
+import pl.skidam.automodpack_core.utils.PlatformUtils;
+
 /**
  * Storage conditions no waiting fixes: a full disk, a read-only filesystem, an operation the filesystem does not
  * support, a failing device. Each surfaces as the same generic {@link FileSystemException} a held file does, so
- * {@link UpdateCommit#isLockFailure} asks here first: a condition is a failure with a clear message, never a deferral
- * that restarts into the same wall.
+ * {@link #isLockFailure} asks here first: a condition is a failure with a clear message, never a deferral that restarts
+ * into the same wall.
  *
  * <p>
  * The decision does not depend on the message, which the OS localizes (strerror follows the JVM locale, FormatMessage
@@ -105,6 +115,41 @@ final class StorageConditions {
 	/** The message a failed apply records for a condition. */
 	static String describe(String condition, IOException failure) {
 		return "The update cannot continue because " + condition + ": " + failure.getMessage();
+	}
+
+	/** Whether a failure is another process holding the path, so waiting and retrying can clear it. */
+	static boolean isLockFailure(IOException exception) {
+		return isLockFailure(exception, 0);
+	}
+
+	/** {@link #isLockFailure(IOException, boolean)} for a failed write of {@code requiredBytes}, the size the store must still hold. */
+	static boolean isLockFailure(IOException exception, long requiredBytes) {
+		return isLockFailure(exception, PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS, requiredBytes);
+	}
+
+	/**
+	 * AccessDeniedException is a sharing violation only on Windows. A generic FileSystemException is a lock on every OS
+	 * because the kernel reason is localized (FormatMessage, strerror); named subtypes that cannot be a lock, and the
+	 * conditions above that no wait fixes, stay failures.
+	 */
+	static boolean isLockFailure(IOException exception, boolean windows) {
+		return isLockFailure(exception, windows, 0);
+	}
+
+	static boolean isLockFailure(IOException exception, boolean windows, long requiredBytes) {
+		if (condition(exception, requiredBytes) != null) return false;
+		for (Throwable current = exception; current != null; current = current.getCause()) {
+			// The projection state is ours alone; no game holds it, so its failures are never a held file (P8).
+			if (current instanceof ProjectionState.UnavailableException) return false;
+			if (current instanceof AccessDeniedException) return windows;
+			if (current instanceof FileSystemException fileSystemException && !definiteNonLock(fileSystemException)) return true;
+		}
+		return false;
+	}
+
+	private static boolean definiteNonLock(FileSystemException exception) {
+		return exception instanceof NoSuchFileException || exception instanceof DirectoryNotEmptyException || exception instanceof FileAlreadyExistsException || exception instanceof NotDirectoryException
+				|| exception instanceof AtomicMoveNotSupportedException || exception instanceof FileSystemLoopException || exception instanceof NotLinkException;
 	}
 
 	private static String storeCondition(String file, long requiredBytes) {

@@ -1247,21 +1247,21 @@ class UpdateCommitTest {
 
 	@Test
 	void treatsAccessDeniedAsARecoverableStorageLockOnlyWhereItMeansOne() {
-		assertTrue(UpdateCommit.isLockFailure(new AccessDeniedException("active", "backup", null), true));
-		assertFalse(UpdateCommit.isLockFailure(new AccessDeniedException("active", "backup", null), false));
+		assertTrue(StorageConditions.isLockFailure(new AccessDeniedException("active", "backup", null), true));
+		assertFalse(StorageConditions.isLockFailure(new AccessDeniedException("active", "backup", null), false));
 		FileSystemException german = new FileSystemException("active", null, "Der Prozess kann nicht auf die Datei zugreifen, da sie von einem anderen Prozess verwendet wird");
-		assertTrue(UpdateCommit.isLockFailure(german, true));
-		assertTrue(UpdateCommit.isLockFailure(german, false));
-		assertTrue(UpdateCommit.isLockFailure(new FileSystemException("active", null, "プロセスはファイルにアクセスできません"), false));
-		assertFalse(UpdateCommit.isLockFailure(new DirectoryNotEmptyException("dir"), true));
-		assertFalse(UpdateCommit.isLockFailure(new DirectoryNotEmptyException("dir"), false));
-		assertFalse(UpdateCommit.isLockFailure(new NoSuchFileException("missing"), true));
-		assertFalse(UpdateCommit.isLockFailure(new NoSuchFileException("missing"), false));
-		assertFalse(UpdateCommit.isLockFailure(new FileAlreadyExistsException("exists"), true));
-		assertFalse(UpdateCommit.isLockFailure(new NotDirectoryException("file"), true));
-		assertFalse(UpdateCommit.isLockFailure(new AtomicMoveNotSupportedException("from", "to", null), true));
-		assertFalse(UpdateCommit.isLockFailure(new FileSystemLoopException("loop"), true));
-		assertFalse(UpdateCommit.isLockFailure(new NotLinkException("link"), true));
+		assertTrue(StorageConditions.isLockFailure(german, true));
+		assertTrue(StorageConditions.isLockFailure(german, false));
+		assertTrue(StorageConditions.isLockFailure(new FileSystemException("active", null, "プロセスはファイルにアクセスできません"), false));
+		assertFalse(StorageConditions.isLockFailure(new DirectoryNotEmptyException("dir"), true));
+		assertFalse(StorageConditions.isLockFailure(new DirectoryNotEmptyException("dir"), false));
+		assertFalse(StorageConditions.isLockFailure(new NoSuchFileException("missing"), true));
+		assertFalse(StorageConditions.isLockFailure(new NoSuchFileException("missing"), false));
+		assertFalse(StorageConditions.isLockFailure(new FileAlreadyExistsException("exists"), true));
+		assertFalse(StorageConditions.isLockFailure(new NotDirectoryException("file"), true));
+		assertFalse(StorageConditions.isLockFailure(new AtomicMoveNotSupportedException("from", "to", null), true));
+		assertFalse(StorageConditions.isLockFailure(new FileSystemLoopException("loop"), true));
+		assertFalse(StorageConditions.isLockFailure(new NotLinkException("link"), true));
 	}
 
 	@Test

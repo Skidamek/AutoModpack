@@ -3,17 +3,10 @@ package pl.skidam.automodpack_core.update;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
-import java.nio.file.AccessDeniedException;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.DirectoryNotEmptyException;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystemException;
-import java.nio.file.FileSystemLoopException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
-import java.nio.file.NotDirectoryException;
-import java.nio.file.NotLinkException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -35,7 +28,6 @@ import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
-import pl.skidam.automodpack_core.utils.PlatformUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.WindowsLockProbe;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -338,7 +330,7 @@ public final class UpdateCommit {
 				return new ReplanRequired(transaction, operationName, blockedPath, e.getMessage());
 			}
 			long required = currentOperation == null || currentOperation.operation() == OperationType.DELETE ? 0 : Math.max(0, currentOperation.expectedSize());
-			if (isLockFailure(e, required)) return defer(transaction, List.of(new Lock(currentOperation, blockedPath != null ? blockedPath : storage.activeDirectory(), e)));
+			if (StorageConditions.isLockFailure(e, required)) return defer(transaction, List.of(new Lock(currentOperation, blockedPath != null ? blockedPath : storage.activeDirectory(), e)));
 			IOException classified = StorageConditions.classified(e, required);
 			if (classified != e) {
 				// No wait fixes it, so it is a failure with the reason the player can act on, never a deferral that restarts.
@@ -549,7 +541,7 @@ public final class UpdateCommit {
 				if (operation.root() == Root.GAME_DIR && ModpackPathPolicy.isModPath(path)) scannedChanges.add((operation.operation() == OperationType.DELETE ? "deleted " : "wrote ") + path);
 			} catch (IOException e) {
 				long required = operation.operation() == OperationType.DELETE ? 0 : Math.max(0, operation.expectedSize());
-				if (!isLockFailure(e, required)) throw StorageConditions.classified(e, required);
+				if (!StorageConditions.isLockFailure(e, required)) throw StorageConditions.classified(e, required);
 				locks.add(new Lock(operation, target, e));
 				owed.add(operation);
 			}
@@ -732,38 +724,6 @@ public final class UpdateCommit {
 	}
 
 	/**
-	 * AccessDeniedException is a sharing violation only on Windows. A generic FileSystemException is a lock on every OS
-	 * because the kernel reason is localized (FormatMessage, strerror); named subtypes that cannot be a lock, and the
-	 * storage conditions no wait fixes ({@link StorageConditions}: full, read-only, unsupported), stay failures.
+	 * P8: a failure of this write is the projection state's own; no game holds it, so it is never reported as a held file.
 	 */
-	static boolean isLockFailure(IOException exception, boolean windows) {
-		return isLockFailure(exception, windows, 0);
-	}
-
-	/** {@link #isLockFailure(IOException, boolean)} for a failed write of {@code requiredBytes}, the size the store must still hold. */
-	static boolean isLockFailure(IOException exception, boolean windows, long requiredBytes) {
-		if (StorageConditions.condition(exception, requiredBytes) != null) return false;
-		Throwable current = exception;
-		while (current != null) {
-			// The projection state is ours alone; no game holds it, so its failures are never a held file (P8).
-			if (current instanceof ProjectionState.UnavailableException) return false;
-			if (current instanceof AccessDeniedException) return windows;
-			if (current instanceof FileSystemException fileSystemException && !definiteNonLock(fileSystemException)) return true;
-			current = current.getCause();
-		}
-		return false;
-	}
-
-	private static boolean definiteNonLock(FileSystemException exception) {
-		return exception instanceof NoSuchFileException || exception instanceof DirectoryNotEmptyException || exception instanceof FileAlreadyExistsException || exception instanceof NotDirectoryException
-				|| exception instanceof AtomicMoveNotSupportedException || exception instanceof FileSystemLoopException || exception instanceof NotLinkException;
-	}
-
-	static boolean isLockFailure(IOException exception) {
-		return isLockFailure(exception, 0);
-	}
-
-	static boolean isLockFailure(IOException exception, long requiredBytes) {
-		return isLockFailure(exception, PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS, requiredBytes);
-	}
 }
