@@ -1,0 +1,39 @@
+id: canary-preload-classload
+description: |
+  Boots a client with a pre-staged pack and proves Mixin's one global config selection ran on the
+  main thread. AutoModpack's mixin plugin carries a canary that fails an autotest launch when the
+  first transformable class was loaded by a worker that outlived preload, which is how the OneCRL
+  refresh used to hand every mod's mixin plugin to a background thread (and poisoned ServerCore's
+  platform lookup on a real server).
+
+  The client's own log is used because the headless client image writes no debug.log.
+
+# No server is launched; the client loads a locally staged modpack.
+mode: client-only
+
+flow:
+  - use: boot_client_only
+  - do: wait_for
+    name: wait for the client test bridge
+    timeout: 300s
+    until:
+      log:
+        file: logs/latest.log
+        matches: 'AutoModpack bridge ready'
+  - do: assert
+    name: Mixin's config selection ran on the main thread
+    that:
+      log:
+        file: logs/latest.log
+        matches_all:
+          - 'AutoModpack target:'
+        not_matches:
+          - 'Mixin config selection ran on'
+  - use: finish_client_only
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  files:
+    - path: config/amp-autotest-alpha.txt
+      content: "amp-autotest-alpha\n"

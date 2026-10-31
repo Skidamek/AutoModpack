@@ -37,6 +37,8 @@ flow:
           # not a classloading failure and must not fail the assert. Any other CNFE still does.
           - '^(?!.*Error loading class: net/fabricmc/fabric/impl/networking/server/ServerLoginNetworkAddon).*ClassNotFoundException'
           - 'Failed to load modpack'
+          # The canary in MixinPlugin fails the launch when Mixin's one global selection runs on a worker.
+          - 'Mixin config selection ran on'
   - use: finish_client_only
 
 serverFiles:

@@ -3,6 +3,8 @@ package pl.skidam.automodpack.mixin;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
@@ -10,10 +12,34 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import com.llamalad7.mixinextras.MixinExtrasBootstrap;
 
 public class MixinPlugin implements IMixinConfigPlugin {
+	private static final Logger LOGGER = LogManager.getLogger(MixinPlugin.class);
 
 	@Override
 	public void onLoad(String mixinPackage) {
 		MixinExtrasBootstrap.init();
+		assertMainThreadSelection();
+	}
+
+	/**
+	 * Mixin runs its one global config selection on whichever thread loads the first transformable class. A worker that
+	 * outlives preload can be that thread, and it then hosts every mod's plugin, including ones that read game state
+	 * there. Autotests fail the launch on it; a release logs it, because the game is already in that state.
+	 */
+	private static void assertMainThreadSelection() {
+		Thread thread = Thread.currentThread();
+		if (thread.getName().equals("main")) return;
+		String message = "Mixin config selection ran on " + thread.getName() + " instead of main";
+		if (autotest()) throw new IllegalStateException(message);
+		LOGGER.warn(message);
+	}
+
+	private static boolean autotest() {
+		try {
+			Class.forName("pl.skidam.automodpack.client.autotest.AutoTestBridge", false, MixinPlugin.class.getClassLoader());
+			return true;
+		} catch (ClassNotFoundException absent) {
+			return false;
+		}
 	}
 
 	@Override
