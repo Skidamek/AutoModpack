@@ -63,6 +63,28 @@ public final class Trust {
 		}
 	}
 
+	/** Verdict ints, the boundary's wire format: 0 unusable, 1 good, 2 revoked, 3 unknown. */
+	public static final int UNUSABLE = 0;
+	public static final int GOOD = 1;
+	public static final int REVOKED = 2;
+	public static final int UNKNOWN = 3;
+
+	public static String crlUrl(X509Certificate leaf) {
+		try {
+			return (String) handle().crlUrlHandle.invokeExact(leaf);
+		} catch (Throwable failure) {
+			throw failed(failure);
+		}
+	}
+
+	public static int crlVerdict(X509Certificate leaf, X509Certificate[] presented, byte[] body, byte[] cachedBody) {
+		try {
+			return (int) handle().crlVerdictHandle.invokeExact(leaf, presented, body, cachedBody);
+		} catch (Throwable failure) {
+			throw failed(failure);
+		}
+	}
+
 	/** The platform CA set when {@code trustStore} is null; tests inject a keystore. */
 	public static X509ExtendedTrustManager trustManager(KeyStore trustStore) {
 		try {
@@ -94,7 +116,9 @@ public final class Trust {
 					lookup.findStatic(boundary, "key", MethodType.methodType(String.class, byte[].class, byte[].class)),
 					lookup.findStatic(boundary, "feed", MethodType.methodType(void.class, Set.class, Set.class)),
 					lookup.findStatic(boundary, "snapshot", MethodType.methodType(void.class, Set.class, Set.class)),
-					lookup.findStatic(boundary, "trustManager", MethodType.methodType(X509ExtendedTrustManager.class, KeyStore.class)));
+					lookup.findStatic(boundary, "trustManager", MethodType.methodType(X509ExtendedTrustManager.class, KeyStore.class)),
+					lookup.findStatic(boundary, "crlUrl", MethodType.methodType(String.class, X509Certificate.class)),
+					lookup.findStatic(boundary, "crlVerdict", MethodType.methodType(int.class, X509Certificate.class, X509Certificate[].class, byte[].class, byte[].class)));
 		} catch (Throwable failure) {
 			throw new IllegalStateException("Cannot build the AutoModpack trust boundary", failure);
 		}
@@ -106,5 +130,6 @@ public final class Trust {
 		return new IllegalStateException("The trust boundary call failed", failure);
 	}
 
-	private record Handle(MethodHandle blocksHandle, MethodHandle keyHandle, MethodHandle feedHandle, MethodHandle snapshotHandle, MethodHandle trustManagerHandle) {}
+	private record Handle(MethodHandle blocksHandle, MethodHandle keyHandle, MethodHandle feedHandle, MethodHandle snapshotHandle, MethodHandle trustManagerHandle, MethodHandle crlUrlHandle,
+			MethodHandle crlVerdictHandle) {}
 }

@@ -21,7 +21,7 @@ class TrustBoundaryIsolationTest {
 	private static final String OWN = "pl/skidam/automodpack_core/protocol/trust/";
 	private static final String MOD_PREFIX = "pl/skidam/";
 	private static final List<String> FORBIDDEN = List.of("net/minecraft", "net/fabricmc", "cpw/mods", "net/neoforged", "net/minecraftforge", "com/google/gson", "org/slf4j",
-			"org/apache/logging");
+			"org/apache/logging", "amp_libs", "org/bouncycastle");
 
 	@Test
 	void everyBoundaryClassResolvesOnlyTheJdkItsOwnPackageAndShadedLibraries() throws Exception {
