@@ -22,13 +22,13 @@ import java.util.function.Consumer;
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.platforms.FetchManager;
 import pl.skidam.automodpack_core.platforms.PlatformCache;
+import pl.skidam.automodpack_core.protocol.CertificateRejectedException;
 import pl.skidam.automodpack_core.protocol.HostTiles;
 import pl.skidam.automodpack_core.protocol.LocalStorageException;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.protocol.StaleRangeException;
-import pl.skidam.automodpack_core.protocol.UserRejectedCertificateException;
 import pl.skidam.automodpack_core.protocol.WireTrace;
 import pl.skidam.automodpack_core.screen.DownloadView;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -391,9 +391,9 @@ public class DownloadManager implements DownloadView {
 				cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.CANCELLED);
 				return;
 			}
-			if (failure instanceof UserRejectedCertificateException) {
-				// The player's no is final for this endpoint: charging it as a remote failure would spend the retry budget
-				// on a host that will never open a lane again.
+			if (failure instanceof CertificateRejectedException) {
+				// A refused certificate is final for this endpoint: charging it as a remote failure would spend the retry
+				// budget on a host that will never open a lane again.
 				task.lastFailureCategory = FailureCategory.TRUST_REJECTED;
 			} else if (failure instanceof StaleRangeException) {
 				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;

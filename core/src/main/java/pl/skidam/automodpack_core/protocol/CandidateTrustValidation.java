@@ -153,7 +153,7 @@ public final class CandidateTrustValidation {
 		if (candidate.trustManager().getDeferredFailure(candidate.socket()) == null && leafCoversOrigin(certificate, candidate.originHost())) {
 			return LeafRevocation.check(certificate, peerChain(candidate), candidate.sessionTrust()::revoke).thenCompose(status -> switch (status) {
 				case GOOD -> trustCaVouch(candidate, certificate);
-				case REVOKED -> reject(candidate, new CertificateException("The certificate for " + candidate.originHost() + " was revoked by its CA"));
+				case REVOKED -> reject(candidate, revokedByCa());
 				case UNKNOWN -> {
 					LOGGER.warn("Cannot tell whether the CA revoked the certificate from {}; only a published record or the player can trust it", candidate.endpointHost());
 					yield recordOrPlayer(candidate, certificate);
@@ -163,8 +163,8 @@ public final class CandidateTrustValidation {
 		return recordOrPlayer(candidate, certificate);
 	}
 
-	private static UserRejectedCertificateException revokedByCa() {
-		return new UserRejectedCertificateException("The certificate was revoked by its CA");
+	private static CertificateRejectedException revokedByCa() {
+		return new CertificateRejectedException(CertificateRejectedException.Reason.CA_REVOCATION);
 	}
 
 	private static CompletableFuture<Void> trustCaVouch(Candidate candidate, X509Certificate certificate) {
@@ -288,7 +288,7 @@ public final class CandidateTrustValidation {
 			if (!trusted) {
 				candidate.socket().getSession().invalidate();
 				closeQuietly(candidate.socket());
-				throw new CompletionException(new UserRejectedCertificateException());
+				throw new CompletionException(new CertificateRejectedException(CertificateRejectedException.Reason.PLAYER));
 			}
 			try {
 				candidate.sessionTrust().accept(certificate);

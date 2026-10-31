@@ -44,7 +44,7 @@ final class LanePool {
 	private long laneOpenCooldownUntilNanos;
 	private boolean laneCooldownRePumpArmed;
 	/** The sticky trust verdict, kept as the exception itself so the state and the error handed to every waiter are one value. */
-	private UserRejectedCertificateException trustRejection;
+	private CertificateRejectedException trustRejection;
 	// abortTransfers() advances this before it closes lanes. A take carries the epoch it submitted under; a settle on a
 	// stale epoch is "Download aborted" and never retried onto the live pool. A later submit carries the new epoch and may
 	// reopen lanes - the review flow keeps one client across cancel-and-retry.
@@ -146,14 +146,15 @@ final class LanePool {
 		}
 	}
 
-	/** A lane open died: the player's explicit distrust ends every future open on this client, anything else buys a jittered exponential cooldown before the next probe. Called under the lock. */
+	/** A lane open died: a refused certificate ends every future open on this client, anything else buys a jittered exponential cooldown before the next probe. Called under the lock. */
 	private void onLaneOpenFailed(SlotWaiter<?> waiter, Throwable failure) {
-		if (failure instanceof UserRejectedCertificateException rejection) {
+		if (failure instanceof CertificateRejectedException rejection) {
 			if (trustRejection == null) {
 				trustRejection = rejection;
-				LOGGER.error(
-						"Host {} failed to open a download connection because the certificate was rejected, so this client will never connect to it again and every pending transfer on it fails; accepting the server's certificate is the only way back",
-						session.endpointHost);
+				LOGGER.error("Host {} failed to open a download connection because {}; this client will never connect to it again and every pending transfer on it fails", session.endpointHost,
+						rejection.reason() == CertificateRejectedException.Reason.CA_REVOCATION
+								? "the CA revoked the server's certificate"
+								: "the certificate was rejected, and accepting the server's certificate is the only way back");
 			}
 			WireTrace.log("LANE_FAIL", "lane", waiter.lane(), "error", failure);
 			waiter.future().completeExceptionally(rejection);
