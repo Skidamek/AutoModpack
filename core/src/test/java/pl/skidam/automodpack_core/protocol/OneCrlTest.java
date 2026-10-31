@@ -2,17 +2,25 @@ package pl.skidam.automodpack_core.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Base64;
+import java.util.HexFormat;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import pl.skidam.automodpack_core.utils.FetchCache;
 
 class OneCrlTest {
 
@@ -81,6 +89,23 @@ class OneCrlTest {
 		String record = "{\"enabled\":true,\"issuerName\":\"QQ==\",\"serialNumber\":\"Qg==\"}";
 		assertNull(OneCrl.parseMozilla(("{\"data\":[" + (record + ",").repeat(9_999) + record + "]}").getBytes(StandardCharsets.UTF_8)));
 		assertNull(OneCrl.parseMozilla("{\"data\":[]}".getBytes(StandardCharsets.UTF_8)));
+	}
+
+	@Test
+	void theLastFeedOnDiskIsReadableBeforeTheNetwork(@TempDir Path directory) throws Exception {
+		String record = "{\"enabled\":true,\"issuerName\":\"QQ==\",\"serialNumber\":\"Qg==\"}";
+		byte[] body = ("{\"data\":[" + record + "]}").getBytes(StandardCharsets.UTF_8);
+		String name = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(OneCrl.SOURCE_URL.getBytes(StandardCharsets.UTF_8)));
+		Files.write(directory.resolve(name), body);
+
+		OneCrl.Blocklist cached = OneCrl.cachedFeed(new FetchCache(directory));
+		assertNotNull(cached);
+		assertTrue(cached.issuerSerial().contains(Trust.key(b64("QQ=="), b64("Qg=="))));
+	}
+
+	@Test
+	void aCacheWithoutAFeedHasNothingToApply(@TempDir Path directory) {
+		assertNull(OneCrl.cachedFeed(new FetchCache(directory)));
 	}
 
 	@Test

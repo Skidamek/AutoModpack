@@ -56,6 +56,21 @@ public final class OneCrl {
 		return new Blocklist(Set.copyOf(issuerSerial), Set.copyOf(spkiHex));
 	}
 
+	/** The last Mozilla feed on disk, applied before any network: a launch decides trust long before the deferred refresh runs. */
+	static Blocklist cachedFeed() {
+		return cachedFeed(FetchCache.shared());
+	}
+
+	static Blocklist cachedFeed(FetchCache cache) {
+		byte[] stored = cache.stored(SOURCE_URL);
+		if (stored == null) return null;
+		try {
+			return parseMozilla(stored);
+		} catch (RuntimeException unusable) {
+			return null;
+		}
+	}
+
 	/** A fresh copy of the bundled floor; {@link Trust#start()} parses it once, tests parse it independently. */
 	static Blocklist loadBundledSnapshot() {
 		try (InputStream raw = OneCrl.class.getResourceAsStream(SNAPSHOT_RESOURCE)) {

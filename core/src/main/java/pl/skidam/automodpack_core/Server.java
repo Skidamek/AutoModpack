@@ -41,8 +41,8 @@ public class Server {
 			return;
 		}
 
-		Trust.start();
 		FetchCache.useDirectory(DataRootResolver.resolve(GameDirectory.current(), LoaderManagerService.EnvironmentType.SERVER).layout().fetchCacheDirectory());
+		Trust.start();
 		OneCrl.startRefresh();
 		modpackExecutor = new ModpackExecutor();
 		var generation = modpackExecutor.publish();

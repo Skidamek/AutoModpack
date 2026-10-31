@@ -39,8 +39,8 @@ public class Preload {
 			long start = System.currentTimeMillis();
 			LOGGER.debug("Prelaunching AutoModpack...");
 			initializeConstants(loaderManager, modpackLoader);
-			Trust.start();
 			FetchCache.useDirectory(DataRootResolver.resolve(GameDirectory.current()).layout().fetchCacheDirectory());
+			Trust.start();
 			// The refresh is fire-and-forget, so it must not run while the game is still loading classes (see Deferred).
 			Deferred.shared().run(OneCrl::startRefresh);
 			RuntimeJar.prepareForBoot();

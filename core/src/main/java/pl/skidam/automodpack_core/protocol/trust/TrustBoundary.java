@@ -83,20 +83,11 @@ public final class TrustBoundary {
 		return RevokingTrustManager.wrap(trustStore);
 	}
 
-	/** The leaf's http CRL distribution point, or null when it names none. */
-	public static String crlUrl(X509Certificate leaf) {
-		try {
-			return CrlVerdict.httpUrl(leaf);
-		} catch (RuntimeException unreadable) {
-			throw new IllegalArgumentException("Cannot read the certificate's CRL distribution points", unreadable);
-		}
-	}
-
 	/**
 	 * The verdict ints are a wire format between the two sides of the boundary, which cannot share a type:
 	 * {@code 0} unusable body, {@code 1} good, {@code 2} revoked, {@code 3} unknown.
 	 */
-	public static int crlVerdict(X509Certificate leaf, X509Certificate[] presented, byte[] body, byte[] cachedBody) {
-		return CrlVerdict.verdict(leaf, presented, body, cachedBody);
+	public static int crlVerdict(X509Certificate leaf, X509Certificate[] presented, byte[] body) {
+		return CrlVerdict.verdict(leaf, presented, body);
 	}
 }

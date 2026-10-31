@@ -28,12 +28,17 @@ public final class Trust {
 
 	private Trust() {}
 
-	/** Builds the boundary and loads its bundled OneCRL floor; called once, before anything decides trust. */
+	/**
+	 * Builds the boundary, loads its bundled OneCRL floor and overlays the last Mozilla feed from disk. Called once,
+	 * before anything decides trust: the network refresh is deferred, the data the launch starts with is not.
+	 */
 	public static void start() {
 		if (!STARTED.compareAndSet(false, true)) return;
 		OneCrl.Blocklist floor = OneCrl.loadBundledSnapshot();
 		try {
 			handle().snapshotHandle.invokeExact(floor.issuerSerial(), floor.spkiHex());
+			OneCrl.Blocklist cached = OneCrl.cachedFeed();
+			if (cached != null) handle().feedHandle.invokeExact(cached.issuerSerial(), cached.spkiHex());
 		} catch (Throwable failure) {
 			throw failed(failure);
 		}
@@ -69,17 +74,9 @@ public final class Trust {
 	public static final int REVOKED = 2;
 	public static final int UNKNOWN = 3;
 
-	public static String crlUrl(X509Certificate leaf) {
+	public static int crlVerdict(X509Certificate leaf, X509Certificate[] presented, byte[] body) {
 		try {
-			return (String) handle().crlUrlHandle.invokeExact(leaf);
-		} catch (Throwable failure) {
-			throw failed(failure);
-		}
-	}
-
-	public static int crlVerdict(X509Certificate leaf, X509Certificate[] presented, byte[] body, byte[] cachedBody) {
-		try {
-			return (int) handle().crlVerdictHandle.invokeExact(leaf, presented, body, cachedBody);
+			return (int) handle().crlVerdictHandle.invokeExact(leaf, presented, body);
 		} catch (Throwable failure) {
 			throw failed(failure);
 		}
@@ -117,8 +114,7 @@ public final class Trust {
 					lookup.findStatic(boundary, "feed", MethodType.methodType(void.class, Set.class, Set.class)),
 					lookup.findStatic(boundary, "snapshot", MethodType.methodType(void.class, Set.class, Set.class)),
 					lookup.findStatic(boundary, "trustManager", MethodType.methodType(X509ExtendedTrustManager.class, KeyStore.class)),
-					lookup.findStatic(boundary, "crlUrl", MethodType.methodType(String.class, X509Certificate.class)),
-					lookup.findStatic(boundary, "crlVerdict", MethodType.methodType(int.class, X509Certificate.class, X509Certificate[].class, byte[].class, byte[].class)));
+					lookup.findStatic(boundary, "crlVerdict", MethodType.methodType(int.class, X509Certificate.class, X509Certificate[].class, byte[].class)));
 		} catch (Throwable failure) {
 			throw new IllegalStateException("Cannot build the AutoModpack trust boundary", failure);
 		}
@@ -130,6 +126,5 @@ public final class Trust {
 		return new IllegalStateException("The trust boundary call failed", failure);
 	}
 
-	private record Handle(MethodHandle blocksHandle, MethodHandle keyHandle, MethodHandle feedHandle, MethodHandle snapshotHandle, MethodHandle trustManagerHandle, MethodHandle crlUrlHandle,
-			MethodHandle crlVerdictHandle) {}
+	private record Handle(MethodHandle blocksHandle, MethodHandle keyHandle, MethodHandle feedHandle, MethodHandle snapshotHandle, MethodHandle trustManagerHandle, MethodHandle crlVerdictHandle) {}
 }
