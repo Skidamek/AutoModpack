@@ -15,21 +15,21 @@ mode: client-only
 flow:
   - use: boot_client_only
   - do: wait_for
-    name: wait until AutoModpack has prelaunched
+    name: wait until AutoModpack has launched the client
     timeout: 300s
     until:
       log:
-        # DEBUG-only on Forge 1.20.1 / NeoForge console appenders; the file has it on every generation.
-        file: logs/debug.log
-        matches: 'AutoModpack prelaunched'
+        # The headless client image writes no logs/debug.log; the bridge reports only after mod init,
+        # which a failed preload can never reach.
+        file: logs/latest.log
+        matches: 'AutoModpack bridge ready'
   - do: assert
     name: AutoModpack loaded cleanly (no classloading failure)
     that:
       log:
-        file: logs/debug.log
+        file: logs/latest.log
         matches_all:
-          - 'Prelaunching AutoModpack'
-          - 'AutoModpack prelaunched'
+          - 'AutoModpack target:'
         not_matches:
           # The Mixin subsystem probes the @Pseudo FabricLoginMixin target (a Fabric API class this
           # modpack deliberately does not install) and logs the absent target as a benign WARN -
