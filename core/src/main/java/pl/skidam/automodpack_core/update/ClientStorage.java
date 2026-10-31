@@ -508,27 +508,19 @@ public final class ClientStorage {
 		// One read decides the gate and is what the latch remembers, so recovery compares against exactly what was decided.
 		// A physical read failure this early is usually a startup scanner holding the file: it is retried for a while
 		// rather than refusing Kilt the projection and spending a relaunch on it.
-		ProjectionState projection = null;
-		String refusal = null;
+		ProjectionState.Inspection inspection = null;
 		for (int attempt = 1;; attempt++) {
+			inspection = ProjectionState.inspect(ProjectionState.file(gameDirectory));
+			if (inspection.standing() != ProjectionState.Standing.UNAVAILABLE || attempt >= SCAN_READ_ATTEMPTS) break;
 			try {
-				projection = ProjectionState.read(ProjectionState.file(gameDirectory));
-				refusal = ProjectionState.refusal(projection);
+				Thread.sleep(SCAN_READ_RETRY_MILLIS);
+			} catch (InterruptedException interrupted) {
+				Thread.currentThread().interrupt();
 				break;
-			} catch (ProjectionState.UnreadableException e) {
-				refusal = "the projection state cannot be read (" + e.getMessage() + ")";
-				break;
-			} catch (IOException e) {
-				refusal = "the projection state cannot be read (" + e.getMessage() + ")";
-				if (attempt >= SCAN_READ_ATTEMPTS) break;
-				try {
-					Thread.sleep(SCAN_READ_RETRY_MILLIS);
-				} catch (InterruptedException interrupted) {
-					Thread.currentThread().interrupt();
-					break;
-				}
 			}
 		}
+		ProjectionState projection = inspection.state();
+		String refusal = inspection.refusal();
 		directoryScan = new DirectoryScan(projection, false, false);
 		Path activeDirectory = gameDirectory.resolve(CLIENT_ACTIVE_DIR).normalize();
 		if (!Files.isDirectory(activeDirectory, LinkOption.NOFOLLOW_LINKS)) return null;

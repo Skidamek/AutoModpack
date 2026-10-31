@@ -47,14 +47,13 @@ public final class ProjectionRelaunch {
 				Files.deleteIfExists(guard);
 				return false;
 			}
-			ProjectionState now;
-			try {
-				now = ProjectionState.read(storage);
-			} catch (IOException e) {
+			ProjectionState.Inspection inspection = ProjectionState.inspect(storage);
+			if (inspection.state() == null) {
 				// Nothing loads this boot (every gate refuses), so a relaunch would load nothing more; the guard stays as it was.
-				LOGGER.error("The projection state cannot be read after recovery; the projection does not load this boot", e);
+				LOGGER.error("The projection state cannot be read after recovery; the projection does not load this boot", inspection.failure());
 				return false;
 			}
+			ProjectionState now = inspection.state();
 			boolean refusedNowLoadable = !now.converging() && scan.refusedByState() && Files.isDirectory(storage.activePath("mods"), LinkOption.NOFOLLOW_LINKS);
 			boolean moved = !now.converging() && scan.exposed() && (scan.state() == null || !now.sameContentAs(scan.state()));
 			if (!refusedNowLoadable && !moved) {

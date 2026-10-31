@@ -290,30 +290,63 @@ public final class ProjectionState {
 		}
 	}
 
-	/**
-	 * Why a loader must not take {@code active/} as it stands right now, or null when it may (P3). Any document that
-	 * cannot be read refuses: it cannot prove the tree complete.
-	 */
-	public static String loadRefusal(Path gameDirectory) {
-		try {
-			return refusal(read(file(gameDirectory)));
-		} catch (IOException e) {
-			return "the projection state cannot be read (" + e.getMessage() + ")";
+	/** What one read of the document says; the door every gate and recovery caller asks, so no caller invents a policy. */
+	public enum Standing {
+		/** One complete projection, loadable as it stands. */
+		SETTLED,
+		/** A convergence has not finished: no gate may load the mixed tree. */
+		CONVERGING,
+		/** The contents are no document: they are set aside and repaired (P6). */
+		UNREADABLE,
+		/** The file could not be read at all (permissions, a sharing violation); a writer's read records it (P8). */
+		UNAVAILABLE
+	}
+
+	/** One read's answer. {@code state} is present for {@link Standing#SETTLED} and {@link Standing#CONVERGING}. */
+	public record Inspection(Standing standing, ProjectionState state, IOException failure) {
+		public boolean loadable() {
+			return standing == Standing.SETTLED;
+		}
+
+		/** Why a loader must not take {@code active/}, or null when it may (P3). */
+		public String refusal() {
+			return switch (standing) {
+				case SETTLED -> null;
+				case CONVERGING -> "a projection update has not finished (transaction " + state.transactionId() + ")";
+				case UNREADABLE, UNAVAILABLE -> "the projection state cannot be read (" + failure.getMessage() + ")";
+			};
 		}
 	}
 
-	/** {@link #loadRefusal} for a state the caller already read, so one read decides a gate. */
-	public static String refusal(ProjectionState state) {
-		return state.converging() ? "a projection update has not finished (transaction " + state.transactionId() + ")" : null;
+	/** Reads once and classifies, for callers that must keep going on every answer; writers use {@link #readForWriter}. */
+	public static Inspection inspect(ClientStorage storage) {
+		return inspect(storage.projectionStateFile());
+	}
+
+	public static Inspection inspect(Path file) {
+		try {
+			ProjectionState state = read(file);
+			return new Inspection(state.converging() ? Standing.CONVERGING : Standing.SETTLED, state, null);
+		} catch (UnreadableException unreadable) {
+			return new Inspection(Standing.UNREADABLE, null, unreadable);
+		} catch (IOException unavailable) {
+			return new Inspection(Standing.UNAVAILABLE, null, unavailable);
+		}
+	}
+
+	/** Why a loader must not take {@code active/} as it stands right now, or null when it may (P3). */
+	public static String loadRefusal(Path gameDirectory) {
+		return inspect(file(gameDirectory)).refusal();
 	}
 
 	/** Whether a boot must settle the projection before any loader takes it: converging, or unreadable contents (P4, P6). A physical read failure propagates. */
 	public static boolean owed(ClientStorage storage) throws IOException {
-		try {
-			return read(storage).converging();
-		} catch (UnreadableException e) {
-			return true;
-		}
+		Inspection inspection = inspect(storage);
+		return switch (inspection.standing()) {
+			case SETTLED -> false;
+			case CONVERGING, UNREADABLE -> true;
+			case UNAVAILABLE -> throw inspection.failure();
+		};
 	}
 
 	/**
