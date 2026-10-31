@@ -25,11 +25,12 @@ class TrustBoundaryIsolationTest {
 
 	@Test
 	void nothingOutsideTheBoundaryReferencesItsInternalClasses() throws Exception {
-		Path root = Path.of(TrustBoundary.class.getProtectionDomain().getCodeSource().getLocation().toURI()).resolve("pl/skidam/automodpack_core");
+		Path root = Path.of(TrustBoundary.class.getProtectionDomain().getCodeSource().getLocation().toURI()).resolve(Path.of("pl", "skidam", "automodpack_core"));
+		Path boundary = root.resolve(Path.of("protocol", "trust"));
 		List<String> internal = List.of("protocol/trust/TrustBoundary", "protocol/trust/CrlVerdict", "protocol/trust/RevokingTrustManager");
 		List<String> violations = new ArrayList<>();
 		try (Stream<Path> walk = Files.walk(root)) {
-			for (Path file : walk.filter(path -> path.toString().endsWith(".class") && !path.toString().contains("protocol/trust")).toList()) {
+			for (Path file : walk.filter(path -> path.toString().endsWith(".class") && !path.startsWith(boundary)).toList()) {
 				String text = new String(Files.readAllBytes(file), StandardCharsets.ISO_8859_1);
 				for (String name : internal) {
 					if (text.contains(name)) violations.add(file.getFileName() + " references " + name);
