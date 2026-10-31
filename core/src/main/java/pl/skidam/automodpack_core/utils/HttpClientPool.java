@@ -55,8 +55,10 @@ public final class HttpClientPool {
 	private static final ScheduledExecutorService EXCHANGE_DEADLINES = Executors.newSingleThreadScheduledExecutor(
 			new CustomThreadFactoryBuilder().setNameFormat("AutoModpackHttpExchangeDeadline").setDaemon(true).build());
 	private static final SSLContext HTTPS_CONTEXT = httpsContext();
+	private static final SSLContext REVOCATION_CONTEXT = revocationContext();
 	private static final HttpClient DIRECT_CLIENT = client(HttpClient.Redirect.NEVER);
 	private static final HttpClient REDIRECT_CLIENT = client(HttpClient.Redirect.NORMAL);
+	private static final HttpClient REVOCATION_CLIENT = client(HttpClient.Redirect.NORMAL, REVOCATION_CONTEXT);
 
 	private HttpClientPool() {}
 
@@ -71,6 +73,14 @@ public final class HttpClientPool {
 	}
 
 	/** One pooled API exchange; the body is fully read and decoded so the connection is reused. See the class doc for the retry discipline. */
+	/**
+	 * The revocation data's own exchange. A blocklist must never be able to block the fetch that repairs it, so the
+	 * OneCRL feed and the CA CRLs go through the platform trust manager instead of {@link #HTTPS_CONTEXT}.
+	 */
+	public static HttpResponse<byte[]> requestForRevocationData(String url, Map<String, String> headers, byte[] body) throws IOException {
+		return requestWithRetry(url, headers, body, REVOCATION_CLIENT);
+	}
+
 	public static HttpResponse<byte[]> request(String url, Map<String, String> headers, byte[] body, boolean followRedirects) throws IOException {
 		try {
 			return requestWithRetry(url, headers, body, followRedirects ? REDIRECT_CLIENT : DIRECT_CLIENT);
@@ -244,9 +254,23 @@ public final class HttpClientPool {
 	}
 
 	private static HttpClient client(HttpClient.Redirect redirects) {
+		return client(redirects, HTTPS_CONTEXT);
+	}
+
+	private static HttpClient client(HttpClient.Redirect redirects, SSLContext context) {
 		// Daemon pool threads: a parked client must never hold the JVM open.
-		return HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).followRedirects(redirects).connectTimeout(NetUtils.NETWORK_TIMEOUT).sslContext(HTTPS_CONTEXT)
+		return HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).followRedirects(redirects).connectTimeout(NetUtils.NETWORK_TIMEOUT).sslContext(context)
 				.executor(Executors.newCachedThreadPool(new CustomThreadFactoryBuilder().setNameFormat("AutoModpackHttpClient-%d").setDaemon(true).build())).build();
+	}
+
+	private static SSLContext revocationContext() {
+		try {
+			SSLContext context = SSLContext.getInstance("TLS");
+			context.init(null, null, new SecureRandom());
+			return context;
+		} catch (GeneralSecurityException e) {
+			throw new IllegalStateException("Failed to initialize the revocation data trust", e);
+		}
 	}
 
 	private static SSLContext httpsContext() {

@@ -117,7 +117,8 @@ public final class FetchCache {
 	/** One URL's answer: completes {@code winner} with an accepted body, otherwise names the failure. */
 	private static <T> String attempt(String url, Function<byte[], T> parse, CompletableFuture<byte[]> winner) {
 		try {
-			HttpResponse<byte[]> response = HttpClientPool.request(url, Map.of(), null, true);
+			// Revocation data repairs itself: the blocklist must never be able to block the fetch that updates it.
+			HttpResponse<byte[]> response = HttpClientPool.requestForRevocationData(url, Map.of(), null);
 			if (response.statusCode() < 200 || response.statusCode() >= 300) return "HTTP " + response.statusCode();
 			if (parseQuietly(response.body(), parse) == null) return "an unusable body";
 			winner.complete(response.body());
