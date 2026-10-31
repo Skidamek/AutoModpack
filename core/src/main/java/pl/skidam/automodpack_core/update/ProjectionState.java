@@ -19,6 +19,7 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -123,7 +124,7 @@ public final class ProjectionState {
 		long size;
 	}
 
-	private static final Gson GSON = new Gson();
+	private static final Gson GSON = ConfigTools.strictEnums(new GsonBuilder()).create();
 
 	/** This process: a boot. A read failure recorded by another one has persisted across a restart (P8). */
 	private static volatile String process = UUID.randomUUID().toString();
@@ -159,6 +160,7 @@ public final class ProjectionState {
 		this.revision = revision;
 		this.transactionId = transactionId;
 		this.committedToken = committedToken;
+		// A settled document does not persist it; the read rejects a converging one that does not name it.
 		this.fallbackSource = fallbackSource == null ? Fallback.RECORDED : fallbackSource;
 		this.contentDigest = contentDigest;
 		this.targetDigest = targetDigest;
@@ -246,6 +248,7 @@ public final class ProjectionState {
 			throw new UnreadableException("Projection state is unreadable: " + file, e);
 		}
 		if (fields == null || fields.phase == null || fields.version != 1 || fields.revision < 0) throw new UnreadableException("Projection state is invalid: " + file, null);
+		if (fields.phase == Phase.CONVERGING && fields.fallbackSource == null) throw new UnreadableException("Converging projection state does not name its fallback source: " + file, null);
 		List<Row> rows = new ArrayList<>();
 		try {
 			if (fields.fallback != null) for (RowFields row : fields.fallback) rows.add(new Row(row.path, row.sha1, row.size));

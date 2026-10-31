@@ -10,8 +10,9 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
-import pl.skidam.automodpack_core.utils.DurableFiles;
+import pl.skidam.automodpack_core.config.ConfigTools;
 
 /**
  * P5 of {@link ProjectionState} for directory-scanning loaders (Kilt): they take {@code active/mods} before preload,
@@ -36,7 +37,7 @@ public final class ProjectionRelaunch {
 		long at;
 	}
 
-	private static final Gson GSON = new Gson();
+	private static final Gson GSON = ConfigTools.strictEnums(new GsonBuilder()).create();
 
 	/** Whether this boot must relaunch now; recorded durably before the caller relaunches. */
 	public static boolean required(ClientStorage storage, ClientStorage.DirectoryScan scan) {
@@ -71,7 +72,7 @@ public final class ProjectionRelaunch {
 			GuardFields fields = new GuardFields();
 			fields.content = content;
 			fields.at = time;
-			DurableFiles.writeAtomic(guard, GSON.toJson(fields).getBytes(StandardCharsets.UTF_8));
+			ConfigTools.writeAtomicCompact(guard, fields);
 		} catch (IOException e) {
 			LOGGER.error("The projection relaunch guard cannot be updated; not relaunching, so no relaunch can repeat", e);
 			return false;

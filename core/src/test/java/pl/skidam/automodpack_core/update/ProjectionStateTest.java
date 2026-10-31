@@ -65,6 +65,15 @@ class ProjectionStateTest {
 	}
 
 	@Test
+	void anUnknownEnumNameIsUnreadableInsteadOfDefaulting() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		Files.createDirectories(storage.projectionStateFile().getParent());
+		// Reading an effect we never wrote as RECORDED would restore a tree the document did not name.
+		Files.writeString(storage.projectionStateFile(), "{\"version\":1,\"phase\":\"CONVERGING\",\"revision\":1,\"fallbackSource\":\"SOMETHING_ELSE\",\"fallback\":[]}");
+		assertThrows(ProjectionState.UnreadableException.class, () -> ProjectionState.read(storage));
+	}
+
+	@Test
 	void readingNeverSetsTheDocumentAside() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
 		Files.createDirectories(storage.projectionStateFile().getParent());
