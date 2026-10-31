@@ -38,13 +38,11 @@ final class LeafRevocation {
 	}
 
 	static final Duration DEADLINE = Duration.ofSeconds(4);
+	/** The background re-check a still-good CRL gets; it never holds the connection that already got its verdict. */
+	private static final Duration REFRESH_DEADLINE = Duration.ofMinutes(2);
 	private static final String HTTP = "http://";
 
 	private LeafRevocation() {}
-
-	static CompletableFuture<Status> check(X509Certificate leaf, X509Certificate[] presented) {
-		return check(leaf, presented, FetchCache.shared(), DEADLINE, () -> {});
-	}
 
 	static CompletableFuture<Status> check(X509Certificate leaf, X509Certificate[] presented, Runnable onRevoked) {
 		return check(leaf, presented, FetchCache.shared(), DEADLINE, onRevoked);
@@ -54,7 +52,7 @@ final class LeafRevocation {
 		return check(leaf, presented, cache, deadline, () -> {});
 	}
 
-	static CompletableFuture<Status> check(X509Certificate leaf, X509Certificate[] presented, FetchCache cache, Duration deadline, Runnable onRevoked) {
+	private static CompletableFuture<Status> check(X509Certificate leaf, X509Certificate[] presented, FetchCache cache, Duration deadline, Runnable onRevoked) {
 		String url;
 		try {
 			url = httpCrlUrl(leaf);
@@ -71,10 +69,6 @@ final class LeafRevocation {
 	 * nor a replayed older CRL from one source ever beats a good one. A copy that still settles is the answer, and the
 	 * race runs behind it.
 	 */
-	static CompletableFuture<Status> check(X509Certificate leaf, X509Certificate[] presented, List<String> sources, FetchCache cache, Duration deadline) {
-		return check(leaf, presented, sources, cache, deadline, () -> {});
-	}
-
 	static CompletableFuture<Status> check(X509Certificate leaf, X509Certificate[] presented, List<String> sources, FetchCache cache, Duration deadline, Runnable onRevoked) {
 		byte[] stored = cache.stored(sources.get(0));
 		Status known = settled(leaf, presented, stored, null);
@@ -91,7 +85,7 @@ final class LeafRevocation {
 	 */
 	private static void refresh(X509Certificate leaf, X509Certificate[] presented, List<String> sources, FetchCache cache, byte[] stored, Status known, Runnable onRevoked) {
 		if (known == Status.REVOKED) return;
-		cache.get(sources, body -> settled(leaf, presented, body, stored), Duration.ofMinutes(2)).thenAccept(status -> {
+		cache.get(sources, body -> settled(leaf, presented, body, stored), REFRESH_DEADLINE).thenAccept(status -> {
 			if (status == Status.REVOKED) onRevoked.run();
 		});
 	}
@@ -102,7 +96,7 @@ final class LeafRevocation {
 		if (crl == null) return null;
 		X509CRL cached = crl(cachedBody);
 		if (cached != null && olderThan(crl, cached)) return null;
-		return switch (Trust.crlVerdict(leaf, presented, body)) {
+		return switch (Trust.crlVerdict(leaf, presented, crl)) {
 			case Trust.REVOKED -> Status.REVOKED;
 			case Trust.GOOD -> Status.GOOD;
 			default -> null;

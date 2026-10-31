@@ -4,6 +4,7 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.X509CRL;
 import java.security.cert.X509Certificate;
 import java.util.HexFormat;
 import java.util.Set;
@@ -87,7 +88,7 @@ public final class TrustBoundary {
 	 * The verdict ints are a wire format between the two sides of the boundary, which cannot share a type:
 	 * {@code 0} unusable body, {@code 1} good, {@code 2} revoked, {@code 3} unknown.
 	 */
-	public static int crlVerdict(X509Certificate leaf, X509Certificate[] presented, byte[] body) {
-		return CrlVerdict.verdict(leaf, presented, body);
+	public static int crlVerdict(X509Certificate leaf, X509Certificate[] presented, X509CRL crl) {
+		return CrlVerdict.verdict(leaf, presented, crl);
 	}
 }

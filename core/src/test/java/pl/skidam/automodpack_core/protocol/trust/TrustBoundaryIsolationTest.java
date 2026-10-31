@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.protocol.trust;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -12,6 +13,8 @@ import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 
+import pl.skidam.automodpack_core.protocol.Trust;
+
 /**
  * The boundary may resolve only the JDK, its own package and the shaded libraries. A game, loader or mod class in its
  * constant pool would put the game's class loading back on the trust path, which is what the boundary exists to stop.
@@ -19,6 +22,7 @@ import org.junit.jupiter.api.Test;
  */
 class TrustBoundaryIsolationTest {
 	private static final String OWN = "pl/skidam/automodpack_core/protocol/trust/";
+	private static final String OWN_DOTTED = "pl.skidam.automodpack_core.protocol.trust.";
 	private static final String MOD_PREFIX = "pl/skidam/";
 	private static final List<String> FORBIDDEN = List.of("net/minecraft", "net/fabricmc", "cpw/mods", "net/neoforged", "net/minecraftforge", "com/google/gson", "org/slf4j",
 			"org/apache/logging", "amp_libs", "org/bouncycastle");
@@ -27,17 +31,26 @@ class TrustBoundaryIsolationTest {
 	void nothingOutsideTheBoundaryReferencesItsInternalClasses() throws Exception {
 		Path root = Path.of(TrustBoundary.class.getProtectionDomain().getCodeSource().getLocation().toURI()).resolve(Path.of("pl", "skidam", "automodpack_core"));
 		Path boundary = root.resolve(Path.of("protocol", "trust"));
-		List<String> internal = List.of("protocol/trust/TrustBoundary", "protocol/trust/CrlVerdict", "protocol/trust/RevokingTrustManager");
 		List<String> violations = new ArrayList<>();
 		try (Stream<Path> walk = Files.walk(root)) {
 			for (Path file : walk.filter(path -> path.toString().endsWith(".class") && !path.startsWith(boundary)).toList()) {
+				// Trust is the one door: it names the boundary class to load it, and every other reference is a leak.
+				if (file.getFileName().toString().equals("Trust.class")) continue;
 				String text = new String(Files.readAllBytes(file), StandardCharsets.ISO_8859_1);
-				for (String name : internal) {
-					if (text.contains(name)) violations.add(file.getFileName() + " references " + name);
-				}
+				if (text.contains(OWN) || text.contains(OWN_DOTTED)) violations.add(file.getFileName() + " references " + OWN);
 			}
 		}
 		assertTrue(violations.isEmpty(), String.join("\n", violations));
+	}
+
+	@Test
+	void theVerdictNumbersMeanTheSameThingOnBothSidesOfTheBoundary() {
+		// The two sides cannot share a type, so the four ints are a wire format: a renumber on either side would
+		// silently turn a revocation into a good verdict.
+		assertEquals(CrlVerdict.UNUSABLE, Trust.UNUSABLE);
+		assertEquals(CrlVerdict.GOOD, Trust.GOOD);
+		assertEquals(CrlVerdict.REVOKED, Trust.REVOKED);
+		assertEquals(CrlVerdict.UNKNOWN, Trust.UNKNOWN);
 	}
 
 	@Test

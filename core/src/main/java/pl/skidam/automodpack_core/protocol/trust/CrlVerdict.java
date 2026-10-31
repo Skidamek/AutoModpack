@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.protocol.trust;
 
-import java.io.ByteArrayInputStream;
 import java.security.GeneralSecurityException;
 import java.security.cert.CertPathValidator;
 import java.security.cert.CertPathValidatorException;
@@ -33,12 +32,11 @@ final class CrlVerdict {
 
 	private CrlVerdict() {}
 
-	/** The leaf's status by this CRL body; {@link #UNUSABLE} when the body is no CRL or cannot settle it. */
-	static int verdict(X509Certificate leaf, X509Certificate[] presented, byte[] body) {
+	/** The leaf's status by this CRL body; {@link #UNUSABLE} when the body is not a CRL or cannot settle it. */
+	static int verdict(X509Certificate leaf, X509Certificate[] presented, X509CRL crl) {
+		if (crl == null) return UNUSABLE;
 		X509Certificate issuer = issuer(leaf, presented);
 		if (issuer == null) return UNKNOWN;
-		X509CRL crl = crl(body);
-		if (crl == null) return UNUSABLE;
 		int status = judge(leaf, issuer, crl);
 		return status == UNKNOWN ? UNUSABLE : status;
 	}
@@ -55,15 +53,6 @@ final class CrlVerdict {
 			}
 		}
 		return null;
-	}
-
-	private static X509CRL crl(byte[] body) {
-		if (body == null) return null;
-		try {
-			return (X509CRL) CertificateFactory.getInstance("X.509").generateCRL(new ByteArrayInputStream(body));
-		} catch (GeneralSecurityException notACrl) {
-			return null;
-		}
 	}
 
 	private static int judge(X509Certificate leaf, X509Certificate issuer, X509CRL crl) {
