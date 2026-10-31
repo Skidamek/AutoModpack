@@ -336,14 +336,7 @@ public class DownloadManager implements DownloadView {
 			if (source != null && rescue.hostFarFaster(data.activeDomain)) source = null;
 			if (source != null) {
 				AttemptOutcome outcome = platform.run(hashPathPair, task, data, source, partial, sampler);
-				if (outcome == AttemptOutcome.COMPLETED) {
-					try (FileCache openCache = FileCache.open(dataLayout.fileCacheDirectory())) {
-						outcome = promotion.promote(hashPathPair.hash(), task, partial, openCache) ? AttemptOutcome.COMPLETED : AttemptOutcome.FAILED;
-					} catch (IOException e) {
-						task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
-						outcome = AttemptOutcome.FAILED;
-					}
-				}
+				if (outcome == AttemptOutcome.COMPLETED) outcome = promotion.promote(hashPathPair.hash(), task, partial) ? AttemptOutcome.COMPLETED : AttemptOutcome.FAILED;
 				cleanupAndFinalize(hashPathPair, task, storeFile, outcome);
 				return;
 			}
@@ -408,12 +401,7 @@ public class DownloadManager implements DownloadView {
 			cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.FAILED);
 			return;
 		}
-		try (FileCache cache = FileCache.open(dataLayout.fileCacheDirectory())) {
-			cleanupAndFinalize(hashPathPair, task, storeFile, promotion.promote(hashPathPair.hash(), task, partial, cache) ? AttemptOutcome.COMPLETED : AttemptOutcome.FAILED);
-		} catch (IOException e) {
-			task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
-			cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.FAILED);
-		}
+		cleanupAndFinalize(hashPathPair, task, storeFile, promotion.promote(hashPathPair.hash(), task, partial) ? AttemptOutcome.COMPLETED : AttemptOutcome.FAILED);
 	}
 
 	private void cleanupAndFinalize(FileInspection.HashPathPair key, QueuedDownload task, Path storeFile, AttemptOutcome outcome) {

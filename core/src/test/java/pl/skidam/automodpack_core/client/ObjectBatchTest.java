@@ -38,9 +38,7 @@ class ObjectBatchTest {
 		try (OutputStream out = PartialResume.writer(partial, data.length, 0)) {
 			out.write(data);
 		}
-		try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
-			assertTrue(promotion.promote(sha1, task, partial, cache));
-		}
+		assertTrue(promotion.promote(sha1, task, partial));
 		return task;
 	}
 
@@ -165,9 +163,7 @@ class ObjectBatchTest {
 			try (OutputStream out = PartialResume.writer(partial, size, 0)) {
 				out.write(received);
 			}
-			try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
-				assertFalse(promotion.promote(sha1, task, partial, cache));
-			}
+			assertFalse(promotion.promote(sha1, task, partial));
 			assertEquals(DownloadManager.FailureCategory.REMOTE_SOURCE, task.lastFailureCategory);
 		}
 		assertEquals(0, batch.size());

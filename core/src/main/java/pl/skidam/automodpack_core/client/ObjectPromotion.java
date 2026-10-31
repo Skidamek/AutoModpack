@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.UUID;
 
 import pl.skidam.automodpack_core.protocol.PartialResume;
@@ -23,14 +24,10 @@ final class ObjectPromotion {
 	private final DataRootResolver.Layout dataLayout;
 	private final ObjectBatch batch;
 
-	ObjectPromotion(DataRootResolver.Layout dataLayout) {
-		this(dataLayout, null);
-	}
-
-	/** With a batch, verified objects are held for its one sync instead of each being forced into the store on its own. */
+	/** Verified objects are held for the batch's one sync instead of each being forced into the store on its own. */
 	ObjectPromotion(DataRootResolver.Layout dataLayout, ObjectBatch batch) {
 		this.dataLayout = dataLayout;
-		this.batch = batch;
+		this.batch = Objects.requireNonNull(batch, "batch");
 	}
 
 	/** Creates the task's slice directory {@code staging/<sha1>/}; null with the failure recorded means the attempt cannot start. */
@@ -53,8 +50,8 @@ final class ObjectPromotion {
 	 * retried. A one-tile object is moved to a private name and published as is, a larger one is hashed while it is stitched,
 	 * so either way the bytes are written once more at most and read exactly once before they are published.
 	 */
-	boolean promote(String sha1, QueuedDownload task, Path partial, FileCache cache) {
-		Path assembled = batch != null ? PartialResume.newHeldFile(partial) : dataLayout.stagingDirectory().resolve("." + sha1 + "." + UUID.randomUUID() + ".obj");
+	boolean promote(String sha1, QueuedDownload task, Path partial) {
+		Path assembled = PartialResume.newHeldFile(partial);
 		boolean held = false;
 		try {
 			String hashed;
@@ -63,16 +60,12 @@ final class ObjectPromotion {
 			} else {
 				hashed = PartialResume.assembleHashing(partial, assembled, task.fileSize);
 			}
-			if (batch != null) {
-				VerifiedFileTransfer.requireHashed(assembled, task.fileSize, sha1, hashed);
-				PartialResume.deleteTiles(partial, task.fileSize);
-				batch.hold(new ObjectBatch.Held(sha1, task.fileSize, assembled, partial, task));
-				held = true;
-				// The batch owns the slice directory from here: it deletes it once the object is durable in the store.
-				task.partialFile = null;
-			} else {
-				VerifiedFileTransfer.promoteHashed(assembled, dataLayout.objectFile(sha1), task.fileSize, sha1, hashed, cache);
-			}
+			VerifiedFileTransfer.requireHashed(assembled, task.fileSize, sha1, hashed);
+			PartialResume.deleteTiles(partial, task.fileSize);
+			batch.hold(new ObjectBatch.Held(sha1, task.fileSize, assembled, partial, task));
+			held = true;
+			// The batch owns the slice directory from here: it deletes it once the object is durable in the store.
+			task.partialFile = null;
 		} catch (VerifiedFileTransfer.VerificationMismatchException e) {
 			task.lastFailureCategory = DownloadManager.FailureCategory.REMOTE_SOURCE;
 			LOGGER.warn("Size or hash mismatch for downloaded file {}", task.file.getFileName());
@@ -102,7 +95,7 @@ final class ObjectPromotion {
 		Path directory = PartialResume.directory(dataLayout.stagingDirectory(), sha1);
 		try {
 			for (Path heldFile : PartialResume.heldFiles(directory)) {
-				if (batch != null && batch.holds(heldFile)) continue;
+				if (batch.holds(heldFile)) continue;
 				Path adopted = dataLayout.stagingDirectory().resolve("." + sha1 + "." + UUID.randomUUID() + ".obj");
 				try {
 					Files.move(heldFile, adopted);

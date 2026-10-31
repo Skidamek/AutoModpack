@@ -57,7 +57,8 @@ class ObjectPromotionTest {
 	@Test
 	void aOneTileObjectIsMovedIntoTheStoreWithoutACopy(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
-		ObjectPromotion promotion = new ObjectPromotion(layout);
+		ObjectBatch batch = new ObjectBatch(layout);
+		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
 		byte[] data = bytes(300_000, 1);
 		String sha1 = HashUtils.sha1(data);
 		QueuedDownload task = task(sha1, data.length);
@@ -65,7 +66,8 @@ class ObjectPromotionTest {
 		Object tileKey = Files.readAttributes(PartialResume.sliceFile(partial, 0), "basic:fileKey").get("fileKey");
 
 		try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
-			assertTrue(promotion.promote(sha1, task, partial, cache));
+			assertTrue(promotion.promote(sha1, task, partial));
+			assertEquals(List.of(), batch.flush(), "the held object reached the store");
 			assertPublished(layout, sha1, data, cache);
 		}
 		if (tileKey != null) assertEquals(tileKey, Files.readAttributes(layout.objectFile(sha1), "basic:fileKey").get("fileKey"), "the store object is the downloaded tile itself, not a second copy of its bytes");
@@ -75,13 +77,15 @@ class ObjectPromotionTest {
 	@Test
 	void aFullFourMebibyteObjectIsStillOneTile(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
-		ObjectPromotion promotion = new ObjectPromotion(layout);
+		ObjectBatch batch = new ObjectBatch(layout);
+		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
 		byte[] data = bytes(NetUtils.WIRE_CHUNK_BYTES, 2);
 		String sha1 = HashUtils.sha1(data);
 		QueuedDownload task = task(sha1, data.length);
 		Path partial = stage(promotion, task, data);
 		try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
-			assertTrue(promotion.promote(sha1, task, partial, cache));
+			assertTrue(promotion.promote(sha1, task, partial));
+			assertEquals(List.of(), batch.flush(), "the held object reached the store");
 			assertPublished(layout, sha1, data, cache);
 		}
 	}
@@ -89,13 +93,15 @@ class ObjectPromotionTest {
 	@Test
 	void aMultiTileObjectIsHashedWhileItIsStitched(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
-		ObjectPromotion promotion = new ObjectPromotion(layout);
+		ObjectBatch batch = new ObjectBatch(layout);
+		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
 		byte[] data = bytes(NetUtils.WIRE_CHUNK_BYTES * 2 + 12_345, 3);
 		String sha1 = HashUtils.sha1(data);
 		QueuedDownload task = task(sha1, data.length);
 		Path partial = stage(promotion, task, data);
 		try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
-			assertTrue(promotion.promote(sha1, task, partial, cache));
+			assertTrue(promotion.promote(sha1, task, partial));
+			assertEquals(List.of(), batch.flush(), "the held object reached the store");
 			assertPublished(layout, sha1, data, cache);
 		}
 	}
@@ -103,7 +109,8 @@ class ObjectPromotionTest {
 	@Test
 	void aResumedTransferPromotesTheSameBytesOnBothPaths(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
-		ObjectPromotion promotion = new ObjectPromotion(layout);
+		ObjectBatch batch = new ObjectBatch(layout);
+		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
 		for (int size : new int[]{1_000_000, NetUtils.WIRE_CHUNK_BYTES + 777_777}) {
 			byte[] data = bytes(size, size);
 			String sha1 = HashUtils.sha1(data);
@@ -121,7 +128,8 @@ class ObjectPromotionTest {
 				out.write(data, (int) from, size - (int) from);
 			}
 			try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
-				assertTrue(promotion.promote(sha1, task, partial, cache), "size " + size);
+				assertTrue(promotion.promote(sha1, task, partial), "size " + size);
+				assertEquals(List.of(), batch.flush(), "the held object reached the store");
 				assertPublished(layout, sha1, data, cache);
 			}
 		}
@@ -130,7 +138,8 @@ class ObjectPromotionTest {
 	@Test
 	void mismatchedBytesAreNeverPublishedAndLeaveNothingBehind(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
-		ObjectPromotion promotion = new ObjectPromotion(layout);
+		ObjectBatch batch = new ObjectBatch(layout);
+		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
 		for (int size : new int[]{4096, NetUtils.WIRE_CHUNK_BYTES * 2 + 1}) {
 			byte[] advertised = bytes(size, 10 + size);
 			byte[] received = advertised.clone();
@@ -138,9 +147,8 @@ class ObjectPromotionTest {
 			String sha1 = HashUtils.sha1(advertised);
 			QueuedDownload task = task(sha1, size);
 			Path partial = stage(promotion, task, received);
-			try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
-				assertFalse(promotion.promote(sha1, task, partial, cache), "size " + size);
-			}
+			assertFalse(promotion.promote(sha1, task, partial), "size " + size);
+			assertEquals(0, batch.size(), "nothing unverified is held for the store");
 			assertEquals(DownloadManager.FailureCategory.REMOTE_SOURCE, task.lastFailureCategory);
 			assertFalse(Files.exists(layout.objectFile(sha1)), "unverified bytes never appear under a hash name");
 			assertNull(task.partialFile, "a mismatched partial is dropped so the retry starts from zero");
@@ -151,7 +159,8 @@ class ObjectPromotionTest {
 	@Test
 	void anIncompletePartialIsNotPromoted(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
-		ObjectPromotion promotion = new ObjectPromotion(layout);
+		ObjectBatch batch = new ObjectBatch(layout);
+		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
 		byte[] data = bytes(100_000, 4);
 		String sha1 = HashUtils.sha1(data);
 		QueuedDownload task = task(sha1, data.length);
@@ -159,9 +168,8 @@ class ObjectPromotionTest {
 		try (OutputStream out = PartialResume.writer(partial, data.length, 0)) {
 			out.write(data, 0, 50_000);
 		}
-		try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
-			assertFalse(promotion.promote(sha1, task, partial, cache));
-		}
+		assertFalse(promotion.promote(sha1, task, partial));
+		assertEquals(0, batch.size(), "an incomplete partial is never held");
 		assertFalse(Files.exists(layout.objectFile(sha1)));
 		assertEquals(List.of(), stagingLeftovers(layout));
 	}
@@ -169,7 +177,8 @@ class ObjectPromotionTest {
 	@Test
 	void anObjectAlreadyInTheStoreIsDedupedNotAnError(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
-		ObjectPromotion promotion = new ObjectPromotion(layout);
+		ObjectBatch batch = new ObjectBatch(layout);
+		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
 		for (int size : new int[]{64_000, NetUtils.WIRE_CHUNK_BYTES + 5}) {
 			byte[] data = bytes(size, 20 + size);
 			String sha1 = HashUtils.sha1(data);
@@ -180,7 +189,8 @@ class ObjectPromotionTest {
 			QueuedDownload task = task(sha1, size);
 			Path partial = stage(promotion, task, data);
 			try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
-				assertTrue(promotion.promote(sha1, task, partial, cache), "another download won the race for size " + size);
+				assertTrue(promotion.promote(sha1, task, partial), "another download won the race for size " + size);
+				assertEquals(List.of(), batch.flush(), "the held object reached the store");
 				assertPublished(layout, sha1, data, cache);
 			}
 		}
@@ -189,7 +199,8 @@ class ObjectPromotionTest {
 	@Test
 	void aCorruptObjectInTheStoreIsReplacedByTheVerifiedDownload(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
-		ObjectPromotion promotion = new ObjectPromotion(layout);
+		ObjectBatch batch = new ObjectBatch(layout);
+		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
 		byte[] data = bytes(70_000, 5);
 		String sha1 = HashUtils.sha1(data);
 		Path object = layout.objectFile(sha1);
@@ -198,7 +209,8 @@ class ObjectPromotionTest {
 		QueuedDownload task = task(sha1, data.length);
 		Path partial = stage(promotion, task, data);
 		try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
-			assertTrue(promotion.promote(sha1, task, partial, cache));
+			assertTrue(promotion.promote(sha1, task, partial));
+			assertEquals(List.of(), batch.flush(), "the held object reached the store");
 			assertPublished(layout, sha1, data, cache);
 		}
 	}
@@ -206,12 +218,14 @@ class ObjectPromotionTest {
 	@Test
 	void anEmptyObjectIsPromoted(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
-		ObjectPromotion promotion = new ObjectPromotion(layout);
+		ObjectBatch batch = new ObjectBatch(layout);
+		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
 		String sha1 = HashUtils.sha1(new byte[0]);
 		QueuedDownload task = task(sha1, 0);
 		Path partial = promotion.preparePartial(sha1, task);
 		try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
-			assertTrue(promotion.promote(sha1, task, partial, cache));
+			assertTrue(promotion.promote(sha1, task, partial));
+			assertEquals(List.of(), batch.flush(), "the held object reached the store");
 			assertPublished(layout, sha1, new byte[0], cache);
 		}
 	}
