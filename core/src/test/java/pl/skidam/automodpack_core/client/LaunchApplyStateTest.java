@@ -1,6 +1,8 @@
 package pl.skidam.automodpack_core.client;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -36,6 +38,21 @@ class LaunchApplyStateTest {
 		assertTrue(LaunchApplyState.takeUnseenApply(storage, "abc1234"));
 		assertFalse(LaunchApplyState.hasUnseenApply(storage, "abc1234"));
 		assertFalse(LaunchApplyState.takeUnseenApply(storage, "abc1234"));
+	}
+
+	@Test
+	void theNoticeNamesTheSelectedPackAndIsConsumedOnce() throws Exception {
+		ClientStorage storage = storage("notice");
+		storage.writeSelectedModpackId("abc1234");
+		assertNull(LaunchApplyState.unseenNotice(storage));
+
+		LaunchApplyState.recordUnseenApply(storage, "abc1234");
+		LaunchApplyState.Notice notice = LaunchApplyState.unseenNotice(storage);
+		assertEquals("abc1234", notice.modpackId());
+		assertTrue(LaunchApplyState.hasUnseenApply(storage, "abc1234"), "reading the notice does not consume it");
+		assertTrue(LaunchApplyState.takeNotice(storage, notice));
+		assertNull(LaunchApplyState.unseenNotice(storage));
+		assertFalse(LaunchApplyState.takeNotice(storage, notice));
 	}
 
 	private ClientStorage storage(String name) throws Exception {
