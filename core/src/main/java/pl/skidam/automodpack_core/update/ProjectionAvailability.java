@@ -196,7 +196,7 @@ public final class ProjectionAvailability {
 		ClientStorageJsons.ClientGenerationStateFields state;
 		try {
 			state = ConfigTools.readUnique(gameDirectory.resolve(CLIENT_ACTIVE_STATE_FILE).normalize(), ClientStorageJsons.ClientGenerationStateFields.class, "Client active state",
-					ClientStorage::validatedActiveState).orElse(null);
+					ActivePackPointer::validated).orElse(null);
 		} catch (IOException e) {
 			// The state is durable, so this is a locked or unreadable file, not corrupt content. The gate cannot decide,
 			// and returning null quietly would let preload load a projection the directory-scanning loaders never
