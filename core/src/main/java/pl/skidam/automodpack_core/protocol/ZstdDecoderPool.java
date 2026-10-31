@@ -16,14 +16,14 @@ import io.airlift.compress.zstd.ZstdInputStream;
  * A stream that is never closed just keeps its decoder, which the GC then collects with it.
  *
  * <p>
- * The idle pool is bounded in count, and a decoder only comes back if its stream decoded at most
- * {@link #RETAIN_DECODED_LIMIT} bytes. The window buffer grows only with the output it held, so this keeps what the
- * pool retains small. Big streams, where the buffer allocation does not matter next to the data, release theirs to
- * the GC as before. Decoding itself is unchanged: same decoder, same 8 MiB window limit, same exceptions.
+ * A pooled decoder is built with {@link #MAX_WINDOW_BYTES} as its window, so it retains at most 2 x 1 MiB + 128 KiB of
+ * window buffer however large a window a frame header declares. That is the window this protocol's own compressor
+ * emits (single-segment frames up to 1 MiB, windowLog 20 above it, measured over 1 KiB..32 MiB inputs), so every stream
+ * a pack sends decodes on a pooled decoder, and the idle pool holds at most ~17 MiB across {@link #MAX_IDLE} decoders.
  */
 final class ZstdDecoderPool {
 	static final int MAX_IDLE = 8;
-	static final long RETAIN_DECODED_LIMIT = 1L << 20;
+	static final int MAX_WINDOW_BYTES = 1 << 20;
 
 	private static final ConcurrentLinkedQueue<ZstdIncrementalFrameDecompressor> IDLE = new ConcurrentLinkedQueue<>();
 	private static final AtomicInteger IDLE_COUNT = new AtomicInteger();
@@ -33,7 +33,7 @@ final class ZstdDecoderPool {
 	static InputStream open(InputStream source) {
 		ZstdIncrementalFrameDecompressor decoder = IDLE.poll();
 		if (decoder == null) {
-			decoder = new ZstdIncrementalFrameDecompressor();
+			decoder = new ZstdIncrementalFrameDecompressor(MAX_WINDOW_BYTES);
 		} else {
 			IDLE_COUNT.decrementAndGet();
 		}
@@ -65,7 +65,6 @@ final class ZstdDecoderPool {
 		private final AtomicInteger readers = new AtomicInteger();
 		private final AtomicBoolean released = new AtomicBoolean();
 		private volatile boolean closed;
-		private long decoded;
 
 		PooledStream(ZstdInputStream delegate, ZstdIncrementalFrameDecompressor decoder) {
 			this.delegate = delegate;
@@ -76,9 +75,7 @@ final class ZstdDecoderPool {
 		public int read() throws IOException {
 			enter();
 			try {
-				int value = delegate.read();
-				if (value >= 0) decoded++;
-				return value;
+				return delegate.read();
 			} finally {
 				exit();
 			}
@@ -88,9 +85,7 @@ final class ZstdDecoderPool {
 		public int read(byte[] buffer, int offset, int length) throws IOException {
 			enter();
 			try {
-				int read = delegate.read(buffer, offset, length);
-				if (read > 0) decoded += read;
-				return read;
+				return delegate.read(buffer, offset, length);
 			} finally {
 				exit();
 			}
@@ -130,7 +125,7 @@ final class ZstdDecoderPool {
 
 		private void release() {
 			if (!released.compareAndSet(false, true)) return;
-			if (decoded <= RETAIN_DECODED_LIMIT) giveBack(decoder);
+			giveBack(decoder);
 		}
 	}
 }

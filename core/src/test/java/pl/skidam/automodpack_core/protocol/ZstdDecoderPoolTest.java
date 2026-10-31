@@ -138,14 +138,14 @@ class ZstdDecoderPoolTest {
 	}
 
 	@Test
-	void aBigStreamsDecoderIsLeftToTheGc() throws Exception {
-		byte[] warm = payload(3, 1000);
-		unzstd(zstd(warm));
-		byte[] big = payload(4, (int) ZstdDecoderPool.RETAIN_DECODED_LIMIT * 4);
-		byte[] frame = zstd(big);
-		int before = ZstdDecoderPool.idle();
-		assertArrayEquals(big, unzstd(frame));
-		assertEquals(Math.max(0, before - 1), ZstdDecoderPool.idle(), "the big stream took a pooled decoder and did not return it");
+	void theLargestWindowThisProtocolEmitsStillDecodesOnAPooledDecoder() throws Exception {
+		// Measured on the pack's own compressor: single-segment frames up to 1 MiB, windowLog 20 (1 MiB) streaming
+		// frames above it. A pooled decoder built for that window decodes every stream this protocol produces.
+		assertEquals(1 << 20, ZstdDecoderPool.MAX_WINDOW_BYTES);
+		for (int size : new int[]{1 << 20, 32 << 20}) {
+			byte[] data = payload(size, size);
+			assertArrayEquals(data, unzstd(zstd(data)), "stream of " + size + " bytes");
+		}
 	}
 
 	@Test
