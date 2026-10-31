@@ -16,6 +16,7 @@ import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.protocol.OneCrl;
+import pl.skidam.automodpack_core.protocol.Trust;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -38,6 +39,7 @@ public class Preload {
 			long start = System.currentTimeMillis();
 			LOGGER.debug("Prelaunching AutoModpack...");
 			initializeConstants(loaderManager, modpackLoader);
+			Trust.start();
 			FetchCache.useDirectory(DataRootResolver.resolve(GameDirectory.current()).layout().fetchCacheDirectory());
 			// The refresh is fire-and-forget, so it must not run while the game is still loading classes (see Deferred).
 			Deferred.shared().run(OneCrl::startRefresh);

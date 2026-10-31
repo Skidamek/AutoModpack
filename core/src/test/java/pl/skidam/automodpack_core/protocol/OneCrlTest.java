@@ -11,9 +11,15 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Base64;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 class OneCrlTest {
+
+	@BeforeAll
+	static void startTrust() {
+		Trust.start();
+	}
 
 	// Atos TrustedRoot Server-CA 2011, revoked in OneCRL by bug 1312150: https://crt.sh/?id=705899
 	private static final String ATOS_SERVER_CA_PEM = """
@@ -54,8 +60,8 @@ class OneCrlTest {
 		OneCrl.Blocklist list = OneCrl.parseMozilla(body);
 		assertEquals(1, list.issuerSerial().size());
 		assertEquals(1, list.spkiHex().size());
-		assertTrue(list.issuerSerial().contains(OneCrl.issuerSerialKey(b64("QQ=="), b64("Qg=="))));
-		assertFalse(list.issuerSerial().contains(OneCrl.issuerSerialKey(b64("QQ=="), b64("Qw=="))));
+		assertTrue(list.issuerSerial().contains(Trust.key(b64("QQ=="), b64("Qg=="))));
+		assertFalse(list.issuerSerial().contains(Trust.key(b64("QQ=="), b64("Qw=="))));
 	}
 
 	@Test
@@ -65,8 +71,9 @@ class OneCrlTest {
 			certificate = (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(in);
 		}
 		OneCrl.Blocklist list = OneCrl.parseMozilla(("{\"data\":[" + ATOS_RECORD + "]}").getBytes(StandardCharsets.UTF_8));
-		assertTrue(list.blocks(certificate), "the issuer DER and serial encodings must match Mozilla's bytes");
-		assertFalse(list.blocks(NetUtils.selfSign(NetUtils.generateKeyPair())));
+		String certificateKey = Trust.key(certificate.getIssuerX500Principal().getEncoded(), certificate.getSerialNumber().toByteArray());
+		assertTrue(list.issuerSerial().contains(certificateKey), "the issuer DER and serial encodings must match Mozilla's bytes");
+		assertFalse(Trust.blocks(NetUtils.selfSign(NetUtils.generateKeyPair())));
 	}
 
 	@Test

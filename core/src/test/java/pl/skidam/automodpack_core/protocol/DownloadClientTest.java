@@ -58,12 +58,18 @@ import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 
 class DownloadClientTest {
+
+	@BeforeAll
+	static void startTrust() {
+		Trust.start();
+	}
 	/**
 	 * Upper bound for async waits on loopback handshakes that complete in milliseconds when warm.
 	 * Cold CI runners (Windows especially) have blown past five seconds here; a generous bound only

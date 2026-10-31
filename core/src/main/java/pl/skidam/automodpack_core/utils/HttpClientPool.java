@@ -25,7 +25,7 @@ import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManager;
 
 import pl.skidam.automodpack_core.protocol.NetUtils;
-import pl.skidam.automodpack_core.protocol.RevokingTrustManager;
+import pl.skidam.automodpack_core.protocol.Trust;
 import pl.skidam.automodpack_core.protocol.WireCodec;
 
 /**
@@ -252,7 +252,7 @@ public final class HttpClientPool {
 	private static SSLContext httpsContext() {
 		try {
 			SSLContext context = SSLContext.getInstance("TLS");
-			context.init(null, new TrustManager[]{RevokingTrustManager.wrap(null)}, new SecureRandom());
+			context.init(null, new TrustManager[]{Trust.trustManager(null)}, new SecureRandom());
 			return context;
 		} catch (GeneralSecurityException e) {
 			throw new IllegalStateException("Failed to initialize HTTPS trust", e);

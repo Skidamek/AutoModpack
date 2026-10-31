@@ -20,6 +20,7 @@ import java.util.Locale;
 
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.protocol.Trust;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -65,6 +66,7 @@ public final class UpdateHelperMain {
 		LoaderManagerService.EnvironmentType environment = environment(arguments);
 		Long parentStartEpochMilli = parentStartEpochMilli(arguments);
 
+		Trust.start();
 		Path gameDirectory = GameDirectory.current();
 		DataRootResolver.Location dataLocation = DataRootResolver.resolve(gameDirectory, environment);
 		logStart(parentPid, environment, gameDirectory, dataLocation, log);

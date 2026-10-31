@@ -86,7 +86,7 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 
 	/** The production CA set is the JDK's; tests inject a keystore whose CA the deferral gate can judge as trusted. */
 	CustomizableTrustManager(SessionTrust sessionTrust, Consumer<X509Certificate[]> onValidating, KeyStore trustStore) throws KeyStoreException {
-		this.defaultTrustManager = RevokingTrustManager.wrap(trustStore);
+		this.defaultTrustManager = Trust.trustManager(trustStore);
 		this.sessionTrust = sessionTrust;
 		this.onValidating = onValidating;
 	}

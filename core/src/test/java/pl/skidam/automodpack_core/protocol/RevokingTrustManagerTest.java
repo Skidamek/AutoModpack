@@ -28,9 +28,15 @@ import org.bouncycastle.asn1.x509.Extension;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 class RevokingTrustManagerTest {
+
+	@BeforeAll
+	static void startTrust() {
+		Trust.start();
+	}
 
 	// EM OV TLS CA - G3C, private key 4. https://emudhra.we-have-a-problem.com/impacted-intermediates.json
 	private static final String EM_OV_TLS_CA_G3C_PEM = """
@@ -60,7 +66,7 @@ class RevokingTrustManagerTest {
 	@Test
 	void theEmudhraIntermediatePublicKeyIsDistrusted() throws Exception {
 		X509Certificate certificate = pem(EM_OV_TLS_CA_G3C_PEM);
-		var manager = RevokingTrustManager.wrap(trusting(certificate));
+		var manager = Trust.trustManager(trusting(certificate));
 		CertificateException thrown = assertThrows(CertificateException.class, () -> manager.checkServerTrusted(new X509Certificate[]{certificate}, "ECDHE_ECDSA"));
 		assertTrue(thrown.getMessage().contains("OneCRL"));
 	}
@@ -68,7 +74,7 @@ class RevokingTrustManagerTest {
 	@Test
 	void aGeneratedLeafIsNotDistrusted() throws Exception {
 		X509Certificate certificate = NetUtils.selfSign(NetUtils.generateKeyPair());
-		var manager = RevokingTrustManager.wrap(trusting(certificate));
+		var manager = Trust.trustManager(trusting(certificate));
 		assertDoesNotThrow(() -> manager.checkServerTrusted(new X509Certificate[]{certificate}, "RSA"));
 	}
 
@@ -98,10 +104,10 @@ class RevokingTrustManagerTest {
 			X500Name intermediateName = new X500Name("CN=Trust Store Intermediate");
 			X509Certificate intermediate = certificate(rootName, listed ? blockedSerial : BigInteger.TWO, intermediateName, intermediateKeys, rootKeys, true);
 			X509Certificate leaf = certificate(intermediateName, BigInteger.TEN, new X500Name("CN=leaf.example"), NetUtils.generateKeyPair(), intermediateKeys, false);
-			assertTrue(OneCrl.blocks(intermediate) == listed);
+			assertTrue(Trust.blocks(intermediate) == listed);
 			KeyStore store = trusting(root);
 			store.setCertificateEntry("intermediate", intermediate);
-			var manager = RevokingTrustManager.wrap(store);
+			var manager = Trust.trustManager(store);
 
 			if (listed) {
 				CertificateException thrown = assertThrows(CertificateException.class, () -> manager.checkServerTrusted(new X509Certificate[]{leaf}, "RSA"));
@@ -129,16 +135,16 @@ class RevokingTrustManagerTest {
 		X509Certificate cleanIntermediate = certificate(cleanRootName, BigInteger.TWO, intermediateName, intermediateKeys, cleanRootKeys, true);
 		X509Certificate crossCertificate = certificate(blocked.issuer(), blocked.serial(), intermediateName, intermediateKeys, blockedRootKeys, true);
 		X509Certificate leaf = certificate(intermediateName, BigInteger.TEN, new X500Name("CN=leaf.example"), NetUtils.generateKeyPair(), intermediateKeys, false);
-		assertTrue(OneCrl.blocks(crossCertificate));
-		for (X509Certificate clean : List.of(cleanRoot, blockedRoot, cleanIntermediate, leaf)) assertFalse(OneCrl.blocks(clean));
+		assertTrue(Trust.blocks(crossCertificate));
+		for (X509Certificate clean : List.of(cleanRoot, blockedRoot, cleanIntermediate, leaf)) assertFalse(Trust.blocks(clean));
 		KeyStore both = trusting(cleanRoot);
 		both.setCertificateEntry("blocked-root", blockedRoot);
 
-		assertDoesNotThrow(() -> RevokingTrustManager.wrap(both).checkServerTrusted(new X509Certificate[]{leaf, crossCertificate, cleanIntermediate}, "RSA"), "a clean path exists");
-		assertDoesNotThrow(() -> RevokingTrustManager.wrap(trusting(cleanRoot)).checkServerTrusted(new X509Certificate[]{leaf, cleanIntermediate, crossCertificate}, "RSA"),
+		assertDoesNotThrow(() -> Trust.trustManager(both).checkServerTrusted(new X509Certificate[]{leaf, crossCertificate, cleanIntermediate}, "RSA"), "a clean path exists");
+		assertDoesNotThrow(() -> Trust.trustManager(trusting(cleanRoot)).checkServerTrusted(new X509Certificate[]{leaf, cleanIntermediate, crossCertificate}, "RSA"),
 				"a presented certificate no path uses is not judged");
 		CertificateException thrown = assertThrows(CertificateException.class,
-				() -> RevokingTrustManager.wrap(trusting(blockedRoot)).checkServerTrusted(new X509Certificate[]{leaf, crossCertificate}, "RSA"));
+				() -> Trust.trustManager(trusting(blockedRoot)).checkServerTrusted(new X509Certificate[]{leaf, crossCertificate}, "RSA"));
 		assertTrue(thrown.getMessage().contains("OneCRL"), thrown::toString);
 	}
 
@@ -157,16 +163,16 @@ class RevokingTrustManagerTest {
 		List<X509Certificate> chain = deep.certificates();
 		X509Certificate unusedCrossRoot = certificate(blocked.issuer(), blocked.serial(), rootName, rootKeys, rootKeys, true);
 		X509Certificate blockedTop = certificate(blocked.issuer(), blocked.serial(), new X500Name("CN=Intermediate 1"), deep.topKeys(), rootKeys, true);
-		assertTrue(OneCrl.blocks(unusedCrossRoot));
-		for (X509Certificate clean : chain) assertFalse(OneCrl.blocks(clean));
+		assertTrue(Trust.blocks(unusedCrossRoot));
+		for (X509Certificate clean : chain) assertFalse(Trust.blocks(clean));
 
 		List<X509Certificate> withUnused = new ArrayList<>(chain);
 		withUnused.add(unusedCrossRoot);
-		assertDoesNotThrow(() -> RevokingTrustManager.wrap(trusting(root)).checkServerTrusted(withUnused.toArray(X509Certificate[]::new), "RSA"), "the cross-root is never used");
+		assertDoesNotThrow(() -> Trust.trustManager(trusting(root)).checkServerTrusted(withUnused.toArray(X509Certificate[]::new), "RSA"), "the cross-root is never used");
 		List<X509Certificate> throughBlocked = new ArrayList<>(chain);
 		throughBlocked.set(chain.size() - 1, blockedTop);
 		CertificateException thrown = assertThrows(CertificateException.class,
-				() -> RevokingTrustManager.wrap(trusting(blockedRoot)).checkServerTrusted(throughBlocked.toArray(X509Certificate[]::new), "RSA"));
+				() -> Trust.trustManager(trusting(blockedRoot)).checkServerTrusted(throughBlocked.toArray(X509Certificate[]::new), "RSA"));
 		assertTrue(thrown.getMessage().contains("OneCRL"), thrown::toString);
 	}
 
@@ -182,10 +188,10 @@ class RevokingTrustManagerTest {
 		X509Certificate blockedAnchor = certificate(blocked.issuer(), blocked.serial(), padName, padKeys, NetUtils.generateKeyPair(), true);
 		List<X509Certificate> padded = new ArrayList<>(deepChain(padName, padKeys).certificates());
 		for (int pad = 0; pad < 12; pad++) padded.add(certificate(padName, BigInteger.valueOf(100 + pad), padName, padKeys, padKeys, true));
-		assertTrue(OneCrl.blocks(blockedAnchor));
+		assertTrue(Trust.blocks(blockedAnchor));
 
 		CertificateException thrown = assertTimeoutPreemptively(Duration.ofSeconds(20),
-				() -> assertThrows(CertificateException.class, () -> RevokingTrustManager.wrap(trusting(blockedAnchor)).checkServerTrusted(padded.toArray(X509Certificate[]::new), "RSA")));
+				() -> assertThrows(CertificateException.class, () -> Trust.trustManager(trusting(blockedAnchor)).checkServerTrusted(padded.toArray(X509Certificate[]::new), "RSA")));
 		assertTrue(thrown.getMessage().contains("OneCRL"), thrown::toString);
 	}
 

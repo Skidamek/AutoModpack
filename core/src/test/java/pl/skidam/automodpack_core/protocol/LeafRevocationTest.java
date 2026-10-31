@@ -57,6 +57,7 @@ import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -68,6 +69,11 @@ import pl.skidam.automodpack_core.utils.FetchCache;
 
 /** The leaf CRL check against a local CA, its CRLs served over plain http, and the trust ladder's silent CA step. */
 class LeafRevocationTest {
+
+	@BeforeAll
+	static void startTrust() {
+		Trust.start();
+	}
 
 	private static final Duration DEADLINE = Duration.ofSeconds(4);
 	private static final String HTTP = "/ca.crl";

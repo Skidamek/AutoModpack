@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.protocol;
+package pl.skidam.automodpack_core.protocol.trust;
 
 import java.net.Socket;
 import java.security.GeneralSecurityException;
@@ -30,7 +30,7 @@ import javax.net.ssl.X509ExtendedTrustManager;
  * The JDK trust manager, then OneCRL over the certification paths to a trust anchor, which may run through trust-store
  * certificates the server never sent: a path only through blocked certificates is not a WebPKI vouch.
  */
-public final class RevokingTrustManager extends X509ExtendedTrustManager {
+final class RevokingTrustManager extends X509ExtendedTrustManager {
 
 	private final X509ExtendedTrustManager delegate;
 	private final Set<TrustAnchor> anchors;
@@ -41,7 +41,7 @@ public final class RevokingTrustManager extends X509ExtendedTrustManager {
 	}
 
 	/** The platform CA set when {@code trustStore} is null; tests inject a keystore. */
-	public static X509ExtendedTrustManager wrap(KeyStore trustStore) throws KeyStoreException {
+	static X509ExtendedTrustManager wrap(KeyStore trustStore) throws KeyStoreException {
 		try {
 			TrustManagerFactory factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
 			factory.init(trustStore);
@@ -98,8 +98,8 @@ public final class RevokingTrustManager extends X509ExtendedTrustManager {
 	 * server never sent included. The builder is consulted only when a blocked certificate is anywhere a path could run.
 	 */
 	private void rejectBlocked(X509Certificate[] chain) throws CertificateException {
-		List<X509Certificate> presented = Arrays.stream(chain).filter(certificate -> !OneCrl.blocks(certificate)).toList();
-		Set<TrustAnchor> clean = anchors.stream().filter(anchor -> !OneCrl.blocks(anchor.getTrustedCert())).collect(Collectors.toUnmodifiableSet());
+		List<X509Certificate> presented = Arrays.stream(chain).filter(certificate -> !TrustBoundary.blocks(certificate)).toList();
+		Set<TrustAnchor> clean = anchors.stream().filter(anchor -> !TrustBoundary.blocks(anchor.getTrustedCert())).collect(Collectors.toUnmodifiableSet());
 		if (presented.size() == chain.length && clean.size() == anchors.size()) return;
 		if (presented.isEmpty() || presented.get(0) != chain[0]) throw blocked();
 		if (builds(chain[0], presented, clean)) return;
@@ -120,9 +120,9 @@ public final class RevokingTrustManager extends X509ExtendedTrustManager {
 		Set<X509Certificate> seen = new HashSet<>(pending);
 		while (!pending.isEmpty()) {
 			X509Certificate certificate = pending.pop();
-			if (OneCrl.blocks(certificate)) continue;
+			if (TrustBoundary.blocks(certificate)) continue;
 			for (TrustAnchor anchor : anchors)
-				if (anchor.getTrustedCert().equals(certificate) || issued(anchor.getTrustedCert(), certificate) && !OneCrl.blocks(anchor.getTrustedCert())) return true;
+				if (anchor.getTrustedCert().equals(certificate) || issued(anchor.getTrustedCert(), certificate) && !TrustBoundary.blocks(anchor.getTrustedCert())) return true;
 			for (X509Certificate issuer : presented)
 				if (!seen.contains(issuer) && issued(issuer, certificate)) {
 					seen.add(issuer);
