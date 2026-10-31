@@ -30,7 +30,6 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.StorageLeftovers;
-import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -78,6 +77,8 @@ public final class ClientStorage {
 	private final Path stateFile;
 	private final Path transactionFile;
 	private final Path projectionStateFile;
+	private final Path projectionRelaunchFile;
+	private final Path projectionRepairBackupsDirectory;
 	private final Path repairJournalFile;
 	private final Path mutationLockFile;
 	private final Path selectionFile;
@@ -114,6 +115,8 @@ public final class ClientStorage {
 		this.stateFile = this.gameDirectory.resolve(CLIENT_ACTIVE_STATE_FILE).normalize();
 		this.transactionFile = this.gameDirectory.resolve(CLIENT_TRANSACTION_FILE).normalize();
 		this.projectionStateFile = ProjectionState.file(this.gameDirectory);
+		this.projectionRelaunchFile = this.gameDirectory.resolve(CLIENT_PROJECTION_RELAUNCH_FILE).normalize();
+		this.projectionRepairBackupsDirectory = this.clientDirectory.resolve(ProjectionRepairBackups.DIRECTORY).normalize();
 		this.repairJournalFile = this.gameDirectory.resolve(CLIENT_REPAIR_FILE).normalize();
 		this.mutationLockFile = this.gameDirectory.resolve(CLIENT_MUTATION_LOCK_FILE).normalize();
 		this.selectionFile = this.gameDirectory.resolve(CLIENT_SELECTION_FILE).normalize();
@@ -273,7 +276,12 @@ public final class ClientStorage {
 
 	/** The one-shot guard of the relaunch after recovery changed what a directory-scanning loader took (P5). */
 	public Path projectionRelaunchFile() {
-		return gameDirectory.resolve(StoragePaths.CLIENT_PROJECTION_RELAUNCH_FILE).normalize();
+		return projectionRelaunchFile;
+	}
+
+	/** Where a repair keeps the player's own files before the projection replaces them. */
+	Path projectionRepairBackupsDirectory() {
+		return projectionRepairBackupsDirectory;
 	}
 
 	/** The projection state document: whether {@code active/} is loadable as it stands ({@link ProjectionState}). */
@@ -693,7 +701,8 @@ public final class ClientStorage {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
 		validateWithin(clientDirectory, overlaysDirectory, generatedCopiesDirectory, generatedCopiesFile, activeDirectory, legacyIncomingDirectory, legacyBackupDirectory,
-				historyDirectory, stateHistoryDirectory, stateHistoryTreesDirectory(), stateFile, transactionFile, projectionStateFile, repairJournalFile, mutationLockFile, selectionFile, selectedModpackFile,
+				historyDirectory, stateHistoryDirectory, stateHistoryTreesDirectory(), stateFile, transactionFile, projectionStateFile, projectionRelaunchFile, projectionRepairBackupsDirectory,
+				repairJournalFile, mutationLockFile, selectionFile, selectedModpackFile,
 				restartLoopStateFile,
 				stuckTransactionStateFile,
 				modpackContentTempFile,

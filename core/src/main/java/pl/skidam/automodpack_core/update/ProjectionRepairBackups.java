@@ -43,7 +43,7 @@ public final class ProjectionRepairBackups {
 	static final long LIMIT_BYTES = 1L << 30;
 
 	static Path directory(ClientStorage storage) {
-		return storage.clientDirectory().resolve(DIRECTORY);
+		return storage.projectionRepairBackupsDirectory();
 	}
 
 	/** Keeps {@code source} (bytes {@code sha1}, at projection path {@code path}) durably; returns the kept file, or null when an identical one already is. */
