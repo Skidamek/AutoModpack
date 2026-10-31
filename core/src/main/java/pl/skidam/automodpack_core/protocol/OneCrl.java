@@ -8,7 +8,6 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.Base64;
@@ -16,8 +15,7 @@ import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Set;
-
-import org.bouncycastle.cert.jcajce.JcaX509CertificateHolder;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -39,6 +37,7 @@ public final class OneCrl {
 	private static final String SNAPSHOT_RESOURCE = "/onecrl.json.zst";
 	private static final Blocklist SNAPSHOT = loadBundledSnapshot();
 	private static volatile Blocklist live = SNAPSHOT;
+	private static final AtomicBoolean KEYING_FAILED = new AtomicBoolean();
 
 	private OneCrl() {}
 
@@ -49,12 +48,14 @@ public final class OneCrl {
 		});
 	}
 
-	/** True when the certificate is on the live list. A match error fails closed. */
+	/** True when the certificate is on the live list. A certificate that cannot be keyed fails closed, once. */
 	static boolean blocks(X509Certificate certificate) {
 		try {
 			return live.blocks(certificate);
-		} catch (Exception e) {
-			LOGGER.warn("OneCRL match failed; treating the certificate as blocked", e);
+		} catch (RuntimeException unkeyable) {
+			if (KEYING_FAILED.compareAndSet(false, true)) {
+				LOGGER.warn("Could not key a certificate for OneCRL and refused it; logged once per process", unkeyable);
+			}
 			return true;
 		}
 	}
@@ -99,12 +100,8 @@ public final class OneCrl {
 		return new Blocklist(Set.copyOf(issuerSerial), Set.copyOf(spkiHex));
 	}
 
-	static String issuerSerialKey(X509Certificate certificate) throws CertificateEncodingException {
-		try {
-			return issuerSerialKey(new JcaX509CertificateHolder(certificate).getIssuer().getEncoded(), certificate.getSerialNumber().toByteArray());
-		} catch (IOException e) {
-			throw new CertificateEncodingException("Cannot encode certificate issuer", e);
-		}
+	static String issuerSerialKey(X509Certificate certificate) {
+		return issuerSerialKey(certificate.getIssuerX500Principal().getEncoded(), certificate.getSerialNumber().toByteArray());
 	}
 
 	static String issuerSerialKey(byte[] issuerDer, byte[] serial) {
@@ -127,7 +124,7 @@ public final class OneCrl {
 	}
 
 	record Blocklist(Set<String> issuerSerial, Set<String> spkiHex) {
-		boolean blocks(X509Certificate certificate) throws CertificateEncodingException {
+		boolean blocks(X509Certificate certificate) {
 			return spkiHex.contains(OneCrl.spkiHex(certificate)) || issuerSerial.contains(issuerSerialKey(certificate));
 		}
 
