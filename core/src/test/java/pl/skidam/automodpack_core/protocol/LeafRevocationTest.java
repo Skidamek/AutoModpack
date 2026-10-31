@@ -211,6 +211,33 @@ class LeafRevocationTest {
 	}
 
 	@Test
+	void aStaleCopyThatStillSettlesAnswersWithoutHoldingTheConnection(@TempDir Path directory) throws Exception {
+		X509Certificate leaf = leaf(HTTP);
+		FetchCache cache = new FetchCache(directory);
+		serve(HTTP, crl(caKeys, Instant.now().plusSeconds(86_400), null));
+		assertEquals(Status.GOOD, check(leaf, cache));
+		age(directory);
+		served.put(HTTP, new Served(null, 5_000, null));
+		served.put(TLS, new Served(null, 5_000, null));
+		assertFast(Status.GOOD, () -> check(leaf, cache, Duration.ofMillis(200)));
+	}
+
+	@Test
+	void aRevocationFoundByTheRefreshEndsTheSessionThatAlreadyAccepted(@TempDir Path directory) throws Exception {
+		X509Certificate leaf = leaf(HTTP);
+		FetchCache cache = new FetchCache(directory);
+		serve(HTTP, crl(caKeys, Instant.now().plusSeconds(86_400), null));
+		assertEquals(Status.GOOD, check(leaf, cache));
+		age(directory);
+		serve(HTTP, crl(caKeys, Instant.now().plusSeconds(86_400), null, leaf.getSerialNumber()));
+		AtomicBoolean revoked = new AtomicBoolean();
+		assertEquals(Status.GOOD, check(leaf, cache, DEADLINE, () -> revoked.set(true)));
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (!revoked.get() && System.nanoTime() < deadline) Thread.sleep(25);
+		assertTrue(revoked.get(), "a revocation learned after the verdict ends the session");
+	}
+
+	@Test
 	void aCrlOlderThanTheCachedOneIsARollbackThatNeverWins(@TempDir Path directory) throws Exception {
 		X509Certificate leaf = leaf(HTTP);
 		FetchCache cache = new FetchCache(directory);
@@ -224,7 +251,18 @@ class LeafRevocationTest {
 		assertEquals(Status.REVOKED, check(leaf, cache), "an earlier thisUpdate and a lower CRL number both lose to the cached copy");
 
 		serve(TLS, crl(caKeys, issued.plusSeconds(300), BigInteger.valueOf(6), next, null));
-		assertEquals(Status.GOOD, check(leaf, cache), "the race goes on past the rollback to a newer CRL");
+		assertEquals(Status.REVOKED, check(leaf, cache), "a newer CRL that omits the entry cannot un-revoke the leaf");
+
+		Path rollbackDirectory = directory.resolve("rollback");
+		Files.createDirectories(rollbackDirectory);
+		FetchCache rollback = new FetchCache(rollbackDirectory);
+		X509Certificate unlisted = leaf(HTTP);
+		serve(HTTP, crl(caKeys, Instant.now(), BigInteger.valueOf(9), next, null));
+		assertEquals(Status.GOOD, check(unlisted, rollback));
+		age(rollbackDirectory);
+		serve(HTTP, crl(caKeys, issued.minusSeconds(3600), BigInteger.valueOf(8), next, null, unlisted.getSerialNumber()));
+		serve(TLS, crl(caKeys, issued, BigInteger.valueOf(7), next, null));
+		assertEquals(Status.GOOD, check(unlisted, rollback), "an older revoking CRL never wins over the cached newer one");
 	}
 
 	@Test
@@ -274,7 +312,11 @@ class LeafRevocationTest {
 	}
 
 	private Status check(X509Certificate leaf, FetchCache cache, Duration deadline) throws Exception {
-		return LeafRevocation.check(leaf, new X509Certificate[]{leaf, ca}, List.of(url(HTTP), url(TLS)), cache, deadline).get(10, TimeUnit.SECONDS);
+		return check(leaf, cache, deadline, () -> {});
+	}
+
+	private Status check(X509Certificate leaf, FetchCache cache, Duration deadline, Runnable onRevoked) throws Exception {
+		return LeafRevocation.check(leaf, new X509Certificate[]{leaf, ca}, List.of(url(HTTP), url(TLS)), cache, deadline, onRevoked).get(10, TimeUnit.SECONDS);
 	}
 
 	private interface Check {

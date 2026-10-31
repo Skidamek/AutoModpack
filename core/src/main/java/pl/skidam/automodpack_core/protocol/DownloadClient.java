@@ -62,7 +62,10 @@ public class DownloadClient implements PackTransport, HostTiles {
 
 	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, String secret, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, Route route) {
 		this.session = new TransportSession(connectionInfo.endpoint.getHostString());
-		this.lanes = new LanePool(session, new LaneConnector(connectionInfo, trustCallback, route), secret, connectionInfo.endpoint.getHostString() + ":" + connectionInfo.endpoint.getPort());
+		LaneConnector connector = new LaneConnector(connectionInfo, trustCallback, route);
+		this.lanes = new LanePool(session, connector, secret, connectionInfo.endpoint.getHostString() + ":" + connectionInfo.endpoint.getPort());
+		// A revocation the session learns after the handshake is final: the live lanes stop with it.
+		connector.sessionTrust().onRevoked(this::abortTransfers);
 	}
 
 	public static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, String secret,

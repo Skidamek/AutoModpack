@@ -7,4 +7,8 @@ public class UserRejectedCertificateException extends IOException {
 	public UserRejectedCertificateException() {
 		super("User rejected certificate");
 	}
+
+	public UserRejectedCertificateException(String message) {
+		super(message);
+	}
 }

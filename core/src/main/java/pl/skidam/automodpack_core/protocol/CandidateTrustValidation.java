@@ -87,6 +87,10 @@ public final class CandidateTrustValidation {
 	public static CompletableFuture<Void> validate(Candidate candidate) {
 		CustomizableTrustManager trustManager = candidate.trustManager();
 		CustomizableTrustManager.SessionTrust sessionTrust = candidate.sessionTrust();
+		if (sessionTrust.isRevoked()) {
+			closeQuietly(candidate.socket());
+			return CompletableFuture.failedFuture(revokedByCa());
+		}
 
 		// A resumed handshake never enters the trust manager, so it has no deferral: its certificate comes from the
 		// cached session, and it may only be the pin or the leaf the session already accepted. Anything else is a
@@ -131,6 +135,7 @@ public final class CandidateTrustValidation {
 	 * no authority covered; and whatever remains is the player's decision.
 	 */
 	private static CompletableFuture<Void> judge(Candidate candidate, X509Certificate certificate) {
+		if (candidate.sessionTrust().isRevoked()) return reject(candidate, revokedByCa());
 		if (candidate.sessionTrust().hasConfiguredPin()) {
 			// The leaf already differed from the pin when the handshake deferred it: the mismatch is final.
 			try {
@@ -146,7 +151,7 @@ public final class CandidateTrustValidation {
 		// revoked the leaf: a revocation is final, an undecidable one leaves the leaf to the record and the player, and a
 		// leaf naming no http CRL distribution point has no CRL to consult, so its vouch stands as it did before this check.
 		if (candidate.trustManager().getDeferredFailure(candidate.socket()) == null && leafCoversOrigin(certificate, candidate.originHost())) {
-			return LeafRevocation.check(certificate, peerChain(candidate)).thenCompose(status -> switch (status) {
+			return LeafRevocation.check(certificate, peerChain(candidate), candidate.sessionTrust()::revoke).thenCompose(status -> switch (status) {
 				case GOOD -> trustCaVouch(candidate, certificate);
 				case REVOKED -> reject(candidate, new CertificateException("The certificate for " + candidate.originHost() + " was revoked by its CA"));
 				case UNKNOWN -> {
@@ -156,6 +161,10 @@ public final class CandidateTrustValidation {
 			});
 		}
 		return recordOrPlayer(candidate, certificate);
+	}
+
+	private static UserRejectedCertificateException revokedByCa() {
+		return new UserRejectedCertificateException("The certificate was revoked by its CA");
 	}
 
 	private static CompletableFuture<Void> trustCaVouch(Candidate candidate, X509Certificate certificate) {

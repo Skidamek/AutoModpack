@@ -156,6 +156,10 @@ final class LaneConnector {
 		}
 	}
 
+	CustomizableTrustManager.SessionTrust sessionTrust() {
+		return sessionTrust;
+	}
+
 	private TlsCandidate openTlsCandidate() throws IOException {
 		Socket plainSocket = connectTransport();
 		SSLSocket tlsSocket = null;

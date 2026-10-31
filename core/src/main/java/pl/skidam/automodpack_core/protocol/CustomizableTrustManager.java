@@ -12,6 +12,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
@@ -24,6 +25,8 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 		private final String origin;
 		private volatile String configuredFingerprint;
 		private final AtomicReference<String> acceptedFingerprint = new AtomicReference<>();
+		private final AtomicBoolean revoked = new AtomicBoolean();
+		private volatile Runnable onRevoked;
 
 		public SessionTrust(String origin, String configuredFingerprint) {
 			this.origin = origin;
@@ -63,6 +66,21 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 		boolean acceptedMatches(X509Certificate[] chain) throws CertificateEncodingException {
 			String accepted = acceptedFingerprint.get();
 			return accepted != null && chain != null && chain.length > 0 && accepted.equals(getFingerprint(chain[0]));
+		}
+
+		/** A revocation learned after the handshake: the live lanes stop and no later handshake may pass. */
+		public void revoke() {
+			if (!revoked.compareAndSet(false, true)) return;
+			Runnable action = onRevoked;
+			if (action != null) action.run();
+		}
+
+		public boolean isRevoked() {
+			return revoked.get();
+		}
+
+		void onRevoked(Runnable action) {
+			onRevoked = action;
 		}
 
 		private String expectedFingerprint() {
