@@ -25,6 +25,7 @@ import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.client.ClientOfflineRepair;
+import pl.skidam.automodpack_core.client.LaunchApplyState;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.ModpackUtils;
 import pl.skidam.automodpack_core.client.SessionUpdateState;
@@ -458,20 +459,11 @@ final class InstalledModpackController {
 	}
 
 	boolean launchWritesUnverified(Pack pack) {
-		try {
-			return ConnectionStore.allowUnverifiedLaunchWrites(storage, pack.modpackId());
-		} catch (IOException e) {
-			LOGGER.warn("The launch-consent record of {} is unreadable; the checkbox shows refused", pack.modpackId(), e);
-			return false;
-		}
+		return LaunchApplyState.allowsUnverifiedLaunchWrites(storage, pack.modpackId());
 	}
 
 	void setLaunchWritesUnverified(Pack pack, boolean allowed) {
-		try {
-			ConnectionStore.saveAllowUnverifiedLaunchWrites(storage, pack.modpackId(), allowed);
-		} catch (IOException e) {
-			LOGGER.warn("The launch-consent record of {} could not be saved", pack.modpackId(), e);
-		}
+		LaunchApplyState.setAllowsUnverifiedLaunchWrites(storage, pack.modpackId(), allowed);
 	}
 
 	void openHistory(Pack pack, Runnable released) {

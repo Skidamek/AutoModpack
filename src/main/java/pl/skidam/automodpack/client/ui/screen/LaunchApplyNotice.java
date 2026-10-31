@@ -4,7 +4,7 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import net.minecraft.client.gui.screens.Screen;
 
-import pl.skidam.automodpack_core.auth.ConnectionStore;
+import pl.skidam.automodpack_core.client.LaunchApplyState;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 
@@ -32,9 +32,9 @@ public final class LaunchApplyNotice {
 				taken = true;
 				return null;
 			}
-			Long seq = ConnectionStore.takeUnseenLaunchApplySeq(storage, modpackId);
+			boolean unseen = LaunchApplyState.takeUnseenApply(storage, modpackId);
 			taken = true;
-			if (seq == null) return null;
+			if (!unseen) return null;
 			String name = modpackId;
 			try {
 				InstalledModpackController.Pack pack = new InstalledModpackController(storage).installedPack(modpackId);

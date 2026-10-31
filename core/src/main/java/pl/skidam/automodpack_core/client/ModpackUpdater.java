@@ -15,7 +15,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.client.RestartDecision.ApplyResult;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -429,31 +428,16 @@ public class ModpackUpdater implements AutoCloseable {
 	private boolean launchMayWriteUnverified(boolean applyFirstInstall) {
 		if (selectedTarget == null) return false;
 		if (applyFirstInstall) return true;
-		try {
-			return ConnectionStore.allowUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId());
-		} catch (IOException e) {
-			LOGGER.warn("The launch-consent record of {} is unreadable; launch applies keep refusing unverified jars", selectedTarget.manifest().modpackId(), e);
-			return false;
-		}
+		return LaunchApplyState.allowsUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId());
 	}
 
 	private void rememberLaunchConsent(boolean allowed) {
-		try {
-			ConnectionStore.saveAllowUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId(), allowed);
-		} catch (IOException e) {
-			LOGGER.warn("The launch-consent record of {} could not be saved", selectedTarget.manifest().modpackId(), e);
-		}
+		LaunchApplyState.setAllowsUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId(), allowed);
 	}
 
 	private void rememberLaunchApplyReceipt() {
 		if (!preload || changelogs.changedOrRemovedPaths().isEmpty() || selectedTarget == null) return;
-		var journal = changelogs.journal();
-		long seq = journal.isEmpty() ? 1L : journal.get(journal.size() - 1).seq();
-		try {
-			ConnectionStore.saveUnseenLaunchApplySeq(storage, selectedTarget.manifest().modpackId(), seq);
-		} catch (IOException e) {
-			LOGGER.warn("The launch-apply receipt of {} could not be saved", selectedTarget.manifest().modpackId(), e);
-		}
+		LaunchApplyState.recordUnseenApply(storage, selectedTarget.manifest().modpackId());
 	}
 
 	/** Launch apply's close handling: hot-load the active projection when preloading, then close. */
@@ -664,22 +648,13 @@ public class ModpackUpdater implements AutoCloseable {
 	/** The pack's durable launch consent, as the screens' checkbox should show it; nothing resolved reads as refused. */
 	public boolean launchWritesUnverified() {
 		if (selectedTarget == null || serverModpackContent == null) return false;
-		try {
-			return ConnectionStore.allowUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId());
-		} catch (IOException e) {
-			LOGGER.warn("The launch-consent record of {} is unreadable; the checkbox shows refused", selectedTarget.manifest().modpackId(), e);
-			return false;
-		}
+		return LaunchApplyState.allowsUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId());
 	}
 
 	/** The confirm screens' checkbox writes the consent the moment it moves, in either direction. */
 	public void setLaunchWritesUnverified(boolean allowed) {
 		if (selectedTarget == null || serverModpackContent == null) return;
-		try {
-			ConnectionStore.saveAllowUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId(), allowed);
-		} catch (IOException e) {
-			LOGGER.warn("The launch-consent record of {} could not be saved", selectedTarget.manifest().modpackId(), e);
-		}
+		LaunchApplyState.setAllowsUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId(), allowed);
 	}
 
 	/** Wraps a reviewable plan with this engine's review backing; the unverified-jar gate is precomputed, mode-gated. */
