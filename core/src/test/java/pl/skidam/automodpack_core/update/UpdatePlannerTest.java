@@ -100,6 +100,34 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void packSwitchConsentPreservesAndRemovesAnObservedLocalMod() {
+		String path = "mods/local.jar";
+		FileState local = new FileState(OLD_HASH, 8, true);
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, path), local);
+		ModpackJsons.ModpackContentFields installed = packManifest("oldpack", Map.of());
+		ModpackJsons.ModpackContentFields target = packManifest("newpack", Map.of());
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of(path, local)));
+
+		assertEquals(List.of(new Preservation(Root.GAME_DIR, path, OLD_HASH, 8, PreservationProof.PLAYER_CONSENT)), plan.preservations());
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(path)
+				&& operation.operation() == OperationType.DELETE && OLD_HASH.equals(operation.expectedExistingHash())));
+	}
+
+	@Test
+	void consentForTheInstalledPacksOwnUpdateIsRejected() {
+		String path = "mods/local.jar";
+		FileState local = new FileState(OLD_HASH, 8, true);
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, path), local);
+		ModpackJsons.ModpackContentFields installed = packManifest("abc1234", Map.of());
+		ModpackJsons.ModpackContentFields target = packManifest("abc1234", Map.of());
+
+		assertThrows(IllegalArgumentException.class, () -> new UpdatePlanner.Input(installed, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of(path, local)));
+	}
+
+	@Test
 	void pinnedLiveJarIsNotDeletedOnSameIdDuplicate() {
 		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
 		config.pinnedModIds = List.of("sodium");

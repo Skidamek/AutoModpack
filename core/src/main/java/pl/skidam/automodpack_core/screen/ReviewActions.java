@@ -13,6 +13,6 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
  * screen vocabulary (is the review still open, was it cancelled, is a preview being reviewed right now) rather than
  * in engine states.
  */
-public record ReviewActions(Consumer<Boolean> setFirstInstallLocalModCleanup, Runnable startConfirmedUpdate, Consumer<SelectionIntent> reselectAndPreview,
-		Consumer<Boolean> setLaunchWritesUnverified, Runnable cancelConfirmation, Runnable cancelFromPlayer, BooleanSupplier reviewActive, BooleanSupplier reviewCancelled,
-		BooleanSupplier cancelledByPlayer, BooleanSupplier reviewPreviewing, Supplier<SourceAvailability> sourceAvailability) {}
+public record ReviewActions(Consumer<Boolean> setFirstInstallLocalModCleanup, Consumer<Boolean> setLocalModCleanup, BooleanSupplier localModArchive, Runnable startConfirmedUpdate,
+		Consumer<SelectionIntent> reselectAndPreview, Consumer<Boolean> setLaunchWritesUnverified, Runnable cancelConfirmation, Runnable cancelFromPlayer, BooleanSupplier reviewActive,
+		BooleanSupplier reviewCancelled, BooleanSupplier cancelledByPlayer, BooleanSupplier reviewPreviewing, Supplier<SourceAvailability> sourceAvailability) {}

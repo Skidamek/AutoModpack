@@ -168,6 +168,106 @@ flow:
   - do: screenshot
     name: capture the pack still installed and detached after instance restore
     file: state-history-restored-detached
+  - do: click
+    name: return to the pack manager
+    select: { key: automodpack.back }
+  - do: wait_for
+    name: show the pack manager again
+    timeout: 20s
+    until: { screen: InstalledModpacksScreen }
+  - do: click
+    name: reopen the state history
+    select: { key: automodpack.management.stateHistory }
+  - do: wait_for
+    name: wait for the timeline again
+    timeout: 20s
+    until: { screen: StateHistoryScreen }
+  - do: click
+    name: select the pre-install snapshot at the bottom of the timeline
+    select: { text: "Your files before a change", index: -1 }
+  - do: wait_for
+    name: wait for the pre-install restore to unlock
+    timeout: 30s
+    until: { element: { key: automodpack.stateHistory.restore, enabled: true } }
+  - do: click
+    name: arm the pre-install restore
+    select: { key: automodpack.stateHistory.restore }
+  - do: wait_for
+    name: show the armed pre-install restore
+    timeout: 20s
+    until: { element: { key: automodpack.stateHistory.restoreArmed, enabled: true } }
+  - do: click
+    name: restore the pre-install snapshot
+    select: { key: automodpack.stateHistory.restoreArmed }
+  - do: wait_for
+    name: show the offered restart after the pre-install restore
+    timeout: 20s
+    until: { screen: RestartScreen }
+  - do: click
+    name: decline the restart
+    select: { key: automodpack.restart.cancel }
+  - do: wait_for
+    name: wait for the multiplayer hub after the pre-install restore
+    timeout: 20s
+    until: { screen: Play Multiplayer }
+  - use: open_pack_manager
+  - do: wait_for
+    name: show the pack still claimed after the pre-install restore
+    timeout: 20s
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: amp-autotest }
+  - do: click
+    name: open the claimed pack without an active pointer
+    select: { text: amp-autotest }
+  - do: wait_for
+    name: show activate because the pre-install restore cleared the active pointer
+    timeout: 20s
+    until:
+      all:
+        - screen: ModpackSettingsScreen
+        - element: { key: automodpack.management.activate, enabled: true }
+  - do: screenshot
+    name: capture the claimed but inactive pack after the pre-install restore
+    file: state-history-preinstall-inactive
+  - do: seed_unowned_local_file
+    name: seed a local mod the reopen review must ask about
+    path: mods/local-unowned.jar
+    fixture: { modId: amp_local_unowned, version: "9.9.9-local", marker: local-universe }
+  - do: click
+    name: activate the claimed pack again
+    select: { key: automodpack.management.activate }
+  - do: wait_for
+    name: show the pack-change review with the local mod checkbox
+    timeout: 90s
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: "Keep 1 existing mod files", enabled: true }
+  - do: screenshot
+    name: capture the reopen review asking about the local mod
+    file: state-history-preinstall-local-mod
+  - do: click
+    name: keep the local mod and switch
+    select: { key: automodpack.update.apply }
+  - do: wait_for
+    name: show the restart after the switch
+    timeout: 90s
+    until: { screen: RestartScreen }
+  - do: click
+    name: restart onto the switched pack
+    select: { text: "Yes, close the game" }
+  - do: wait_client_exit
+    name: wait for the switched client to exit
+  - do: launch_client
+    name: relaunch the switched client
+  - do: wait_bridge
+    name: wait for the relaunched bridge
+  - do: assert_mod_fixture
+    name: verify the kept local mod survived the switch
+    path: mods/local-unowned.jar
+    fixture: { modId: amp_local_unowned, version: "9.9.9-local", marker: local-universe }
   - do: quit
     name: quit the client
 

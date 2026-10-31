@@ -233,7 +233,7 @@ class ClientStateJournalTest {
 	}
 
 	@Test
-	void checkoutKeepsTheLoadedPackAndDetaches() throws Exception {
+	void checkoutClearsThePointerForAPreInstallSnapshotAndKeepsTheClaim() throws Exception {
 		ClientStorage storage = storage();
 		byte[] currentBytes = "current".getBytes(StandardCharsets.UTF_8);
 		String currentHash = HashUtils.sha1(currentBytes);
@@ -261,12 +261,13 @@ class ClientStateJournalTest {
 
 		StateHistory.CheckoutResult result = StateHistory.checkout(storage, 1);
 
+		// A pre-install tree ran no pack, so the pointer must not claim one; the claim itself is consent and survives.
 		assertEquals("abc1234", storage.selectedModpackId());
-		assertEquals("abc1234", storage.readActiveState().modpackId);
-		assertTrue(storage.readActiveState().detached);
+		assertNull(storage.readActiveState());
 		assertEquals(selection, new ClientSelectionStore(storage.selectionFile()).get("abc1234").orElseThrow());
 		assertFalse(Files.exists(projected));
 		assertEquals(RestartDemand.REQUIRED, result.restartDemand());
+		assertEquals(Kind.RESTORE, ClientStateJournal.open(storage).head().kind());
 		assertEquals(StateHistory.Restorability.CURRENT, StateHistory.views(storage).get(0).restorability());
 	}
 
@@ -301,6 +302,93 @@ class ClientStateJournalTest {
 		assertFalse(ImmutableFiles.isProtected(projected));
 		Files.writeString(projected, "edited", StandardCharsets.UTF_8);
 		assertEquals("mod", Files.readString(object, StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void checkoutPointsAtThePackTheSnapshotRanAndKeepsBothClaims() throws Exception {
+		ClientStorage storage = storage();
+		byte[] aBytes = "a".getBytes(StandardCharsets.UTF_8);
+		byte[] bBytes = "b".getBytes(StandardCharsets.UTF_8);
+		String aHash = HashUtils.sha1(aBytes);
+		String bHash = HashUtils.sha1(bBytes);
+		ClientObjectStore.storeObject(storage, aHash, aBytes);
+		ClientObjectStore.storeObject(storage, bHash, bBytes);
+		GroupManifest aManifest = TestPacks.manifest("pack a", "mods/a.jar", "a");
+		PackDocument aDocument = TestPacks.document(aManifest);
+		TestPacks.stageGeneration(storage, aDocument);
+		GroupManifest.GroupFile bMod = new GroupManifest.GroupFile(bBytes.length, false, bHash, null);
+		GroupManifest.Group bGroup = new GroupManifest.Group("", "pack b", "General", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Set.of(), Map.of("mods/b.jar", bMod));
+		GroupManifest bManifest = new GroupManifest("def5678", "pack b", "", "", "", "", Map.of("main", bGroup));
+		PackDocument bDocument = TestPacks.document(bManifest);
+		TestPacks.stageGeneration(storage, bDocument);
+		SelectionIntent aSelection = new SelectionIntent(Set.of("main"));
+		SelectionIntent bSelection = new SelectionIntent(Set.of("main"));
+		new ClientSelectionStore(storage.selectionFile()).put("abc1234", aSelection);
+		new ClientSelectionStore(storage.selectionFile()).put("def5678", bSelection);
+		storage.writeActiveState(bDocument, bSelection);
+		storage.writeSelectedModpackId("def5678");
+		InstanceTree aTree = InstanceTree.of(new LiveIdentity("abc1234", aDocument.contentToken(), false, aSelection, List.of()),
+				List.of(new TrackedFile(Root.PROJECTION, "", "mods/a.jar", aHash, aBytes.length)));
+		InstanceTree bTree = InstanceTree.of(new LiveIdentity("def5678", bDocument.contentToken(), false, bSelection, List.of()),
+				List.of(new TrackedFile(Root.PROJECTION, "", "mods/b.jar", bHash, bBytes.length)));
+		aTree.write(storage);
+		bTree.write(storage);
+		ClientStateJournal journal = ClientStateJournal.open(storage);
+		journal.append(bTree.sha1(), Kind.INSTALL, "def5678", "install-b");
+		journal.append(aTree.sha1(), Kind.INSTALL, "abc1234", "install-a");
+
+		StateHistory.checkout(storage, 2);
+
+		assertEquals("abc1234", storage.readActiveState().modpackId);
+		assertEquals(aDocument.contentToken(), storage.readActiveState().contentToken);
+		assertTrue(storage.readActiveState().detached);
+		assertEquals("def5678", storage.selectedModpackId());
+		assertEquals(aSelection, new ClientSelectionStore(storage.selectionFile()).get("abc1234").orElseThrow());
+		assertEquals(bSelection, new ClientSelectionStore(storage.selectionFile()).get("def5678").orElseThrow());
+		assertEquals("a", Files.readString(storage.activePath("mods/a.jar"), StandardCharsets.UTF_8));
+		assertEquals("abc1234", ClientStateJournal.open(storage).head().modpackId());
+	}
+
+	@Test
+	void checkoutPointsAtTheOlderGenerationTheSnapshotRan() throws Exception {
+		ClientStorage storage = storage();
+		byte[] one = "one".getBytes(StandardCharsets.UTF_8);
+		byte[] two = "two".getBytes(StandardCharsets.UTF_8);
+		String oneHash = HashUtils.sha1(one);
+		String twoHash = HashUtils.sha1(two);
+		ClientObjectStore.storeObject(storage, oneHash, one);
+		ClientObjectStore.storeObject(storage, twoHash, two);
+		GroupManifest v1Manifest = TestPacks.manifest("generation one", "mods/test.jar", "one");
+		PackDocument v1 = TestPacks.document(v1Manifest);
+		GroupManifest.GroupFile v2Mod = new GroupManifest.GroupFile(two.length, false, twoHash, null);
+		GroupManifest.Group v2Group = new GroupManifest.Group("", "generation two", "General", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Set.of(), Map.of("mods/test.jar", v2Mod));
+		GroupManifest v2Manifest = new GroupManifest("abc1234", "generation two", "", "", "", "", Map.of("main", v2Group));
+		PackDocument v2 = TestPacks.document(v2Manifest);
+		TestPacks.stageGeneration(storage, v1);
+		TestPacks.stageGeneration(storage, v2);
+		SelectionIntent selection = new SelectionIntent(Set.of("main"));
+		new ClientSelectionStore(storage.selectionFile()).put("abc1234", selection);
+		storage.writeActiveState(v2, selection);
+		storage.writeSelectedModpackId("abc1234");
+		Path projected = storage.activePath("mods/test.jar");
+		Files.createDirectories(projected.getParent());
+		Files.write(projected, two);
+		InstanceTree v1Tree = InstanceTree.of(new LiveIdentity("abc1234", v1.contentToken(), false, selection, List.of()),
+				List.of(new TrackedFile(Root.PROJECTION, "", "mods/test.jar", oneHash, one.length)));
+		InstanceTree v2Tree = InstanceTree.of(new LiveIdentity("abc1234", v2.contentToken(), false, selection, List.of()),
+				List.of(new TrackedFile(Root.PROJECTION, "", "mods/test.jar", twoHash, two.length)));
+		v1Tree.write(storage);
+		v2Tree.write(storage);
+		ClientStateJournal journal = ClientStateJournal.open(storage);
+		journal.append(v1Tree.sha1(), Kind.INSTALL, "abc1234", "install");
+		journal.append(v2Tree.sha1(), Kind.UPDATE, "abc1234", "update");
+
+		StateHistory.checkout(storage, 1);
+
+		assertEquals("abc1234", storage.readActiveState().modpackId);
+		assertEquals(v1.contentToken(), storage.readActiveState().contentToken);
+		assertTrue(storage.readActiveState().detached);
+		assertEquals("one", Files.readString(projected, StandardCharsets.UTF_8));
 	}
 
 	@Test

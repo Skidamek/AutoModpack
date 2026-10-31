@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.client;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.MC_VERSION;
+import static pl.skidam.automodpack_core.Constants.THIS_MOD_JAR;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -28,6 +29,7 @@ import pl.skidam.automodpack_core.loader.GeneratedBundle;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.loader.NestedConflicts;
+import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
@@ -118,9 +120,11 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	record PreparedPlan(UpdatePlan plan, Map<UpdatePlan.FileKey, UpdatePlan.FileState> originalFiles, String overlayDigest, PlannedAgainst plannedAgainst) {
+	record PreparedPlan(UpdatePlan plan, Map<UpdatePlan.FileKey, UpdatePlan.FileState> originalFiles, Map<String, UpdatePlan.FileState> unownedLocalMods, String overlayDigest,
+			PlannedAgainst plannedAgainst) {
 		PreparedPlan {
 			originalFiles = Map.copyOf(originalFiles);
+			unownedLocalMods = Map.copyOf(unownedLocalMods);
 			if (!HashUtils.isCanonicalSha1(overlayDigest)) throw new IllegalArgumentException("Prepared overlay digest is invalid");
 			plannedAgainst = Objects.requireNonNull(plannedAgainst, "plannedAgainst");
 		}
@@ -169,8 +173,50 @@ final class ClientUpdatePlanBuilder {
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, input.target(), files, forceCopyServices, targetMods, standardMods,
 				previousCopies, nestedCandidates, selection, plannedConfig, input.consentedLocalModFiles(), projection.owed())).withPlannedSelectedModpackId(input.target().modpackId);
-		return new PreparedPlan(withSwitchConsequences(plan, LauncherVersionSwapper.Versions.advertisedBy(input.target()), projection, logicalConfig.syncVersions), files, targetOverlay.digest(),
+		UpdatePlan planned = withSwitchConsequences(plan, LauncherVersionSwapper.Versions.advertisedBy(input.target()), projection, logicalConfig.syncVersions);
+		return new PreparedPlan(planned, files, unownedLocalMods(installed, files, planned, standardMods, input.currentConfig()), targetOverlay.digest(),
 				new PlannedAgainst(expectedClientConfig, expectedSelectedModpackId, installed == null ? null : installed.ownershipLedger));
+	}
+
+	/**
+	 * Local mod files a pack change leaves untouched: direct children of the mods folder that the plan neither removes
+	 * nor rewrites, that the outgoing pack's ledger does not prove it owns, that are not client-wide pinned, and that
+	 * are not this running jar. The review asks about exactly these; an ordinary update of the same pack has none
+	 * because its own files are either replaced by the plan or already owned.
+	 */
+	private Map<String, UpdatePlan.FileState> unownedLocalMods(ModpackJsons.ModpackContentFields installed, Map<UpdatePlan.FileKey, UpdatePlan.FileState> files,
+			UpdatePlan plan, List<UpdatePlan.ModInfo> standardMods, ClientConfigJsons.ClientConfigFieldsV3 config) {
+		if (installed != null && plan.modpackId().equals(installed.modpackId)) return Map.of();
+		OwnershipLedger ledger = installed == null || installed.ownershipLedger == null ? null : OwnershipLedger.fromFields(installed.ownershipLedger);
+		Set<String> pinned = PinnedMods.index(config == null ? List.of() : config.pinnedModIds);
+		Map<String, UpdatePlan.ModInfo> modsByPath = new HashMap<>();
+		for (UpdatePlan.ModInfo mod : standardMods) modsByPath.put(mod.relativePath(), mod);
+		Map<UpdatePlan.FileKey, UpdatePlan.ProjectedFile> finalState = new HashMap<>();
+		for (UpdatePlan.ProjectedFile projected : plan.projectedFinalState()) finalState.put(new UpdatePlan.FileKey(projected.root(), projected.relativePath()), projected);
+		Path runningJar = THIS_MOD_JAR == null ? null : THIS_MOD_JAR.toAbsolutePath().normalize();
+		Map<String, UpdatePlan.FileState> unowned = new TreeMap<>();
+		for (var entry : files.entrySet()) {
+			UpdatePlan.FileKey key = entry.getKey();
+			if (key.root() != UpdatePlan.Root.GAME_DIR) continue;
+			String relative = key.relativePath();
+			Path relativePath = Path.of(relative);
+			if (relativePath.getNameCount() != 2 || !relativePath.getName(0).toString().equals(ModpackPathPolicy.MODS_ROOT)) continue;
+			if (runningJar != null && storage.gamePath(relative).toAbsolutePath().normalize().equals(runningJar)) continue;
+			UpdatePlan.FileState observed = entry.getValue();
+			UpdatePlan.ProjectedFile projected = finalState.get(key);
+			if (projected == null || !projected.present() || projected.expectedSize() != observed.size() || !projected.expectedHash().equalsIgnoreCase(observed.sha1())) continue;
+			UpdatePlan.ModInfo mod = modsByPath.get(relative);
+			if (mod != null && PinnedMods.matches(pinned, mod.ids())) continue;
+			if (ownedBy(ledger, relative, observed)) continue;
+			unowned.put(relative, observed);
+		}
+		return Collections.unmodifiableMap(unowned);
+	}
+
+	private static boolean ownedBy(OwnershipLedger ledger, String relative, UpdatePlan.FileState observed) {
+		if (ledger == null) return false;
+		OwnershipLedger.Entry entry = ledger.entries().get(relative);
+		return entry != null && entry.historicalHashes().contains(new OwnershipLedger.Content(observed.sha1().toLowerCase(Locale.ROOT), observed.size()));
 	}
 
 	/**

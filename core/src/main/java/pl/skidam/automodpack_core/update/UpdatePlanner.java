@@ -55,8 +55,8 @@ public final class UpdatePlanner {
 			Map<String, FileState> consentedLocalModFiles,
 			Owed owed) {
 		public Input {
-			if (installedManifest != null && consentedLocalModFiles != null && !consentedLocalModFiles.isEmpty())
-				throw new IllegalArgumentException("First-install consent cannot be used after a modpack is installed");
+			if (installedManifest != null && installedManifest.modpackId.equals(targetManifest.modpackId) && consentedLocalModFiles != null && !consentedLocalModFiles.isEmpty())
+				throw new IllegalArgumentException("Local-mod consent cannot be used for the installed pack's own update");
 			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
 			forceCopyServicePaths = Collections.unmodifiableSet(new LinkedHashSet<>(forceCopyServicePaths));
 			targetMods = List.copyOf(targetMods);
@@ -378,8 +378,8 @@ public final class UpdatePlanner {
 	}
 
 	private static void planConsentedLocalMods(Input input, Map<String, ModInfo> standardModsByPath, PlanningSession session) {
-		if (input.installedManifest() != null) {
-			if (!input.consentedLocalModFiles().isEmpty()) throw new IllegalArgumentException("First-install consent cannot be used after a modpack is installed");
+		if (input.installedManifest() != null && input.installedManifest().modpackId.equals(input.targetManifest().modpackId)) {
+			if (!input.consentedLocalModFiles().isEmpty()) throw new IllegalArgumentException("Local-mod consent cannot be used for the installed pack's own update");
 			return;
 		}
 		if (input.consentedLocalModFiles().isEmpty()) return;

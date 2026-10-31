@@ -49,6 +49,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private boolean finished;
 	private int titleTop;
 	private CheckboxWidget launchWritesCheckbox;
+	private CheckboxWidget localModsCheckbox;
 
 	public UpdatePreviewScreen(Screen parent, PreviewPayload payload) {
 		super(VersionedText.text(titleKey(payload.preview().mode())));
@@ -71,19 +72,37 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		List<ActionRow> rows = buildRows();
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
 		List<MutableComponent> body = buildBodyLines();
+		localModsCheckbox = null;
+		if (showsLocalModsCheckbox()) {
+			localModsCheckbox = new CheckboxWidget(this.font, 0, 0, panelWidth(PANEL_WIDTH), PackConfirmCopy.leftoverLabel(preview.unownedLocalMods().size()),
+					!actions.localModArchive().getAsBoolean(), value -> actions.setLocalModCleanup().accept(!value));
+			String joined = String.join("\n", wrapToWidth(this.font, String.join(", ", preview.unownedLocalMods()), 240, 8));
+			VersionedScreen.setTooltip(localModsCheckbox, VersionedText.text("automodpack.confirm.leftoverTooltip", joined));
+			this.addRenderableWidget(localModsCheckbox);
+		}
 		launchWritesCheckbox = null;
 		if (showsLaunchWritesCheckbox()) {
 			launchWritesCheckbox = new CheckboxWidget(this.font, 0, 0, panelWidth(PANEL_WIDTH), PackConfirmCopy.launchWritesLabel(), launchWrites, value -> actions.setLaunchWritesUnverified().accept(value));
 			this.addRenderableWidget(launchWritesCheckbox);
 		}
-		int stack = launchWritesCheckbox == null ? 0 : ActionAreaLayout.SEAM + launchWritesCheckbox.boxHeight();
+		int stack = 0;
+		if (launchWritesCheckbox != null) stack += ActionAreaLayout.SEAM + launchWritesCheckbox.boxHeight();
+		if (localModsCheckbox != null) stack += ActionAreaLayout.SEAM + localModsCheckbox.boxHeight();
 		// The origin takes the third header line when it is known, so the pack name always names its server.
 		int headerLines = origin.isBlank() ? 2 : 3;
 		DialogLayout layout = layoutDialogWithActions(28, headerLines * LINE_HEIGHT, body.size() * LINE_HEIGHT, stack, rowArray);
 		this.titleTop = layout.titleTop();
 		List<AbstractWidget> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 		setTooltip(buttons.get(buttons.size() - 2), ChangeSummary.diffLegend());
-		if (launchWritesCheckbox != null) launchWritesCheckbox.moveTo(panelLeft(PANEL_WIDTH), layout.actionsTop() - ActionAreaLayout.SEAM - launchWritesCheckbox.boxHeight());
+		int nextTop = layout.actionsTop();
+		if (launchWritesCheckbox != null) {
+			nextTop -= ActionAreaLayout.SEAM + launchWritesCheckbox.boxHeight();
+			launchWritesCheckbox.centerIn(panelLeft(PANEL_WIDTH), panelWidth(PANEL_WIDTH), nextTop);
+		}
+		if (localModsCheckbox != null) {
+			nextTop -= ActionAreaLayout.SEAM + localModsCheckbox.boxHeight();
+			localModsCheckbox.centerIn(panelLeft(PANEL_WIDTH), panelWidth(PANEL_WIDTH), nextTop);
+		}
 		this.addCenteredScrollBody(PANEL_WIDTH, layout.column().bodyTop(), layout.column().bodyBottom(), body);
 	}
 
@@ -101,6 +120,11 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 
 	private boolean showsLaunchWritesCheckbox() {
 		return (mode == UpdatePreview.Mode.UPDATE || mode == UpdatePreview.Mode.ROLLBACK) && actions != null && target != null;
+	}
+
+	/** A pack change that would leave the player's own mod files in place asks about them once, here. */
+	private boolean showsLocalModsCheckbox() {
+		return mode == UpdatePreview.Mode.UPDATE && actions != null && !preview.unownedLocalMods().isEmpty();
 	}
 
 	private boolean canCustomize() {

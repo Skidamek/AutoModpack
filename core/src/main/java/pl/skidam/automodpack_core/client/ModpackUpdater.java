@@ -174,6 +174,7 @@ public class ModpackUpdater implements AutoCloseable {
 	 */
 	UpdatePreview previewInstalledSwitch() throws Exception {
 		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Installed modpack target is unavailable");
+		review.resetLocalModCleanup();
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
 		boolean projectionPresent = active != null && Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS);
 		SelectionIntent applied = new ClientGenerationStore(storage).appliedSelection(active == null ? selectedTarget.manifest().modpackId() : active.modpackId).orElse(null);
@@ -191,6 +192,8 @@ public class ModpackUpdater implements AutoCloseable {
 	void applyInstalledSwitch() throws Exception {
 		UpdateAttempt current = attempt.get();
 		if (!(current instanceof UpdateSession switchPlan) || selectedTarget == null) throw new IllegalStateException("Installed modpack switch was not prepared");
+		// The preview's checkbox is the consent for the local mods that would otherwise stay beside the new pack.
+		switchPlan.applyLocalModConsent(review.localModArchive());
 		// The confirm click that reached this action is the review's consent; commit itself refuses an unapproved plan.
 		switchPlan.approve();
 		// The switch flow reports its failure through its own caller, so its failure handling carries the failure out of the harness.

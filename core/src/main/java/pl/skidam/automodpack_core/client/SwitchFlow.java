@@ -80,10 +80,11 @@ public final class SwitchFlow {
 		}
 		if (forcedMode != null) preview = preview.withMode(forcedMode);
 		boolean writesUnverifiedJar = (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && updater.planWritesUnverifiedJar(preview.plan());
-		// The save already consented to a selection switch, so the only thing worth an interposing screen is a plan
-		// that writes jars nobody vouched for; every other switch applies straight through, and the restart screen -
-		// whose buttons only pick when the game reloads - is the one screen a demanding change may still show.
-		if (!rollback && !writesUnverifiedJar) {
+		// The save already consented to a selection switch, so the only things worth an interposing screen are jars
+		// nobody vouched for and local mods the switch would leave beside the new pack; every other switch applies
+		// straight through, and the restart screen - whose buttons only pick when the game reloads - is the one screen
+		// a demanding change may still show.
+		if (!rollback && !writesUnverifiedJar && preview.unownedLocalMods().isEmpty()) {
 			apply(updater, release, false);
 			return;
 		}

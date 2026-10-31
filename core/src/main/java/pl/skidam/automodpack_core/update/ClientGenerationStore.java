@@ -441,6 +441,15 @@ public final class ClientGenerationStore {
 		if (!wasDetached) LOGGER.info("Modpack {} is detached: every file stays as it is and server updates stop until you resume syncing", modpackId);
 	}
 
+	/**
+	 * Makes the active projection editable without touching the pointer: each file that still shares its inode with a
+	 * CAS object gets a private copy first, then the read-only policy drops. Timeline restore publishes a generation and
+	 * then calls this, so the restored files behave like any other detached pack's files.
+	 */
+	public void makeProjectionEditable() throws IOException {
+		unprotectProjection();
+	}
+
 	private void unprotectProjection() throws IOException {
 		Path active = storage.activeDirectory();
 		if (!Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) return;

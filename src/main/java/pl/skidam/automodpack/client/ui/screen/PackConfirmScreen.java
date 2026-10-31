@@ -256,17 +256,17 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private int pinConsentCheckboxes(int bottomY) {
 		int nextBottom = bottomY;
 		if (ackCheckbox != null) {
-			ackCheckbox.moveTo(panelLeft(BODY), nextBottom - ackCheckbox.boxHeight());
+			ackCheckbox.centerIn(panelLeft(BODY), panelWidth(BODY), nextBottom - ackCheckbox.boxHeight());
 			// The reason sits between the ack and whatever is stacked above it.
 			ackReasonY = ackCheckbox.yPosition() - 11;
 			nextBottom = ackCheckbox.yPosition() - 20;
 		}
 		if (launchWritesCheckbox != null) {
-			launchWritesCheckbox.moveTo(panelLeft(BODY), nextBottom - launchWritesCheckbox.boxHeight());
+			launchWritesCheckbox.centerIn(panelLeft(BODY), panelWidth(BODY), nextBottom - launchWritesCheckbox.boxHeight());
 			nextBottom = launchWritesCheckbox.yPosition() - ActionAreaLayout.SEAM;
 		}
 		if (leftoverCheckbox != null) {
-			leftoverCheckbox.moveTo(panelLeft(BODY), nextBottom - leftoverCheckbox.boxHeight());
+			leftoverCheckbox.centerIn(panelLeft(BODY), panelWidth(BODY), nextBottom - leftoverCheckbox.boxHeight());
 			nextBottom = leftoverCheckbox.yPosition() - ActionAreaLayout.SEAM;
 		}
 		return nextBottom;
@@ -293,11 +293,11 @@ public final class PackConfirmScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.sharedCommands(), wrapWidth, ChatFormatting.YELLOW));
 		int bodyFooter = footerTop;
 		if (launchWritesCheckbox != null) {
-			launchWritesCheckbox.moveTo(panelLeft(BODY), bodyFooter - ActionAreaLayout.SEAM - launchWritesCheckbox.boxHeight());
+			launchWritesCheckbox.centerIn(panelLeft(BODY), panelWidth(BODY), bodyFooter - ActionAreaLayout.SEAM - launchWritesCheckbox.boxHeight());
 			bodyFooter = launchWritesCheckbox.yPosition();
 		}
 		if (leftoverCheckbox != null) {
-			leftoverCheckbox.moveTo(panelLeft(BODY), bodyFooter - ActionAreaLayout.SEAM - leftoverCheckbox.boxHeight());
+			leftoverCheckbox.centerIn(panelLeft(BODY), panelWidth(BODY), bodyFooter - ActionAreaLayout.SEAM - leftoverCheckbox.boxHeight());
 			bodyFooter = leftoverCheckbox.yPosition();
 		}
 		DialogColumn column = layoutDialogColumn(42, bodyFooter, lines.size() * LINE_HEIGHT, 0);
@@ -335,7 +335,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 		y += topHeight;
 		if (leftoverCheckbox != null) {
 			y += ActionAreaLayout.SEAM;
-			leftoverCheckbox.moveTo(panelLeft(BODY), y);
+			leftoverCheckbox.centerIn(panelLeft(BODY), panelWidth(BODY), y);
 			y += leftoverCheckbox.boxHeight();
 		}
 		y += ActionAreaLayout.SEAM;
@@ -345,12 +345,12 @@ public final class PackConfirmScreen extends VersionedScreen {
 		y += bottomHeight;
 		if (launchWritesCheckbox != null) {
 			y += ActionAreaLayout.SEAM;
-			launchWritesCheckbox.moveTo(panelLeft(BODY), y);
+			launchWritesCheckbox.centerIn(panelLeft(BODY), panelWidth(BODY), y);
 			y += launchWritesCheckbox.boxHeight();
 		}
 		if (ackCheckbox != null) {
 			y += ActionAreaLayout.SEAM;
-			ackCheckbox.moveTo(panelLeft(BODY), y);
+			ackCheckbox.centerIn(panelLeft(BODY), panelWidth(BODY), y);
 			ackReasonY = y + ackCheckbox.boxHeight() + 2;
 		}
 	}

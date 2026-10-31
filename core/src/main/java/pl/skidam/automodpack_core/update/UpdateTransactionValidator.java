@@ -392,7 +392,7 @@ final class UpdateTransactionValidator {
 			if (preservation.proof() == PreservationProof.PLAYER_CONSENT) {
 				if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE
 						|| Path.of(relative).getNameCount() != 2 || !Path.of(relative).getName(0).toString().equals(ModpackPathPolicy.MODS_ROOT))
-					throw new IOException("Player-consent preservation is restricted to direct mods files on first install");
+					throw new IOException("Player-consent preservation is restricted to direct mods files when the pack changes");
 				Operation deletion = transaction.plan().operations().stream().filter(operation -> operation.root() == Root.GAME_DIR
 						&& operation.operation() == OperationType.DELETE && relative.equals(operation.relativePath())).findFirst().orElse(null);
 				Operation installation = transaction.plan().operations().stream().filter(operation -> operation.root() == Root.GAME_DIR
@@ -401,8 +401,11 @@ final class UpdateTransactionValidator {
 				boolean replaceProof = installation != null && installation.expectedExistingHash() != null
 						&& preservation.expectedHash().equalsIgnoreCase(installation.expectedExistingHash());
 				if (!deleteProof && !replaceProof) throw new IOException("Player-consent preservation has no matching hash-pinned operation");
-				if (activeState != null && !(activeState.modpackId.equals(transaction.plan().modpackId()) && activeState.contentToken.equals(transaction.plan().packTarget().contentToken())))
-					throw new IOException("Player-consent preservation is only valid on a first install");
+				boolean sameGeneration = activeState != null && transaction.plan().modpackId().equals(activeState.modpackId)
+						&& transaction.plan().packTarget().contentToken().equals(activeState.contentToken);
+				boolean switchingPacks = activeState != null && !transaction.plan().modpackId().equals(activeState.modpackId);
+				if (activeState != null && !sameGeneration && !switchingPacks)
+					throw new IOException("Player-consent preservation is only valid when the pack changes");
 				ProjectedFile projected = finalState.get(new FileKey(preservation.root(), relative));
 				if (projected == null || (deleteProof && projected.present()) || (replaceProof && !projected.present()))
 					throw new IOException("Player-consent preservation target has an invalid projected final state");

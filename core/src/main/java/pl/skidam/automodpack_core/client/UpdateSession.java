@@ -55,6 +55,8 @@ final class UpdateSession implements UpdateAttempt {
 	private final boolean firstConnection;
 	private final Map<String, UpdatePlan.FileState> consentedLocalModFiles;
 	private final boolean attaching;
+	private Map<String, UpdatePlan.FileState> switchLocalModConsent = Map.of();
+	private boolean preparedObjects;
 	private ClientUpdatePlanBuilder.PreparedPlan prepared;
 	private ReviewedUpdatePlan review;
 	private UpdatePlan appliedPlan;
@@ -81,6 +83,7 @@ final class UpdateSession implements UpdateAttempt {
 	 * live connection; the flows that need one call the updater's connection guard themselves.
 	 */
 	void prepare(boolean playerFacing, boolean prepareObjects) throws Exception {
+		this.preparedObjects = prepareObjects;
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			objectAcquisition.acquireTargetObjects(target.flatTarget(), cache, playerFacing);
 			// A review presented to the player must not have its unverified verdict flipped by a late platform lookup; the preload path never waits on platform APIs.
@@ -201,7 +204,8 @@ final class UpdateSession implements UpdateAttempt {
 		// so nothing of the target is still uncached wire bytes here.
 		long remaining = 0;
 		return UpdatePreview.forUpdate(prepared.plan(), target.selection(), journal, tokenRule.installedToken(storage, target.manifest().modpackId()))
-				.withFeatureManifest(target.manifest()).withRemainingWireBytes(remaining);
+				.withFeatureManifest(target.manifest()).withUnownedLocalMods(prepared.unownedLocalMods().keySet().stream().sorted().toList())
+				.withRemainingWireBytes(remaining);
 	}
 
 	/**
@@ -304,8 +308,21 @@ final class UpdateSession implements UpdateAttempt {
 	}
 
 	private ClientUpdatePlanBuilder.Input planInput(boolean prepareObjects) {
-		Map<String, UpdatePlan.FileState> consent = firstConnection ? consentedLocalModFiles : Map.of();
+		Map<String, UpdatePlan.FileState> consent = firstConnection ? consentedLocalModFiles : switchLocalModConsent;
 		return new ClientUpdatePlanBuilder.Input(target, connectionInfo, clientConfig, prepareObjects, consent);
+	}
+
+	/**
+	 * The archive answer from a pack-change preview: the unowned files the preview offered get moved aside, and the
+	 * plan is rebuilt against that consent before the commit. Updates of the installed pack's own generation never
+	 * reach here; the planner rejects consent for them as a tripwire.
+	 */
+	void applyLocalModConsent(boolean archive) throws Exception {
+		if (!archive || prepared == null || prepared.unownedLocalMods().isEmpty()) return;
+		ModpackJsons.ModpackContentFields installed = storedTarget();
+		if (installed != null && installed.modpackId.equals(target.manifest().modpackId())) return;
+		switchLocalModConsent = prepared.unownedLocalMods();
+		prepare(true, preparedObjects);
 	}
 
 	private ModpackJsons.ModpackContentFields storedTarget() throws IOException {

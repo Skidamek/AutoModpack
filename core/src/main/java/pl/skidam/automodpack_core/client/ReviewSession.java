@@ -63,6 +63,7 @@ final class ReviewSession {
 	private boolean firstConnection;
 	private Map<String, UpdatePlan.FileState> firstInstallLocalModFiles = Map.of();
 	private Map<String, UpdatePlan.FileState> consentedLocalModFiles = Map.of();
+	private boolean archiveLocalMods;
 
 	ReviewSession(ModpackUpdater updater, ClientStorage storage, SourceCatalogue sourceCatalogue, AtomicBoolean playerCancelled) {
 		this.updater = updater;
@@ -82,18 +83,32 @@ final class ReviewSession {
 	/** Clears any earlier review's leftover consent so a launch apply can never inherit it. */
 	void resetLocalModConsent() {
 		consentedLocalModFiles = Map.of();
+		archiveLocalMods = false;
 	}
 
 	Map<String, UpdatePlan.FileState> consentedLocalModFiles() {
 		return consentedLocalModFiles;
 	}
 
+	boolean localModArchive() {
+		return archiveLocalMods;
+	}
+
+	/** The pack-change preview's checkbox: archive means move the unowned files aside before the switch commits. */
+	void setLocalModCleanup(boolean archive) {
+		archiveLocalMods = archive;
+	}
+
+	/** A new preview starts from keep; the last action's archive choice must never leak into this one. */
+	void resetLocalModCleanup() {
+		archiveLocalMods = false;
+	}
+
 	/** The actions and live polls a review-backed screen may drive; the seam type, backed by this session. */
 	ReviewActions reviewActions() {
-		return new ReviewActions(this::setFirstInstallLocalModCleanup, this::startConfirmedUpdate, this::reselectAndPreview, updater::setLaunchWritesUnverified, this::cancelConfirmation, this::cancelFromPlayer,
-				() -> confirmationState.get() == ConfirmationState.WAITING, () -> confirmationState.get() == ConfirmationState.CANCELLED, this::isCancelledByPlayer,
-				() -> confirmationState.get() == ConfirmationState.PREVIEWING,
-				sourceCatalogue::sourceAvailability);
+		return new ReviewActions(this::setFirstInstallLocalModCleanup, this::setLocalModCleanup, this::localModArchive, this::startConfirmedUpdate, this::reselectAndPreview, updater::setLaunchWritesUnverified,
+				this::cancelConfirmation, this::cancelFromPlayer, () -> confirmationState.get() == ConfirmationState.WAITING, () -> confirmationState.get() == ConfirmationState.CANCELLED,
+				this::isCancelledByPlayer, () -> confirmationState.get() == ConfirmationState.PREVIEWING, sourceCatalogue::sourceAvailability);
 	}
 
 	/** The first-install welcome snapshot; everything is settled before the screen opens, so the review never moves under it. */
@@ -302,6 +317,7 @@ final class ReviewSession {
 
 	private PreviewRequestResult requestUpdatePreview() throws Exception {
 		updater.getSelectedTarget(); // the engine's requireNonNull states the unavailable-target error
+		resetLocalModCleanup();
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		sourceCatalogue.startSourceFetch();
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
@@ -321,6 +337,14 @@ final class ReviewSession {
 		}
 		Runnable continueAction = () -> {
 			if (!updater.isCurrentAttempt(session)) return;
+			try {
+				session.applyLocalModConsent(localModArchive());
+			} catch (Exception e) {
+				if (isCancelledByPlayer()) return;
+				updater.close();
+				ModpackUpdater.showUpdateFailure(e);
+				return;
+			}
 			try {
 				session.approve(); // The confirm click is the review's consent; a second click dies here.
 			} catch (IllegalStateException e) {

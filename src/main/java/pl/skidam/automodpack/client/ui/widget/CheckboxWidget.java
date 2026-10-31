@@ -190,6 +190,24 @@ public class CheckboxWidget extends AbstractButton {
 		*//*?}*/
 	}
 
+	/**
+	 * Centers the box and label as one unit inside {@code width}. A short label shrinks to its natural width so it sits
+	 * under centered prose instead of hugging the panel's left edge; a label that must wrap keeps the full width, so its
+	 * rows stay aligned rather than ragged.
+	 */
+	public void centerIn(int left, int width, int y) {
+		// A wrapped label keeps the full row: shrinking it would re-wrap the text and could truncate the last line.
+		if (labelLines.size() > 1) {
+			moveTo(left, y);
+			return;
+		}
+		int labelWidth = labelLines.stream().mapToInt(font::width).max().orElse(0);
+		int natural = BOX_SIZE + TEXT_SPACING + labelWidth + rightReserve;
+		int target = Math.min(Math.max(1, width), natural);
+		relayout(target);
+		moveTo(left + (width - target) / 2, y);
+	}
+
 	public int xPosition() {
 		return left();
 	}

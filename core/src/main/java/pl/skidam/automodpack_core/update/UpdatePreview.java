@@ -27,10 +27,11 @@ public final class UpdatePreview {
 	private final List<JournalEntry> journal;
 	private final Mode mode;
 	private final Map<String, String> featureNames;
+	private final List<String> unownedLocalMods;
 	private final Long remainingWireBytes;
 
 	private UpdatePreview(UpdatePlan decision, GroupConsequences groupConsequences, String patchNotes,
-			List<JournalEntry> journal, Mode mode, ChangeSet changeSet, Map<String, String> featureNames, Long remainingWireBytes) {
+			List<JournalEntry> journal, Mode mode, ChangeSet changeSet, Map<String, String> featureNames, List<String> unownedLocalMods, Long remainingWireBytes) {
 		this.decision = Objects.requireNonNull(decision, "reconciliation decision");
 		this.changeSet = Objects.requireNonNull(changeSet, "reconciliation consequences");
 		this.groupConsequences = Objects.requireNonNull(groupConsequences, "group consequences");
@@ -38,6 +39,7 @@ public final class UpdatePreview {
 		this.journal = List.copyOf(Objects.requireNonNull(journal, "journal"));
 		this.mode = Objects.requireNonNull(mode, "mode");
 		this.featureNames = Map.copyOf(new TreeMap<>(featureNames == null ? Map.of() : featureNames));
+		this.unownedLocalMods = List.copyOf(unownedLocalMods == null ? List.of() : unownedLocalMods);
 		this.remainingWireBytes = remainingWireBytes;
 	}
 
@@ -47,7 +49,7 @@ public final class UpdatePreview {
 		GroupConsequences consequences = selection == null
 				? new GroupConsequences(Set.of(), Set.of(), Set.of())
 				: new GroupConsequences(selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedGroups(), selection.groupResolutions());
-		return new UpdatePreview(decision, consequences, patchNotes, journal, mode, decision.consequences(), Map.of(), null);
+		return new UpdatePreview(decision, consequences, patchNotes, journal, mode, decision.consequences(), Map.of(), List.of(), null);
 	}
 
 	public static UpdatePreview create(UpdatePlan decision, ResolvedSelection selection, Mode mode) {
@@ -93,6 +95,16 @@ public final class UpdatePreview {
 		return featureNames;
 	}
 
+	/** Direct mods files the plan leaves untouched, in display order: the review offers to keep or move them aside. */
+	public List<String> unownedLocalMods() {
+		return unownedLocalMods;
+	}
+
+	public UpdatePreview withUnownedLocalMods(List<String> paths) {
+		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet, featureNames,
+				paths == null ? List.of() : new ArrayList<>(new TreeSet<>(paths)), remainingWireBytes);
+	}
+
 	/** Adds presentation names (unnamed groups present their id) without reclassifying any planned disposition. */
 	public UpdatePreview withFeatureManifest(GroupManifest manifest) {
 		Objects.requireNonNull(manifest, "feature manifest");
@@ -116,22 +128,22 @@ public final class UpdatePreview {
 					.toList();
 			changes.add(new ChangeSet.Change(change.logicalPath(), change.kind(), occurrences));
 		}
-		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, ChangeSet.of(changes, changeSet.effects()), names, remainingWireBytes);
+		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, ChangeSet.of(changes, changeSet.effects()), names, unownedLocalMods, remainingWireBytes);
 	}
 
 	public UpdatePreview withReferences(ChangeSet.ReferenceProvider provider) {
-		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet.withReferences(provider), featureNames, remainingWireBytes);
+		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet.withReferences(provider), featureNames, unownedLocalMods, remainingWireBytes);
 	}
 
 	/** Re-labels the presentation mode without changing any planned disposition. */
 	public UpdatePreview withMode(Mode mode) {
-		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet, featureNames, remainingWireBytes);
+		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet, featureNames, unownedLocalMods, remainingWireBytes);
 	}
 
 	/** Remaining wire bytes for this preview, after CAS hits and finished staging slices. */
 	public UpdatePreview withRemainingWireBytes(long bytes) {
 		if (bytes < 0) throw new IllegalArgumentException("Remaining wire bytes cannot be negative");
-		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet, featureNames, bytes);
+		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet, featureNames, unownedLocalMods, bytes);
 	}
 
 	public long addedBytes() {
