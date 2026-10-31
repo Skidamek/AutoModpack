@@ -8,56 +8,67 @@ import pl.skidam.automodpack_core.client.LaunchApplyState;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 
-/** Title-screen receipt for a launch apply the player has not been shown yet. Showing it once consumes the durable pointer. */
+/**
+ * The title-screen door to the changelog of a launch apply the player has not been shown. The receipt is read once and
+ * consumed only when the player opens it, so quitting before clicking keeps it for the next launch.
+ */
 public final class LaunchApplyNotice {
-	private static volatile Held held;
-	private static volatile boolean taken;
+	private static volatile Pending pending;
+	private static volatile boolean read;
 
 	private LaunchApplyNotice() {}
 
-	private record Held(String modpackId, String name) {}
+	private record Pending(String modpackId) {}
 
-	/** True when this session still has a launch-apply receipt to show; the first call consumes the durable pointer. */
+	/** True while this session has a receipt to announce; reading it consumes nothing. */
 	public static boolean pending() {
-		return peek() != null;
+		return notice() != null;
 	}
 
-	private static Held peek() {
-		if (held != null) return held;
-		if (taken) return null;
+	public static void open(Screen parent) {
+		Pending notice = notice();
+		if (notice == null) return;
+		pending = null;
+		try {
+			ClientStorage storage = ClientStorage.open(GameDirectory.current());
+			if (!LaunchApplyState.takeUnseenApply(storage, notice.modpackId())) return;
+			GenerationHistoryController.open(parent, storage, notice.modpackId(), nameOf(storage, notice.modpackId()), () -> {});
+		} catch (Exception e) {
+			LOGGER.warn("The launch-apply history could not be opened", e);
+		}
+	}
+
+	private static Pending notice() {
+		if (!read) {
+			synchronized (LaunchApplyNotice.class) {
+				if (!read) {
+					pending = readNotice();
+					read = true;
+				}
+			}
+		}
+		return pending;
+	}
+
+	private static Pending readNotice() {
 		try {
 			ClientStorage storage = ClientStorage.open(GameDirectory.current());
 			String modpackId = storage.selectedModpackId();
-			if (modpackId == null || modpackId.isBlank()) {
-				taken = true;
-				return null;
-			}
-			boolean unseen = LaunchApplyState.takeUnseenApply(storage, modpackId);
-			taken = true;
-			if (!unseen) return null;
-			String name = modpackId;
-			try {
-				InstalledModpackController.Pack pack = new InstalledModpackController(storage).installedPack(modpackId);
-				if (pack != null) name = pack.name();
-			} catch (RuntimeException ignored) {
-			}
-			held = new Held(modpackId, name);
-			return held;
+			if (modpackId == null || modpackId.isBlank()) return null;
+			return LaunchApplyState.hasUnseenApply(storage, modpackId) ? new Pending(modpackId) : null;
 		} catch (Exception e) {
 			LOGGER.debug("Launch-apply notice is unavailable", e);
 			return null;
 		}
 	}
 
-	public static void open(Screen parent) {
-		Held notice = peek();
-		if (notice == null) return;
-		held = null;
+	private static String nameOf(ClientStorage storage, String modpackId) {
 		try {
-			ClientStorage storage = ClientStorage.open(GameDirectory.current());
-			GenerationHistoryController.open(parent, storage, notice.modpackId(), notice.name(), () -> {});
-		} catch (Exception e) {
-			LOGGER.warn("The launch-apply history could not be opened", e);
+			InstalledModpackController.Pack pack = new InstalledModpackController(storage).installedPack(modpackId);
+			if (pack != null) return pack.name();
+		} catch (RuntimeException e) {
+			LOGGER.debug("The launch-apply notice falls back to the pack id as its name", e);
 		}
+		return modpackId;
 	}
 }
