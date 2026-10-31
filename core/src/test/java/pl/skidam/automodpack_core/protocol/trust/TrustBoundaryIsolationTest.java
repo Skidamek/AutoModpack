@@ -24,6 +24,22 @@ class TrustBoundaryIsolationTest {
 			"org/apache/logging", "amp_libs", "org/bouncycastle");
 
 	@Test
+	void nothingOutsideTheBoundaryReferencesItsInternalClasses() throws Exception {
+		Path root = Path.of(TrustBoundary.class.getProtectionDomain().getCodeSource().getLocation().toURI()).resolve("pl/skidam/automodpack_core");
+		List<String> internal = List.of("protocol/trust/TrustBoundary", "protocol/trust/CrlVerdict", "protocol/trust/RevokingTrustManager");
+		List<String> violations = new ArrayList<>();
+		try (Stream<Path> walk = Files.walk(root)) {
+			for (Path file : walk.filter(path -> path.toString().endsWith(".class") && !path.toString().contains("protocol/trust")).toList()) {
+				String text = new String(Files.readAllBytes(file), StandardCharsets.ISO_8859_1);
+				for (String name : internal) {
+					if (text.contains(name)) violations.add(file.getFileName() + " references " + name);
+				}
+			}
+		}
+		assertTrue(violations.isEmpty(), String.join("\n", violations));
+	}
+
+	@Test
 	void everyBoundaryClassResolvesOnlyTheJdkItsOwnPackageAndShadedLibraries() throws Exception {
 		Path classes = Path.of(TrustBoundary.class.getProtectionDomain().getCodeSource().getLocation().toURI()).resolve(OWN);
 		List<Path> files;
