@@ -594,7 +594,7 @@ public final class UpdateCommit {
 
 	/** A directory-scanning loader that already took {@code active/} this boot learns of the change through the scanned changes (P5). */
 	private void noteProjectionChange() {
-		if (ClientStorage.directoryScanRevision() != null && !scannedChanges.contains(PROJECTION_SCANNED_CHANGE)) scannedChanges.add(PROJECTION_SCANNED_CHANGE);
+		if (ProjectionAvailability.scanned(storage.gameDirectory()) && !scannedChanges.contains(PROJECTION_SCANNED_CHANGE)) scannedChanges.add(PROJECTION_SCANNED_CHANGE);
 	}
 
 	/**

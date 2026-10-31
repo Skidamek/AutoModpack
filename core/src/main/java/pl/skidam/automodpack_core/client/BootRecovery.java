@@ -15,7 +15,7 @@ import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.GeneratedCopyState;
-import pl.skidam.automodpack_core.update.ProjectionRelaunch;
+import pl.skidam.automodpack_core.update.ProjectionAvailability;
 import pl.skidam.automodpack_core.update.ProjectionState;
 import pl.skidam.automodpack_core.update.PublicationSweep;
 import pl.skidam.automodpack_core.update.UpdateCommit;
@@ -88,7 +88,7 @@ public final class BootRecovery {
 	 * projection the gate refused.
 	 */
 	private void relaunchIfScannedProjectionMoved() {
-		if (ProjectionRelaunch.required(storage, ClientStorage.directoryScan())) new ReLauncher(UpdateType.UPDATE).restart(true);
+		if (ProjectionAvailability.mustRelaunch(storage)) new ReLauncher(UpdateType.UPDATE).restart(true);
 	}
 
 	private void loadClientConfig() {

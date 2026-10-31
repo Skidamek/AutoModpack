@@ -1,7 +1,7 @@
 package pl.skidam.automodpack_loader_core_fabric
 
 import net.fabricmc.loader.api.FabricLoader
-import pl.skidam.automodpack_core.update.ClientStorage
+import pl.skidam.automodpack_core.update.ProjectionAvailability
 import xyz.bluspring.knit.loader.api.KnitModScanSetupApi
 import xyz.bluspring.knit.loader.api.KnitNativeModCompatExtension
 
@@ -27,7 +27,7 @@ import xyz.bluspring.knit.loader.api.KnitNativeModCompatExtension
 class AutomodpackKnitExtension : KnitNativeModCompatExtension {
 	override fun setupModScanning(api: KnitModScanSetupApi) {
 		val gameDir = FabricLoader.getInstance().gameDir
-		val modsDir = ClientStorage.loadableProjectionModsDirectory(gameDir) ?: return
+		val modsDir = ProjectionAvailability.loadableModsDirectory(gameDir) ?: return
 		api.addModDirectory(modsDir)
 	}
 }

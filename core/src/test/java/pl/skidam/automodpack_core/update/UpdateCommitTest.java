@@ -263,7 +263,7 @@ class UpdateCommitTest {
 		assertTrue(installedRevision > 0);
 
 		try {
-			ClientStorage.loadableProjectionModsDirectory(storage.gameDirectory());
+			ProjectionAvailability.loadableModsDirectory(storage.gameDirectory());
 			SelectedModpackTarget next = nextTarget(storage, installed, "mods/keep.jar", keepHash, keepBytes.length, Instant.parse("2026-01-02T00:00:00Z"));
 			UpdatePlan update = UpdateTestFixtures.plan(next, clientConfig(next.manifest().modpackId()), List.of(
 					new Operation(Root.PROJECTION, "mods/gone.jar", OperationType.DELETE, null, -1, goneHash)),
@@ -276,7 +276,7 @@ class UpdateCommitTest {
 			assertTrue(ProjectionState.read(storage).revision() > installedRevision);
 			assertFalse(ProjectionState.read(storage).converging());
 		} finally {
-			ClientStorage.forgetDirectoryScan();
+			ProjectionAvailability.forget(storage.gameDirectory());
 		}
 	}
 

@@ -7,7 +7,6 @@ import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
@@ -47,21 +46,6 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  */
 public final class ClientStorage {
 	private static final Map<Path, WeakReference<ClientStorage>> OPEN_STORAGE = new HashMap<>();
-	private static volatile IOException scanTimeStateFailure;
-	private static volatile DirectoryScan directoryScan;
-	private static final int SCAN_READ_ATTEMPTS = 5;
-	private static final long SCAN_READ_RETRY_MILLIS = 100;
-
-	/**
-	 * What the scan-time gate decided in this process, from one read of the projection state: the state it read (null
-	 * when it could not be read), whether that state refused the projection, and whether {@code active/mods} went to
-	 * the directory-scanning loaders.
-	 */
-	public record DirectoryScan(ProjectionState state, boolean refusedByState, boolean exposed) {
-		public long revision() {
-			return state == null ? -1 : state.revision();
-		}
-	}
 	private final Path gameDirectory;
 	private final Path automodpackDirectory;
 	private final Path clientDirectory;
@@ -505,68 +489,6 @@ public final class ClientStorage {
 		GeneratedCopyState.migrateLegacyTree(this);
 	}
 
-	/**
-	 * Scan-time twin of the projection loader gate: whether {@code active/mods} should be handed to loaders that
-	 * discover mods by directory. The directory loads when it exists, its projection state is settled (P3 of
-	 * {@link ProjectionState}), and selected and active-state do not disagree; an unreadable state file refuses. A
-	 * missing pointer with files on disk still loads. Runs before preload, so it reads files only, and it records the
-	 * projection revision it decided on, so boot recovery can relaunch when it then changes what was scanned.
-	 */
-	public static Path loadableProjectionModsDirectory(Path gameDirectory) {
-		// One read decides the gate and is what the latch remembers, so recovery compares against exactly what was decided.
-		// A physical read failure this early is usually a startup scanner holding the file: the gate spends the longest
-		// budget on it (5 x 100 ms) rather than refusing Kilt the projection and spending a relaunch on it.
-		ProjectionState.Inspection inspection = ProjectionState.inspect(ProjectionState.file(gameDirectory), SCAN_READ_ATTEMPTS, SCAN_READ_RETRY_MILLIS);
-		ProjectionState projection = inspection.state();
-		String refusal = inspection.refusal();
-		directoryScan = new DirectoryScan(projection, false, false);
-		Path activeDirectory = gameDirectory.resolve(CLIENT_ACTIVE_DIR).normalize();
-		if (!Files.isDirectory(activeDirectory, LinkOption.NOFOLLOW_LINKS)) return null;
-		Path activeModsDirectory = activeDirectory.resolve(ModpackPathPolicy.MODS_ROOT);
-		if (!Files.isDirectory(activeModsDirectory, LinkOption.NOFOLLOW_LINKS)) return null;
-		if (refusal != null) {
-			LOGGER.warn("Not exposing the projection to directory-scanning loaders before recovery: {}", refusal);
-			directoryScan = new DirectoryScan(projection, true, false);
-			return null;
-		}
-
-		ClientStorageJsons.ClientGenerationStateFields state;
-		try {
-			state = ConfigTools.readUnique(gameDirectory.resolve(CLIENT_ACTIVE_STATE_FILE).normalize(),
-					ClientStorageJsons.ClientGenerationStateFields.class, "Client active state", ClientStorage::validatedActiveState).orElse(null);
-		} catch (IOException e) {
-			// The state is durable, so this is a locked or unreadable file, not corrupt content. The gate cannot decide,
-			// and returning null quietly would let preload load a projection the directory-scanning loaders never
-			// received, so the failure is recorded and the authoritative load refuses to run on this boot.
-			LOGGER.error("Failed to read the client active state; not exposing the projection to directory-scanning loaders", e);
-			scanTimeStateFailure = e;
-			return null;
-		}
-		ClientConfigJsons.SelectedModpackFields selected = ConfigTools.read(gameDirectory.resolve(CLIENT_SELECTED_FILE).normalize(), ClientConfigJsons.SelectedModpackFields.class).orElse(null);
-		if (activeSelectionMismatch(selected, state) != null) return null;
-		directoryScan = new DirectoryScan(projection, false, true);
-		return activeModsDirectory;
-	}
-
-	/** What the scan-time gate decided in this process, or null when no directory-scanning loader asked. */
-	public static DirectoryScan directoryScan() {
-		return directoryScan;
-	}
-
-	/**
-	 * The projection revision the scan-time gate decided on in this process, or null when no directory-scanning loader
-	 * asked; -1 when the state file was unreadable. Boot recovery compares it with the revision it leaves behind.
-	 */
-	public static Long directoryScanRevision() {
-		DirectoryScan scan = directoryScan;
-		return scan == null ? null : scan.revision();
-	}
-
-	/** Test seam: the latch is process state, so a test that drove the scan-time gate forgets it again. */
-	static void forgetDirectoryScan() {
-		directoryScan = null;
-	}
-
 	/** Why selected and active-state disagree, or null when the projection may load (matching pointer, or no pointer). */
 	public static String activeSelectionMismatch(ClientConfigJsons.SelectedModpackFields selected, ClientStorageJsons.ClientGenerationStateFields state) {
 		return activeSelectionMismatch(selected == null ? null : selected.modpackId, state);
@@ -582,17 +504,6 @@ public final class ClientStorage {
 	}
 
 	/**
-	 * The scan-time gate's active-state read failure, when it could not decide whether the projection would load. The
-	 * authoritative load refuses the projection on a boot where this is set: the projection would load without the
-	 * loaders that discover mods by directory ever receiving it. A process-lifetime latch, not storage state: the
-	 * scan-time hook runs in the loader's own context and can only hand back a directory, so the failure crosses to
-	 * the authoritative load through this static and dies with the boot.
-	 */
-	public static IOException scanTimeStateFailure() {
-		return scanTimeStateFailure;
-	}
-
-	/**
 	 * The active pack pointer, or null when none was persisted yet. Unusable content fails this boot in place and is
 	 * never set aside: the pointer carries the detach flag, so continuing as empty would silently rejoin enforcement.
 	 */
@@ -600,7 +511,7 @@ public final class ClientStorage {
 		return ConfigTools.readUnique(stateFile, ClientStorageJsons.ClientGenerationStateFields.class, "Client active state", ClientStorage::validatedActiveState).orElse(null);
 	}
 
-	private static ClientStorageJsons.ClientGenerationStateFields validatedActiveState(ClientStorageJsons.ClientGenerationStateFields state) {
+	static ClientStorageJsons.ClientGenerationStateFields validatedActiveState(ClientStorageJsons.ClientGenerationStateFields state) {
 		if (!ModpackId.isValid(state.modpackId) || !HashUtils.isSha1(state.contentToken) || !"ACTIVE".equals(state.status))
 			throw new IllegalArgumentException("Client active state identity is invalid");
 		OwnershipLedger.fromFields(state.ownershipLedger);

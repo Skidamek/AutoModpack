@@ -92,8 +92,8 @@ class ProjectionConvergenceTest {
 			}));
 			assertTrue(ProjectionState.read(storage).converging(), "marked before the first write");
 			assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()), "no gate loads a mixed tree");
-			assertNull(ClientStorage.loadableProjectionModsDirectory(storage.gameDirectory()));
-			ClientStorage.forgetDirectoryScan();
+			assertNull(ProjectionAvailability.loadableModsDirectory(storage.gameDirectory()));
+			ProjectionAvailability.forget(storage.gameDirectory());
 
 			// Backward: the fallback is the complete old tree, put back from CAS.
 			assertTrue(new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).restoreFallback());

@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -55,11 +54,6 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * one game process stack on each other, and the next boot converges on the latest one.
  */
 class BestEffortApplyTest {
-	@AfterEach
-	void forgetScan() {
-		ClientStorage.forgetDirectoryScan();
-	}
-
 	private static final String PACK = "abc1234";
 	private static final String MOD = "mods/m.jar";
 	private static final String MANAGED = "config/managed.toml";
@@ -239,8 +233,8 @@ class BestEffortApplyTest {
 		assertInstanceOf(UpdateCommit.Deferred.class, inGame.run(new UpdateCommit.Fresh(() -> built(fixture.storage, fixture.plan, fixture.target), null)));
 		assertTrue(ProjectionState.read(fixture.storage).converging());
 		assertNotNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()));
-		assertNull(ClientStorage.loadableProjectionModsDirectory(fixture.storage.gameDirectory()));
-		ClientStorage.forgetDirectoryScan();
+		assertNull(ProjectionAvailability.loadableModsDirectory(fixture.storage.gameDirectory()));
+		ProjectionAvailability.forget(fixture.storage.gameDirectory());
 		assertTrue(Files.exists(fixture.storage.activePath(CONFIG)) && Files.exists(fixture.storage.activePath("mods/old.jar")), "the rest landed around the held jar");
 		assertEquals(UpdateTransaction.Phase.PROJECTED, UpdateTransaction.read(fixture.storage.transactionFile()).phase);
 

@@ -21,7 +21,7 @@ import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.ProjectionState;
+import pl.skidam.automodpack_core.update.ProjectionAvailability;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -53,9 +53,9 @@ final class ProjectionLoader {
 	void loadModpack() throws Exception {
 
 		if (!Files.exists(storage.activeDirectory())) return;
-		String refusal = ProjectionState.loadRefusal(storage.gameDirectory());
-		if (refusal != null) {
-			LOGGER.error("Not loading the modpack projection because {}", refusal);
+		ProjectionAvailability.Refusal refusal = ProjectionAvailability.stateStanding(storage.gameDirectory());
+		if (!refusal.none()) {
+			LOGGER.error("Not loading the modpack projection because {}", refusal.reason());
 			return;
 		}
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
@@ -70,20 +70,13 @@ final class ProjectionLoader {
 			LOGGER.warn("Skipping active modpack load after preload because {}", mismatch);
 			return;
 		}
-		// The scan-time gate could not decide, so the loaders that discover mods by directory never received the
-		// projection; loading only through the loader API would hide that half-loaded state, so this boot refuses the
-		// projection and runs without it. The state itself is fine - a locked file decided the gate - and the next
-		// boot re-decides with a readable one.
-		IOException scanFailure = ClientStorage.scanTimeStateFailure();
-		if (scanFailure != null) {
-			LOGGER.error("The scan-time projection gate could not read the client active state, so directory-scanning loaders did not receive the projection; not loading it through the loader API either", scanFailure);
-			return;
-		}
-		// The same for a projection the scan-time gate refused by its state: recovery relaunches when it settled it, so a
-		// boot that gets here without that relaunch never hands the loader API what the directory scanners were denied.
-		ClientStorage.DirectoryScan scan = ClientStorage.directoryScan();
-		if (scan != null && scan.refusedByState()) {
-			LOGGER.error("Directory-scanning loaders were refused the projection at scan time and this boot did not relaunch into it; not loading it through the loader API either");
+		// The scan-time gate could not decide, or refused by its state and this boot did not relaunch, so the loaders
+		// that discover mods by directory never received the projection; loading only through the loader API would hide
+		// that half-loaded state, so this boot refuses the projection and runs without it.
+		ProjectionAvailability.Refusal withheld = ProjectionAvailability.loaderApiWithholding(storage.gameDirectory());
+		if (!withheld.none()) {
+			if (withheld.cause() != null) LOGGER.error("{}; not loading it through the loader API either", withheld.reason(), withheld.cause());
+			else LOGGER.error("{}; not loading it through the loader API either", withheld.reason());
 			return;
 		}
 		loadModpack();

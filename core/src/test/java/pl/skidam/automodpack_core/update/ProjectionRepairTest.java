@@ -26,7 +26,6 @@ import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -47,11 +46,6 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 class ProjectionRepairTest {
 	@TempDir
 	Path temporaryDirectory;
-
-	@AfterEach
-	void forgetScan() {
-		ClientStorage.forgetDirectoryScan();
-	}
 
 	private static final Map<String, String> OLD = Map.of("mods/alpha-1.0.jar", "alpha one", "mods/beta.jar", "beta", "config/alpha.toml", "a = 1");
 	private static final Map<String, String> NEW = Map.of("mods/alpha-1.1.jar", "alpha two", "mods/beta.jar", "beta", "config/alpha.toml", "a = 2");
@@ -130,8 +124,8 @@ class ProjectionRepairTest {
 				IOException physical = assertThrows(IOException.class, () -> ProjectionState.owed(storage));
 				assertFalse(physical instanceof ProjectionState.UnreadableException);
 				assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()));
-				assertNull(ClientStorage.loadableProjectionModsDirectory(storage.gameDirectory()));
-				assertTrue(ClientStorage.directoryScan().refusedByState());
+				assertNull(ProjectionAvailability.loadableModsDirectory(storage.gameDirectory()));
+				assertTrue(ProjectionAvailability.scan(storage.gameDirectory()).refusedByState());
 				IOException writer = assertThrows(IOException.class, () -> new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).restoreFallback());
 				assertFalse(writer instanceof ProjectionState.UnreadableException);
 				PublicationSweep.sweepUnpinnedDirectories(storage);
@@ -282,21 +276,21 @@ class ProjectionRepairTest {
 			Path held = storage.activePath("config/alpha.toml");
 			assertFalse(converge(storage, cache, NEW, Map.of(), holding(held::equals)).converged());
 
-			assertNull(ClientStorage.loadableProjectionModsDirectory(storage.gameDirectory()));
-			ClientStorage.DirectoryScan refused = ClientStorage.directoryScan();
+			assertNull(ProjectionAvailability.loadableModsDirectory(storage.gameDirectory()));
+			ProjectionAvailability.Scan refused = ProjectionAvailability.scan(storage.gameDirectory());
 			assertTrue(refused.refusedByState());
 			assertFalse(refused.exposed());
-			assertFalse(ProjectionRelaunch.required(storage, refused), "still converging: a relaunch would load nothing more");
+			assertFalse(ProjectionAvailability.mustRelaunch(storage, refused), "still converging: a relaunch would load nothing more");
 
 			assertTrue(PublicationSweep.restoreFallback(storage));
-			assertTrue(ProjectionRelaunch.required(storage, refused));
+			assertTrue(ProjectionAvailability.mustRelaunch(storage, refused));
 			assertTrue(Files.exists(storage.projectionRelaunchFile()));
-			assertFalse(ProjectionRelaunch.required(storage, refused), "the guard allows one relaunch in a row");
+			assertFalse(ProjectionAvailability.mustRelaunch(storage, refused), "the guard allows one relaunch in a row");
 
-			assertNotNull(ClientStorage.loadableProjectionModsDirectory(storage.gameDirectory()));
-			ClientStorage.DirectoryScan exposed = ClientStorage.directoryScan();
+			assertNotNull(ProjectionAvailability.loadableModsDirectory(storage.gameDirectory()));
+			ProjectionAvailability.Scan exposed = ProjectionAvailability.scan(storage.gameDirectory());
 			assertTrue(exposed.exposed());
-			assertFalse(ProjectionRelaunch.required(storage, exposed));
+			assertFalse(ProjectionAvailability.mustRelaunch(storage, exposed));
 			assertFalse(Files.exists(storage.projectionRelaunchFile()), "a stable boot clears the guard");
 		}
 	}
@@ -307,18 +301,18 @@ class ProjectionRepairTest {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			settle(storage, cache, OLD);
-			assertNotNull(ClientStorage.loadableProjectionModsDirectory(storage.gameDirectory()));
-			ClientStorage.DirectoryScan scan = ClientStorage.directoryScan();
+			assertNotNull(ProjectionAvailability.loadableModsDirectory(storage.gameDirectory()));
+			ProjectionAvailability.Scan scan = ProjectionAvailability.scan(storage.gameDirectory());
 			assertTrue(scan.exposed());
 
 			Path held = storage.activePath("config/alpha.toml");
 			assertFalse(converge(storage, cache, NEW, Map.of(), holding(held::equals)).converged());
 			assertTrue(PublicationSweep.restoreFallback(storage));
 			assertTrue(ProjectionState.read(storage).revision() > scan.revision());
-			assertFalse(ProjectionRelaunch.required(storage, scan), "the same tree came back");
+			assertFalse(ProjectionAvailability.mustRelaunch(storage, scan), "the same tree came back");
 
 			settle(storage, cache, NEW);
-			assertTrue(ProjectionRelaunch.required(storage, scan));
+			assertTrue(ProjectionAvailability.mustRelaunch(storage, scan));
 		}
 	}
 
@@ -495,21 +489,21 @@ class ProjectionRepairTest {
 			settle(storage, cache, OLD);
 		}
 		ProjectionState state = ProjectionState.read(storage);
-		ClientStorage.DirectoryScan refused = new ClientStorage.DirectoryScan(state, true, false);
-		assertTrue(ProjectionRelaunch.required(storage, refused));
-		assertFalse(ProjectionRelaunch.required(storage, refused), "the same need right after its relaunch does not relaunch again");
+		ProjectionAvailability.Scan refused = new ProjectionAvailability.Scan(state, true, false, null);
+		assertTrue(ProjectionAvailability.mustRelaunch(storage, refused));
+		assertFalse(ProjectionAvailability.mustRelaunch(storage, refused), "the same need right after its relaunch does not relaunch again");
 		assertTrue(Files.exists(storage.projectionRelaunchFile()));
 
-		assertFalse(ProjectionRelaunch.required(storage, null), "a boot without a directory scan needs none");
+		assertFalse(ProjectionAvailability.mustRelaunch(storage, null), "a boot without a directory scan needs none");
 		assertFalse(Files.exists(storage.projectionRelaunchFile()), "and clears the guard");
-		assertTrue(ProjectionRelaunch.required(storage, refused), "so a later need relaunches");
+		assertTrue(ProjectionAvailability.mustRelaunch(storage, refused), "so a later need relaunches");
 
 		// A guard for other content from long ago never suppresses; one from a moment ago does (one relaunch in a row).
-		Files.writeString(storage.projectionRelaunchFile(), "{\"content\":\"digest:other\",\"at\":" + (System.currentTimeMillis() - 2 * ProjectionRelaunch.CONSECUTIVE_MILLIS) + "}");
-		assertTrue(ProjectionRelaunch.required(storage, refused));
+		Files.writeString(storage.projectionRelaunchFile(), "{\"content\":\"digest:other\",\"at\":" + (System.currentTimeMillis() - 2 * ProjectionAvailability.CONSECUTIVE_MILLIS) + "}");
+		assertTrue(ProjectionAvailability.mustRelaunch(storage, refused));
 		Files.writeString(storage.projectionRelaunchFile(), "{\"content\":\"digest:other\",\"at\":" + System.currentTimeMillis() + "}");
-		assertFalse(ProjectionRelaunch.required(storage, refused));
-		assertFalse(ProjectionRelaunch.required(storage, new ClientStorage.DirectoryScan(state, false, true)));
+		assertFalse(ProjectionAvailability.mustRelaunch(storage, refused));
+		assertFalse(ProjectionAvailability.mustRelaunch(storage, new ProjectionAvailability.Scan(state, false, true, null)));
 		assertFalse(Files.exists(storage.projectionRelaunchFile()), "a clean scan clears it");
 	}
 
@@ -535,13 +529,13 @@ class ProjectionRepairTest {
 		});
 		release.start();
 		try {
-			assertNotNull(ClientStorage.loadableProjectionModsDirectory(storage.gameDirectory()));
-			assertTrue(ClientStorage.directoryScan().exposed());
+			assertNotNull(ProjectionAvailability.loadableModsDirectory(storage.gameDirectory()));
+			assertTrue(ProjectionAvailability.scan(storage.gameDirectory()).exposed());
 		} finally {
 			release.join();
 			Files.setPosixFilePermissions(state, PosixFilePermissions.fromString("rw-r--r--"));
 		}
-		assertFalse(ProjectionRelaunch.required(storage, ClientStorage.directoryScan()));
+		assertFalse(ProjectionAvailability.mustRelaunch(storage, ProjectionAvailability.scan(storage.gameDirectory())));
 	}
 
 	/** R2-4: a detached pack whose recorded tree the store cannot complete stays refused, never settled mixed; restored once the bytes are back. */

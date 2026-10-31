@@ -20,7 +20,7 @@ import pl.skidam.automodpack_core.protocol.PackTransport;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.MissingGenerationContentException;
-import pl.skidam.automodpack_core.update.ProjectionState;
+import pl.skidam.automodpack_core.update.ProjectionAvailability;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 
@@ -188,14 +188,9 @@ public final class ClientLaunch {
 	/** Whether {@code active/} should load this boot: the directory exists, its projection state is settled, and selected does not disagree with active-state. */
 	private boolean hasActiveProjection() throws IOException {
 		if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return false;
-		String refusal = ProjectionState.loadRefusal(storage.gameDirectory());
-		if (refusal != null) {
-			LOGGER.error("Skipping active modpack load because {}", refusal);
-			return false;
-		}
-		String mismatch = ClientStorage.activeSelectionMismatch(storage.selectedModpackId(), storage.readActiveState());
-		if (mismatch != null) {
-			LOGGER.warn("Skipping active modpack load because {}", mismatch);
+		ProjectionAvailability.Refusal refusal = ProjectionAvailability.loadRefusal(storage);
+		if (!refusal.none()) {
+			LOGGER.error("Skipping active modpack load because {}", refusal.reason());
 			return false;
 		}
 		return true;
