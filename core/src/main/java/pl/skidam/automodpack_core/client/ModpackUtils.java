@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.Constants.*;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
@@ -19,6 +20,7 @@ import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdatePlan;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -142,6 +144,27 @@ public class ModpackUtils {
 			uncachedFiles.add(entry);
 		}
 		return uncachedFiles;
+	}
+
+	/**
+	 * The files neither in the store nor verifiably available at one of their cached sources: a store miss that a
+	 * projection or live copy can still satisfy is not missing. Reads only, unlike {@link #identifyUncachedFiles}.
+	 */
+	public static Set<ModpackJsons.ModpackContentFields.ModpackContentItem> identifyUnavailableFiles(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToCheck,
+			FileCache cache, ClientStorage storage, Function<ModpackJsons.ModpackContentFields.ModpackContentItem, List<Path>> sources) {
+		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> unavailable = new HashSet<>();
+		for (var item : filesToCheck) {
+			if (FileIntegrity.matchesNamed(storage.objectFile(item.sha1), item.size, item.sha1, cache)) continue;
+			boolean available = false;
+			for (Path candidate : sources.apply(item)) {
+				if (FileIntegrity.matchesNamed(candidate, item.size, item.sha1, cache)) {
+					available = true;
+					break;
+				}
+			}
+			if (!available) unavailable.add(item);
+		}
+		return unavailable;
 	}
 
 	/** Remaining wire bytes of objects the store still misses, counting finished staging slices as already fetched. */

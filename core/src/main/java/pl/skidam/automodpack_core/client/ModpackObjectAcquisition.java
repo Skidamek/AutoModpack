@@ -86,6 +86,14 @@ final class ModpackObjectAcquisition {
 		return ModpackUtils.identifyUncachedFiles(uniqueObjects(items), cache, storage);
 	}
 
+	/** The same answer without writing the store: a store miss a cached projection or live source satisfies is not missing. */
+	Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missingTargetObjects(ModpackJsons.ModpackContentFields target, FileCache cache, ClientProjectionView projectionView)
+			throws IOException {
+		Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items = target.list == null ? List.of() : target.list;
+		ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
+		return ModpackUtils.identifyUnavailableFiles(uniqueObjects(items), cache, storage, item -> planBuilder.cachedSourceCandidates(projection, item));
+	}
+
 	/** The download queue needs a complete connection and its client; entry points that can run without a live handshake trip this. */
 	void requireTransferSession() throws IOException {
 		if (connectionInfo == null || !connectionInfo.isComplete() || transport == null) throw new IOException("Modpack transfer session is unavailable");

@@ -90,7 +90,7 @@ final class UpdateSession implements UpdateAttempt {
 			if (playerFacing) sourceCatalogue.awaitSourceLookup();
 			ClientProjectionView projectionView = ClientProjectionView.observe(storage);
 			planBuilder.reconcileEditableState(cache, projectionView, target.flatTarget());
-			prepared = planBuilder.buildPlan(planInput(true), projectionView, cache, modCache);
+			prepared = planBuilder.buildPlan(planInput(), projectionView, cache, modCache);
 			if (prepareObjects) planBuilder.preparePlanObjects(prepared.plan(), target.flatTarget(), projectionView, cache);
 			review = ReviewedUpdatePlan.pending(prepared.plan());
 		}
@@ -290,7 +290,7 @@ final class UpdateSession implements UpdateAttempt {
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			ClientProjectionView projectionView = ClientProjectionView.observe(storage);
 			planBuilder.reconcileEditableState(cache, projectionView, target.flatTarget());
-			ClientUpdatePlanBuilder.PreparedPlan replanned = planBuilder.buildPlan(planInput(true), projectionView, cache, modCache);
+			ClientUpdatePlanBuilder.PreparedPlan replanned = planBuilder.buildPlan(planInput(), projectionView, cache, modCache);
 			try {
 				review().requireCompatible(replanned.plan());
 			} catch (IllegalStateException e) {
@@ -307,9 +307,9 @@ final class UpdateSession implements UpdateAttempt {
 			throw new UpdateReplanRequiredException(null, "Selected modpack changed while the update was being applied");
 	}
 
-	private ClientUpdatePlanBuilder.Input planInput(boolean prepareObjects) {
+	private ClientUpdatePlanBuilder.Input planInput() {
 		Map<String, UpdatePlan.FileState> consent = firstConnection ? consentedLocalModFiles : switchLocalModConsent;
-		return new ClientUpdatePlanBuilder.Input(target, connectionInfo, clientConfig, prepareObjects, consent);
+		return new ClientUpdatePlanBuilder.Input(target, connectionInfo, clientConfig, consent);
 	}
 
 	/**
@@ -338,7 +338,7 @@ final class UpdateSession implements UpdateAttempt {
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); ModFileCache modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			ClientProjectionView projectionView = ClientProjectionView.observe(storage);
 			builder.reconcileEditableState(cache, projectionView, target.flatTarget());
-			ClientUpdatePlanBuilder.PreparedPlan prepared = builder.buildPlan(new ClientUpdatePlanBuilder.Input(target, null, currentConfig, true), projectionView, cache, modCache);
+			ClientUpdatePlanBuilder.PreparedPlan prepared = builder.buildPlan(new ClientUpdatePlanBuilder.Input(target, null, currentConfig), projectionView, cache, modCache);
 			if (!ReviewedUpdatePlan.outcomeCompatible(pending.plan(), prepared.plan()))
 				throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending update outcome; a new review is required");
 			builder.preparePlanObjects(prepared.plan(), target.flatTarget(), projectionView, cache);

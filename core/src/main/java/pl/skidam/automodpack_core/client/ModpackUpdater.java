@@ -101,8 +101,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missingSelectedTargetObjects() throws IOException {
 		if (selectedTarget == null || serverModpackContent == null) throw new IOException("Selected modpack target is unavailable");
 		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
-			planBuilder.populateStoreFromCachedLocations(selectedTarget.flatTarget(), ClientProjectionView.observe(storage), cache);
-			return objectAcquisition.missingTargetObjects(selectedTarget.flatTarget(), cache);
+			return objectAcquisition.missingTargetObjects(selectedTarget.flatTarget(), cache, ClientProjectionView.observe(storage));
 		}
 	}
 

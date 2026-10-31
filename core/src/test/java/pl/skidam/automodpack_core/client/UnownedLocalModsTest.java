@@ -58,12 +58,12 @@ class UnownedLocalModsTest {
 		ClientUpdatePlanBuilder builder = builder(storage);
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); ModFileCache modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			SelectedModpackTarget target = SelectedModpackTarget.prepare(replacement, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
-			ClientUpdatePlanBuilder.PreparedPlan switchPlan = builder.buildPlan(new ClientUpdatePlanBuilder.Input(target, null, new ClientConfigJsons.ClientConfigFieldsV3(), true),
+			ClientUpdatePlanBuilder.PreparedPlan switchPlan = builder.buildPlan(new ClientUpdatePlanBuilder.Input(target, null, new ClientConfigJsons.ClientConfigFieldsV3()),
 					ClientProjectionView.observe(storage), cache, modCache);
 			assertEquals(List.of("mods/local.jar"), List.copyOf(switchPlan.unownedLocalMods().keySet()));
 
 			SelectedModpackTarget samePack = SelectedModpackTarget.prepare(installed, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
-			ClientUpdatePlanBuilder.PreparedPlan updatePlan = builder.buildPlan(new ClientUpdatePlanBuilder.Input(samePack, null, new ClientConfigJsons.ClientConfigFieldsV3(), true),
+			ClientUpdatePlanBuilder.PreparedPlan updatePlan = builder.buildPlan(new ClientUpdatePlanBuilder.Input(samePack, null, new ClientConfigJsons.ClientConfigFieldsV3()),
 					ClientProjectionView.observe(storage), cache, modCache);
 			assertTrue(updatePlan.unownedLocalMods().isEmpty());
 		}

@@ -100,16 +100,15 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	record Input(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo,
-			ClientConfigJsons.ClientConfigFieldsV3 currentConfig, boolean prepareObjects, Map<String, UpdatePlan.FileState> consentedLocalModFiles) {
+			ClientConfigJsons.ClientConfigFieldsV3 currentConfig, Map<String, UpdatePlan.FileState> consentedLocalModFiles) {
 		Input {
 			Objects.requireNonNull(selectedTarget, "selectedTarget");
 			Objects.requireNonNull(currentConfig, "currentConfig");
 			consentedLocalModFiles = Map.copyOf(consentedLocalModFiles == null ? Map.of() : consentedLocalModFiles);
 		}
 
-		Input(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo,
-				ClientConfigJsons.ClientConfigFieldsV3 currentConfig, boolean prepareObjects) {
-			this(selectedTarget, connectionInfo, currentConfig, prepareObjects, Map.of());
+		Input(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo, ClientConfigJsons.ClientConfigFieldsV3 currentConfig) {
+			this(selectedTarget, connectionInfo, currentConfig, Map.of());
 		}
 
 		/** The target's flat manifest, a validated component of the selected target rather than a separately carried copy. */
@@ -153,7 +152,6 @@ final class ClientUpdatePlanBuilder {
 		GeneratedCopyState previousGeneratedState = installed == null ? null : projection.generatedCopies();
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(input.target(), installed, selection, projection,
 				previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies(), cache, overlaySnapshots);
-		if (input.prepareObjects()) populateStoreFromProjection(input.target(), projection, cache);
 		Set<String> forceCopyServices = getForceCopyMods(input.target(), cache, modCache, projection);
 		List<UpdatePlan.ModInfo> targetMods = inspectTargetMods(input.target(), cache, modCache, projection);
 		List<NestedConflicts.StandardRoot> standardRoots = inspectStandardRoots(cache, modCache);
@@ -161,9 +159,7 @@ final class ClientUpdatePlanBuilder {
 		for (NestedConflicts.StandardRoot root : standardRoots)
 			standardMods.add(new UpdatePlan.ModInfo(root.logicalPath(), root.mod().hash(), Files.size(root.mod().path()), root.mod().version(), root.mod().IDs(), root.mod().deps()));
 		List<UpdatePlan.NestedCopy> previousCopies = previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies();
-		List<UpdatePlanner.NestedCandidate> nestedCandidates = input.prepareObjects()
-				? inspectNestedCopies(input.target(), cache, projection, targetMods, standardRoots, previousCopies, forceCopyServices, modCache)
-				: readGeneratedCopyState(input.target(), input.selectedTarget().selection().intent()).nestedCopies().stream().map(UpdatePlanner.NestedCandidate::previous).toList();
+		List<UpdatePlanner.NestedCandidate> nestedCandidates = inspectNestedCopies(input.target(), cache, projection, targetMods, standardRoots, previousCopies, forceCopyServices, modCache);
 		ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = input.connectionInfo() == null || !input.connectionInfo().isComplete()
 				? ModpackUtils.planCachedModpackSelection(input.target().modpackId, logicalConfig)
 				: ModpackUtils.planModpackSelection(input.target().modpackId, input.connectionInfo(), logicalConfig);
@@ -238,11 +234,14 @@ final class ClientUpdatePlanBuilder {
 
 	void populateStoreFromCachedLocations(ModpackJsons.ModpackContentFields target, ClientProjectionView projectionView, FileCache cache) throws IOException {
 		ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
-		populateStoreFromSources(target, cache, item -> {
-			List<Path> candidates = new ArrayList<>(projection.sourceCandidates(item.file));
-			candidates.add(livePath(item));
-			return candidates;
-		});
+		populateStoreFromSources(target, cache, item -> cachedSourceCandidates(projection, item));
+	}
+
+	/** Where a target file may already live on this machine: the projection's sources and the live game file. */
+	List<Path> cachedSourceCandidates(ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields.ModpackContentItem item) {
+		List<Path> candidates = new ArrayList<>(projection.sourceCandidates(item.file));
+		candidates.add(livePath(item));
+		return candidates;
 	}
 
 	void preparePlanObjects(UpdatePlan plan, ModpackJsons.ModpackContentFields targetManifest, ClientProjectionView projectionView, FileCache cache) throws IOException {
