@@ -456,7 +456,7 @@ class BestEffortApplyTest {
 		group.defaultSelected = true;
 		Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> groupFiles = new LinkedHashMap<>();
 		for (var entry : files.entrySet()) {
-			String hash = OverlayTombstoneCommitTest.store(storage, entry.getValue());
+			String hash = UpdateTestFixtures.store(storage, entry.getValue());
 			groupFiles.put(entry.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(entry.getValue().length),
 					entry.getKey().equals(EDITABLE), hash, "0"));
 		}
@@ -503,12 +503,12 @@ class BestEffortApplyTest {
 	/** The fixture the rc.4/rc.5 journals were written against: mods/old.jar installed, then a generation replacing it with one editable config planned against CRLF live bytes. */
 	private Fixture twoGenerations() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
-		String old = OverlayTombstoneCommitTest.store(storage, OLD_JAR);
+		String old = UpdateTestFixtures.store(storage, OLD_JAR);
 		SelectedModpackTarget oldTarget = UpdateTestFixtures.target(storage, "mods/old.jar", "mod", false, old, OLD_JAR.length);
 		assertInstanceOf(UpdateCommit.Applied.class, UpdateTestFixtures.commit(storage, UpdateTestFixtures.plan(oldTarget,
 				List.of(new Operation(Root.PROJECTION, "mods/old.jar", OperationType.INSTALL_OBJECT, old, OLD_JAR.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/old.jar", true, old, OLD_JAR.length))), oldTarget));
-		String lf = OverlayTombstoneCommitTest.store(storage, LF);
+		String lf = UpdateTestFixtures.store(storage, LF);
 		var manifest = GroupManifestValidator.validate(UpdateTestFixtures.fields(CONFIG, "config", true, lf, LF.length));
 		PackDocument document = PackDocument.create(manifest, TestPacks.policySha1(manifest), TestPacks.CREATED, oldTarget.document().ownershipLedger());
 		TestPacks.stageGeneration(storage, document);

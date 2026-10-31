@@ -22,6 +22,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** The fixture layer shared by the update transaction tests; helpers here must stay behavior-identical for every user. */
 final class UpdateTestFixtures {
@@ -43,6 +44,13 @@ final class UpdateTestFixtures {
 		ClientStorage storage = TestDataRoot.open(gameDirectory(temporaryDirectory), temporaryDirectory.resolve("data"));
 		Files.createDirectories(storage.modsDirectory());
 		return storage;
+	}
+
+	/** Stores {@code bytes} as a CAS object and returns its SHA-1. */
+	static String store(ClientStorage storage, byte[] bytes) throws Exception {
+		String hash = HashUtils.sha1(bytes);
+		ClientObjectStore.storeObject(storage, hash, bytes);
+		return hash;
 	}
 
 	static UpdateCommit commits(ClientStorage storage) {

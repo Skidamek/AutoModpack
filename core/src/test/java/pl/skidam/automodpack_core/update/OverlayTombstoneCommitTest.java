@@ -29,7 +29,6 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
-import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** #580 failure 1 and its siblings: every commit door derives the same tombstones, and a delete with nothing to remove is complete. */
 class OverlayTombstoneCommitTest {
@@ -46,7 +45,7 @@ class OverlayTombstoneCommitTest {
 	@ValueSource(strings = {"rc.4", "rc.5"})
 	void aReleaseCandidateJournalStuckOnATombstoneDeleteRecovers(String release) throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
-		String kept = store(storage, KEPT_BYTES);
+		String kept = UpdateTestFixtures.store(storage, KEPT_BYTES);
 		UpdateTestFixtures.target(storage, KEPT, "config", false, kept, KEPT_BYTES.length);
 		storage.writeOverlayState(PACK, Set.of(TOMBSTONED));
 		// The release's live installs ran before its delete threw.
@@ -69,7 +68,7 @@ class OverlayTombstoneCommitTest {
 	@Test
 	void aFreshPlanCannotDeleteWhatItNeverObserved() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
-		String kept = store(storage, KEPT_BYTES);
+		String kept = UpdateTestFixtures.store(storage, KEPT_BYTES);
 		SelectedModpackTarget target = UpdateTestFixtures.target(storage, KEPT, "config", false, kept, KEPT_BYTES.length);
 		UpdatePlan plan = UpdateTestFixtures.plan(target, sorted(new Operation(Root.PROJECTION, KEPT, OperationType.INSTALL_OBJECT, kept, KEPT_BYTES.length, null),
 				new Operation(Root.OVERLAY, TOMBSTONED, OperationType.DELETE, null, -1, null)), finalState(kept, new ProjectedFile(Root.OVERLAY, TOMBSTONED, false, null, -1)));
@@ -83,7 +82,7 @@ class OverlayTombstoneCommitTest {
 	@Test
 	void theCommitKeepsOnlyTombstonesTheTargetShipsAsEditable() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
-		String kept = store(storage, KEPT_BYTES);
+		String kept = UpdateTestFixtures.store(storage, KEPT_BYTES);
 		SelectedModpackTarget target = UpdateTestFixtures.target(storage, KEPT, "config", true, kept, KEPT_BYTES.length);
 		UpdatePlan plan = UpdateTestFixtures.plan(target, sorted(new Operation(Root.PROJECTION, KEPT, OperationType.INSTALL_OBJECT, kept, KEPT_BYTES.length, null)),
 				finalState(kept, new ProjectedFile(Root.OVERLAY, KEPT, false, null, -1)));
@@ -99,7 +98,7 @@ class OverlayTombstoneCommitTest {
 	void aPublishedReplayDoesNotCompareTombstonesThePlanItselfRewrites() throws Exception {
 		// S4: the post-publication overlay compare used to require the stale tombstones, so a replay that cleaned them was "drift".
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
-		String kept = store(storage, KEPT_BYTES);
+		String kept = UpdateTestFixtures.store(storage, KEPT_BYTES);
 		SelectedModpackTarget target = UpdateTestFixtures.target(storage, KEPT, "config", false, kept, KEPT_BYTES.length);
 		storage.writeOverlayState(PACK, Set.of(TOMBSTONED));
 		UpdatePlan plan = UpdateTestFixtures.plan(target, sorted(new Operation(Root.PROJECTION, KEPT, OperationType.INSTALL_OBJECT, kept, KEPT_BYTES.length, null)),
@@ -119,7 +118,7 @@ class OverlayTombstoneCommitTest {
 	@ValueSource(strings = {"DEFERRED_LOCKED", "REPLAN_REQUIRED"})
 	void aJournalDeferredBeforeItsFirstWriteSeesALaterOverlayEdit(String status) throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
-		String kept = store(storage, KEPT_BYTES);
+		String kept = UpdateTestFixtures.store(storage, KEPT_BYTES);
 		SelectedModpackTarget target = UpdateTestFixtures.target(storage, KEPT, "config", true, kept, KEPT_BYTES.length);
 		UpdatePlan plan = UpdateTestFixtures.plan(target, sorted(new Operation(Root.PROJECTION, KEPT, OperationType.INSTALL_OBJECT, kept, KEPT_BYTES.length, null)), finalState(kept));
 		UpdateTransaction transaction = UpdateTestFixtures.createTransaction(storage, plan, target);
@@ -153,9 +152,4 @@ class OverlayTombstoneCommitTest {
 		}
 	}
 
-	static String store(ClientStorage storage, byte[] bytes) throws Exception {
-		String hash = HashUtils.sha1(bytes);
-		ClientObjectStore.storeObject(storage, hash, bytes);
-		return hash;
-	}
 }

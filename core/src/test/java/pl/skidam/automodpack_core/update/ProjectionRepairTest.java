@@ -7,12 +7,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.skidam.automodpack_core.update.ProjectionTestFixtures.*;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.PosixFileAttributeView;
@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
-import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.AfterEach;
@@ -629,7 +628,7 @@ class ProjectionRepairTest {
 
 	private static void commit(ClientStorage storage) throws Exception {
 		byte[] bytes = "committed".getBytes(StandardCharsets.UTF_8);
-		String hash = OverlayTombstoneCommitTest.store(storage, bytes);
+		String hash = UpdateTestFixtures.store(storage, bytes);
 		var target = UpdateTestFixtures.target(storage, "mods/committed.jar", "mod", false, hash, bytes.length);
 		storage.writeActiveState(target.document(), target.selection().intent());
 	}
@@ -662,38 +661,6 @@ class ProjectionRepairTest {
 		return hashes;
 	}
 
-	private static ProjectionConvergence.Result converge(ClientStorage storage, FileCache cache, Map<String, String> files, Map<String, String> hints, ProjectionConvergence.Writes writes)
-			throws Exception {
-		return new ProjectionConvergence(storage, cache, writes).converge("tx", rows(storage, files), hints);
-	}
-
-	private static ProjectionConvergence.Writes holding(Predicate<Path> held) {
-		return new ProjectionConvergence.Writes() {
-			@Override
-			public void beforeWrite(Path target) throws IOException {
-				if (held.test(target)) throw new FileSystemException(target.toString(), null, "The process cannot access the file because it is being used by another process");
-			}
-		};
-	}
-
-	private static void settle(ClientStorage storage, FileCache cache, Map<String, String> files) throws Exception {
-		assertTrue(converge(storage, cache, files, Map.of(), ProjectionConvergence.Writes.NONE).converged());
-		ProjectionState.settled(storage, "settle-" + UUID.randomUUID());
-	}
-
-	private static List<ProjectionState.Row> rows(ClientStorage storage, Map<String, String> files) throws Exception {
-		List<ProjectionState.Row> rows = new ArrayList<>();
-		for (var entry : new TreeMap<>(files).entrySet()) {
-			byte[] bytes = entry.getValue().getBytes(StandardCharsets.UTF_8);
-			rows.add(new ProjectionState.Row(entry.getKey(), OverlayTombstoneCommitTest.store(storage, bytes), bytes.length));
-		}
-		return rows;
-	}
-
-	private static Map<String, String> tree(ClientStorage storage) throws IOException {
-		return files(storage.activeDirectory());
-	}
-
 	/** The kept files by projection path, from the content-addressed backup directory ({@code <sha1>/<path>}). */
 	static Map<String, String> repairBackups(ClientStorage storage) throws IOException {
 		Map<String, String> kept = new TreeMap<>();
@@ -711,19 +678,4 @@ class ProjectionRepairTest {
 		}
 	}
 
-	static Map<String, String> files(Path root) throws IOException {
-		Map<String, String> files = new TreeMap<>();
-		if (!Files.exists(root)) return files;
-		try (Stream<Path> walk = Files.walk(root)) {
-			for (Path path : walk.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).toList())
-				files.put(root.relativize(path).toString().replace('\\', '/'), Files.readString(path));
-		}
-		return files;
-	}
-
-	private static List<String> names(Path directory) throws IOException {
-		try (Stream<Path> list = Files.list(directory)) {
-			return list.map(path -> path.getFileName().toString()).sorted().toList();
-		}
-	}
 }
