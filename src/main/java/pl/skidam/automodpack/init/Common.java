@@ -6,6 +6,7 @@ import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.auth.ProvisioningSecretStore;
 import pl.skidam.automodpack_core.client.SessionNotices;
+import pl.skidam.automodpack_core.Deferred;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
@@ -84,6 +85,7 @@ public class Common {
 
 	public static void init() {
 		GAME_CALL = new GameCall();
+		Deferred.shared().drain();
 	}
 
 	public static synchronized void afterSetupServer() {
