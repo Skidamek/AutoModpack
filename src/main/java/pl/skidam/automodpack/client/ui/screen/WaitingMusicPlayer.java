@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import net.minecraft.client.Minecraft;
 
 import pl.skidam.automodpack.client.audio.AudioManager;
+import pl.skidam.automodpack_core.client.InstalledPacks;
 import pl.skidam.automodpack_core.client.StoredModpackConnection;
 import pl.skidam.automodpack_core.client.WaitingMusic;
 import pl.skidam.automodpack_core.protocol.PackTransport;
@@ -35,7 +36,7 @@ final class WaitingMusicPlayer {
 	}
 
 	/** Opens the pack's route and plays what it advertises; a press while one is already starting does nothing. */
-	void play(InstalledModpackController.Pack pack) {
+	void play(InstalledPacks.Pack pack) {
 		if (busy) return;
 		release();
 		busy = true;
@@ -82,7 +83,7 @@ final class WaitingMusicPlayer {
 		refreshFailed = false;
 	}
 
-	private WaitingMusicListen openWaitingMusic(InstalledModpackController.Pack pack) {
+	private WaitingMusicListen openWaitingMusic(InstalledPacks.Pack pack) {
 		try {
 			StoredModpackConnection connection = StoredModpackConnection.open(storage, pack.modpackId(), false);
 			PackTransport transport = connection.transport();

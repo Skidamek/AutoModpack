@@ -15,6 +15,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.client.Changelogs;
+import pl.skidam.automodpack_core.client.InstalledPacks;
 import pl.skidam.automodpack_core.client.UpdateType;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
@@ -25,7 +26,7 @@ public class RestartScreen extends VersionedScreen {
 	private final UpdateType updateType;
 	private final Changelogs changelogs;
 	private final InstalledModpackController controller = new InstalledModpackController();
-	private List<InstalledModpackController.StalePack> stalePacks = List.of();
+	private List<InstalledPacks.Stale> stalePacks = List.of();
 	private boolean stalePacksLoaded;
 	private Future<?> staleLoad;
 	private int titleTop;
@@ -65,7 +66,7 @@ public class RestartScreen extends VersionedScreen {
 	private void loadStalePacks() {
 		if (stalePacksLoaded || staleLoad != null) return;
 		staleLoad = ScreenManager.background(() -> {
-			List<InstalledModpackController.StalePack> loaded = controller.stalePacks();
+			List<InstalledPacks.Stale> loaded = controller.stalePacks();
 			this.minecraft.execute(() -> {
 				stalePacksLoaded = true;
 				staleLoad = null;

@@ -14,6 +14,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
+import pl.skidam.automodpack_core.client.InstalledPacks;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
@@ -29,7 +30,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 
 	private final Screen parent;
 	private final InstalledModpackController controller;
-	private List<InstalledModpackController.Pack> entries = List.of();
+	private List<InstalledPacks.Pack> entries = List.of();
 	private RowListWidget packList;
 	private boolean discoveryFailureShown;
 	private boolean loading = true;
@@ -68,7 +69,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		int activeIndex = -1;
 		List<RowListWidget.Row> rows = new ArrayList<>(entries.size());
 		for (int index = 0; index < entries.size(); index++) {
-			InstalledModpackController.Pack entry = entries.get(index);
+			InstalledPacks.Pack entry = entries.get(index);
 			String source = VersionedText.str(entry.connectionAvailable() ? "automodpack.packManager.sourceServer" : "automodpack.packManager.sourceLocal");
 			// State is carried by color, not bracket markers: green = active pack, white = installed pack.
 			rows.add(new RowListWidget.Row(List.of(
@@ -101,7 +102,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		activeLine = null;
 		activeLineY = descriptionLines.size() > 1 ? 50 : 44;
 		if (loading || entries.isEmpty()) return;
-		String active = entries.stream().filter(InstalledModpackController.Pack::active).findFirst()
+		String active = entries.stream().filter(InstalledPacks.Pack::active).findFirst()
 				.map(entry -> VersionedText.str("automodpack.packManager.active", entry.name()))
 				.orElse(VersionedText.str("automodpack.packManager.noActive"));
 		activeLine = VersionedText.literal(truncateToWidth(this.font, active, this.width - 20)).withStyle(ChatFormatting.YELLOW);
@@ -121,14 +122,14 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 
 	private void loadEntries() {
 		try {
-			List<InstalledModpackController.Pack> loaded = controller.installed();
+			List<InstalledPacks.Pack> loaded = controller.installed();
 			this.minecraft.execute(() -> loaded(loaded));
 		} catch (Exception e) {
 			this.minecraft.execute(() -> fail(e));
 		}
 	}
 
-	private void loaded(List<InstalledModpackController.Pack> loaded) {
+	private void loaded(List<InstalledPacks.Pack> loaded) {
 		if (closed) return;
 		entries = loaded;
 		loading = false;
@@ -141,7 +142,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		ScreenManager.failure(FailureRequest.of(exception, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 	}
 
-	private void open(InstalledModpackController.Pack entry) {
+	private void open(InstalledPacks.Pack entry) {
 		ScreenImpl.setScreen(new ModpackSettingsScreen(this, controller, entry));
 	}
 

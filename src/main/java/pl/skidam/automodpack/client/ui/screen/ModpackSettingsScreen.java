@@ -19,6 +19,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
+import pl.skidam.automodpack_core.client.InstalledPacks;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
@@ -30,7 +31,7 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 
 	private final Screen parent;
 	private final InstalledModpackController controller;
-	private final InstalledModpackController.Pack pack;
+	private final InstalledPacks.Pack pack;
 	private final List<AbstractWidget> actionButtons = new ArrayList<>();
 	private boolean busy;
 	private boolean busyVisible;
@@ -53,7 +54,7 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 	private final WaitingMusicPlayer music;
 	private boolean launchWrites;
 
-	public ModpackSettingsScreen(Screen parent, InstalledModpackController controller, InstalledModpackController.Pack pack) {
+	public ModpackSettingsScreen(Screen parent, InstalledModpackController controller, InstalledPacks.Pack pack) {
 		super(VersionedText.text("automodpack.packDetails.title"));
 		this.parent = parent;
 		this.controller = controller;
@@ -213,7 +214,7 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 	}
 
 	private void reopenOrList() {
-		InstalledModpackController.Pack next = controller.installedPack(pack.modpackId());
+		InstalledPacks.Pack next = controller.installedPack(pack.modpackId());
 		ScreenImpl.setScreen(next == null ? parent : new ModpackSettingsScreen(parent, controller, next));
 	}
 

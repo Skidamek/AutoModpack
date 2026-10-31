@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,6 +24,7 @@ import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.client.ClientOfflineRepair;
+import pl.skidam.automodpack_core.client.InstalledPacks;
 import pl.skidam.automodpack_core.client.LaunchApplyState;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.ModpackUtils;
@@ -55,7 +55,6 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.MissingGenerationContentException;
 import pl.skidam.automodpack_core.update.OfflineRepair;
 import pl.skidam.automodpack_core.update.RecoveredFiles;
 import pl.skidam.automodpack_core.update.RestartDemand;
@@ -70,6 +69,8 @@ import pl.skidam.automodpack_core.utils.UriOpener;
  * The screens only choose an action and render its result; storage and update invariants stay here.
  */
 final class InstalledModpackController {
+	/** The one thing discovery needs from the game: the vanilla server-list name for a saved origin. */
+	private static final InstalledPacks.ServerNames SERVER_NAMES = VersionedServers::entryName;
 	private final ClientStorage storage;
 	private Throwable discoveryFailure;
 
@@ -125,17 +126,6 @@ final class InstalledModpackController {
 		}
 	}
 
-	Pack pack(PackDocument record) {
-		ClientStorageJsons.ClientGenerationStateFields activeState;
-		try {
-			activeState = storage.readActiveState();
-		} catch (IOException | RuntimeException e) {
-			discoveryFailure = e;
-			activeState = null;
-		}
-		return pack(record, record.manifest().modpackId().equals(activeId(activeState)), detached(activeState, record.manifest().modpackId()), connection(record.manifest().modpackId()));
-	}
-
 	/** Save is the consent moment: the desire lands first, so backing out of the preview still keeps the intent. */
 	void switchSelection(PackDocument record, SelectionIntent target, String modpackName, Runnable released) {
 		try {
@@ -149,45 +139,16 @@ final class InstalledModpackController {
 		}
 	}
 
-	Pack installedPack(String modpackId) {
-		return installed().stream().filter(entry -> entry.modpackId().equals(modpackId)).findFirst().orElse(null);
+	InstalledPacks.Pack installedPack(String modpackId) {
+		for (InstalledPacks.Pack pack : installed()) if (pack.modpackId().equals(modpackId)) return pack;
+		return null;
 	}
 
-	List<Pack> installed() {
-		ClientStorageJsons.ClientGenerationStateFields activeState;
-		try {
-			activeState = storage.readActiveState();
-		} catch (IOException | RuntimeException e) {
-			discoveryFailure = e;
-			activeState = null;
-		}
-		try {
-			ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
-			ClientGenerationStore generations = new ClientGenerationStore(storage);
-			List<Pending> pending = new ArrayList<>();
-			for (String modpackId : generations.installedPackIds(activeState, selections)) {
-				PackDocument record;
-				try {
-					record = generations.newestDocument(modpackId, activeState);
-				} catch (MissingGenerationContentException e) {
-					// The generation's own documents are not on this machine yet. That is what a pack awaiting its
-					// first sync looks like, not broken storage, so the list keeps every pack it could read.
-					LOGGER.info("Installed modpack {} has no stored documents for its newest generation yet, so it is not listed until the next sync: {}", modpackId, e.getMessage());
-					continue;
-				} catch (IOException | RuntimeException e) {
-					discoveryFailure = e;
-					continue;
-				}
-				ConnectionJsons.ConnectionInfo connection = connection(modpackId);
-				String connectionOrigin = connectionOrigin(connection);
-				pending.add(new Pending(record, modpackId.equals(activeId(activeState)), detached(activeState, modpackId), connection, displayName(record, connectionOrigin)));
-			}
-			pending.sort(Comparator.comparing(Pending::displayName, String.CASE_INSENSITIVE_ORDER));
-			return pending.stream().map(entry -> pack(entry.record(), entry.active(), entry.detached(), entry.connection())).toList();
-		} catch (IOException | RuntimeException e) {
-			discoveryFailure = e;
-			return List.of();
-		}
+	/** The whole catalogue, with the first read failure that hid any of it recorded for the screens. */
+	List<InstalledPacks.Pack> installed() {
+		InstalledPacks.Catalogue catalogue = InstalledPacks.read(storage, SERVER_NAMES);
+		if (catalogue.failure() != null) discoveryFailure = catalogue.failure();
+		return catalogue.packs();
 	}
 
 	Throwable discoveryFailure() {
@@ -215,17 +176,10 @@ final class InstalledModpackController {
 		}
 	}
 
-	/** One installed pack this origin no longer serves, with its player-facing name or raw id. */
-	record StalePack(String modpackId, String name) {}
-
 	/** Installed packs whose saved origin now serves the active pack instead: the leftovers of a republished server. */
-	List<StalePack> stalePacks() {
-		String activeId = activeModpackId();
-		if (activeId.isBlank()) return List.of();
+	List<InstalledPacks.Stale> stalePacks() {
 		try {
-			List<StalePack> stale = new ArrayList<>();
-			for (String modpackId : ConnectionStore.staleSameOriginPackIds(storage, activeId)) stale.add(new StalePack(modpackId, packName(modpackId)));
-			return List.copyOf(stale);
+			return InstalledPacks.stale(storage, SERVER_NAMES);
 		} catch (IOException | RuntimeException e) {
 			discoveryFailure = e;
 			return List.of();
@@ -234,13 +188,7 @@ final class InstalledModpackController {
 
 	/** The light name lookup: one document read, no catalogue projection. For labels; never for pack actions. */
 	String packName(String modpackId) {
-		try {
-			PackDocument record = new ClientGenerationStore(storage).newestDocument(modpackId);
-			if (record != null) return displayName(record, connectionOrigin(connection(modpackId)));
-		} catch (IOException | RuntimeException ignored) {
-			// The name is cosmetic; the raw id is the honest fallback, not a discovery failure.
-		}
-		return modpackId;
+		return InstalledPacks.nameOf(storage, modpackId, SERVER_NAMES);
 	}
 
 	/** The restart footer only offers the action; consent is the same removal preview the pack manager uses, one pack at a time. */
@@ -249,12 +197,12 @@ final class InstalledModpackController {
 	}
 
 	/** Builds one pack's removal preview off the player thread and offers it on the client thread; the forget callback recurses to the next pack. */
-	private void previewStaleRemoval(List<StalePack> stale, int index, Runnable completed) {
+	private void previewStaleRemoval(List<InstalledPacks.Stale> stale, int index, Runnable completed) {
 		if (index >= stale.size()) {
 			completed.run();
 			return;
 		}
-		StalePack pack = stale.get(index);
+		InstalledPacks.Stale pack = stale.get(index);
 		try {
 			PackDocument record = new ClientGenerationStore(storage).newestDocument(pack.modpackId());
 			if (record == null) throw new IOException("Stale pack has no installed generation: " + pack.modpackId());
@@ -269,7 +217,7 @@ final class InstalledModpackController {
 		}
 	}
 
-	private void showStaleRemoval(List<StalePack> stale, int index, StalePack pack, UpdatePreview preview, String origin, Runnable completed) {
+	private void showStaleRemoval(List<InstalledPacks.Stale> stale, int index, InstalledPacks.Stale pack, UpdatePreview preview, String origin, Runnable completed) {
 		boolean shown = ScreenManager.preview(PreviewPayload.storageRemoval(preview, pack.name(), origin, null,
 				(Runnable) () -> ScreenManager.background(() -> {
 					try {
@@ -348,7 +296,7 @@ final class InstalledModpackController {
 	}
 
 	/** Whether the saved desire composes a different pack than the applied one: pending work the update button must still offer. */
-	boolean pendingGroupChanges(Pack pack) {
+	boolean pendingGroupChanges(InstalledPacks.Pack pack) {
 		try {
 			SelectionIntent desired = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
 			return desired != null && !desired.equals(appliedSelection(pack.modpackId()));
@@ -357,7 +305,7 @@ final class InstalledModpackController {
 		}
 	}
 
-	void update(Pack pack, Consumer<Boolean> completed) {
+	void update(InstalledPacks.Pack pack, Consumer<Boolean> completed) {
 		if (!pack.active() || !pack.connectionAvailable()) {
 			releaseOnClient(() -> completed.accept(false));
 			return;
@@ -397,7 +345,7 @@ final class InstalledModpackController {
 	}
 
 	/** Declares local sovereignty for the active pack: a pure local statement that stops every sync until the player explicitly syncs again. */
-	void stopSyncing(Pack pack, Runnable completed) {
+	void stopSyncing(InstalledPacks.Pack pack, Runnable completed) {
 		ScreenManager.background(() -> {
 			try {
 				new ClientGenerationStore(storage).declareDetached(pack.modpackId());
@@ -409,7 +357,7 @@ final class InstalledModpackController {
 		});
 	}
 
-	void repair(Screen parent, Pack pack, Consumer<Boolean> completed) {
+	void repair(Screen parent, InstalledPacks.Pack pack, Consumer<Boolean> completed) {
 		if (!pack.active()) {
 			releaseOnClient(() -> completed.accept(false));
 			return;
@@ -427,7 +375,7 @@ final class InstalledModpackController {
 		});
 	}
 
-	void activate(Pack pack, Runnable released) {
+	void activate(InstalledPacks.Pack pack, Runnable released) {
 		try {
 			SelectionIntent desired = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
 			SelectionIntent targetSelection = desired == null ? GroupSelectionResolver.defaultIntent(pack.record().manifest()) : desired;
@@ -438,11 +386,11 @@ final class InstalledModpackController {
 		}
 	}
 
-	void deactivate(Pack pack, Runnable released, Runnable completed) {
+	void deactivate(InstalledPacks.Pack pack, Runnable released, Runnable completed) {
 		removeActive(pack, true, released, completed);
 	}
 
-	void remove(Pack pack, Runnable released, Runnable removed) {
+	void remove(InstalledPacks.Pack pack, Runnable released, Runnable removed) {
 		if (pack.active()) {
 			removeActive(pack, false, released, removed);
 			return;
@@ -458,15 +406,15 @@ final class InstalledModpackController {
 		}
 	}
 
-	boolean launchWritesUnverified(Pack pack) {
+	boolean launchWritesUnverified(InstalledPacks.Pack pack) {
 		return LaunchApplyState.allowsUnverifiedLaunchWrites(storage, pack.modpackId());
 	}
 
-	void setLaunchWritesUnverified(Pack pack, boolean allowed) {
+	void setLaunchWritesUnverified(InstalledPacks.Pack pack, boolean allowed) {
 		LaunchApplyState.setAllowsUnverifiedLaunchWrites(storage, pack.modpackId(), allowed);
 	}
 
-	void openHistory(Pack pack, Runnable released) {
+	void openHistory(InstalledPacks.Pack pack, Runnable released) {
 		ScreenManager.background(() -> {
 			try {
 				GenerationHistoryController.open(storage, pack.modpackId(), pack.name(), released);
@@ -477,7 +425,7 @@ final class InstalledModpackController {
 		});
 	}
 
-	void openFiles(Screen parent, Pack pack) {
+	void openFiles(Screen parent, InstalledPacks.Pack pack) {
 		ScreenImpl.setScreen(new ChangeBrowserScreen(parent, VersionedText.text("automodpack.files.title", pack.name()),
 				VersionedText.text("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), groupNames(pack.record().manifest()), null, List.of(), 0, ""));
 	}
@@ -496,7 +444,7 @@ final class InstalledModpackController {
 		return Map.copyOf(names);
 	}
 
-	private void removeActive(Pack pack, boolean deactivation, Runnable released, Runnable removed) {
+	private void removeActive(InstalledPacks.Pack pack, boolean deactivation, Runnable released, Runnable removed) {
 		ModpackUpdater updater;
 		try {
 			updater = new ModpackUpdater(null, null, storage);
@@ -508,7 +456,7 @@ final class InstalledModpackController {
 		updater.removeOrDeactivate(deactivation, pack.name(), released, removed);
 	}
 
-	private void forget(Pack pack, Runnable released, Runnable removed) {
+	private void forget(InstalledPacks.Pack pack, Runnable released, Runnable removed) {
 		try {
 			new ClientGenerationStore(storage).forgetModpack(pack.modpackId());
 			releaseOnClient(() -> {
@@ -531,7 +479,8 @@ final class InstalledModpackController {
 
 	String activeModpackId() {
 		try {
-			return activeId(storage.readActiveState());
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+			return state == null || state.modpackId == null ? "" : state.modpackId;
 		} catch (IOException | RuntimeException e) {
 			discoveryFailure = e;
 			return "";
@@ -550,8 +499,8 @@ final class InstalledModpackController {
 
 	/** The display origin recorded for this pack, or "" when the pack has none (for example a locally imported record). */
 	public String originFor(String modpackId) {
-		String origin = connectionOrigin(connection(modpackId));
-		return origin == null ? "" : origin;
+		ConnectionJsons.ConnectionInfo connection = connection(modpackId);
+		return connection == null ? "" : InstalledPacks.displayOrigin(AddressHelpers.formatAddress(connection.origin));
 	}
 
 	/** The forget-this-pack preview: a removal plan over the installed record with no operations of its own. */
@@ -568,18 +517,6 @@ final class InstalledModpackController {
 		return connection == null ? null : AddressHelpers.formatAddress(connection.endpoint) + " · " + connection.connectionMode.name().toLowerCase(Locale.ROOT).replace('_', ' ');
 	}
 
-	/** Player-facing pack name: explicit name, else the vanilla server list entry, else the address, else the raw id. */
-	private static String displayName(PackDocument record, String connectionOrigin) {
-		String name = record.manifest().modpackName();
-		if (!name.isBlank()) return name;
-		if (connectionOrigin != null) {
-			String server = VersionedServers.entryName(connectionOrigin);
-			if (!server.isBlank()) return server;
-			return connectionOrigin;
-		}
-		return record.manifest().modpackId();
-	}
-
 	private void releaseOnClient(Runnable released) {
 		Minecraft.getInstance().execute(released);
 	}
@@ -592,35 +529,4 @@ final class InstalledModpackController {
 		ScreenManager.failure(FailureRequest.of(cause, messageKey, category, FailureDestination.CURRENT_SCREEN, null));
 	}
 
-	private static Pack pack(PackDocument record, boolean active, boolean detached, ConnectionJsons.ConnectionInfo connection) {
-		int fileCount = 0;
-		long byteCount = 0;
-		for (GroupManifest.Group group : record.manifest().groups().values())
-			for (GroupManifest.GroupFile file : group.files().values()) {
-				fileCount++;
-				byteCount += file.size();
-			}
-		return new Pack(record, active, detached, connectionOrigin(connection), connectionDetail(connection), fileCount, byteCount);
-	}
-
-	private record Pending(PackDocument record, boolean active, boolean detached, ConnectionJsons.ConnectionInfo connection, String displayName) {}
-
-	record Pack(PackDocument record, boolean active, boolean detached, String connectionOrigin, String connectionDetail, int fileCount, long fileBytes) {
-		boolean connectionAvailable() {
-			return connectionOrigin != null;
-		}
-
-		String modpackId() {
-			return record.manifest().modpackId();
-		}
-
-		String name() {
-			return InstalledModpackController.displayName(record, connectionOrigin);
-		}
-
-		int groupCount() {
-			return record.manifest().groups().size();
-		}
-
-	}
 }

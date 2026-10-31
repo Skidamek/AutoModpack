@@ -4,6 +4,8 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import net.minecraft.client.gui.screens.Screen;
 
+import pl.skidam.automodpack.client.ui.versioned.VersionedServers;
+import pl.skidam.automodpack_core.client.InstalledPacks;
 import pl.skidam.automodpack_core.client.LaunchApplyState;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -30,7 +32,7 @@ public final class LaunchApplyNotice {
 		try {
 			ClientStorage storage = ClientStorage.open(GameDirectory.current());
 			if (!LaunchApplyState.takeNotice(storage, pending)) return;
-			GenerationHistoryController.open(parent, storage, pending.modpackId(), nameOf(storage, pending.modpackId()), () -> {});
+			GenerationHistoryController.open(parent, storage, pending.modpackId(), InstalledPacks.nameOf(storage, pending.modpackId(), VersionedServers::entryName), () -> {});
 		} catch (Exception e) {
 			LOGGER.warn("The launch-apply history could not be opened", e);
 		}
@@ -52,13 +54,4 @@ public final class LaunchApplyNotice {
 		return notice;
 	}
 
-	private static String nameOf(ClientStorage storage, String modpackId) {
-		try {
-			InstalledModpackController.Pack pack = new InstalledModpackController(storage).installedPack(modpackId);
-			if (pack != null) return pack.name();
-		} catch (RuntimeException e) {
-			LOGGER.debug("The launch-apply notice falls back to the pack id as its name", e);
-		}
-		return modpackId;
-	}
 }
