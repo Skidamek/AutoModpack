@@ -514,19 +514,9 @@ public final class ClientStorage {
 	 */
 	public static Path loadableProjectionModsDirectory(Path gameDirectory) {
 		// One read decides the gate and is what the latch remembers, so recovery compares against exactly what was decided.
-		// A physical read failure this early is usually a startup scanner holding the file: it is retried for a while
-		// rather than refusing Kilt the projection and spending a relaunch on it.
-		ProjectionState.Inspection inspection = null;
-		for (int attempt = 1;; attempt++) {
-			inspection = ProjectionState.inspect(ProjectionState.file(gameDirectory));
-			if (inspection.standing() != ProjectionState.Standing.UNAVAILABLE || attempt >= SCAN_READ_ATTEMPTS) break;
-			try {
-				Thread.sleep(SCAN_READ_RETRY_MILLIS);
-			} catch (InterruptedException interrupted) {
-				Thread.currentThread().interrupt();
-				break;
-			}
-		}
+		// A physical read failure this early is usually a startup scanner holding the file: the gate spends the longest
+		// budget on it (5 x 100 ms) rather than refusing Kilt the projection and spending a relaunch on it.
+		ProjectionState.Inspection inspection = ProjectionState.inspect(ProjectionState.file(gameDirectory), SCAN_READ_ATTEMPTS, SCAN_READ_RETRY_MILLIS);
 		ProjectionState projection = inspection.state();
 		String refusal = inspection.refusal();
 		directoryScan = new DirectoryScan(projection, false, false);

@@ -234,9 +234,14 @@ public final class ProjectionState {
 	 * temporary of an interrupted non-atomic replace stands beside it (P7).
 	 */
 	public static ProjectionState read(Path file) throws IOException {
+		return read(file, READ_ATTEMPTS, READ_RETRY_MILLIS);
+	}
+
+	/** {@link #read(Path)} with the caller's own retry budget, so a longer-budget caller never nests two loops. */
+	static ProjectionState read(Path file, int attempts, long retryMillis) throws IOException {
 		byte[] bytes;
 		try {
-			bytes = readBytes(file);
+			bytes = readBytes(file, attempts, retryMillis);
 		} catch (NoSuchFileException missing) {
 			if (interruptedReplace(file)) throw new UnreadableException("Projection state is missing beside the temporary of an interrupted replace: " + file, missing);
 			return LEGACY;
@@ -259,17 +264,17 @@ public final class ProjectionState {
 		return new ProjectionState(fields.phase, fields.revision, fields.transactionId, fields.committedToken, fields.fallbackSource, fields.contentDigest, fields.targetDigest, rows);
 	}
 
-	/** A transient hold (a scanner, a sharing violation) is retried briefly; what persists propagates as itself. */
-	private static byte[] readBytes(Path file) throws IOException {
+	/** A transient hold (a scanner, a sharing violation) is retried on the caller's budget; what persists propagates as itself. */
+	private static byte[] readBytes(Path file, int attempts, long retryMillis) throws IOException {
 		for (int attempt = 1;; attempt++) {
 			try {
 				return Files.readAllBytes(file);
 			} catch (NoSuchFileException missing) {
 				throw missing;
 			} catch (IOException physical) {
-				if (attempt >= READ_ATTEMPTS) throw physical;
+				if (attempt >= attempts) throw physical;
 				try {
-					Thread.sleep(READ_RETRY_MILLIS);
+					Thread.sleep(retryMillis);
 				} catch (InterruptedException interrupted) {
 					Thread.currentThread().interrupt();
 					throw physical;
@@ -318,14 +323,19 @@ public final class ProjectionState {
 		}
 	}
 
-	/** Reads once and classifies, for callers that must keep going on every answer; writers use {@link #readForWriter}. */
+	/** Reads and classifies, for callers that must keep going on every answer; writers use {@link #readForWriter}. */
 	public static Inspection inspect(ClientStorage storage) {
 		return inspect(storage.projectionStateFile());
 	}
 
 	public static Inspection inspect(Path file) {
+		return inspect(file, READ_ATTEMPTS, READ_RETRY_MILLIS);
+	}
+
+	/** {@link #inspect(Path)} on the caller's retry budget, so the scan gate's longer wait is not multiplied by the default one. */
+	public static Inspection inspect(Path file, int attempts, long retryMillis) {
 		try {
-			ProjectionState state = read(file);
+			ProjectionState state = read(file, attempts, retryMillis);
 			return new Inspection(state.converging() ? Standing.CONVERGING : Standing.SETTLED, state, null);
 		} catch (UnreadableException unreadable) {
 			return new Inspection(Standing.UNREADABLE, null, unreadable);
