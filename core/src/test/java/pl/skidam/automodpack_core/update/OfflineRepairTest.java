@@ -51,7 +51,7 @@ class OfflineRepairTest {
 		write(storage.gamePath("config/settings.json"), "broken-live".getBytes(StandardCharsets.UTF_8));
 		OfflineRepair repair = new OfflineRepair(storage);
 
-		OfflineRepair.Prepared before = repair.inspect(new OfflineRepair.Request(target, Set.of(), null));
+		OfflineRepair.Prepared before = repair.inspect(new OfflineRepair.Request(target, Set.of(), null, Set.of()));
 		OfflineRepair.Receipt receipt = repair.apply(before);
 
 		assertEquals(2, before.findings().size());
@@ -74,7 +74,7 @@ class OfflineRepairTest {
 		long before = ProjectionState.read(storage).revision();
 		OfflineRepair repair = new OfflineRepair(storage);
 
-		OfflineRepair.Receipt receipt = repair.apply(repair.inspect(new OfflineRepair.Request(target, Set.of(), null)));
+		OfflineRepair.Receipt receipt = repair.apply(repair.inspect(new OfflineRepair.Request(target, Set.of(), null, Set.of())));
 
 		assertEquals(1, receipt.repairedMaterializedFiles());
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/a.jar"), expectedBytes.length, hash));
@@ -92,7 +92,7 @@ class OfflineRepairTest {
 		write(storage.gamePath("mods/edit.jar"), edited);
 		OfflineRepair repair = new OfflineRepair(storage);
 
-		OfflineRepair.Prepared before = repair.inspect(new OfflineRepair.Request(target, Set.of(), null));
+		OfflineRepair.Prepared before = repair.inspect(new OfflineRepair.Request(target, Set.of(), null, Set.of()));
 
 		// The live copy of an editable mod belongs to the pack until the player removes it; its divergence is a reset candidate, not unowned clutter.
 		assertTrue(before.unownedModPaths().isEmpty());
@@ -109,7 +109,7 @@ class OfflineRepairTest {
 		write(storage.objectFile(hash), corrupt);
 		OfflineRepair repair = new OfflineRepair(storage);
 
-		OfflineRepair.Prepared before = repair.inspect(new OfflineRepair.Request(target, Set.of(), null));
+		OfflineRepair.Prepared before = repair.inspect(new OfflineRepair.Request(target, Set.of(), null, Set.of()));
 		OfflineRepair.Receipt receipt = repair.apply(before);
 
 		assertTrue(before.requiresUpdate());
@@ -131,7 +131,7 @@ class OfflineRepairTest {
 		write(live, "my-local-edit".getBytes(StandardCharsets.UTF_8));
 		OfflineRepair repair = new OfflineRepair(storage);
 
-		OfflineRepair.Prepared prepared = repair.inspect(new OfflineRepair.Request(target, Set.of(), null));
+		OfflineRepair.Prepared prepared = repair.inspect(new OfflineRepair.Request(target, Set.of(), null, Set.of()));
 		OfflineRepair.Receipt receipt = repair.apply(prepared);
 
 		assertTrue(prepared.healthy());
@@ -153,7 +153,7 @@ class OfflineRepairTest {
 		Path extra = write(storage.modsDirectory().resolve("extra.jar"), "extra".getBytes(StandardCharsets.UTF_8));
 		OfflineRepair repair = new OfflineRepair(storage);
 
-		OfflineRepair.Prepared prepared = repair.inspect(new OfflineRepair.Request(target, Set.of(), protectedJar));
+		OfflineRepair.Prepared prepared = repair.inspect(new OfflineRepair.Request(target, Set.of(), protectedJar, Set.of()));
 		OfflineRepair.Receipt receipt = repair.apply(prepared, Set.of("config/settings.json"), Set.of("mods/extra.jar"));
 
 		assertEquals(1, receipt.resetEditableFiles());
@@ -187,7 +187,7 @@ class OfflineRepairTest {
 		ClientStateJournal.open(storage).append(tree.sha1(), ClientStateJournal.Kind.INSTALL, target.manifest().modpackId(), "txn-1");
 		OfflineRepair repair = new OfflineRepair(storage);
 
-		repair.apply(repair.inspect(new OfflineRepair.Request(target, Set.of(), null)), Set.of("config/settings.json"), Set.of("mods/extra.jar"));
+		repair.apply(repair.inspect(new OfflineRepair.Request(target, Set.of(), null, Set.of())), Set.of("config/settings.json"), Set.of("mods/extra.jar"));
 
 		assertEquals(ClientStateJournal.Kind.REPAIR, ClientStateJournal.open(storage).head().kind());
 		assertTrue(ClientObjectStore.referencedHashes(storage).contains(editedHash));
@@ -206,7 +206,7 @@ class OfflineRepairTest {
 		Path live = write(storage.gamePath("config/settings.json"), editedBytes);
 		Path extra = write(storage.modsDirectory().resolve("extra.jar"), "extra".getBytes(StandardCharsets.UTF_8));
 		OfflineRepair repair = new OfflineRepair(storage);
-		OfflineRepair.Request request = new OfflineRepair.Request(target, Set.of(), null);
+		OfflineRepair.Request request = new OfflineRepair.Request(target, Set.of(), null, Set.of());
 		OfflineRepair.Prepared prepared = repair.inspect(request);
 		OfflineRepair.EditableResetCandidate candidate = prepared.editableResetCandidates().get(0);
 		ClientStorageJsons.OfflineRepairJournalFields journal = new ClientStorageJsons.OfflineRepairJournalFields();
@@ -251,7 +251,7 @@ class OfflineRepairTest {
 		long fileCacheBefore = regularFileCount(storage.fileCacheDirectory());
 		long modCacheBefore = regularFileCount(storage.modCacheDirectory());
 
-		OfflineRepair.Prepared prepared = repair.inspect(new OfflineRepair.Request(target, Set.of(), protectedJar));
+		OfflineRepair.Prepared prepared = repair.inspect(new OfflineRepair.Request(target, Set.of(), protectedJar, Set.of()));
 
 		assertEquals(List.of("mods/extra.jar"), prepared.unownedModPaths());
 		assertTrue(prepared.healthy());
@@ -274,7 +274,7 @@ class OfflineRepairTest {
 		SelectedModpackTarget active = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElseThrow();
 		OfflineRepair repair = new OfflineRepair(storage);
 
-		OfflineRepair.Prepared prepared = repair.inspect(new OfflineRepair.Request(active, Set.of(), null));
+		OfflineRepair.Prepared prepared = repair.inspect(new OfflineRepair.Request(active, Set.of(), null, Set.of()));
 		OfflineRepair.Receipt receipt = repair.apply(prepared);
 
 		assertEquals(target.document().contentToken(), prepared.contentToken(), "the repair target is the active detached generation");
@@ -328,7 +328,7 @@ class OfflineRepairTest {
 		Files.deleteIfExists(storage.gamePath("config/delta.txt"));
 		OfflineRepair repair = new OfflineRepair(storage);
 
-		OfflineRepair.Prepared before = repair.inspect(new OfflineRepair.Request(target, Set.of(), null));
+		OfflineRepair.Prepared before = repair.inspect(new OfflineRepair.Request(target, Set.of(), null, Set.of()));
 		OfflineRepair.Receipt receipt = repair.apply(before, Set.of("config/shared.txt"), Set.of("mods/local-unowned.jar"));
 
 		assertEquals(List.of("mods/local-unowned.jar"), before.unownedModPaths());

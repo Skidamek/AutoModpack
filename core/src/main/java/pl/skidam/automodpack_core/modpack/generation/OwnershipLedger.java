@@ -4,10 +4,13 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
@@ -16,6 +19,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.PathFold;
 
 /** Immutable cumulative ownership projection for one modpack lineage. */
 public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entries, String digest) {
@@ -184,6 +188,24 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 			if (entry == null || entry.currentStatus() != Status.PRESENT)
 				throw new IllegalArgumentException(kind + " ownership path is not present: " + path);
 		}
+	}
+
+	/**
+	 * The tombstones a client holding {@code since} has not seen: all of them for another pack or none, else paths deleted,
+	 * or shipped again and deleted, after it. One whose spelling is, or folds onto, a path the client ships is that file on
+	 * an insensitive disk, so it never names a file to delete.
+	 */
+	public List<Entry> tombstonesSince(OwnershipLedger since, Collection<String> shippedPaths) {
+		Set<String> shipped = new HashSet<>();
+		for (String path : shippedPaths) shipped.add(PathFold.key(LogicalPath.normalize(path)));
+		List<Entry> unseen = new ArrayList<>();
+		for (Entry entry : entries.values()) {
+			if (entry.currentStatus() != Status.TOMBSTONE || shipped.contains(PathFold.key(entry.logicalPath()))) continue;
+			Entry seen = since == null || !since.modpackId().equals(modpackId) ? null : since.entries().get(entry.logicalPath());
+			if (seen != null && seen.currentStatus() == Status.TOMBSTONE && seen.historicalHashes().containsAll(entry.historicalHashes())) continue;
+			unseen.add(entry);
+		}
+		return unseen;
 	}
 
 	public static OwnershipLedger materialize(OwnershipLedger parent, GroupManifest manifest) {

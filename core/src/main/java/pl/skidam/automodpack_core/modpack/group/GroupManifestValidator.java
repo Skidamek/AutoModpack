@@ -80,6 +80,10 @@ public final class GroupManifestValidator {
 		GroupManifest manifest = new GroupManifest(fields.modpackId, value(fields.modpackName), value(fields.automodpackVersion), value(fields.loader),
 				value(fields.loaderVersion), value(fields.mcVersion), groups);
 		PairMemo pairs = new PairMemo(manifest);
+		if (publishing)
+			for (var group : manifest.groups().entrySet())
+				for (String path : group.getValue().files().keySet())
+					if (ModpackPathPolicy.isPlayerRuntimePath(path)) errors.add("Group '" + group.getKey() + "' file '" + path + "' is in a folder the game keeps for the player");
 		validatePlatformPaths(manifest, publishing, errors, pairs);
 		validateDefaultAndIndividualSelections(manifest, errors);
 		validateObjectSizes(manifest, errors);

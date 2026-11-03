@@ -157,7 +157,8 @@ public final class OfflineRepairScreen extends VersionedScreen {
 	}
 
 	private boolean hasRepairWork() {
-		return prepared.findings().stream().anyMatch(OfflineRepair.Finding::locallyRepairable) || !selectedEditablePaths.isEmpty() || !keepUnownedMods && !prepared.unownedModPaths().isEmpty();
+		return prepared.findings().stream().anyMatch(OfflineRepair.Finding::locallyRepairable) || !selectedEditablePaths.isEmpty() || !keepUnownedMods && !prepared.unownedModPaths().isEmpty()
+				|| !prepared.ledgerTombstonePaths().isEmpty();
 	}
 
 	private void apply() {

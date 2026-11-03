@@ -157,7 +157,7 @@ final class ClientUpdatePlanBuilder {
 				previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies(), cache, overlaySnapshots);
 		Set<String> forceCopyServices = getForceCopyMods(input.target(), cache, modCache, projection);
 		List<UpdatePlan.ModInfo> targetMods = inspectTargetMods(input.target(), cache, modCache, projection);
-		List<NestedConflicts.StandardRoot> standardRoots = inspectStandardRoots(cache, modCache);
+		List<NestedConflicts.StandardRoot> standardRoots = standardRoots(storage, cache, modCache);
 		List<UpdatePlan.ModInfo> standardMods = new ArrayList<>();
 		for (NestedConflicts.StandardRoot root : standardRoots)
 			standardMods.add(new UpdatePlan.ModInfo(root.logicalPath(), root.mod().hash(), Files.size(root.mod().path()), root.mod().version(), root.mod().IDs(), root.mod().deps()));
@@ -565,7 +565,8 @@ final class ClientUpdatePlanBuilder {
 		return mods;
 	}
 
-	private List<NestedConflicts.StandardRoot> inspectStandardRoots(FileCache cache, ModFileCache modCache) throws IOException {
+	/** The player's own jars directly in the mods folder, with the ids pinning and conflicts are judged by. */
+	static List<NestedConflicts.StandardRoot> standardRoots(ClientStorage storage, FileCache cache, ModFileCache modCache) throws IOException {
 		if (!Files.isDirectory(storage.modsDirectory())) return List.of();
 		List<NestedConflicts.StandardRoot> roots = new ArrayList<>();
 		try (Stream<Path> stream = Files.list(storage.modsDirectory())) {

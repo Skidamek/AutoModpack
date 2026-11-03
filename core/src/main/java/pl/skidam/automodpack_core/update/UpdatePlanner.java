@@ -268,8 +268,7 @@ public final class UpdatePlanner {
 		planInstalledRemovals(input, target.modpackId, targetItems, installedItems, baselines, baselineObjects, listedPins, standardModsByPath, session);
 		if (installedLedger != null)
 			planLedgerCleanup(installedLedger, installedItems.keySet(), targetItems.keySet(), baselines, baselineObjects, switchesPack, listedPins, standardModsByPath, session);
-		else
-			planServerKnownCleanup(ledger, targetItems.keySet(), listedPins, standardModsByPath, session);
+		planServerKnownCleanup(ledger.tombstonesSince(installedLedger, targetItems.keySet()), listedPins, standardModsByPath, session);
 		planSelectionChange(input, target, session);
 		Set<String> liveCopyPaths = liveCopyPaths(targetItems, input.forceCopyServicePaths());
 		Set<String> protectedIds = PinnedMods.protectedIds(listedPins, input.standardMods().stream().map(ModInfo::ids).toList());
@@ -558,9 +557,9 @@ public final class UpdatePlanner {
 		return true;
 	}
 
-	private static void planServerKnownCleanup(OwnershipLedger ledger, Set<String> targetPaths, Set<String> listedPins, Map<String, ModInfo> standardModsByPath, PlanningSession session) {
-		for (OwnershipLedger.Entry entry : ledger.entries().values()) {
-			if (entry.currentStatus() != OwnershipLedger.Status.TOMBSTONE || targetPaths.contains(entry.logicalPath())) continue;
+	/** First install and a switch apply every tombstone of the target; an update of the same pack only those it has not seen, so a long-deleted file a player put back stays. */
+	private static void planServerKnownCleanup(List<OwnershipLedger.Entry> tombstones, Set<String> listedPins, Map<String, ModInfo> standardModsByPath, PlanningSession session) {
+		for (OwnershipLedger.Entry entry : tombstones) {
 			if (pinnedLiveMod(listedPins, standardModsByPath, entry.logicalPath())) continue;
 			Optional<FileKey> candidateKey = managedCleanupKey(entry.logicalPath());
 			if (candidateKey.isEmpty()) continue;
@@ -587,7 +586,7 @@ public final class UpdatePlanner {
 		} catch (RuntimeException e) {
 			return Optional.empty();
 		}
-		if (ModpackPathPolicy.isReservedPath(normalized)) return Optional.empty();
+		if (ModpackPathPolicy.isClientOwnedPath(normalized)) return Optional.empty();
 		return Optional.of(new FileKey(Root.GAME_DIR, normalized));
 	}
 

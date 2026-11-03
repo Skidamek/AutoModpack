@@ -22,6 +22,7 @@ import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
@@ -59,13 +60,15 @@ public final class OfflineRepair {
 		UNSUPPORTED_PATH
 	}
 
-	public record Request(SelectedModpackTarget activeTarget, Set<String> forceCopyPaths, Path protectedModPath) {
+	/** {@code pinnedModPaths} are the jars the player pinned: repair never archives or removes them. */
+	public record Request(SelectedModpackTarget activeTarget, Set<String> forceCopyPaths, Path protectedModPath, Set<String> pinnedModPaths) {
 		public Request {
 			activeTarget = Objects.requireNonNull(activeTarget, "active target");
 			TreeSet<String> normalizedForceCopyPaths = new TreeSet<>();
 			for (String path : Objects.requireNonNull(forceCopyPaths, "force-copy paths")) normalizedForceCopyPaths.add(LogicalPath.normalize(path));
 			forceCopyPaths = Set.copyOf(normalizedForceCopyPaths);
 			protectedModPath = protectedModPath == null ? null : protectedModPath.toAbsolutePath().normalize();
+			pinnedModPaths = Objects.requireNonNull(pinnedModPaths, "pinned mod paths").stream().map(LogicalPath::normalize).collect(Collectors.toUnmodifiableSet());
 		}
 	}
 
@@ -99,7 +102,7 @@ public final class OfflineRepair {
 	}
 
 	public record Prepared(String modpackId, String contentToken, String selectionDigest, Request request, List<Finding> findings,
-			List<EditableResetCandidate> editableResetCandidates, List<String> unownedModPaths, long directlyHashedFileCount, long directlyHashedBytes) {
+			List<EditableResetCandidate> editableResetCandidates, List<String> unownedModPaths, List<String> ledgerTombstonePaths, long directlyHashedFileCount, long directlyHashedBytes) {
 		public Prepared {
 			Objects.requireNonNull(modpackId, "modpack ID");
 			contentToken = HashUtils.normalizeSha1(contentToken);
@@ -108,6 +111,7 @@ public final class OfflineRepair {
 			findings = List.copyOf(findings);
 			editableResetCandidates = List.copyOf(editableResetCandidates);
 			unownedModPaths = List.copyOf(unownedModPaths);
+			ledgerTombstonePaths = List.copyOf(ledgerTombstonePaths);
 			if (directlyHashedFileCount < 0 || directlyHashedBytes < 0) throw new IllegalArgumentException("Direct hash receipt is invalid");
 		}
 
@@ -262,7 +266,9 @@ public final class OfflineRepair {
 		}
 		journal.editableResets = List.copyOf(resets);
 		List<ClientStorageJsons.OfflineRepairJournalFields.UnownedModFields> unowned = new ArrayList<>();
-		for (String path : unownedModPaths.stream().sorted().toList()) {
+		TreeSet<String> archived = new TreeSet<>(unownedModPaths);
+		archived.addAll(analysis.prepared().ledgerTombstonePaths());
+		for (String path : archived) {
 			Observation observation = analysis.observations().get(storage.gamePath(path).toAbsolutePath().normalize());
 			if (observation == null || observation.unsupported()) throw new IOException("Unowned mod selection is stale: " + path);
 			ClientStorageJsons.OfflineRepairJournalFields.UnownedModFields fields = new ClientStorageJsons.OfflineRepairJournalFields.UnownedModFields();
@@ -353,14 +359,14 @@ public final class OfflineRepair {
 					throw new IOException("Journaled unowned mod disappeared before its bytes were captured: " + fields.logicalPath);
 				continue;
 			}
-			FileTrees.requireNoSymbolicLinkDescendants(storage.modsDirectory(), source, "Repair path");
+			FileTrees.requireNoSymbolicLinkDescendants(storage.gameDirectory(), source, "Repair path");
 			if (!FileIntegrity.matches(source, fields.size, fields.objectHash, fileCache)) throw new IOException("Unowned mod changed after repair was journaled: " + fields.logicalPath);
 			assertPinned(request, pinned);
 			Path object = storage.objectFile(fields.objectHash).normalize();
 			if (!FileIntegrity.matchesNamed(object, fields.size, fields.objectHash, fileCache))
 				VerifiedFileTransfer.copyAtomicImmutable(source, object, fields.size, fields.objectHash, fileCache);
 			Files.delete(source);
-			FileTrees.pruneEmptyAncestors(source, storage.modsDirectory());
+			FileTrees.pruneEmptyAncestors(source, storage.gameDirectory());
 			applied++;
 		}
 		return applied;
@@ -427,7 +433,9 @@ public final class OfflineRepair {
 			String editablePath = LogicalPath.normalize(item.file);
 			if (item.editable && !overlayState.deletedPaths.contains(editablePath) && ModpackPathPolicy.isActiveMod(editablePath)) ownedLiveMods.add(editablePath);
 		}
-		List<String> unownedMods = inspectMods(request.protectedModPath(), ownedLiveMods, fileCache, observations, observationsByFileKey);
+		List<String> unownedMods = inspectMods(request.protectedModPath(), ownedLiveMods, fileCache, observations, observationsByFileKey).stream()
+				.filter(path -> !request.pinnedModPaths().contains(path)).toList();
+		List<String> tombstoned = inspectTombstones(request.activeTarget(), fileCache, observations, observationsByFileKey);
 		for (Expected value : expected.values()) observe(value.path(), value.root(), fileCache, observations, observationsByFileKey);
 
 		// Twins recorded under both paths share one Observation, so the distinct view is the honest source list and
@@ -449,7 +457,7 @@ public final class OfflineRepair {
 		List<EditableResetCandidate> editableCandidates = editable.values().stream().sorted(EDITABLE_ORDER).toList();
 		long bytes = 0;
 		for (Observation observation : hashed) bytes = Math.addExact(bytes, observation.size());
-		Prepared prepared = new Prepared(modpackId, contentToken, selectionDigest, request, findings, editableCandidates, unownedMods, hashed.size(), bytes);
+		Prepared prepared = new Prepared(modpackId, contentToken, selectionDigest, request, findings, editableCandidates, unownedMods, tombstoned, hashed.size(), bytes);
 		return new Analysis(prepared, Map.copyOf(expected), Map.copyOf(observations), immutableSources(sources));
 	}
 
@@ -468,6 +476,26 @@ public final class OfflineRepair {
 			}
 		}
 		return Map.copyOf(result);
+	}
+
+	/**
+	 * Repair applies every tombstone of the active pack, as a first install does: a file the pack once shipped there, byte
+	 * for byte, that it no longer ships. Active mods stay with the unowned-mod archive, whose keep choice is the player's.
+	 */
+	private List<String> inspectTombstones(SelectedModpackTarget target, FileCache fileCache, Map<Path, Observation> observations, Map<Object, Observation> observationsByFileKey)
+			throws IOException {
+		List<String> shipped = target.flatTarget().list.stream().map(item -> item.file).toList();
+		List<String> tombstoned = new ArrayList<>();
+		for (OwnershipLedger.Entry entry : target.document().ownershipLedger().tombstonesSince(null, shipped)) {
+			String logicalPath = entry.logicalPath();
+			if (ModpackPathPolicy.isActiveMod(logicalPath) || UpdatePlanner.managedCleanupKey(logicalPath).isEmpty()) continue;
+			Path path = storage.gamePath(logicalPath);
+			if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
+			Observation observation = observe(path.toAbsolutePath().normalize(), storage.gameDirectory(), fileCache, observations, observationsByFileKey);
+			if (observation != null && !observation.unsupported() && entry.historicalHashes().contains(new OwnershipLedger.Content(observation.hash(), observation.size())))
+				tombstoned.add(logicalPath);
+		}
+		return List.copyOf(tombstoned);
 	}
 
 	private List<String> inspectMods(Path protectedModPath, Set<String> ownedLiveMods, FileCache fileCache, Map<Path, Observation> observations, Map<Object, Observation> observationsByFileKey) throws IOException {

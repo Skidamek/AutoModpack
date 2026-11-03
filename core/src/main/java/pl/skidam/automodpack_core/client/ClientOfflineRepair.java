@@ -7,9 +7,14 @@ import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
+import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
+import pl.skidam.automodpack_core.loader.NestedConflicts;
+import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -57,12 +62,16 @@ public final class ClientOfflineRepair {
 	private OfflineRepair.Request request() throws IOException {
 		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget()
 				.orElseThrow(() -> new IOException("Repair is available only for the active installed modpack"));
-		return new OfflineRepair.Request(target, forceCopyPaths(target), protectedModPath);
-	}
-
-	private Set<String> forceCopyPaths(SelectedModpackTarget target) throws IOException {
+		Set<String> pins = PinnedMods.index(ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new).pinnedModIds);
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); ModFileCache mods = ModFileCache.open(storage.modCacheDirectory())) {
-			return ForceCopyPaths.ofActiveMods(target.flatTarget().list, loader.forceCopyServices(), item -> verifiedSource(item.file, item.size, item.sha1, cache), mods, cache);
+			Set<String> forceCopyPaths = ForceCopyPaths.ofActiveMods(target.flatTarget().list, loader.forceCopyServices(), item -> verifiedSource(item.file, item.size, item.sha1, cache),
+					mods, cache);
+			Set<String> pinnedModPaths = new TreeSet<>();
+			if (!pins.isEmpty())
+				for (NestedConflicts.StandardRoot root : ClientUpdatePlanBuilder.standardRoots(storage, cache, mods))
+					if (PinnedMods.matches(pins, root.mod().IDs())) pinnedModPaths.add(root.logicalPath());
+			return new OfflineRepair.Request(target, forceCopyPaths, protectedModPath, pinnedModPaths);
 		}
 	}
 

@@ -22,6 +22,8 @@ public final class ModpackPathPolicy {
 
 	/** Roots owned by the player or by AutoModpack itself; a server manifest cannot claim them. */
 	private static final Set<String> RESERVED_ROOTS = Set.of("automodpack", "logs", "saves", "screenshots");
+	/** Vanilla folders the game writes for the player: new packs cannot publish into them and cleanup never touches them, while packs published before still load. */
+	private static final Set<String> PLAYER_RUNTIME_ROOTS = Set.of("crash-reports");
 	/** Roots with client live-file semantics; descendants are valid only with their canonical lowercase spelling. */
 	private static final Set<String> LIVE_ROOTS = Set.of(MODS_ROOT, CONFIG_ROOT, SHADERPACKS_ROOT, RESOURCEPACKS_ROOT);
 
@@ -29,6 +31,21 @@ public final class ModpackPathPolicy {
 
 	public static boolean isReservedPath(String logicalPath) {
 		return RESERVED_ROOTS.contains(firstComponent(logicalPath).toLowerCase(Locale.ROOT));
+	}
+
+	/** Whether this path is in a vanilla folder the game writes for the player. */
+	public static boolean isPlayerRuntimePath(String logicalPath) {
+		return PLAYER_RUNTIME_ROOTS.contains(firstComponent(logicalPath).toLowerCase(Locale.ROOT));
+	}
+
+	/** Paths no pack may delete: the player's and AutoModpack's own roots and the files AutoModpack keeps in the game directory. */
+	public static boolean isClientOwnedPath(String normalized) {
+		return isReservedPath(normalized) || isPlayerRuntimePath(normalized) || isAutoModpackFile(normalized);
+	}
+
+	private static boolean isAutoModpackFile(String normalized) {
+		return isGeneratedBundlePath(normalized) || normalized.equalsIgnoreCase(MODPACK_CONTENT_FILE.toString())
+				|| normalized.equalsIgnoreCase(BOOTSTRAP_FILE.getFileName().toString());
 	}
 
 	/** Whether this mod id names AutoModpack itself; clients receive that jar through the self-update flow, never as pack content. */
@@ -71,10 +88,7 @@ public final class ModpackPathPolicy {
 		} catch (RuntimeException e) {
 			return false;
 		}
-		if (isReservedPath(normalized)) return false;
-		if (isGeneratedBundlePath(normalized)) return false;
-		if (normalized.equalsIgnoreCase(MODPACK_CONTENT_FILE.toString())) return false;
-		if (normalized.equalsIgnoreCase(BOOTSTRAP_FILE.getFileName().toString())) return false;
+		if (isReservedPath(normalized) || isAutoModpackFile(normalized)) return false;
 		return !isInvalidLiveRoot(normalized);
 	}
 
