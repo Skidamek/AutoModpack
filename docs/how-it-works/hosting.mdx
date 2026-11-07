@@ -12,12 +12,6 @@ Players need a route from their game to your modpack files. AutoModpack ships a 
 
 `HOLEPUNCH` is the default and needs no open port beyond Minecraft's. The client sends a Minecraft Login Start whose UUID carries a marker, and the server claims that connection for AutoModpack before vanilla builds a login listener. Unmarked logins reach Minecraft unchanged.
 
-## Single-port tunnels
-
-A proxy that forwards one port, such as Porthole or e4mc, only carries the port the guest joined on. The default `HOLEPUNCH` mode fits that shape because it reuses the Minecraft port for the modpack connection.
-
-A dedicated `bind-port` needs a second forwarded port on the guest. Share that port too and set `advertised-endpoint-port` to the port the client will dial. If the tool remaps ports per guest, that number is local to each guest, so keep a shared-port mode instead.
-
 `MAGIC` marks its connections with the bytes `AMMH` followed by an `AMOK` confirmation before any TLS. On the shared Minecraft port, traffic without the marker passes through to Minecraft untouched. On a dedicated listener, non-magic traffic is rejected.
 
 The opening differs per mode, but the wire is the same everywhere: after the opening, every mode serves the same HTTP contract - ordinary GET requests, `Authorization: Bearer` credentials when the pack validates secrets, keep-alive connections, and per-request negotiated compression.

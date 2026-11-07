@@ -92,6 +92,27 @@ class ReconfConfigsTest {
 	}
 
 	@Test
+	void saveDoesNotRestoreDeletedCommentsOnExistingMembers() throws IOException {
+		ReconfConfigs.readOrCreate(serverConfig(), ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
+		String withoutComments = text
+				.replaceAll("(?m)^[ \\t]*# require a login-issued download secret\\R", "")
+				.replaceAll("(?m)^[ \\t]*# extra paths from the server root\\R", "");
+		assertFalse(withoutComments.contains("require a login-issued download secret"));
+		assertFalse(withoutComments.contains("extra paths from the server root"));
+		Files.writeString(serverConfig(), withoutComments, StandardCharsets.UTF_8);
+
+		ServerConfigFieldsV3 config = ReconfConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		ReconfConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+
+		String after = Files.readString(serverConfig(), StandardCharsets.UTF_8);
+		assertFalse(after.contains("require a login-issued download secret"), after);
+		assertFalse(after.contains("extra paths from the server root"), after);
+		assertTrue(after.contains("validate-secrets: true"), after);
+		assertTrue(after.contains("from-server:"), after);
+	}
+
+	@Test
 	void saveIsIdempotent() throws IOException {
 		ServerConfigFieldsV3 config = ReconfConfigs.readOrCreate(serverConfig(), ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		config.bindPort = 25577;

@@ -57,7 +57,7 @@ import pl.skidam.reconf.Value;
 public final class ReconfConfigs {
 	private ReconfConfigs() {}
 
-	/** Marks a config field as documented: the comment is emitted on fresh generation and ensured into old files. */
+	/** Marks a config field as documented: emitted on fresh generation, and materialized with a missing field. A comment removed from an existing member is never restored. */
 	@Retention(RetentionPolicy.RUNTIME)
 	@Target(ElementType.FIELD)
 	public @interface Comment {
@@ -127,7 +127,7 @@ public final class ReconfConfigs {
 		setArrays(document, tree, document.tree(), ConfigPath.root());
 		for (ConfMigration migration : ConfMigration.applicableTo(type)) migration.repair(document, path);
 		ensureDeclared(document, type, defaults.get());
-		ensureNestedComments(document, type, model);
+		ensureNestedComments(document, type, model, CommentPolicy.MATERIALIZE);
 		return document;
 	}
 
@@ -272,7 +272,7 @@ public final class ReconfConfigs {
 			if (comment != null) byKey.put(serializedName(field), comment.value());
 		}
 		Document document = Reconf.parse(Reconf.canonical(root, Comments.of(BANNER, byKey))).document();
-		ensureNestedComments(document, type, model);
+		ensureNestedComments(document, type, model, CommentPolicy.GENERATE);
 		return document;
 	}
 
@@ -292,26 +292,35 @@ public final class ReconfConfigs {
 
 	/**
 	 * Documents the {@link Comment} fields of every object the model nests under a dynamic path, the ones
-	 * {@link #ensureDeclared} cannot reach because its paths are not known from the type alone.
+	 * {@link #ensureDeclared} cannot reach because its paths are not known from the type alone. {@code GENERATE} adds the
+	 * declared comments to a fresh document; {@code MATERIALIZE} only ensures missing fields, leaving existing members
+	 * and their comments untouched.
 	 */
-	private static void ensureNestedComments(Document document, Class<?> type, Object model) {
+	private static void ensureNestedComments(Document document, Class<?> type, Object model, CommentPolicy policy) {
 		for (ConfMigration migration : ConfMigration.applicableTo(type))
-			for (ConfMigration.Shape shape : migration.nestedShapes(model)) ensureComments(document, shape.path(), shape.value());
+			for (ConfMigration.Shape shape : migration.nestedShapes(model)) ensureComments(document, shape.path(), shape.value(), policy);
 	}
 
-	/** Ensures one nested object's declared {@link Comment} fields, materializing with their default and comment. */
-	private static void ensureComments(Document document, ConfigPath objectPath, Object value) {
+	/** Ensures one nested object's declared {@link Comment} fields, materializing missing fields with their default and comment. */
+	private static void ensureComments(Document document, ConfigPath objectPath, Object value, CommentPolicy policy) {
 		for (Field field : value.getClass().getDeclaredFields()) {
 			Comment comment = field.getAnnotation(Comment.class);
 			if (comment == null) continue;
 			try {
 				ConfigPath path = objectPath.appended(serializedName(field));
 				document.ensure(path, toJsonValue(ConfigTools.GSON.toJsonTree(field.get(value))), comment.value());
-				if (document.attachedComment(path).isEmpty()) document.setComment(path, comment.value());
+				if (policy == CommentPolicy.GENERATE && document.attachedComment(path).isEmpty()) document.setComment(path, comment.value());
 			} catch (IllegalAccessException e) {
 				throw new ConfigTools.ConfigException("Cannot read the default of config field " + field.getName(), e);
 			}
 		}
+	}
+
+	private enum CommentPolicy {
+		/** A fresh document: emit every declared comment. */
+		GENERATE,
+		/** An existing document: a missing field gets its comment; an existing member keeps whatever comment it has. */
+		MATERIALIZE
 	}
 
 	private static String serializedName(Field field) {

@@ -59,19 +59,17 @@ public class ServerConfigJsons {
 		public String nagClickableLink = "https://modrinth.com/project/automodpack";
 		@SerializedName("bind-address")
 		public String bindAddress = "";
-		@ReconfConfigs.Comment("extra listener port for MAGIC and HTTP; MAGIC -1 shares the Minecraft port, HTTP -1 means the contract is served externally; a dedicated port must be reachable by clients")
 		@SerializedName("bind-port")
 		public int bindPort = -1;
 		@SerializedName("advertised-endpoint-host")
 		public String advertisedEndpointHost = "";
-		@ReconfConfigs.Comment("port clients dial; -1 uses the port they joined on, set it when a dedicated modpack port differs from the join port")
 		@SerializedName("advertised-endpoint-port")
 		public int advertisedEndpointPort = -1;
 		@SerializedName("disable-internal-tls")
 		public boolean disableInternalTLS = false;
 		@SerializedName("accept-proxy-protocol")
 		public boolean acceptProxyProtocol = false;
-		@ReconfConfigs.Comment("HOLEPUNCH uses the Minecraft port, so it works through single-port tunnels. MAGIC can share it or use bindPort. HTTP uses bindPort.")
+		@ReconfConfigs.Comment("HOLEPUNCH uses the Minecraft port. MAGIC can share it or use bindPort. HTTP uses bindPort.")
 		@SerializedName("connection-mode")
 		public ModpackConnectionMode connectionMode = ModpackConnectionMode.HOLEPUNCH;
 		@SerializedName("bandwidth-limit")
