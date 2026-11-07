@@ -17,7 +17,7 @@ import java.util.function.IntConsumer;
 
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.protocol.Connection.ObjectTake;
-import pl.skidam.automodpack_core.protocol.LaneConnector.Route;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 
 /**
@@ -60,10 +60,10 @@ public class DownloadClient implements PackTransport, HostTiles {
 	final TransportSession session;
 	private final LanePool lanes;
 
-	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, String secret, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, Route route) {
-		this.session = new TransportSession(connectionInfo.endpoint.getHostString());
+	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, String secret, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, EndpointRoute route) {
+		this.session = new TransportSession(route.identityHost());
 		LaneConnector connector = new LaneConnector(connectionInfo, trustCallback, route);
-		this.lanes = new LanePool(session, connector, secret, connectionInfo.endpoint.getHostString() + ":" + connectionInfo.endpoint.getPort());
+		this.lanes = new LanePool(session, connector, secret, AddressHelpers.formatAddress(AddressHelpers.format(route.identityHost(), route.identityPort())));
 		// A revocation the session learns after the handshake is final: the live lanes stop with it.
 		connector.sessionTrust().onRevoked(this::abortTransfers);
 	}

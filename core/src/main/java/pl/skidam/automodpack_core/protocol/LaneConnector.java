@@ -32,7 +32,6 @@ import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.mcholepunch.HolepunchClient;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchOptions;
-import pl.skidam.mcholepunch.HolepunchRoute;
 
 /**
  * One lane's way onto an endpoint: resolve the route, connect the transport, complete the magic handshake, wrap TLS, and
@@ -41,12 +40,10 @@ import pl.skidam.mcholepunch.HolepunchRoute;
  */
 final class LaneConnector {
 
-	record Route(InetSocketAddress directAddress, HolepunchRoute holepunchRoute) {}
-
 	private record TlsCandidate(SSLSocket socket, Socket transport) {}
 
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
-	private final Route route;
+	private final EndpointRoute route;
 	private final Function<X509Certificate, CompletableFuture<Boolean>> trustCallback;
 	// True the moment the trust ladder asks the player about this client's candidate: only a parked manual-trust
 	// decision justifies the handoff liveness probe in open.
@@ -55,7 +52,7 @@ final class LaneConnector {
 	private final CustomizableTrustManager trustManager;
 	private final SSLContext sslContext;
 
-	LaneConnector(ConnectionJsons.ConnectionInfo connectionInfo, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, Route route) {
+	LaneConnector(ConnectionJsons.ConnectionInfo connectionInfo, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, EndpointRoute route) {
 		this.connectionInfo = connectionInfo;
 		this.route = route;
 		this.trustCallback = trustCallback == null ? null : certificate -> {
@@ -77,15 +74,15 @@ final class LaneConnector {
 		this.sslContext = CandidateTrustValidation.newSslContext(manager);
 	}
 
-	/** How this client's endpoint is reached: holepunch's resolved route, or a direct address after a brief DNS retry for freshly cut records. */
-	static CompletableFuture<Route> resolveRouteAsync(ConnectionJsons.ConnectionInfo connectionInfo) {
+	/** Resolves the route once per session: holepunch's resolved route, or a direct address after a brief DNS retry for freshly cut records. */
+	static CompletableFuture<EndpointRoute> resolveRouteAsync(ConnectionJsons.ConnectionInfo connectionInfo) {
+		InetSocketAddress endpoint = connectionInfo.endpoint;
 		if (connectionInfo.connectionMode == ModpackConnectionMode.HOLEPUNCH) {
-			return HolepunchClient.resolve(connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort()).toCompletableFuture()
-					.thenApply(holepunchRoute -> new Route(null, holepunchRoute));
+			return HolepunchClient.resolve(endpoint.getHostString(), endpoint.getPort()).toCompletableFuture().thenApply(EndpointRoute::from);
 		}
 
 		return CompletableFuture.supplyAsync(() -> {
-			String host = connectionInfo.endpoint.getHostString();
+			String host = endpoint.getHostString();
 			// Freshly-cut DNS records (quick tunnels cut their name seconds before the first player connects) can lag
 			// the advertisement; retry briefly before declaring the endpoint unresolvable.
 			IOException failure = new IOException("Failed to resolve endpoint host: " + host);
@@ -98,8 +95,8 @@ final class LaneConnector {
 						throw new CompletionException(failure);
 					}
 				}
-				InetSocketAddress address = new InetSocketAddress(host, connectionInfo.endpoint.getPort());
-				if (!address.isUnresolved()) return new Route(address, null);
+				InetSocketAddress address = new InetSocketAddress(host, endpoint.getPort());
+				if (!address.isUnresolved()) return new EndpointRoute(host, endpoint.getPort(), address);
 			}
 			throw new CompletionException(failure);
 		}, DownloadClient.NET_EXECUTOR);
@@ -169,7 +166,7 @@ final class LaneConnector {
 			// TLS identity follows the endpoint - the host this socket actually reaches - so proxied frontends like
 			// tunnels present their own certificate (SNI and name check); the origin stays the trust root: its pin
 			// is enforced against the presented leaf, and any unpinned first contact defers to the trust ladder.
-			tlsSocket = CandidateTrustValidation.wrapWithTls(plainSocket, sslContext, connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort());
+			tlsSocket = CandidateTrustValidation.wrapWithTls(plainSocket, sslContext, route.identityHost(), route.identityPort());
 			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket);
 			tlsSocket.setSoTimeout(0);
 			return new TlsCandidate(tlsSocket, plainSocket);
@@ -209,7 +206,11 @@ final class LaneConnector {
 	private Socket connectTransport() throws IOException {
 		if (connectionInfo.connectionMode != ModpackConnectionMode.HOLEPUNCH) {
 			Socket socket = new Socket();
-			socket.connect(route.directAddress(), NETWORK_TIMEOUT_MILLIS);
+			try {
+				socket.connect(route.transportAddress(), NETWORK_TIMEOUT_MILLIS);
+			} catch (IOException e) {
+				throw new IOException("Failed to connect to modpack endpoint " + AddressHelpers.formatAddressLiteral(route.transportAddress()), e);
+			}
 			// Request heads are small writes; without this Nagle holds every head behind its lane's previous segment
 			// while the server, which does set TCP_NODELAY, already waits for it.
 			socket.setTcpNoDelay(true);
@@ -219,6 +220,7 @@ final class LaneConnector {
 		}
 
 		int protocolVersion = MinecraftProtocols.forVersion(MC_VERSION);
+		String target = AddressHelpers.formatAddressLiteral(route.transportAddress());
 
 		try {
 			HolepunchSocket socket = new HolepunchSocket();
@@ -228,20 +230,20 @@ final class LaneConnector {
 			return socket;
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
-			throw new IOException("Holepunch connect interrupted", e);
+			throw new IOException("Holepunch connect interrupted for " + target, e);
 		} catch (ExecutionException e) {
 			Throwable cause = e.getCause() == null ? e : e.getCause();
-			if (cause instanceof IOException io) throw io;
-			throw new IOException("Holepunch connect failed", cause);
+			if (cause instanceof IOException io) throw new IOException("Holepunch connect failed for " + target, io);
+			throw new IOException("Holepunch connect failed for " + target, cause);
 		} catch (Exception e) {
-			throw new IOException("Holepunch connect failed", e);
+			throw new IOException("Holepunch connect failed for " + target, e);
 		}
 	}
 
 	private void performMagicHandshake(Socket plainSocket) throws IOException {
 		DataOutputStream plainOut = new DataOutputStream(new BufferedOutputStream(plainSocket.getOutputStream()));
 		DataInputStream plainIn = new DataInputStream(new BufferedInputStream(plainSocket.getInputStream()));
-		byte[] hostBytes = connectionInfo.endpoint.getHostString().getBytes(StandardCharsets.UTF_8);
+		byte[] hostBytes = route.identityHost().getBytes(StandardCharsets.UTF_8);
 
 		plainOut.writeInt(MAGIC_AMMH);
 		plainOut.writeShort(hostBytes.length);
@@ -255,7 +257,7 @@ final class LaneConnector {
 	/** The shared candidate trust ladder; completion means the certificate is pinned into this session's trust. */
 	private CompletableFuture<TlsCandidate> validateCandidate(TlsCandidate candidate) {
 		return CandidateTrustValidation.validate(new CandidateTrustValidation.Candidate(candidate.socket(), trustManager, sessionTrust, connectionInfo.origin.getHostString(),
-				connectionInfo.endpoint.getHostString(), trustCallback)).thenApply(ignored -> candidate);
+				route.identityHost(), trustCallback)).thenApply(ignored -> candidate);
 	}
 
 	/** Turns a validated candidate into a pooled connection, releasing the socket when construction fails. */
