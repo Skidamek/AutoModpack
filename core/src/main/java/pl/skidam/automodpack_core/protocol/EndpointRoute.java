@@ -7,9 +7,8 @@ import pl.skidam.mcholepunch.HolepunchRoute;
 
 /**
  * One resolved way onto an endpoint. The identity host and port are what the peer sees in the Minecraft handshake,
- * TLS SNI, and the HTTP Host header. The transport address is the socket this client dials. A login that already
- * reached a concrete IP supplies that address as the transport, while a stored or hostname-routed connection resolves
- * it normally.
+ * TLS SNI, and the HTTP Host header. The transport address is the socket this client dials. Loopback and IP-literal
+ * joins keep the literal the game reached; hostname joins resolve normally.
  */
 record EndpointRoute(String identityHost, int identityPort, InetSocketAddress transportAddress) {
 	EndpointRoute {
