@@ -200,6 +200,7 @@ public class NettyServer {
 			} else {
 				started = startDedicated(connectionMode);
 			}
+			logAdvertisedEndpoint(connectionMode);
 			logHostFingerprint();
 			return started;
 		} catch (Exception e) {
@@ -252,6 +253,16 @@ public class NettyServer {
 					}
 				}).group(eventLoopGroup).localAddress(bindAddress).bind().syncUninterruptibly();
 		return Optional.of(serverChannel);
+	}
+
+	/** What clients will dial, so a report shows the advertised route without reproducing the login. */
+	private void logAdvertisedEndpoint(ModpackConnectionMode mode) {
+		String host = serverConfig.advertisedEndpointHost == null || serverConfig.advertisedEndpointHost.isBlank() ? "<joined host>" : serverConfig.advertisedEndpointHost;
+		String port = serverConfig.advertisedEndpointPort == -1 ? "<joined port>" : Integer.toString(serverConfig.advertisedEndpointPort);
+		LOGGER.info("Modpack endpoint advertised to clients: {}:{} (mode {})", host, port, mode);
+		if (mode != ModpackConnectionMode.HOLEPUNCH && serverConfig.bindPort != -1 && serverConfig.advertisedEndpointPort == -1) {
+			LOGGER.warn("bind-port is {} but advertised-endpoint-port is -1: clients will use the port they joined on. Set advertised-endpoint-port if the modpack port is not the join port.", serverConfig.bindPort);
+		}
 	}
 
 	private void logHostFingerprint() {

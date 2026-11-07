@@ -108,7 +108,7 @@ final class ClientLoginUpdateFlow {
 				Throwable failure = manifestResult.failure() == null ? new IOException("Modpack manifest fetch returned no failure cause") : manifestResult.failure();
 				if (selfCheck) return CompletableFuture.completedFuture(selfCheckStop("the manifest fetch failed", failure));
 				disconnectImmediately(handler);
-				return CompletableFuture.completedFuture(presentReconcileFailure(failure, manifestResult.state()));
+				return CompletableFuture.completedFuture(presentReconcileFailure(failure, manifestResult.state(), connectionInfo));
 			}
 
 			PackTransport transport = manifestResult.transport();
@@ -144,7 +144,7 @@ final class ClientLoginUpdateFlow {
 			Throwable failure = Throwables.unwrap(e);
 			if (selfCheck) return selfCheckStop("the reconcile ladder failed", failure);
 			disconnectImmediately(handler);
-			return presentReconcileFailure(failure, null);
+			return presentReconcileFailure(failure, null, connectionInfo);
 		});
 	}
 
@@ -227,7 +227,7 @@ final class ClientLoginUpdateFlow {
 	 * and returns the response that tells the server the same story. A refused certificate or a dismissed verification is
 	 * named on the wire so the server stops blaming its own config; everything else stays a host error.
 	 */
-	private static LoginUpdateResponse presentReconcileFailure(Throwable failure, ManifestFetcher.ManifestFetchState state) {
+	private static LoginUpdateResponse presentReconcileFailure(Throwable failure, ManifestFetcher.ManifestFetchState state, ConnectionJsons.ConnectionInfo connectionInfo) {
 		if (Throwables.findCause(failure, CertificateTrustCancelledException.class) != null) return LoginUpdateResponse.CLIENT_DECLINED;
 		CertificatePinMismatchException mismatch = Throwables.findCause(failure, CertificatePinMismatchException.class);
 		if (mismatch != null) {
@@ -240,13 +240,26 @@ final class ClientLoginUpdateFlow {
 		if (state == ManifestFetcher.ManifestFetchState.OPERATION_FAILED) {
 			presentFailure(failure, "automodpack.error.hostContent", FailureCategory.HOST);
 		} else {
-			presentFailure(failure, "automodpack.error.connection", FailureCategory.CONNECTION);
+			presentConnectionFailure(failure, connectionInfo);
 		}
 		return LoginUpdateResponse.HOST_ERROR;
 	}
 
 	private static void presentFailure(Throwable failure, String messageKey, FailureCategory category) {
 		ScreenManager.failure(FailureRequest.of(failure, messageKey, category, FailureDestination.MULTIPLAYER, null));
+	}
+
+	private static void presentConnectionFailure(Throwable failure, ConnectionJsons.ConnectionInfo connectionInfo) {
+		FailureRequest request = FailureRequest.of(failure, "automodpack.error.connection", FailureCategory.CONNECTION, FailureDestination.MULTIPLAYER, null);
+		if (connectionInfo != null && connectionInfo.origin != null && connectionInfo.endpoint != null) {
+			request = request.withDiagnosticDetails("Origin: " + AddressHelpers.formatAddress(connectionInfo.origin),
+					"Endpoint: " + AddressHelpers.formatAddress(connectionInfo.endpoint), "Mode: " + connectionInfo.connectionMode);
+			if (AddressHelpers.isLoopbackLiteral(connectionInfo.endpoint.getHostString()) && connectionInfo.endpoint.getPort() != connectionInfo.origin.getPort()) {
+				request = request.withDiagnosticDetails(
+						"The modpack endpoint is local and on a different port than the join address. A single-port tunnel carries only the join port; use HOLEPUNCH or share the modpack port too.");
+			}
+		}
+		ScreenManager.failure(request);
 	}
 
 	private static boolean canRepair(GenerationJsons.HeadDocumentFields fields, SelectionIntent savedSelection) {
