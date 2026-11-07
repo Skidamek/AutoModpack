@@ -58,10 +58,11 @@ public class DataC2SPacket {
 			String effectiveHost;
 			int effectivePort;
 
-			// A blank packet endpoint uses the hostname from the established Minecraft connection.
-			// This preserves hostname-routed tunnels and shared frontends; literal-IP PTR prevention happens in the resolver.
+			// A blank packet endpoint uses the address from the established Minecraft connection. Hostname-routed
+			// tunnels keep the connected hostname; an IP-literal or loopback join keeps the literal address the game
+			// reached, so the modpack transport cannot re-resolve a PTR name like "localhost" to the other IP family.
 			if (packetEndpointHost.isBlank()) {
-				effectiveHost = connectedAddress.getHostString();
+				effectiveHost = AddressHelpers.endpointHost(connectedAddress, connectionAttempt.origin());
 			} else {
 				effectiveHost = packetEndpointHost;
 			}
@@ -71,6 +72,7 @@ public class DataC2SPacket {
 			} else {
 				effectivePort = packetEndpointPort;
 			}
+			if (effectivePort < 1 || effectivePort > 65535) throw new IllegalArgumentException("Invalid modpack endpoint port: " + effectivePort);
 
 			InetSocketAddress endpoint = AddressHelpers.format(effectiveHost, effectivePort);
 

@@ -25,6 +25,16 @@ public class AddressHelpers {
 		return host + ":" + normalized.getPort();
 	}
 
+	/** Formats the resolved bytes, so a PTR hostname carried by the socket address cannot reappear in a diagnostic. */
+	public static String formatAddressLiteral(InetSocketAddress address) {
+		Objects.requireNonNull(address, "address");
+		InetAddress inetAddress = address.getAddress();
+		if (inetAddress == null) return formatAddress(address);
+		String host = inetAddress.getHostAddress();
+		if (host.contains(":")) host = "[" + host + "]";
+		return host + ":" + address.getPort();
+	}
+
 	public static InetSocketAddress parseOrigin(String address) {
 		return parseStrict(address, false);
 	}
@@ -103,6 +113,27 @@ public class AddressHelpers {
 			if (Integer.parseInt(octet) > 255) return false;
 		}
 		return true;
+	}
+
+	/** A loopback address written as a literal, so diagnostics can name a local tunnel without resolving a hostname. */
+	public static boolean isLoopbackLiteral(String host) {
+		if (!isIpLiteral(host)) return false;
+		try {
+			return InetAddress.getByName(host).isLoopbackAddress();
+		} catch (UnknownHostException e) {
+			return false;
+		}
+	}
+
+	/**
+	 * The host an unadvertised endpoint uses. A hostname-routed tunnel keeps the connected hostname; an IP-literal or
+	 * loopback join keeps the literal address the game reached, because {@code getHostString()} can carry a PTR name
+	 * that re-resolves to the other IP family.
+	 */
+	public static String endpointHost(InetSocketAddress connected, InetSocketAddress origin) {
+		if (connected.getAddress() == null || origin == null) return connected.getHostString();
+		if (isIpLiteral(origin.getHostString()) || connected.getAddress().isLoopbackAddress()) return connected.getAddress().getHostAddress();
+		return connected.getHostString();
 	}
 
 	private static String stripIpv6Brackets(String host) {
