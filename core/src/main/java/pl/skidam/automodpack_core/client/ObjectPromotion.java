@@ -99,6 +99,10 @@ final class ObjectPromotion {
 				if (batch.holds(heldFile)) continue;
 				try {
 					VerifiedFileTransfer.requireHashed(heldFile, task.fileSize, sha1, HashUtils.hashFile(heldFile));
+					// A batched force seals held bytes before publication, so a crash can leave this file read-only.
+					// Adoption owns it now: reopen it for the normal force-and-publish path instead of trusting its
+					// old in-memory verification.
+					ImmutableFiles.unprotect(heldFile);
 					batch.hold(new ObjectBatch.Held(sha1, task.fileSize, heldFile, directory, task));
 					return true;
 				} catch (VerifiedFileTransfer.VerificationMismatchException torn) {

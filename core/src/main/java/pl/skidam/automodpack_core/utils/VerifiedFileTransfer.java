@@ -181,6 +181,17 @@ public final class VerifiedFileTransfer {
 	 */
 	public static Path publishForced(Path temporary, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
 		ImmutableFiles.protect(temporary);
+		return publishSealed(temporary, targetFile, expectedSize, expectedSha1);
+	}
+
+	/**
+	 * Publishes private, verified bytes whose content and read-only policy the caller already forced together with
+	 * {@link ImmutableFiles#protectAndForce}. The source remains exclusively owned until this call; repeating its
+	 * protection here would add filesystem probes and stats without changing it. The target policy, including the
+	 * cross-filesystem copy fallback, is still enforced before returning. The caller forces the returned directory
+	 * before seeding a cache record, exactly as for {@link #publishForced}.
+	 */
+	public static Path publishSealed(Path temporary, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
 		Path targetParent = OsPaths.requirePublishableParent(targetFile, "Target path");
 		boolean crossFileSystem = false;
 		try {

@@ -55,6 +55,28 @@ class ObjectPromotionTest {
 	}
 
 	@Test
+	void aSealedHeldObjectIsRehashedAndAdoptedAfterRestart(@TempDir Path root) throws Exception {
+		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
+		ObjectBatch firstBatch = new ObjectBatch(layout);
+		ObjectPromotion first = new ObjectPromotion(layout, layout.stagingDirectory(), firstBatch);
+		byte[] data = bytes(300_000, 111);
+		String sha1 = HashUtils.sha1(data);
+		QueuedDownload task = task(sha1, data.length);
+		Path partial = stage(first, task, data);
+		assertTrue(first.promote(sha1, task, partial));
+		Path held = PartialResume.heldFiles(partial).get(0);
+		ImmutableFiles.protectAndForce(held);
+		assertFalse(Files.exists(layout.objectFile(sha1)), "sealing is not publication");
+		ObjectBatch restartedBatch = new ObjectBatch(layout);
+		ObjectPromotion restarted = new ObjectPromotion(layout, layout.stagingDirectory(), restartedBatch);
+		try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
+			assertTrue(restarted.adoptHeld(sha1, task(sha1, data.length)), "durable held bytes need no redownload");
+			assertEquals(List.of(), restartedBatch.flush(), "the adopted object reached the store");
+			assertPublished(layout, sha1, data, cache);
+		}
+	}
+
+	@Test
 	void aOneTileObjectIsMovedIntoTheStoreWithoutACopy(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		ObjectBatch batch = new ObjectBatch(layout);

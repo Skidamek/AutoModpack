@@ -31,11 +31,26 @@ final class ObjectBatch {
 
 	record Held(String sha1, long size, Path file, Path sliceDirectory, QueuedDownload task) {}
 
+	enum Step {
+		BEFORE_FORCE, FORCED, BEFORE_PUBLISH, PUBLISHED, DIRECTORY_FORCED, BEFORE_RECORD, RECORDED
+	}
+
+	@FunctionalInterface
+	interface Probe {
+		void reached(Step step, Path path);
+	}
+
+	private final Probe probe;
 	private final DataRootResolver.Layout dataLayout;
 	private final List<Held> held = new ArrayList<>();
 
 	ObjectBatch(DataRootResolver.Layout dataLayout) {
+		this(dataLayout, (step, path) -> {});
+	}
+
+	ObjectBatch(DataRootResolver.Layout dataLayout, Probe probe) {
 		this.dataLayout = dataLayout;
+		this.probe = probe;
 	}
 
 	synchronized void hold(Held object) {
@@ -67,7 +82,9 @@ final class ObjectBatch {
 		List<Held> forced = new ArrayList<>(batch.size());
 		for (Held object : batch) {
 			try {
-				FileTrees.forceFile(object.file());
+				probe.reached(Step.BEFORE_FORCE, object.file());
+				ImmutableFiles.protectAndForce(object.file());
+				probe.reached(Step.FORCED, object.file());
 				forced.add(object);
 			} catch (IOException e) {
 				fail(object, failed, e);
@@ -76,7 +93,9 @@ final class ObjectBatch {
 		Map<Path, List<Held>> byDirectory = new LinkedHashMap<>();
 		for (Held object : forced) {
 			try {
-				Path parent = VerifiedFileTransfer.publishForced(object.file(), dataLayout.objectFile(object.sha1()), object.size(), object.sha1());
+				probe.reached(Step.BEFORE_PUBLISH, object.file());
+				Path parent = VerifiedFileTransfer.publishSealed(object.file(), dataLayout.objectFile(object.sha1()), object.size(), object.sha1());
+				probe.reached(Step.PUBLISHED, dataLayout.objectFile(object.sha1()));
 				byDirectory.computeIfAbsent(parent, ignored -> new ArrayList<>()).add(object);
 			} catch (IOException e) {
 				fail(object, failed, e);
@@ -85,12 +104,15 @@ final class ObjectBatch {
 		List<Held> durable = new ArrayList<>(forced.size());
 		for (Map.Entry<Path, List<Held>> directory : byDirectory.entrySet()) {
 			FileTrees.forceDirectory(directory.getKey());
+			probe.reached(Step.DIRECTORY_FORCED, directory.getKey());
 			durable.addAll(directory.getValue());
 		}
 		try (FileCache cache = FileCache.open(dataLayout.fileCacheDirectory())) {
 			for (Held object : durable) {
 				try {
+					probe.reached(Step.BEFORE_RECORD, dataLayout.objectFile(object.sha1()));
 					cache.overwriteCache(dataLayout.objectFile(object.sha1()), object.sha1());
+					probe.reached(Step.RECORDED, dataLayout.objectFile(object.sha1()));
 				} catch (IOException e) {
 					fail(object, failed, e);
 				}

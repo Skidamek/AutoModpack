@@ -43,6 +43,23 @@ public final class ImmutableFiles {
 	}
 
 	/**
+	 * Forces private, verified bytes and their read-only policy before publication. When enforcement changes the
+	 * policy, its own force already persists the data too; otherwise the writable channel opened before enforcement
+	 * supplies that barrier. No file is published, nor any hash record seeded, until this method returns.
+	 *
+	 * <p>
+	 * The file must still be writable. An owner that adopts a file sealed by an earlier run clears that policy
+	 * first, exactly as it would before editing any immutable file it owns.
+	 */
+	public static void protectAndForce(Path file) throws IOException {
+		Path normalized = file.toAbsolutePath().normalize();
+		if (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(normalized)) throw new IOException("Immutable path is not a regular file: " + normalized);
+		try (FileChannel channel = FileChannel.open(normalized, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+			if (!enforcementWorks(normalized) || !enforce(normalized)) channel.force(true);
+		}
+	}
+
+	/**
 	 * Probes the filesystem once per JVM on a throwaway file with the same enforcement path, so a filesystem that only
 	 * pretends to be read-only is told apart from a file that failed protection for its own reasons - those still throw.
 	 */
@@ -84,10 +101,10 @@ public final class ImmutableFiles {
 		}
 	}
 
-	private static void enforce(Path normalized) throws IOException {
+	private static boolean enforce(Path normalized) throws IOException {
 		PosixFileAttributeView posix = Files.getFileAttributeView(normalized, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
 		if (posix != null) {
-			if (disjoint(posix.readAttributes().permissions(), WRITE_PERMISSIONS)) return;
+			if (disjoint(posix.readAttributes().permissions(), WRITE_PERMISSIONS)) return false;
 			try (FileChannel channel = FileChannel.open(normalized, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
 				Set<PosixFilePermission> permissions = EnumSet.noneOf(PosixFilePermission.class);
 				permissions.addAll(posix.readAttributes().permissions());
@@ -96,13 +113,13 @@ public final class ImmutableFiles {
 				if (!disjoint(posix.readAttributes().permissions(), WRITE_PERMISSIONS)) throw new UnenforceableReadOnlyException("Filesystem did not make immutable file read-only: " + normalized);
 				channel.force(true);
 			}
-			return;
+			return true;
 		}
 		AclFileAttributeView acl = Files.getFileAttributeView(normalized, AclFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
 		DosFileAttributeView dos = Files.getFileAttributeView(normalized, DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
 		if (acl != null) {
 			if (dos != null && dos.readAttributes().isReadOnly()) dos.setReadOnly(false);
-			if (isAclProtected(normalized, acl)) return;
+			if (isAclProtected(normalized, acl)) return false;
 			try (FileChannel channel = FileChannel.open(normalized, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
 				AclEntry protection = protectionEntry(normalized);
 				List<AclEntry> entries = new ArrayList<>(acl.getAcl());
@@ -113,16 +130,16 @@ public final class ImmutableFiles {
 				if (!isAclProtected(normalized, acl)) throw new UnenforceableReadOnlyException("Filesystem did not protect immutable file ACL: " + normalized);
 				channel.force(true);
 			}
-			return;
+			return true;
 		}
 		if (dos != null) {
-			if (dos.readAttributes().isReadOnly()) return;
+			if (dos.readAttributes().isReadOnly()) return false;
 			try (FileChannel channel = FileChannel.open(normalized, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
 				dos.setReadOnly(true);
 				if (!dos.readAttributes().isReadOnly()) throw new UnenforceableReadOnlyException("Filesystem did not make immutable file read-only: " + normalized);
 				channel.force(true);
 			}
-			return;
+			return true;
 		}
 		try {
 			if (!normalized.toFile().setReadOnly()) throw new UnenforceableReadOnlyException("Filesystem has no enforceable read-only policy for immutable file: " + normalized);
@@ -130,6 +147,7 @@ public final class ImmutableFiles {
 		} catch (UnsupportedOperationException | IllegalArgumentException e) {
 			throw new UnenforceableReadOnlyException("Filesystem has no enforceable read-only policy for immutable file: " + normalized, e);
 		}
+		return false;
 	}
 
 	/** Clears the read-only policy so a sovereign owner can edit or delete the file. */
