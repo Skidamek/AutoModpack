@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.client.ui.screen;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +30,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupResolution;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionSummary;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -71,7 +71,6 @@ public class GroupSelectionScreen extends VersionedScreen {
 	private final Consumer<SelectionIntent> selectionAction;
 	private final Runnable cancelAction;
 	private final ReviewActions actions;
-	private final boolean activeModpack;
 	private final PackDocument localRecord;
 	private final ClientPlatform detectedPlatform;
 	private ClientPlatform platformOverride;
@@ -82,6 +81,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 	private final Set<String> chosenCategories = new LinkedHashSet<>();
 	private final Set<String> excluded = new LinkedHashSet<>();
 	private ResolvedSelection resolution;
+	private GroupSelectionSummary summary;
 	private String resolutionError = "";
 	// The receipt of the last auto-resolved conflict, shown in yellow until the next successful selection change.
 	private String conflictNotice = "";
@@ -121,7 +121,6 @@ public class GroupSelectionScreen extends VersionedScreen {
 		this.selectionAction = entry.selectionAction();
 		this.cancelAction = entry.cancelAction();
 		this.actions = entry.actions();
-		this.activeModpack = controller.activeRecord(modpackId) != null;
 		this.localRecord = entry.localRecord();
 		// The player edits the desire - what they last asked for - which may already sit ahead of what is installed.
 		SelectionIntent initial = entry.initialSelection() != null ? entry.initialSelection() : controller.savedSelection(modpackId);
@@ -132,9 +131,9 @@ public class GroupSelectionScreen extends VersionedScreen {
 		this.chosenCategories.addAll(initial.requestedCategories());
 		this.excluded.addAll(initial.excludedGroups());
 		try {
-			this.resolution = GroupSelectionResolver.resolve(manifest, initial, effectivePlatform());
+			useResolved(GroupSelectionResolver.resolve(manifest, initial, effectivePlatform()));
 		} catch (SelectionResolutionException e) {
-			this.resolution = Objects.requireNonNull(e.resolution(), "Invalid selection did not include a partial resolution");
+			useResolved(Objects.requireNonNull(e.resolution(), "Invalid selection did not include a partial resolution"));
 			this.resolutionError = VersionedText.str("automodpack.selection.savedInvalid");
 		}
 	}
@@ -330,7 +329,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 
 	private void applyResolved(SelectionIntent intent, ResolvedSelection resolved) {
 		applyIntent(intent);
-		resolution = resolved;
+		useResolved(resolved);
 		resolutionError = "";
 		conflictNotice = "";
 		rebuild();
@@ -346,14 +345,16 @@ public class GroupSelectionScreen extends VersionedScreen {
 	}
 
 	private void reresolveDefault() {
-		resolution = GroupSelectionResolver.resolveDefault(manifest, effectivePlatform());
+		useResolved(GroupSelectionResolver.resolveDefault(manifest, effectivePlatform()));
 		resolutionError = "";
 		conflictNotice = "";
 		rebuild();
 	}
 
-	private boolean isActiveModpack() {
-		return activeModpack;
+	/** Every answer of the resolver is rendered from this one place, so the summary never lags the selection. */
+	private void useResolved(ResolvedSelection resolved) {
+		this.resolution = Objects.requireNonNull(resolved, "resolution");
+		this.summary = GroupSelectionSummary.of(manifest, resolved.selectedGroups());
 	}
 
 	private void save() {
@@ -596,31 +597,14 @@ public class GroupSelectionScreen extends VersionedScreen {
 				&& (selectionAction != null || !initialSelection.equals(currentIntent()) || platformChanged);
 	}
 
-	/** The estimated download size of the current selection: unique SHA-1s across the selected groups, shared files counted once. */
+	/** The estimated download size of the current selection: unique paths across the selected groups, shared files counted once. */
 	private long selectionBytes() {
-		if (resolution != renderedSelection) {
-			renderedSelectionBytes = computeSelectionBytes();
-			renderedSelection = resolution;
-		}
-		return renderedSelectionBytes;
+		return summary == null ? 0 : summary.byteCount();
 	}
 
-	private long computeSelectionBytes() {
-		Set<String> counted = new HashSet<>();
-		long total = 0;
-		for (String groupId : resolution.selectedGroups()) {
-			GroupManifest.Group group = groups.get(groupId);
-			if (group == null) continue;
-			for (GroupManifest.GroupFile file : group.files().values()) if (counted.add(file.sha1())) total = Math.addExact(total, file.size());
-		}
-		return total;
-	}
-
-	// Per-frame caches: the rail wrap and the byte total only change when the window resizes or the selection moves.
+	// Per-frame cache: the rail wrap only changes when the window resizes.
 	private List<String> wrappedDescription = List.of();
 	private int wrappedDescriptionWidth = -1;
-	private ResolvedSelection renderedSelection;
-	private long renderedSelectionBytes;
 
 	private List<String> wrappedDescription(int width, String description) {
 		if (width != wrappedDescriptionWidth) {

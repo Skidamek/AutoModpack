@@ -84,6 +84,29 @@ class SelectedTreeComposerTest {
 		assertEquals(Set.of("base-hash", "alternative-hash"), target.list.stream().map(item -> item.sha1).collect(Collectors.toSet()));
 	}
 
+	@Test
+	void selectionSummaryCountsASharedPathOnce() {
+		GroupManifest.GroupFile shared = new GroupManifest.GroupFile(7, false, "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
+		GroupManifest.GroupFile own = new GroupManifest.GroupFile(11, false, "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null);
+		GroupManifest manifest = manifest(Map.of("main",
+				new GroupManifest.Group("", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/shared.jar", shared))), "visuals",
+				new GroupManifest.Group("", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(), Set.of(),
+						new TreeMap<>(Map.of("mods/own.jar", own, "mods/shared.jar", shared)))));
+
+		assertEquals(new GroupSelectionSummary(18), GroupSelectionSummary.of(manifest, Set.of("main", "visuals")));
+	}
+
+	@Test
+	void selectionSummaryCountsSharedContentOnce() {
+		GroupManifest.GroupFile first = new GroupManifest.GroupFile(9, false, "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
+		GroupManifest.GroupFile second = new GroupManifest.GroupFile(9, false, "86F7E437FAA5A7FCE15D1DDCB9EAEAEA377667B8", null);
+		GroupManifest manifest = manifest(Map.of("main",
+				new GroupManifest.Group("", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/first.jar", first))), "visuals",
+				new GroupManifest.Group("", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/second.jar", second)))));
+
+		assertEquals(new GroupSelectionSummary(9), GroupSelectionSummary.of(manifest, Set.of("main", "visuals")));
+	}
+
 	private static GroupManifest manifest(Map<String, GroupManifest.Group> groups) {
 		return new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(groups));
 	}
