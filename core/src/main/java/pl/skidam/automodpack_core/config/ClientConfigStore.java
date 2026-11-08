@@ -22,17 +22,9 @@ public final class ClientConfigStore {
 		this.file = file;
 	}
 
-	/**
-	 * The document this instance runs on. A storage instance can outlive or precede the boot that adopted the document,
-	 * and the cache may have dropped it, so a missing copy is read back from the file the store owns.
-	 */
+	/** The document, read once at boot and replaced by {@link #commit} or by a reopen; never null after a boot. */
 	public ClientConfigFieldsV3 current() {
-		ClientConfigFieldsV3 document = current;
-		if (document != null) return document;
-		synchronized (lock) {
-			if (current == null) current = ReconfConfigs.read(file, ClientConfigFieldsV3.class).orElse(null);
-			return current;
-		}
+		return current;
 	}
 
 	/** Boot only: the process is still single-threaded, so the document lands without the lock and without a write. */
@@ -41,10 +33,18 @@ public final class ClientConfigStore {
 		return document;
 	}
 
+	/**
+	 * Re-derives the document from the file. A storage is a re-creatable handle, so an instance that belongs to no live
+	 * storage starts from what the file says instead of carrying a copy that no longer exists.
+	 */
+	public void adoptFromDisk() {
+		current = ReconfConfigs.read(file, ClientConfigFieldsV3.class).orElse(null);
+	}
+
 	/** A preference change: derive from the document, write it, land it, one critical section. */
 	public ClientConfigFieldsV3 commit(UnaryOperator<ClientConfigFieldsV3> next) {
 		synchronized (lock) {
-			ClientConfigFieldsV3 landed = next.apply(current());
+			ClientConfigFieldsV3 landed = next.apply(current);
 			write(landed);
 			current = landed;
 			return landed;

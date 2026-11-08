@@ -149,6 +149,8 @@ public final class ClientStorage {
 		} catch (IOException e) {
 			throw new IllegalStateException("Cannot initialize client storage for " + storage.gameDirectory, e);
 		}
+		// A dropped instance takes its in-memory copies with it; the reopened one starts from what the files say.
+		storage.clientConfig().adoptFromDisk();
 		try {
 			ClientObjectStore.publishOwnership(storage);
 		} catch (IOException e) {
