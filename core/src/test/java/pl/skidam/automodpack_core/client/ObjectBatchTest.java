@@ -52,7 +52,7 @@ class ObjectBatchTest {
 	void heldObjectsStayOutOfTheStoreUntilTheBatchSyncPublishesThem(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		ObjectBatch batch = new ObjectBatch(layout);
-		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
+		ObjectPromotion promotion = new ObjectPromotion(layout, layout.stagingDirectory(), batch);
 		List<byte[]> objects = List.of(bytes(10_000, 1), bytes(NetUtils.WIRE_CHUNK_BYTES, 2), bytes(NetUtils.WIRE_CHUNK_BYTES * 2 + 9, 3), new byte[0]);
 		for (byte[] data : objects) {
 			QueuedDownload task = downloaded(promotion, layout, data);
@@ -85,7 +85,7 @@ class ObjectBatchTest {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		byte[] intact = bytes(200_000, 4);
 		byte[] torn = bytes(NetUtils.WIRE_CHUNK_BYTES + 1234, 5);
-		ObjectPromotion crashed = new ObjectPromotion(layout, new ObjectBatch(layout));
+		ObjectPromotion crashed = new ObjectPromotion(layout, layout.stagingDirectory(), new ObjectBatch(layout));
 		downloaded(crashed, layout, intact);
 		downloaded(crashed, layout, torn);
 		// The process dies before joinAll flushes. A power cut can keep a held file's name and size but not its bytes.
@@ -93,7 +93,7 @@ class ObjectBatchTest {
 		Files.write(tornHeld, new byte[torn.length]);
 
 		ObjectBatch next = new ObjectBatch(layout);
-		ObjectPromotion rebooted = new ObjectPromotion(layout, next);
+		ObjectPromotion rebooted = new ObjectPromotion(layout, layout.stagingDirectory(), next);
 		String tornSha1 = HashUtils.sha1(torn);
 		assertFalse(rebooted.adoptHeld(tornSha1, task(tornSha1, torn.length)), "torn held bytes fail their hash and are downloaded again");
 		assertFalse(Files.exists(layout.objectFile(tornSha1)), "a torn object never reaches the store");
@@ -116,7 +116,7 @@ class ObjectBatchTest {
 	void adoptionNeverTakesAnObjectThisRunStillHolds(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		ObjectBatch batch = new ObjectBatch(layout);
-		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
+		ObjectPromotion promotion = new ObjectPromotion(layout, layout.stagingDirectory(), batch);
 		byte[] data = bytes(5_000, 6);
 		String sha1 = HashUtils.sha1(data);
 		downloaded(promotion, layout, data);
@@ -129,7 +129,7 @@ class ObjectBatchTest {
 	void aHeldObjectLostBeforeTheFlushFailsItsTaskUnlessTheStoreAlreadyHasIt(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		ObjectBatch batch = new ObjectBatch(layout);
-		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
+		ObjectPromotion promotion = new ObjectPromotion(layout, layout.stagingDirectory(), batch);
 		byte[] won = bytes(7_000, 7);
 		byte[] lost = bytes(8_000, 8);
 		downloaded(promotion, layout, won);
@@ -153,7 +153,7 @@ class ObjectBatchTest {
 	void aMismatchIsRejectedBeforeAnythingIsHeld(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		ObjectBatch batch = new ObjectBatch(layout);
-		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
+		ObjectPromotion promotion = new ObjectPromotion(layout, layout.stagingDirectory(), batch);
 		for (int size : new int[]{3_000, NetUtils.WIRE_CHUNK_BYTES + 3}) {
 			byte[] advertised = bytes(size, size);
 			byte[] received = advertised.clone();

@@ -78,6 +78,7 @@ public class DownloadManager implements DownloadView {
 	private final ObjectBatch batch;
 	private final PlatformAttempt platform;
 	private final DataRootResolver.Layout dataLayout;
+	private final Path stagingDirectory;
 
 	private volatile PackTransport transport = null;
 	private volatile HostTiles hostTiles = null;
@@ -107,16 +108,17 @@ public class DownloadManager implements DownloadView {
 	/** An in-flight platform attempt the rescue wants moved off its domain. */
 	private record Rerouted(String task, String domain, HttpFileDownloader.AttemptControl control) {}
 
-	public DownloadManager(long bytesToDownload, DataRootResolver.Layout dataLayout, PlatformCache platformCache) {
+	public DownloadManager(long bytesToDownload, DataRootResolver.Layout dataLayout, Path stagingDirectory, PlatformCache platformCache) {
 		totalBytesToDownload.set(bytesToDownload);
 		speedometer.setExpectedBytes(bytesToDownload);
 		this.dataLayout = Objects.requireNonNull(dataLayout, "dataLayout");
+		this.stagingDirectory = Objects.requireNonNull(stagingDirectory, "stagingDirectory");
 		// The dispatch discipline caps platform-routed tasks at PLATFORM_WORKERS, so the pool itself stays unbounded: a
 		// host-routed task holds its thread only until the take is submitted, and a platform download parked on a slow
 		// body can never starve a host dispatch of its thread.
 		this.downloadExecutor = Executors.newCachedThreadPool(new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
 		this.batch = new ObjectBatch(this.dataLayout);
-		this.promotion = new ObjectPromotion(this.dataLayout, batch);
+		this.promotion = new ObjectPromotion(this.dataLayout, this.stagingDirectory, batch);
 		// Owns the batched platform-metadata refetch of this run: concurrent dead links share the bulk API calls.
 		this.platform = new PlatformAttempt(httpDownloader, new FetchManager(List.of(), Objects.requireNonNull(platformCache, "platformCache")));
 		this.probe = new HostProbe(scheduler, rescue);
@@ -174,7 +176,7 @@ public class DownloadManager implements DownloadView {
 			long chosenTile = -1;
 			for (DownloadData inFlight : HostProbe.platformAttempts(queue.inFlightTasks())) {
 				if (!probe.worthMeasuring(inFlight)) continue;
-				Path slices = PartialResume.directory(dataLayout.stagingDirectory(), inFlight.sha1);
+				Path slices = PartialResume.directory(stagingDirectory, inFlight.sha1);
 				long tile;
 				try {
 					tile = HostProbe.takeableTile(slices, inFlight.fileSize);
@@ -300,7 +302,7 @@ public class DownloadManager implements DownloadView {
 		try (FileCache cache = FileCache.open(dataLayout.fileCacheDirectory())) {
 			if (ClientObjectStore.acquireVerified(storeFile, hashPathPair.hash(), task.fileSize, List.of(), cache, ClientObjectStore.CorruptObjectPolicy.KEEP).present()) {
 				// The run's total is remaining wire bytes, so a CAS hit only fills the amount this task still owed.
-				totalBytesDownloaded.addAndGet(PartialResume.remainingBytes(dataLayout.stagingDirectory(), hashPathPair.hash(), task.fileSize));
+				totalBytesDownloaded.addAndGet(PartialResume.remainingBytes(stagingDirectory, hashPathPair.hash(), task.fileSize));
 				cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.COMPLETED);
 				return;
 			}

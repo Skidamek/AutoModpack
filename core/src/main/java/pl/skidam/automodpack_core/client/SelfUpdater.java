@@ -192,7 +192,7 @@ public class SelfUpdater {
 			Path targetJar = modsDirectory.resolve(Path.of(automodpack.fileName()).getFileName()).normalize();
 
 			try (PlatformCache platformCache = PlatformCache.open(dataLocation.layout().platformCacheDirectory())) {
-				DownloadManager downloadManager = new DownloadManager(0, dataLocation.layout(), platformCache);
+				DownloadManager downloadManager = new DownloadManager(0, dataLocation.layout(), dataLocation.stagingDirectory(), platformCache);
 				// No transport owns a self-update download: end any session a previous in-process pack download
 				// left behind, or the audio layer replays the previous server's track over this screen.
 				WaitingMusic.endRun();

@@ -252,7 +252,7 @@ class DownloadManagerPlatformTest {
 		byte[] heldContent = CONTENTS.get("held.bin");
 		List<String> holderNames = List.of("chunk-under.bin", "chunk-exact.bin", "chunk-over.bin", "held.bin", "resume.bin");
 		long totalBytes = holderNames.size() * (long) heldContent.length + smallContent.length + largeContent.length;
-		DownloadManager manager = new DownloadManager(totalBytes, layout, cache);
+		DownloadManager manager = new DownloadManager(totalBytes, layout, layout.stagingDirectory(), cache);
 		manager.attachTransport(new FakeTransport(null)); // any host fetch would fail this test loudly
 		for (String holder : holderNames) HELD_LATCHES.put(holder, new CountDownLatch(1));
 		HELD_LATCHES.put("one-byte.txt", new CountDownLatch(1));
@@ -290,7 +290,7 @@ class DownloadManagerPlatformTest {
 		byte[] hostContent = CONTENTS.get("one-byte.txt");
 		List<String> holderNames = List.of("chunk-under.bin", "chunk-exact.bin", "chunk-over.bin", "held.bin", "resume.bin");
 		long totalBytes = holderNames.size() * (long) CONTENTS.get("held.bin").length + headContent.length + hostContent.length;
-		DownloadManager manager = new DownloadManager(totalBytes, layout, cache);
+		DownloadManager manager = new DownloadManager(totalBytes, layout, layout.stagingDirectory(), cache);
 		FakeTransport transport = new FakeTransport(hostContent);
 		manager.attachTransport(transport);
 		for (String holder : holderNames) HELD_LATCHES.put(holder, new CountDownLatch(1));
@@ -340,7 +340,7 @@ class DownloadManagerPlatformTest {
 		Path destination = tempDir.resolve("active").resolve(name); // the projection path; the store is the real target
 		byte[] content = CONTENTS.get(contentKey);
 		PlatformCache cache = PlatformCache.open(tempDir.resolve("platform-cache"));
-		DownloadManager manager = new DownloadManager(content.length, layout, cache);
+		DownloadManager manager = new DownloadManager(content.length, layout, layout.stagingDirectory(), cache);
 		manager.attachTransport(transport);
 		List<DownloadSource> sources = List.of(new DownloadSource("http://127.0.0.1:" + server.getAddress().getPort() + serverPath, DownloadSource.Provider.MODRINTH));
 		String sha1 = HashUtils.getHash(writeExpected(name, content));
@@ -357,7 +357,7 @@ class DownloadManagerPlatformTest {
 		layout = new DataRootResolver.Layout(tempDir.resolve("data"));
 		Path destination = tempDir.resolve("active").resolve("zero.bin");
 		PlatformCache cache = PlatformCache.open(tempDir.resolve("platform-cache"));
-		DownloadManager manager = new DownloadManager(0, layout, cache);
+		DownloadManager manager = new DownloadManager(0, layout, layout.stagingDirectory(), cache);
 		manager.attachTransport(new FakeTransport(null)); // any host fetch would fail this test
 		String sha1 = HashUtils.getHash(writeExpected("zero.bin", new byte[0]));
 		manager.download(destination, sha1, null, "config", List.of(), 0, () -> {}, category -> {});

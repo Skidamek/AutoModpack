@@ -249,7 +249,7 @@ public final class ClientStorage {
 	}
 
 	public Path stagingDirectory() {
-		return dataLayout.stagingDirectory();
+		return dataLocation.stagingDirectory();
 	}
 
 	public Path stateFile() {
@@ -486,7 +486,7 @@ public final class ClientStorage {
 		FileTrees.createManagedDirectory(platformCacheDirectory, "platform cache");
 		FileTrees.createManagedDirectory(packsDirectory, "shared pack state");
 		FileTrees.createManagedDirectory(overlaysDirectory, "client overlays");
-		FileTrees.createManagedDirectory(stagingDirectory(), "shared publication staging");
+		FileTrees.createManagedDirectory(stagingDirectory(), "client download staging");
 		FileTrees.createManagedDirectory(historyDirectory, "client journal mirrors");
 		FileTrees.createManagedDirectory(stateHistoryDirectory, "client state history");
 		FileTrees.createManagedDirectory(stateHistoryTreesDirectory(), "instance trees");

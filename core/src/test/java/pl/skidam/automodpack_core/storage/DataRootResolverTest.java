@@ -73,6 +73,16 @@ class DataRootResolverTest {
 	}
 
 	@Test
+	void installationsOnOneDataRootStageInTheirOwnSubtree() throws Exception {
+		Path data = Files.createDirectory(temporaryDirectory.resolve("staging-data"));
+		ClientStorage original = TestDataRoot.open(temporaryDirectory.resolve("staging-game-a"), data);
+		ClientStorage clone = TestDataRoot.open(temporaryDirectory.resolve("staging-game-b"), data);
+		assertEquals(data.resolve("staging").resolve(original.dataLocation().ownerId()).normalize(), original.stagingDirectory());
+		assertNotEquals(original.stagingDirectory(), clone.stagingDirectory(), "two installations never clean each other's in-flight bytes");
+		assertTrue(Files.isDirectory(original.stagingDirectory()), "the instance staging area exists before the first download");
+	}
+
+	@Test
 	void shardsObjectFilesOnTheFirstTwoHexCharacters() {
 		Path objects = Path.of("objects");
 		Path file = DataRootResolver.objectFile(objects, "0123456789abcdef0123456789abcdef01234567");

@@ -34,7 +34,7 @@ public final class DataRootResolver {
 			return DataRootResolver.objectFile(objectsDirectory(), sha1);
 		}
 
-		/** In-flight downloads stage here before verified promotion into the object store. */
+		/** The base of the instance-owned download staging area; a process uses {@link Location#stagingDirectory()}. */
 		public Path stagingDirectory() {
 			return root.resolve("staging").normalize();
 		}
@@ -86,6 +86,11 @@ public final class DataRootResolver {
 
 		public Layout layout() {
 			return new Layout(root);
+		}
+
+		/** This instance's scratch area for in-flight downloads, inside the shared data root, so no other instance cleans it. */
+		public Path stagingDirectory() {
+			return layout().stagingDirectory().resolve(ownerId).normalize();
 		}
 	}
 

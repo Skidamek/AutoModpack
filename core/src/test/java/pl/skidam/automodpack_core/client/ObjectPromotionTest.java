@@ -58,7 +58,7 @@ class ObjectPromotionTest {
 	void aOneTileObjectIsMovedIntoTheStoreWithoutACopy(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		ObjectBatch batch = new ObjectBatch(layout);
-		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
+		ObjectPromotion promotion = new ObjectPromotion(layout, layout.stagingDirectory(), batch);
 		byte[] data = bytes(300_000, 1);
 		String sha1 = HashUtils.sha1(data);
 		QueuedDownload task = task(sha1, data.length);
@@ -78,7 +78,7 @@ class ObjectPromotionTest {
 	void aFullFourMebibyteObjectIsStillOneTile(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		ObjectBatch batch = new ObjectBatch(layout);
-		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
+		ObjectPromotion promotion = new ObjectPromotion(layout, layout.stagingDirectory(), batch);
 		byte[] data = bytes(NetUtils.WIRE_CHUNK_BYTES, 2);
 		String sha1 = HashUtils.sha1(data);
 		QueuedDownload task = task(sha1, data.length);
@@ -94,7 +94,7 @@ class ObjectPromotionTest {
 	void aMultiTileObjectIsHashedWhileItIsStitched(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		ObjectBatch batch = new ObjectBatch(layout);
-		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
+		ObjectPromotion promotion = new ObjectPromotion(layout, layout.stagingDirectory(), batch);
 		byte[] data = bytes(NetUtils.WIRE_CHUNK_BYTES * 2 + 12_345, 3);
 		String sha1 = HashUtils.sha1(data);
 		QueuedDownload task = task(sha1, data.length);
@@ -110,7 +110,7 @@ class ObjectPromotionTest {
 	void aResumedTransferPromotesTheSameBytesOnBothPaths(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		ObjectBatch batch = new ObjectBatch(layout);
-		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
+		ObjectPromotion promotion = new ObjectPromotion(layout, layout.stagingDirectory(), batch);
 		for (int size : new int[]{1_000_000, NetUtils.WIRE_CHUNK_BYTES + 777_777}) {
 			byte[] data = bytes(size, size);
 			String sha1 = HashUtils.sha1(data);
@@ -139,7 +139,7 @@ class ObjectPromotionTest {
 	void mismatchedBytesAreNeverPublishedAndLeaveNothingBehind(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		ObjectBatch batch = new ObjectBatch(layout);
-		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
+		ObjectPromotion promotion = new ObjectPromotion(layout, layout.stagingDirectory(), batch);
 		for (int size : new int[]{4096, NetUtils.WIRE_CHUNK_BYTES * 2 + 1}) {
 			byte[] advertised = bytes(size, 10 + size);
 			byte[] received = advertised.clone();
@@ -160,7 +160,7 @@ class ObjectPromotionTest {
 	void anIncompletePartialIsNotPromoted(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		ObjectBatch batch = new ObjectBatch(layout);
-		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
+		ObjectPromotion promotion = new ObjectPromotion(layout, layout.stagingDirectory(), batch);
 		byte[] data = bytes(100_000, 4);
 		String sha1 = HashUtils.sha1(data);
 		QueuedDownload task = task(sha1, data.length);
@@ -178,7 +178,7 @@ class ObjectPromotionTest {
 	void anObjectAlreadyInTheStoreIsDedupedNotAnError(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		ObjectBatch batch = new ObjectBatch(layout);
-		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
+		ObjectPromotion promotion = new ObjectPromotion(layout, layout.stagingDirectory(), batch);
 		for (int size : new int[]{64_000, NetUtils.WIRE_CHUNK_BYTES + 5}) {
 			byte[] data = bytes(size, 20 + size);
 			String sha1 = HashUtils.sha1(data);
@@ -200,7 +200,7 @@ class ObjectPromotionTest {
 	void aCorruptObjectInTheStoreIsReplacedByTheVerifiedDownload(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		ObjectBatch batch = new ObjectBatch(layout);
-		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
+		ObjectPromotion promotion = new ObjectPromotion(layout, layout.stagingDirectory(), batch);
 		byte[] data = bytes(70_000, 5);
 		String sha1 = HashUtils.sha1(data);
 		Path object = layout.objectFile(sha1);
@@ -219,7 +219,7 @@ class ObjectPromotionTest {
 	void anEmptyObjectIsPromoted(@TempDir Path root) throws Exception {
 		DataRootResolver.Layout layout = new DataRootResolver.Layout(root);
 		ObjectBatch batch = new ObjectBatch(layout);
-		ObjectPromotion promotion = new ObjectPromotion(layout, batch);
+		ObjectPromotion promotion = new ObjectPromotion(layout, layout.stagingDirectory(), batch);
 		String sha1 = HashUtils.sha1(new byte[0]);
 		QueuedDownload task = task(sha1, 0);
 		Path partial = promotion.preparePartial(sha1, task);

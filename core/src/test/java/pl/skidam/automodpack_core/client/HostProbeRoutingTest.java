@@ -132,7 +132,7 @@ class HostProbeRoutingTest {
 		try {
 			// One file is enough now: the probe takes from a file the platform is already sending.
 			int files = 1;
-			DownloadManager manager = new DownloadManager((long) files * CRAWLING.length, layout, cache);
+			DownloadManager manager = new DownloadManager((long) files * CRAWLING.length, layout, layout.stagingDirectory(), cache);
 			manager.attachTransport(host);
 			List<DownloadSource> sources = List.of(new DownloadSource("http://127.0.0.1:" + server.getAddress().getPort() + "/mod/a", DownloadSource.Provider.MODRINTH));
 			for (int i = 0; i < files; i++) {
@@ -152,7 +152,7 @@ class HostProbeRoutingTest {
 	void aPlatformAlreadyDeliveringKeepsEveryByteOnTheAuthorChannel() throws Exception {
 		setUp(64 * MiB);
 		try {
-			DownloadManager manager = new DownloadManager(CRAWLING.length, layout, cache);
+			DownloadManager manager = new DownloadManager(CRAWLING.length, layout, layout.stagingDirectory(), cache);
 			manager.attachTransport(host);
 			List<DownloadSource> sources = List.of(new DownloadSource("http://127.0.0.1:" + server.getAddress().getPort() + "/mod/b", DownloadSource.Provider.MODRINTH));
 			Path destination = tempDir.resolve("active").resolve("mod.jar");

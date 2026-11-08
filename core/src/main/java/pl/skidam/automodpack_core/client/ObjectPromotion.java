@@ -20,11 +20,13 @@ import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 final class ObjectPromotion {
 
 	private final DataRootResolver.Layout dataLayout;
+	private final Path stagingDirectory;
 	private final ObjectBatch batch;
 
 	/** Verified objects are held for the batch's one sync instead of each being forced into the store on its own. */
-	ObjectPromotion(DataRootResolver.Layout dataLayout, ObjectBatch batch) {
+	ObjectPromotion(DataRootResolver.Layout dataLayout, Path stagingDirectory, ObjectBatch batch) {
 		this.dataLayout = dataLayout;
+		this.stagingDirectory = Objects.requireNonNull(stagingDirectory, "stagingDirectory");
 		this.batch = Objects.requireNonNull(batch, "batch");
 	}
 
@@ -32,7 +34,7 @@ final class ObjectPromotion {
 	Path preparePartial(String sha1, QueuedDownload task) {
 		try {
 			if (task.partialFile == null) {
-				task.partialFile = PartialResume.directory(dataLayout.stagingDirectory(), sha1);
+				task.partialFile = PartialResume.directory(stagingDirectory, sha1);
 				Files.createDirectories(task.partialFile);
 			}
 			return task.partialFile;
@@ -91,7 +93,7 @@ final class ObjectPromotion {
 	 * now owns them.
 	 */
 	boolean adoptHeld(String sha1, QueuedDownload task) {
-		Path directory = PartialResume.directory(dataLayout.stagingDirectory(), sha1);
+		Path directory = PartialResume.directory(stagingDirectory, sha1);
 		try {
 			for (Path heldFile : PartialResume.heldFiles(directory)) {
 				if (batch.holds(heldFile)) continue;

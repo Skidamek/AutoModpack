@@ -158,7 +158,7 @@ final class ModpackObjectAcquisition {
 			else LOGGER.info("Downloading from the AutoModpack host without waiting for CurseForge/Modrinth lookup");
 		}
 
-		downloadManager = new DownloadManager(totalBytes, storage.dataLocation().layout(), platformCache);
+		downloadManager = new DownloadManager(totalBytes, storage.dataLocation().layout(), storage.stagingDirectory(), platformCache);
 		if (playerFacing) ScreenManager.download(downloadManager, modpackName.get(), onPlayerCancel);
 		downloadManager.attachTransport(transport);
 		for (var serverItem : files) {
