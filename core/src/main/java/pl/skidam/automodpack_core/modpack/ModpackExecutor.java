@@ -21,6 +21,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.Supplier;
 
 import pl.skidam.automodpack_core.Environment;
+import pl.skidam.automodpack_core.Hosting;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.loader.ModFileCache;
@@ -43,6 +44,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.platforms.PlatformSideVerdicts;
 import pl.skidam.automodpack_core.platforms.PlatformSourceLookup;
+import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
@@ -92,7 +94,8 @@ public class ModpackExecutor {
 				(ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2),
 						new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build()),
 				hosting -> {
-					if (hostServer != null) hostServer.replacePaths(hosting);
+					NettyServer runningHost = Hosting.serverOrNull();
+					if (runningHost != null) runningHost.replacePaths(hosting);
 				}, ServerConfigStore::installed, platformSourceLookup, ownedElsewhere);
 	}
 
@@ -127,7 +130,8 @@ public class ModpackExecutor {
 
 		Deps(GenerationStore generationStore, CandidateScan candidateScan, ThreadPoolExecutor creationExecutor) {
 			this(generationStore, candidateScan, creationExecutor, hosting -> {
-				if (hostServer != null) hostServer.replacePaths(hosting);
+				NettyServer runningHost = Hosting.serverOrNull();
+				if (runningHost != null) runningHost.replacePaths(hosting);
 			}, ServerConfigStore::installed, PlatformSourceLookup.none());
 		}
 	}

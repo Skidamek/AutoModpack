@@ -16,6 +16,7 @@ import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.FileInspection;
+import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoadSelection;
@@ -141,7 +142,7 @@ final class ProjectionLoader {
 				LOGGER.warn("Skipping load of projection mod {} because pinned client mod ids {} are present in the default mods folder", jar.path().getFileName(), jar.ids());
 		}
 
-		MODPACK_LOADER.loadModpack(new ModpackLoadRequest(activeModsDirectory, modpackMods));
+		LoaderServices.modpackLoader().loadModpack(new ModpackLoadRequest(activeModsDirectory, modpackMods));
 	}
 
 	private static String activeModLogicalPath(Path activeModsDirectory, Path path) {

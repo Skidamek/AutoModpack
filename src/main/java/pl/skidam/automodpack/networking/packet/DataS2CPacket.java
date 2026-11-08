@@ -18,6 +18,7 @@ import pl.skidam.automodpack.modpack.GameHelpers;
 import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.content.LoginUpdateResponse;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
+import pl.skidam.automodpack_core.Hosting;
 import pl.skidam.automodpack_core.config.ServerConfigStore;
 
 public class DataS2CPacket {
@@ -46,7 +47,7 @@ public class DataS2CPacket {
 			LoginUpdateResponse clientResponse = LoginUpdateResponse.fromWire(buf.readUtf(Short.MAX_VALUE));
 
 			if (clientResponse == LoginUpdateResponse.UPDATE_REQUIRED) { // disconnect
-				String fingerprint = hostServer.getCertificateFingerprint();
+				String fingerprint = Hosting.server().getCertificateFingerprint();
 				if (fingerprint == null) {
 					LOGGER.warn("{} has not installed modpack", GameHelpers.getPlayerName(profile));
 				} else {
@@ -56,7 +57,7 @@ public class DataS2CPacket {
 			} else if (clientResponse == LoginUpdateResponse.CONTINUE) {
 				LOGGER.debug("{} has installed whole modpack", GameHelpers.getPlayerName(profile));
 			} else if (clientResponse == LoginUpdateResponse.CLIENT_REJECTED) {
-				String fingerprint = hostServer.getCertificateFingerprint();
+				String fingerprint = Hosting.server().getCertificateFingerprint();
 				if (fingerprint == null) {
 					LOGGER.warn(
 							"{} refused this server's certificate: it does not match the fingerprint pinned on their client. If this server's certificate did not change, their pin is stale or something intercepts their connection.",
@@ -83,7 +84,7 @@ public class DataS2CPacket {
 				}
 
 				LOGGER.warn("Verify advertisedEndpointHost and advertisedEndpointPort, including any proxy or external routing configuration.");
-				String fingerprint = hostServer.getCertificateFingerprint();
+				String fingerprint = Hosting.server().getCertificateFingerprint();
 				if (fingerprint != null) LOGGER.warn("Server certificate fingerprint: {}", fingerprint);
 			}
 		} catch (Exception e) {

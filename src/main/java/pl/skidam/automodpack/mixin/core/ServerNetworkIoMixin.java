@@ -10,7 +10,10 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import io.netty.channel.Channel;
 
 import pl.skidam.automodpack.init.Common;
+import pl.skidam.automodpack_core.AutoModpack;
+import pl.skidam.automodpack_core.Hosting;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
+import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.handler.AmmhGateHandler;
 import pl.skidam.mcholepunch.server.netty.NettyLoginClaimHandler;
 
@@ -20,8 +23,9 @@ public abstract class ServerNetworkIoMixin {
 	@WrapMethod(method = "initChannel")
 	private void injectAutoModpackHost(Channel channel, Operation<Void> original) {
 		original.call(channel);
+		NettyServer hostServer = Hosting.serverOrNull();
 		if (hostServer != null && hostServer.isSharedMagicEnabled()) {
-			channel.pipeline().addFirst(MOD_ID + "-magic-gate", new AmmhGateHandler(hostServer, true));
+			channel.pipeline().addFirst(AutoModpack.ID + "-magic-gate", new AmmhGateHandler(hostServer, true));
 			return;
 		}
 		if (Common.server != null && ServerHolepunchBridge.isRegistered()) {

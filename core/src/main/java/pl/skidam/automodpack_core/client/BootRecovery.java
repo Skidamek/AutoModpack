@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.client;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.MODPACK_LOADER;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -12,6 +11,7 @@ import pl.skidam.automodpack_core.config.BootstrapInstaller;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
+import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.GeneratedCopyState;
@@ -101,7 +101,7 @@ public final class BootRecovery {
 	private void recoverPendingRepair() throws IOException {
 		if (!Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) return;
 		try {
-			new ClientOfflineRepair(storage, MODPACK_LOADER).recover()
+			new ClientOfflineRepair(storage, LoaderServices.modpackLoader()).recover()
 					.ifPresent(receipt -> LOGGER.info("Recovered offline repair for {} (complete: {})", receipt.before().modpackId(), receipt.complete()));
 		} catch (IOException | RuntimeException e) {
 			// The journal can name state that no longer exists (its generation was checked out, an editable
@@ -165,7 +165,7 @@ public final class BootRecovery {
 	/** The boot rebuild policy: a pending transaction is rebuilt from what the player now wants; a rebuild failure is terminal, never a crash. */
 	private UpdateCommit.Built rebuildPending(UpdateTransaction pending) throws IOException {
 		try {
-			return UpdateAttempt.pendingRebuild(storage, pending, MODPACK_LOADER, Environment.current().loader());
+			return UpdateAttempt.pendingRebuild(storage, pending, LoaderServices.modpackLoader(), Environment.current().loader());
 		} catch (UpdateReplanRequiredException e) {
 			throw e;
 		} catch (IOException e) {

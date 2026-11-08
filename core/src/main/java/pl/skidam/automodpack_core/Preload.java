@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.protocol.OneCrl;
 import pl.skidam.automodpack_core.protocol.Trust;
@@ -82,7 +83,7 @@ public class Preload {
 
 	private void initializeEnvironment(LoaderManagerService loaderManager, ModpackLoaderService modpackLoader) {
 		Environment.beginPrelaunch();
-		MODPACK_LOADER = modpackLoader;
+		LoaderServices.installModpackLoader(modpackLoader);
 		Path thisModJar = JarUtils.getJarPath(this.getClass());
 		Environment.install(loaderManager.getEnvironmentType(), loaderManager.getPlatformType(), loaderManager.getPlatformType().toString().toLowerCase(Locale.ROOT), loaderManager.getModVersion("minecraft"),
 				loaderManager.getLoaderVersion(), FileInspection.getModVersion(thisModJar), loaderManager.isDevelopmentEnvironment(), thisModJar);

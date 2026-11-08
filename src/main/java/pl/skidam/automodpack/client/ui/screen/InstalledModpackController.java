@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.client.ui.screen;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.MODPACK_LOADER;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -35,6 +34,7 @@ import pl.skidam.automodpack_core.client.UpdateType;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -382,7 +382,7 @@ final class InstalledModpackController {
 		}
 		ScreenManager.background(() -> {
 			try {
-				ClientOfflineRepair repair = new ClientOfflineRepair(storage, MODPACK_LOADER);
+				ClientOfflineRepair repair = new ClientOfflineRepair(storage, LoaderServices.modpackLoader());
 				OfflineRepair.Prepared prepared = repair.inspect();
 				releaseOnClient(() -> ScreenImpl.setScreen(new OfflineRepairScreen(parent, pack.name(), repair, prepared,
 						pack.connectionAvailable() ? () -> update(pack, completed) : null, () -> completed.accept(false))));

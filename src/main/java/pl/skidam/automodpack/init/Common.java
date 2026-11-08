@@ -1,5 +1,11 @@
 package pl.skidam.automodpack.init;
 
+import pl.skidam.automodpack_core.AutoModpack;
+
+import pl.skidam.automodpack_core.loader.LoaderServices;
+
+import pl.skidam.automodpack_core.Hosting;
+
 import pl.skidam.automodpack_core.config.ServerConfigStore;
 
 import pl.skidam.automodpack_core.Environment;
@@ -41,8 +47,9 @@ public class Common {
 		if (serverRuntimePrepared) return;
 		prepareRuntime();
 		try {
-			hostRole = HostRole.open(LoaderManagerService.EnvironmentType.SERVER, GameDirectory.current(), modpackExecutor);
-			hostRole.bind(hostServer);
+			HostRole role = HostRole.open(LoaderManagerService.EnvironmentType.SERVER, GameDirectory.current(), Hosting.executor());
+			role.bind(Hosting.server());
+			Hosting.installRole(role);
 		} catch (IOException e) {
 			throw new IllegalStateException("Failed to prepare the modpack host", e);
 		}
@@ -56,14 +63,14 @@ public class Common {
 
 		ProvisioningSecretStore.ensure();
 
-		hostServer = new NettyServer();
+		Hosting.installServer(new NettyServer());
 		LoaderManagerService.EnvironmentType environment = Environment.sideOrNull();
-		modpackExecutor = new ModpackExecutor(GameDirectory.current(), HostRole.ownedElsewhere(environment, GameDirectory.current()));
+		Hosting.installExecutor(new ModpackExecutor(GameDirectory.current(), HostRole.ownedElsewhere(environment, GameDirectory.current())));
 		serverRuntimePrepared = true;
 	}
 
 	public static void init() {
-		GAME_CALL = new GameCall();
+		LoaderServices.installGameCall(new GameCall());
 		Deferred.shared().drain();
 	}
 
@@ -78,8 +85,8 @@ public class Common {
 
 	/** A host with no generation has nothing to start; the absence line from the generation attempt is the receipt. */
 	private static void startHostWhenOneIsBound() {
-		if (hostRole.absence() != null) return;
-		hostServer.start();
+		if (Hosting.role().absence() != null) return;
+		Hosting.server().start();
 	}
 
 	/**
@@ -91,17 +98,19 @@ public class Common {
 	private static synchronized void prepareClientHostBestEffort() {
 		try {
 			prepareRuntime();
-			hostRole = HostRole.open(LoaderManagerService.EnvironmentType.CLIENT, GameDirectory.current(), modpackExecutor);
-			hostRole.bind(hostServer);
+			HostRole role = HostRole.open(LoaderManagerService.EnvironmentType.CLIENT, GameDirectory.current(), Hosting.executor());
+			role.bind(Hosting.server());
+			Hosting.installRole(role);
 			startHostWhenOneIsBound();
 		} catch (Exception e) {
 			try {
-				if (hostServer != null) hostServer.stop();
+				NettyServer server = Hosting.serverOrNull();
+				if (server != null) server.stop();
 			} catch (Exception stopFailure) {
 				e.addSuppressed(stopFailure);
 			}
 			String reason = e.getMessage() == null ? e.toString() : e.getMessage();
-			hostRole = HostRole.unavailable(reason);
+			Hosting.installRole(HostRole.unavailable(reason));
 			SessionNotices.post("AutoModpack hosting failed", reason);
 			LOGGER.error("AutoModpack hosting is unavailable this session", e);
 		}
@@ -109,11 +118,9 @@ public class Common {
 
 	public static synchronized void beforeShutdownServer() {
 		if (!serverRuntimePrepared) return;
-		hostServer.stop();
-		modpackExecutor.stop();
-		hostServer = null;
-		modpackExecutor = null;
-		hostRole = null;
+		Hosting.server().stop();
+		Hosting.executor().stop();
+		Hosting.clear();
 		serverRuntimePrepared = false;
 	}
 
@@ -122,11 +129,11 @@ public class Common {
 	@SuppressWarnings("removal")
 	public static Identifier id(String path) {
 		/*? if >=1.21.11 {*/
-		return Identifier.tryBuild(MOD_ID, path);
+		return Identifier.tryBuild(AutoModpack.ID, path);
 		/*?} else if >=1.19.2 {*/
-		/*return Identifier.tryBuild(MOD_ID, path);
+		/*return Identifier.tryBuild(AutoModpack.ID, path);
 		*//*?} else {*/
-		/*return new Identifier(MOD_ID, path);
+		/*return new Identifier(AutoModpack.ID, path);
 		*//*?}*/
 	}
 }

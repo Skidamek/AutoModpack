@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.modpack.host;
 
-import static pl.skidam.automodpack_core.Constants.modpackExecutor;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_CERT_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_DIR;
 
@@ -10,6 +9,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
+import pl.skidam.automodpack_core.Hosting;
 import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.loader.LoaderManagerService.EnvironmentType;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
@@ -54,7 +54,7 @@ public final class HostingDesk {
 
 	/** Generates or previews like the world start would, under the same host role, so the menu can never do what a world may not. */
 	public static Outcome generate(Path gameDirectory, boolean preview) throws IOException {
-		if (modpackExecutor != null) return Outcome.refused("A world is running; generate from it with /automodpack generate");
+		if (Hosting.executorOrNull() != null) return Outcome.refused("A world is running; generate from it with /automodpack generate");
 		ServerConfigStore.loadIfAbsent();
 		ModpackExecutor executor = new ModpackExecutor(gameDirectory, HostRole.ownedElsewhere(EnvironmentType.CLIENT, gameDirectory));
 		try {

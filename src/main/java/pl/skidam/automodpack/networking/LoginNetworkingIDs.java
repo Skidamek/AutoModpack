@@ -1,12 +1,11 @@
 package pl.skidam.automodpack.networking;
 
-import static pl.skidam.automodpack_core.Constants.MOD_ID;
-
 import java.util.Locale;
 
 import net.minecraft.resources.Identifier;
 
 import pl.skidam.automodpack.init.Common;
+import pl.skidam.automodpack_core.AutoModpack;
 
 public enum LoginNetworkingIDs {
 	// AutoModpack login query id's
@@ -27,7 +26,7 @@ public enum LoginNetworkingIDs {
 	}
 
 	public static Integer getByKey(Identifier key) {
-		if (key.getNamespace().equalsIgnoreCase(MOD_ID)) {
+		if (key.getNamespace().equalsIgnoreCase(AutoModpack.ID)) {
 			for (var ID : LoginNetworkingIDs.values()) {
 				if (ID.name().equalsIgnoreCase(key.getPath())) return ID.getValue();
 			}

@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.mixin.core;
 
+import pl.skidam.automodpack_core.AutoModpack;
+
 import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
 import org.spongepowered.asm.mixin.Mixin;
 
@@ -27,7 +29,7 @@ public class LoginQueryRequestS2CPacketMixin {
 
 	@WrapMethod(method = "readPayload")
 	private static CustomQueryPayload readPayload(Identifier id, FriendlyByteBuf buf, Operation<CustomQueryPayload> original) {
-		if (id.getNamespace().equals(Constants.MOD_ID)) return new LoginRequestPayload(id, PayloadHelper.read(buf, MAX_PAYLOAD_SIZE));
+		if (id.getNamespace().equals(AutoModpack.ID)) return new LoginRequestPayload(id, PayloadHelper.read(buf, MAX_PAYLOAD_SIZE));
 		return original.call(id, buf);
 	}
 	/*?}*/

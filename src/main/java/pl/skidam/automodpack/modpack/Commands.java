@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.modpack;
 
+import pl.skidam.automodpack_core.Hosting;
+
 import pl.skidam.automodpack_core.config.ServerConfigStore;
 
 import pl.skidam.automodpack_core.Environment;
@@ -185,7 +187,7 @@ public class Commands {
 	}
 
 	private static int fingerprint(CommandContext<CommandSourceStack> context) {
-		String fingerprint = hostServer.getCertificateFingerprint();
+		String fingerprint = Hosting.server().getCertificateFingerprint();
 		if (fingerprint != null) {
 			send(context, "Certificate fingerprint", ChatFormatting.WHITE, copyable(fingerprint), ChatFormatting.YELLOW, false);
 		} else {
@@ -201,7 +203,7 @@ public class Commands {
 	}
 
 	private static int fingerprintDnsRecord(CommandContext<CommandSourceStack> context) {
-		String fingerprint = hostServer.getCertificateFingerprint();
+		String fingerprint = Hosting.server().getCertificateFingerprint();
 		if (fingerprint == null) {
 			send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", ChatFormatting.RED, false);
 			return Command.SINGLE_SUCCESS;
@@ -228,7 +230,7 @@ public class Commands {
 	}
 
 	private static int fingerprintShareAddress(CommandContext<CommandSourceStack> context) {
-		String fingerprint = hostServer.getCertificateFingerprint();
+		String fingerprint = Hosting.server().getCertificateFingerprint();
 		if (fingerprint == null) {
 			send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", ChatFormatting.RED, false);
 			return Command.SINGLE_SUCCESS;
@@ -304,11 +306,11 @@ public class Commands {
 
 	private static String requireBootstrapFingerprint() {
 		if (ServerConfigStore.current().disableInternalTLS) throw new IllegalArgumentException("Bootstrap export requires AutoModpack TLS to be enabled");
-		String fingerprint = hostServer.getCertificateFingerprint();
+		String fingerprint = Hosting.server().getCertificateFingerprint();
 		if (fingerprint == null) {
 			// An externally served endpoint terminates TLS in front of this process, so the certificate clients
 			// actually see belongs to that proxy - pinning this host's own pair would be a receipt for the wrong document.
-			if (hostServer.endpointOwner() == NettyServer.EndpointOwner.EXTERNAL)
+			if (Hosting.server().endpointOwner() == NettyServer.EndpointOwner.EXTERNAL)
 				throw new IllegalArgumentException("The advertised endpoint is served externally, so its certificate belongs to whatever terminates TLS in front of it; export that proxy's fingerprint instead of this host's");
 			throw new IllegalArgumentException("Certificate fingerprint is unavailable; start the AutoModpack host with TLS enabled first");
 		}
@@ -321,7 +323,7 @@ public class Commands {
 
 	private static String requirePublishedModpackId() {
 		try {
-			PackDocument current = hostRole.currentDocument().orElseThrow(() -> new IllegalArgumentException("No published modpack is available; generate the modpack first"));
+			PackDocument current = Hosting.role().currentDocument().orElseThrow(() -> new IllegalArgumentException("No published modpack is available; generate the modpack first"));
 			return ModpackId.requireValid(current.manifest().modpackId());
 		} catch (IOException e) {
 			throw new IllegalArgumentException("The published modpack is invalid; check the server logs", e);
@@ -385,7 +387,7 @@ public class Commands {
 	private static int activity(CommandContext<CommandSourceStack> context) {
 		runAsync(context, "Activity collection", () -> {
 			try {
-				send(context, activityMessage(hostServer.activitySnapshot()), false);
+				send(context, activityMessage(Hosting.server().activitySnapshot()), false);
 			} catch (Exception e) {
 				LOGGER.error("Failed to collect modpack activity", e);
 				send(context, "Failed to collect modpack activity: " + e.getMessage(), ChatFormatting.RED, false);
@@ -474,13 +476,13 @@ public class Commands {
 	private static int startModpackHost(CommandContext<CommandSourceStack> context) {
 		if (refusedHostStart(context)) return 0;
 		runAsync(context, "Host start", () -> {
-			if (hostServer.isRunning()) {
+			if (Hosting.server().isRunning()) {
 				send(context, "Modpack hosting is already running!", ChatFormatting.RED, false);
 				return;
 			}
 
 			send(context, "Starting modpack hosting...", ChatFormatting.YELLOW, true);
-			hostServer.start();
+			Hosting.server().start();
 			reportHostStart(context, "started");
 		});
 
@@ -489,9 +491,9 @@ public class Commands {
 
 	private static int stopModpackHost(CommandContext<CommandSourceStack> context) {
 		runAsync(context, "Host stop", () -> {
-			boolean wasRunning = hostServer.isRunning();
+			boolean wasRunning = Hosting.server().isRunning();
 			if (wasRunning) send(context, "Stopping modpack hosting...", ChatFormatting.RED, true);
-			if (!hostServer.stop()) {
+			if (!Hosting.server().stop()) {
 				send(context, "Couldn't stop server!", ChatFormatting.RED, true);
 			} else if (wasRunning) {
 				send(context, "Modpack hosting stopped!", ChatFormatting.RED, true);
@@ -507,12 +509,12 @@ public class Commands {
 		if (refusedHostStart(context)) return 0;
 		runAsync(context, "Host restart", () -> {
 			send(context, "Restarting modpack hosting...", ChatFormatting.YELLOW, true);
-			if (!hostServer.stop()) {
+			if (!Hosting.server().stop()) {
 				send(context, "Couldn't restart server!", ChatFormatting.RED, true);
 				return;
 			}
 
-			hostServer.start();
+			Hosting.server().start();
 			reportHostStart(context, "restarted");
 		});
 
@@ -521,14 +523,14 @@ public class Commands {
 
 	/** A host start with nothing bound would serve an empty map, so the role's absence answers instead. */
 	private static boolean refusedHostStart(CommandContext<CommandSourceStack> context) {
-		var absence = hostRole == null ? null : hostRole.absence();
-		if (hostRole != null && absence == null) return false;
+		var absence = Hosting.roleOrNull() == null ? null : Hosting.role().absence();
+		if (Hosting.roleOrNull() != null && absence == null) return false;
 		send(context, "FAILED: " + (absence == null ? "The modpack host is not running" : absence.detail()), ChatFormatting.RED, false);
 		return true;
 	}
 
 	private static void reportHostStart(CommandContext<CommandSourceStack> context, String action) {
-		if (hostServer.isRunning()) {
+		if (Hosting.server().isRunning()) {
 			if (ServerConfigStore.current().connectionMode == ModpackConnectionMode.HTTP)
 				send(context, "Modpack hosting " + action + "!", ChatFormatting.GREEN, "HTTP contract over HTTPS on port " + ServerConfigStore.current().bindPort, ChatFormatting.WHITE, true);
 			else send(context, "Modpack hosting " + action + "!", ChatFormatting.GREEN, true);
@@ -542,8 +544,8 @@ public class Commands {
 	}
 
 	private static int modpackHostAbout(CommandContext<CommandSourceStack> context) {
-		ChatFormatting statusColor = hostServer.isRunning() ? ChatFormatting.GREEN : ChatFormatting.RED;
-		String status = hostServer.isRunning() ? "running" : "not running";
+		ChatFormatting statusColor = Hosting.server().isRunning() ? ChatFormatting.GREEN : ChatFormatting.RED;
+		String status = Hosting.server().isRunning() ? "running" : "not running";
 		send(context, "Modpack hosting status", ChatFormatting.GREEN, status, statusColor, false);
 		return Command.SINGLE_SUCCESS;
 	}
@@ -581,15 +583,15 @@ public class Commands {
 		runAsync(context, preview ? "Modpack preview" : "Modpack generation", () -> {
 			send(context, preview ? "Preparing modpack preview..." : "Generating modpack...", ChatFormatting.YELLOW, !preview);
 			long start = System.currentTimeMillis();
-			if (preview) reportPreview(context, start, modpackExecutor.preview(notes));
-			else reportPublication(context, start, guarded ? modpackExecutor.publishIfContent(expectedToken, notes) : modpackExecutor.publish(notes));
+			if (preview) reportPreview(context, start, Hosting.executor().preview(notes));
+			else reportPublication(context, start, guarded ? Hosting.executor().publishIfContent(expectedToken, notes) : Hosting.executor().publish(notes));
 		});
 		return Command.SINGLE_SUCCESS;
 	}
 
 	/** Generation commands act on this world's own generation, which a session hosting something else must not touch. */
 	private static boolean refusedGeneration(CommandContext<CommandSourceStack> context) {
-		Optional<String> refusal = hostRole == null ? Optional.of("The modpack host is not running") : hostRole.generationRefusal();
+		Optional<String> refusal = Hosting.roleOrNull() == null ? Optional.of("The modpack host is not running") : Hosting.role().generationRefusal();
 		refusal.ifPresent(reason -> send(context, "FAILED: " + reason, ChatFormatting.RED, false));
 		return refusal.isPresent();
 	}
@@ -655,7 +657,7 @@ public class Commands {
 		runAsync(context, "Modpack revert", () -> {
 			long start = System.currentTimeMillis();
 			send(context, "Reverting the modpack to #" + targetSeq + "...", ChatFormatting.YELLOW, true);
-			ModpackExecutor.RevertResult result = modpackExecutor.revert(targetSeq, notes);
+			ModpackExecutor.RevertResult result = Hosting.executor().revert(targetSeq, notes);
 			if (result instanceof ModpackExecutor.Reverted reverted) {
 				send(context, "REVERTED to #" + reverted.targetSeq() + elapsed(start), ChatFormatting.GREEN,
 						VersionedText.literal("content token ").append(copyable(shortToken(reverted.current().contentToken()), reverted.current().contentToken())),
@@ -683,7 +685,7 @@ public class Commands {
 	/** The shared resolve-and-report prologue of the revert handlers; feedback is sent and false returned when the target is missing or the journal unreadable. */
 	private static boolean resolveAndReportRevertTarget(CommandContext<CommandSourceStack> context, long targetSeq) {
 		try {
-			List<JournalEntry> history = modpackExecutor.technicalHistory(HISTORY_TAIL_LIMIT);
+			List<JournalEntry> history = Hosting.executor().technicalHistory(HISTORY_TAIL_LIMIT);
 			JournalEntry target = findRevertTarget(history, targetSeq);
 			if (target == null) {
 				send(context, "FAILED: journal target was not found", ChatFormatting.RED, true);
@@ -726,7 +728,7 @@ public class Commands {
 		runAsync(context, "HTTP export", () -> {
 			send(context, "Exporting the HTTP contract tree...", ChatFormatting.YELLOW, true);
 			try {
-				HttpExporter.Result result = modpackExecutor.exportHttp(Path.of(directory), includeAll);
+				HttpExporter.Result result = Hosting.executor().exportHttp(Path.of(directory), includeAll);
 				if (result instanceof HttpExporter.Result.Exported exported) {
 					send(context, exported.receipt(directory), ChatFormatting.GREEN, true);
 				} else if (result instanceof HttpExporter.Result.Refused refused) {
@@ -745,7 +747,7 @@ public class Commands {
 		runAsync(context, "Patch notes replacement", () -> {
 			send(context, "Replacing patch notes...", ChatFormatting.YELLOW, true);
 			long start = System.currentTimeMillis();
-			ModpackExecutor.ReplaceNotesResult result = modpackExecutor.replaceNotes(notes);
+			ModpackExecutor.ReplaceNotesResult result = Hosting.executor().replaceNotes(notes);
 			if (result instanceof ModpackExecutor.NotesReplaced replaced) {
 				send(context, "NOTES REPLACED on #" + replaced.entry().seq() + elapsed(start), ChatFormatting.GREEN, true);
 				send(context, "Patch notes: " + firstLine(replaced.entry().notes()), ChatFormatting.GRAY, false);
@@ -760,7 +762,7 @@ public class Commands {
 
 	private static int generationHistory(CommandContext<CommandSourceStack> context) {
 		try {
-			List<JournalEntry> history = modpackExecutor.technicalHistory(HISTORY_TAIL_LIMIT);
+			List<JournalEntry> history = Hosting.executor().technicalHistory(HISTORY_TAIL_LIMIT);
 			if (history.isEmpty()) {
 				send(context, "No published modpack content.", ChatFormatting.YELLOW, false);
 				return Command.SINGLE_SUCCESS;
@@ -783,7 +785,7 @@ public class Commands {
 	private static int modpackGroups(CommandContext<CommandSourceStack> context) {
 		runAsync(context, "Group overview", () -> {
 			try {
-				Optional<PackDocument> published = hostRole.currentDocument();
+				Optional<PackDocument> published = Hosting.role().currentDocument();
 				for (String line : GroupInspector.overview(ServerConfigStore.current().modpack.categories, published.map(PackDocument::manifest).orElse(null)))
 					send(context, line, ChatFormatting.WHITE, false);
 			} catch (IOException e) {
@@ -797,7 +799,7 @@ public class Commands {
 		String groupId = StringArgumentType.getString(context, "group-id");
 		runAsync(context, "Group detail", () -> {
 			try {
-				Optional<PackDocument> published = hostRole.currentDocument();
+				Optional<PackDocument> published = Hosting.role().currentDocument();
 				Optional<List<String>> lines = GroupInspector.detail(ServerConfigStore.current().modpack.categories, groupId, published.map(PackDocument::manifest).orElse(null));
 				if (lines.isEmpty()) {
 					send(context, "Unknown group id: " + groupId + ". Run /automodpack groups for the list.", ChatFormatting.RED, false);
@@ -813,7 +815,7 @@ public class Commands {
 
 	private static int generationStorage(CommandContext<CommandSourceStack> context) {
 			try {
-				GenerationStore.StorageReport report = modpackExecutor.storageReport();
+				GenerationStore.StorageReport report = Hosting.executor().storageReport();
 				send(context, "Modpack storage", ChatFormatting.GREEN, false);
 				send(context, "Journal", ChatFormatting.WHITE, report.journalEntries() + " entries, " + report.journalBytes() + " bytes", ChatFormatting.YELLOW, false);
 				send(context, "Objects", ChatFormatting.WHITE, report.objectCount() + " files, " + report.objectBytes() + " bytes", ChatFormatting.YELLOW, false);
@@ -826,7 +828,7 @@ public class Commands {
 
 		private static int generationStorageCollect(CommandContext<CommandSourceStack> context) {
 			try {
-				GenerationStore.CollectionSummary result = modpackExecutor.collectUnreachableObjects();
+				GenerationStore.CollectionSummary result = Hosting.executor().collectUnreachableObjects();
 				send(context, "Modpack objects collected", ChatFormatting.GREEN, false);
 				send(context, "Objects", ChatFormatting.WHITE, result.objectsBefore() + " -> " + (result.objectsBefore() - result.deletedObjects()), ChatFormatting.YELLOW, false);
 				send(context, "Bytes", ChatFormatting.WHITE, result.bytesBefore() + " -> " + (result.bytesBefore() - result.deletedBytes()), ChatFormatting.YELLOW, false);

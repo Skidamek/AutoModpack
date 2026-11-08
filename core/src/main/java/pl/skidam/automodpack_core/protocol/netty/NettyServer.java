@@ -30,6 +30,7 @@ import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import io.netty.util.AttributeKey;
 
+import pl.skidam.automodpack_core.AutoModpack;
 import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
@@ -247,7 +248,7 @@ public class NettyServer {
 						ch.pipeline().addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, NetUtils.HTTP_IDLE_REAP_SECONDS));
 						ch.pipeline().addLast("traffic-shaper", NettyServer.this.trafficHandler());
 						if (connectionMode == ModpackConnectionMode.MAGIC) {
-							ch.pipeline().addLast(MOD_ID + "-magic-gate", new AmmhGateHandler(NettyServer.this, false));
+							ch.pipeline().addLast(AutoModpack.ID + "-magic-gate", new AmmhGateHandler(NettyServer.this, false));
 							return;
 						}
 						installContractHandlers(ch.pipeline());
@@ -278,7 +279,7 @@ public class NettyServer {
 		pipeline.channel().config().setWriteBufferWaterMark(new WriteBufferWaterMark(NetUtils.WRITE_BUFFER_LOW_WATER, NetUtils.WRITE_BUFFER_HIGH_WATER));
 		if (sslCtx != null) pipeline.addLast("tls", sslCtx.newHandler(pipeline.channel().alloc()));
 		else LOGGER.debug("TLS termination handled externally: {}", pipeline.channel().remoteAddress());
-		pipeline.addLast(MOD_ID, new HttpContractHandler(this, diskReads));
+		pipeline.addLast(AutoModpack.ID, new HttpContractHandler(this, diskReads));
 	}
 
 	private void prepareTls() throws Exception {

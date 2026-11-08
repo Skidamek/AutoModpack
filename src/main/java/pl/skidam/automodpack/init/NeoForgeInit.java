@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.init;
 
+import pl.skidam.automodpack_core.AutoModpack;
+
 import pl.skidam.automodpack_core.Environment;
 
 /*? if neoforge {*/
@@ -19,7 +21,7 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
-@Mod(MOD_ID + "_mod")
+@Mod(AutoModpack.ID + "_mod")
 public class NeoForgeInit {
 	public NeoForgeInit() {
 		Environment.current().markGameStarted();
@@ -42,9 +44,9 @@ public class NeoForgeInit {
 	}
 
 /^? if >1.20.5 {^/
-@EventBusSubscriber(modid = MOD_ID + "_mod")
+@EventBusSubscriber(modid = AutoModpack.ID + "_mod")
 /^?} else {^/
-/^@Mod.EventBusSubscriber(modid = MOD_ID + "_mod")
+/^@Mod.EventBusSubscriber(modid = AutoModpack.ID + "_mod")
 ^//^?}^/
 	public static class events {
 		@SubscribeEvent

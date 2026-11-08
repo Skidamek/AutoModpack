@@ -22,8 +22,8 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.Environment;
+import pl.skidam.automodpack_core.Hosting;
 import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
@@ -244,16 +244,16 @@ class ModpackExecutorTest {
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor first = new ModpackExecutor(server, groups, generationRoot);
 		try {
-			Constants.hostServer = new NettyServer();
+			Hosting.installServer(new NettyServer());
 			assertInstanceOf(ModpackExecutor.Published.class, first.publish());
-			assertTrue(Constants.hostServer.getPath(GenerationHosting.HEAD_DOCUMENT_KEY).isPresent());
+			assertTrue(Hosting.server().getPath(GenerationHosting.HEAD_DOCUMENT_KEY).isPresent());
 
 			// A server restart builds a fresh host and executor over the same on-disk journal.
-			Constants.hostServer = new NettyServer();
+			Hosting.installServer(new NettyServer());
 			ModpackExecutor restarted = new ModpackExecutor(server, groups, generationRoot);
 			try {
 				assertInstanceOf(ModpackExecutor.NoChanges.class, restarted.publish());
-				assertTrue(Constants.hostServer.getPath(GenerationHosting.HEAD_DOCUMENT_KEY).isPresent());
+				assertTrue(Hosting.server().getPath(GenerationHosting.HEAD_DOCUMENT_KEY).isPresent());
 			} finally {
 				restarted.stop();
 			}
@@ -708,12 +708,12 @@ class ModpackExecutorTest {
 	private static final class ConstantsSnapshot {
 		private final ServerConfigJsons.ServerConfigFieldsV3 serverConfig = ServerConfigStore.installed();
 		private final Environment environment = Environment.installed();
-		private final NettyServer hostServer = Constants.hostServer;
+		private final NettyServer hostServer = Hosting.serverOrNull();
 
 		void restore() {
 			ServerConfigStore.install(serverConfig);
 			TestEnvironment.restore(environment);
-			Constants.hostServer = hostServer;
+			Hosting.installServer(hostServer);
 		}
 	}
 }

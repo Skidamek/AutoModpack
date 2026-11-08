@@ -26,6 +26,7 @@ import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack_core.Environment;
+import pl.skidam.automodpack_core.Hosting;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigUtils;
@@ -73,8 +74,8 @@ public class HandshakeS2CPacket {
 		// Nothing local to serve is this process's problem only when this process is the one that would serve it. An
 		// externally handled endpoint is fed by a proxy, a separate host or an exported tree whose current generation
 		// this server never sees, so an empty local store says nothing about what a client will fetch there.
-		PackAbsence absence = hostRole.absence();
-		boolean nothingToServeHere = absence != null && hostServer.endpointOwner() == NettyServer.EndpointOwner.BUILT_IN;
+		PackAbsence absence = Hosting.role().absence();
+		boolean nothingToServeHere = absence != null && Hosting.server().endpointOwner() == NettyServer.EndpointOwner.BUILT_IN;
 
 		if (!understood) {
 			Common.players.put(playerName, false);
@@ -128,7 +129,7 @@ public class HandshakeS2CPacket {
 				return;
 			}
 
-			if (modpackExecutor.isGenerating()) {
+			if (Hosting.executor().isGenerating()) {
 				Component reason = VersionedText.literal("AutoModpack is generating modpack. Please wait a moment and try again.");
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);

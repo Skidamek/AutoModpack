@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.init;
 
+import pl.skidam.automodpack_core.AutoModpack;
+
 import pl.skidam.automodpack_core.Environment;
 
 /*? if forge {*/
@@ -16,7 +18,7 @@ import net.minecraftforge.fml.common.Mod;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
-@Mod(MOD_ID + "_mod")
+@Mod(AutoModpack.ID + "_mod")
 public class ForgeInit {
 
 	public ForgeInit() {
@@ -39,7 +41,7 @@ public class ForgeInit {
 		LOGGER.debug("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
 	}
 
-	@Mod.EventBusSubscriber(modid = MOD_ID + "_mod")
+	@Mod.EventBusSubscriber(modid = AutoModpack.ID + "_mod")
 	public static class events {
 		@SubscribeEvent
 		public static void onCommandsRegister(RegisterCommandsEvent event) {

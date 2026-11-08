@@ -13,13 +13,13 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
+import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
@@ -40,13 +40,13 @@ class BootRecoveryStaleReviewTest {
 
 	@Test
 	void aPendingUpdateWhoseReviewedGroupsChangedRevertsInsteadOfCrashingTheBoot(@TempDir Path temp) throws Exception {
-		ModpackLoaderService previousLoader = Constants.MODPACK_LOADER;
+		ModpackLoaderService previousLoader = LoaderServices.modpackLoaderOrNull();
 		Environment previousEnvironment = TestEnvironment.swap("fabric", "test", "test", "test");
-		if (Constants.MODPACK_LOADER == null) {
-			Constants.MODPACK_LOADER = new ModpackLoaderService() {
+		if (LoaderServices.modpackLoaderOrNull() == null) {
+			LoaderServices.installModpackLoader(new ModpackLoaderService() {
 				@Override
 				public void loadModpack(ModpackLoadRequest request) {}
-			};
+			});
 		}
 		try {
 			ClientStorage storage = TestDataRoot.open(temp.resolve("game"), temp.resolve("data"));
@@ -74,7 +74,7 @@ class BootRecoveryStaleReviewTest {
 				assertTrue(files.anyMatch(path -> path.getFileName().toString().startsWith("update-transaction.stuck-")));
 			}
 		} finally {
-			Constants.MODPACK_LOADER = previousLoader;
+			LoaderServices.installModpackLoader(previousLoader);
 			TestEnvironment.restore(previousEnvironment);
 		}
 	}

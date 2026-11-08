@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.modpack.group;
 
-import static pl.skidam.automodpack_core.Constants.MOD_ID;
 import static pl.skidam.automodpack_core.storage.StoragePaths.BOOTSTRAP_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.MODPACK_CONTENT_FILE;
 
@@ -8,6 +7,7 @@ import java.util.Collection;
 import java.util.Locale;
 import java.util.Set;
 
+import pl.skidam.automodpack_core.AutoModpack;
 import pl.skidam.automodpack_core.utils.JarUtils;
 
 public final class ModpackPathPolicy {
@@ -52,7 +52,7 @@ public final class ModpackPathPolicy {
 	public static boolean isSelfModId(String id) {
 		if (id == null || id.isBlank()) return false;
 		String canonical = id.strip().toLowerCase(Locale.ROOT);
-		return MOD_ID.equals(canonical) || (MOD_ID + "_bootstrap").equals(canonical) || (MOD_ID + "-bootstrap").equals(canonical) || (MOD_ID + "_mod").equals(canonical);
+		return AutoModpack.ID.equals(canonical) || (AutoModpack.ID + "_bootstrap").equals(canonical) || (AutoModpack.ID + "-bootstrap").equals(canonical) || (AutoModpack.ID + "_mod").equals(canonical);
 	}
 
 	/** Whether any of the jar's ids names AutoModpack itself. */

@@ -17,8 +17,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.TestEnvironment;
+import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
@@ -234,11 +234,11 @@ class ReviewSessionTest {
 	/** One engine on empty storage, with an optional leftover file in the loader-visible mods directory for the consent scan. */
 	private Harness harness(boolean leftoverMod) throws Exception {
 		// The plan builder rejects a missing loader; tests have no Preload, so a no-op loader stands in for the real one.
-		if (Constants.MODPACK_LOADER == null) {
-			Constants.MODPACK_LOADER = new ModpackLoaderService() {
+		if (LoaderServices.modpackLoaderOrNull() == null) {
+			LoaderServices.installModpackLoader(new ModpackLoaderService() {
 				@Override
 				public void loadModpack(ModpackLoadRequest request) {}
-			};
+			});
 		}
 		TestEnvironment.swap("fabric", "test", "test", "test");
 		ClientStorage storage = TestDataRoot.open(temporaryDirectory.resolve("game" + System.nanoTime()), temporaryDirectory.resolve("data" + System.nanoTime()));

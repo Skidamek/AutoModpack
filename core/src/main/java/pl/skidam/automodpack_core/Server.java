@@ -26,7 +26,7 @@ public class Server {
 	public static void main(String[] args) throws IOException {
 
 		NettyServer server = new NettyServer();
-		hostServer = server;
+		Hosting.installServer(server);
 
 		try {
 			ServerConfigStore.install(ReconfConfigs.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons::standalone));
@@ -45,8 +45,8 @@ public class Server {
 		FetchCache.useDirectory(DataRootResolver.resolve(GameDirectory.current(), LoaderManagerService.EnvironmentType.SERVER).layout().fetchCacheDirectory());
 		Trust.start();
 		OneCrl.startRefresh();
-		modpackExecutor = new ModpackExecutor();
-		var generation = modpackExecutor.publish();
+		Hosting.installExecutor(new ModpackExecutor());
+		var generation = Hosting.executor().publish();
 
 		if (generation instanceof ModpackExecutor.Published || generation instanceof ModpackExecutor.NoChanges) {
 			LOGGER.info("Modpack generation completed!");
@@ -68,6 +68,6 @@ public class Server {
 				LOGGER.error("Interrupted server thread", e);
 			}
 		}
-		modpackExecutor.stop();
+		Hosting.executor().stop();
 	}
 }

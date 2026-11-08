@@ -1,6 +1,8 @@
 # Cross-domain import edges that exist in core/src/main/java today.
 # PackageEdgesTest fails on a new edge; add the line here when the dependency is deliberate.
 
+
+
 <root> -> client
 <root> -> config
 <root> -> loader
@@ -11,6 +13,7 @@
 <root> -> utils
 auth -> <root>
 auth -> config
+auth -> loader
 auth -> modpack
 auth -> protocol
 auth -> storage

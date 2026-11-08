@@ -32,13 +32,13 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.util.ReferenceCountUtil;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.loader.GameCallService;
+import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
@@ -505,8 +505,8 @@ class HttpContractHandlerTest {
 	void aValidBearerSecretIsAccepted() throws Exception {
 		fixture();
 		ServerConfigStore.current().validateSecrets = true;
-		GameCallService previousGameCall = Constants.GAME_CALL;
-		Constants.GAME_CALL = (address, id, playerName) -> true;
+		GameCallService previousGameCall = LoaderServices.gameCall();
+		LoaderServices.installGameCall((address, id, playerName) -> true);
 		Secrets.Secret secret = Secrets.generateSecret();
 		SecretsStore.saveHostSecret("test-player", secret, "Test Player");
 
@@ -515,7 +515,7 @@ class HttpContractHandlerTest {
 			assertTrue(exchange(channel, request("/head", "Authorization: Bearer " + secret.secret())).startsWith("HTTP/1.1 200 OK\r\n"));
 			assertTrue(channel.isOpen());
 		} finally {
-			Constants.GAME_CALL = previousGameCall;
+			LoaderServices.installGameCall(previousGameCall);
 		}
 	}
 

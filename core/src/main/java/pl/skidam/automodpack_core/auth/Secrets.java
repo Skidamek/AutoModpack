@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_core.auth;
 
-import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.net.SocketAddress;
 import java.security.MessageDigest;
@@ -8,6 +8,7 @@ import java.security.SecureRandom;
 import java.util.Base64;
 
 import pl.skidam.automodpack_core.config.ServerConfigStore;
+import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.utils.TimedSet;
 
 public class Secrets {
@@ -96,7 +97,7 @@ public class Secrets {
 			return false;
 		}
 
-		if (!GAME_CALL.isPlayerAuthorized(address, issued.playerId(), issued.name())) { // check if the player the secret was issued to is still authorized
+		if (!LoaderServices.gameCall().isPlayerAuthorized(address, issued.playerId(), issued.name())) { // check if the player the secret was issued to is still authorized
 			LOGGER.warn("Rejecting a secret from {}: {} is no longer authorized - make sure they are whitelisted", address, issued.name());
 			return false;
 		}

@@ -21,6 +21,7 @@ import pl.skidam.automodpack_core.client.RestartDecision.ApplyResult;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -230,7 +231,7 @@ public class ModpackUpdater implements AutoCloseable {
 		this.connectionInfo = connectionInfo;
 		this.storage = Objects.requireNonNull(storage, "storage");
 		this.platformCache = openPlatformCache(storage);
-		this.planBuilder = new ClientUpdatePlanBuilder(this.storage, MODPACK_LOADER, Environment.current().loader());
+		this.planBuilder = new ClientUpdatePlanBuilder(this.storage, LoaderServices.modpackLoader(), Environment.current().loader());
 		this.updateLoopDetector = new UpdateLoopDetector(storage.restartLoopStateFile());
 		this.sourceCatalogue = new SourceCatalogue(() -> selectedTarget, this.platformCache);
 		this.projectionLoader = new ProjectionLoader(this.storage, this::storedTarget);

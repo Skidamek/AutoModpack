@@ -17,6 +17,7 @@ import net.fabricmc.loader.impl.metadata.DependencyOverrides;
 import net.fabricmc.loader.impl.metadata.VersionOverrides;
 import net.fabricmc.loader.impl.util.SystemProperties;
 
+import pl.skidam.automodpack_core.AutoModpack;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.loader.RequestedCandidates;
@@ -151,7 +152,7 @@ public class ModpackLoader implements ModpackLoaderService {
 
 			for (var entry : definitions.entrySet()) {
 
-				if (!candidate.getId().equals(MOD_ID) && adapterMap.containsKey(entry.getKey())) {
+				if (!candidate.getId().equals(AutoModpack.ID) && adapterMap.containsKey(entry.getKey())) {
 					FabricGuiEntry.displayCriticalError(new IllegalArgumentException("Duplicate language adapter ID: " + entry.getKey()), true);
 					continue;
 				}
