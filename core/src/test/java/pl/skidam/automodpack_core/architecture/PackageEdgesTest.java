@@ -15,7 +15,6 @@ import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +26,7 @@ import org.junit.jupiter.api.Test;
 class PackageEdgesTest {
 	private static final String BASELINE = "/architecture/package-edges.txt";
 	private static final String CORE = "pl.skidam.automodpack_core";
+	private static final String CYCLE_BUDGET = "/architecture/cycle-budget.txt";
 	private static final String ROOT = "<root>";
 	private static final String NEWLINE = "\n";
 	private static final Pattern PACKAGE = Pattern.compile("^package\\s+([\\w.]+)\\s*;", Pattern.MULTILINE);
@@ -41,13 +41,42 @@ class PackageEdgesTest {
 				+ String.join(NEWLINE, added));
 	}
 
-	private static Set<String> currentEdges() throws IOException {
-		List<Path> sources = new ArrayList<>();
-		try (Stream<Path> walk = Files.walk(coreMain())) {
-			walk.filter(path -> path.toString().endsWith(".java")).forEach(sources::add);
+	/** A pair of domains that import each other; the number may only go down, so a new cycle needs a deliberate budget change. */
+	@Test
+	void crossDomainCyclesDoNotGrow() throws IOException {
+		Set<String> edges = currentEdges();
+		int cycles = 0;
+		for (String edge : edges) {
+			String[] ends = edge.split(" -> ");
+			if (edges.contains(ends[1] + " -> " + ends[0])) cycles++;
 		}
+		cycles /= 2;
+		int budget = cycleBudget();
+		if (cycles <= budget) return;
+		fail("core main has " + cycles + " mutually importing domain pairs, the budget is " + budget + ". Remove an edge instead of raising core/src/test/resources" + CYCLE_BUDGET + ": "
+				+ String.join(", ", cycles(edges)));
+	}
+
+	private static List<String> cycles(Set<String> edges) {
+		List<String> cycles = new ArrayList<>();
+		for (String edge : edges) {
+			String[] ends = edge.split(" -> ");
+			if (ends[0].compareTo(ends[1]) < 0 && edges.contains(ends[1] + " -> " + ends[0])) cycles.add(edge + " and " + ends[1] + " -> " + ends[0]);
+		}
+		return cycles;
+	}
+
+	private static int cycleBudget() throws IOException {
+		try (InputStream stream = PackageEdgesTest.class.getResourceAsStream(CYCLE_BUDGET)) {
+			if (stream == null) throw new IllegalStateException("Missing budget resource " + CYCLE_BUDGET);
+			return new String(stream.readAllBytes(), StandardCharsets.UTF_8).lines().map(String::strip).filter(line -> !line.isEmpty() && !line.startsWith("#")).mapToInt(Integer::parseInt).findFirst()
+					.orElseThrow(() -> new IllegalStateException("Empty cycle budget " + CYCLE_BUDGET));
+		}
+	}
+
+	private static Set<String> currentEdges() throws IOException {
 		List<String> texts = new ArrayList<>();
-		for (Path source : sources) texts.add(Files.readString(source, StandardCharsets.UTF_8));
+		for (Path source : CoreSources.javaFiles()) texts.add(Files.readString(source, StandardCharsets.UTF_8));
 		Set<String> domains = new HashSet<>();
 		for (String text : texts) {
 			Matcher matcher = PACKAGE.matcher(text);
@@ -80,12 +109,4 @@ class PackageEdgesTest {
 		}
 	}
 
-	private static Path coreMain() throws IOException {
-		Path root = Path.of("").toAbsolutePath();
-		while (root != null && !Files.isRegularFile(root.resolve("settings.gradle.kts"))) root = root.getParent();
-		if (root == null) throw new IllegalStateException("Could not locate the repository root (settings.gradle.kts) from " + Path.of("").toAbsolutePath());
-		Path coreMain = root.resolve("core/src/main/java");
-		if (!Files.isDirectory(coreMain)) throw new IllegalStateException("Missing core main sources at " + coreMain);
-		return coreMain;
-	}
 }

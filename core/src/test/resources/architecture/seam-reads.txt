@@ -1,0 +1,9 @@
+# Reads of a process seam inside core/src/main/java.
+# ProcessSeamTest fails on a new read; a composition root or the platform boundary that owns the seam may add a line.
+# Every line here is a place where engine logic does not receive its collaborator as a parameter yet.
+
+ClientStorage.current pl/skidam/automodpack_core/client/SelfUpdater.java
+Hosting pl/skidam/automodpack_core/Server.java
+Hosting pl/skidam/automodpack_core/modpack/ModpackExecutor.java
+LoaderServices pl/skidam/automodpack_core/Preload.java
+LoaderServices pl/skidam/automodpack_core/auth/Secrets.java
