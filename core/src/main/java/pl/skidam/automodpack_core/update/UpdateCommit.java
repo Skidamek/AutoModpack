@@ -31,6 +31,7 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.WindowsLockProbe;
+import pl.skidam.automodpack_core.utils.WorkStatus;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
@@ -443,6 +444,7 @@ public final class UpdateCommit {
 		if (!started) persistPhase(transaction, UpdateTransaction.Phase.PREPARING);
 		else if (!published) setPhase(transaction, UpdateTransaction.Phase.PREPARING);
 		if (!published) {
+			WorkStatus.phase(WorkStatus.Phase.APPLYING);
 			List<Lock> owed = applyOperations(transaction, current);
 			current.set(null);
 			applyOverlayTombstones(transaction);
@@ -454,6 +456,7 @@ public final class UpdateCommit {
 		if (transaction.phase != UpdateTransaction.Phase.PROJECTED) persistPhase(transaction, UpdateTransaction.Phase.PROJECTED);
 		// A journal of an older version proved its publication only by these directories; PROJECTED is durable now.
 		PublicationSweep.settleLegacyDirectories(storage);
+		WorkStatus.phase(WorkStatus.Phase.FINISHING);
 		List<Lock> held = convergeProjection(transaction);
 		if (!held.isEmpty()) return held;
 		finalizeModpackState(transaction, preserveNewerSelection);
@@ -524,7 +527,10 @@ public final class UpdateCommit {
 	private List<Lock> applyOperations(UpdateTransaction transaction, AtomicReference<Operation> current) throws IOException {
 		List<Operation> owed = new ArrayList<>();
 		List<Lock> locks = new ArrayList<>();
-		for (Operation operation : transaction.plan().operations()) {
+		List<Operation> operations = transaction.plan().operations();
+		for (int index = 0; index < operations.size(); index++) {
+			Operation operation = operations.get(index);
+			WorkStatus.progress(index + 1, operations.size());
 			if (operation.root() == Root.PROJECTION) {
 				owed.add(operation);
 				continue;

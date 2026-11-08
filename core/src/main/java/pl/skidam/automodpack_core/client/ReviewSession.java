@@ -37,6 +37,7 @@ import pl.skidam.automodpack_core.update.JournalMirror;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.Throwables;
+import pl.skidam.automodpack_core.utils.WorkStatus;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
@@ -202,6 +203,7 @@ final class ReviewSession {
 	 * shows the welcome screen. The caller has already established that the pack has no local state.
 	 */
 	void beginFirstInstallReview() throws IOException, InterruptedException {
+		WorkStatus.phase(WorkStatus.Phase.CHECKING);
 		firstConnection = true;
 		updater.fullDownload = true;
 		LOGGER.info("First-time install; scanning existing mods before the review screen");
@@ -304,6 +306,7 @@ final class ReviewSession {
 
 	/** Returns {@link ModpackUpdater.UpdateOutcome#REVIEW_OPENED} only when the review preview was accepted for display; every other outcome still owns the screen. */
 	ModpackUpdater.UpdateOutcome startUpdate(boolean showWaitingScreen) {
+		WorkStatus.phase(WorkStatus.Phase.CHECKING);
 		try {
 			updater.requireLiveConnection();
 			if (showWaitingScreen) ScreenManager.waiting(this::cancelFromPlayer);

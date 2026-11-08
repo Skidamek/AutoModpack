@@ -38,6 +38,7 @@ import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateReviewPolicy;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
+import pl.skidam.automodpack_core.utils.WorkStatus;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
@@ -93,6 +94,7 @@ final class UpdateSession implements UpdateAttempt {
 			if (playerFacing) sourceCatalogue.awaitSourceLookup();
 			ClientProjectionView projectionView = ClientProjectionView.observe(storage);
 			planBuilder.reconcileEditableState(cache, projectionView, target.flatTarget());
+			WorkStatus.phase(WorkStatus.Phase.PREPARING);
 			prepared = planBuilder.buildPlan(planInput(), projectionView, cache, modCache);
 			if (prepareObjects) planBuilder.preparePlanObjects(prepared.plan(), target.flatTarget(), projectionView, cache);
 			review = ReviewedUpdatePlan.pending(prepared.plan());

@@ -48,6 +48,7 @@ import pl.skidam.automodpack_core.update.UpdateLoopDetector;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.WorkStatus;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
@@ -547,6 +548,7 @@ public class ModpackUpdater implements AutoCloseable {
 	 * first-install flow. Returns true only when the preview was accepted for display.
 	 */
 	private UpdateOutcome startInstalledSwitch(boolean showWaitingScreen) {
+		WorkStatus.phase(WorkStatus.Phase.CHECKING);
 		try {
 			requireLiveConnection();
 			if (showWaitingScreen) ScreenManager.waiting(review::cancelFromPlayer);

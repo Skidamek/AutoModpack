@@ -32,6 +32,7 @@ import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 import pl.skidam.automodpack_core.utils.DownloadSource;
+import pl.skidam.automodpack_core.utils.WorkStatus;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Acquires selected-target objects into CAS. The updater owns confirmation and apply; this owns the download queue. */
@@ -102,6 +103,7 @@ final class ModpackObjectAcquisition {
 	}
 
 	int acquireTargetObjects(ModpackJsons.ModpackContentFields target, FileCache cache, boolean playerFacing) throws Exception {
+		WorkStatus.phase(WorkStatus.Phase.CHECKING);
 		failedDownloads.clear();
 		failedDownloadCategories.clear();
 		Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items = target.list == null ? List.of() : target.list;
@@ -115,6 +117,7 @@ final class ModpackObjectAcquisition {
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missing = ModpackUtils.identifyUncachedFiles(targetObjects, cache, storage);
 		if (missing.isEmpty()) {
 			LOGGER.info("All {} selected modpack objects are already acquired locally", targetObjects.size());
+			WorkStatus.phase(WorkStatus.Phase.PREPARING);
 			return 0;
 		}
 
@@ -133,6 +136,7 @@ final class ModpackObjectAcquisition {
 			}
 			throw e;
 		}
+		WorkStatus.phase(WorkStatus.Phase.PREPARING);
 
 		planBuilder.populateStoreFromLogicalProjection(target, projectionView, cache);
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> stillMissing = ModpackUtils.identifyUncachedFiles(targetObjects, cache, storage);
@@ -161,6 +165,7 @@ final class ModpackObjectAcquisition {
 		}
 
 		downloadManager = new DownloadManager(totalBytes, storage.dataLocation().layout(), storage.stagingDirectory(), platformCache);
+		WorkStatus.phase(WorkStatus.Phase.DOWNLOADING);
 		if (playerFacing) ScreenManager.download(downloadManager, modpackName.get(), onPlayerCancel);
 		downloadManager.attachTransport(transport);
 		for (var serverItem : files) {
