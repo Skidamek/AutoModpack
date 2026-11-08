@@ -58,4 +58,17 @@ public class QueuedDownload {
 			return url;
 		}
 	}
+
+	/** Whether the host wire can still serve this task; the caller still owns the transport check. */
+	boolean hostRouteAvailable() {
+		if (domainFailures.getOrDefault(RescuePolicy.HOST_DOMAIN, 0) >= DownloadManager.MAX_DOWNLOAD_ATTEMPTS) return false;
+		// A task with no explicit host source falls back to the host wire once every platform domain has burned its budget.
+		return sources.isEmpty() || domains.contains(RescuePolicy.HOST_DOMAIN) || !platformRouteAvailable();
+	}
+
+	/** Whether any platform source still has attempt budget. */
+	boolean platformRouteAvailable() {
+		for (String domain : domains) if (!RescuePolicy.HOST_DOMAIN.equals(domain) && domainFailures.getOrDefault(domain, 0) < DownloadManager.MAX_DOWNLOAD_ATTEMPTS) return true;
+		return false;
+	}
 }

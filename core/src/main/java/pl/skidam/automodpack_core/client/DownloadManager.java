@@ -107,6 +107,7 @@ public class DownloadManager implements DownloadView {
 
 	private final Semaphore semaphore = new Semaphore(0);
 	private final Speedometer speedometer = new Speedometer();
+	private FileCache fileCache;
 
 	/** An in-flight platform attempt the rescue wants moved off its domain. */
 	private record Rerouted(String task, String domain, HttpFileDownloader.AttemptControl control) {}
@@ -246,9 +247,11 @@ public class DownloadManager implements DownloadView {
 	 * actually on offer - a host-only wave never pays for it.
 	 */
 	private boolean dispatchOne() {
-		QueuedDownload task = queue.pollDispatchable(this::dispatchable);
+		int platformTasks = queue.platformTasks();
+		boolean platformFull = platformTasks >= PLATFORM_WORKERS;
+		QueuedDownload task = platformFull ? queue.pollHostDispatchable(transport != null) : queue.pollDispatchable(candidate -> dispatchable(candidate, platformTasks));
 		if (task == null) return false;
-		List<String> candidates = candidateDomains(task);
+		List<String> candidates = platformFull ? List.of(HOST_DOMAIN) : candidateDomains(task);
 		String domain = scheduler.chooseDomain(new DownloadScheduler.QueuedFile<>(task.key, task.fileSize, candidates), candidates.size() > 1 ? queue.inFlightBacklog() : Map.of());
 		LOGGER.debug("Queueing download for: {} {} {}", task.file, task.fileSize, domain);
 		DownloadData data = new DownloadData(task.file, task.key.hash(), domain, task.fileSize, task.domains);
@@ -279,10 +282,14 @@ public class DownloadManager implements DownloadView {
 	}
 
 	/** Which routes a task can run on right now: the host wire when it is one of its domains, a platform source only on a free worker. */
-	private boolean dispatchable(QueuedDownload task) {
-		List<String> domains = candidateDomains(task);
-		if (transport != null && domains.contains(HOST_DOMAIN)) return true;
-		return queue.platformTasks() < PLATFORM_WORKERS && domains.stream().anyMatch(domain -> !domain.equals(HOST_DOMAIN));
+	private boolean dispatchable(QueuedDownload task, int platformTasks) {
+		if (transport != null && task.hostRouteAvailable()) return true;
+		return platformTasks < PLATFORM_WORKERS && task.platformRouteAvailable();
+	}
+
+	/** Whether any route can still serve this task, regardless of a temporarily full worker pool. */
+	private boolean routable(QueuedDownload task) {
+		return (transport != null && task.hostRouteAvailable()) || task.platformRouteAvailable();
 	}
 
 	/**
@@ -302,7 +309,8 @@ public class DownloadManager implements DownloadView {
 
 	private void processDownloadTask(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data) {
 		Path storeFile = dataLayout.objectFile(hashPathPair.hash());
-		try (FileCache cache = FileCache.open(dataLayout.fileCacheDirectory())) {
+		try {
+			FileCache cache = fileCache();
 			if (ClientObjectStore.acquireVerified(storeFile, hashPathPair.hash(), task.fileSize, List.of(), cache, ClientObjectStore.CorruptObjectPolicy.KEEP).present()) {
 				// The run's total is remaining wire bytes, so a CAS hit only fills the amount this task still owed.
 				totalBytesDownloaded.addAndGet(PartialResume.remainingBytes(stagingDirectory, hashPathPair.hash(), task.fileSize));
@@ -442,7 +450,7 @@ public class DownloadManager implements DownloadView {
 			return;
 		}
 		if (task.lastFailureCategory != FailureCategory.LOCAL_STORAGE && task.lastFailureCategory != FailureCategory.TRUST_REJECTED
-				&& task.attempts < (task.sources.size() + 1) * MAX_DOWNLOAD_ATTEMPTS) {
+				&& task.attempts < (task.sources.size() + 1) * MAX_DOWNLOAD_ATTEMPTS && routable(task)) {
 			WireTrace.log("REQUEUE", "task", task.file.getFileName(), "attempts", task.attempts, "category", task.lastFailureCategory);
 			LOGGER.debug("Retrying download: {}", task.file.getFileName());
 			task.attempts++;
@@ -524,6 +532,18 @@ public class DownloadManager implements DownloadView {
 	/** Stops the pool after every queued file has finished. Does not mark the run cancelled. */
 	public void finish() {
 		downloadExecutor.shutdown();
+		closeFileCache();
+	}
+
+	private synchronized FileCache fileCache() throws IOException {
+		if (fileCache == null) fileCache = FileCache.open(dataLayout.fileCacheDirectory());
+		return fileCache;
+	}
+
+	private synchronized void closeFileCache() {
+		if (fileCache == null) return;
+		fileCache.close();
+		fileCache = null;
 	}
 
 	public void cancelAllAndShutdown() {
@@ -538,6 +558,7 @@ public class DownloadManager implements DownloadView {
 		semaphore.release(totalFilesAdded);
 		downloadedCount.set(0);
 		downloadExecutor.shutdown();
+		closeFileCache();
 	}
 
 	/** Snapshot of finished acquisitions, what the acquisition summary line renders. */

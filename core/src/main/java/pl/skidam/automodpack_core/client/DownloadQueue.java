@@ -24,12 +24,15 @@ public final class DownloadQueue {
 
 	private final Set<FileInspection.HashPathPair> queued = new HashSet<>();
 	private final Map<FileInspection.HashPathPair, DownloadData> inFlight = new ConcurrentHashMap<>();
+	private static final Comparator<QueuedDownload> LARGEST_FIRST = Comparator.comparingLong((QueuedDownload task) -> task.fileSize).reversed().thenComparingInt(task -> task.seq);
 	// Largest file first, enqueue order breaks ties. A scan re-queues only the tasks ahead of the one it picked, so the
 	// usual dispatch is one insert or one poll. Largest-first governs enqueue order only: past it the pool's waiter queue
 	// is FIFO, so a tiny file can wait one pipeline generation behind big first-takes - no starvation, every settle
 	// re-pumps the queue.
-	private final PriorityQueue<QueuedDownload> dispatchOrder = new PriorityQueue<>(
-			Comparator.comparingLong((QueuedDownload task) -> task.fileSize).reversed().thenComparingInt(task -> task.seq));
+	private final PriorityQueue<QueuedDownload> dispatchOrder = new PriorityQueue<>(LARGEST_FIRST);
+	// Host-capable tasks stay in their own order so a saturated platform worker pool never rescans the whole backlog.
+	// Entries are lazily deleted: a task dispatched through the main order is skipped here when its key leaves queued.
+	private final PriorityQueue<QueuedDownload> hostOrder = new PriorityQueue<>(LARGEST_FIRST);
 
 	public boolean queued(FileInspection.HashPathPair key) {
 		return queued.contains(key);
@@ -38,6 +41,7 @@ public final class DownloadQueue {
 	public void enqueue(QueuedDownload task) {
 		queued.add(task.key);
 		dispatchOrder.add(task);
+		if (task.hostRouteAvailable()) hostOrder.add(task);
 	}
 
 	/** The largest queued file {@code dispatchable} accepts, or null when none of them can run now; the rest stay queued in order. */
@@ -45,6 +49,7 @@ public final class DownloadQueue {
 		List<QueuedDownload> skipped = new ArrayList<>();
 		QueuedDownload chosen = null;
 		for (QueuedDownload candidate; (candidate = dispatchOrder.poll()) != null;) {
+			if (!queued.contains(candidate.key)) continue; // already dispatched through the host order
 			if (dispatchable.test(candidate)) {
 				chosen = candidate;
 				break;
@@ -54,6 +59,19 @@ public final class DownloadQueue {
 		dispatchOrder.addAll(skipped);
 		if (chosen != null) queued.remove(chosen.key);
 		return chosen;
+	}
+
+	/** The largest queued file the host wire can take, without touching platform-only tasks; null when none is available. */
+	public QueuedDownload pollHostDispatchable(boolean hostAvailable) {
+		if (!hostAvailable) return null;
+		while (true) {
+			QueuedDownload candidate = hostOrder.poll();
+			if (candidate == null) return null;
+			if (!queued.contains(candidate.key)) continue; // already dispatched through the main order
+			if (!candidate.hostRouteAvailable()) continue; // the host budget is spent; it will never be dispatchable here
+			queued.remove(candidate.key);
+			return candidate;
+		}
 	}
 
 	public void start(FileInspection.HashPathPair key, DownloadData data) {
@@ -104,5 +122,6 @@ public final class DownloadQueue {
 	public void clearQueued() {
 		queued.clear();
 		dispatchOrder.clear();
+		hostOrder.clear();
 	}
 }

@@ -8,6 +8,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -234,6 +235,38 @@ class DownloadManagerPlatformTest {
 		Path stored = downloadViaPlatform("fallback.bin", "multi-chunk.bin", "/missing/fallback.bin", transport);
 		assertArrayEquals(expected, Files.readAllBytes(stored));
 		assertEquals(1, transport.fetches.size(), "the burned budget falls through to exactly one host transfer, whose tiling is the transport's business");
+	}
+
+	@Test
+	void aHostOnlyTaskSettlesAfterItsHostBudgetBurns() throws Exception {
+		layout = new DataRootResolver.Layout(tempDir.resolve("data"));
+		PlatformCache cache = PlatformCache.open(tempDir.resolve("platform-cache"));
+		byte[] content = CONTENTS.get("one-byte.txt");
+		DownloadManager manager = new DownloadManager(content.length, layout, layout.stagingDirectory(), cache);
+		manager.attachTransport(new FakeTransport(null));
+		String sha1 = HashUtils.getHash(writeExpected("host-only.bin", content));
+		manager.download(tempDir.resolve("active/host-only.bin"), sha1, null, "mods", List.of(), content.length, () -> {}, category -> {});
+
+		assertTimeoutPreemptively(Duration.ofSeconds(10), manager::joinAll);
+		assertEquals(1L, manager.failed(), "the task must settle instead of staying queued forever");
+		manager.finish();
+		cache.close();
+	}
+
+	@Test
+	void aPlatformOnlyTaskWithoutATransportSettlesWhenItsBudgetBurns() throws Exception {
+		layout = new DataRootResolver.Layout(tempDir.resolve("data"));
+		PlatformCache cache = PlatformCache.open(tempDir.resolve("platform-cache"));
+		byte[] content = CONTENTS.get("one-byte.txt");
+		DownloadManager manager = new DownloadManager(content.length, layout, layout.stagingDirectory(), cache);
+		String sha1 = HashUtils.getHash(writeExpected("no-transport.bin", content));
+		List<DownloadSource> sources = List.of(new DownloadSource("http://127.0.0.1:" + server.getAddress().getPort() + "/missing/no-transport.bin", DownloadSource.Provider.MODRINTH));
+		manager.download(tempDir.resolve("active/no-transport.bin"), sha1, null, "mods", sources, content.length, () -> {}, category -> {});
+
+		assertTimeoutPreemptively(Duration.ofSeconds(10), manager::joinAll);
+		assertEquals(1L, manager.failed(), "a platform-only task with no transport must settle once its budget burns");
+		manager.finish();
+		cache.close();
 	}
 
 	/**
