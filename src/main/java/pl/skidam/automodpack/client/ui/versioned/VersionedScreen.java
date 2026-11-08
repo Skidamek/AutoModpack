@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.client.ui.versioned;
 
 import java.util.ArrayList;
-import java.util.function.IntConsumer;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;

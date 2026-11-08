@@ -22,7 +22,6 @@ import java.net.URI;
 /*?}*/
 
 import static pl.skidam.automodpack.init.Common.server;
-import pl.skidam.automodpack_core.Environment;
 
 public class GameHelpers {
 

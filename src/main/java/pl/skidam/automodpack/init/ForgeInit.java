@@ -12,7 +12,6 @@ import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.modpack.Commands;
 import pl.skidam.automodpack.networking.ModPackets;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 
 import net.minecraftforge.event.RegisterCommandsEvent;

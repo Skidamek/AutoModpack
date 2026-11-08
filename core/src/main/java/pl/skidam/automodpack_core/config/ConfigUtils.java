@@ -15,10 +15,10 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 public class ConfigUtils {
 	private static final Logger LOGGER = LogManager.getLogger(ConfigUtils.class);
 
-	/** One completed server-config reload: the config now installed as the global server config and whether hosting must restart. */
+	/** One completed server-config reload: the config now installed as the running server config and whether hosting must restart. */
 	public record ReloadedServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config, boolean connectionSettingsChanged) {}
 
-	/** Reads, normalizes and saves the server config file, then swaps it into the running global. Empty when no file exists; throws when it cannot be read, parsed or saved, leaving the running global untouched. */
+	/** Reads, normalizes and saves the server config file, then swaps it into the running document. Empty when no file exists; throws when it cannot be read, parsed or saved, leaving the running document untouched. */
 	public static Optional<ReloadedServerConfig> reloadServerConfig() {
 		Optional<ServerConfigJsons.ServerConfigFieldsV3> read = ReconfConfigs.read(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class);
 		if (read.isEmpty()) return Optional.empty();

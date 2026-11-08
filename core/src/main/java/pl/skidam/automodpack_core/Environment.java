@@ -95,10 +95,6 @@ public final class Environment {
 		return environment == null ? null : environment.side;
 	}
 
-	public EnvironmentType side() {
-		return side;
-	}
-
 	public boolean isServer() {
 		return side == EnvironmentType.SERVER;
 	}
