@@ -373,7 +373,7 @@ public final class UpdatePlanner {
 		Map<String, FileState> overlays = overlaysByRelative(input.files());
 		for (var item : targetItems.values()) {
 			String relative = LogicalPath.normalize(item.file);
-			boolean activeMod = ModpackPathPolicy.isActiveMod(relative);
+			boolean activeMod = ModpackPathPolicy.isActiveCanonicalMod(relative);
 			FileKey modpackKey = new FileKey(Root.PROJECTION, relative);
 			FileState existing = session.projected(modpackKey);
 			FileState overlay = item.editable ? overlays.get(relative) : null;
@@ -741,7 +741,7 @@ public final class UpdatePlanner {
 	private static String normalizedManifestPath(ModpackJsons.ModpackContentFields.ModpackContentItem item) {
 		if (item == null) throw new IllegalArgumentException("Manifest item is incomplete");
 		String normalized = LogicalPath.normalize(item.file);
-		if (!ModpackPathPolicy.isValidPublishedPath(normalized)) throw new IllegalArgumentException("Invalid manifest path: " + item.file);
+		if (!ModpackPathPolicy.isValidCanonicalPublishedPath(normalized)) throw new IllegalArgumentException("Invalid manifest path: " + item.file);
 		return normalized;
 	}
 

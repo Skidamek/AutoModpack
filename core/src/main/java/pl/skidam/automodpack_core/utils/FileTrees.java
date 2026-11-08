@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.utils;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -150,6 +151,16 @@ public final class FileTrees {
 		if (Files.isSymbolicLink(directory)) {
 			ImmutableFiles.deleteIfExists(directory);
 			return;
+		}
+		if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
+			ImmutableFiles.deleteIfExists(directory);
+			return;
+		}
+		try {
+			Files.delete(directory);
+			return;
+		} catch (DirectoryNotEmptyException notEmpty) {
+			// Fall through to the recursive walk only when there is actually a tree to walk.
 		}
 		try (Stream<Path> paths = Files.walk(directory)) {
 			for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) ImmutableFiles.deleteIfExists(path);

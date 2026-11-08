@@ -424,7 +424,7 @@ final class ClientUpdatePlanBuilder {
 		if (targetItems.isEmpty()) return false;
 		String relative = LogicalPath.normalize(item.file);
 		var targetItem = targetItems.get(relative);
-		if (targetItem == null || !targetItem.sha1.equalsIgnoreCase(item.sha1) || ModpackPathPolicy.isActiveMod(relative)) return false;
+		if (targetItem == null || !targetItem.sha1.equalsIgnoreCase(item.sha1) || ModpackPathPolicy.isActiveCanonicalMod(relative)) return false;
 		Path live = livePath(item);
 		if (!Files.isRegularFile(live, LinkOption.NOFOLLOW_LINKS)) return false;
 		long packSize = item.size;
@@ -558,7 +558,7 @@ final class ClientUpdatePlanBuilder {
 
 	private List<UpdatePlan.ModInfo> inspectTargetMods(ModpackJsons.ModpackContentFields target, FileCache cache, ModFileCache modCache, ClientProjectionView.Snapshot projection) {
 		List<UpdatePlan.ModInfo> mods = new ArrayList<>();
-		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(LogicalPath.normalize(value.file)))
+		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveCanonicalMod(LogicalPath.normalize(value.file)))
 				.sorted(Comparator.comparing(value -> value.file)).toList()) {
 			Path source = resolvedObject(item, projection, cache);
 			if (source == null) continue;
@@ -601,7 +601,7 @@ final class ClientUpdatePlanBuilder {
 			List<UpdatePlan.NestedCopy> previousCopies, Set<String> forceCopyPaths, ModFileCache modCache) throws IOException {
 		if (!modpackLoader.discoversNestedConflicts()) return List.of();
 		List<NestedConflicts.PackRoot> packRoots = new ArrayList<>();
-		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(LogicalPath.normalize(value.file))).toList()) {
+		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveCanonicalMod(LogicalPath.normalize(value.file))).toList()) {
 			Path source = resolvedObject(item, projection, cache);
 			if (source == null) continue;
 			FileInspection.Mod root = modCache.getModOrNull(source, item.sha1, cache);

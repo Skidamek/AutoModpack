@@ -113,7 +113,13 @@ final class ProjectionLoader {
 		Set<String> editableActiveModPaths = new HashSet<>();
 		ModpackJsons.ModpackContentFields target = storedTarget.get();
 		if (target != null && target.list != null) for (var item : target.list) {
-			if (item.editable && ModpackPathPolicy.isActiveMod(item.file)) editableActiveModPaths.add(LogicalPath.normalize(item.file));
+			final String relative;
+			try {
+				relative = LogicalPath.normalize(item.file);
+			} catch (IllegalArgumentException invalid) {
+				continue;
+			}
+			if (item.editable && ModpackPathPolicy.isActiveCanonicalMod(relative)) editableActiveModPaths.add(relative);
 		}
 		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = storage.clientConfig().current();
 		List<String> pinnedModIds = currentConfig == null || currentConfig.pinnedModIds == null ? List.of() : currentConfig.pinnedModIds;

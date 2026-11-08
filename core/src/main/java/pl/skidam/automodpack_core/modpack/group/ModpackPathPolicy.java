@@ -91,8 +91,8 @@ public final class ModpackPathPolicy {
 		return isValidCanonicalPublishedPath(normalized);
 	}
 
-	/** Package-private for callers that already validated this exact immutable path string. */
-	static boolean isValidCanonicalPublishedPath(String normalized) {
+	/** For callers that already validated this exact immutable path string. */
+	public static boolean isValidCanonicalPublishedPath(String normalized) {
 		if (isReservedPath(normalized) || isAutoModpackFile(normalized)) return false;
 		return !isInvalidLiveRoot(normalized);
 	}
@@ -107,7 +107,7 @@ public final class ModpackPathPolicy {
 	}
 
 	/** Only validated manifest paths may skip the public raw-input guard. */
-	static boolean isActiveCanonicalMod(String normalized) {
+	public static boolean isActiveCanonicalMod(String normalized) {
 		return isModPath(normalized) && JarUtils.hasJarExtension(normalized);
 	}
 

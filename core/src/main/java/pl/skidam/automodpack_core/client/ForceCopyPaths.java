@@ -29,11 +29,12 @@ final class ForceCopyPaths {
 		if (services == null || services.isEmpty()) return Set.of();
 		Set<String> paths = new TreeSet<>();
 		for (ModpackJsons.ModpackContentFields.ModpackContentItem item : items) {
-			if (!ModpackPathPolicy.isActiveMod(LogicalPath.normalize(item.file))) continue;
+			String relative = LogicalPath.normalize(item.file);
+			if (!ModpackPathPolicy.isActiveCanonicalMod(relative)) continue;
 			Path source = resolve.apply(item);
 			if (source == null) continue;
 			try {
-				if (mods.inspect(source, item.sha1, cache).providesAny(services)) paths.add(LogicalPath.normalize(item.file));
+				if (mods.inspect(source, item.sha1, cache).providesAny(services)) paths.add(relative);
 			} catch (IOException e) {
 				LOGGER.error("Failed to inspect {} for force-copy services", source, e);
 			}
