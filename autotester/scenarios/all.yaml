@@ -539,8 +539,21 @@ flow:
   - do: click
     name: review the Pack A to Pack B v2 switch
     select: { text: Activate }
-  # The activate click is the consent: the cached Pack B v2 switch applies
-  # straight through, and the restart demand is the flow's only screen.
+  # The cached Pack B v2 switch still asks about the local mod it would leave
+  # beside the new pack; keeping it is the default, and the restart demand follows.
+  - do: wait_for
+    name: show the Pack B v2 local mod review
+    timeout: 90s
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: "Keep 1 existing mod files", enabled: true }
+  - do: screenshot
+    name: capture the Pack B v2 local mod review
+    file: all-pack-b-v2-local-mod
+  - do: click
+    name: keep the local mod and apply the Pack B v2 switch
+    select: { key: automodpack.update.apply }
   - do: wait_for
     name: the Pack B v2 switch applies and demands its restart
     timeout: 90s

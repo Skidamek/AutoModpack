@@ -132,7 +132,8 @@ class FakeBridge:
                 "screenClass": "UpdatePreviewScreen",
                 "buttons": [{"id": 5, "text": "Update", "enabled": True, "visible": True, "key": "automodpack.update.apply"},
                             {"id": 17, "text": "History", "enabled": True, "visible": True},
-                            {"id": 104, "text": "Back", "enabled": True, "visible": True}],
+                            {"id": 104, "text": "Back", "enabled": True, "visible": True},
+                            *([{"id": 89, "text": f"Keep {len(self._switch_unowned_mods())} existing mod files", "enabled": True, "visible": True, "checked": True, "key": "automodpack.confirm.keepExistingMods"}] if self._switch_unowned_mods() else [])],
                 "textFields": [],
             },
             "removal_preview": {
@@ -384,8 +385,12 @@ class FakeBridge:
                     # A cached record carrying mod jars reviews through the unverified confirm.
                     self.acknowledged = False
                     self.screen = "strict_confirm"
+                elif self._switch_unowned_mods():
+                    # The activate click is the consent for the switch, but mod files the
+                    # new pack would leave beside it still get their own keep-or-archive review.
+                    self.screen = "preview"
                 else:
-                    # The activate click is the consent: the switch applies straight
+                    # Nothing else worth an interposing screen: the switch applies straight
                     # through and the restart demand is the flow's only screen.
                     self._apply_pending_switch()
                     self.screen = "restart"
@@ -526,6 +531,19 @@ class FakeBridge:
         if pack == "B":
             return any(str(name).endswith(".jar") for name, _ in self.pack_b_files)
         return True
+
+    def _switch_unowned_mods(self) -> list[Path]:
+        """Local mod files the pending switch would leave beside the target pack."""
+        if self.pending_pack is None:
+            return []
+        if self.selected_pack == "B":
+            owned = {Path(str(name)).name for name, _content in self.pack_b_files}
+        else:
+            owned = {rel.name for rel, _payload in self._generation_fixture_files(0)}
+        mods = self.ctx.game_dir / "mods"
+        if not mods.is_dir():
+            return []
+        return sorted(path for path in mods.iterdir() if path.is_file() and path.name != "automodpack.jar" and path.name not in owned)
 
     def _editable_overlay_path(self, pack: str) -> Path:
         return self.ctx.game_dir / "automodpack" / "client" / "overlays" / self._pack_id(pack) / "config" / "pack-shared-editable.txt"
