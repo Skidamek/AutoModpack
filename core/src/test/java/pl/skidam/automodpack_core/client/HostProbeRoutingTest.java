@@ -136,8 +136,7 @@ class HostProbeRoutingTest {
 			manager.attachTransport(host);
 			List<DownloadSource> sources = List.of(new DownloadSource("http://127.0.0.1:" + server.getAddress().getPort() + "/mod/a", DownloadSource.Provider.MODRINTH));
 			for (int i = 0; i < files; i++) {
-				Path destination = tempDir.resolve("active").resolve("mod-" + i + ".jar");
-				manager.download(destination, HashUtils.sha1(CRAWLING), null, "mods", sources, CRAWLING.length, () -> {}, category -> {});
+				manager.download("mod-" + i + ".jar", HashUtils.sha1(CRAWLING), null, "mods", sources, CRAWLING.length, () -> {}, category -> {});
 			}
 			awaitRun(manager, "crawl");
 			assertFalse(host.fetches.isEmpty(), "a platform crawling at 64 KiB/s must hand the run to the host wire, which only the probe can reach: " + host.fetches);
@@ -155,8 +154,7 @@ class HostProbeRoutingTest {
 			DownloadManager manager = new DownloadManager(CRAWLING.length, layout, layout.stagingDirectory(), cache);
 			manager.attachTransport(host);
 			List<DownloadSource> sources = List.of(new DownloadSource("http://127.0.0.1:" + server.getAddress().getPort() + "/mod/b", DownloadSource.Provider.MODRINTH));
-			Path destination = tempDir.resolve("active").resolve("mod.jar");
-			manager.download(destination, HashUtils.sha1(CRAWLING), null, "mods", sources, CRAWLING.length, () -> {}, category -> {});
+			manager.download("mod.jar", HashUtils.sha1(CRAWLING), null, "mods", sources, CRAWLING.length, () -> {}, category -> {});
 			awaitRun(manager, "healthy");
 			assertTrue(stored(), "the platform served the file");
 			assertTrue(host.fetches.isEmpty(), "a platform above the bar owes the author the whole file, so the host must not be probed at all: " + host.fetches);

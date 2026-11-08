@@ -8,7 +8,6 @@ import java.util.Objects;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.platforms.FetchManager;
 import pl.skidam.automodpack_core.protocol.LocalStorageException;
 import pl.skidam.automodpack_core.protocol.PartialResume;
@@ -45,7 +44,7 @@ final class PlatformAttempt {
 	}
 
 	/** The whole-file HTTP pull behind the stored partial. The host transport is not involved. */
-	DownloadManager.AttemptOutcome run(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, DownloadSource source, Path partial, TransferSampler sampler)
+	DownloadManager.AttemptOutcome run(String sha1, QueuedDownload task, DownloadData data, DownloadSource source, Path partial, TransferSampler sampler)
 			throws IOException, InterruptedException {
 		data.attemptControl = new HttpFileDownloader.AttemptControl();
 		try {
@@ -58,16 +57,16 @@ final class PlatformAttempt {
 			}
 		} catch (HttpFileDownloader.ReroutedAttemptException rerouted) {
 			// A slow domain is not a broken one: this cancel was the rescue's own verdict, charged to nobody.
-			WireTrace.log("RESCUE_CANCEL", "task", hashPathPair.hash(), "domain", data.activeDomain);
+			WireTrace.log("RESCUE_CANCEL", "task", sha1, "domain", data.activeDomain);
 			return DownloadManager.AttemptOutcome.REROUTED;
 		} catch (LocalStorageException e) {
 			task.lastFailureCategory = DownloadManager.FailureCategory.LOCAL_STORAGE;
-			LOGGER.warn("Failed to write temporary CAS object {}", hashPathPair.hash(), e);
+			LOGGER.warn("Failed to write temporary CAS object {}", sha1, e);
 			ObjectPromotion.deletePartial(task);
 			return DownloadManager.AttemptOutcome.FAILED;
 		} catch (HttpFileDownloader.HttpStatusException e) {
 			task.lastFailureCategory = DownloadManager.FailureCategory.REMOTE_SOURCE;
-			if (isDeadLink(e.statusCode())) markDeadLink(hashPathPair.hash(), task);
+			if (isDeadLink(e.statusCode())) markDeadLink(sha1, task);
 			else if (source.provider() == DownloadSource.Provider.CURSEFORGE && e.statusCode() == HTTP_UNAUTHORIZED) {
 				LOGGER.warn("CurseForge rejected the download API key with HTTP 401; trying the next source");
 				task.domainFailures.merge(data.activeDomain, DownloadManager.MAX_DOWNLOAD_ATTEMPTS, Integer::sum);
@@ -76,12 +75,12 @@ final class PlatformAttempt {
 		} catch (StaleRangeException e) {
 			// The partial cannot serve as the resume prefix: worthless, so the next attempt starts clean.
 			task.lastFailureCategory = DownloadManager.FailureCategory.REMOTE_SOURCE;
-			LOGGER.warn("Stored partial for CAS object {} is stale for resume; restarting from zero", hashPathPair.hash());
+			LOGGER.warn("Stored partial for CAS object {} is stale for resume; restarting from zero", sha1);
 			ObjectPromotion.deletePartial(task);
 			return DownloadManager.AttemptOutcome.FAILED;
 		} catch (IOException e) {
 			task.lastFailureCategory = DownloadManager.FailureCategory.REMOTE_SOURCE;
-			LOGGER.debug("Remote source failed for CAS object {}", hashPathPair.hash(), e);
+			LOGGER.debug("Remote source failed for CAS object {}", sha1, e);
 			return DownloadManager.AttemptOutcome.FAILED;
 		} finally {
 			data.attemptControl = null;

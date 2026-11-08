@@ -33,7 +33,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
-import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.platforms.FetchManager;
 import pl.skidam.automodpack_core.platforms.PlatformCache;
 import pl.skidam.automodpack_core.protocol.DocumentFetch;
@@ -212,7 +211,7 @@ class DownloadManagerPlatformTest {
 				return List.of(refreshed);
 			}
 		});
-		QueuedDownload task = new QueuedDownload(new FileInspection.HashPathPair("a".repeat(40), Path.of("mod.jar")), Path.of("mod.jar"), original, null, "mods", 1, 0,
+		QueuedDownload task = new QueuedDownload("a".repeat(40), "mod.jar", original, null, "mods", 1, 0,
 				() -> {}, category -> {});
 		task.needsMetadataRefetch = true;
 
@@ -245,7 +244,7 @@ class DownloadManagerPlatformTest {
 		DownloadManager manager = new DownloadManager(content.length, layout, layout.stagingDirectory(), cache);
 		manager.attachTransport(new FakeTransport(null));
 		String sha1 = HashUtils.getHash(writeExpected("host-only.bin", content));
-		manager.download(tempDir.resolve("active/host-only.bin"), sha1, null, "mods", List.of(), content.length, () -> {}, category -> {});
+		manager.download("host-only.bin", sha1, null, "mods", List.of(), content.length, () -> {}, category -> {});
 
 		assertTimeoutPreemptively(Duration.ofSeconds(10), manager::joinAll);
 		assertEquals(1L, manager.failed(), "the task must settle instead of staying queued forever");
@@ -261,7 +260,7 @@ class DownloadManagerPlatformTest {
 		DownloadManager manager = new DownloadManager(content.length, layout, layout.stagingDirectory(), cache);
 		String sha1 = HashUtils.getHash(writeExpected("no-transport.bin", content));
 		List<DownloadSource> sources = List.of(new DownloadSource("http://127.0.0.1:" + server.getAddress().getPort() + "/missing/no-transport.bin", DownloadSource.Provider.MODRINTH));
-		manager.download(tempDir.resolve("active/no-transport.bin"), sha1, null, "mods", sources, content.length, () -> {}, category -> {});
+		manager.download("no-transport.bin", sha1, null, "mods", sources, content.length, () -> {}, category -> {});
 
 		assertTimeoutPreemptively(Duration.ofSeconds(10), manager::joinAll);
 		assertEquals(1L, manager.failed(), "a platform-only task with no transport must settle once its budget burns");
@@ -335,8 +334,7 @@ class DownloadManagerPlatformTest {
 		assertEquals(arrivalsBefore + DownloadManager.PLATFORM_WORKERS, HELD_REQUESTS.size(), "every worker slot must be parked before the pair enqueues: " + HELD_REQUESTS);
 		enqueuePlatformDownload(manager, "blocked-head.bin", headContent, "/held/blocked-head.bin");
 		String hostSha1 = HashUtils.getHash(writeExpected("host-served.bin", hostContent));
-		Path hostDestination = tempDir.resolve("active").resolve("host-served.bin");
-		manager.download(hostDestination, hostSha1, null, "mods", List.of(), hostContent.length, () -> {}, category -> {});
+		manager.download("host-served.bin", hostSha1, null, "mods", List.of(), hostContent.length, () -> {}, category -> {});
 		awaitHostFetch(transport, hostSha1);
 		assertFalse(HELD_REQUESTS.contains("blocked-head.bin"), "the platform head must still be parked; the host file cannot have freed a worker: " + HELD_REQUESTS);
 		HELD_LATCHES.values().forEach(CountDownLatch::countDown);
@@ -356,9 +354,8 @@ class DownloadManagerPlatformTest {
 	/** Queues one file whose only source is a /held path, so the attempt parks at that path's latch. */
 	private void enqueuePlatformDownload(DownloadManager manager, String name, byte[] content, String heldPath) throws IOException {
 		String sha1 = HashUtils.getHash(writeExpected(name, content));
-		Path destination = tempDir.resolve("active").resolve(name);
 		List<DownloadSource> sources = List.of(new DownloadSource("http://127.0.0.1:" + server.getAddress().getPort() + heldPath, DownloadSource.Provider.MODRINTH));
-		manager.download(destination, sha1, null, "mods", sources, content.length, () -> {}, category -> {});
+		manager.download(name, sha1, null, "mods", sources, content.length, () -> {}, category -> {});
 	}
 
 	/** Fails fast once the named request reaches the server: its dispatch happened, whatever parked at the latch. */
@@ -370,14 +367,13 @@ class DownloadManagerPlatformTest {
 
 	private Path downloadViaPlatform(String name, String contentKey, String serverPath, FakeTransport transport) throws Exception {
 		layout = new DataRootResolver.Layout(tempDir.resolve("data"));
-		Path destination = tempDir.resolve("active").resolve(name); // the projection path; the store is the real target
 		byte[] content = CONTENTS.get(contentKey);
 		PlatformCache cache = PlatformCache.open(tempDir.resolve("platform-cache"));
 		DownloadManager manager = new DownloadManager(content.length, layout, layout.stagingDirectory(), cache);
 		manager.attachTransport(transport);
 		List<DownloadSource> sources = List.of(new DownloadSource("http://127.0.0.1:" + server.getAddress().getPort() + serverPath, DownloadSource.Provider.MODRINTH));
 		String sha1 = HashUtils.getHash(writeExpected(name, content));
-		manager.download(destination, sha1, null, "mods", sources, content.length, () -> {}, category -> {});
+		manager.download(name, sha1, null, "mods", sources, content.length, () -> {}, category -> {});
 		manager.joinAll();
 		manager.finish();
 		cache.close();
@@ -388,12 +384,11 @@ class DownloadManagerPlatformTest {
 	@Test
 	void emptyFileMaterializesWithoutAnySourceOrWire() throws Exception {
 		layout = new DataRootResolver.Layout(tempDir.resolve("data"));
-		Path destination = tempDir.resolve("active").resolve("zero.bin");
 		PlatformCache cache = PlatformCache.open(tempDir.resolve("platform-cache"));
 		DownloadManager manager = new DownloadManager(0, layout, layout.stagingDirectory(), cache);
 		manager.attachTransport(new FakeTransport(null)); // any host fetch would fail this test
 		String sha1 = HashUtils.getHash(writeExpected("zero.bin", new byte[0]));
-		manager.download(destination, sha1, null, "config", List.of(), 0, () -> {}, category -> {});
+		manager.download("zero.bin", sha1, null, "config", List.of(), 0, () -> {}, category -> {});
 		manager.joinAll();
 		manager.finish();
 		cache.close();

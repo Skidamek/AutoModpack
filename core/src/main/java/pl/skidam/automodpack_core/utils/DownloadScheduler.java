@@ -48,8 +48,8 @@ public class DownloadScheduler {
 		long pendingNanos;
 	}
 
-	/** A file waiting to be downloaded: opaque identity, its known size and the source domains it can come from, in the caller's preference order. */
-	public record QueuedFile<T>(T identity, long sizeBytes, List<String> sourceDomains) {}
+	/** A file waiting to be downloaded: its known size and the source domains it can come from, in the caller's preference order. */
+	public record QueuedFile(long sizeBytes, List<String> sourceDomains) {}
 
 	public DownloadScheduler() {
 		this(System::nanoTime);
@@ -66,7 +66,7 @@ public class DownloadScheduler {
 	 * sizes this degenerates to round robin over the caller's preference order. Returns null when the file has no
 	 * candidate domain.
 	 */
-	public synchronized <T> String chooseDomain(QueuedFile<T> file, Map<String, Long> inFlightBytesRemaining) {
+	public synchronized String chooseDomain(QueuedFile file, Map<String, Long> inFlightBytesRemaining) {
 		String bestDomain = null;
 		double bestSeconds = Double.MAX_VALUE;
 		for (String domain : file.sourceDomains()) {

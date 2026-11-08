@@ -136,13 +136,13 @@ public class DownloadScreen extends VersionedScreen {
 	}
 
 	private boolean downloadsInProgress() {
-		return download != null && !download.downloadingFileNames().isEmpty();
+		return download != null && !download.downloadingNames().isEmpty();
 	}
 
 	private void drawDownloadingFiles(VersionedMatrices matrices) {
 		int y = this.height / 2 - 94;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.download.downloading").withStyle(ChatFormatting.BOLD), this.width / 2, y, TextColors.WHITE);
-		List<String> names = download.downloadingFileNames();
+		List<String> names = download.downloadingNames();
 		int shown = Math.min(3, names.size());
 		int currentY = y + 14;
 		for (int index = 0; index < shown; index++) {

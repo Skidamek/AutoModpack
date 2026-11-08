@@ -21,7 +21,6 @@ import java.util.function.Consumer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.platforms.FetchManager;
 import pl.skidam.automodpack_core.platforms.PlatformCache;
 import pl.skidam.automodpack_core.protocol.CertificateRejectedException;
@@ -133,15 +132,15 @@ public class DownloadManager implements DownloadView {
 		this.hostTiles = transport instanceof HostTiles tiles ? tiles : null;
 	}
 
-	public synchronized void download(Path file, String sha1, String murmur, String fileType, List<DownloadSource> sources, long fileSize, Runnable successCallback, Runnable failureCallback) {
-		download(file, sha1, murmur, fileType, sources, fileSize, successCallback, ignored -> failureCallback.run());
+	public synchronized void download(String name, String sha1, String murmur, String fileType, List<DownloadSource> sources, long fileSize, Runnable successCallback, Runnable failureCallback) {
+		download(name, sha1, murmur, fileType, sources, fileSize, successCallback, ignored -> failureCallback.run());
 	}
 
-	public synchronized void download(Path file, String sha1, String murmur, String fileType, List<DownloadSource> sources, long fileSize, Runnable successCallback,
+	/** Queues one CAS object. {@code name} only labels the progress and the logs; the bytes land under the hash, never at a caller-chosen path. */
+	public synchronized void download(String name, String sha1, String murmur, String fileType, List<DownloadSource> sources, long fileSize, Runnable successCallback,
 			Consumer<FailureCategory> failureCallback) {
-		FileInspection.HashPathPair hashPathPair = new FileInspection.HashPathPair(sha1, file);
-		if (queue.queued(hashPathPair)) return;
-		queue.enqueue(new QueuedDownload(hashPathPair, file, sources, murmur, fileType, fileSize, enqueueSequence++, successCallback, failureCallback));
+		if (queue.queued(sha1)) return;
+		queue.enqueue(new QueuedDownload(sha1, name, sources, murmur, fileType, fileSize, enqueueSequence++, successCallback, failureCallback));
 		totalFilesAdded++;
 		downloadNext();
 	}
@@ -199,7 +198,7 @@ public class DownloadManager implements DownloadView {
 			directory = chosenDirectory;
 			tileStart = chosenTile;
 		}
-		LOGGER.debug("[download] measuring the host wire from tile {} of {}", tileStart, data.getFileName());
+		LOGGER.debug("[download] measuring the host wire from tile {} of {}", tileStart, data.name);
 		probe.probe(hostTiles, directory, data, tileStart, outcome -> {
 			synchronized (DownloadManager.this) {
 				probing = false;
@@ -216,7 +215,7 @@ public class DownloadManager implements DownloadView {
 		for (DownloadData data : queue.inFlightTasks()) {
 			if (data.route != Route.PLATFORM || data.attemptControl == null || !rescue.hostFarFaster(data.activeDomain)) continue;
 			if (reroutes == null) reroutes = new ArrayList<>();
-			reroutes.add(new Rerouted(data.getFileName(), data.activeDomain, data.attemptControl));
+			reroutes.add(new Rerouted(data.name, data.activeDomain, data.attemptControl));
 			rescue.engaged(data.activeDomain);
 		}
 		return reroutes == null ? List.of() : reroutes;
@@ -252,13 +251,13 @@ public class DownloadManager implements DownloadView {
 		QueuedDownload task = platformFull ? queue.pollHostDispatchable(transport != null) : queue.pollDispatchable(candidate -> dispatchable(candidate, platformTasks));
 		if (task == null) return false;
 		List<String> candidates = platformFull ? List.of(HOST_DOMAIN) : candidateDomains(task);
-		String domain = scheduler.chooseDomain(new DownloadScheduler.QueuedFile<>(task.key, task.fileSize, candidates), candidates.size() > 1 ? queue.inFlightBacklog() : Map.of());
-		LOGGER.debug("Queueing download for: {} {} {}", task.file, task.fileSize, domain);
-		DownloadData data = new DownloadData(task.file, task.key.hash(), domain, task.fileSize, task.domains);
+		String domain = scheduler.chooseDomain(new DownloadScheduler.QueuedFile(task.fileSize, candidates), candidates.size() > 1 ? queue.inFlightBacklog() : Map.of());
+		LOGGER.debug("Queueing download for: {} {} {}", task.name, task.fileSize, domain);
+		DownloadData data = new DownloadData(task.name, task.sha1, domain, task.fileSize, task.domains);
 		data.route = domain.equals(HOST_DOMAIN) ? Route.HOST : Route.PLATFORM;
-		queue.start(task.key, data);
+		queue.start(task.sha1, data);
 		if (cancelled || downloadExecutor.isShutdown()) {
-			queue.finish(task.key);
+			queue.finish(task.sha1);
 			failedFiles.incrementAndGet();
 			semaphore.release();
 			return true;
@@ -266,13 +265,13 @@ public class DownloadManager implements DownloadView {
 		try {
 			downloadExecutor.execute(() -> {
 				try {
-					processDownloadTask(task.key, task, data);
+					processDownloadTask(task.sha1, task, data);
 				} catch (Throwable error) {
-					LOGGER.error("Fatal error executing download task for {}", task.file.getFileName(), error);
+					LOGGER.error("Fatal error executing download task for {}", task.name, error);
 				}
 			});
 		} catch (RuntimeException error) {
-			queue.finish(task.key);
+			queue.finish(task.sha1);
 			failedFiles.incrementAndGet();
 			semaphore.release();
 			// A non-rejected execution is a programming error and still fails loudly after the cleanup.
@@ -307,94 +306,94 @@ public class DownloadManager implements DownloadView {
 		return rescue.offer(domains);
 	}
 
-	private void processDownloadTask(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data) {
-		Path storeFile = dataLayout.objectFile(hashPathPair.hash());
+	private void processDownloadTask(String sha1, QueuedDownload task, DownloadData data) {
+		Path storeFile = dataLayout.objectFile(sha1);
 		try {
 			FileCache cache = fileCache();
-			if (ClientObjectStore.acquireVerified(storeFile, hashPathPair.hash(), task.fileSize, List.of(), cache, ClientObjectStore.CorruptObjectPolicy.KEEP).present()) {
+			if (ClientObjectStore.acquireVerified(storeFile, sha1, task.fileSize, List.of(), cache, ClientObjectStore.CorruptObjectPolicy.KEEP).present()) {
 				// The run's total is remaining wire bytes, so a CAS hit only fills the amount this task still owed.
-				totalBytesDownloaded.addAndGet(PartialResume.remainingBytes(stagingDirectory, hashPathPair.hash(), task.fileSize));
-				cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.COMPLETED);
+				totalBytesDownloaded.addAndGet(PartialResume.remainingBytes(stagingDirectory, sha1, task.fileSize));
+				cleanupAndFinalize(sha1, task, storeFile, AttemptOutcome.COMPLETED);
 				return;
 			}
-			if (promotion.adoptHeld(hashPathPair.hash(), task)) {
+			if (promotion.adoptHeld(sha1, task)) {
 				totalBytesDownloaded.addAndGet(task.fileSize);
-				cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.COMPLETED);
+				cleanupAndFinalize(sha1, task, storeFile, AttemptOutcome.COMPLETED);
 				return;
 			}
 			// DOWNLOAD REQUIRED. A corrupt object is never a cache hit.
 			// An empty file is its own source: there are no bytes to fetch from anyone, so materialize it locally and let the
 			// normal promotion judge it.
 			if (task.fileSize == 0) {
-				Path empty = promotion.preparePartial(hashPathPair.hash(), task);
+				Path empty = promotion.preparePartial(sha1, task);
 				if (empty == null) {
-					cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.FAILED);
+					cleanupAndFinalize(sha1, task, storeFile, AttemptOutcome.FAILED);
 					return;
 				}
-				finishHostFile(hashPathPair, task, empty, null);
+				finishHostFile(sha1, task, empty, null);
 				return;
 			}
-			Path partial = promotion.preparePartial(hashPathPair.hash(), task);
+			Path partial = promotion.preparePartial(sha1, task);
 			if (partial == null) {
-				cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.FAILED);
+				cleanupAndFinalize(sha1, task, storeFile, AttemptOutcome.FAILED);
 				return;
 			}
 			long already = PartialResume.presentBytes(partial, task.fileSize);
 			if (already > 0) data.remainingBytes.addAndGet(-already);
-			platform.refreshDeadLinkSources(hashPathPair.hash(), task);
+			platform.refreshDeadLinkSources(sha1, task);
 			TransferSampler sampler = new TransferSampler(scheduler, data, this::updateNetworkProgress, transport != null ? NetUtils.TAKE_RATE_FLOOR_BYTES_PER_SECOND : 0, this::downloadNext);
 			DownloadSource source = data.route == Route.HOST ? null : platform.sourceFor(task, data.activeDomain);
 			// A task parked in the metadata refetch held no cancel handle while the estimates moved on, so its route is
 			// decided again here from the state the rescue reads, not from the verdict dispatch saw.
 			if (source != null && rescue.hostFarFaster(data.activeDomain)) source = null;
 			if (source != null) {
-				AttemptOutcome outcome = platform.run(hashPathPair, task, data, source, partial, sampler);
-				if (outcome == AttemptOutcome.COMPLETED) outcome = promotion.promote(hashPathPair.hash(), task, partial) ? AttemptOutcome.COMPLETED : AttemptOutcome.FAILED;
-				cleanupAndFinalize(hashPathPair, task, storeFile, outcome);
+				AttemptOutcome outcome = platform.run(sha1, task, data, source, partial, sampler);
+				if (outcome == AttemptOutcome.COMPLETED) outcome = promotion.promote(sha1, task, partial) ? AttemptOutcome.COMPLETED : AttemptOutcome.FAILED;
+				cleanupAndFinalize(sha1, task, storeFile, outcome);
 				return;
 			}
 			if (transport == null) {
 				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
-				cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.FAILED);
+				cleanupAndFinalize(sha1, task, storeFile, AttemptOutcome.FAILED);
 				return;
 			}
 			// The flip is the accounting: the task stops occupying a platform worker the moment its bytes move to the host wire.
 			data.route = Route.HOST;
-			downloadFromHost(hashPathPair, task, data, partial, sampler);
+			downloadFromHost(sha1, task, data, partial, sampler);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
-			cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.CANCELLED);
+			cleanupAndFinalize(sha1, task, storeFile, AttemptOutcome.CANCELLED);
 		} catch (Exception e) {
 			if (cancelled || Thread.currentThread().isInterrupted()) {
-				cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.CANCELLED);
+				cleanupAndFinalize(sha1, task, storeFile, AttemptOutcome.CANCELLED);
 			} else {
 				task.lastFailureCategory = FailureCategory.UNKNOWN;
-				LOGGER.warn("Unexpected error processing {}", task.file, e);
-				cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.FAILED);
+				LOGGER.warn("Unexpected error processing {}", task.name, e);
+				cleanupAndFinalize(sha1, task, storeFile, AttemptOutcome.FAILED);
 			}
 		}
 	}
 
 	/** The host path: the transport owns the whole transfer - resume, tiling, flow control - and its future finalizes the task, so the worker is free at once. */
-	private void downloadFromHost(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path partial, TransferSampler sampler) {
-		transport.downloadObject(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), partial, task.fileSize, sampler.progressHook()).whenComplete((path, error) -> {
+	private void downloadFromHost(String sha1, QueuedDownload task, DownloadData data, Path partial, TransferSampler sampler) {
+		transport.downloadObject(sha1.getBytes(StandardCharsets.UTF_8), partial, task.fileSize, sampler.progressHook()).whenComplete((path, error) -> {
 			// Every byte that arrived is real bandwidth data for the path it actually travelled, whatever happened to the transfer.
 			sampler.flush();
 			try {
-				downloadExecutor.execute(() -> finishHostFile(hashPathPair, task, partial, error));
+				downloadExecutor.execute(() -> finishHostFile(sha1, task, partial, error));
 			} catch (RejectedExecutionException rejected) {
-				finishHostFile(hashPathPair, task, partial, error); // shutdown: end the task inline rather than zombie it
+				finishHostFile(sha1, task, partial, error); // shutdown: end the task inline rather than zombie it
 			}
 		});
 	}
 
 	/** The transfer's outcome: promotion judges the assembled partial, the failure category routes the retry. */
-	private void finishHostFile(FileInspection.HashPathPair hashPathPair, QueuedDownload task, Path partial, Throwable error) {
-		Path storeFile = dataLayout.objectFile(hashPathPair.hash());
+	private void finishHostFile(String sha1, QueuedDownload task, Path partial, Throwable error) {
+		Path storeFile = dataLayout.objectFile(sha1);
 		if (error != null) {
 			Throwable failure = Throwables.unwrap(error);
 			if (cancelled || failure instanceof InterruptedException) {
-				cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.CANCELLED);
+				cleanupAndFinalize(sha1, task, storeFile, AttemptOutcome.CANCELLED);
 				return;
 			}
 			if (failure instanceof CertificateRejectedException) {
@@ -409,16 +408,16 @@ public class DownloadManager implements DownloadView {
 				ObjectPromotion.deletePartial(task);
 			} else {
 				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
-				LOGGER.debug("Remote source failed for CAS object {}", hashPathPair.hash(), failure);
+				LOGGER.debug("Remote source failed for CAS object {}", sha1, failure);
 			}
-			cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.FAILED);
+			cleanupAndFinalize(sha1, task, storeFile, AttemptOutcome.FAILED);
 			return;
 		}
-		cleanupAndFinalize(hashPathPair, task, storeFile, promotion.promote(hashPathPair.hash(), task, partial) ? AttemptOutcome.COMPLETED : AttemptOutcome.FAILED);
+		cleanupAndFinalize(sha1, task, storeFile, promotion.promote(sha1, task, partial) ? AttemptOutcome.COMPLETED : AttemptOutcome.FAILED);
 	}
 
-	private void cleanupAndFinalize(FileInspection.HashPathPair key, QueuedDownload task, Path storeFile, AttemptOutcome outcome) {
-		DownloadData data = queue.finish(key);
+	private void cleanupAndFinalize(String sha1, QueuedDownload task, Path storeFile, AttemptOutcome outcome) {
+		DownloadData data = queue.finish(sha1);
 		// A failed attempt counts against the domain that served it, so the retry dispatches elsewhere before the attempts
 		// budget forces the task to give up. A reroute is the rescue's own verdict and a cancellation the player's, so
 		// neither charges the domain.
@@ -427,23 +426,23 @@ public class DownloadManager implements DownloadView {
 			if (outcome == AttemptOutcome.COMPLETED) {
 				downloadedCount.incrementAndGet();
 				acquiredFiles.incrementAndGet();
-				LOGGER.debug("Acquired CAS object {} for {}", storeFile.getFileName(), task.file.getFileName());
+				LOGGER.debug("Acquired CAS object {} for {}", storeFile.getFileName(), task.name);
 				try {
 					task.successCallback.run();
 				} finally {
 					semaphore.release();
 				}
 			} else {
-				handleRetry(key, task, outcome);
+				handleRetry(sha1, task, outcome);
 			}
 		} finally {
-			if (queue.isIdle() && transport != null) LOGGER.info("[download] {} transfer summary: {}", task.file.getFileName(), transport.windowSummary());
+			if (queue.isIdle() && transport != null) LOGGER.info("[download] {} transfer summary: {}", task.name, transport.windowSummary());
 			if (outcome != AttemptOutcome.CANCELLED && !cancelled && !downloadExecutor.isShutdown()) downloadNext();
 		}
 	}
 
 	/** Requeues the task for another attempt, or ends it for good: a cancelled run, a local failure and a rejected certificate never retry. */
-	private void handleRetry(FileInspection.HashPathPair key, QueuedDownload task, AttemptOutcome outcome) {
+	private void handleRetry(String sha1, QueuedDownload task, AttemptOutcome outcome) {
 		if (outcome == AttemptOutcome.CANCELLED || cancelled) {
 			failedFiles.incrementAndGet();
 			semaphore.release();
@@ -451,15 +450,15 @@ public class DownloadManager implements DownloadView {
 		}
 		if (task.lastFailureCategory != FailureCategory.LOCAL_STORAGE && task.lastFailureCategory != FailureCategory.TRUST_REJECTED
 				&& task.attempts < (task.sources.size() + 1) * MAX_DOWNLOAD_ATTEMPTS && routable(task)) {
-			WireTrace.log("REQUEUE", "task", task.file.getFileName(), "attempts", task.attempts, "category", task.lastFailureCategory);
-			LOGGER.debug("Retrying download: {}", task.file.getFileName());
+			WireTrace.log("REQUEUE", "task", task.name, "attempts", task.attempts, "category", task.lastFailureCategory);
+			LOGGER.debug("Retrying download: {}", task.name);
 			task.attempts++;
-			requeue(key, task);
+			requeue(sha1, task);
 			return;
 		}
-		WireTrace.log("FAIL", "task", task.file.getFileName(), "attempts", task.attempts, "category", task.lastFailureCategory);
+		WireTrace.log("FAIL", "task", task.name, "attempts", task.attempts, "category", task.lastFailureCategory);
 		failedFiles.incrementAndGet();
-		LOGGER.error("Permanently failed to download {} ({})", task.file.getFileName(), task.lastFailureCategory);
+		LOGGER.error("Permanently failed to download {} ({})", task.name, task.lastFailureCategory);
 		ObjectPromotion.deletePartial(task);
 		try {
 			task.failureCallback.accept(task.lastFailureCategory);
@@ -469,7 +468,7 @@ public class DownloadManager implements DownloadView {
 	}
 
 	/** Puts a dispatched task back into the queue and re-pumps; the pump is a no-op while the drain loop runs. */
-	private synchronized void requeue(FileInspection.HashPathPair key, QueuedDownload task) {
+	private synchronized void requeue(String sha1, QueuedDownload task) {
 		queue.enqueue(task);
 		downloadNext();
 	}
@@ -499,7 +498,7 @@ public class DownloadManager implements DownloadView {
 			acquiredFiles.updateAndGet(count -> Math.max(0, count - 1));
 			downloadedCount.updateAndGet(count -> Math.max(0, count - 1));
 			failedFiles.incrementAndGet();
-			LOGGER.error("Permanently failed to download {} ({})", task.file.getFileName(), task.lastFailureCategory);
+			LOGGER.error("Permanently failed to download {} ({})", task.name, task.lastFailureCategory);
 			task.failureCallback.accept(task.lastFailureCategory);
 		}
 	}
@@ -573,8 +572,8 @@ public class DownloadManager implements DownloadView {
 	}
 
 	@Override
-	public List<String> downloadingFileNames() {
-		return queue.downloadingFileNames();
+	public List<String> downloadingNames() {
+		return queue.downloadingNames();
 	}
 
 	public boolean isCancelled() {

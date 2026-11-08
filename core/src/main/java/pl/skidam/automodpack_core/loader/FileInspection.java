@@ -35,8 +35,6 @@ public class FileInspection {
 		return environment == null ? null : environment.loader();
 	}
 
-	public record HashPathPair(String hash, Path path) {}
-
 	/**
 	 * Whether the file is a mod jar at all, the metadata when there is any, and the loader-service files this jar actually
 	 * ships. A service-only jar is a mod whose metadata is absent; {@code services} is that jar's identity. A NeoForge

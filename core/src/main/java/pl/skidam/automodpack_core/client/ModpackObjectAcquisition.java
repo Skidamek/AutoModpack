@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.client;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -169,14 +168,13 @@ final class ModpackObjectAcquisition {
 		if (playerFacing) ScreenManager.download(downloadManager, modpackName.get(), onPlayerCancel);
 		downloadManager.attachTransport(transport);
 		for (var serverItem : files) {
-			Path downloadFile = storage.activePath(serverItem.file);
 			List<DownloadSource> sources = fetchManager == null ? List.of() : fetchManager.sourcesFor(serverItem.sha1);
 			Consumer<DownloadManager.FailureCategory> failureCallback = category -> {
 				if (category == DownloadManager.FailureCategory.CANCELLED) return;
 				failedDownloads.put(serverItem, sources.stream().map(DownloadSource::url).toList());
 				failedDownloadCategories.put(serverItem, category);
 			};
-			downloadManager.download(downloadFile, serverItem.sha1, serverItem.murmur, ModpackContentType.platformProjectKind(serverItem.file), sources, serverItem.size, () -> {}, failureCallback);
+			downloadManager.download(serverItem.file, serverItem.sha1, serverItem.murmur, ModpackContentType.platformProjectKind(serverItem.file), sources, serverItem.size, () -> {}, failureCallback);
 		}
 
 		downloadManager.joinAll();

@@ -12,7 +12,6 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -28,7 +27,7 @@ class ObjectBatchTest {
 	}
 
 	private static QueuedDownload task(String sha1, long size) {
-		return new QueuedDownload(new FileInspection.HashPathPair(sha1, Path.of(sha1 + ".jar")), Path.of(sha1 + ".jar"), List.of(), null, "mods", size, 0, () -> {}, category -> {});
+		return new QueuedDownload(sha1, sha1 + ".jar", List.of(), null, "mods", size, 0, () -> {}, category -> {});
 	}
 
 	private static QueuedDownload downloaded(ObjectPromotion promotion, DataRootResolver.Layout layout, byte[] data) throws Exception {

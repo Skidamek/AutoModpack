@@ -14,7 +14,6 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -28,16 +27,16 @@ class ObjectBatchDurabilityTest {
 
 	private static QueuedDownload task(byte[] bytes) {
 		String hash = HashUtils.sha1(bytes);
-		return new QueuedDownload(new FileInspection.HashPathPair(hash, Path.of("mod.jar")), Path.of("mod.jar"), List.of(), null, "mods", bytes.length, 0, () -> {}, category -> {});
+		return new QueuedDownload(hash, "mod.jar", List.of(), null, "mods", bytes.length, 0, () -> {}, category -> {});
 	}
 
 	private static void stage(ObjectPromotion promotion, byte[] bytes) throws Exception {
 		QueuedDownload task = task(bytes);
-		Path partial = promotion.preparePartial(task.key.hash(), task);
+		Path partial = promotion.preparePartial(task.sha1, task);
 		try (OutputStream out = PartialResume.writer(partial, bytes.length, 0)) {
 			out.write(bytes);
 		}
-		assertTrue(promotion.promote(task.key.hash(), task, partial));
+		assertTrue(promotion.promote(task.sha1, task, partial));
 	}
 
 	@Test
@@ -108,7 +107,7 @@ class ObjectBatchDurabilityTest {
 			try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
 				for (byte[] bytes : CONTENTS) {
 					QueuedDownload task = task(bytes);
-					assertFalse(retry.adoptHeld(task.key.hash(), task), "torn held bytes cannot become a trusted object");
+					assertFalse(retry.adoptHeld(task.sha1, task), "torn held bytes cannot become a trusted object");
 					stage(retry, bytes);
 				}
 				assertTrue(restarted.flush().isEmpty());

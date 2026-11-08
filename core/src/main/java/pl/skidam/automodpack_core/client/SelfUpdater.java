@@ -203,7 +203,7 @@ public class SelfUpdater {
 				// left behind, or the audio layer replays the previous server's track over this screen.
 				WaitingMusic.endRun();
 				ScreenManager.download(downloadManager, "AutoModpack " + automodpack.fileVersion());
-				downloadManager.download(targetJar, automodpack.SHA1Hash(), null, ModpackContentType.MOD,
+				downloadManager.download(targetJar.getFileName().toString(), automodpack.SHA1Hash(), null, ModpackContentType.MOD,
 						List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
 						() -> LOGGER.debug("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));
 				downloadManager.joinAll();

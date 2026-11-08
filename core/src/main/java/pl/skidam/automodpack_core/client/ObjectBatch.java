@@ -159,10 +159,10 @@ final class ObjectBatch {
 		}
 		if (!Files.exists(object.file(), LinkOption.NOFOLLOW_LINKS)) {
 			// The staged bytes were removed under the run: no storage condition failed and the next acquisition can fetch them again.
-			LOGGER.warn("The staged copy of {} was removed before it could be published; it is downloaded again", object.task().file.getFileName());
+			LOGGER.warn("The staged copy of {} was removed before it could be published; it is downloaded again", object.task().name);
 			object.task().lastFailureCategory = DownloadManager.FailureCategory.UNKNOWN;
 		} else {
-			LOGGER.warn("Failed to persist verified CAS object {}", object.task().file.getFileName(), cause);
+			LOGGER.warn("Failed to persist verified CAS object {}", object.task().name, cause);
 			object.task().lastFailureCategory = DownloadManager.FailureCategory.LOCAL_STORAGE;
 		}
 		failed.add(object.task());

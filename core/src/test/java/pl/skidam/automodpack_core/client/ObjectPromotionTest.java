@@ -12,7 +12,6 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -29,11 +28,11 @@ class ObjectPromotionTest {
 	}
 
 	private static QueuedDownload task(String sha1, long size) {
-		return new QueuedDownload(new FileInspection.HashPathPair(sha1, Path.of("mod.jar")), Path.of("mod.jar"), List.of(), null, "mods", size, 0, () -> {}, category -> {});
+		return new QueuedDownload(sha1, "mod.jar", List.of(), null, "mods", size, 0, () -> {}, category -> {});
 	}
 
 	private static Path stage(ObjectPromotion promotion, QueuedDownload task, byte[] data) throws Exception {
-		Path partial = promotion.preparePartial(task.key.hash(), task);
+		Path partial = promotion.preparePartial(task.sha1, task);
 		try (OutputStream out = PartialResume.writer(partial, data.length, 0)) {
 			out.write(data);
 		}

@@ -12,7 +12,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 
 import pl.skidam.automodpack_core.client.DownloadData.Route;
-import pl.skidam.automodpack_core.loader.FileInspection;
 
 /**
  * The run's dispatch queue and its in-flight ledger, and nothing else: which queued file goes out next, and which files
@@ -22,8 +21,9 @@ import pl.skidam.automodpack_core.loader.FileInspection;
  */
 public final class DownloadQueue {
 
-	private final Set<FileInspection.HashPathPair> queued = new HashSet<>();
-	private final Map<FileInspection.HashPathPair, DownloadData> inFlight = new ConcurrentHashMap<>();
+	// One object is one queue entry, because a CAS object is addressed by its hash alone.
+	private final Set<String> queued = new HashSet<>();
+	private final Map<String, DownloadData> inFlight = new ConcurrentHashMap<>();
 	private static final Comparator<QueuedDownload> LARGEST_FIRST = Comparator.comparingLong((QueuedDownload task) -> task.fileSize).reversed().thenComparingInt(task -> task.seq);
 	// Largest file first, enqueue order breaks ties. A scan re-queues only the tasks ahead of the one it picked, so the
 	// usual dispatch is one insert or one poll. Largest-first governs enqueue order only: past it the pool's waiter queue
@@ -34,12 +34,12 @@ public final class DownloadQueue {
 	// Entries are lazily deleted: a task dispatched through the main order is skipped here when its key leaves queued.
 	private final PriorityQueue<QueuedDownload> hostOrder = new PriorityQueue<>(LARGEST_FIRST);
 
-	public boolean queued(FileInspection.HashPathPair key) {
-		return queued.contains(key);
+	public boolean queued(String sha1) {
+		return queued.contains(sha1);
 	}
 
 	public void enqueue(QueuedDownload task) {
-		queued.add(task.key);
+		queued.add(task.sha1);
 		dispatchOrder.add(task);
 		if (task.hostRouteAvailable()) hostOrder.add(task);
 	}
@@ -49,7 +49,7 @@ public final class DownloadQueue {
 		List<QueuedDownload> skipped = new ArrayList<>();
 		QueuedDownload chosen = null;
 		for (QueuedDownload candidate; (candidate = dispatchOrder.poll()) != null;) {
-			if (!queued.contains(candidate.key)) continue; // already dispatched through the host order
+			if (!queued.contains(candidate.sha1)) continue; // already dispatched through the host order
 			if (dispatchable.test(candidate)) {
 				chosen = candidate;
 				break;
@@ -57,7 +57,7 @@ public final class DownloadQueue {
 			skipped.add(candidate);
 		}
 		dispatchOrder.addAll(skipped);
-		if (chosen != null) queued.remove(chosen.key);
+		if (chosen != null) queued.remove(chosen.sha1);
 		return chosen;
 	}
 
@@ -67,19 +67,19 @@ public final class DownloadQueue {
 		while (true) {
 			QueuedDownload candidate = hostOrder.poll();
 			if (candidate == null) return null;
-			if (!queued.contains(candidate.key)) continue; // already dispatched through the main order
+			if (!queued.contains(candidate.sha1)) continue; // already dispatched through the main order
 			if (!candidate.hostRouteAvailable()) continue; // the host budget is spent; it will never be dispatchable here
-			queued.remove(candidate.key);
+			queued.remove(candidate.sha1);
 			return candidate;
 		}
 	}
 
-	public void start(FileInspection.HashPathPair key, DownloadData data) {
-		inFlight.put(key, data);
+	public void start(String sha1, DownloadData data) {
+		inFlight.put(sha1, data);
 	}
 
-	public DownloadData finish(FileInspection.HashPathPair key) {
-		return inFlight.remove(key);
+	public DownloadData finish(String sha1) {
+		return inFlight.remove(sha1);
 	}
 
 	/** How many in-flight tasks occupy a platform worker right now. */
@@ -107,8 +107,8 @@ public final class DownloadQueue {
 		return List.copyOf(inFlight.values());
 	}
 
-	public List<String> downloadingFileNames() {
-		return inFlight.values().stream().map(DownloadData::getFileName).toList();
+	public List<String> downloadingNames() {
+		return inFlight.values().stream().map(data -> data.name).toList();
 	}
 
 	/** Bytes still owed by every in-flight task, per domain; the scheduler's backlog input. */

@@ -70,12 +70,12 @@ final class ObjectPromotion {
 			task.partialFile = null;
 		} catch (VerifiedFileTransfer.VerificationMismatchException e) {
 			task.lastFailureCategory = DownloadManager.FailureCategory.REMOTE_SOURCE;
-			LOGGER.warn("Size or hash mismatch for downloaded file {}", task.file.getFileName());
+			LOGGER.warn("Size or hash mismatch for downloaded file {}", task.name);
 			deletePartial(task);
 			return false;
 		} catch (IOException e) {
 			task.lastFailureCategory = DownloadManager.FailureCategory.LOCAL_STORAGE;
-			LOGGER.warn("Failed to persist verified CAS object {}", task.file.getFileName(), e);
+			LOGGER.warn("Failed to persist verified CAS object {}", task.name, e);
 			deletePartial(task);
 			return false;
 		} finally {
@@ -104,12 +104,12 @@ final class ObjectPromotion {
 					batch.hold(new ObjectBatch.Held(sha1, task.fileSize, heldFile, directory, task));
 					return true;
 				} catch (VerifiedFileTransfer.VerificationMismatchException torn) {
-					LOGGER.info("Dropping a held copy of {} that did not survive to its sync", task.file.getFileName());
+					LOGGER.info("Dropping a held copy of {} that did not survive to its sync", task.name);
 					ImmutableFiles.deleteIfExists(heldFile);
 				}
 			}
 		} catch (IOException e) {
-			LOGGER.debug("Could not adopt a held copy of {}; downloading it again", task.file.getFileName(), e);
+			LOGGER.debug("Could not adopt a held copy of {}; downloading it again", task.name, e);
 		}
 		return false;
 	}

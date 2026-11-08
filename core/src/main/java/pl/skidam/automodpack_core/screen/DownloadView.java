@@ -24,7 +24,7 @@ public interface DownloadView {
 	long failed();
 
 	/** Names of the files being downloaded right now, copied so the screen never iterates live engine state. */
-	List<String> downloadingFileNames();
+	List<String> downloadingNames();
 
 	void cancelAllAndShutdown() throws Exception;
 }

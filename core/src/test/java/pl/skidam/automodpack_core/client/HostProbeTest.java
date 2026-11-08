@@ -16,7 +16,6 @@ import java.util.function.IntConsumer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.protocol.HostTiles;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.PartialResume;
@@ -53,8 +52,8 @@ class HostProbeTest {
 	}
 
 	private QueuedDownload task(String name, long size, List<String> domains) {
-		FileInspection.HashPathPair key = new FileInspection.HashPathPair(name.repeat(40).substring(0, 40), Path.of(name));
-		QueuedDownload download = new QueuedDownload(key, Path.of(name), List.of(), null, null, size, 0, () -> {}, ignored -> {});
+		String key = name.repeat(40).substring(0, 40);
+		QueuedDownload download = new QueuedDownload(key, name, List.of(), null, null, size, 0, () -> {}, ignored -> {});
 		download.domains.addAll(domains);
 		return download;
 	}
@@ -73,7 +72,7 @@ class HostProbeTest {
 		assertFalse(probe.worthMeasuring(attempt("cdn.example.com")), "a platform at the bar needs no rescue");
 
 		measure("cdn.example.com", 100 * 1024);
-		DownloadData dual = new DownloadData(Path.of("mod.jar"), "a".repeat(40), "cdn.example.com", 8 * MiB, List.of("cdn.example.com", "other.example.com"));
+		DownloadData dual = new DownloadData("mod.jar", "a".repeat(40), "cdn.example.com", 8 * MiB, List.of("cdn.example.com", "other.example.com"));
 		assertFalse(probe.worthMeasuring(dual), "a second unmeasured candidate on the same file must be tried before moving traffic off the first");
 
 		measure("other.example.com", 100 * 1024);
@@ -85,7 +84,7 @@ class HostProbeTest {
 
 	@Test
 	void hostBytesAreBookedAgainstTheHostAfterTheAttemptStartFlip() throws Exception {
-		DownloadData data = new DownloadData(Path.of("mod.jar"), "a".repeat(40), "cdn.example.com", 5 * MiB);
+		DownloadData data = new DownloadData("mod.jar", "a".repeat(40), "cdn.example.com", 5 * MiB);
 		assertEquals("cdn.example.com", data.bookedDomain(), "a platform attempt books against the platform");
 		data.route = DownloadData.Route.HOST;
 		assertEquals(RescuePolicy.HOST_DOMAIN, data.bookedDomain(),
@@ -144,7 +143,7 @@ class HostProbeTest {
 	}
 
 	private DownloadData attempt(String domain) {
-		return new DownloadData(Path.of("mod.jar"), "a".repeat(40), domain, 8 * MiB);
+		return new DownloadData("mod.jar", "a".repeat(40), domain, 8 * MiB);
 	}
 
 	private static long countTiles(Path directory, long fileSize) throws IOException {

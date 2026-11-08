@@ -21,7 +21,7 @@ class DownloadSchedulerTest {
 		DownloadScheduler scheduler = new DownloadScheduler();
 		scheduler.report("fast.example.com", 10 * MB, SECOND);
 		scheduler.report("slow.example.com", MB, SECOND);
-		QueuedFile<String> file = new QueuedFile<>("file", 100 * MB, List.of("slow.example.com", "fast.example.com"));
+		QueuedFile file = new QueuedFile(100 * MB, List.of("slow.example.com", "fast.example.com"));
 		assertEquals("fast.example.com", scheduler.chooseDomain(file, Map.of()));
 	}
 
@@ -30,7 +30,7 @@ class DownloadSchedulerTest {
 		DownloadScheduler scheduler = new DownloadScheduler();
 		scheduler.report("fast.example.com", 10 * MB, SECOND);
 		scheduler.report("slow.example.com", MB, SECOND);
-		QueuedFile<String> file = new QueuedFile<>("file", 10 * MB, List.of("fast.example.com", "slow.example.com"));
+		QueuedFile file = new QueuedFile(10 * MB, List.of("fast.example.com", "slow.example.com"));
 		assertEquals("fast.example.com", scheduler.chooseDomain(file, Map.of()));
 		assertEquals("slow.example.com", scheduler.chooseDomain(file, Map.of("fast.example.com", 500 * MB)));
 	}
@@ -38,7 +38,7 @@ class DownloadSchedulerTest {
 	@Test
 	void seedsUnknownSourcesOptimisticallyAndConvergesOnSamples() {
 		DownloadScheduler scheduler = new DownloadScheduler();
-		QueuedFile<String> file = new QueuedFile<>("file", 100 * MB, List.of("tortoise.example.com", "hare.example.com"));
+		QueuedFile file = new QueuedFile(100 * MB, List.of("tortoise.example.com", "hare.example.com"));
 		// Both unknown: equal optimistic seeds, so the caller's preference order decides.
 		assertEquals("tortoise.example.com", scheduler.chooseDomain(file, Map.of()));
 		// Measurements split them: tortoise converges towards its real slow speed while hare keeps the optimistic seed.
@@ -53,14 +53,14 @@ class DownloadSchedulerTest {
 		scheduler.report("b.example.com", 20 * MB, SECOND);
 		scheduler.report("c.example.com", MB, 0);
 		// If the zero-duration sample were recorded as infinite speed, c would win despite being listed last.
-		QueuedFile<String> file = new QueuedFile<>("file", 100 * MB, List.of("a.example.com", "b.example.com", "c.example.com"));
+		QueuedFile file = new QueuedFile(100 * MB, List.of("a.example.com", "b.example.com", "c.example.com"));
 		assertEquals("b.example.com", scheduler.chooseDomain(file, Map.of()));
 	}
 
 	@Test
 	void returnsNullForAFileWithoutCandidateDomains() {
 		DownloadScheduler scheduler = new DownloadScheduler();
-		assertNull(scheduler.chooseDomain(new QueuedFile<>("file", MB, List.of()), Map.of()));
+		assertNull(scheduler.chooseDomain(new QueuedFile(MB, List.of()), Map.of()));
 	}
 
 	@Test
@@ -70,7 +70,7 @@ class DownloadSchedulerTest {
 		scheduler.report("slow.example.com", DownloadScheduler.MIN_SAMPLE_BYTES, SECOND);
 		assertEquals(10.0 * MB, scheduler.measuredSpeed("fast.example.com"));
 		assertEquals((double) DownloadScheduler.MIN_SAMPLE_BYTES, scheduler.measuredSpeed("slow.example.com"));
-		QueuedFile<String> file = new QueuedFile<>("file", 10 * MB, List.of("fast.example.com", "slow.example.com"));
+		QueuedFile file = new QueuedFile(10 * MB, List.of("fast.example.com", "slow.example.com"));
 		assertEquals("fast.example.com", scheduler.chooseDomain(file, Map.of()));
 	}
 
@@ -107,7 +107,7 @@ class DownloadSchedulerTest {
 		nanos.set(DownloadScheduler.SAMPLE_STALE_NANOS + 1);
 		assertNull(scheduler.measuredSpeed("a.example.com"), "one nanosecond past the threshold the measurement is unmeasured");
 		// Unmeasured everywhere: the fossil estimate must not win the choice against an unknown domain's optimistic seed.
-		QueuedFile<String> file = new QueuedFile<>("file", MB, List.of("b.example.com", "a.example.com"));
+		QueuedFile file = new QueuedFile(MB, List.of("b.example.com", "a.example.com"));
 		assertEquals("b.example.com", scheduler.chooseDomain(file, Map.of()));
 	}
 

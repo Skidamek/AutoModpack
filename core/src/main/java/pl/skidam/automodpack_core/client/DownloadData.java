@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -12,7 +11,8 @@ public class DownloadData {
 		PLATFORM, HOST
 	}
 
-	public final Path file;
+	/** What the player sees this object as; the bytes are addressed by {@link #sha1}, not by this. */
+	public final String name;
 	/** The object's hash, so a tile of it can be addressed without the task that queued it. */
 	public final String sha1;
 	public final String activeDomain;
@@ -26,21 +26,17 @@ public class DownloadData {
 	/** The in-flight platform attempt's cancel handle, set by the worker right before the attempt starts and cleared after it; the rescue cancels through it. */
 	public volatile HttpFileDownloader.AttemptControl attemptControl;
 
-	DownloadData(Path file, String sha1, String activeDomain, long fileSize) {
-		this(file, sha1, activeDomain, fileSize, RescuePolicy.HOST_DOMAIN.equals(activeDomain) ? List.of() : List.of(activeDomain));
+	DownloadData(String name, String sha1, String activeDomain, long fileSize) {
+		this(name, sha1, activeDomain, fileSize, RescuePolicy.HOST_DOMAIN.equals(activeDomain) ? List.of() : List.of(activeDomain));
 	}
 
-	DownloadData(Path file, String sha1, String activeDomain, long fileSize, List<String> platformDomains) {
-		this.file = file;
+	DownloadData(String name, String sha1, String activeDomain, long fileSize, List<String> platformDomains) {
+		this.name = name;
 		this.sha1 = sha1;
 		this.activeDomain = activeDomain;
 		this.fileSize = fileSize;
 		this.platformDomains = List.copyOf(platformDomains);
 		this.remainingBytes = new AtomicLong(fileSize);
-	}
-
-	public String getFileName() {
-		return file.getFileName().toString();
 	}
 
 	/**

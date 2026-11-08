@@ -8,15 +8,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
-import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 
-/** One file the queue is holding: what it is, where it can come from, and what the attempts so far cost it. */
+/** One object the queue is holding: what it is, where it can come from, and what the attempts so far cost it. */
 public class QueuedDownload {
 
-	/** The queue key this task lives under; the dispatch queue cannot find the task without it. */
-	public final FileInspection.HashPathPair key;
-	public final Path file;
+	/** The object's hash: the queue key, the CAS address, and what every attempt is charged to. */
+	public final String sha1;
+	/** What the player sees this object as. Never a write target: the bytes only ever land in CAS. */
+	public final String name;
 	public final List<DownloadSource> sources;
 	/** Every source's host, parsed once at enqueue, so a source URL's userinfo never becomes a map key or a log line. */
 	public final List<String> domains;
@@ -34,10 +34,10 @@ public class QueuedDownload {
 	/** The one partial temp of the whole task: kept across failed attempts as the resume prefix, deleted at its ends. */
 	public Path partialFile;
 
-	public QueuedDownload(FileInspection.HashPathPair key, Path file, List<DownloadSource> sources, String murmur, String fileType, long fileSize, int seq, Runnable successCallback,
+	public QueuedDownload(String sha1, String name, List<DownloadSource> sources, String murmur, String fileType, long fileSize, int seq, Runnable successCallback,
 			Consumer<DownloadManager.FailureCategory> failureCallback) {
-		this.key = key;
-		this.file = file;
+		this.sha1 = sha1;
+		this.name = name;
 		this.sources = new ArrayList<>(sources);
 		this.murmur = murmur;
 		this.fileType = fileType;

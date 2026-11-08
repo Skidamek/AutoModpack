@@ -3,18 +3,16 @@ package pl.skidam.automodpack_core.client;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-import java.nio.file.Path;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 
 class DownloadQueueTest {
 
 	private static QueuedDownload task(String hash, long size, String fileName, List<DownloadSource> sources) {
-		return new QueuedDownload(new FileInspection.HashPathPair(hash, Path.of(fileName)), Path.of(fileName), sources, null, "mods", size, 0, () -> {}, category -> {});
+		return new QueuedDownload(hash, fileName, sources, null, "mods", size, 0, () -> {}, category -> {});
 	}
 
 	@Test
@@ -26,9 +24,9 @@ class DownloadQueueTest {
 		queue.enqueue(hostOnly);
 
 		assertNull(queue.pollHostDispatchable(false));
-		assertEquals(hostOnly.key, queue.pollHostDispatchable(true).key);
+		assertEquals(hostOnly.sha1, queue.pollHostDispatchable(true).sha1);
 		assertNull(queue.pollHostDispatchable(true), "a platform-only task is never handed to the host order");
-		assertEquals(platform.key, queue.pollDispatchable(task -> true).key, "the host-dispatched task's stale main-order entry is skipped");
+		assertEquals(platform.sha1, queue.pollDispatchable(task -> true).sha1, "the host-dispatched task's stale main-order entry is skipped");
 		assertNull(queue.pollDispatchable(task -> true));
 	}
 
