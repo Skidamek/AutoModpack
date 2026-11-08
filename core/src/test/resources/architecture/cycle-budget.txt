@@ -1,4 +1,4 @@
 # Mutually importing domain pairs in core/src/main/java.
 # PackageEdgesTest fails when the count grows; break an edge rather than raising this number.
 
-22
+21

@@ -89,6 +89,12 @@ public final class Environment {
 		return current;
 	}
 
+	/** True when a loader environment exists and it declared a side; a detached helper and a test environment do not. */
+	public static boolean sideKnown() {
+		Environment environment = current;
+		return environment != null && environment.side != null;
+	}
+
 	/** The process side, or null when no loader environment exists; the data-root resolver and client storage accept that. */
 	public static EnvironmentType sideOrNull() {
 		Environment environment = current;

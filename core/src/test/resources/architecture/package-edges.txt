@@ -76,7 +76,6 @@ screen -> update
 screen -> utils
 storage -> <root>
 storage -> config
-storage -> loader
 storage -> utils
 update -> <root>
 update -> change

@@ -13,7 +13,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.Environment;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -101,7 +100,7 @@ public final class DataRootResolver {
 
 	/** Resolves with the running process's role; detached helpers and tests without a loader default to the client selection. */
 	public static Location resolve(Path gameDirectory) {
-		return resolve(gameDirectory, Environment.sideOrNull());
+		return resolve(gameDirectory, Environment.installed() != null && Environment.current().isServer());
 	}
 
 	/**
@@ -112,13 +111,13 @@ public final class DataRootResolver {
 	 * because nothing can be hard-linked across volumes anyway. An explicit {@code AUTOMODPACK_DATA_ROOT} always
 	 * wins. The instance's own answer to "what is installed here" never lives here.
 	 */
-	public static Location resolve(Path gameDirectory, LoaderManagerService.EnvironmentType environment) {
+	public static Location resolve(Path gameDirectory, boolean server) {
 		Path requestedRoot = Objects.requireNonNull(gameDirectory, "game directory").toAbsolutePath().normalize();
 		try {
 			Path gameRoot = canonicalGameRoot(requestedRoot);
 			Path automodpackDirectory = gameRoot.resolve(StoragePaths.AUTOMODPACK_DIR).normalize();
 			createLocalDataDirectory(gameRoot, automodpackDirectory);
-			Path root = selectRoot(gameRoot, automodpackDirectory, environment);
+			Path root = selectRoot(gameRoot, automodpackDirectory, server);
 			String localFailure = probe(root);
 			if (localFailure != null) throw new IOException("AutoModpack data storage is not writable: " + localFailure);
 			return new Location(root, computeOwnerIdentity(gameRoot), gameRoot);
@@ -169,7 +168,7 @@ public final class DataRootResolver {
 		if (!gameRoot.equals(realDirectory.getParent())) throw new IOException("AutoModpack data directory resolves outside the game directory: " + directory);
 	}
 
-	private static Path selectRoot(Path gameRoot, Path automodpackDirectory, LoaderManagerService.EnvironmentType environment) throws IOException {
+	private static Path selectRoot(Path gameRoot, Path automodpackDirectory, boolean server) throws IOException {
 		Path configured = configuredRoot(gameRoot);
 		if (configured != null) {
 			String failure = probe(configured);
@@ -177,7 +176,7 @@ public final class DataRootResolver {
 			logRootOnce("Using the configured AutoModpack data root: {}", configured);
 			return configured;
 		}
-		if (environment == LoaderManagerService.EnvironmentType.SERVER) {
+		if (server) {
 			Path serverRoot = gameRoot.resolve(StoragePaths.SERVER_DATA_DIR).normalize();
 			logRootOnce("AutoModpack server data root: {}", serverRoot);
 			return serverRoot;

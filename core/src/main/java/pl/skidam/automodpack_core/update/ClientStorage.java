@@ -21,7 +21,6 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientConfigStore;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
@@ -134,9 +133,8 @@ public final class ClientStorage {
 
 	public static synchronized ClientStorage open(Path gameDirectory) {
 		// The detached helper and unit tests run without a loader environment (null dist); there the check stays silent.
-		LoaderManagerService.EnvironmentType environment = Environment.sideOrNull();
-		if (environment != null && environment != LoaderManagerService.EnvironmentType.CLIENT)
-			throw new IllegalStateException("Client storage belongs to the client role, but this process runs the " + environment + " environment");
+		if (Environment.sideKnown() && !Environment.current().isClient())
+			throw new IllegalStateException("Client storage belongs to the client role, but this process does not run as a client");
 		DataRootResolver.Location dataLocation = DataRootResolver.resolve(requireDirectoryPath(gameDirectory, "game directory"));
 		Path canonicalGameDirectory = dataLocation.ownerPath();
 		WeakReference<ClientStorage> reference = OPEN_STORAGE.get(canonicalGameDirectory);

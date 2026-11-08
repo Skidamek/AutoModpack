@@ -68,7 +68,7 @@ public final class UpdateHelperMain {
 
 		Trust.start();
 		Path gameDirectory = GameDirectory.current();
-		DataRootResolver.Location dataLocation = DataRootResolver.resolve(gameDirectory, environment);
+		DataRootResolver.Location dataLocation = DataRootResolver.resolve(gameDirectory, environment == LoaderManagerService.EnvironmentType.SERVER);
 		logStart(parentPid, environment, gameDirectory, dataLocation, log);
 		Path helperDirectory = gameDirectory.resolve(HELPER_PRESENCE_FILE).toAbsolutePath().normalize().getParent();
 		Files.createDirectories(helperDirectory);

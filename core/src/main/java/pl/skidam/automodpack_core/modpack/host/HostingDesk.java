@@ -77,7 +77,7 @@ public final class HostingDesk {
 	}
 
 	private static GenerationStore generationStore(Path gameDirectory) {
-		DataRootResolver.Location location = DataRootResolver.resolve(gameDirectory, EnvironmentType.CLIENT);
+		DataRootResolver.Location location = DataRootResolver.resolve(gameDirectory, false);
 		return new GenerationStore(gameDirectory.resolve(SERVER_DIR), location.layout().objectsDirectory(), location, null);
 	}
 

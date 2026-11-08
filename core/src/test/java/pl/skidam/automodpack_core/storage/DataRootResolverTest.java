@@ -15,7 +15,6 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.update.ClientStorage;
 
 class DataRootResolverTest {
@@ -95,7 +94,7 @@ class DataRootResolverTest {
 	@Test
 	void dedicatedServersOwnTheirCacheInsideTheServerScope() throws Exception {
 		Path game = Files.createDirectory(temporaryDirectory.resolve("server-game"));
-		DataRootResolver.Location location = DataRootResolver.resolve(game, LoaderManagerService.EnvironmentType.valueOf("SERVER"));
+		DataRootResolver.Location location = DataRootResolver.resolve(game, true);
 		// The resolver canonicalizes the game root; on Windows the injected temp path may spell it as an 8.3 alias, so compare real paths.
 		assertEquals(game.resolve("automodpack").resolve("server").resolve("data").toRealPath(), location.root().toRealPath());
 		assertTrue(location.root().toRealPath().startsWith(game.toRealPath()));
@@ -107,7 +106,7 @@ class DataRootResolverTest {
 		Path data = Files.createDirectory(temporaryDirectory.resolve("server-configured-data"));
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, data.toAbsolutePath().normalize().toString());
 		try {
-			assertEquals(data.toAbsolutePath().normalize(), DataRootResolver.resolve(game, LoaderManagerService.EnvironmentType.SERVER).root());
+			assertEquals(data.toAbsolutePath().normalize(), DataRootResolver.resolve(game, true).root());
 		} finally {
 			if (previous == null) System.clearProperty(StoragePaths.DATA_ROOT_PROPERTY);
 			else System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, previous);
@@ -122,9 +121,9 @@ class DataRootResolverTest {
 		String previousHome = System.setProperty("user.home", temporaryDirectory.resolve("home").toString());
 		try {
 			Path game = Files.createDirectory(temporaryDirectory.resolve("client-game"));
-			DataRootResolver.Location client = DataRootResolver.resolve(game, LoaderManagerService.EnvironmentType.CLIENT);
-			assertEquals(DataRootResolver.resolve(game, LoaderManagerService.EnvironmentType.UNIVERSAL).root(), client.root());
-			assertEquals(DataRootResolver.resolve(game, null).root(), client.root());
+			DataRootResolver.Location client = DataRootResolver.resolve(game, false);
+			assertEquals(DataRootResolver.resolve(game, false).root(), client.root());
+			assertEquals(DataRootResolver.resolve(game, false).root(), client.root());
 			assertFalse(client.root().startsWith(game));
 			assertNotEquals(game.resolve("automodpack").resolve("server").resolve("data").toAbsolutePath().normalize(), client.root());
 		} finally {

@@ -61,7 +61,7 @@ public final class DetachedUpdateHelper {
 		Path helperLog = GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize();
 		// The helper has no loader service. Pin this process's already-resolved root as a JVM property before the main class; configuredRoot prefers it over env and role defaults.
 		String environment = Environment.sideOrNull() == null ? "" : Environment.sideOrNull().name();
-		DataRootResolver.Location dataLocation = DataRootResolver.resolve(GameDirectory.current(), Environment.sideOrNull());
+		DataRootResolver.Location dataLocation = DataRootResolver.resolve(GameDirectory.current(), Environment.installed() != null && Environment.current().isServer());
 		String parentStart = ProcessHandle.current().info().startInstant().map(instant -> Long.toString(instant.toEpochMilli())).orElse("-");
 		DetachedProcesses.start(UpdateHelperMain.class, List.of("-D" + DATA_ROOT_PROPERTY + "=" + dataLocation.root()),
 				List.of(Long.toString(ProcessHandle.current().pid()), environment, parentStart), GameDirectory.current(), helperLog, helperClasspath(runtimeJar));
