@@ -160,6 +160,33 @@ class ZstdDecoderPoolTest {
 	}
 
 	@Test
+	void aCountRejectDoesNotDropTheByteCharge() throws Exception {
+		byte[] data = payload(11, 40_000);
+		byte[] frame = zstd(data);
+		List<InputStream> held = new ArrayList<>();
+		List<InputStream> live = new ArrayList<>();
+		try {
+			int leftover = ZstdDecoderPool.idle();
+			for (int i = 0; i < leftover; i++) held.add(WireCodec.ZSTD.unwrap(new ByteArrayInputStream(frame)));
+			for (int i = 0; i < ZstdDecoderPool.MAX_IDLE + 1; i++) {
+				InputStream in = WireCodec.ZSTD.unwrap(new ByteArrayInputStream(frame));
+				in.readAllBytes();
+				live.add(in);
+			}
+			for (int i = 0; i < ZstdDecoderPool.MAX_IDLE; i++) live.get(i).close();
+			assertEquals(ZstdDecoderPool.MAX_IDLE, ZstdDecoderPool.idle());
+			long bytes = ZstdDecoderPool.idleBytes();
+			assertTrue(bytes > 0);
+			live.get(ZstdDecoderPool.MAX_IDLE).close();
+			assertEquals(ZstdDecoderPool.MAX_IDLE, ZstdDecoderPool.idle());
+			assertEquals(bytes, ZstdDecoderPool.idleBytes(), "refusing a 9th decoder must not subtract bytes that were never added");
+		} finally {
+			for (InputStream in : live) in.close();
+			for (InputStream in : held) in.close();
+		}
+	}
+
+	@Test
 	void aBlockHeaderInTheLastThreeBufferedBytesDecodes() throws Exception {
 		// no checksum, a raw "hello" block, then an empty last raw block: the frame ends on a bare 3-byte block header,
 		// which the bounds-checked decoder must not read past

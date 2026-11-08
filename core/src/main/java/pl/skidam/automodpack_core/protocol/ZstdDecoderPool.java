@@ -58,7 +58,9 @@ final class ZstdDecoderPool {
 
 	private static void giveBack(ZstdIncrementalFrameDecompressor decoder) {
 		long retained = decoder.retainedWindowBytes();
-		if (IDLE_COUNT.incrementAndGet() > MAX_IDLE || IDLE_BYTES.addAndGet(retained) > MAX_RETAINED_BYTES) {
+		int count = IDLE_COUNT.incrementAndGet();
+		long bytes = IDLE_BYTES.addAndGet(retained);
+		if (count > MAX_IDLE || bytes > MAX_RETAINED_BYTES) {
 			IDLE_COUNT.decrementAndGet();
 			IDLE_BYTES.addAndGet(-retained);
 			return;
