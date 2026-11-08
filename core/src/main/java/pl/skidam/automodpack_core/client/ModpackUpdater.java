@@ -112,7 +112,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	/** Returns whether the selected installed target needs an authenticated object-transfer session. */
-	public boolean requiresSelectedTargetDownload() throws IOException {
+	boolean requiresSelectedTargetDownload() throws IOException {
 		return !missingSelectedTargetObjects().isEmpty();
 	}
 
@@ -149,12 +149,12 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	/** Jar counts by lookup source over the selected target; the lookup settles before review screens open. */
-	public SourceCounts selectedJarSourceCounts() {
+	SourceCounts selectedJarSourceCounts() {
 		return sourceCatalogue.selectedJarSourceCounts(getSelectedTarget());
 	}
 
 	/** Minecraft join target as `host:port`, or "" when this engine has no live connection. */
-	public String joinOrigin() {
+	String joinOrigin() {
 		return review.joinOrigin();
 	}
 
@@ -280,7 +280,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	/** Trusted bootstrap install: apply the selected pack on this launch without a review screen. */
-	public void applyTrustedInstall() {
+	void applyTrustedInstall() {
 		applySelectedTargetWithoutReview(true, false);
 	}
 
@@ -289,7 +289,7 @@ public class ModpackUpdater implements AutoCloseable {
 	 * without the transfer-session guard and acquisition may only draw on local content. The normal launch-apply tails
 	 * handle the restart demand, so force-copy corrections still land and are narrated like the online apply.
 	 */
-	public void applyStoredTargetOffline() {
+	void applyStoredTargetOffline() {
 		applySelectedTargetWithoutReview(false, true);
 	}
 
@@ -486,7 +486,7 @@ public class ModpackUpdater implements AutoCloseable {
 		new ReLauncher(RestartDecision.launchRestartType(review.firstConnection(), applyResult.restartReasons()), changelogs).restart(true);
 	}
 
-	public void loadModpack() throws Exception {
+	void loadModpack() throws Exception {
 		projectionLoader.loadModpack();
 	}
 

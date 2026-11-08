@@ -3,7 +3,7 @@
 # genuinely belongs on the module interface, and make it private when it does not.
 # Current values are the measured surface, not the target: budgets may only shrink here.
 
-pl.skidam.automodpack_core.client.ModpackUpdater 19
+pl.skidam.automodpack_core.client.ModpackUpdater 13
 pl.skidam.automodpack_core.client.ReviewSession 10
 pl.skidam.automodpack_core.client.SwitchFlow 2
 pl.skidam.automodpack_core.client.LifecycleFlow 0
@@ -12,6 +12,6 @@ pl.skidam.automodpack_core.client.BootRecovery 2
 pl.skidam.automodpack_core.screen.TransientAttention 6
 pl.skidam.automodpack_core.update.UpdateCommit 5
 pl.skidam.automodpack_core.update.ClientProjectionView 10
-pl.skidam.automodpack_core.update.ClientGenerationStore 30
+pl.skidam.automodpack_core.update.ClientGenerationStore 28
 pl.skidam.automodpack_core.utils.FileIntegrity 9
 pl.skidam.automodpack_core.loader.ModFileCache 7

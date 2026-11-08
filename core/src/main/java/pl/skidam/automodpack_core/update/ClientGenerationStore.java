@@ -58,7 +58,7 @@ public final class ClientGenerationStore {
 	}
 
 	/** Every modpack id with a local journal mirror, consent or not: the mirror is cache a head fetch writes, never a record of an install. */
-	public List<String> mirroredPackIds() throws IOException {
+	List<String> mirroredPackIds() throws IOException {
 		Path root = storage.historyDirectory();
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
 		FileTrees.requireDirectory(root, "client journal mirrors");
@@ -524,7 +524,7 @@ public final class ClientGenerationStore {
 	 * rebuild clears the pointer instead of letting it describe a tree it does not carry. The restored pack is detached
 	 * because the restored tree is not the head the next join would sync to.
 	 */
-	public boolean reconcileActiveClaim(InstanceTree.LiveIdentity identity) throws IOException {
+	boolean reconcileActiveClaim(InstanceTree.LiveIdentity identity) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields current = storage.readActiveState();
 		String modpackId = identity.activeModpackId();
 		if (modpackId.isEmpty()) return clearActivePointer(current);
