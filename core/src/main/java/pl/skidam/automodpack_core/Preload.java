@@ -48,7 +48,6 @@ public class Preload {
 			if (Environment.current().isClient()) {
 				storage = ClientStorage.open(GameDirectory.current());
 				BootRecovery.BootDecision decision = new BootRecovery(storage).recover();
-				clientConfig = decision.clientConfig();
 				trustedBootstrapApply = decision.trustedBootstrapApply();
 				bootAsIs = decision.bootAsIs();
 			} else {

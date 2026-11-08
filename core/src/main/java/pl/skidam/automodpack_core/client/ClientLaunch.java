@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.client;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.clientConfig;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -60,7 +59,7 @@ public final class ClientLaunch {
 		// updateSelectedModpackOnLaunch=false loads the current projection and does not contact the
 		// server, so extra jars in mods/ stay put (binary search, pinning experiments). A trusted
 		// bootstrap file is an explicit install request and still applies.
-		if (!trustedBootstrapApply && !clientConfig.updateSelectedModpackOnLaunch) {
+		if (!trustedBootstrapApply && !storage.clientConfig().current().updateSelectedModpackOnLaunch) {
 			bootLocalOrSelfUpdate(connectionInfo, secret);
 			return;
 		}

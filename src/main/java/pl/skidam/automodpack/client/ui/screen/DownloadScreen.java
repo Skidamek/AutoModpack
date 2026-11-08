@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.client.ui.screen;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.clientConfig;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -20,6 +19,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack_core.client.WaitingMusic;
 import pl.skidam.automodpack_core.screen.DownloadView;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 
@@ -188,7 +188,7 @@ public class DownloadScreen extends VersionedScreen {
 	private void checkAndStartMusic() {
 		musicButton.active = true;
 		if (musicStarted) return;
-		if (clientConfig.playMusic) AudioManager.playMusic();
+		if (ClientStorage.current().clientConfig().current().playMusic) AudioManager.playMusic();
 		musicStarted = true;
 	}
 

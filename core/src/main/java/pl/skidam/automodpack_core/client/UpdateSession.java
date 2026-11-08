@@ -163,7 +163,7 @@ final class UpdateSession implements UpdateAttempt {
 			if (!PackTarget.fromFlat(installed).equals(PackTarget.fromFlat(target.flatTarget()))) return true;
 			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 					.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
-			ClientConfigJsons.ClientConfigFieldsV3 logicalConfig = projectionView.logicalConfig(clientConfig, expectedClientConfig);
+			ClientConfigJsons.ClientConfigFieldsV3 logicalConfig = projectionView.logicalConfig(storage.clientConfig().current(), expectedClientConfig);
 			ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = connectionInfo != null && connectionInfo.isComplete()
 					? ModpackUtils.planModpackSelection(target.manifest().modpackId(), connectionInfo, logicalConfig)
 					: ModpackUtils.planCachedModpackSelection(target.manifest().modpackId(), logicalConfig);
@@ -178,7 +178,7 @@ final class UpdateSession implements UpdateAttempt {
 	private boolean hasPlanImpact(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
 		UpdatePlan plan = prepared.plan();
 		return !plan.operations().isEmpty() || !plan.conflicts().isEmpty() || !plan.preservations().isEmpty() || !plan.baselineCaptures().isEmpty()
-				|| !plan.restartReasons().isEmpty() || !Objects.equals(plan.plannedClientConfig(), ClientProjectionView.observe(storage).logicalConfig(clientConfig));
+				|| !plan.restartReasons().isEmpty() || !Objects.equals(plan.plannedClientConfig(), ClientProjectionView.observe(storage).logicalConfig(storage.clientConfig().current()));
 	}
 
 	/** Which installed state cuts a preview's journal tail: only a matching active bookmark, or the mirror's last entry as the switch flow's fallback. */
@@ -309,7 +309,7 @@ final class UpdateSession implements UpdateAttempt {
 
 	private ClientUpdatePlanBuilder.Input planInput() {
 		Map<String, UpdatePlan.FileState> consent = firstConnection ? consentedLocalModFiles : switchLocalModConsent;
-		return new ClientUpdatePlanBuilder.Input(target, connectionInfo, clientConfig, consent);
+		return new ClientUpdatePlanBuilder.Input(target, connectionInfo, storage.clientConfig().current(), consent);
 	}
 
 	/**

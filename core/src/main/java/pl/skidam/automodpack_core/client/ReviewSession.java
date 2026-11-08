@@ -18,6 +18,7 @@ import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.change.ChangeSet;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.loader.PinnedMods;
@@ -218,7 +219,8 @@ final class ReviewSession {
 		Path thisModJar = environment == null ? null : environment.thisModJar();
 		Path loadedMod = thisModJar == null ? null : thisModJar.toAbsolutePath().normalize();
 		Map<String, UpdatePlan.FileState> observed = new TreeMap<>();
-		Set<String> listedPins = PinnedMods.index(clientConfig == null ? List.of() : clientConfig.pinnedModIds);
+		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = storage.clientConfig().current();
+		Set<String> listedPins = PinnedMods.index(currentConfig == null ? List.of() : currentConfig.pinnedModIds);
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {
 			for (Path path : stream.toList()) {
 				if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;

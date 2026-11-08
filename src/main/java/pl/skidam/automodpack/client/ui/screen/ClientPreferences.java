@@ -1,15 +1,7 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import static pl.skidam.automodpack_core.Constants.clientConfig;
-import static pl.skidam.automodpack_core.Constants.clientConfigWriteLock;
-
-import java.io.IOException;
 import java.util.List;
 
-import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.ReconfConfigs;
-import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 
 /** Owns durable client preference changes requested by screens. */
@@ -17,24 +9,10 @@ final class ClientPreferences {
 	private ClientPreferences() {}
 
 	static void setMusicEnabled(boolean enabled) {
-		synchronized (clientConfigWriteLock) {
-			save(clientConfig.withPlayMusic(enabled));
-		}
+		ClientStorage.current().clientConfig().commit(current -> current.withPlayMusic(enabled));
 	}
 
 	static void setPinnedModIds(List<String> pinnedModIds) {
-		synchronized (clientConfigWriteLock) {
-			save(clientConfig.withPinnedModIds(pinnedModIds));
-		}
-	}
-
-	private static void save(ClientConfigJsons.ClientConfigFieldsV3 next) {
-		clientConfig = next;
-		try {
-			ReconfConfigs.save(ClientStorage.open(GameDirectory.current()).clientConfigFile(), clientConfig, ClientConfigJsons.ClientConfigFieldsV3.class,
-					ClientConfigJsons.ClientConfigFieldsV3::new);
-		} catch (IOException e) {
-			throw new ConfigTools.ConfigException("Failed to save client configuration", e);
-		}
+		ClientStorage.current().clientConfig().commit(current -> current.withPinnedModIds(pinnedModIds));
 	}
 }

@@ -31,7 +31,7 @@ class BootRecoveryTest {
 
 		BootRecovery.BootDecision decision = new BootRecovery(storage).recover();
 
-		assertNotNull(decision.clientConfig());
+		assertNotNull(storage.clientConfig().current());
 		assertTrue(storage.selectedModpackId().isBlank());
 		assertFalse(decision.trustedBootstrapApply());
 		assertFalse(decision.bootAsIs());

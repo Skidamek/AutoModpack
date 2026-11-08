@@ -32,7 +32,6 @@ import pl.skidam.automodpack_core.utils.DurableFiles;
  */
 public final class BootRecovery {
 	private final ClientStorage storage;
-	private ClientConfigJsons.ClientConfigFieldsV3 clientConfig;
 	private boolean trustedBootstrapApply;
 	private boolean bootAsIs;
 
@@ -41,7 +40,7 @@ public final class BootRecovery {
 	}
 
 	/** What the boot phase needs to decide how the launch proceeds. */
-	public record BootDecision(ClientConfigJsons.ClientConfigFieldsV3 clientConfig, boolean trustedBootstrapApply, boolean bootAsIs) {}
+	public record BootDecision(boolean trustedBootstrapApply, boolean bootAsIs) {}
 
 	public BootDecision recover() throws IOException {
 		loadClientConfig();
@@ -51,7 +50,7 @@ public final class BootRecovery {
 		relaunchIfScannedProjectionMoved();
 		rebuildGeneratedCopies();
 		importBootstrap();
-		return new BootDecision(clientConfig, trustedBootstrapApply, bootAsIs);
+		return new BootDecision(trustedBootstrapApply, bootAsIs);
 	}
 
 	/**
@@ -93,8 +92,9 @@ public final class BootRecovery {
 
 	private void loadClientConfig() {
 		long startTime = System.currentTimeMillis();
-		clientConfig = ReconfConfigs.readOrCreate(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
-		if (clientConfig == null) throw new RuntimeException("Failed to load config!");
+		ClientConfigJsons.ClientConfigFieldsV3 document = ReconfConfigs.readOrCreate(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		if (document == null) throw new RuntimeException("Failed to load config!");
+		storage.clientConfig().adopt(document);
 		LOGGER.info("Loaded config! took {}ms", System.currentTimeMillis() - startTime);
 	}
 
@@ -193,8 +193,8 @@ public final class BootRecovery {
 		}
 		UpdateRecovery.clearDeferredGuard(storage);
 		if (deferred.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
-			clientConfig = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
-					.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing"));
+			storage.clientConfig().adopt(ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+					.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing")));
 		}
 		LOGGER.info("Recovered update transaction {}", deferred.transactionId);
 		// The journal is retired, so this relaunch into what the loader should have scanned cannot repeat.
@@ -214,8 +214,8 @@ public final class BootRecovery {
 	}
 
 	private void importBootstrap() {
-		BootstrapInstaller.importIfPresent(storage, clientConfig).ifPresent(receipt -> {
-			clientConfig = receipt.clientConfig();
+		BootstrapInstaller.importIfPresent(storage, storage.clientConfig().current()).ifPresent(receipt -> {
+			storage.clientConfig().adopt(receipt.clientConfig());
 			trustedBootstrapApply = receipt.installsModpack();
 		});
 	}

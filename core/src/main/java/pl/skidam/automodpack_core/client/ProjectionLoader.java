@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.Environment;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.ModFileCache;
@@ -109,7 +110,8 @@ final class ProjectionLoader {
 		if (target != null && target.list != null) for (var item : target.list) {
 			if (item.editable && ModpackPathPolicy.isActiveMod(item.file)) editableActiveModPaths.add(LogicalPath.normalize(item.file));
 		}
-		List<String> pinnedModIds = clientConfig == null || clientConfig.pinnedModIds == null ? List.of() : clientConfig.pinnedModIds;
+		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = storage.clientConfig().current();
+		List<String> pinnedModIds = currentConfig == null || currentConfig.pinnedModIds == null ? List.of() : currentConfig.pinnedModIds;
 		Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT).toAbsolutePath().normalize();
 		Set<String> liveModPaths = new HashSet<>();
 		List<ModpackLoadSelection.Jar> projectionJars = new ArrayList<>();

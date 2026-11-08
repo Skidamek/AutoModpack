@@ -16,6 +16,7 @@ import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
+import pl.skidam.automodpack_core.config.ClientConfigStore;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
@@ -25,6 +26,7 @@ import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.storage.StorageLeftovers;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileTrees;
@@ -68,6 +70,7 @@ public final class ClientStorage {
 	private final Path restartLoopStateFile;
 	private final Path stuckTransactionStateFile;
 	private final Path clientConfigFile;
+	private final ClientConfigStore clientConfig;
 	private final Path selectedModpackFile;
 	private final Path modpackContentTempFile;
 	private final Path historyDirectory;
@@ -108,6 +111,7 @@ public final class ClientStorage {
 		this.restartLoopStateFile = gameDirectory.resolve(CLIENT_RESTART_LOOP_STATE_FILE).normalize();
 		this.stuckTransactionStateFile = gameDirectory.resolve(CLIENT_STUCK_TRANSACTION_STATE_FILE).normalize();
 		this.clientConfigFile = gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize();
+		this.clientConfig = new ClientConfigStore(clientConfigFile);
 		this.selectedModpackFile = gameDirectory.resolve(CLIENT_SELECTED_FILE).normalize();
 		this.modpackContentTempFile = gameDirectory.resolve(CLIENT_CONTENT_TEMP_FILE).normalize();
 		this.historyDirectory = gameDirectory.resolve(CLIENT_HISTORY_DIR).normalize();
@@ -301,6 +305,16 @@ public final class ClientStorage {
 
 	public Path clientConfigFile() {
 		return clientConfigFile;
+	}
+
+	/** The document this instance runs on: the only door to reading or changing the client config. */
+	public ClientConfigStore clientConfig() {
+		return clientConfig;
+	}
+
+	/** The running instance's storage; one client instance per process. */
+	public static ClientStorage current() {
+		return open(GameDirectory.current());
 	}
 
 	public Path selectedModpackFile() {

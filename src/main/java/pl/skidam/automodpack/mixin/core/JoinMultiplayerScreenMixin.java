@@ -1,7 +1,5 @@
 package pl.skidam.automodpack.mixin.core;
 
-import static pl.skidam.automodpack_core.Constants.clientConfig;
-
 import org.spongepowered.asm.mixin.Mixin;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
@@ -16,6 +14,8 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.screen.InstalledModpacksScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
+import pl.skidam.automodpack_core.update.ClientStorage;
 
 /** Adds a modpack management button for the currently selected modpack to the multiplayer screen. */
 @Mixin(JoinMultiplayerScreen.class)
@@ -28,7 +28,8 @@ public abstract class JoinMultiplayerScreenMixin extends Screen {
 	@WrapMethod(method = "init")
 	private void automodpack$addGroupsButton(Operation<Void> original) {
 		original.call();
-		if (clientConfig != null && !clientConfig.showModpackSettingsButton) return;
+		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = ClientStorage.current().clientConfig().current();
+		if (currentConfig != null && !currentConfig.showModpackSettingsButton) return;
 
 		int titleLeft = (width - this.font.width(this.title)) / 2;
 		int titleRight = titleLeft + this.font.width(this.title);

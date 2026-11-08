@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Set;
 
 import pl.skidam.automodpack_core.Environment;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
@@ -20,6 +21,7 @@ import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.SelfUpdateSwap;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
@@ -51,7 +53,8 @@ public class SelfUpdater {
 		boolean gettingServerVersion = serverModpackContent != null && serverModpackContent.automodpackVersion != null
 				&& !serverModpackContent.automodpackVersion.isBlank();
 
-		if (!gettingServerVersion && Environment.current().isClient() && !clientConfig.selfUpdater) {
+		ClientConfigJsons.ClientConfigFieldsV3 clientConfig = Environment.current().isClient() ? ClientStorage.current().clientConfig().current() : null;
+		if (!gettingServerVersion && clientConfig != null && !clientConfig.selfUpdater) {
 			LOGGER.info("AutoModpack self-updater is disabled in client config.");
 			return false;
 		}

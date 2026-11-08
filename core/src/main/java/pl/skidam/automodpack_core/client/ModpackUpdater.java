@@ -502,11 +502,11 @@ public class ModpackUpdater implements AutoCloseable {
 	 * critical section as the landing - a concurrent preference save must wait for it rather than interleave.
 	 */
 	ApplyResult commitFlow(UpdateAttempt attempt) throws Exception {
-		ApplyResult result;
-		synchronized (clientConfigWriteLock) {
-			result = attempt.commit();
-			clientConfig = attempt.plannedClientConfig();
-		}
+		ApplyResult result = storage.clientConfig().critical(writer -> {
+			ApplyResult applied = attempt.commit();
+			writer.land(attempt.plannedClientConfig());
+			return applied;
+		});
 		// The confirm screens hand their answers here, so a cancelled dialog never grants anything and a confirmed one does.
 		review.applyLaunchConsent();
 		return result;

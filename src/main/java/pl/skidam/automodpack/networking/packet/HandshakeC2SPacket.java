@@ -1,6 +1,6 @@
 package pl.skidam.automodpack.networking.packet;
 
-import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -18,6 +18,7 @@ import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.client.SelfUpdater;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.screen.ScreenManager;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 
 public class HandshakeC2SPacket {
@@ -50,7 +51,7 @@ public class HandshakeC2SPacket {
 	}
 
 	private static void updateIfNeededMod(ClientHandshakePacketListenerImpl handler, String serverAMVersion, String serverMCVersion) {
-		if (!clientConfig.syncAutoModpackVersion) {
+		if (!ClientStorage.current().clientConfig().current().syncAutoModpackVersion) {
 			LOGGER.warn("AutoModpack version syncing is disabled in client config. Cannot sync to server version: {}", serverAMVersion);
 			return;
 		}

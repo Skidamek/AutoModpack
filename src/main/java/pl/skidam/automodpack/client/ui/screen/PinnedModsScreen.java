@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.client.ui.screen;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.clientConfig;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -29,6 +28,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack_core.change.PlatformReferences;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.loader.PinnedMods;
@@ -177,7 +177,8 @@ public final class PinnedModsScreen extends VersionedScreen {
 	}
 
 	private List<String> currentPins() {
-		return new ArrayList<>(PinnedMods.normalize(clientConfig == null ? List.of() : clientConfig.pinnedModIds));
+		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = ClientStorage.current().clientConfig().current();
+		return new ArrayList<>(PinnedMods.normalize(currentConfig == null ? List.of() : currentConfig.pinnedModIds));
 	}
 
 	@Override
