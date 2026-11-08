@@ -143,7 +143,7 @@ public final class HttpClientPool {
 		} catch (IllegalArgumentException e) {
 			throw new IOException("Invalid request URI: " + url, e);
 		}
-		request.header("User-Agent", NetUtils.USER_AGENT).header("Accept-Encoding", WireCodec.offeredEncodings()).timeout(NetUtils.NETWORK_TIMEOUT);
+		request.header("User-Agent", NetUtils.userAgent()).header("Accept-Encoding", WireCodec.offeredEncodings()).timeout(NetUtils.NETWORK_TIMEOUT);
 		headers.forEach(request::setHeader);
 		if (body != null) request.POST(HttpRequest.BodyPublishers.ofByteArray(body));
 		else request.GET();

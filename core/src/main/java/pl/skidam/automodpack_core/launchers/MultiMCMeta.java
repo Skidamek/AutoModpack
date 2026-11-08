@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.launchers;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.PRELOAD_TIME;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -14,6 +13,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.launchers.LauncherVersionSwapper.Axis;
 
 // MultiMC and forks like Prism and forks of forks like Fjord etc.
@@ -182,7 +182,7 @@ final class MultiMCMeta implements LauncherAdapter {
 	 * launch without restarting the launcher.
 	 */
 	private static void waitForLauncherWriteWindow(Path mmcPackPath) throws IOException {
-		long deadline = PRELOAD_TIME + DELAY + 500;
+		long deadline = Environment.current().preloadTime() + DELAY + 500;
 		long snapshot = lastModifiedOrZero(mmcPackPath);
 		while (System.currentTimeMillis() < deadline) {
 			if (lastModifiedOrZero(mmcPackPath) != snapshot) {

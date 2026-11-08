@@ -30,7 +30,7 @@ class PackageEdgesTest {
 	private static final String ROOT = "<root>";
 	private static final String NEWLINE = "\n";
 	private static final Pattern PACKAGE = Pattern.compile("^package\\s+([\\w.]+)\\s*;", Pattern.MULTILINE);
-	private static final Pattern IMPORT = Pattern.compile("^import\\s+(?:static\\s+)?pl\\.skidam\\.automodpack_core\\.([\\w.]+)\\s*;", Pattern.MULTILINE);
+	private static final Pattern IMPORT = Pattern.compile("^import\\s+(?:static\\s+)?pl\\.skidam\\.automodpack_core\\.([\\w.]+?)(?:\\.\\*)?\\s*;", Pattern.MULTILINE);
 
 	@Test
 	void coreMainHasNoNewCrossDomainEdges() throws IOException {

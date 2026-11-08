@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.THIS_MOD_JAR;
-
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashMap;
@@ -11,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.PinnedMods;
@@ -38,7 +37,9 @@ final class UnownedLocalMods {
 		Map<UpdatePlan.FileKey, UpdatePlan.ProjectedFile> finalState = new HashMap<>();
 		for (UpdatePlan.ProjectedFile projected : plan.projectedFinalState())
 			if (projected != null) finalState.put(new UpdatePlan.FileKey(projected.root(), projected.relativePath()), projected);
-		Path runningJar = THIS_MOD_JAR == null ? null : THIS_MOD_JAR.toAbsolutePath().normalize();
+		Environment environment = Environment.installed();
+		Path thisModJar = environment == null ? null : environment.thisModJar();
+		Path runningJar = thisModJar == null ? null : thisModJar.toAbsolutePath().normalize();
 		Map<String, UpdatePlan.FileState> unowned = new TreeMap<>();
 		for (var entry : files.entrySet()) {
 			UpdatePlan.FileKey key = entry.getKey();

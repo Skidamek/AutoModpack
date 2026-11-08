@@ -53,7 +53,7 @@ class PrismMetaTest {
 		PATHS.clear();
 		assertTrue(PrismMeta.isResolvable(url("net.minecraftforge", "1.2.3")));
 		assertEquals(1, USER_AGENTS.size());
-		assertEquals(NetUtils.USER_AGENT, USER_AGENTS.get(0));
+		assertEquals(NetUtils.userAgent(), USER_AGENTS.get(0));
 	}
 
 	@Test

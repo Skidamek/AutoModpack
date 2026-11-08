@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
@@ -238,8 +239,8 @@ class ReviewSessionTest {
 				@Override
 				public void loadModpack(ModpackLoadRequest request) {}
 			};
-			Constants.LOADER = "fabric";
 		}
+		TestEnvironment.swap("fabric", "test", "test", "test");
 		ClientStorage storage = TestDataRoot.open(temporaryDirectory.resolve("game" + System.nanoTime()), temporaryDirectory.resolve("data" + System.nanoTime()));
 		if (leftoverMod) {
 			Files.createDirectories(storage.modsDirectory());

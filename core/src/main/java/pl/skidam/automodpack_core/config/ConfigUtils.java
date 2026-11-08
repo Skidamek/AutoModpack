@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.regex.Pattern;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class ConfigUtils {
@@ -35,7 +36,7 @@ public class ConfigUtils {
 		ServerConfigJsons.ServerConfigFieldsV3 config = ReconfConfigs.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
 		String before = ConfigTools.GSON.toJson(config);
 		// Seeded on first load only. Handshake still accepts this server's loader if the file later omits it.
-		if (config.acceptedLoaders == null || config.acceptedLoaders.isEmpty()) config.acceptedLoaders = new HashSet<>(Set.of(LOADER));
+		if (config.acceptedLoaders == null || config.acceptedLoaders.isEmpty()) config.acceptedLoaders = new HashSet<>(Set.of(Environment.current().loader()));
 		normalizeServerConfig(config);
 		if (!before.equals(ConfigTools.GSON.toJson(config))) saveServerConfig(config);
 		return config;
@@ -140,7 +141,8 @@ public class ConfigUtils {
 			if (loader == null || loader.isBlank()) continue;
 			accepted.add(loader);
 		}
-		if (LOADER != null && !LOADER.isBlank()) accepted.add(LOADER);
+		String loader = Environment.current().loader();
+		if (loader != null && !loader.isBlank()) accepted.add(loader);
 		return accepted;
 	}
 }

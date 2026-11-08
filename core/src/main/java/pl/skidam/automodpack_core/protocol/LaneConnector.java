@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.protocol;
 
-import static pl.skidam.automodpack_core.Constants.LOADER_MANAGER;
-import static pl.skidam.automodpack_core.Constants.MC_VERSION;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 import java.io.BufferedInputStream;
@@ -26,6 +24,7 @@ import java.util.function.Function;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
@@ -196,7 +195,7 @@ final class LaneConnector {
 
 	private static HolepunchOptions holepunchOptions() {
 		HolepunchOptions.Builder builder = HolepunchOptions.builder().connectTimeout(NETWORK_TIMEOUT).negotiationTimeout(NETWORK_TIMEOUT);
-		LoaderManagerService.ModPlatform platform = LOADER_MANAGER.getPlatformType();
+		LoaderManagerService.ModPlatform platform = Environment.current().platform();
 		if (platform == LoaderManagerService.ModPlatform.FORGE || platform == LoaderManagerService.ModPlatform.NEOFORGE) {
 			builder.handshakeHostSuffix(HolepunchOptions.FORGE_FML3_HANDSHAKE_HOST_SUFFIX);
 		}
@@ -219,7 +218,7 @@ final class LaneConnector {
 			return socket;
 		}
 
-		int protocolVersion = MinecraftProtocols.forVersion(MC_VERSION);
+		int protocolVersion = MinecraftProtocols.forVersion(Environment.current().mcVersion());
 		String target = AddressHelpers.formatAddressLiteral(route.transportAddress());
 
 		try {

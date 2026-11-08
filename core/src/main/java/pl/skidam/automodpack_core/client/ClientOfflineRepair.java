@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.THIS_MOD_JAR;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Objects;
@@ -9,6 +7,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.loader.ModFileCache;
@@ -30,7 +29,7 @@ public final class ClientOfflineRepair {
 	private final OfflineRepair repair;
 
 	public ClientOfflineRepair(ClientStorage storage, ModpackLoaderService loader) {
-		this(storage, loader, THIS_MOD_JAR);
+		this(storage, loader, Environment.current().thisModJar());
 	}
 
 	ClientOfflineRepair(ClientStorage storage, ModpackLoaderService loader, Path protectedModPath) {

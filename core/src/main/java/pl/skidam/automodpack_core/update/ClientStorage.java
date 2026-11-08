@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOADER_MANAGER;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
@@ -15,6 +14,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -126,7 +126,7 @@ public final class ClientStorage {
 
 	public static synchronized ClientStorage open(Path gameDirectory) {
 		// The detached helper and unit tests run without a loader environment (null dist); there the check stays silent.
-		LoaderManagerService.EnvironmentType environment = LOADER_MANAGER == null ? null : LOADER_MANAGER.getEnvironmentType();
+		LoaderManagerService.EnvironmentType environment = Environment.sideOrNull();
 		if (environment != null && environment != LoaderManagerService.EnvironmentType.CLIENT)
 			throw new IllegalStateException("Client storage belongs to the client role, but this process runs the " + environment + " environment");
 		DataRootResolver.Location dataLocation = DataRootResolver.resolve(requireDirectoryPath(gameDirectory, "game directory"));

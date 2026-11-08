@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client.ui.versioned;
 
+import pl.skidam.automodpack_core.Environment;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -55,7 +57,7 @@ public class VersionedText {
 	}
 
 	private static String languageCode() {
-		if (Constants.LOADER_MANAGER != null && Constants.LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
+		if (Environment.installed() != null && Environment.current().isClient()) {
 			/*? if <1.20 {*/
 			/*return Minecraft.getInstance().getLanguageManager().getSelected().getCode();
 			*//*?} else {*/

@@ -19,10 +19,10 @@ import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.Preload;
 import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.GenerationProbes;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.TargetId;
 import pl.skidam.automodpack_loader_core_neoforge.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
@@ -87,7 +87,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 		}
 
 		try {
-			if (Constants.LOADER_MANAGER.getEnvironmentType() != LoaderManagerService.EnvironmentType.CLIENT) return;
+			if (!Environment.current().isClient()) return;
 			List<Path> earlyServiceJars = ModpackLoader.modsToLoad.stream().filter(EarlyServiceLayer::eligibleForInPlace).toList();
 			if (earlyServiceJars.isEmpty()) return;
 			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());

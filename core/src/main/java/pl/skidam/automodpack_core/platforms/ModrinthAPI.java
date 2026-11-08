@@ -16,6 +16,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.utils.Json;
 
 public record ModrinthAPI(String modrinthID, String requestUrl, String downloadUrl, String fileVersion, String fileName, long fileSize, String releaseType,
@@ -33,8 +34,8 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 
 		if (modrinthID.isBlank()) return null;
 
-		String modLoader = LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT);
-		String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + MC_VERSION + "\"]";
+		String modLoader = Environment.current().loader();
+		String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + Environment.current().mcVersion() + "\"]";
 		requestUrl = requestUrl.replaceAll("\"", "%22"); // so important!
 
 		List<ModrinthAPI> modrinthAPIList = new ArrayList<>();
@@ -76,7 +77,7 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 
 		if (modrinthID.isBlank() || modVersion.isBlank() || mcVersion.isBlank()) return null;
 
-		String modLoader = LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT);
+		String modLoader = Environment.current().loader();
 		String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + mcVersion + "\"]";
 		requestUrl = requestUrl.replaceAll("\"", "%22"); // important!
 

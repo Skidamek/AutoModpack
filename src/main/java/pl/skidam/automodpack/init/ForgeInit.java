@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.init;
 
+import pl.skidam.automodpack_core.Environment;
+
 /*? if forge {*/
 /*import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
@@ -18,14 +20,14 @@ import static pl.skidam.automodpack_core.Constants.*;
 public class ForgeInit {
 
 	public ForgeInit() {
-		preload = false;
+		Environment.current().markGameStarted();
 
 		long start = System.currentTimeMillis();
 		LOGGER.debug("Launching AutoModpack...");
 
 		Common.init();
 
-		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
+		if (Environment.current().isServer()) {
 			Common.serverInit();
 		} else {
 			ScreenManager.install(new ScreenImpl());

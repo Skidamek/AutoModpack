@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.client;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.MC_VERSION;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -17,6 +16,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
@@ -190,7 +190,7 @@ final class ClientUpdatePlanBuilder {
 		if (target == null) return plan;
 		if (owed != null && target.equals(owed.versions())) return plan.withLauncherSwitch(owed);
 		BiPredicate<String, String> versionKnown = (uid, version) -> owed != null && owed.vouchesFor(uid, version) || launcherVersionKnown.test(uid, version);
-		LauncherVersionSwapper.SwitchPlan switchPlan = LauncherVersionSwapper.planSwitch(target.loader(), target.loaderVersion(), target.mcVersion(), syncVersions, loaderType, MC_VERSION,
+		LauncherVersionSwapper.SwitchPlan switchPlan = LauncherVersionSwapper.planSwitch(target.loader(), target.loaderVersion(), target.mcVersion(), syncVersions, loaderType, Environment.current().mcVersion(),
 				LauncherVersionSwapper.detect(storage.gameDirectory()), versionKnown);
 		if (switchPlan.refused()) throw new IOException(switchPlan.refusedReason());
 		if (!switchPlan.required()) return plan;

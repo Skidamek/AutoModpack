@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.ModFileCache;
@@ -213,7 +214,9 @@ final class ReviewSession {
 		if (Files.notExists(modsDirectory, LinkOption.NOFOLLOW_LINKS)) return Map.of();
 		if (Files.isSymbolicLink(modsDirectory) || !Files.isDirectory(modsDirectory, LinkOption.NOFOLLOW_LINKS))
 			throw new IOException("Loader-visible mods directory is not a real directory: " + modsDirectory);
-		Path loadedMod = THIS_MOD_JAR == null ? null : THIS_MOD_JAR.toAbsolutePath().normalize();
+		Environment environment = Environment.installed();
+		Path thisModJar = environment == null ? null : environment.thisModJar();
+		Path loadedMod = thisModJar == null ? null : thisModJar.toAbsolutePath().normalize();
 		Map<String, UpdatePlan.FileState> observed = new TreeMap<>();
 		Set<String> listedPins = PinnedMods.index(clientConfig == null ? List.of() : clientConfig.pinnedModIds);
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {

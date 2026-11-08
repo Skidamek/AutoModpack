@@ -9,8 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
@@ -41,9 +41,9 @@ public class SelfUpdater {
 	}
 
 	public static boolean update(ModpackJsons.ModpackContentFields serverModpackContent) {
-		if (LOADER_MANAGER.isDevelopmentEnvironment()) return false;
+		if (Environment.current().development()) return false;
 
-		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER && !serverConfig.selfUpdater) {
+		if (Environment.current().isServer() && !serverConfig.selfUpdater) {
 			LOGGER.info("AutoModpack self-updater is disabled in server config.");
 			return false;
 		}
@@ -51,23 +51,23 @@ public class SelfUpdater {
 		boolean gettingServerVersion = serverModpackContent != null && serverModpackContent.automodpackVersion != null
 				&& !serverModpackContent.automodpackVersion.isBlank();
 
-		if (!gettingServerVersion && LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT && !clientConfig.selfUpdater) {
+		if (!gettingServerVersion && Environment.current().isClient() && !clientConfig.selfUpdater) {
 			LOGGER.info("AutoModpack self-updater is disabled in client config.");
 			return false;
 		}
 
 		SemanticVersion currentVersion;
 		try {
-			currentVersion = SemanticVersion.parse(AM_VERSION);
+			currentVersion = SemanticVersion.parse(Environment.current().modVersion());
 		} catch (IllegalArgumentException e) {
-			LOGGER.error("Current installed AutoModpack version is corrupt/invalid: " + AM_VERSION);
+			LOGGER.error("Current installed AutoModpack version is corrupt/invalid: " + Environment.current().modVersion());
 			return false;
 		}
 
 		List<ModrinthAPI> modrinthAPIList = new ArrayList<>();
 
 		if (gettingServerVersion) {
-			if (serverModpackContent.automodpackVersion.equals(AM_VERSION)) {
+			if (serverModpackContent.automodpackVersion.equals(Environment.current().modVersion())) {
 				LOGGER.debug("AutoModpack is up-to-date with server version: {}", serverModpackContent.automodpackVersion);
 				return false;
 			}
@@ -82,7 +82,7 @@ public class SelfUpdater {
 			ModrinthAPI lookup = ModrinthAPI.getModSpecificVersion(AUTOMODPACK_ID, serverModpackContent.automodpackVersion, mcVersion);
 			if (lookup == null) {
 				LOGGER.warn("Modrinth has no AutoModpack {} build for Minecraft {}, so the client stays on {}", serverModpackContent.automodpackVersion,
-						mcVersion, AM_VERSION);
+						mcVersion, Environment.current().modVersion());
 				return false;
 			}
 			modrinthAPIList.add(lookup);
@@ -97,7 +97,7 @@ public class SelfUpdater {
 		}
 
 		// The jar's identity cannot change while this loop runs, so it is hashed once, not per candidate.
-		String localJarHash = FileIntegrity.identityHash(THIS_MOD_JAR, null);
+		String localJarHash = FileIntegrity.identityHash(Environment.current().thisModJar(), null);
 		for (ModrinthAPI automodpack : modrinthAPIList) {
 			if (automodpack == null || automodpack.fileVersion() == null) continue;
 
@@ -112,7 +112,7 @@ public class SelfUpdater {
 
 			// Exact Hash Match (Fastest check)
 			if (automodpack.SHA1Hash().equals(localJarHash)) {
-				LOGGER.debug("Already on the target version (Hash match): {}", AM_VERSION);
+				LOGGER.debug("Already on the target version (Hash match): {}", Environment.current().modVersion());
 				return false;
 			}
 
@@ -123,7 +123,7 @@ public class SelfUpdater {
 				if (comparison == 0) {
 					LOGGER.debug("No updates found. You are on the latest version: {}", rawRemoteVersion);
 				} else {
-					LOGGER.debug("Development check: Installed version {} is newer/different than release {}.", AM_VERSION, rawRemoteVersion);
+					LOGGER.debug("Development check: Installed version {} is newer/different than release {}.", Environment.current().modVersion(), rawRemoteVersion);
 				}
 				// Since Modrinth lists are usually sorted latest-first, if the first is older, no newer exists.
 				return false;
@@ -132,7 +132,7 @@ public class SelfUpdater {
 			// Stable -> Beta Protection
 			// If checking for updates (not syncing), do not update FROM Stable TO Beta.
 			if (!gettingServerVersion && currentVersion.isStable() && !remoteVersion.isStable()) {
-				LOGGER.debug("Skipping update: You are on Stable ({}) and latest is Pre-release ({}).", AM_VERSION, rawRemoteVersion);
+				LOGGER.debug("Skipping update: You are on Stable ({}) and latest is Pre-release ({}).", Environment.current().modVersion(), rawRemoteVersion);
 				continue; // Skip this beta, keep looking for a newer Stable version in the list
 			}
 
@@ -178,7 +178,7 @@ public class SelfUpdater {
 	 * the running loader: ModrinthAPI reads it from the loader manager.
 	 */
 	static String lookupMcVersion(String advertisedMcVersion) {
-		return advertisedMcVersion == null || advertisedMcVersion.isBlank() ? MC_VERSION : advertisedMcVersion;
+		return advertisedMcVersion == null || advertisedMcVersion.isBlank() ? Environment.current().mcVersion() : advertisedMcVersion;
 	}
 
 	public static void installModVersion(ModrinthAPI automodpack) {
@@ -187,7 +187,7 @@ public class SelfUpdater {
 		try {
 			SharedObjectOwnership.publish(dataLocation, SELF_UPDATE_OWNER, Set.of(automodpack.SHA1Hash()));
 			Path modsDirectory = gameDirectory.resolve(ModpackPathPolicy.MODS_ROOT).toAbsolutePath().normalize();
-			Path currentJar = THIS_MOD_JAR.toAbsolutePath().normalize();
+			Path currentJar = Environment.current().thisModJar().toAbsolutePath().normalize();
 			if (!currentJar.getParent().equals(modsDirectory)) throw new IllegalStateException("Loaded AutoModpack JAR is not a direct child of the mods directory");
 			Path targetJar = modsDirectory.resolve(Path.of(automodpack.fileName()).getFileName()).normalize();
 

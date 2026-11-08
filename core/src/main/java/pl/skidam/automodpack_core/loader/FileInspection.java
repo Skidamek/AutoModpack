@@ -17,7 +17,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.MiniToml;
@@ -29,7 +29,8 @@ public class FileInspection {
 	private static final Set<String> LOADER_ARTIFACT_TYPES = Set.of("GAMELIBRARY", "LIBRARY", "LANGPROVIDER");
 
 	private static String getLoader() {
-		return Constants.LOADER;
+		Environment environment = Environment.installed();
+		return environment == null ? null : environment.loader();
 	}
 
 	public record HashPathPair(String hash, Path path) {}

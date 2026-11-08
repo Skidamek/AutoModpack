@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.ModFileCache;
@@ -85,7 +86,7 @@ final class ProjectionLoader {
 	// Load the modpack mods that aren't already present in the standard mods
 	// directory, without requiring a restart.
 	private void loadModpackMods(FileCache cache, ModFileCache modCache) throws Exception {
-		if (!preload) {
+		if (!Environment.isPrelaunching()) {
 			LOGGER.info("Modpack is already loaded");
 			return;
 		}

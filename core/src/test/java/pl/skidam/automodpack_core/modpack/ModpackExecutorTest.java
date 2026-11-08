@@ -23,8 +23,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.Environment;
+import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.loader.LoaderManagerService.ModPlatform;
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
@@ -55,10 +58,7 @@ class ModpackExecutorTest {
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();
-		Constants.AM_VERSION = "test";
-		Constants.LOADER = "test";
-		Constants.LOADER_VERSION = "test";
-		Constants.MC_VERSION = "test";
+		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
 		try {
@@ -126,10 +126,7 @@ class ModpackExecutorTest {
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();
-		Constants.AM_VERSION = "test";
-		Constants.LOADER = "test";
-		Constants.LOADER_VERSION = "test";
-		Constants.MC_VERSION = "test";
+		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
 		try {
@@ -173,10 +170,7 @@ class ModpackExecutorTest {
 		Files.writeString(groups.resolve("main/config/example.txt"), "content", StandardCharsets.UTF_8);
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();
-		Constants.AM_VERSION = "test";
-		Constants.LOADER = "test";
-		Constants.LOADER_VERSION = "test";
-		Constants.MC_VERSION = "test";
+		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		CountDownLatch entered = new CountDownLatch(1);
 		CountDownLatch release = new CountDownLatch(1);
 		ModpackCandidateScanner scanner = new ModpackCandidateScanner();
@@ -219,10 +213,7 @@ class ModpackExecutorTest {
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();
-		Constants.AM_VERSION = "test";
-		Constants.LOADER = "test";
-		Constants.LOADER_VERSION = "test";
-		Constants.MC_VERSION = "test";
+		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot,
 				new ModpackExecutor.Deps(new GenerationStore(generationRoot, dataRoot.resolve("objects")), new ModpackCandidateScanner()::scan, creation));
@@ -248,10 +239,7 @@ class ModpackExecutorTest {
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();
-		Constants.AM_VERSION = "test";
-		Constants.LOADER = "test";
-		Constants.LOADER_VERSION = "test";
-		Constants.MC_VERSION = "test";
+		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor first = new ModpackExecutor(server, groups, generationRoot);
 		try {
@@ -287,10 +275,7 @@ class ModpackExecutorTest {
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();
-		Constants.AM_VERSION = "test";
-		Constants.LOADER = "test";
-		Constants.LOADER_VERSION = "test";
-		Constants.MC_VERSION = "test";
+		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot,
 				new ModpackExecutor.Deps(new GenerationStore(generationRoot, tempDir.resolve("objects")), new ModpackCandidateScanner()::scan, creation, hosting -> {
@@ -326,10 +311,7 @@ class ModpackExecutorTest {
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();
-		Constants.AM_VERSION = "test";
-		Constants.LOADER = "test";
-		Constants.LOADER_VERSION = "test";
-		Constants.MC_VERSION = "test";
+		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		List<GenerationHosting> bound = new ArrayList<>();
 		ModpackExecutor clean = new ModpackExecutor(server, groups, generationRoot,
@@ -369,10 +351,7 @@ class ModpackExecutorTest {
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();
 		Constants.serverConfig.exportHttpDirectory = tempDir.resolve("auto-export").toString();
-		Constants.AM_VERSION = "test";
-		Constants.LOADER = "test";
-		Constants.LOADER_VERSION = "test";
-		Constants.MC_VERSION = "test";
+		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
 		try {
@@ -436,10 +415,7 @@ class ModpackExecutorTest {
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();
-		Constants.AM_VERSION = "test";
-		Constants.LOADER = "test";
-		Constants.LOADER_VERSION = "test";
-		Constants.MC_VERSION = "test";
+		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
 		try {
@@ -476,10 +452,7 @@ class ModpackExecutorTest {
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		ServerConfigJsons.ServerConfigFieldsV3 fixture = config();
 		Constants.serverConfig = fixture;
-		Constants.AM_VERSION = "test";
-		Constants.LOADER = "test";
-		Constants.LOADER_VERSION = "test";
-		Constants.MC_VERSION = "test";
+		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		String objectSha = HashUtils.sha1("platform-served".getBytes(StandardCharsets.UTF_8));
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot,
@@ -513,10 +486,7 @@ class ModpackExecutorTest {
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		ServerConfigJsons.ServerConfigFieldsV3 fixture = config();
 		Constants.serverConfig = fixture;
-		Constants.AM_VERSION = "test";
-		Constants.LOADER = "test";
-		Constants.LOADER_VERSION = "test";
-		Constants.MC_VERSION = "test";
+		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		Map<String, Long> platformServed = new HashMap<>();
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot,
@@ -602,10 +572,7 @@ class ModpackExecutorTest {
 		fixture.validateSecrets = true;
 		fixture.exportHttpDirectory = tempDir.resolve("auto-export").toString();
 		Constants.serverConfig = fixture;
-		Constants.AM_VERSION = "test";
-		Constants.LOADER = "test";
-		Constants.LOADER_VERSION = "test";
-		Constants.MC_VERSION = "test";
+		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot,
 				new ModpackExecutor.Deps(new GenerationStore(generationRoot, tempDir.resolve("objects")), new ModpackCandidateScanner()::scan, creation, hosting -> {},
@@ -634,10 +601,7 @@ class ModpackExecutorTest {
 		Files.createDirectories(server);
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
-		Constants.AM_VERSION = "test";
-		Constants.LOADER = "test";
-		Constants.LOADER_VERSION = "test";
-		Constants.MC_VERSION = "test";
+		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
 		try {
@@ -742,18 +706,12 @@ class ModpackExecutorTest {
 
 	private static final class ConstantsSnapshot {
 		private final ServerConfigJsons.ServerConfigFieldsV3 serverConfig = Constants.serverConfig;
-		private final String amVersion = Constants.AM_VERSION;
-		private final String loader = Constants.LOADER;
-		private final String loaderVersion = Constants.LOADER_VERSION;
-		private final String mcVersion = Constants.MC_VERSION;
+		private final Environment environment = Environment.installed();
 		private final NettyServer hostServer = Constants.hostServer;
 
 		void restore() {
 			Constants.serverConfig = serverConfig;
-			Constants.AM_VERSION = amVersion;
-			Constants.LOADER = loader;
-			Constants.LOADER_VERSION = loaderVersion;
-			Constants.MC_VERSION = mcVersion;
+			TestEnvironment.restore(environment);
 			Constants.hostServer = hostServer;
 		}
 	}

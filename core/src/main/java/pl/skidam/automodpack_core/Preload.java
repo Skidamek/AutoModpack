@@ -38,14 +38,14 @@ public class Preload {
 		try {
 			long start = System.currentTimeMillis();
 			LOGGER.debug("Prelaunching AutoModpack...");
-			initializeConstants(loaderManager, modpackLoader);
+			initializeEnvironment(loaderManager, modpackLoader);
 			FetchCache.useDirectory(DataRootResolver.resolve(GameDirectory.current()).layout().fetchCacheDirectory());
 			Trust.start();
 			// The refresh is fire-and-forget, so it must not run while the game is still loading classes (see Deferred).
 			Deferred.shared().run(OneCrl::startRefresh);
 			RuntimeJar.prepareForBoot();
 			recoverPendingSelfUpdate();
-			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
+			if (Environment.current().isClient()) {
 				storage = ClientStorage.open(GameDirectory.current());
 				BootRecovery.BootDecision decision = new BootRecovery(storage).recover();
 				clientConfig = decision.clientConfig();
@@ -73,22 +73,18 @@ public class Preload {
 	}
 
 	private void updateAll() throws Exception {
-		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
+		if (Environment.current().isServer()) {
 			SelfUpdater.update();
 			return;
 		}
 		new ClientLaunch(storage, trustedBootstrapApply, bootAsIs).run();
 	}
 
-	private void initializeConstants(LoaderManagerService loaderManager, ModpackLoaderService modpackLoader) {
-		preload = true;
-		PRELOAD_TIME = System.currentTimeMillis();
-		LOADER_MANAGER = loaderManager;
+	private void initializeEnvironment(LoaderManagerService loaderManager, ModpackLoaderService modpackLoader) {
+		Environment.beginPrelaunch();
 		MODPACK_LOADER = modpackLoader;
-		MC_VERSION = LOADER_MANAGER.getModVersion("minecraft");
-		LOADER_VERSION = LOADER_MANAGER.getLoaderVersion();
-		LOADER = LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT);
-		THIS_MOD_JAR = JarUtils.getJarPath(this.getClass());
-		AM_VERSION = FileInspection.getModVersion(THIS_MOD_JAR);
+		Path thisModJar = JarUtils.getJarPath(this.getClass());
+		Environment.install(loaderManager.getEnvironmentType(), loaderManager.getPlatformType(), loaderManager.getPlatformType().toString().toLowerCase(Locale.ROOT), loaderManager.getModVersion("minecraft"),
+				loaderManager.getLoaderVersion(), FileInspection.getModVersion(thisModJar), loaderManager.isDevelopmentEnvironment(), thisModJar);
 	}
 }

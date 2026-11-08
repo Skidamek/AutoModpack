@@ -25,6 +25,7 @@ import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigUtils;
@@ -112,15 +113,15 @@ public class HandshakeS2CPacket {
 
 			if (!isAcceptedLoader) {
 				Component reason = VersionedText.literal("This server does not accept your mod loader. Join with "
-						+ LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT) + ".");
+						+ Environment.current().loader() + ".");
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);
 				return;
 			}
 
-			if (!clientHandshakePacket.amVersion.equals(AM_VERSION)) {
-				Component reason = VersionedText.literal("AutoModpack version mismatch. This server runs " + AM_VERSION
-						+ ", so install that version of AutoModpack for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT) + " to join.");
+			if (!clientHandshakePacket.amVersion.equals(Environment.current().modVersion())) {
+				Component reason = VersionedText.literal("AutoModpack version mismatch. This server runs " + Environment.current().modVersion()
+						+ ", so install that version of AutoModpack for " + Environment.current().loader() + " to join.");
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);
 				return;
@@ -189,6 +190,6 @@ public class HandshakeS2CPacket {
 	private static boolean knownLoader(String loader) {
 		for (LoaderManagerService.ModPlatform type : LoaderManagerService.ModPlatform.values())
 			if (type.name().toLowerCase(Locale.ROOT).equals(loader.toLowerCase(Locale.ROOT))) return true;
-		return LOADER != null && LOADER.equalsIgnoreCase(loader);
+		return Environment.current().loader() != null && Environment.current().loader().equalsIgnoreCase(loader);
 	}
 }

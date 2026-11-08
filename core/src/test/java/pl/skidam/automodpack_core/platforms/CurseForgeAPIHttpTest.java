@@ -133,7 +133,7 @@ class CurseForgeAPIHttpTest {
 		assertEquals("https://www.curseforge.com/minecraft/mc-mods/a-mod", info.projectPageUrl());
 		List<Served> fingerprints = served("/v1/fingerprints");
 		assertEquals(1, fingerprints.size());
-		assertEquals(NetUtils.USER_AGENT, fingerprints.get(0).userAgent());
+		assertEquals(NetUtils.userAgent(), fingerprints.get(0).userAgent());
 		assertEquals(CurseForgeAPI.summonKey(), fingerprints.get(0).apiKey());
 		assertEquals(1, served("/v1/mods").size());
 	}

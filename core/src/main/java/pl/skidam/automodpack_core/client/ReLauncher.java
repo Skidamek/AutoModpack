@@ -4,8 +4,8 @@ import static pl.skidam.automodpack_core.Constants.*;
 
 import java.awt.*;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.client.compat.crashassistant.ProcessSignalIO;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 
 public class ReLauncher {
@@ -29,12 +29,12 @@ public class ReLauncher {
 	}
 
 	public final void restart(boolean shutdownInPreload, Runnable... callbacks) {
-		if (preload && !shutdownInPreload) {
+		if (Environment.isPrelaunching() && !shutdownInPreload) {
 			runCallbacks(callbacks);
 			return;
 		}
 
-		boolean isClient = LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT;
+		boolean isClient = Environment.current().isClient();
 		boolean isHeadless = GraphicsEnvironment.isHeadless();
 
 		if (isClient) {
@@ -47,7 +47,7 @@ public class ReLauncher {
 	private void handleClientRestart(Runnable[] callbacks, boolean isHeadless) {
 		if (updateType != null && ScreenManager.hasScreen()) {
 			ScreenManager.restart(updateType, changelogs);
-		} else if (preload) {
+		} else if (Environment.isPrelaunching()) {
 			ProcessSignalIO.post("normal_stop"); // let crash assistant know
 			if (isHeadless) LOGGER.info("Please restart the game to apply updates!");
 			else ScreenManager.preloadRestart(updateMessage);

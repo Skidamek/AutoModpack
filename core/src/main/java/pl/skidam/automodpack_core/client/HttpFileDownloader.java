@@ -182,7 +182,7 @@ public class HttpFileDownloader {
 	}
 
 	private HttpResponse<InputStream> send(DownloadSource source, URI uri, boolean authenticate, long offset, long stopAt, long fileSize, HttpClient client, Path target) throws IOException, InterruptedException {
-		HttpRequest.Builder request = HttpRequest.newBuilder().uri(uri).header("User-Agent", NetUtils.USER_AGENT)
+		HttpRequest.Builder request = HttpRequest.newBuilder().uri(uri).header("User-Agent", NetUtils.userAgent())
 				.header("Accept-Encoding", WireCodec.offeredEncodings()).timeout(NetUtils.NETWORK_TIMEOUT).GET();
 		if (authenticate) request.header("x-api-key", summonKey());
 		if (offset > 0 || stopAt < fileSize) request.header("Range", "bytes=" + offset + "-" + (stopAt < fileSize ? stopAt - 1 : ""));

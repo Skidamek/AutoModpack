@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.modpack;
 
+import pl.skidam.automodpack_core.Environment;
+
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
@@ -545,7 +547,7 @@ public class Commands {
 	}
 
 	private static int about(CommandContext<CommandSourceStack> context) {
-		send(context, "AutoModpack", ChatFormatting.GREEN, AM_VERSION, ChatFormatting.WHITE, false);
+		send(context, "AutoModpack", ChatFormatting.GREEN, Environment.current().modVersion(), ChatFormatting.WHITE, false);
 		send(context, "/automodpack generate [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate preview [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate if-content <content-token> [notes <text...>]", ChatFormatting.YELLOW, false);

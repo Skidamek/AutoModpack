@@ -377,7 +377,7 @@ class DownloadManagerPlatformTest {
 		assertEquals(2, RESUME_REQUESTS.size());
 		assertNull(RESUME_REQUESTS.get(0).range(), "the first attempt has no partial, so no Range header");
 		assertResumesBehindThePartial(RESUME_REQUESTS.get(1).range(), expected.length * 8 / 10);
-		for (ServedRequest served : RESUME_REQUESTS) assertEquals(NetUtils.USER_AGENT, served.userAgent(), "downloads carry the User-Agent too");
+		for (ServedRequest served : RESUME_REQUESTS) assertEquals(NetUtils.userAgent(), served.userAgent(), "downloads carry the User-Agent too");
 	}
 
 	/** A redirecting non-CurseForge source is followed by the pool, and the file behind the hop lands exact. */

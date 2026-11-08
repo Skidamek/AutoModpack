@@ -8,10 +8,10 @@ import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.Preload;
 import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.GenerationProbes;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.TargetId;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
 import pl.skidam.automodpack_loader_core_neoforge_4.loader.LoaderManager;
@@ -60,7 +60,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
 		try {
 			// Early-service hosting serves the client's active projection; a dedicated server has none.
-			if (Constants.LOADER_MANAGER.getEnvironmentType() != LoaderManagerService.EnvironmentType.CLIENT) return;
+			if (!Environment.current().isClient()) return;
 
 			// Preload owns what this launch loads; host early services only for jars on that list, so a
 			// projection that was skipped (no active state, pinned conflicts, standard-mods duplicates)

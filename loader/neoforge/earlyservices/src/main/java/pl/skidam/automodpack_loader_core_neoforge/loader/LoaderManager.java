@@ -7,6 +7,7 @@ import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.fml.loading.LoadingModList;
 import net.neoforged.fml.loading.moddiscovery.ModInfo;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 
@@ -33,7 +34,7 @@ public class LoaderManager implements LoaderManagerService {
 	public String getLoaderVersion() {
 		// getVersionInfo() is only reachable through the loader instance once it is current.
 		// Preload uses the value captured in EarlyServiceBootstrapper; after preload, VersionInfo is populated.
-		if (preload && EarlyLaunchEnvironment.LOADER_VERSION != null) return EarlyLaunchEnvironment.LOADER_VERSION;
+		if (Environment.isPrelaunching() && EarlyLaunchEnvironment.LOADER_VERSION != null) return EarlyLaunchEnvironment.LOADER_VERSION;
 		return FMLLoader.getCurrent().getVersionInfo().neoForgeVersion();
 	}
 
@@ -42,7 +43,7 @@ public class LoaderManager implements LoaderManagerService {
 		// At mod-construction time the loader-native dist is authoritative. Preload uses the capture
 		// from EarlyServiceBootstrapper. Trusting that capture past preload let a stale launchTarget
 		// report CLIENT on a real dedicated server and crash mod construction.
-		if (preload && EarlyLaunchEnvironment.IS_CLIENT != null) {
+		if (Environment.isPrelaunching() && EarlyLaunchEnvironment.IS_CLIENT != null) {
 			return EarlyLaunchEnvironment.IS_CLIENT ? EnvironmentType.CLIENT : EnvironmentType.SERVER;
 		}
 		if (FMLLoader.getCurrent().getDist() == Dist.CLIENT) {
@@ -54,7 +55,7 @@ public class LoaderManager implements LoaderManagerService {
 
 	@Override
 	public String getModVersion(String modId) {
-		if (preload) {
+		if (Environment.isPrelaunching()) {
 			if (modId.equals("minecraft")) {
 				if (EarlyLaunchEnvironment.MC_VERSION != null) return EarlyLaunchEnvironment.MC_VERSION;
 				return FMLLoader.getCurrent().getVersionInfo().mcVersion();

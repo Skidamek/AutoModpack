@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.init;
 
+import pl.skidam.automodpack_core.Environment;
+
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import pl.skidam.automodpack.loader.GameCall;
@@ -53,7 +55,7 @@ public class Common {
 		ProvisioningSecretStore.ensure();
 
 		hostServer = new NettyServer();
-		LoaderManagerService.EnvironmentType environment = LOADER_MANAGER == null ? null : LOADER_MANAGER.getEnvironmentType();
+		LoaderManagerService.EnvironmentType environment = Environment.sideOrNull();
 		modpackExecutor = new ModpackExecutor(GameDirectory.current(), HostRole.ownedElsewhere(environment, GameDirectory.current()));
 		serverRuntimePrepared = true;
 	}
@@ -64,7 +66,7 @@ public class Common {
 	}
 
 	public static synchronized void afterSetupServer() {
-		if (LOADER_MANAGER != null && LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
+		if (Environment.installed() != null && Environment.current().isClient()) {
 			prepareClientHostBestEffort();
 			return;
 		}

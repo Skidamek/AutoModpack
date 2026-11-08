@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.client.RestartDecision.ApplyResult;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -229,7 +230,7 @@ public class ModpackUpdater implements AutoCloseable {
 		this.connectionInfo = connectionInfo;
 		this.storage = Objects.requireNonNull(storage, "storage");
 		this.platformCache = openPlatformCache(storage);
-		this.planBuilder = new ClientUpdatePlanBuilder(this.storage, MODPACK_LOADER, LOADER);
+		this.planBuilder = new ClientUpdatePlanBuilder(this.storage, MODPACK_LOADER, Environment.current().loader());
 		this.updateLoopDetector = new UpdateLoopDetector(storage.restartLoopStateFile());
 		this.sourceCatalogue = new SourceCatalogue(() -> selectedTarget, this.platformCache);
 		this.projectionLoader = new ProjectionLoader(this.storage, this::storedTarget);
@@ -328,7 +329,7 @@ public class ModpackUpdater implements AutoCloseable {
 	 * failed. A wait episode never outlives this call: a successor screen or {@link ScreenManager#restore()} settled it.
 	 */
 	public UpdateOutcome processModpackUpdate(boolean showWaitingScreen) {
-		if (preload) {
+		if (Environment.isPrelaunching()) {
 			applySelectedTargetWithoutReview(false, false);
 			return UpdateOutcome.APPLIED;
 		}
@@ -356,7 +357,7 @@ public class ModpackUpdater implements AutoCloseable {
 			if (review.isCancelledByPlayer()) return UpdateOutcome.INCOMPLETE;
 			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
 			UpdateRecovery.handoffToHelper();
-			new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
+			new ReLauncher(UpdateType.UPDATE, changelogs).restart(Environment.isPrelaunching());
 			return UpdateOutcome.INCOMPLETE;
 		} catch (Exception e) {
 			close();
@@ -377,7 +378,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private void applySelectedTargetWithoutReview(boolean applyFirstInstall, boolean offline) {
 		runReviewedFlow(new ApplyFlow(offline ? "Offline launch apply" : "Launch apply", () -> new ReLauncher(UpdateType.UPDATE, changelogs).restart(true), e -> {
 			LOGGER.error("Failed to apply the selected modpack; no projection changes were made outside the existing transaction guarantees", e);
-			if (!preload && !review.abortedByPlayer(e)) showUpdateFailure(e);
+			if (!Environment.isPrelaunching() && !review.abortedByPlayer(e)) showUpdateFailure(e);
 		}, this::closeLaunchApply), () -> launchApply(applyFirstInstall, offline));
 	}
 
@@ -436,14 +437,14 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private void rememberLaunchApplyReceipt() {
-		if (!preload || changelogs.changedOrRemovedPaths().isEmpty() || selectedTarget == null) return;
+		if (!Environment.isPrelaunching() || changelogs.changedOrRemovedPaths().isEmpty() || selectedTarget == null) return;
 		LaunchApplyState.recordUnseenApply(storage, selectedTarget.manifest().modpackId());
 	}
 
 	/** Launch apply's close handling: hot-load the active projection when preloading, then close. */
 	private void closeLaunchApply() {
 		try {
-			if (preload) projectionLoader.loadSelectedActiveProjection();
+			if (Environment.isPrelaunching()) projectionLoader.loadSelectedActiveProjection();
 		} catch (Exception e) {
 			LOGGER.error("Failed to load the active modpack projection after launch apply", e);
 		}
@@ -451,7 +452,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private void finishLaunchApply(ApplyResult applyResult) {
-		if (!preload) {
+		if (!Environment.isPrelaunching()) {
 			restartAfterApply(applyResult);
 			return;
 		}
@@ -577,7 +578,7 @@ public class ModpackUpdater implements AutoCloseable {
 			return ApplyStatus.FAILED;
 		}
 		return runReviewedFlow(new ApplyFlow("Update", () -> {
-			if (!review.isCancelledByPlayer()) new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
+			if (!review.isCancelledByPlayer()) new ReLauncher(UpdateType.UPDATE, changelogs).restart(Environment.isPrelaunching());
 		}, e -> {
 			if (review.abortedByPlayer(e)) LOGGER.info("Modpack update apply was aborted by the player");
 			else showUpdateFailure(e);

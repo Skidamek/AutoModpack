@@ -113,7 +113,7 @@ class HttpClientPoolTest {
 		assertEquals(count, hits.size(), "unexpected request count at " + path);
 		for (Served served : hits) {
 			assertEquals(method, served.method());
-			assertEquals(NetUtils.USER_AGENT, served.userAgent(), "every outbound API request must carry the User-Agent");
+			assertEquals(NetUtils.userAgent(), served.userAgent(), "every outbound API request must carry the User-Agent");
 			assertTrue(served.acceptEncoding() != null && served.acceptEncoding().contains("zstd") && served.acceptEncoding().contains("gzip"), "every outbound API request must offer both content codings");
 		}
 	}

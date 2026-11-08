@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.THIS_MOD_JAR;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_DIR;
 
 import java.io.IOException;
@@ -11,6 +10,7 @@ import java.nio.file.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.JarUtils;
@@ -102,7 +102,8 @@ public final class RuntimeJar {
 
 	/** The game sets {@link pl.skidam.automodpack_core.Constants#THIS_MOD_JAR} during preload; a detached child finds its own jar. */
 	private static Path sourceJar() {
-		return (THIS_MOD_JAR != null ? THIS_MOD_JAR : JarUtils.getJarPath(RuntimeJar.class)).toAbsolutePath().normalize();
+		Path installedJar = Environment.installed() == null ? null : Environment.installed().thisModJar();
+		return (installedJar != null ? installedJar : JarUtils.getJarPath(RuntimeJar.class)).toAbsolutePath().normalize();
 	}
 
 	private static Path defaultDirectory() {

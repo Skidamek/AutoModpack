@@ -5,7 +5,6 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.NETWORK_TIMEOUT;
 import static pl.skidam.automodpack_core.protocol.NetUtils.PIPELINE_MAX_REQUESTS;
 import static pl.skidam.automodpack_core.protocol.NetUtils.PIPELINE_WINDOW_BYTES;
 import static pl.skidam.automodpack_core.protocol.NetUtils.READ_BUFFER_BYTES;
-import static pl.skidam.automodpack_core.protocol.NetUtils.USER_AGENT;
 import static pl.skidam.automodpack_core.protocol.NetUtils.WIRE_CHUNK_BYTES;
 
 import java.io.BufferedInputStream;
@@ -102,7 +101,7 @@ class Connection implements AutoCloseable {
 		this.onSlotFreed = onSlotFreed;
 		this.requestLinePrefix = "GET ".getBytes(StandardCharsets.UTF_8);
 		String authorization = secret == null ? "" : "Authorization: Bearer " + secret + "\r\n";
-		this.requestLineSuffix = (" HTTP/1.1\r\nHost: " + hostHeader + "\r\nUser-Agent: " + USER_AGENT + "\r\n" + authorization).getBytes(StandardCharsets.UTF_8);
+		this.requestLineSuffix = (" HTTP/1.1\r\nHost: " + hostHeader + "\r\nUser-Agent: " + NetUtils.userAgent() + "\r\n" + authorization).getBytes(StandardCharsets.UTF_8);
 	}
 
 	boolean isActive() {

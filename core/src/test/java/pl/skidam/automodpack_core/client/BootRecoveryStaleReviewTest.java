@@ -14,6 +14,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.Environment;
+import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -39,13 +41,12 @@ class BootRecoveryStaleReviewTest {
 	@Test
 	void aPendingUpdateWhoseReviewedGroupsChangedRevertsInsteadOfCrashingTheBoot(@TempDir Path temp) throws Exception {
 		ModpackLoaderService previousLoader = Constants.MODPACK_LOADER;
-		String previousLoaderId = Constants.LOADER;
+		Environment previousEnvironment = TestEnvironment.swap("fabric", "test", "test", "test");
 		if (Constants.MODPACK_LOADER == null) {
 			Constants.MODPACK_LOADER = new ModpackLoaderService() {
 				@Override
 				public void loadModpack(ModpackLoadRequest request) {}
 			};
-			Constants.LOADER = "fabric";
 		}
 		try {
 			ClientStorage storage = TestDataRoot.open(temp.resolve("game"), temp.resolve("data"));
@@ -74,7 +75,7 @@ class BootRecoveryStaleReviewTest {
 			}
 		} finally {
 			Constants.MODPACK_LOADER = previousLoader;
-			Constants.LOADER = previousLoaderId;
+			TestEnvironment.restore(previousEnvironment);
 		}
 	}
 }

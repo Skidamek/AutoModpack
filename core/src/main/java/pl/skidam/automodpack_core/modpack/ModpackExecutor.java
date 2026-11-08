@@ -20,6 +20,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.Supplier;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.modpack.PackAbsence.Kind;
@@ -383,8 +384,9 @@ public class ModpackExecutor {
 			// pack whose versions they must switch to.
 			boolean advertiseVersions = serverConfig.advertiseVersionsToSync;
 			// A preview reports the files a publish would drop; only a publish takes them out of the manifest.
-			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpack.name, AM_VERSION,
-					advertiseVersions ? LOADER : null, advertiseVersions ? LOADER_VERSION : null, advertiseVersions ? MC_VERSION : null, serverRoot, groupRoot,
+			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpack.name, Environment.current().modVersion(),
+					advertiseVersions ? Environment.current().loader() : null, advertiseVersions ? Environment.current().loaderVersion() : null, advertiseVersions ? Environment.current().mcVersion() : null, serverRoot,
+					groupRoot,
 					serverConfig.modpack.categories, materializeMissingObjects, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()),
 					creationExecutor, generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects, ownedElsewhere.read());
 			ModpackCandidate candidate = candidateScan.scan(request);

@@ -26,6 +26,7 @@ import org.apache.logging.log4j.core.LoggerContext;
 
 import com.google.gson.Gson;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
@@ -57,8 +58,8 @@ public final class DetachedUpdateHelper {
 		// Append: a second helper that loses the lease still starts with this redirect already open, and must not truncate the running helper's log.
 		Path helperLog = GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize();
 		// The helper has no loader service. Pin this process's already-resolved root as a JVM property before the main class; configuredRoot prefers it over env and role defaults.
-		String environment = LOADER_MANAGER == null || LOADER_MANAGER.getEnvironmentType() == null ? "" : LOADER_MANAGER.getEnvironmentType().name();
-		DataRootResolver.Location dataLocation = DataRootResolver.resolve(GameDirectory.current(), LOADER_MANAGER == null ? null : LOADER_MANAGER.getEnvironmentType());
+		String environment = Environment.sideOrNull() == null ? "" : Environment.sideOrNull().name();
+		DataRootResolver.Location dataLocation = DataRootResolver.resolve(GameDirectory.current(), Environment.sideOrNull());
 		String parentStart = ProcessHandle.current().info().startInstant().map(instant -> Long.toString(instant.toEpochMilli())).orElse("-");
 		DetachedProcesses.start(UpdateHelperMain.class, List.of("-D" + DATA_ROOT_PROPERTY + "=" + dataLocation.root()),
 				List.of(Long.toString(ProcessHandle.current().pid()), environment, parentStart), GameDirectory.current(), helperLog, helperClasspath(runtimeJar));

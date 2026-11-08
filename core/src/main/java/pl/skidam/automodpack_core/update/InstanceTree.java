@@ -21,7 +21,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
-import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -215,8 +215,9 @@ public final class InstanceTree {
 
 	/** The running AutoModpack jar is the updater itself: it is never tracked, never restored over, and never deleted by a checkout. */
 	static boolean isRunningModJar(Path absoluteFile) {
-		if (Constants.THIS_MOD_JAR == null) return false;
-		return absoluteFile.toAbsolutePath().normalize().equals(Constants.THIS_MOD_JAR.toAbsolutePath().normalize());
+		Environment environment = Environment.installed();
+		if (environment == null || environment.thisModJar() == null) return false;
+		return absoluteFile.toAbsolutePath().normalize().equals(environment.thisModJar().toAbsolutePath().normalize());
 	}
 
 	static LiveIdentity observeIdentity(ClientStorage storage) throws IOException {

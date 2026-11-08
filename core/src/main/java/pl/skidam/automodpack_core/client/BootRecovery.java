@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOADER;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.MODPACK_LOADER;
 
@@ -8,6 +7,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.BootstrapInstaller;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -165,7 +165,7 @@ public final class BootRecovery {
 	/** The boot rebuild policy: a pending transaction is rebuilt from what the player now wants; a rebuild failure is terminal, never a crash. */
 	private UpdateCommit.Built rebuildPending(UpdateTransaction pending) throws IOException {
 		try {
-			return UpdateAttempt.pendingRebuild(storage, pending, MODPACK_LOADER, LOADER);
+			return UpdateAttempt.pendingRebuild(storage, pending, MODPACK_LOADER, Environment.current().loader());
 		} catch (UpdateReplanRequiredException e) {
 			throw e;
 		} catch (IOException e) {

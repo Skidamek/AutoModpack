@@ -22,7 +22,7 @@ import net.minecraftforge.forgespi.locating.IModFile;
 import net.minecraftforge.forgespi.locating.IModLocator;
 
 import pl.skidam.automodpack_core.Constants;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.loader.ServiceJarIndex;
 import pl.skidam.automodpack_loader_core_forge.mods.ModpackLoader;
@@ -135,7 +135,7 @@ public final class EarlyServiceLayer {
 		if (!BOOTSTRAPPED.compareAndSet(false, true)) return;
 
 		// Early-service hosting serves the client's active projection; a dedicated server has none.
-		if (Constants.LOADER_MANAGER.getEnvironmentType() != LoaderManagerService.EnvironmentType.CLIENT) return;
+		if (!Environment.current().isClient()) return;
 
 		try {
 			// Preload owns what this launch loads; host early services only for jars on that list, so a

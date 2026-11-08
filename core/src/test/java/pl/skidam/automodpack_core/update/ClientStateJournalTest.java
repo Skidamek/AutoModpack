@@ -18,7 +18,10 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.Environment;
+import pl.skidam.automodpack_core.TestEnvironment;
+import pl.skidam.automodpack_core.loader.LoaderManagerService.EnvironmentType;
+import pl.skidam.automodpack_core.loader.LoaderManagerService.ModPlatform;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
@@ -117,8 +120,7 @@ class ClientStateJournalTest {
 		Path runningJar = storage.gamePath("mods/automodpack-9.9.9.jar");
 		Files.createDirectories(runningJar.getParent());
 		Files.write(runningJar, bytes);
-		Path previousThisModJar = Constants.THIS_MOD_JAR;
-		Constants.THIS_MOD_JAR = runningJar;
+		Environment previousEnvironment = TestEnvironment.swap(EnvironmentType.CLIENT, ModPlatform.FABRIC, "fabric", "test", "test", "test", runningJar);
 		try {
 			Set<Key> extra = Set.of(new Key(Root.GAME_DIR, "", "mods/automodpack-9.9.9.jar"));
 			StateHistory.snapshotIfDirty(storage, extra, Kind.LIVE, "", "txn-1");
@@ -128,7 +130,7 @@ class ClientStateJournalTest {
 			assertThrows(Exception.class, () -> StateHistory.restoreFile(storage, 1, Root.GAME_DIR, "mods/automodpack-9.9.9.jar"));
 			assertEquals("automodpack-jar", Files.readString(runningJar, StandardCharsets.UTF_8));
 		} finally {
-			Constants.THIS_MOD_JAR = previousThisModJar;
+			TestEnvironment.restore(previousEnvironment);
 		}
 	}
 

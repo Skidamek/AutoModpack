@@ -2,7 +2,6 @@ package pl.skidam.automodpack.networking.packet;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
-import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -15,6 +14,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.client.ClientLoginDisconnect;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.client.SelfUpdater;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.screen.ScreenManager;
@@ -30,7 +30,7 @@ public class HandshakeC2SPacket {
 			String serverResponse = buf.readUtf(Short.MAX_VALUE);
 			HandshakePacket serverHandshakePacket = HandshakePacket.fromJson(serverResponse);
 
-			String loader = LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT);
+			String loader = Environment.current().loader();
 			if (!serverHandshakePacket.loaders.contains(loader)) {
 				LOGGER.warn("Loader mismatch. Server accepts: {}: Client: {}", serverHandshakePacket.loaders, loader);
 				return CompletableFuture.completedFuture(outBuf);
@@ -38,7 +38,7 @@ public class HandshakeC2SPacket {
 
 			updateIfNeededMod(handler, serverHandshakePacket.amVersion, serverHandshakePacket.mcVersion);
 
-			HandshakePacket clientHandshakePacket = new HandshakePacket(Set.of(loader), AM_VERSION, MC_VERSION);
+			HandshakePacket clientHandshakePacket = new HandshakePacket(Set.of(loader), Environment.current().modVersion(), Environment.current().mcVersion());
 			outBuf.writeUtf(clientHandshakePacket.toJson(), Short.MAX_VALUE);
 
 			return CompletableFuture.completedFuture(outBuf);
@@ -55,15 +55,15 @@ public class HandshakeC2SPacket {
 			return;
 		}
 
-		if (!serverMCVersion.equals(MC_VERSION)) return;
+		if (!serverMCVersion.equals(Environment.current().mcVersion())) return;
 
-		if (AM_VERSION.equals(serverAMVersion)) {
-			LOGGER.debug("Versions match {}", AM_VERSION);
+		if (Environment.current().modVersion().equals(serverAMVersion)) {
+			LOGGER.debug("Versions match {}", Environment.current().modVersion());
 			return;
 		}
-		LOGGER.debug("Versions mismatch. Server: {}: Client: {}", serverAMVersion, AM_VERSION);
+		LOGGER.debug("Versions mismatch. Server: {}: Client: {}", serverAMVersion, Environment.current().modVersion());
 
-		ModrinthAPI automodpack = ModrinthAPI.getModSpecificVersion(SelfUpdater.AUTOMODPACK_ID, serverAMVersion, MC_VERSION);
+		ModrinthAPI automodpack = ModrinthAPI.getModSpecificVersion(SelfUpdater.AUTOMODPACK_ID, serverAMVersion, Environment.current().mcVersion());
 
 		if (automodpack == null) {
 			LOGGER.warn("Couldn't find {} version of automodpack for minecraft {} required by server", serverAMVersion, serverMCVersion);
@@ -72,7 +72,7 @@ public class HandshakeC2SPacket {
 
 		SemanticVersion semver = SemanticVersion.parse(automodpack.fileVersion());
 
-		if (SelfUpdater.validUpdate(semver, SemanticVersion.parse(AM_VERSION))) {
+		if (SelfUpdater.validUpdate(semver, SemanticVersion.parse(Environment.current().modVersion()))) {
 			LOGGER.info("Updating AutoModpack to {}", serverAMVersion);
 			ScreenManager.waiting();
 			ClientLoginDisconnect.disconnect(handler);

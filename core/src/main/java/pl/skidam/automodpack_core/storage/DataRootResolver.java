@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.storage;
 
-import static pl.skidam.automodpack_core.Constants.LOADER_MANAGER;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
@@ -12,6 +11,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.FileTrees;
@@ -98,7 +98,7 @@ public final class DataRootResolver {
 
 	/** Resolves with the running process's role; detached helpers and tests without a loader default to the client selection. */
 	public static Location resolve(Path gameDirectory) {
-		return resolve(gameDirectory, LOADER_MANAGER == null ? null : LOADER_MANAGER.getEnvironmentType());
+		return resolve(gameDirectory, Environment.sideOrNull());
 	}
 
 	/**

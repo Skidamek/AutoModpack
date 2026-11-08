@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.protocol;
 
-import static pl.skidam.automodpack_core.Constants.AM_VERSION;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.ByteArrayInputStream;
@@ -43,10 +42,17 @@ import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.math.ec.ECCurve;
 import org.bouncycastle.operator.ContentSigner;
 
+import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 
 public class NetUtils {
-	public static final String USER_AGENT = "github/skidamek/automodpack/" + AM_VERSION;
+	private static final String USER_AGENT_PREFIX = "github/skidamek/automodpack/";
+
+	/** Resolved on demand: a detached helper makes requests before any environment exists. */
+	public static String userAgent() {
+		Environment environment = Environment.installed();
+		return USER_AGENT_PREFIX + (environment == null ? "unknown" : environment.modVersion());
+	}
 	public static final Duration NETWORK_TIMEOUT = Duration.ofSeconds(15);
 	// The configured-connection read deadline also guards bulk file transfers, where legitimate
 	// flow-control pauses outlast a connect-grade deadline. It only has to catch a dead peer, not

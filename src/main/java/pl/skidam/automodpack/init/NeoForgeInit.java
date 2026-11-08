@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.init;
 
+import pl.skidam.automodpack_core.Environment;
+
 /*? if neoforge {*/
 /*/^? if >1.20.5 {^/
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -20,14 +22,14 @@ import static pl.skidam.automodpack_core.Constants.*;
 @Mod(MOD_ID + "_mod")
 public class NeoForgeInit {
 	public NeoForgeInit() {
-		preload = false;
+		Environment.current().markGameStarted();
 
 		long start = System.currentTimeMillis();
 		LOGGER.debug("Launching AutoModpack...");
 
 		Common.init();
 
-		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
+		if (Environment.current().isServer()) {
 			Common.serverInit();
 		} else {
 			ScreenManager.install(new ScreenImpl());
