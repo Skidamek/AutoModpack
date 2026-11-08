@@ -328,7 +328,7 @@ def my_step(ctx, step):
 ```
 
 Engine internals (selectors, conditions, templating, the executor) are covered by
-`tests/` and run without Docker: `uv --project autotester run --group dev pytest`.
+`tests/` and run without Docker: `uv run --directory autotester --group dev pytest`.
 
 ## Output
 
