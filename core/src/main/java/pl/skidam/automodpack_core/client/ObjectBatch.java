@@ -5,9 +5,11 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -45,6 +47,7 @@ final class ObjectBatch {
 	private final Probe probe;
 	private final DataRootResolver.Layout dataLayout;
 	private final List<Held> held = new ArrayList<>();
+	private final Set<Path> heldFiles = new HashSet<>();
 
 	ObjectBatch(DataRootResolver.Layout dataLayout) {
 		this(dataLayout, (step, path) -> {});
@@ -57,6 +60,7 @@ final class ObjectBatch {
 
 	synchronized void hold(Held object) {
 		held.add(object);
+		heldFiles.add(object.file());
 	}
 
 	synchronized int size() {
@@ -65,8 +69,7 @@ final class ObjectBatch {
 
 	/** Whether this run still owns {@code file}; adoption leaves those alone so the batch never loses an object it holds. */
 	synchronized boolean holds(Path file) {
-		for (Held object : held) if (object.file().equals(file)) return true;
-		return false;
+		return heldFiles.contains(file);
 	}
 
 	/**
@@ -79,13 +82,17 @@ final class ObjectBatch {
 			if (held.isEmpty()) return List.of();
 			batch = new ArrayList<>(held);
 			held.clear();
+			heldFiles.clear();
 		}
+		// Probe the directory that actually holds the objects, not the staging root's parent, so a staging mount keeps
+		// its own enforcement verdict.
+		boolean enforcementWorks = ImmutableFiles.enforcementWorks(batch.get(0).file());
 		List<QueuedDownload> failed = new ArrayList<>();
 		List<Held> forced = new ArrayList<>(batch.size());
 		for (Held object : batch) {
 			try {
 				probe.reached(Step.BEFORE_FORCE, object.file());
-				ImmutableFiles.protectAndForce(object.file());
+				ImmutableFiles.protectAndForce(object.file(), enforcementWorks);
 				probe.reached(Step.FORCED, object.file());
 				forced.add(object);
 			} catch (IOException e) {
@@ -109,18 +116,31 @@ final class ObjectBatch {
 			probe.reached(Step.DIRECTORY_FORCED, directory.getKey());
 			durable.addAll(directory.getValue());
 		}
-		try (FileCache cache = FileCache.open(dataLayout.fileCacheDirectory())) {
+		if (!durable.isEmpty()) {
+			Map<Path, String> records = new LinkedHashMap<>(durable.size());
 			for (Held object : durable) {
-				try {
-					probe.reached(Step.BEFORE_RECORD, dataLayout.objectFile(object.sha1()));
-					cache.overwriteCache(dataLayout.objectFile(object.sha1()), object.sha1());
-					probe.reached(Step.RECORDED, dataLayout.objectFile(object.sha1()));
-				} catch (IOException e) {
-					fail(object, failed, e);
-				}
+				Path target = dataLayout.objectFile(object.sha1());
+				probe.reached(Step.BEFORE_RECORD, target);
+				records.put(target, object.sha1());
 			}
-		} catch (IOException e) {
-			for (Held object : durable) if (!failed.contains(object.task())) fail(object, failed, e);
+			try (FileCache cache = FileCache.open(dataLayout.fileCacheDirectory())) {
+				try {
+					cache.overwriteCacheBatch(records);
+					for (Held object : durable) probe.reached(Step.RECORDED, dataLayout.objectFile(object.sha1()));
+				} catch (IOException batchFailure) {
+					// One bad stat must not hide the rest: fall back to the per-object path that isolates it.
+					for (Held object : durable) {
+						try {
+							cache.overwriteCache(dataLayout.objectFile(object.sha1()), object.sha1());
+							probe.reached(Step.RECORDED, dataLayout.objectFile(object.sha1()));
+						} catch (IOException e) {
+							fail(object, failed, e);
+						}
+					}
+				}
+			} catch (IOException e) {
+				for (Held object : durable) if (!failed.contains(object.task())) fail(object, failed, e);
+			}
 		}
 		for (Held object : batch) discard(object);
 		return failed;

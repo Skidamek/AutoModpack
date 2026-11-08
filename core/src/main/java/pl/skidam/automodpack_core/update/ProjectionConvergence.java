@@ -468,7 +468,7 @@ final class ProjectionConvergence {
 		Set<Path> touched = new LinkedHashSet<>();
 		List<Held> held = new ArrayList<>();
 		List<Held> stuck = new ArrayList<>();
-		List<Map.Entry<Path, String>> installed = new ArrayList<>();
+		Map<Path, String> installed = new LinkedHashMap<>();
 		List<Path> kept = new ArrayList<>();
 		for (Path path : work.removals()) {
 			try {
@@ -520,14 +520,18 @@ final class ProjectionConvergence {
 				if (keepUnknown) keep(target, kept);
 				install(target, row, touched);
 				touched.add(target.getParent());
-				installed.add(Map.entry(target, row.sha1()));
+				installed.put(target, row.sha1());
 			} catch (IOException e) {
 				if (!StorageConditions.isLockFailure(e, row.size())) throw StorageConditions.classified(e, row.size());
 				held.add(new Held(target, e));
 			}
 		}
-		// V3: the records go in one pass after the links, so the cache batches its writes instead of flushing between lookups.
-		for (Map.Entry<Path, String> entry : installed) cache.overwriteCache(entry.getKey(), entry.getValue());
+		// V3: the records go in one batch file after the links, so the cache writes one journal instead of one rename per file.
+		try {
+			cache.overwriteCacheBatch(installed);
+		} catch (IOException batchFailure) {
+			for (Map.Entry<Path, String> entry : installed.entrySet()) cache.overwriteCache(entry.getKey(), entry.getValue());
+		}
 		for (Path directory : touched) {
 			FileTrees.forceDirectory(directory);
 			writes.forced(directory);
