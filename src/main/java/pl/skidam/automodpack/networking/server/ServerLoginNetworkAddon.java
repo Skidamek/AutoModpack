@@ -1,32 +1,29 @@
 package pl.skidam.automodpack.networking.server;
 
-import org.apache.logging.log4j.Logger;
-
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.logging.log4j.LogManager;
-
+import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.Connection;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
+import net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket;
 import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginPacketListenerImpl;
-import org.jetbrains.annotations.Nullable;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.LoginNetworkingIDs;
 import pl.skidam.automodpack.networking.LoginQueryParser;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.PacketSender;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket;
-
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
 
 
 // credits to fabric api

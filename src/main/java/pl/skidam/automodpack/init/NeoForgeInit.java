@@ -1,8 +1,7 @@
 package pl.skidam.automodpack.init;
 
-import org.apache.logging.log4j.Logger;
-
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.AutoModpack;
 
@@ -29,7 +28,7 @@ public class NeoForgeInit {
 	private static final Logger LOGGER = LogManager.getLogger(NeoForgeInit.class);
 
 	public NeoForgeInit() {
-		Environment.current().markGameStarted();
+		Environment.markGameStarted();
 
 		long start = System.currentTimeMillis();
 		LOGGER.debug("Launching AutoModpack...");

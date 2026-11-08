@@ -1,19 +1,14 @@
 package pl.skidam.automodpack.client;
 
-import org.apache.logging.log4j.Logger;
-
-import org.apache.logging.log4j.LogManager;
-
 import java.io.InputStream;
 import java.util.List;
-
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import com.mojang.blaze3d.platform.NativeImage;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.resources.Identifier;
-
 import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack_core.utils.Assets;
 

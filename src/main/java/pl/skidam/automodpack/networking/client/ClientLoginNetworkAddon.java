@@ -1,21 +1,18 @@
 package pl.skidam.automodpack.networking.client;
 
-import org.apache.logging.log4j.Logger;
-
-import org.apache.logging.log4j.LogManager;
-
-import io.netty.buffer.Unpooled;
-import org.jetbrains.annotations.Nullable;
-import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
-import pl.skidam.automodpack.networking.LoginQueryParser;
-
 import java.util.concurrent.CompletableFuture;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
+import io.netty.buffer.Unpooled;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
 import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
 import net.minecraft.resources.Identifier;
+import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
+import pl.skidam.automodpack.networking.LoginQueryParser;
 
 
 // credits to fabric api

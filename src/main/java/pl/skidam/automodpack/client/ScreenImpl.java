@@ -1,36 +1,10 @@
 package pl.skidam.automodpack.client;
 
-import org.apache.logging.log4j.Logger;
-
-import org.apache.logging.log4j.LogManager;
-
-import pl.skidam.automodpack_core.config.GenerationJsons;
-import pl.skidam.automodpack.client.ui.*;
-import pl.skidam.automodpack.client.ui.screen.*;
-import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
-import pl.skidam.automodpack_core.modpack.generation.PackDocument;
-import pl.skidam.automodpack_core.modpack.group.GroupManifest;
-import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
-import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
-import pl.skidam.automodpack_core.client.Changelogs;
-import pl.skidam.automodpack_core.client.ModpackUpdater;
-import pl.skidam.automodpack_core.client.SessionUpdateState;
-import pl.skidam.automodpack_core.screen.PreviewPayload;
-import pl.skidam.automodpack_core.screen.ReviewPayload;
-import pl.skidam.automodpack_core.screen.ScreenService;
-import pl.skidam.automodpack_core.screen.FailureDestination;
-import pl.skidam.automodpack_core.screen.FailureRequest;
-import pl.skidam.automodpack_core.screen.HistoryViewRequest;
-import pl.skidam.automodpack_core.screen.DownloadView;
-import pl.skidam.automodpack_core.screen.TransientAttention;
-import pl.skidam.automodpack_core.client.UpdateType;
-import pl.skidam.automodpack_core.utils.Throwables;
-
-
 import java.util.Optional;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.components.toasts.Toast;
@@ -38,6 +12,28 @@ import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
+import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack.client.ui.screen.*;
+import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
+import pl.skidam.automodpack_core.client.Changelogs;
+import pl.skidam.automodpack_core.client.ModpackUpdater;
+import pl.skidam.automodpack_core.client.SessionUpdateState;
+import pl.skidam.automodpack_core.client.UpdateType;
+import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
+import pl.skidam.automodpack_core.screen.DownloadView;
+import pl.skidam.automodpack_core.screen.FailureDestination;
+import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.HistoryViewRequest;
+import pl.skidam.automodpack_core.screen.PreviewPayload;
+import pl.skidam.automodpack_core.screen.ReviewPayload;
+import pl.skidam.automodpack_core.screen.ScreenService;
+import pl.skidam.automodpack_core.screen.TransientAttention;
+import pl.skidam.automodpack_core.utils.Throwables;
 
 public class ScreenImpl implements ScreenService {
 	private static final Logger LOGGER = LogManager.getLogger(ScreenImpl.class);

@@ -1,8 +1,7 @@
 package pl.skidam.automodpack.networking;
 
-import org.apache.logging.log4j.Logger;
-
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /*? if >=1.20.2 {*/
 import pl.skidam.automodpack.networking.client.LoginResponsePayload;

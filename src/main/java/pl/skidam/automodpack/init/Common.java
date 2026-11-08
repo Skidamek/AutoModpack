@@ -1,38 +1,30 @@
 package pl.skidam.automodpack.init;
 
-import org.apache.logging.log4j.Logger;
-
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.logging.log4j.LogManager;
-
-import pl.skidam.automodpack_core.AutoModpack;
-
-import pl.skidam.automodpack_core.loader.LoaderServices;
-
-import pl.skidam.automodpack_core.Hosting;
-
-import pl.skidam.automodpack_core.config.ServerConfigStore;
-
-import pl.skidam.automodpack_core.Environment;
-
+import org.apache.logging.log4j.Logger;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
+import pl.skidam.automodpack_core.AutoModpack;
+import pl.skidam.automodpack_core.Deferred;
+import pl.skidam.automodpack_core.Environment;
+import pl.skidam.automodpack_core.Hosting;
 import pl.skidam.automodpack_core.auth.ProvisioningSecretStore;
 import pl.skidam.automodpack_core.client.SessionNotices;
-import pl.skidam.automodpack_core.Deferred;
 import pl.skidam.automodpack_core.config.ConfigUtils;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.host.HostRole;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.storage.StorageLeftovers;
 import pl.skidam.automodpack_core.storage.StoragePaths;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 
 public class Common {

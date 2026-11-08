@@ -1,8 +1,7 @@
 package pl.skidam.automodpack.init;
 
-import org.apache.logging.log4j.Logger;
-
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.AutoModpack;
 
@@ -27,7 +26,7 @@ public class ForgeInit {
 
 
 	public ForgeInit() {
-		Environment.current().markGameStarted();
+		Environment.markGameStarted();
 
 		long start = System.currentTimeMillis();
 		LOGGER.debug("Launching AutoModpack...");

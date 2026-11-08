@@ -1,8 +1,7 @@
 package pl.skidam.automodpack.init;
 
-import org.apache.logging.log4j.Logger;
-
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.Environment;
 
@@ -20,7 +19,7 @@ public class FabricInit {
 
 	public static void onInitialize() {
 
-		Environment.current().markGameStarted();
+		Environment.markGameStarted();
 
 		long start = System.currentTimeMillis();
 		LOGGER.debug("Launching AutoModpack...");
