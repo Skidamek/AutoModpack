@@ -248,7 +248,7 @@ class ReviewSessionTest {
 		}
 		GroupManifest manifest = TestPacks.manifest("test pack", "config/a.txt", "hello");
 		SelectedModpackTarget target = SelectedModpackTarget.prepareDefault(TestPacks.head(manifest), ClientPlatform.LINUX);
-		ModpackUpdater updater = new ModpackUpdater(target, null, null, storage);
+		ModpackUpdater updater = new ModpackUpdater(target, null, null, storage, TestEnvironment.noopLoader());
 		return new Harness(updater, updater.reviewSession(), updater.reviewActions(), storage);
 	}
 

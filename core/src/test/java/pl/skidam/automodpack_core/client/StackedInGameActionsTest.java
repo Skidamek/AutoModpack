@@ -28,6 +28,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.ModFileCache;
@@ -197,7 +198,7 @@ class StackedInGameActionsTest {
 		Files.delete(instance.storage.objectFile(HashUtils.sha1(bytes(MANAGED, 1))));
 
 		for (int boot = 0; boot < 2; boot++) {
-			assertFalse(new BootRecovery(instance.storage).recover().bootAsIs(), "the boot goes on to sync");
+			assertFalse(new BootRecovery(instance.storage, TestEnvironment.noopLoader()).recover().bootAsIs(), "the boot goes on to sync");
 			assertTrue(Files.exists(instance.storage.transactionFile()), "the started journal stays owed");
 		}
 		assertArrayEquals(bytes(KEPT, 1), Files.readAllBytes(instance.storage.gamePath(KEPT)));
@@ -222,7 +223,7 @@ class StackedInGameActionsTest {
 		Files.delete(mmcPack(instance.storage));
 
 		for (int boot = 0; boot < 2; boot++) {
-			assertFalse(new BootRecovery(instance.storage).recover().bootAsIs());
+			assertFalse(new BootRecovery(instance.storage, TestEnvironment.noopLoader()).recover().bootAsIs());
 			assertTrue(Files.exists(instance.storage.transactionFile()), "the started journal stays owed");
 		}
 		assertArrayEquals(bytes(MANAGED, 1), Files.readAllBytes(instance.storage.gamePath(MANAGED)), "the files landed");

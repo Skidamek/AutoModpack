@@ -4,6 +4,7 @@ import java.nio.file.Path;
 
 import pl.skidam.automodpack_core.loader.LoaderManagerService.EnvironmentType;
 import pl.skidam.automodpack_core.loader.LoaderManagerService.ModPlatform;
+import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 
 /** Installs a process environment for a test; no loader exists there, so the side stays unknown unless the test asks for one. */
 public final class TestEnvironment {
@@ -18,6 +19,11 @@ public final class TestEnvironment {
 		Environment previous = Environment.installed();
 		Environment.install(side, platform, loader, mcVersion, loaderVersion, modVersion, false, thisModJar);
 		return previous;
+	}
+
+	/** A loader that loads nothing, for flows that only need a loader to exist. */
+	public static ModpackLoaderService noopLoader() {
+		return request -> {};
 	}
 
 	public static void restore(Environment previous) {

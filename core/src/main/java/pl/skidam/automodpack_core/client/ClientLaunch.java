@@ -11,6 +11,7 @@ import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
@@ -33,10 +34,12 @@ public final class ClientLaunch {
 	private static final Logger LOGGER = LogManager.getLogger(ClientLaunch.class);
 
 	private final ClientStorage storage;
+	private final ModpackLoaderService modpackLoader;
 	private final boolean trustedBootstrapApply;
 	private final boolean bootAsIs;
 
-	public ClientLaunch(ClientStorage storage, boolean trustedBootstrapApply, boolean bootAsIs) {
+	public ClientLaunch(ClientStorage storage, boolean trustedBootstrapApply, boolean bootAsIs, ModpackLoaderService modpackLoader) {
+		this.modpackLoader = modpackLoader;
 		this.storage = storage;
 		this.trustedBootstrapApply = trustedBootstrapApply;
 		this.bootAsIs = bootAsIs;
@@ -133,7 +136,7 @@ public final class ClientLaunch {
 			transport.close();
 			return;
 		}
-		ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, transport);
+		ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, transport, modpackLoader);
 		if (trustedBootstrapApply) updater.applyTrustedInstall();
 		else updater.processModpackUpdate(true);
 	}
@@ -147,7 +150,7 @@ public final class ClientLaunch {
 	private void loadLocalModpack(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean projectionActive) throws Exception {
 		if (!projectionActive) return;
 		try {
-			new ModpackUpdater(connectionInfo, secret, storage).loadModpack();
+			new ModpackUpdater(connectionInfo, secret, storage, modpackLoader).loadModpack();
 		} catch (MissingGenerationContentException e) {
 			forgetUnresolvableModpack(storage, e);
 		}
@@ -184,7 +187,7 @@ public final class ClientLaunch {
 			loadLocalModpack(connectionInfo, secret, true);
 			return;
 		}
-		new ModpackUpdater(target, connectionInfo, secret, storage).applyStoredTargetOffline();
+		new ModpackUpdater(target, connectionInfo, secret, storage, modpackLoader).applyStoredTargetOffline();
 	}
 
 	/** Whether {@code active/} should load this boot: the directory exists, its projection state is settled, and selected does not disagree with active-state. */

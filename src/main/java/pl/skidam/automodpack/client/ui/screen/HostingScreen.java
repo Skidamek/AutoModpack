@@ -13,6 +13,7 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.Hosting;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.host.HostSource;
 import pl.skidam.automodpack_core.modpack.host.HostingDesk;
@@ -125,7 +126,7 @@ public final class HostingScreen extends VersionedScreen {
 		rebuild();
 		ScreenManager.background(() -> {
 			try {
-				HostingDesk.Outcome outcome = HostingDesk.generate(GameDirectory.current(), preview);
+				HostingDesk.Outcome outcome = HostingDesk.generate(GameDirectory.current(), preview, Hosting.executorOrNull() != null);
 				HostingDesk.Overview refreshed = HostingDesk.read(GameDirectory.current());
 				this.minecraft.execute(() -> {
 					outcomeLine = describe(outcome);

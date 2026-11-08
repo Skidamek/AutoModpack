@@ -24,6 +24,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.client.BootRecovery;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -268,7 +269,7 @@ class ProjectionConvergenceTest {
 		}
 		assertFalse(Files.exists(storage.transactionFile()));
 
-		new BootRecovery(storage).recover();
+		new BootRecovery(storage, TestEnvironment.noopLoader()).recover();
 
 		assertNull(ProjectionState.loadRefusal(storage.gameDirectory()));
 		assertEquals(OLD, tree(storage));

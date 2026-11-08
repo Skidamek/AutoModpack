@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.client;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -28,12 +29,12 @@ public final class SwitchFlow {
 	private SwitchFlow() {}
 
 	/** Switches an installed generation, reusing local objects and connecting only when the selected target needs more. */
-	public static void start(ClientStorage storage, PackDocument record, SelectionIntent expectedSelection, SelectionIntent targetSelection, String modpackName, Runnable release) {
+	public static void start(ClientStorage storage, PackDocument record, SelectionIntent expectedSelection, SelectionIntent targetSelection, String modpackName, Runnable release, ModpackLoaderService modpackLoader) {
 		ModpackUpdater.executor().execute(() -> {
 			ModpackUpdater updater = null;
 			try {
 				SelectedModpackTarget target = SelectedModpackTarget.prepare(record, expectedSelection, targetSelection, ClientPlatform.effective(targetSelection));
-				updater = updater(storage, target);
+				updater = updater(storage, target, modpackLoader);
 				preview(updater, modpackName, release, null, false);
 			} catch (Exception e) {
 				if (updater != null) updater.close();
@@ -49,7 +50,7 @@ public final class SwitchFlow {
 	 * pack detached; the server hosts only head objects, so a generation whose bytes the client no longer holds fails
 	 * loudly instead of syncing.
 	 */
-	public static void rollback(ClientStorage storage, String modpackId, JournalEntry entry, String modpackName, Runnable release) {
+	public static void rollback(ClientStorage storage, String modpackId, JournalEntry entry, String modpackName, Runnable release, ModpackLoaderService modpackLoader) {
 		ModpackUpdater.executor().execute(() -> {
 			ModpackUpdater updater = null;
 			try {
@@ -58,7 +59,7 @@ public final class SwitchFlow {
 				SelectionIntent desiredSelection = new ClientSelectionStore(storage.selectionFile()).get(modpackId).orElse(null);
 				SelectionIntent targetSelection = desiredSelection == null ? GroupSelectionResolver.defaultIntent(record.manifest()) : desiredSelection;
 				SelectedModpackTarget target = SelectedModpackTarget.prepare(record, appliedSelection, targetSelection, ClientPlatform.effective(targetSelection));
-				updater = new ModpackUpdater(target, null, null, storage);
+				updater = new ModpackUpdater(target, null, null, storage, modpackLoader);
 				if (updater.requiresSelectedTargetDownload())
 					throw new IOException("This version's files are no longer kept on this computer, so it cannot be restored");
 				preview(updater, modpackName, release, UpdatePreview.Mode.ROLLBACK, true);
@@ -106,13 +107,13 @@ public final class SwitchFlow {
 		}
 	}
 
-	private static ModpackUpdater updater(ClientStorage storage, SelectedModpackTarget target) throws Exception {
-		ModpackUpdater local = new ModpackUpdater(target, null, null, storage);
+	private static ModpackUpdater updater(ClientStorage storage, SelectedModpackTarget target, ModpackLoaderService modpackLoader) throws Exception {
+		ModpackUpdater local = new ModpackUpdater(target, null, null, storage, modpackLoader);
 		if (!local.requiresSelectedTargetDownload()) return local;
 		local.close();
 
 		try (StoredModpackConnection connection = StoredModpackConnection.open(storage, target.manifest().modpackId(), true)) {
-			return connection.newUpdater(target, storage);
+			return connection.newUpdater(target, storage, modpackLoader);
 		}
 	}
 

@@ -153,7 +153,7 @@ final class InstalledModpackController {
 			// The prior is read before the desire lands: legacy pointers fall back to this store for their applied selection.
 			SelectionIntent applied = appliedSelection(record.manifest().modpackId());
 			new ClientSelectionStore(storage.selectionFile()).put(record.manifest().modpackId(), target);
-			SwitchFlow.start(storage, record, applied, target, modpackName, released);
+			SwitchFlow.start(storage, record, applied, target, modpackName, released, LoaderServices.modpackLoader());
 		} catch (IOException e) {
 			released.run();
 			failure(e, "automodpack.error.update", FailureCategory.UPDATE);
@@ -342,7 +342,7 @@ final class InstalledModpackController {
 					target = desired == null
 							? SelectedModpackTarget.prepareDefault(advertised, ClientPlatform.effective(desired))
 							: SelectedModpackTarget.prepare(advertised, applied, desired, ClientPlatform.effective(desired));
-					updater = connection.newUpdater(target, storage);
+					updater = connection.newUpdater(target, storage, LoaderServices.modpackLoader());
 				}
 				// An explicitly requested sync ends attached whatever it had to do; for an attached pack both clears are no-ops.
 				updater.requestAttach();
@@ -400,7 +400,7 @@ final class InstalledModpackController {
 		try {
 			SelectionIntent desired = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
 			SelectionIntent targetSelection = desired == null ? GroupSelectionResolver.defaultIntent(pack.record().manifest()) : desired;
-			SwitchFlow.start(storage, pack.record(), appliedSelection(pack.modpackId()), targetSelection, pack.name(), released);
+			SwitchFlow.start(storage, pack.record(), appliedSelection(pack.modpackId()), targetSelection, pack.name(), released, LoaderServices.modpackLoader());
 		} catch (IOException | RuntimeException e) {
 			released.run();
 			failure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
@@ -468,7 +468,7 @@ final class InstalledModpackController {
 	private void removeActive(InstalledPacks.Pack pack, boolean deactivation, Runnable released, Runnable removed) {
 		ModpackUpdater updater;
 		try {
-			updater = new ModpackUpdater(null, null, storage);
+			updater = new ModpackUpdater(null, null, storage, LoaderServices.modpackLoader());
 		} catch (RuntimeException e) {
 			released.run();
 			failure(e, "automodpack.error.storage", FailureCategory.STORAGE);

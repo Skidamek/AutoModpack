@@ -13,6 +13,7 @@ import net.minecraft.client.gui.screens.Screen;
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack_core.client.SwitchFlow;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
@@ -57,7 +58,7 @@ final class GenerationHistoryController {
 						else if (entry.seq() >= boundarySeq && generations.locallyRestorable(modpackId, entry)) restorableSeqs.add(entry.seq());
 					}
 				}
-				Consumer<JournalEntry> restore = activePack ? entry -> SwitchFlow.rollback(storage, modpackId, entry, modpackName, closed) : null;
+				Consumer<JournalEntry> restore = activePack ? entry -> SwitchFlow.rollback(storage, modpackId, entry, modpackName, closed, LoaderServices.modpackLoader()) : null;
 				HistoryViewRequest request = new HistoryViewRequest(journal, currentSeq, modpackName, closed, restorableSeqs, restore);
 				if (parent == null) ScreenManager.history(request);
 				else Minecraft.getInstance().execute(() -> ScreenImpl.setScreen(new ContentHistoryScreen(parent, request)));

@@ -66,7 +66,7 @@ class BootRecoveryStaleReviewTest {
 			ConfigTools.writeAtomic(storage.transactionFile(), UpdateTransaction.create(plan, target, storage.overlayDigest(modpackId), new PlannedAgainst(expectedConfig, "", null)));
 
 			new ClientSelectionStore(storage.selectionFile()).remove(modpackId);
-			BootRecovery.BootDecision decision = new BootRecovery(storage).recover();
+			BootRecovery.BootDecision decision = new BootRecovery(storage, TestEnvironment.noopLoader()).recover();
 
 			assertTrue(decision.bootAsIs());
 			assertFalse(Files.exists(storage.transactionFile()));

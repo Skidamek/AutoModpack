@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
@@ -29,7 +30,7 @@ class BootRecoveryTest {
 		Path guardFile = storage.stuckTransactionStateFile();
 		assertTrue(Files.exists(guardFile));
 
-		BootRecovery.BootDecision decision = new BootRecovery(storage).recover();
+		BootRecovery.BootDecision decision = new BootRecovery(storage, TestEnvironment.noopLoader()).recover();
 
 		assertNotNull(storage.clientConfig().current());
 		assertTrue(storage.selectedModpackId().isBlank());
@@ -46,7 +47,7 @@ class BootRecoveryTest {
 		Files.createDirectories(storage.bootstrapFile().getParent());
 		ConfigTools.writeAtomic(storage.bootstrapFile(), fields);
 
-		BootRecovery.BootDecision decision = new BootRecovery(storage).recover();
+		BootRecovery.BootDecision decision = new BootRecovery(storage, TestEnvironment.noopLoader()).recover();
 
 		assertTrue(decision.trustedBootstrapApply());
 		assertEquals("abc1234", storage.selectedModpackId());
@@ -61,7 +62,7 @@ class BootRecoveryTest {
 		Files.createDirectories(storage.bootstrapFile().getParent());
 		ConfigTools.writeAtomic(storage.bootstrapFile(), fields);
 
-		BootRecovery.BootDecision decision = new BootRecovery(storage).recover();
+		BootRecovery.BootDecision decision = new BootRecovery(storage, TestEnvironment.noopLoader()).recover();
 
 		assertFalse(decision.trustedBootstrapApply());
 		assertTrue(storage.selectedModpackId().isBlank());

@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.client.BootRecovery;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.StorageJsons;
@@ -436,7 +437,7 @@ class ProjectionRepairTest {
 		Files.setPosixFilePermissions(state, PosixFilePermissions.fromString("---------"));
 		Assumptions.assumeFalse(Files.isReadable(state), "this filesystem ignores permissions");
 
-		new BootRecovery(storage).recover();
+		new BootRecovery(storage, TestEnvironment.noopLoader()).recover();
 		assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()), "the first boot that meets it refuses");
 		assertTrue(Files.exists(state.resolveSibling(ProjectionState.READ_FAILURE_FILE)), "and records it");
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
@@ -448,7 +449,7 @@ class ProjectionRepairTest {
 		}
 
 		ProjectionState.assumeNextBoot();
-		new BootRecovery(storage).recover();
+		new BootRecovery(storage, TestEnvironment.noopLoader()).recover();
 		assertNull(ProjectionState.loadRefusal(storage.gameDirectory()), "the next boot repaired it");
 		assertEquals(OLD, tree(storage), "without touching the projection");
 		assertFalse(Files.exists(state.resolveSibling(ProjectionState.READ_FAILURE_FILE)));

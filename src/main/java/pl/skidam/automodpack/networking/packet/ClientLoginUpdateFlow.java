@@ -25,6 +25,7 @@ import pl.skidam.automodpack_core.client.ModpackUtils;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -295,7 +296,7 @@ final class ClientLoginUpdateFlow {
 			return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
 		}
 
-		ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, transport);
+		ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, transport, LoaderServices.modpackLoader());
 		try {
 			ClientGenerationStore generations = new ClientGenerationStore(storage);
 			if (generations.isDetached(serverModpackContent.modpackId)) {

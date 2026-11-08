@@ -35,11 +35,13 @@ import pl.skidam.automodpack_core.utils.*;
 public class Preload {
 	private static final Logger LOGGER = LogManager.getLogger(Preload.class);
 
+	private final ModpackLoaderService modpackLoader;
 	private ClientStorage storage;
 	private boolean trustedBootstrapApply;
 	private boolean bootAsIs;
 
 	public Preload(LoaderManagerService loaderManager, ModpackLoaderService modpackLoader) {
+		this.modpackLoader = modpackLoader;
 		try {
 			long start = System.currentTimeMillis();
 			LOGGER.debug("Prelaunching AutoModpack...");
@@ -52,7 +54,7 @@ public class Preload {
 			recoverPendingSelfUpdate();
 			if (Environment.current().isClient()) {
 				storage = ClientStorage.open(GameDirectory.current());
-				BootRecovery.BootDecision decision = new BootRecovery(storage).recover();
+				BootRecovery.BootDecision decision = new BootRecovery(storage, modpackLoader).recover();
 				trustedBootstrapApply = decision.trustedBootstrapApply();
 				bootAsIs = decision.bootAsIs();
 			} else {
@@ -81,7 +83,7 @@ public class Preload {
 			SelfUpdater.update();
 			return;
 		}
-		new ClientLaunch(storage, trustedBootstrapApply, bootAsIs).run();
+		new ClientLaunch(storage, trustedBootstrapApply, bootAsIs, modpackLoader).run();
 	}
 
 	private void initializeEnvironment(LoaderManagerService loaderManager, ModpackLoaderService modpackLoader) {

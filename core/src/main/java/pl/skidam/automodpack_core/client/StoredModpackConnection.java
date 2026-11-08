@@ -6,6 +6,7 @@ import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.PackTransport;
@@ -72,12 +73,12 @@ public final class StoredModpackConnection implements AutoCloseable {
 	}
 
 	/** Transfers this session's transport ownership to an updater. This connection becomes empty. */
-	public synchronized ModpackUpdater newUpdater(SelectedModpackTarget target, ClientStorage storage) throws IOException {
+	public synchronized ModpackUpdater newUpdater(SelectedModpackTarget target, ClientStorage storage, ModpackLoaderService modpackLoader) throws IOException {
 		if (!modpackId.equals(target.manifest().modpackId())) throw new IOException("Selected modpack identity does not match the connected pack");
 		if (transport == null) throw new IllegalStateException("Stored modpack transfer session was already consumed");
 		PackTransport transferred = transport;
 		transport = null;
-		return new ModpackUpdater(target, connection, secret, storage, transferred);
+		return new ModpackUpdater(target, connection, secret, storage, transferred, modpackLoader);
 	}
 
 	@Override

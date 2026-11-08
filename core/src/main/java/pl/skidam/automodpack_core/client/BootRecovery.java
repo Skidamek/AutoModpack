@@ -12,7 +12,7 @@ import pl.skidam.automodpack_core.config.BootstrapInstaller;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
-import pl.skidam.automodpack_core.loader.LoaderServices;
+import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.GeneratedCopyState;
@@ -35,11 +35,13 @@ public final class BootRecovery {
 	private static final Logger LOGGER = LogManager.getLogger(BootRecovery.class);
 
 	private final ClientStorage storage;
+	private final ModpackLoaderService modpackLoader;
 	private boolean trustedBootstrapApply;
 	private boolean bootAsIs;
 
-	public BootRecovery(ClientStorage storage) {
+	public BootRecovery(ClientStorage storage, ModpackLoaderService modpackLoader) {
 		this.storage = storage;
+		this.modpackLoader = modpackLoader;
 	}
 
 	/** What the boot phase needs to decide how the launch proceeds. */
@@ -104,7 +106,7 @@ public final class BootRecovery {
 	private void recoverPendingRepair() throws IOException {
 		if (!Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) return;
 		try {
-			new ClientOfflineRepair(storage, LoaderServices.modpackLoader()).recover()
+			new ClientOfflineRepair(storage, modpackLoader).recover()
 					.ifPresent(receipt -> LOGGER.info("Recovered offline repair for {} (complete: {})", receipt.before().modpackId(), receipt.complete()));
 		} catch (IOException | RuntimeException e) {
 			// The journal can name state that no longer exists (its generation was checked out, an editable
@@ -168,7 +170,7 @@ public final class BootRecovery {
 	/** The boot rebuild policy: a pending transaction is rebuilt from what the player now wants; a rebuild failure is terminal, never a crash. */
 	private UpdateCommit.Built rebuildPending(UpdateTransaction pending) throws IOException {
 		try {
-			return UpdateAttempt.pendingRebuild(storage, pending, LoaderServices.modpackLoader(), Environment.current().loader());
+			return UpdateAttempt.pendingRebuild(storage, pending, modpackLoader, Environment.current().loader());
 		} catch (UpdateReplanRequiredException e) {
 			throw e;
 		} catch (IOException e) {

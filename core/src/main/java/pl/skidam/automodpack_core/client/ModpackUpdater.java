@@ -22,7 +22,7 @@ import pl.skidam.automodpack_core.client.RestartDecision.ApplyResult;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.loader.LoaderServices;
+import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -71,6 +71,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private Changelogs changelogs = new Changelogs();
+	private final ModpackLoaderService modpackLoader;
 	boolean fullDownload = false;
 	private SelectedModpackTarget selectedTarget;
 	private ModpackJsons.ModpackContentFields serverModpackContent;
@@ -219,25 +220,26 @@ public class ModpackUpdater implements AutoCloseable {
 		applyInstalledSwitch();
 	}
 
-	public ModpackUpdater(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage) {
-		this(selectedTarget, connectionInfo, secret, storage, null);
+	public ModpackUpdater(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage, ModpackLoaderService modpackLoader) {
+		this(selectedTarget, connectionInfo, secret, storage, null, modpackLoader);
 	}
 
-	public ModpackUpdater(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage) {
-		this(null, connectionInfo, secret, storage, null);
+	public ModpackUpdater(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage, ModpackLoaderService modpackLoader) {
+		this(null, connectionInfo, secret, storage, null, modpackLoader);
 	}
 
 	public ModpackUpdater(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage,
-			PackTransport transport) {
+			PackTransport transport, ModpackLoaderService modpackLoader) {
 		this.selectedTarget = selectedTarget;
 		this.serverModpackContent = selectedTarget == null ? null : selectedTarget.flatTarget();
 		this.connectionInfo = connectionInfo;
 		this.storage = Objects.requireNonNull(storage, "storage");
+		this.modpackLoader = Objects.requireNonNull(modpackLoader, "modpackLoader");
 		this.platformCache = openPlatformCache(storage);
-		this.planBuilder = new ClientUpdatePlanBuilder(this.storage, LoaderServices.modpackLoader(), Environment.current().loader());
+		this.planBuilder = new ClientUpdatePlanBuilder(this.storage, this.modpackLoader, Environment.current().loader());
 		this.updateLoopDetector = new UpdateLoopDetector(storage.restartLoopStateFile());
 		this.sourceCatalogue = new SourceCatalogue(() -> selectedTarget, this.platformCache);
-		this.projectionLoader = new ProjectionLoader(this.storage, this::storedTarget);
+		this.projectionLoader = new ProjectionLoader(this.storage, this::storedTarget, this.modpackLoader);
 		this.transport = transport;
 		AtomicBoolean playerCancelled = new AtomicBoolean();
 		this.objectAcquisition = new ModpackObjectAcquisition(this.storage, this.platformCache, this.sourceCatalogue, this.planBuilder, this.connectionInfo, this.transport,
