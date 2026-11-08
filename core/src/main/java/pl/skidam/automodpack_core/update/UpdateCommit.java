@@ -722,8 +722,4 @@ public final class UpdateCommit {
 			}
 		}
 	}
-
-	/**
-	 * P8: a failure of this write is the projection state's own; no game holds it, so it is never reported as a held file.
-	 */
 }

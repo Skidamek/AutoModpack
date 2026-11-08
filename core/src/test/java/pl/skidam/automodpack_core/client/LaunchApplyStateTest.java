@@ -44,15 +44,15 @@ class LaunchApplyStateTest {
 	void theNoticeNamesTheSelectedPackAndIsConsumedOnce() throws Exception {
 		ClientStorage storage = storage("notice");
 		storage.writeSelectedModpackId("abc1234");
-		assertNull(LaunchApplyState.unseenNotice(storage));
+		assertNull(LaunchApplyState.unseenNoticeModpackId(storage));
 
 		LaunchApplyState.recordUnseenApply(storage, "abc1234");
-		LaunchApplyState.Notice notice = LaunchApplyState.unseenNotice(storage);
-		assertEquals("abc1234", notice.modpackId());
+		String notice = LaunchApplyState.unseenNoticeModpackId(storage);
+		assertEquals("abc1234", notice);
 		assertTrue(LaunchApplyState.hasUnseenApply(storage, "abc1234"), "reading the notice does not consume it");
-		assertTrue(LaunchApplyState.takeNotice(storage, notice));
-		assertNull(LaunchApplyState.unseenNotice(storage));
-		assertFalse(LaunchApplyState.takeNotice(storage, notice));
+		assertTrue(LaunchApplyState.takeUnseenApply(storage, notice));
+		assertNull(LaunchApplyState.unseenNoticeModpackId(storage));
+		assertFalse(LaunchApplyState.takeUnseenApply(storage, notice));
 	}
 
 	private ClientStorage storage(String name) throws Exception {

@@ -15,35 +15,35 @@ import pl.skidam.automodpack_core.update.ClientStorage;
  * receipt; this class only remembers whether it already asked and opens the history the player clicked.
  */
 public final class LaunchApplyNotice {
-	private static volatile LaunchApplyState.Notice notice;
+	private static volatile String noticeModpackId;
 	private static volatile boolean read;
 
 	private LaunchApplyNotice() {}
 
 	/** True while this session has a receipt to announce; reading it consumes nothing. */
 	public static boolean pending() {
-		return notice() != null;
+		return noticeModpackId() != null;
 	}
 
 	public static void open(Screen parent) {
-		LaunchApplyState.Notice pending = notice();
+		String pending = noticeModpackId();
 		if (pending == null) return;
-		notice = null;
+		noticeModpackId = null;
 		try {
 			ClientStorage storage = ClientStorage.open(GameDirectory.current());
-			if (!LaunchApplyState.takeNotice(storage, pending)) return;
-			GenerationHistoryController.open(parent, storage, pending.modpackId(), InstalledPacks.nameOf(storage, pending.modpackId(), VersionedServers::entryName), () -> {});
+			if (!LaunchApplyState.takeUnseenApply(storage, pending)) return;
+			GenerationHistoryController.open(parent, storage, pending, InstalledPacks.nameOf(storage, pending, VersionedServers::entryName), () -> {});
 		} catch (Exception e) {
 			LOGGER.warn("The launch-apply history could not be opened", e);
 		}
 	}
 
-	private static LaunchApplyState.Notice notice() {
+	private static String noticeModpackId() {
 		if (!read) {
 			synchronized (LaunchApplyNotice.class) {
 				if (!read) {
 					try {
-						notice = LaunchApplyState.unseenNotice(ClientStorage.open(GameDirectory.current()));
+						noticeModpackId = LaunchApplyState.unseenNoticeModpackId(ClientStorage.open(GameDirectory.current()));
 					} catch (Exception e) {
 						LOGGER.debug("Launch-apply notice is unavailable", e);
 					}
@@ -51,7 +51,7 @@ public final class LaunchApplyNotice {
 				}
 			}
 		}
-		return notice;
+		return noticeModpackId;
 	}
 
 }

@@ -87,6 +87,7 @@ final class ReviewSession {
 		archiveLocalMods = false;
 	}
 
+	/** The confirm screens' checkbox holds the player's answer until the update it belongs to commits. */
 	Map<String, UpdatePlan.FileState> consentedLocalModFiles() {
 		return consentedLocalModFiles;
 	}

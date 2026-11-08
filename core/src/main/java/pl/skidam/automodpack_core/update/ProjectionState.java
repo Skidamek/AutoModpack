@@ -42,7 +42,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * {@code active/} held at that moment, before its first projection write ({@code ProjectionConvergence.converge}), and
  * returns to {@link Phase#SETTLED} only after its transaction's COMMITTED marker, or after the fallback was restored.</li>
  * <li><b>P3 (gates consult it).</b> Every loader gate refuses {@code active/} while the phase is not settled or the
- * document cannot be read, for any reason: {@link ClientStorage#loadableProjectionModsDirectory},
+ * document cannot be read, for any reason: {@link ProjectionAvailability#loadableModsDirectory},
  * {@code ClientLaunch.hasActiveProjection} and {@code ProjectionLoader}, through {@link #loadRefusal}.</li>
  * <li><b>P4 (a boot never runs on owed projection work).</b> Boot recovery and the publication sweep restore the
  * fallback from CAS whenever they leave a converging projection behind ({@code BootRecovery.settleProjection},

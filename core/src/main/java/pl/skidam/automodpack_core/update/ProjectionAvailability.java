@@ -109,8 +109,8 @@ public final class ProjectionAvailability {
 
 	/** The projection state's own answer, for a load that has already checked the selection. */
 	public static Refusal stateStanding(Path gameDirectory) {
-		String reason = ProjectionState.loadRefusal(gameDirectory);
-		return new Refusal(reason, null);
+		ProjectionState.Inspection inspection = ProjectionState.inspect(ProjectionState.file(gameDirectory));
+		return new Refusal(inspection.refusal(), inspection.failure());
 	}
 
 	/** Why the authoritative load may not take {@code active/}: the state's answer plus selection agreement. */

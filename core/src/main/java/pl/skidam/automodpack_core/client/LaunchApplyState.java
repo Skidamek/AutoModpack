@@ -47,24 +47,16 @@ public final class LaunchApplyState {
 		}
 	}
 
-	/** The pack whose launch apply the player has not been shown. */
-	public record Notice(String modpackId) {}
-
-	/** The selected pack's unseen notice, or null; reading does not consume it and a missing selection has none. */
-	public static Notice unseenNotice(ClientStorage storage) {
+	/** The selected pack whose launch apply the player has not been shown, or null; reading does not consume it. */
+	public static String unseenNoticeModpackId(ClientStorage storage) {
 		try {
 			String modpackId = storage.selectedModpackId();
 			if (modpackId == null || modpackId.isBlank()) return null;
-			return hasUnseenApply(storage, modpackId) ? new Notice(modpackId) : null;
+			return hasUnseenApply(storage, modpackId) ? modpackId : null;
 		} catch (IOException e) {
 			LOGGER.debug("The launch-apply notice is unavailable", e);
 			return null;
 		}
-	}
-
-	/** Consumes the notice so it is shown once; false when it was already gone. */
-	public static boolean takeNotice(ClientStorage storage, Notice notice) throws IOException {
-		return takeUnseenApply(storage, notice.modpackId());
 	}
 
 	/** Whether the receipt is set, without consuming it. */

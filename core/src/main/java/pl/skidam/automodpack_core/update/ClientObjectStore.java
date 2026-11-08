@@ -174,7 +174,7 @@ public final class ClientObjectStore {
 		Objects.requireNonNull(storage, "storage");
 		Objects.requireNonNull(temporaryObjectHashes, "temporary object hashes");
 		ExpectedSizes references = collectReferences(storage);
-		for (String hash : canonicalPins(temporaryObjectHashes, "temporary object")) references.optional(hash, -1, "in-flight acquisition");
+		for (String hash : ObjectStoreMaintenance.canonicalPins(temporaryObjectHashes, "temporary object")) references.optional(hash, -1, "in-flight acquisition");
 		SharedObjectOwnership.publish(storage.dataLocation(), "client", references.hashes());
 	}
 
@@ -216,7 +216,7 @@ public final class ClientObjectStore {
 		Objects.requireNonNull(storage, "storage");
 		Objects.requireNonNull(pinnedObjectHashes, "pinnedObjectHashes");
 		ExpectedSizes references = collectReferences(storage);
-		for (String hash : canonicalPins(pinnedObjectHashes, "pinned object")) references.optional(hash, -1, "explicit pin");
+		for (String hash : ObjectStoreMaintenance.canonicalPins(pinnedObjectHashes, "pinned object")) references.optional(hash, -1, "explicit pin");
 		return collectUnreachableObjects(storage, references);
 	}
 
@@ -243,9 +243,9 @@ public final class ClientObjectStore {
 	private static StorageReport measure(ClientStorage storage, ExpectedSizes references, boolean requireRequiredReferences) throws IOException {
 		ObjectStoreMaintenance.FileTotals objects = ObjectStoreMaintenance.fileTotals(ObjectStoreMaintenance.objectFiles(storage.objectsDirectory()));
 		ReferenceTotals referenceTotals = measureReferences(storage, references, requireRequiredReferences);
-		ObjectStoreMaintenance.FileTotals active = fileTotals(regularFiles(storage.activeDirectory(), "client active projection"));
+		ObjectStoreMaintenance.FileTotals active = ObjectStoreMaintenance.fileTotals(regularFiles(storage.activeDirectory(), "client active projection"));
 		ObjectStoreMaintenance.FileTotals metadata = metadataTotals(storage);
-		ObjectStoreMaintenance.FileTotals overlays = fileTotals(regularFiles(storage.overlaysDirectory(), "client overlays"));
+		ObjectStoreMaintenance.FileTotals overlays = ObjectStoreMaintenance.fileTotals(regularFiles(storage.overlaysDirectory(), "client overlays"));
 		return new StorageReport(objects.count(), objects.bytes(), references.hashes().size(), referenceTotals.expectedBytes(), referenceTotals.validCount(), referenceTotals.validBytes(),
 				referenceTotals.missingCount(), referenceTotals.invalidCount(), active.count(), active.bytes(), metadata.count(), metadata.bytes(), overlays.count(), overlays.bytes());
 	}
@@ -455,11 +455,11 @@ public final class ClientObjectStore {
 	}
 
 	private static ObjectStoreMaintenance.FileTotals metadataTotals(ClientStorage storage) throws IOException {
-		ObjectStoreMaintenance.FileTotals total = fileTotals(regularFiles(storage.fileCacheDirectory(), "client file cache"));
-		total = total.plus(fileTotals(regularFiles(storage.modCacheDirectory(), "client mod metadata")));
-		total = total.plus(fileTotals(regularFiles(storage.packsDirectory(), "client pack metadata")));
+		ObjectStoreMaintenance.FileTotals total = ObjectStoreMaintenance.fileTotals(regularFiles(storage.fileCacheDirectory(), "client file cache"));
+		total = total.plus(ObjectStoreMaintenance.fileTotals(regularFiles(storage.modCacheDirectory(), "client mod metadata")));
+		total = total.plus(ObjectStoreMaintenance.fileTotals(regularFiles(storage.packsDirectory(), "client pack metadata")));
 		for (Path file : List.of(storage.stateFile(), storage.selectionFile(), storage.selectedModpackFile(), storage.clientConfigFile(), storage.restartLoopStateFile(), storage.modpackContentTempFile()))
-			if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) total = total.plus(fileTotals(List.of(FileTrees.requireRegularFile(file, "client metadata"))));
+			if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) total = total.plus(ObjectStoreMaintenance.fileTotals(List.of(FileTrees.requireRegularFile(file, "client metadata"))));
 		return total;
 	}
 
@@ -490,20 +490,12 @@ public final class ClientObjectStore {
 		}
 	}
 
-	private static ObjectStoreMaintenance.FileTotals fileTotals(List<Path> paths) throws IOException {
-		return ObjectStoreMaintenance.fileTotals(paths);
-	}
-
 	private static String requireModpackId(String value, String description) throws IOException {
 		try {
 			return ModpackId.requireValid(value);
 		} catch (RuntimeException e) {
 			throw new IOException("Invalid " + description + ": " + value, e);
 		}
-	}
-
-	private static Set<String> canonicalPins(Set<String> pins, String description) throws IOException {
-		return ObjectStoreMaintenance.canonicalPins(pins, description);
 	}
 
 	public static String normalizeHash(String sha1) {
