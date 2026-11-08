@@ -9,8 +9,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.storage.StoragePaths;
 
 class SecretsProvisioningTest {
@@ -18,16 +18,16 @@ class SecretsProvisioningTest {
 
 	@BeforeEach
 	void setUp() {
-		previousConfig = Constants.serverConfig;
-		Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
-		Constants.serverConfig.validateSecrets = true;
+		previousConfig = ServerConfigStore.installed();
+		ServerConfigStore.install(new ServerConfigJsons.ServerConfigFieldsV3());
+		ServerConfigStore.current().validateSecrets = true;
 		ProvisioningSecretStore.reset();
 	}
 
 	@AfterEach
 	void tearDown() {
 		ProvisioningSecretStore.reset();
-		Constants.serverConfig = previousConfig;
+		ServerConfigStore.install(previousConfig);
 	}
 
 	@Test
@@ -40,7 +40,7 @@ class SecretsProvisioningTest {
 	/** A disk-backed provisioning secret revokes in the running process when its credential file is deleted: the next validation miss answers null instead of the cached value. */
 	@Test
 	void deletingTheCredentialFileRevokesTheProvisioningSecret() throws Exception {
-		Constants.serverConfig.validateSecrets = true;
+		ServerConfigStore.current().validateSecrets = true;
 		try {
 			String secret = ProvisioningSecretStore.ensure();
 			Files.deleteIfExists(StoragePaths.PROVISIONING_SECRET_FILE);

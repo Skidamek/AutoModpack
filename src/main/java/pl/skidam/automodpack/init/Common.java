@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.init;
 
+import pl.skidam.automodpack_core.config.ServerConfigStore;
+
 import pl.skidam.automodpack_core.Environment;
 
 import net.minecraft.resources.Identifier;
@@ -48,7 +50,7 @@ public class Common {
 
 	private static void prepareRuntime() {
 		if (serverRuntimePrepared) return;
-		if (serverConfig == null) serverConfig = ConfigUtils.loadOrCreateServerConfig();
+		ServerConfigStore.loadIfAbsent();
 
 		StorageLeftovers.warnAbout(GameDirectory.current().resolve(StoragePaths.AUTOMODPACK_DIR));
 

@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.mixin.core;
 
+import pl.skidam.automodpack_core.config.ServerConfigStore;
+
 import com.mojang.authlib.GameProfile;
 import net.minecraft.network.Connection;
 import net.minecraft.server.level.ServerPlayer;
@@ -14,7 +16,6 @@ import pl.skidam.automodpack.modpack.GameHelpers;
 import net.minecraft.server.network.CommonListenerCookie;
 /*?}*/
 
-import static pl.skidam.automodpack_core.Constants.serverConfig;
 
 @Mixin(PlayerList.class)
 public class PlayerManagerMixin {
@@ -36,6 +37,6 @@ original.call(netManager, player);
 			return;
 		}
 
-		if (serverConfig.nagUnModdedClients && !Common.players.get(playerName)) GameHelpers.sendNag(player, serverConfig);
+		if (ServerConfigStore.current().nagUnModdedClients && !Common.players.get(playerName)) GameHelpers.sendNag(player, ServerConfigStore.current());
 	}
 }

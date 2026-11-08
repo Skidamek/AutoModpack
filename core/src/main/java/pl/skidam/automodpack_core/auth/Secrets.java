@@ -7,6 +7,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
 
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.utils.TimedSet;
 
 public class Secrets {
@@ -80,7 +81,7 @@ public class Secrets {
 	private static final TimedSet<String> cachedValidSecrets = new TimedSet<>(3500);
 
 	public static boolean isSecretValid(String secretStr, SocketAddress address) {
-		if (!serverConfig.validateSecrets) return true;
+		if (!ServerConfigStore.current().validateSecrets) return true;
 
 		if (cachedValidSecrets.contains(secretStr)) return true;
 
@@ -100,7 +101,7 @@ public class Secrets {
 			return false;
 		}
 
-		long secretLifetime = serverConfig.secretLifetime * 3600; // in seconds
+		long secretLifetime = ServerConfigStore.current().secretLifetime * 3600; // in seconds
 		long currentTime = System.currentTimeMillis() / 1000;
 
 		boolean valid = issued.timestamp() + secretLifetime > currentTime;

@@ -1,13 +1,13 @@
 package pl.skidam.automodpack_core.modpack.host;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.serverConfig;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
 
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.loader.LoaderManagerService.EnvironmentType;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.PackAbsence;
@@ -77,7 +77,7 @@ public final class HostRole {
 
 	private void bindGeneration() {
 		long start = System.currentTimeMillis();
-		if (serverConfig.generateModpackOnStart) {
+		if (ServerConfigStore.current().generateModpackOnStart) {
 			if (!integrated) LOGGER.info("Generating modpack...");
 			var generation = executor.publish();
 			if (generation instanceof ModpackExecutor.Published) {

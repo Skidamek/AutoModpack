@@ -52,9 +52,9 @@ import org.junit.jupiter.api.Timeout;
 
 import io.netty.channel.ChannelFuture;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -90,13 +90,13 @@ class ThermoStressBenchTest {
 	void setUp() throws Exception {
 		generationDirectory = Files.createTempDirectory("thermo-generation");
 		downloadDirectory = Files.createTempDirectory("thermo-download");
-		previousConfig = Constants.serverConfig;
-		Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
-		Constants.serverConfig.validateSecrets = false;
-		Constants.serverConfig.modpackHost = true;
-		Constants.serverConfig.connectionMode = ModpackConnectionMode.HTTP;
-		Constants.serverConfig.bindPort = 0; // ephemeral
-		Constants.serverConfig.bandwidthLimit = 0;
+		previousConfig = ServerConfigStore.installed();
+		ServerConfigStore.install(new ServerConfigJsons.ServerConfigFieldsV3());
+		ServerConfigStore.current().validateSecrets = false;
+		ServerConfigStore.current().modpackHost = true;
+		ServerConfigStore.current().connectionMode = ModpackConnectionMode.HTTP;
+		ServerConfigStore.current().bindPort = 0; // ephemeral
+		ServerConfigStore.current().bandwidthLimit = 0;
 
 		universe = buildUniverseOnDisk();
 		Files.writeString(generationDirectory.resolve("head-doc"), "{}");
@@ -107,19 +107,19 @@ class ThermoStressBenchTest {
 		assertTrue(server.isRunning());
 		serverPort = localPort(server);
 
-		Constants.serverConfig.disableInternalTLS = true;
+		ServerConfigStore.current().disableInternalTLS = true;
 		plaintextServer = new NettyServer();
 		plaintextServer.replacePaths(pathsFor(universe, true));
 		plaintextServer.start();
 		plaintextPort = localPort(plaintextServer);
-		Constants.serverConfig.disableInternalTLS = false;
+		ServerConfigStore.current().disableInternalTLS = false;
 	}
 
 	@AfterAll
 	void tearDown() throws Exception {
 		if (server != null) server.stop();
 		if (plaintextServer != null) plaintextServer.stop();
-		Constants.serverConfig = previousConfig;
+		ServerConfigStore.install(previousConfig);
 		deleteRecursively(generationDirectory);
 		deleteRecursively(downloadDirectory);
 	}

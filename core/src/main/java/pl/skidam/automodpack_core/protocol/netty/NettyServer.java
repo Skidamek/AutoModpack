@@ -30,6 +30,7 @@ import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import io.netty.util.AttributeKey;
 
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
@@ -150,8 +151,8 @@ public class NettyServer {
 	}
 
 	public EndpointOwner endpointOwner() {
-		if (!serverConfig.modpackHost) return EndpointOwner.EXTERNAL;
-		return serverConfig.connectionMode == ModpackConnectionMode.HTTP && serverConfig.bindPort == -1 ? EndpointOwner.EXTERNAL : EndpointOwner.BUILT_IN;
+		if (!ServerConfigStore.current().modpackHost) return EndpointOwner.EXTERNAL;
+		return ServerConfigStore.current().connectionMode == ModpackConnectionMode.HTTP && ServerConfigStore.current().bindPort == -1 ? EndpointOwner.EXTERNAL : EndpointOwner.BUILT_IN;
 	}
 
 	public synchronized Optional<ChannelFuture> start() {
@@ -160,7 +161,7 @@ public class NettyServer {
 			return Optional.ofNullable(serverChannel);
 		}
 
-		if (!serverConfig.modpackHost) {
+		if (!ServerConfigStore.current().modpackHost) {
 			LOGGER.warn("Built-in modpack hosting is disabled in config");
 			return Optional.empty();
 		}
@@ -179,8 +180,8 @@ public class NettyServer {
 		// The first client after a restart must not pay the document hashes on the event loop either.
 		documentEtags.replace(getPath(GenerationHosting.HEAD_DOCUMENT_KEY), getPath(GenerationHosting.JOURNAL_KEY));
 
-		ModpackConnectionMode connectionMode = serverConfig.connectionMode;
-		if (serverConfig.disableInternalTLS)
+		ModpackConnectionMode connectionMode = ServerConfigStore.current().connectionMode;
+		if (ServerConfigStore.current().disableInternalTLS)
 			LOGGER.info("Internal TLS termination is disabled; the listener serves plaintext and expects TLS to be terminated in front of it");
 
 		try {
@@ -193,7 +194,7 @@ public class NettyServer {
 				startSharedTraffic();
 				holepunchActive = ServerHolepunchBridge.register(this);
 				started = Optional.empty();
-			} else if (connectionMode == ModpackConnectionMode.MAGIC && serverConfig.bindPort == -1) {
+			} else if (connectionMode == ModpackConnectionMode.MAGIC && ServerConfigStore.current().bindPort == -1) {
 				startSharedTraffic();
 				sharedMagicEnabled = true;
 				started = Optional.empty();
@@ -211,8 +212,8 @@ public class NettyServer {
 	}
 
 	private Optional<ChannelFuture> startDedicated(ModpackConnectionMode connectionMode) {
-		String address = serverConfig.bindAddress;
-		int port = serverConfig.bindPort;
+		String address = ServerConfigStore.current().bindAddress;
+		int port = ServerConfigStore.current().bindPort;
 		InetSocketAddress bindAddress;
 		if (address == null || address.isBlank()) {
 			bindAddress = new InetSocketAddress(port);
@@ -239,7 +240,7 @@ public class NettyServer {
 					protected void initChannel(SocketChannel ch) {
 						// A PROXY header claims a source address that feeds secret validation, so only a listener whose
 						// operator opted in (a trusted proxy is in front) may consume one.
-						if (serverConfig.acceptProxyProtocol) ch.pipeline().addLast("proxy-protocol", new ProxyProtocolHandler());
+						if (ServerConfigStore.current().acceptProxyProtocol) ch.pipeline().addLast("proxy-protocol", new ProxyProtocolHandler());
 						// The contract listener is public, so fully silent connections are reaped: the all-idle bound sits
 						// far past any client's keep-alive reuse window, and a streamed body completes a write well
 						// inside it at the receipted drain floor, so the reap never interrupts a live transfer.
@@ -257,11 +258,12 @@ public class NettyServer {
 
 	/** What clients will dial, so a report shows the advertised route without reproducing the login. */
 	private void logAdvertisedEndpoint(ModpackConnectionMode mode) {
-		String host = serverConfig.advertisedEndpointHost == null || serverConfig.advertisedEndpointHost.isBlank() ? "<joined host>" : serverConfig.advertisedEndpointHost;
-		String port = serverConfig.advertisedEndpointPort == -1 ? "<joined port>" : Integer.toString(serverConfig.advertisedEndpointPort);
+		String host = ServerConfigStore.current().advertisedEndpointHost == null || ServerConfigStore.current().advertisedEndpointHost.isBlank() ? "<joined host>" : ServerConfigStore.current().advertisedEndpointHost;
+		String port = ServerConfigStore.current().advertisedEndpointPort == -1 ? "<joined port>" : Integer.toString(ServerConfigStore.current().advertisedEndpointPort);
 		LOGGER.info("Modpack endpoint advertised to clients: {}:{} (mode {})", host, port, mode);
-		if (mode != ModpackConnectionMode.HOLEPUNCH && serverConfig.bindPort != -1 && serverConfig.advertisedEndpointPort == -1) {
-			LOGGER.warn("bind-port is {} but advertised-endpoint-port is -1: clients will use the port they joined on. Set advertised-endpoint-port if the modpack port is not the join port.", serverConfig.bindPort);
+		if (mode != ModpackConnectionMode.HOLEPUNCH && ServerConfigStore.current().bindPort != -1 && ServerConfigStore.current().advertisedEndpointPort == -1) {
+			LOGGER.warn("bind-port is {} but advertised-endpoint-port is -1: clients will use the port they joined on. Set advertised-endpoint-port if the modpack port is not the join port.",
+					ServerConfigStore.current().bindPort);
 		}
 	}
 
@@ -283,7 +285,7 @@ public class NettyServer {
 		sslCtx = null;
 		certificateFingerprint = null;
 
-		if (serverConfig.disableInternalTLS) {
+		if (ServerConfigStore.current().disableInternalTLS) {
 			LOGGER.warn("Internal TLS termination is disabled. Clients still use TLS; traffic must be decrypted before it reaches AutoModpack.");
 			return;
 		}

@@ -12,6 +12,7 @@ import pl.skidam.automodpack_core.client.DetachedUpdateHelper;
 import pl.skidam.automodpack_core.client.RuntimeJar;
 import pl.skidam.automodpack_core.client.SelfUpdater;
 import pl.skidam.automodpack_core.config.ConfigUtils;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
@@ -51,7 +52,7 @@ public class Preload {
 				trustedBootstrapApply = decision.trustedBootstrapApply();
 				bootAsIs = decision.bootAsIs();
 			} else {
-				serverConfig = ConfigUtils.loadOrCreateServerConfig();
+				ServerConfigStore.install(ConfigUtils.loadOrCreateServerConfig());
 			}
 			DetachedUpdateHelper.mirrorRecentRuns();
 			updateAll();

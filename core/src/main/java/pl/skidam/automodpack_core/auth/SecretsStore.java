@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.auth;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.serverConfig;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +16,7 @@ import java.util.regex.Pattern;
 
 import pl.skidam.automodpack_core.config.AuthJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.utils.FileLocks;
 import pl.skidam.automodpack_core.utils.TimedSet;
@@ -115,7 +115,7 @@ public class SecretsStore {
 		}
 
 		private static void pruneExpired(Map<String, IssuedSecret> secrets) {
-			long lifetimeSeconds = serverConfig.secretLifetime * 3600;
+			long lifetimeSeconds = ServerConfigStore.current().secretLifetime * 3600;
 			long now = System.currentTimeMillis() / 1000;
 			secrets.values().removeIf(issued -> issued == null || issued.timestamp() == null || issued.timestamp() + lifetimeSeconds <= now);
 		}

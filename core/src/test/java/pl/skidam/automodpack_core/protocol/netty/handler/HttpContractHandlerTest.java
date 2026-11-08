@@ -37,6 +37,7 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.loader.GameCallService;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
@@ -58,16 +59,16 @@ class HttpContractHandlerTest {
 
 	@BeforeEach
 	void setUp() {
-		previousConfig = Constants.serverConfig;
-		Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
-		Constants.serverConfig.validateSecrets = false;
+		previousConfig = ServerConfigStore.installed();
+		ServerConfigStore.install(new ServerConfigJsons.ServerConfigFieldsV3());
+		ServerConfigStore.current().validateSecrets = false;
 	}
 
 	@AfterEach
 	void tearDown() {
 		for (EmbeddedChannel channel : channels) channel.finishAndReleaseAll();
 		if (server != null) server.stop();
-		Constants.serverConfig = previousConfig;
+		ServerConfigStore.install(previousConfig);
 	}
 
 	@Test
@@ -478,7 +479,7 @@ class HttpContractHandlerTest {
 	@Test
 	void missingMalformedAndUnknownBearerSecretsAreUnauthorized() throws Exception {
 		fixture();
-		Constants.serverConfig.validateSecrets = true;
+		ServerConfigStore.current().validateSecrets = true;
 
 		EmbeddedChannel missing = channel();
 		assertTrue(exchange(missing, request("/head")).startsWith("HTTP/1.1 401 Unauthorized\r\n"));
@@ -503,7 +504,7 @@ class HttpContractHandlerTest {
 	@Test
 	void aValidBearerSecretIsAccepted() throws Exception {
 		fixture();
-		Constants.serverConfig.validateSecrets = true;
+		ServerConfigStore.current().validateSecrets = true;
 		GameCallService previousGameCall = Constants.GAME_CALL;
 		Constants.GAME_CALL = (address, id, playerName) -> true;
 		Secrets.Secret secret = Secrets.generateSecret();

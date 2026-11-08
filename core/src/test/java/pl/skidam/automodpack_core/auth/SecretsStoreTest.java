@@ -18,8 +18,8 @@ import org.junit.jupiter.api.io.TempDir;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 
 class SecretsStoreTest {
 	@TempDir
@@ -29,13 +29,13 @@ class SecretsStoreTest {
 
 	@BeforeEach
 	void setUp() {
-		previousConfig = Constants.serverConfig;
-		Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
+		previousConfig = ServerConfigStore.installed();
+		ServerConfigStore.install(new ServerConfigJsons.ServerConfigFieldsV3());
 	}
 
 	@AfterEach
 	void tearDown() {
-		Constants.serverConfig = previousConfig;
+		ServerConfigStore.install(previousConfig);
 	}
 
 	@Test
@@ -92,14 +92,14 @@ class SecretsStoreTest {
 
 	@Test
 	void savingPrunesAlreadyExpiredEntries() throws Exception {
-		Constants.serverConfig.secretLifetime = 336;
+		ServerConfigStore.current().secretLifetime = 336;
 		SecretsStore.SecretsCache store = new SecretsStore.SecretsCache(secretsFile());
 		long now = now();
 		store.save(playerId(), new Secrets.Secret("stale-secret", now - 2 * 3600), "ghost");
 
 		assertEquals(1, persistedSecrets(Files.readString(secretsFile())).size());
 
-		Constants.serverConfig.secretLifetime = 1; // the operator shortens the lifetime; the ghost entry is now expired
+		ServerConfigStore.current().secretLifetime = 1; // the operator shortens the lifetime; the ghost entry is now expired
 		store.save(playerId(), new Secrets.Secret("fresh-secret", now), "alice");
 
 		assertNull(store.bySecret("stale-secret"));

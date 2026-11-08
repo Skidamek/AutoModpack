@@ -21,8 +21,8 @@ public class ConfigUtils {
 		if (read.isEmpty()) return Optional.empty();
 		ServerConfigJsons.ServerConfigFieldsV3 config = read.get();
 		normalizeServerConfig(config, true);
-		boolean connectionSettingsChanged = connectionRuntimeChanged(serverConfig, config);
-		serverConfig = config;
+		boolean connectionSettingsChanged = connectionRuntimeChanged(ServerConfigStore.current(), config);
+		ServerConfigStore.install(config);
 		return Optional.of(new ReloadedServerConfig(config, connectionSettingsChanged));
 	}
 

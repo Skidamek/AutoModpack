@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.modpack;
 
+import pl.skidam.automodpack_core.config.ServerConfigStore;
+
 import pl.skidam.automodpack_core.Environment;
 
 import pl.skidam.automodpack_core.config.ConnectionJsons;
@@ -284,14 +286,14 @@ public class Commands {
 
 	private static int exportBootstrapInstall(CommandContext<CommandSourceStack> context, String endpoint, String connectionMode, String serverName) {
 		try {
-			if (endpoint == null && (serverConfig.advertisedEndpointHost == null || serverConfig.advertisedEndpointHost.isBlank()
-					|| serverConfig.advertisedEndpointPort == -1))
+			if (endpoint == null && (ServerConfigStore.current().advertisedEndpointHost == null || ServerConfigStore.current().advertisedEndpointHost.isBlank()
+					|| ServerConfigStore.current().advertisedEndpointPort == -1))
 				throw new IllegalArgumentException("Configured bootstrap install requires explicit advertisedEndpointHost and advertisedEndpointPort values");
 			InetSocketAddress origin = AddressHelpers.parseOrigin(StringArgumentType.getString(context, "origin"));
 			InetSocketAddress resolvedEndpoint = endpoint == null
-					? AddressHelpers.parseEndpoint(AddressHelpers.formatAddress(AddressHelpers.format(serverConfig.advertisedEndpointHost, serverConfig.advertisedEndpointPort)))
+					? AddressHelpers.parseEndpoint(AddressHelpers.formatAddress(AddressHelpers.format(ServerConfigStore.current().advertisedEndpointHost, ServerConfigStore.current().advertisedEndpointPort)))
 					: AddressHelpers.parseEndpoint(endpoint);
-			ModpackConnectionMode mode = connectionMode == null ? serverConfig.connectionMode : parseConnectionMode(connectionMode);
+			ModpackConnectionMode mode = connectionMode == null ? ServerConfigStore.current().connectionMode : parseConnectionMode(connectionMode);
 			return writeBootstrap(context, BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), resolvedEndpoint, mode,
 					requireProvisioningSecret(), serverName), true);
 		} catch (IllegalArgumentException e) {
@@ -301,7 +303,7 @@ public class Commands {
 	}
 
 	private static String requireBootstrapFingerprint() {
-		if (serverConfig.disableInternalTLS) throw new IllegalArgumentException("Bootstrap export requires AutoModpack TLS to be enabled");
+		if (ServerConfigStore.current().disableInternalTLS) throw new IllegalArgumentException("Bootstrap export requires AutoModpack TLS to be enabled");
 		String fingerprint = hostServer.getCertificateFingerprint();
 		if (fingerprint == null) {
 			// An externally served endpoint terminates TLS in front of this process, so the certificate clients
@@ -527,12 +529,12 @@ public class Commands {
 
 	private static void reportHostStart(CommandContext<CommandSourceStack> context, String action) {
 		if (hostServer.isRunning()) {
-			if (serverConfig.connectionMode == ModpackConnectionMode.HTTP)
-				send(context, "Modpack hosting " + action + "!", ChatFormatting.GREEN, "HTTP contract over HTTPS on port " + serverConfig.bindPort, ChatFormatting.WHITE, true);
+			if (ServerConfigStore.current().connectionMode == ModpackConnectionMode.HTTP)
+				send(context, "Modpack hosting " + action + "!", ChatFormatting.GREEN, "HTTP contract over HTTPS on port " + ServerConfigStore.current().bindPort, ChatFormatting.WHITE, true);
 			else send(context, "Modpack hosting " + action + "!", ChatFormatting.GREEN, true);
-		} else if (!serverConfig.modpackHost) {
+		} else if (!ServerConfigStore.current().modpackHost) {
 			send(context, "Built-in modpack hosting is disabled by modpackHost.", ChatFormatting.YELLOW, false);
-		} else if (serverConfig.connectionMode == ModpackConnectionMode.HTTP && serverConfig.bindPort == -1) {
+		} else if (ServerConfigStore.current().connectionMode == ModpackConnectionMode.HTTP && ServerConfigStore.current().bindPort == -1) {
 			send(context, "HTTP with bindPort -1 is only advertised; the URL contract must be served externally over HTTPS.", ChatFormatting.YELLOW, false);
 		} else {
 			send(context, "Couldn't start server!", ChatFormatting.RED, true);
@@ -782,7 +784,7 @@ public class Commands {
 		runAsync(context, "Group overview", () -> {
 			try {
 				Optional<PackDocument> published = hostRole.currentDocument();
-				for (String line : GroupInspector.overview(serverConfig.modpack.categories, published.map(PackDocument::manifest).orElse(null)))
+				for (String line : GroupInspector.overview(ServerConfigStore.current().modpack.categories, published.map(PackDocument::manifest).orElse(null)))
 					send(context, line, ChatFormatting.WHITE, false);
 			} catch (IOException e) {
 				send(context, "Failed to read the published modpack: " + e.getMessage(), ChatFormatting.RED, true);
@@ -796,7 +798,7 @@ public class Commands {
 		runAsync(context, "Group detail", () -> {
 			try {
 				Optional<PackDocument> published = hostRole.currentDocument();
-				Optional<List<String>> lines = GroupInspector.detail(serverConfig.modpack.categories, groupId, published.map(PackDocument::manifest).orElse(null));
+				Optional<List<String>> lines = GroupInspector.detail(ServerConfigStore.current().modpack.categories, groupId, published.map(PackDocument::manifest).orElse(null));
 				if (lines.isEmpty()) {
 					send(context, "Unknown group id: " + groupId + ". Run /automodpack groups for the list.", ChatFormatting.RED, false);
 					return;

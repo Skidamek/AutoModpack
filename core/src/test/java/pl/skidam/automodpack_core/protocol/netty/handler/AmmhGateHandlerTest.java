@@ -25,9 +25,9 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.util.ReferenceCountUtil;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
@@ -44,9 +44,9 @@ class AmmhGateHandlerTest {
 
 	@BeforeEach
 	void setUp() {
-		previousConfig = Constants.serverConfig;
-		Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
-		Constants.serverConfig.validateSecrets = false;
+		previousConfig = ServerConfigStore.installed();
+		ServerConfigStore.install(new ServerConfigJsons.ServerConfigFieldsV3());
+		ServerConfigStore.current().validateSecrets = false;
 		server = new NettyServer();
 		server.startSharedTraffic();
 		server.startReaders();
@@ -55,7 +55,7 @@ class AmmhGateHandlerTest {
 	@AfterEach
 	void tearDown() {
 		server.stop();
-		Constants.serverConfig = previousConfig;
+		ServerConfigStore.install(previousConfig);
 	}
 
 	@Test

@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.protocol;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.serverConfig;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 import java.io.IOException;
@@ -20,6 +19,7 @@ import io.netty.handler.codec.MessageToMessageEncoder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.server.netty.HolepunchChannelApplication;
@@ -37,7 +37,7 @@ public final class ServerHolepunchBridge {
 
 	/** Registers the takeover application; returns false when holepunch hosting is off or already registered. */
 	public static synchronized boolean register(NettyServer server) {
-		if (!serverConfig.modpackHost || serverConfig.connectionMode != ModpackConnectionMode.HOLEPUNCH || registration != null) return false;
+		if (!ServerConfigStore.current().modpackHost || ServerConfigStore.current().connectionMode != ModpackConnectionMode.HOLEPUNCH || registration != null) return false;
 		registration = NettyChannelRegistry.register(maxPendingWriteBytes(), application(server));
 		return true;
 	}

@@ -22,9 +22,9 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
@@ -61,8 +61,8 @@ class CloudflaredTunnelLiveTest {
 		config.bindPort = 0;
 		config.disableInternalTLS = true; // cloudflared terminates TLS; the origin hop is plain HTTP
 		config.validateSecrets = false;
-		ServerConfigJsons.ServerConfigFieldsV3 previous = Constants.serverConfig;
-		Constants.serverConfig = config;
+		ServerConfigJsons.ServerConfigFieldsV3 previous = ServerConfigStore.installed();
+		ServerConfigStore.install(config);
 		NettyServer server = new NettyServer();
 		try {
 			server.replacePaths(paths);
@@ -114,7 +114,7 @@ class CloudflaredTunnelLiveTest {
 			}
 		} finally {
 			server.stop();
-			Constants.serverConfig = previous;
+			ServerConfigStore.install(previous);
 		}
 	}
 

@@ -12,6 +12,7 @@ import java.util.Set;
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
@@ -45,7 +46,7 @@ public class SelfUpdater {
 	public static boolean update(ModpackJsons.ModpackContentFields serverModpackContent) {
 		if (Environment.current().development()) return false;
 
-		if (Environment.current().isServer() && !serverConfig.selfUpdater) {
+		if (Environment.current().isServer() && !ServerConfigStore.current().selfUpdater) {
 			LOGGER.info("AutoModpack self-updater is disabled in server config.");
 			return false;
 		}

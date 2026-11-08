@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.protocol.netty.handler;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.serverConfig;
 import static pl.skidam.automodpack_core.protocol.NetUtils.STREAM_WRITE_BYTES;
 import static pl.skidam.automodpack_core.protocol.NetUtils.TRANSFER_WRITE_STALL_TIMEOUT;
 import static pl.skidam.automodpack_core.protocol.NetUtils.closeQuietly;
@@ -38,6 +37,7 @@ import io.netty.util.concurrent.Future;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ContractRoutes;
 import pl.skidam.automodpack_core.protocol.WireCodec;
@@ -260,7 +260,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		RequestHead head = parseHead(lines, requestLine);
 		if (head == null) return finishBodyless(ctx, span, STATUS_400, 0, null, null, false);
 
-		if (serverConfig.validateSecrets && !authorized(ctx, head.authorization(), span)) return false;
+		if (ServerConfigStore.current().validateSecrets && !authorized(ctx, head.authorization(), span)) return false;
 
 		if (!head.method().equals("GET")) return finishBodyless(ctx, span, STATUS_405, 0, null, null, head.keepAlive());
 

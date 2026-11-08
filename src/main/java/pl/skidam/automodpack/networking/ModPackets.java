@@ -20,6 +20,7 @@ import pl.skidam.automodpack.networking.packet.HandshakeS2CPacket;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ConfigUtils;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 
 public class ModPackets {
 	public static final Identifier HANDSHAKE = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.HANDSHAKE);
@@ -74,7 +75,7 @@ public class ModPackets {
 		synchronizer.waitFor(server.submit(() -> {
 			FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
 
-			HandshakePacket handshakePacket = new HandshakePacket(ConfigUtils.advertisedLoaders(serverConfig), Environment.current().modVersion(), Environment.current().mcVersion());
+			HandshakePacket handshakePacket = new HandshakePacket(ConfigUtils.advertisedLoaders(ServerConfigStore.current()), Environment.current().modVersion(), Environment.current().mcVersion());
 			String jsonHandshakePacket = handshakePacket.toJson();
 
 			buf.writeUtf(jsonHandshakePacket, Short.MAX_VALUE);

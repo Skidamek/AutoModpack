@@ -15,9 +15,9 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
@@ -39,32 +39,32 @@ class NettyServerObjectResolutionTest {
 	 */
 	@Test
 	void theEndpointOwnerFollowsTheModeAndPortRatherThanTheConfigDefaults() {
-		ServerConfigJsons.ServerConfigFieldsV3 previous = Constants.serverConfig;
+		ServerConfigJsons.ServerConfigFieldsV3 previous = ServerConfigStore.installed();
 		try {
 			NettyServer server = server();
 
-			Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
+			ServerConfigStore.install(new ServerConfigJsons.ServerConfigFieldsV3());
 			assertEquals(NettyServer.EndpointOwner.BUILT_IN, server.endpointOwner(), "HOLEPUNCH carries the route over the Minecraft connection itself");
 
-			Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
-			Constants.serverConfig.connectionMode = ModpackConnectionMode.MAGIC;
-			Constants.serverConfig.bindPort = -1;
+			ServerConfigStore.install(new ServerConfigJsons.ServerConfigFieldsV3());
+			ServerConfigStore.current().connectionMode = ModpackConnectionMode.MAGIC;
+			ServerConfigStore.current().bindPort = -1;
 			assertEquals(NettyServer.EndpointOwner.BUILT_IN, server.endpointOwner(), "MAGIC on the Minecraft port is still this process's listener");
 
-			Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
-			Constants.serverConfig.connectionMode = ModpackConnectionMode.HTTP;
+			ServerConfigStore.install(new ServerConfigJsons.ServerConfigFieldsV3());
+			ServerConfigStore.current().connectionMode = ModpackConnectionMode.HTTP;
 			assertEquals(NettyServer.EndpointOwner.EXTERNAL, server.endpointOwner(), "bindPort defaults to -1, so HTTP with no port configured is the external shape");
 
-			Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
-			Constants.serverConfig.connectionMode = ModpackConnectionMode.HTTP;
-			Constants.serverConfig.bindPort = 40001;
+			ServerConfigStore.install(new ServerConfigJsons.ServerConfigFieldsV3());
+			ServerConfigStore.current().connectionMode = ModpackConnectionMode.HTTP;
+			ServerConfigStore.current().bindPort = 40001;
 			assertEquals(NettyServer.EndpointOwner.BUILT_IN, server.endpointOwner(), "a port of its own makes this process the listener");
 
-			Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
-			Constants.serverConfig.modpackHost = false;
+			ServerConfigStore.install(new ServerConfigJsons.ServerConfigFieldsV3());
+			ServerConfigStore.current().modpackHost = false;
 			assertEquals(NettyServer.EndpointOwner.EXTERNAL, server.endpointOwner(), "an operator who turned hosting off only advertises");
 		} finally {
-			Constants.serverConfig = previous;
+			ServerConfigStore.install(previous);
 		}
 	}
 

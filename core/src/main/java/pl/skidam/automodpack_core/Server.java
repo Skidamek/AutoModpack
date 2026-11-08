@@ -8,6 +8,7 @@ import java.io.IOException;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.protocol.OneCrl;
@@ -28,7 +29,7 @@ public class Server {
 		hostServer = server;
 
 		try {
-			serverConfig = ReconfConfigs.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons::standalone);
+			ServerConfigStore.install(ReconfConfigs.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons::standalone));
 		} catch (ConfigTools.ConfigException e) {
 			LOGGER.error("Failed to load standalone host configuration: {}", e.getMessage());
 			return;
@@ -36,7 +37,7 @@ public class Server {
 
 		StorageLeftovers.warnAbout(GameDirectory.current().resolve(StoragePaths.AUTOMODPACK_DIR));
 
-		if (serverConfig.bindPort == -1) {
+		if (ServerConfigStore.current().bindPort == -1) {
 			LOGGER.error("Host port not set in config!");
 			return;
 		}
@@ -58,7 +59,7 @@ public class Server {
 			LOGGER.error("Failed to generate modpack: {}", rejected.detail(), rejected.cause());
 		}
 
-		LOGGER.info("Starting server on port {}", serverConfig.bindPort);
+		LOGGER.info("Starting server on port {}", ServerConfigStore.current().bindPort);
 		server.start();
 		while (server.isRunning()) {
 			try {

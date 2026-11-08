@@ -29,6 +29,7 @@ import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigUtils;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.PackAbsence;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
@@ -81,8 +82,8 @@ public class HandshakeS2CPacket {
 			// A built-in host with nothing to serve has no pack to install, so the requirement is vacuous and nagging
 			// about it would only send players after a modpack that does not exist. An external endpoint may well
 			// have one, so the configured rule stands.
-			if (serverConfig.requireModpack && !nothingToServeHere) {
-				Component reason = VersionedText.literal(serverConfig.nagMessage);
+			if (ServerConfigStore.current().requireModpack && !nothingToServeHere) {
+				Component reason = VersionedText.literal(ServerConfigStore.current().nagMessage);
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);
 				return;
@@ -146,7 +147,7 @@ public class HandshakeS2CPacket {
 			// Advertising a HOLEPUNCH endpoint while the holepunch bridge never registered would send
 			// clients into a vanilla login that swallows their holepunch connection with a cryptic
 			// error; reject them here where an honest reason can be given.
-			if (serverConfig.connectionMode == ModpackConnectionMode.HOLEPUNCH && !ServerHolepunchBridge.isRegistered()) {
+			if (ServerConfigStore.current().connectionMode == ModpackConnectionMode.HOLEPUNCH && !ServerHolepunchBridge.isRegistered()) {
 				Component reason = VersionedText.literal("AutoModpack modpack hosting is unavailable on the server. Ask the admin to check the server log and try again later.");
 				LOGGER.error("Modpack hosting is unavailable; rejecting {} instead of advertising an unreachable endpoint", GameHelpers.getPlayerName(profile));
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
@@ -159,11 +160,11 @@ public class HandshakeS2CPacket {
 			Secrets.Secret secret = Secrets.generateSecret();
 			SecretsStore.saveHostSecret(GameHelpers.getPlayerUUID(profile).toString(), secret, GameHelpers.getPlayerName(profile));
 
-			String advertisedEndpointHost = serverConfig.advertisedEndpointHost;
-			int advertisedEndpointPort = serverConfig.advertisedEndpointPort;
+			String advertisedEndpointHost = ServerConfigStore.current().advertisedEndpointHost;
+			int advertisedEndpointPort = ServerConfigStore.current().advertisedEndpointPort;
 			LOGGER.debug("Sending AutoModpack connection details to {}", GameHelpers.getPlayerName(profile));
 
-			DataPacket dataPacket = new DataPacket(advertisedEndpointHost, advertisedEndpointPort, secret, serverConfig.connectionMode, serverConfig.requireModpack);
+			DataPacket dataPacket = new DataPacket(advertisedEndpointHost, advertisedEndpointPort, secret, ServerConfigStore.current().connectionMode, ServerConfigStore.current().requireModpack);
 			String packetContentJson = dataPacket.toJson();
 
 			FriendlyByteBuf outBuf = new FriendlyByteBuf(Unpooled.buffer());
@@ -178,12 +179,12 @@ public class HandshakeS2CPacket {
 	}
 
 	private static boolean acceptedLoader(HandshakePacket clientHandshakePacket) {
-		if (serverConfig.acceptedLoaders != null) for (String loader : serverConfig.acceptedLoaders) {
+		if (ServerConfigStore.current().acceptedLoaders != null) for (String loader : ServerConfigStore.current().acceptedLoaders) {
 			if (loader == null || loader.isBlank() || knownLoader(loader)) continue;
 			LOGGER.warn("Unknown accepted-loader '{}'; it will never match", loader);
 		}
 		if (clientHandshakePacket.loaders == null) return false;
-		for (String loader : ConfigUtils.advertisedLoaders(serverConfig)) if (clientHandshakePacket.loaders.contains(loader)) return true;
+		for (String loader : ConfigUtils.advertisedLoaders(ServerConfigStore.current())) if (clientHandshakePacket.loaders.contains(loader)) return true;
 		return false;
 	}
 

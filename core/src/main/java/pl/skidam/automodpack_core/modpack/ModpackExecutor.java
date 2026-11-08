@@ -22,6 +22,7 @@ import java.util.function.Supplier;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.modpack.PackAbsence.Kind;
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
@@ -92,7 +93,7 @@ public class ModpackExecutor {
 						new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build()),
 				hosting -> {
 					if (hostServer != null) hostServer.replacePaths(hosting);
-				}, () -> serverConfig, platformSourceLookup, ownedElsewhere);
+				}, ServerConfigStore::installed, platformSourceLookup, ownedElsewhere);
 	}
 
 	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, Deps deps) {
@@ -127,7 +128,7 @@ public class ModpackExecutor {
 		Deps(GenerationStore generationStore, CandidateScan candidateScan, ThreadPoolExecutor creationExecutor) {
 			this(generationStore, candidateScan, creationExecutor, hosting -> {
 				if (hostServer != null) hostServer.replacePaths(hosting);
-			}, () -> serverConfig, PlatformSourceLookup.none());
+			}, ServerConfigStore::installed, PlatformSourceLookup.none());
 		}
 	}
 

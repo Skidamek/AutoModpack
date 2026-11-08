@@ -18,6 +18,7 @@ import pl.skidam.automodpack.modpack.GameHelpers;
 import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.content.LoginUpdateResponse;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 
 public class DataS2CPacket {
 
@@ -38,7 +39,7 @@ public class DataS2CPacket {
 				String playerName = GameHelpers.getPlayerName(profile);
 				Common.players.put(playerName, false);
 				LOGGER.warn("{} never answered the modpack verification query.", playerName);
-				if (serverConfig.requireModpack) disconnect(handler, VersionedText.literal("[AutoModpack] Install/Update modpack to join"));
+				if (ServerConfigStore.current().requireModpack) disconnect(handler, VersionedText.literal("[AutoModpack] Install/Update modpack to join"));
 				return;
 			}
 
@@ -77,7 +78,7 @@ public class DataS2CPacket {
 
 				LOGGER.error("AutoModpack connection failed. Check the advertised endpoint and server configuration.");
 
-				if (serverConfig.disableInternalTLS) {
+				if (ServerConfigStore.current().disableInternalTLS) {
 					LOGGER.warn("Internal TLS termination is disabled; clients still use TLS and a compatible terminator must forward decrypted traffic to AutoModpack.");
 				}
 

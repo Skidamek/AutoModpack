@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.loader.GameCallService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.loader.NullGameCall;
@@ -20,6 +19,5 @@ public final class Constants {
 	public static ModpackExecutor modpackExecutor;
 	public static NettyServer hostServer;
 	public static volatile HostRole hostRole;
-	public static volatile ServerConfigJsons.ServerConfigFieldsV3 serverConfig;
 	private Constants() {}
 }

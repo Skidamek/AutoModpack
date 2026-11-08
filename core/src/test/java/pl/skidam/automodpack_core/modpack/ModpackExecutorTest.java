@@ -27,6 +27,7 @@ import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.loader.LoaderManagerService.ModPlatform;
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
@@ -57,7 +58,7 @@ class ModpackExecutorTest {
 		Path notes = groups.resolve("patch-notes.md");
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
-		Constants.serverConfig = config();
+		ServerConfigStore.install(config());
 		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
@@ -125,7 +126,7 @@ class ModpackExecutorTest {
 		Path notes = groups.resolve("patch-notes.md");
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
-		Constants.serverConfig = config();
+		ServerConfigStore.install(config());
 		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
@@ -169,7 +170,7 @@ class ModpackExecutorTest {
 		Files.createDirectories(groups.resolve("main/config"));
 		Files.writeString(groups.resolve("main/config/example.txt"), "content", StandardCharsets.UTF_8);
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
-		Constants.serverConfig = config();
+		ServerConfigStore.install(config());
 		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		CountDownLatch entered = new CountDownLatch(1);
 		CountDownLatch release = new CountDownLatch(1);
@@ -212,7 +213,7 @@ class ModpackExecutorTest {
 		Files.writeString(groups.resolve("main/config/example.txt"), "content", StandardCharsets.UTF_8);
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
-		Constants.serverConfig = config();
+		ServerConfigStore.install(config());
 		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot,
@@ -238,7 +239,7 @@ class ModpackExecutorTest {
 		Files.writeString(source, "one", StandardCharsets.UTF_8);
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
-		Constants.serverConfig = config();
+		ServerConfigStore.install(config());
 		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor first = new ModpackExecutor(server, groups, generationRoot);
@@ -274,13 +275,13 @@ class ModpackExecutorTest {
 		Files.writeString(source, "content", StandardCharsets.UTF_8);
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
-		Constants.serverConfig = config();
+		ServerConfigStore.install(config());
 		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot,
 				new ModpackExecutor.Deps(new GenerationStore(generationRoot, tempDir.resolve("objects")), new ModpackCandidateScanner()::scan, creation, hosting -> {
 					throw new IllegalStateException("swap boom");
-				}, () -> Constants.serverConfig, PlatformSourceLookup.none()));
+				}, () -> ServerConfigStore.current(), PlatformSourceLookup.none()));
 		try {
 			ModpackExecutor.Published published = assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
 			assertEquals("swap boom", published.hostingFailure().orElseThrow().getMessage());
@@ -310,13 +311,13 @@ class ModpackExecutorTest {
 		Files.writeString(source, "content", StandardCharsets.UTF_8);
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
-		Constants.serverConfig = config();
+		ServerConfigStore.install(config());
 		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		List<GenerationHosting> bound = new ArrayList<>();
 		ModpackExecutor clean = new ModpackExecutor(server, groups, generationRoot,
 				new ModpackExecutor.Deps(new GenerationStore(generationRoot, tempDir.resolve("objects-clean")), new ModpackCandidateScanner()::scan, creation, bound::add,
-						() -> Constants.serverConfig, PlatformSourceLookup.none()));
+						() -> ServerConfigStore.current(), PlatformSourceLookup.none()));
 		ModpackExecutor guarded = new ModpackExecutor(tempDir.resolve("server-guarded"), tempDir.resolve("guarded-groups"), tempDir.resolve("guarded-generations"),
 				new ModpackExecutor.Deps(new GenerationStore(tempDir.resolve("guarded-generations"), tempDir.resolve("guarded-objects")),
 						request -> {
@@ -349,8 +350,8 @@ class ModpackExecutorTest {
 		Files.writeString(source, "exported-object", StandardCharsets.UTF_8);
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
-		Constants.serverConfig = config();
-		Constants.serverConfig.exportHttpDirectory = tempDir.resolve("auto-export").toString();
+		ServerConfigStore.install(config());
+		ServerConfigStore.current().exportHttpDirectory = tempDir.resolve("auto-export").toString();
 		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
@@ -414,7 +415,7 @@ class ModpackExecutorTest {
 		Files.writeString(source, "exported-object", StandardCharsets.UTF_8);
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
-		Constants.serverConfig = config();
+		ServerConfigStore.install(config());
 		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
@@ -451,7 +452,7 @@ class ModpackExecutorTest {
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		ServerConfigJsons.ServerConfigFieldsV3 fixture = config();
-		Constants.serverConfig = fixture;
+		ServerConfigStore.install(fixture);
 		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		String objectSha = HashUtils.sha1("platform-served".getBytes(StandardCharsets.UTF_8));
@@ -485,7 +486,7 @@ class ModpackExecutorTest {
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		ServerConfigJsons.ServerConfigFieldsV3 fixture = config();
-		Constants.serverConfig = fixture;
+		ServerConfigStore.install(fixture);
 		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		Map<String, Long> platformServed = new HashMap<>();
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
@@ -571,7 +572,7 @@ class ModpackExecutorTest {
 		ServerConfigJsons.ServerConfigFieldsV3 fixture = config();
 		fixture.validateSecrets = true;
 		fixture.exportHttpDirectory = tempDir.resolve("auto-export").toString();
-		Constants.serverConfig = fixture;
+		ServerConfigStore.install(fixture);
 		TestEnvironment.swap(null, ModPlatform.FABRIC, "test", "test", "test", "test", Path.of("automodpack-test.jar"));
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot,
@@ -605,7 +606,7 @@ class ModpackExecutorTest {
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
 		try {
-			Constants.serverConfig = config();
+			ServerConfigStore.install(config());
 			ModpackExecutor.PublishResult.NothingToPublish empty = assertInstanceOf(ModpackExecutor.PublishResult.NothingToPublish.class, executor.publish());
 			assertEquals(PackAbsence.Kind.NOTHING_FOUND, empty.absence().kind());
 			assertEquals(empty.absence(), executor.packAbsence());
@@ -622,7 +623,7 @@ class ModpackExecutorTest {
 			assertEquals(PackAbsence.Kind.NOTHING_FOUND, previewed.absence().orElseThrow().kind());
 
 			// Files that no group would hand out are refused too, and named as the group configuration they are.
-			Constants.serverConfig = config(false, false);
+			ServerConfigStore.install(config(false, false));
 			Files.createDirectories(groups.resolve("main/config"));
 			Files.writeString(groups.resolve("main/config/example.txt"), "one", StandardCharsets.UTF_8);
 			ModpackExecutor.PublishResult.NothingToPublish unselected = assertInstanceOf(ModpackExecutor.PublishResult.NothingToPublish.class, executor.publish());
@@ -630,7 +631,7 @@ class ModpackExecutorTest {
 			assertTrue(executor.currentDocument().isEmpty());
 
 			// A group selected by default is enough; only a required one is not the sole way out.
-			Constants.serverConfig = config(false, true);
+			ServerConfigStore.install(config(false, true));
 			assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
 			assertNull(executor.packAbsence());
 			assertTrue(executor.currentDocument().isPresent());
@@ -639,7 +640,7 @@ class ModpackExecutorTest {
 			// earlier generation re-advertises it the same way a publish does.
 			Files.writeString(groups.resolve("main/config/example.txt"), "two", StandardCharsets.UTF_8);
 			assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
-			Constants.serverConfig = config(false, false);
+			ServerConfigStore.install(config(false, false));
 			ModpackExecutor.PublishResult.NothingToPublish refusedAgain = assertInstanceOf(ModpackExecutor.PublishResult.NothingToPublish.class, executor.publish());
 			assertEquals(PackAbsence.Kind.NOTHING_SELECTED, refusedAgain.absence().kind());
 			assertNotNull(executor.packAbsence());
@@ -705,12 +706,12 @@ class ModpackExecutorTest {
 	}
 
 	private static final class ConstantsSnapshot {
-		private final ServerConfigJsons.ServerConfigFieldsV3 serverConfig = Constants.serverConfig;
+		private final ServerConfigJsons.ServerConfigFieldsV3 serverConfig = ServerConfigStore.installed();
 		private final Environment environment = Environment.installed();
 		private final NettyServer hostServer = Constants.hostServer;
 
 		void restore() {
-			Constants.serverConfig = serverConfig;
+			ServerConfigStore.install(serverConfig);
 			TestEnvironment.restore(environment);
 			Constants.hostServer = hostServer;
 		}
