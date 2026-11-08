@@ -94,19 +94,22 @@ class ObjectBatchTest {
 
 		ObjectBatch next = new ObjectBatch(layout);
 		ObjectPromotion rebooted = new ObjectPromotion(layout, next);
-		try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
-			String tornSha1 = HashUtils.sha1(torn);
-			assertFalse(rebooted.adoptHeld(tornSha1, task(tornSha1, torn.length), cache), "torn held bytes fail their hash and are downloaded again");
-			assertFalse(Files.exists(layout.objectFile(tornSha1)), "a torn object never reaches the store");
-			assertEquals(List.of(), PartialResume.heldFiles(PartialResume.directory(layout.stagingDirectory(), tornSha1)), "the torn copy is dropped");
+		String tornSha1 = HashUtils.sha1(torn);
+		assertFalse(rebooted.adoptHeld(tornSha1, task(tornSha1, torn.length)), "torn held bytes fail their hash and are downloaded again");
+		assertFalse(Files.exists(layout.objectFile(tornSha1)), "a torn object never reaches the store");
+		assertEquals(List.of(), PartialResume.heldFiles(PartialResume.directory(layout.stagingDirectory(), tornSha1)), "the torn copy is dropped");
 
-			String intactSha1 = HashUtils.sha1(intact);
-			assertTrue(rebooted.adoptHeld(intactSha1, task(intactSha1, intact.length), cache), "intact held bytes still pass their hash and need no download");
+		String intactSha1 = HashUtils.sha1(intact);
+		assertTrue(rebooted.adoptHeld(intactSha1, task(intactSha1, intact.length)), "intact held bytes still pass their hash and need no download");
+		assertFalse(Files.exists(layout.objectFile(intactSha1)), "adoption holds for this run's batch instead of publishing on its own");
+		assertEquals(1, next.size());
+		assertEquals(List.of(), next.flush());
+		try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
 			assertArrayEquals(intact, Files.readAllBytes(layout.objectFile(intactSha1)));
 			assertTrue(cache.matchesImmutable(layout.objectFile(intactSha1), intact.length, intactSha1));
-			assertFalse(Files.exists(PartialResume.directory(layout.stagingDirectory(), intactSha1)));
 		}
-		assertEquals(0, next.size(), "an adopted object is forced into the store at once rather than held again");
+		assertFalse(Files.exists(PartialResume.directory(layout.stagingDirectory(), intactSha1)));
+		assertEquals(0, next.size());
 	}
 
 	@Test
@@ -117,9 +120,7 @@ class ObjectBatchTest {
 		byte[] data = bytes(5_000, 6);
 		String sha1 = HashUtils.sha1(data);
 		downloaded(promotion, layout, data);
-		try (FileCache cache = FileCache.open(layout.fileCacheDirectory())) {
-			assertFalse(promotion.adoptHeld(sha1, task(sha1, data.length), cache));
-		}
+		assertFalse(promotion.adoptHeld(sha1, task(sha1, data.length)));
 		assertEquals(List.of(), batch.flush());
 		assertArrayEquals(data, Files.readAllBytes(layout.objectFile(sha1)));
 	}

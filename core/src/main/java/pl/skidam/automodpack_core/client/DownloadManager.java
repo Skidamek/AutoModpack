@@ -304,7 +304,7 @@ public class DownloadManager implements DownloadView {
 				cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.COMPLETED);
 				return;
 			}
-			if (promotion.adoptHeld(hashPathPair.hash(), task, cache)) {
+			if (promotion.adoptHeld(hashPathPair.hash(), task)) {
 				totalBytesDownloaded.addAndGet(task.fileSize);
 				cleanupAndFinalize(hashPathPair, task, storeFile, AttemptOutcome.COMPLETED);
 				return;

@@ -6,14 +6,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
-import java.util.UUID;
 
 import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
-import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * The CAS side of a finished transfer, identical for the host wire and a platform source: turn the stored slices into one
@@ -88,24 +86,21 @@ final class ObjectPromotion {
 	}
 
 	/**
-	 * Publishes an object an earlier run verified and held but may have lost to a power cut before its sync. The held bytes
-	 * are untrusted, so they are hashed again and forced like any download; true means the store now has the object.
+	 * Holds an object an earlier run verified but may have lost to a power cut before its sync, so this run's batch
+	 * publishes it with everything else. The held bytes are untrusted, so they are hashed again; true means the batch
+	 * now owns them.
 	 */
-	boolean adoptHeld(String sha1, QueuedDownload task, FileCache cache) {
+	boolean adoptHeld(String sha1, QueuedDownload task) {
 		Path directory = PartialResume.directory(dataLayout.stagingDirectory(), sha1);
 		try {
 			for (Path heldFile : PartialResume.heldFiles(directory)) {
 				if (batch.holds(heldFile)) continue;
-				Path adopted = dataLayout.stagingDirectory().resolve("." + sha1 + "." + UUID.randomUUID() + ".obj");
 				try {
-					Files.move(heldFile, adopted);
-					VerifiedFileTransfer.promoteHashed(adopted, dataLayout.objectFile(sha1), task.fileSize, sha1, HashUtils.hashFile(adopted), cache);
-					PartialResume.delete(directory);
+					VerifiedFileTransfer.requireHashed(heldFile, task.fileSize, sha1, HashUtils.hashFile(heldFile));
+					batch.hold(new ObjectBatch.Held(sha1, task.fileSize, heldFile, directory, task));
 					return true;
 				} catch (VerifiedFileTransfer.VerificationMismatchException torn) {
 					LOGGER.info("Dropping a held copy of {} that did not survive to its sync", task.file.getFileName());
-				} finally {
-					ImmutableFiles.deleteIfExists(adopted);
 					ImmutableFiles.deleteIfExists(heldFile);
 				}
 			}
