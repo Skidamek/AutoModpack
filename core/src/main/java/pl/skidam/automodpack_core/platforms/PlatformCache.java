@@ -22,11 +22,11 @@ public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 	private static final SharedCacheRegistry<PlatformCache> REGISTRY = new SharedCacheRegistry<>();
 
 	public static PlatformCache open(Path path) throws IOException {
-		return REGISTRY.acquire(path, PlatformCache::new);
+		return REGISTRY.acquire(path, PlatformCache::new, PlatformCache::loadBatches);
 	}
 
 	private PlatformCache(Path recordsDirectory) {
-		super(recordsDirectory, "platform cache");
+		super(recordsDirectory, "platform cache", Record.class);
 	}
 
 	/** The cached records for the given sha1 digests, keyed by the normalized digest they were requested under, omitting the missing ones. */

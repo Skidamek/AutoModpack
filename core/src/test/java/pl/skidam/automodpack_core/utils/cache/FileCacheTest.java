@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.io.TempDir;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 class FileCacheTest {
@@ -64,6 +66,39 @@ class FileCacheTest {
 		}
 		try (FileCache cache = FileCache.open(cacheDirectory)) {
 			assertEquals(expectedHash, cache.getOrComputeHash(file));
+		}
+	}
+
+	@Test
+	void batchRecordsSurviveIntoAFreshCacheDirectory() throws Exception {
+		Path first = temporaryDirectory.resolve("batch-first.bin");
+		Path second = temporaryDirectory.resolve("batch-second.bin");
+		Files.writeString(first, "first", StandardCharsets.UTF_8);
+		Files.writeString(second, "second", StandardCharsets.UTF_8);
+		FileTime settled = FileTime.from(Instant.ofEpochSecond(1_700_000_000L));
+		Files.setLastModifiedTime(first, settled);
+		Files.setLastModifiedTime(second, settled);
+		String firstHash = HashUtils.getHash(first);
+		String secondHash = HashUtils.getHash(second);
+		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
+			cache.overwriteCacheBatch(Map.of(first, firstHash, second, secondHash));
+		}
+
+		// A fresh directory with only the batch file stands in for a process that never saw the warm map.
+		Path freshDirectory = temporaryDirectory.resolve("fresh-file-cache");
+		Files.createDirectories(freshDirectory);
+		try (var entries = Files.list(cacheDirectory)) {
+			for (Path batch : entries.filter(path -> path.getFileName().toString().startsWith(".batch-")).toList()) {
+				Files.copy(batch, freshDirectory.resolve(batch.getFileName()));
+			}
+		}
+		try (FileCache cache = FileCache.open(freshDirectory)) {
+			assertTrue(cache.matchesImmutable(first, Files.size(first), firstHash));
+			assertTrue(cache.matchesImmutable(second, Files.size(second), secondHash));
+		}
+		try (var entries = Files.list(freshDirectory)) {
+			assertTrue(entries.noneMatch(path -> path.getFileName().toString().startsWith(".batch-")), "consumed batches are removed");
 		}
 	}
 

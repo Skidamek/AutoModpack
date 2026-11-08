@@ -9,6 +9,7 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -131,11 +132,11 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	private record ComputedHash(String hash, FileFingerprint fingerprint) {}
 
 	public static FileCache open(Path path) throws IOException {
-		return REGISTRY.acquire(path, FileCache::new);
+		return REGISTRY.acquire(path, FileCache::new, FileCache::loadBatches);
 	}
 
 	private FileCache(Path recordsDirectory) {
-		super(recordsDirectory, "file cache");
+		super(recordsDirectory, "file cache", CachedFile.class);
 	}
 
 	/** Git worktree identity. Named CAS objects use {@link #matchesImmutable}. */
@@ -445,6 +446,24 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 					validatedAt(fingerprint.lastModifiedNanos()), storedMurmur);
 			writeRecord(pathKey, record);
 		}
+	}
+
+	/** Seeds many known hashes in one batch file instead of one atomic rename per path. */
+	public void overwriteCacheBatch(Map<Path, String> files) throws IOException {
+		if (files.isEmpty()) return;
+		Map<String, CachedFile> records = new LinkedHashMap<>(files.size());
+		for (Map.Entry<Path, String> entry : files.entrySet()) {
+			Path absPath = entry.getKey().toAbsolutePath().normalize();
+			FileFingerprint fingerprint = statSnapshot(absPath).fingerprint();
+			String pathKey = absPath.toString();
+			synchronized (lock(pathKey)) {
+				CachedFile previous = readRecord(pathKey, CachedFile.class);
+				String storedMurmur = previous != null && Objects.equals(previous.contentHash(), entry.getValue()) ? previous.murmur() : null;
+				records.put(pathKey, new CachedFile(pathKey, entry.getValue(), fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(),
+						fingerprint.fileKey(), validatedAt(fingerprint.lastModifiedNanos()), storedMurmur));
+			}
+		}
+		writeRecords(records);
 	}
 
 	@Override

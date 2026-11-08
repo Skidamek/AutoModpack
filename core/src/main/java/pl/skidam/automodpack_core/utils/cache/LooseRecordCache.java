@@ -2,14 +2,23 @@ package pl.skidam.automodpack_core.utils.cache;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.google.gson.reflect.TypeToken;
+
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.utils.DurableFiles;
+import pl.skidam.automodpack_core.utils.OsPaths;
 
 /**
  * Shared skeleton for caches of immutable loose records: a 64-slot striped lock array, a hot-record
@@ -24,8 +33,10 @@ public abstract class LooseRecordCache<T> implements AutoCloseable {
 	private static final Logger LOGGER = LogManager.getLogger(LooseRecordCache.class);
 
 	protected static final String RECORD_SUFFIX = ".json";
+	private static final String BATCH_PREFIX = ".batch-";
 	protected final Path recordsDirectory;
 	private final String description;
+	private final Class<T> recordType;
 	/* Readers and writers hold different per-key locks, so the map itself must be concurrent. */
 	protected final Map<String, T> hotRecords;
 	private final Object[] locks = new Object[64];
@@ -38,9 +49,10 @@ public abstract class LooseRecordCache<T> implements AutoCloseable {
 	 */
 	private static final Map<Path, Map<String, Object>> WARM_RECORDS = new ConcurrentHashMap<>();
 
-	public LooseRecordCache(Path recordsDirectory, String description) {
+	public LooseRecordCache(Path recordsDirectory, String description, Class<T> recordType) {
 		this.recordsDirectory = recordsDirectory;
 		this.description = description;
+		this.recordType = recordType;
 		@SuppressWarnings("unchecked")
 		Map<String, T> warm = (Map<String, T>) WARM_RECORDS.computeIfAbsent(recordsDirectory.toAbsolutePath().normalize(), ignored -> new ConcurrentHashMap<>());
 		this.hotRecords = warm;
@@ -88,6 +100,54 @@ public abstract class LooseRecordCache<T> implements AutoCloseable {
 			ConfigTools.writeCached(recordPath(key), record);
 		} catch (IOException e) {
 			LOGGER.debug("Could not persist {} cache record: {}", description, key, e);
+		}
+	}
+
+	/**
+	 * Publishes many records with one atomic batch file instead of one atomic rename per record. A later open loads
+	 * the batch into the warm map and removes the file; until then the current process already has the same records
+	 * in {@link #hotRecords}. A lost batch only costs the rehashes it would have saved.
+	 */
+	protected void writeRecords(Map<String, T> records) {
+		if (records.isEmpty()) return;
+		hotRecords.putAll(records);
+		Path batch = recordsDirectory.resolve(BATCH_PREFIX + UUID.randomUUID() + RECORD_SUFFIX);
+		try {
+			OsPaths.requirePublishableConfig(batch);
+			Type type = TypeToken.getParameterized(Map.class, String.class, recordType).getType();
+			DurableFiles.writeVolatile(batch, ConfigTools.GSON.toJson(records, type).getBytes(StandardCharsets.UTF_8));
+		} catch (IOException e) {
+			LOGGER.debug("Could not persist {} cache batch: {}", description, e);
+		}
+	}
+
+	/**
+	 * Loads every batch a previous process left behind, then removes it. Called once by each open after the instance
+	 * exists, so subclass fields are initialized before {@link #belongsTo} and {@link #isCurrent} inspect a record.
+	 */
+	protected void loadBatches() {
+		if (!Files.isDirectory(recordsDirectory)) return;
+		Type type = TypeToken.getParameterized(Map.class, String.class, recordType).getType();
+		try (DirectoryStream<Path> batches = Files.newDirectoryStream(recordsDirectory, BATCH_PREFIX + "*" + RECORD_SUFFIX)) {
+			for (Path batch : batches) {
+				try {
+					Map<String, T> records = ConfigTools.GSON.fromJson(Files.readString(batch, StandardCharsets.UTF_8), type);
+					if (records != null) for (Map.Entry<String, T> entry : records.entrySet()) {
+						T record = entry.getValue();
+						if (record != null && belongsTo(record, entry.getKey()) && isCurrent(record)) hotRecords.put(entry.getKey(), record);
+					}
+				} catch (IOException | RuntimeException e) {
+					LOGGER.debug("Dropping unreadable {} cache batch {}: {}", description, batch, e.toString());
+				} finally {
+					try {
+						Files.deleteIfExists(batch);
+					} catch (IOException e) {
+						LOGGER.debug("Could not remove consumed {} cache batch {}", description, batch, e);
+					}
+				}
+			}
+		} catch (IOException e) {
+			LOGGER.debug("Could not list {} cache batches: {}", description, e.toString());
 		}
 	}
 

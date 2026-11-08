@@ -5,13 +5,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /** Owns path-normalized, reference-counted cache instances within one process. */
 public final class SharedCacheRegistry<T> {
 	private final Map<Path, Entry<T>> entries = new HashMap<>();
 
-	public synchronized T acquire(Path path, Function<Path, T> factory) throws IOException {
+	public synchronized T acquire(Path path, Function<Path, T> factory, Consumer<T> initializer) throws IOException {
 		Path normalized = path.toAbsolutePath().normalize();
 		Files.createDirectories(normalized);
 		Entry<T> existing = entries.get(normalized);
@@ -20,6 +21,7 @@ public final class SharedCacheRegistry<T> {
 			return existing.instance;
 		}
 		T instance = factory.apply(normalized);
+		initializer.accept(instance);
 		entries.put(normalized, new Entry<>(instance));
 		return instance;
 	}

@@ -24,11 +24,11 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 	private static final SharedCacheRegistry<ModFileCache> REGISTRY = new SharedCacheRegistry<>();
 
 	public static ModFileCache open(Path path) throws IOException {
-		return REGISTRY.acquire(path, ModFileCache::new);
+		return REGISTRY.acquire(path, ModFileCache::new, ModFileCache::loadBatches);
 	}
 
 	private ModFileCache(Path recordsDirectory) {
-		super(recordsDirectory, "mod metadata");
+		super(recordsDirectory, "mod metadata", ModRecord.class);
 	}
 
 	public FileInspection.Mod getOrComputeMod(Path file, FileCache cache) throws IOException {
