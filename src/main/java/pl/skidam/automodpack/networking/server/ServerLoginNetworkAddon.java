@@ -1,5 +1,9 @@
 package pl.skidam.automodpack.networking.server;
 
+import org.apache.logging.log4j.Logger;
+
+import org.apache.logging.log4j.LogManager;
+
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.Connection;
 import net.minecraft.network.FriendlyByteBuf;
@@ -24,10 +28,11 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 // credits to fabric api
 public class ServerLoginNetworkAddon implements PacketSender {
+	private static final Logger LOGGER = LogManager.getLogger(ServerLoginNetworkAddon.class);
+
 
 	private final ServerLoginPacketListenerImpl handler;
 	private final Connection connection;

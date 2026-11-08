@@ -1,10 +1,11 @@
 package pl.skidam.automodpack_core.modpack.candidate;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
@@ -15,6 +16,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Promotes verified candidate snapshots into the immutable server object directory. */
 public final class ServerObjectStore {
+	private static final Logger LOGGER = LogManager.getLogger(ServerObjectStore.class);
+
 	private final Path objectsDirectory;
 	private final Path stagingDirectory;
 

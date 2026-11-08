@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_loader_core_neoforge;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -9,6 +7,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
@@ -25,6 +26,7 @@ import pl.skidam.automodpack_core.loader.ServiceJarIndex;
  * these jars through that fallback with no {@code addReads} bridge.
  */
 public final class EarlyServiceLayer {
+	private static final Logger LOGGER = LogManager.getLogger(EarlyServiceLayer.class);
 
 	private EarlyServiceLayer() {}
 

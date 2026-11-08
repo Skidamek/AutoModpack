@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.protocol;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.NETWORK_TIMEOUT;
 import static pl.skidam.automodpack_core.protocol.NetUtils.PIPELINE_MAX_REQUESTS;
 import static pl.skidam.automodpack_core.protocol.NetUtils.PIPELINE_WINDOW_BYTES;
@@ -28,6 +27,9 @@ import java.util.function.IntConsumer;
 
 import javax.net.ssl.SSLSocket;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.protocol.PackTransport.DocumentConditional;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
@@ -41,6 +43,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * hosts on this fixed response subset and fails loudly on anything else.
  */
 class Connection implements AutoCloseable {
+	private static final Logger LOGGER = LogManager.getLogger(Connection.class);
 
 	private static final byte[] CRLF = {'\r', '\n'};
 	private static final String ACCEPT_ENCODING = "Accept-Encoding: " + WireCodec.offeredEncodings() + "\r\n";

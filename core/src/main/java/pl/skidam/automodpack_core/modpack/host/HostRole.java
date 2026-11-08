@@ -1,11 +1,12 @@
 package pl.skidam.automodpack_core.modpack.host;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.loader.LoaderManagerService.EnvironmentType;
@@ -23,6 +24,8 @@ import pl.skidam.automodpack_core.update.RelayConsent;
  * this one object what is served, so a client never generates over a pack it runs nor relays one it was not told to.
  */
 public final class HostRole {
+	private static final Logger LOGGER = LogManager.getLogger(HostRole.class);
+
 	private final HostSource source;
 	private final ModpackExecutor executor;
 	private final ClientStorage clientStorage;

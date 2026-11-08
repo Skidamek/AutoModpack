@@ -1,10 +1,12 @@
 package pl.skidam.automodpack_core.protocol.netty.handler;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.HTTP_IDLE_REAP_SECONDS;
 import static pl.skidam.automodpack_core.protocol.NetUtils.MAGIC_AMOK;
 
 import java.util.List;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -23,6 +25,7 @@ import pl.skidam.automodpack_core.protocol.netty.detectors.MatchResult;
  * swaps the channel over to the shaper, TLS and the URL contract. The post-magic bytes replay into the new stack.
  */
 public class AmmhGateHandler extends ByteToMessageDecoder {
+	private static final Logger LOGGER = LogManager.getLogger(AmmhGateHandler.class);
 
 	private final NettyServer server;
 	private final boolean sharedMinecraftSocket;

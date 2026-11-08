@@ -1,5 +1,9 @@
 package pl.skidam.automodpack.networking;
 
+import org.apache.logging.log4j.Logger;
+
+import org.apache.logging.log4j.LogManager;
+
 /*? if >=1.20.2 {*/
 import pl.skidam.automodpack.networking.client.LoginResponsePayload;
 import pl.skidam.automodpack.networking.server.LoginRequestPayload;
@@ -7,7 +11,6 @@ import net.minecraft.network.protocol.login.custom.CustomQueryAnswerPayload;
 import net.minecraft.network.protocol.login.custom.CustomQueryPayload;
 /*?}*/
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.Packet;
@@ -16,6 +19,8 @@ import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
 import net.minecraft.resources.Identifier;
 
 public class LoginQueryParser {
+	private static final Logger LOGGER = LogManager.getLogger(LoginQueryParser.class);
+
 	public Packet<?> packet;
 	public boolean success = true;
 	public int queryId;

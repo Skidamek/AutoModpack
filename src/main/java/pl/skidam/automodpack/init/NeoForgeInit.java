@@ -1,5 +1,9 @@
 package pl.skidam.automodpack.init;
 
+import org.apache.logging.log4j.Logger;
+
+import org.apache.logging.log4j.LogManager;
+
 import pl.skidam.automodpack_core.AutoModpack;
 
 import pl.skidam.automodpack_core.Environment;
@@ -19,10 +23,11 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
-import static pl.skidam.automodpack_core.Constants.*;
 
 @Mod(AutoModpack.ID + "_mod")
 public class NeoForgeInit {
+	private static final Logger LOGGER = LogManager.getLogger(NeoForgeInit.class);
+
 	public NeoForgeInit() {
 		Environment.current().markGameStarted();
 

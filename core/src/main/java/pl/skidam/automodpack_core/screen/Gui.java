@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.screen;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.GUI_LOG_FILE;
 
 import java.awt.*;
@@ -19,6 +18,7 @@ import javax.swing.*;
 import javax.swing.plaf.ColorUIResource;
 
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
 
 import pl.skidam.automodpack_core.client.DetachedProcesses;
@@ -27,6 +27,7 @@ import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 public class Gui {
+	private static final Logger LOGGER = LogManager.getLogger(Gui.class);
 
 	private String text;
 

@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.utils;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -25,6 +23,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 /**
  * The one cache for fetched revocation data, the Mozilla OneCRL feed and CA CRLs: the last usable body of each URL
  * on disk, refetched through {@link HttpClientPool} once it is older than {@link #MAX_AGE}. A failed refetch keeps the
@@ -32,6 +33,7 @@ import java.util.function.Function;
  * worth. Concurrent requests for one URL share a single fetch. Without a directory nothing is kept between fetches.
  */
 public final class FetchCache {
+	private static final Logger LOGGER = LogManager.getLogger(FetchCache.class);
 
 	public static final Duration MAX_AGE = Duration.ofHours(6);
 	private static final ExecutorService FETCHES = Executors.newCachedThreadPool(new CustomThreadFactoryBuilder().setNameFormat("AutoModpackFetchCache-%d").setDaemon(true).build());

@@ -1,5 +1,9 @@
 package pl.skidam.automodpack.client;
 
+import org.apache.logging.log4j.Logger;
+
+import org.apache.logging.log4j.LogManager;
+
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack.client.ui.*;
 import pl.skidam.automodpack.client.ui.screen.*;
@@ -23,7 +27,6 @@ import pl.skidam.automodpack_core.screen.TransientAttention;
 import pl.skidam.automodpack_core.client.UpdateType;
 import pl.skidam.automodpack_core.utils.Throwables;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.util.Optional;
 import java.util.concurrent.Future;
@@ -37,6 +40,8 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 
 public class ScreenImpl implements ScreenService {
+	private static final Logger LOGGER = LogManager.getLogger(ScreenImpl.class);
+
 
 	private static void executeOnClient(Runnable task) {
 		Minecraft.getInstance().execute(task);

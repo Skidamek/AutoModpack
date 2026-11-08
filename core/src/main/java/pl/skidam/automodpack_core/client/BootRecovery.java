@@ -1,10 +1,11 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.BootstrapInstaller;
@@ -31,6 +32,8 @@ import pl.skidam.automodpack_core.utils.DurableFiles;
  * {@link UpdateRecovery}.
  */
 public final class BootRecovery {
+	private static final Logger LOGGER = LogManager.getLogger(BootRecovery.class);
+
 	private final ClientStorage storage;
 	private boolean trustedBootstrapApply;
 	private boolean bootAsIs;

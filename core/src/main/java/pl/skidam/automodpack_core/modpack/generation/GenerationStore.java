@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_GENERATION_LOCK_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_JOURNAL_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_PROJECTION_FILE;
@@ -21,6 +20,9 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
@@ -43,6 +45,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * content changes. The journal is the only truth; the projection document is a rebuilt view.
  */
 public final class GenerationStore {
+	private static final Logger LOGGER = LogManager.getLogger(GenerationStore.class);
+
 	private static final String OWNERSHIP_COMPONENT = "server";
 	private static final ConcurrentHashMap<Path, ReentrantLock> JVM_LOCKS = new ConcurrentHashMap<>();
 

@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.config;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.BOOTSTRAP_FILE;
 
 import java.io.IOException;
@@ -9,6 +8,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.OriginTrustStore;
@@ -20,6 +22,8 @@ import pl.skidam.automodpack_core.utils.ServerListFile;
 
 /** One-shot import of a human-dropped instance-root bootstrap file into client runtime state. */
 public final class BootstrapInstaller {
+	private static final Logger LOGGER = LogManager.getLogger(BootstrapInstaller.class);
+
 	private BootstrapInstaller() {}
 
 	public static Optional<Receipt> importIfPresent(ClientStorage storage, ClientConfigJsons.ClientConfigFieldsV3 clientConfig) {

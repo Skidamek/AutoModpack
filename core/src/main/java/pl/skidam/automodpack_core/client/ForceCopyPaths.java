@@ -1,12 +1,13 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.ModFileCache;
@@ -19,6 +20,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * services that jar actually provides, so a service-only wrapper is visible the same way a described mod is.
  */
 final class ForceCopyPaths {
+	private static final Logger LOGGER = LogManager.getLogger(ForceCopyPaths.class);
+
 	private ForceCopyPaths() {}
 
 	static Set<String> ofActiveMods(Iterable<ModpackJsons.ModpackContentFields.ModpackContentItem> items, Set<String> services, Function<ModpackJsons.ModpackContentFields.ModpackContentItem, Path> resolve,

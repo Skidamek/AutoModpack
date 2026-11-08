@@ -1,7 +1,5 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,6 +10,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Consumer;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -70,6 +71,8 @@ import pl.skidam.automodpack_core.utils.UriOpener;
  * The screens only choose an action and render its result; storage and update invariants stay here.
  */
 final class InstalledModpackController {
+	private static final Logger LOGGER = LogManager.getLogger(InstalledModpackController.class);
+
 	/** The one thing discovery needs from the game: the vanilla server-list name for a saved origin. */
 	private static final InstalledPacks.ServerNames SERVER_NAMES = VersionedServers::entryName;
 	private final ClientStorage storage;

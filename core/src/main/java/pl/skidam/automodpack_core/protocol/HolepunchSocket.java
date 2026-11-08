@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.protocol;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.NETWORK_TIMEOUT;
 
 import java.io.IOException;
@@ -20,11 +19,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ssl.SSLKeyException;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchFailure;
 import pl.skidam.mcholepunch.HolepunchHandler;
 
 public class HolepunchSocket extends Socket {
+	private static final Logger LOGGER = LogManager.getLogger(HolepunchSocket.class);
+
 	// Tripwire sized by the old chunk-size negotiation it outlived: a healthy TLS peer drains continuously, so only a stalled consumer queues this much.
 	static final int MAX_QUEUED_READ_BYTES = 8 * 1024 * 1024;
 	private volatile HolepunchConnection connection;

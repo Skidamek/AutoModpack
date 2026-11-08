@@ -1,13 +1,14 @@
 package pl.skidam.automodpack_core.config;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -21,6 +22,8 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 /** One-shot JSON → current human model. Used only when the canonical {@code .conf} is missing. */
 public final class HumanConfigMigration {
+	private static final Logger LOGGER = LogManager.getLogger(HumanConfigMigration.class);
+
 	private HumanConfigMigration() {}
 
 	private static final List<String> DROPPED_SERVER = List.of("forceCopyFilesToStandardLocation", "nonModpackFilesToDelete", "updateIpsOnEveryStart", "autoExcludeUnnecessaryFiles");

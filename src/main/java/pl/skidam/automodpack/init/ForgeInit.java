@@ -1,5 +1,9 @@
 package pl.skidam.automodpack.init;
 
+import org.apache.logging.log4j.Logger;
+
+import org.apache.logging.log4j.LogManager;
+
 import pl.skidam.automodpack_core.AutoModpack;
 
 import pl.skidam.automodpack_core.Environment;
@@ -16,10 +20,11 @@ import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-import static pl.skidam.automodpack_core.Constants.*;
 
 @Mod(AutoModpack.ID + "_mod")
 public class ForgeInit {
+	private static final Logger LOGGER = LogManager.getLogger(ForgeInit.class);
+
 
 	public ForgeInit() {
 		Environment.current().markGameStarted();

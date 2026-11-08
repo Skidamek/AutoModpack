@@ -1,17 +1,20 @@
 package pl.skidam.automodpack_core.auth;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.net.SocketAddress;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.utils.TimedSet;
 
 public class Secrets {
+	private static final Logger LOGGER = LogManager.getLogger(Secrets.class);
+
 	public static final int BYTE_LENGTH = 32;
 
 	public static class Secret { // unfortunately has to be a class instead of record because of older gson version in 1.18 mc

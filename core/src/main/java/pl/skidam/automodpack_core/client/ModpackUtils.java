@@ -1,12 +1,13 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -25,6 +26,7 @@ import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public class ModpackUtils {
+	private static final Logger LOGGER = LogManager.getLogger(ModpackUtils.class);
 
 	// Modpack may require update even if there's no files to update, because some files may need to be deleted
 	public record UpdateCheckResult(boolean requiresUpdate, Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {}

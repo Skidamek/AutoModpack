@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -24,6 +25,8 @@ import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 
 public class DownloadScreen extends VersionedScreen {
+	private static final Logger LOGGER = LogManager.getLogger(DownloadScreen.class);
+
 	private static final Identifier PROGRESS_BAR_EMPTY_TEXTURE = Common.id("textures/gui/sprites/green_background.png");
 	private static final Identifier PROGRESS_BAR_FULL_TEXTURE = Common.id("textures/gui/sprites/green_progress.png");
 	private static final int PROGRESS_BAR_WIDTH = 182;

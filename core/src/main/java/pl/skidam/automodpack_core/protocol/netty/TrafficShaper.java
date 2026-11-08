@@ -1,9 +1,10 @@
 package pl.skidam.automodpack_core.protocol.netty;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 
@@ -12,6 +13,7 @@ import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 
 /** Bandwidth shaper owned by one {@link NettyServer}: every hosted connection pipeline installs its handler. */
 public final class TrafficShaper {
+	private static final Logger LOGGER = LogManager.getLogger(TrafficShaper.class);
 
 	private final GlobalTrafficShapingHandler handler;
 	private final ScheduledExecutorService ownedExecutor;

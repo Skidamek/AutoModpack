@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -17,6 +15,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Stream;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -67,6 +68,8 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * </ul>
  */
 public final class ProjectionState {
+	private static final Logger LOGGER = LogManager.getLogger(ProjectionState.class);
+
 	/**
 	 * A writer cannot read the document for a physical reason (permissions, I/O). Never a held file: no game process
 	 * holds this file, so {@link StorageConditions#isLockFailure} stops here and the update fails with this message.

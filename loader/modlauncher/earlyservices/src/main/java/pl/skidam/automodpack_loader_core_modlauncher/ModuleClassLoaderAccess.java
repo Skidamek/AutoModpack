@@ -6,10 +6,11 @@ import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.util.Map;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import cpw.mods.cl.ModuleClassLoader;
 import sun.misc.Unsafe;
-
-import pl.skidam.automodpack_core.Constants;
 
 /**
  * Reads the three private routing maps of a {@link ModuleClassLoader} (and subclasses such as
@@ -43,6 +44,7 @@ import pl.skidam.automodpack_core.Constants;
  * reached through the trusted {@code IMPL_LOOKUP} - itself only readable via {@link Unsafe}.
  */
 public final class ModuleClassLoaderAccess {
+	private static final Logger LOGGER = LogManager.getLogger(ModuleClassLoaderAccess.class);
 
 	private static final Unsafe UNSAFE;
 	private static final long PACKAGE_LOOKUP_OFFSET;
@@ -78,7 +80,7 @@ public final class ModuleClassLoaderAccess {
 		} catch (Throwable t) {
 			// Not fatal, but addReads becomes a silent no-op afterward, resurrecting the
 			// IllegalAccessError this bridge exists to prevent with no log to explain why.
-			Constants.LOGGER.error(
+			LOGGER.error(
 					"[AutoModpack] Could not resolve jdk.internal.module.Modules.addReads; in-place early-service mods may crash with IllegalAccessError when their inner mod accesses the outer jar's classes",
 					t);
 			return null;

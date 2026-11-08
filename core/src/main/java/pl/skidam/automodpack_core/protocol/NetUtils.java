@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.protocol;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -34,6 +32,8 @@ import java.util.Locale;
 
 import javax.security.auth.x500.X500Principal;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.bouncycastle.asn1.DERNull;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
@@ -46,6 +46,8 @@ import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 
 public class NetUtils {
+	private static final Logger LOGGER = LogManager.getLogger(NetUtils.class);
+
 	private static final String USER_AGENT_PREFIX = "github/skidamek/automodpack/";
 
 	/** Resolved on demand: a detached helper makes requests before any environment exists. */

@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -14,6 +12,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.auth.Secrets;
@@ -55,6 +56,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * apply machinery and every restart decision stay here.
  */
 public class ModpackUpdater implements AutoCloseable {
+	private static final Logger LOGGER = LogManager.getLogger(ModpackUpdater.class);
+
 	/** The update engine's background pool: one daemon-thread pool for flow, review, and controller dispatch on the client; the transport keeps its own. */
 	private static final ExecutorService APP_EXECUTOR = Executors.newCachedThreadPool(r -> {
 		Thread t = new Thread(r, "automodpack-update");

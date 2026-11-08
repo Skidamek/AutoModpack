@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -17,6 +15,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.MissingObjectException;
@@ -43,6 +44,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * reason about a missing transport.
  */
 public final class WaitingMusic {
+	private static final Logger LOGGER = LogManager.getLogger(WaitingMusic.class);
 
 	private static volatile Session current;
 

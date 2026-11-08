@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_loader_core_forge;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
@@ -15,13 +13,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import cpw.mods.modlauncher.api.ITransformationService;
 import net.minecraftforge.fml.loading.FMLLoader;
 import net.minecraftforge.forgespi.locating.IDependencyLocator;
 import net.minecraftforge.forgespi.locating.IModFile;
 import net.minecraftforge.forgespi.locating.IModLocator;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.loader.ServiceJarIndex;
@@ -49,6 +49,7 @@ import pl.skidam.automodpack_loader_core_modlauncher.ModLauncherEarlyServiceBrid
  * bridge - lives in {@link ModLauncherEarlyServiceBridge}.
  */
 public final class EarlyServiceLayer {
+	private static final Logger LOGGER = LogManager.getLogger(EarlyServiceLayer.class);
 
 	private EarlyServiceLayer() {}
 
@@ -144,7 +145,7 @@ public final class EarlyServiceLayer {
 			List<Path> earlyServiceJars = ModpackLoader.modsToLoad.stream().filter(EarlyServiceLayer::eligibleForInPlace).toList();
 			if (earlyServiceJars.isEmpty()) return;
 
-			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
+			LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
 
 			ModuleLayer serviceLayer = EarlyServiceLayer.class.getModule().getLayer();
 			if (serviceLayer == null) {

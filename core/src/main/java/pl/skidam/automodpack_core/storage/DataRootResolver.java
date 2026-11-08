@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.storage;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -10,6 +8,9 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
@@ -20,6 +21,8 @@ import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 /** Resolves the one shared-or-local AutoModpack data root for an instance. */
 public final class DataRootResolver {
+	private static final Logger LOGGER = LogManager.getLogger(DataRootResolver.class);
+
 	private static final AtomicReference<Path> loggedRoot = new AtomicReference<>();
 	public record Layout(Path root) {
 		public Layout {

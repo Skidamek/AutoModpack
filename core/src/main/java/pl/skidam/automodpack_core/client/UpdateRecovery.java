@@ -1,10 +1,12 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LOG_FILE;
 
 import java.io.IOException;
 import java.nio.file.Path;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -21,6 +23,8 @@ import pl.skidam.automodpack_core.update.UpdateTransaction;
  * the decisions and the numbers behind them.
  */
 public final class UpdateRecovery {
+	private static final Logger LOGGER = LogManager.getLogger(UpdateRecovery.class);
+
 	// Receipts: in-repo, 11s of retries lost an on-access lock race. Microsoft Defender cloud block holds a file 10s by default,
 	// extendable to 60s (Configure extended cloud check). Geometric 500ms→5s over 20 attempts sleeps ~82.5s, past that 60s cap
 	// with slack for a local archive scan of one jar (Defender's "expensive file" log threshold is 3s; there is no documented RTP cap).

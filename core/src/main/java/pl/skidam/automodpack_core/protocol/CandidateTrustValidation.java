@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.protocol;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.closeQuietly;
 import static pl.skidam.automodpack_core.protocol.NetUtils.getFingerprint;
 
@@ -31,6 +30,9 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.utils.Throwables;
 
@@ -45,6 +47,7 @@ import pl.skidam.automodpack_core.utils.Throwables;
  * without asking again.
  */
 public final class CandidateTrustValidation {
+	private static final Logger LOGGER = LogManager.getLogger(CandidateTrustValidation.class);
 
 	/** One transport candidate: its probe socket, the client's shared trust manager holding that socket's deferral, and who may accept the certificate. */
 	public record Candidate(SSLSocket socket, CustomizableTrustManager trustManager, CustomizableTrustManager.SessionTrust sessionTrust, String originHost, String endpointHost,

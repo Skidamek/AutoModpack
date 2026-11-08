@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.platforms;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
@@ -12,6 +10,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /**
@@ -20,6 +21,8 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * be asked is logged with its size and leaves the jar in the pack, never reported as "the platform matched nothing".
  */
 public final class PlatformSideVerdicts {
+	private static final Logger LOGGER = LogManager.getLogger(PlatformSideVerdicts.class);
+
 	private final Path cacheDirectory;
 
 	public PlatformSideVerdicts(Path cacheDirectory) {

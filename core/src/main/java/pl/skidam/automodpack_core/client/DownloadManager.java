@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.client.DownloadData.Route;
 import static pl.skidam.automodpack_core.client.RescuePolicy.HOST_DOMAIN;
 
@@ -18,6 +17,9 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.platforms.FetchManager;
@@ -46,6 +48,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * with {@link ObjectPromotion} run one attempt's pull and promote what it wrote.
  */
 public class DownloadManager implements DownloadView {
+	private static final Logger LOGGER = LogManager.getLogger(DownloadManager.class);
 
 	public enum FailureCategory {
 		/** Nothing judged this yet: an unexpected error, not a verdict, so it never refuses a retry on its own. */

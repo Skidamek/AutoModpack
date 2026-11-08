@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -10,6 +8,9 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.google.gson.reflect.TypeToken;
 
@@ -27,6 +28,8 @@ import pl.skidam.automodpack_core.utils.DurableFiles;
  * insertion-ordered, so a rotation of many endpoints keeps the recent ones.
  */
 public final class HostValidatorCache {
+	private static final Logger LOGGER = LogManager.getLogger(HostValidatorCache.class);
+
 	// Two documents per endpoint; 32 entries ≈ a dozen hosts' worth of validators, a few hundred bytes of JSON.
 	private static final int MAX_ENTRIES = 32;
 	private static final String FILE_NAME = "host-validators.json";

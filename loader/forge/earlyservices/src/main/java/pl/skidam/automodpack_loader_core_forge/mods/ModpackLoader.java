@@ -1,11 +1,12 @@
 package pl.skidam.automodpack_loader_core_forge.mods;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.loader.ConnectorFallback;
 import pl.skidam.automodpack_core.loader.FileInspection;
@@ -14,6 +15,8 @@ import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 
 public class ModpackLoader implements ModpackLoaderService {
+	private static final Logger LOGGER = LogManager.getLogger(ModpackLoader.class);
+
 	public static final List<Path> modsToLoad = new ArrayList<>();
 
 	@Override

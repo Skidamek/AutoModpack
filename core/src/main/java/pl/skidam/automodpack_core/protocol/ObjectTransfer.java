@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.protocol;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.DownloadClient.LANES;
 import static pl.skidam.automodpack_core.protocol.DownloadClient.RETRY_SCHEDULER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.TAKE_RATE_FLOOR_BYTES_PER_SECOND;
@@ -20,6 +19,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.protocol.Connection.ObjectTake;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 import pl.skidam.automodpack_core.utils.RateFuse;
@@ -33,6 +35,7 @@ import pl.skidam.automodpack_core.utils.Throwables;
  * one thread at a time.
  */
 final class ObjectTransfer {
+	private static final Logger LOGGER = LogManager.getLogger(ObjectTransfer.class);
 
 	// Survives two consecutive lane deaths (each retry picks a fresh lane via laneCounter); a third failure means the server, not a lane, is gone.
 	private static final int MAX_TAKE_ATTEMPTS = 3;

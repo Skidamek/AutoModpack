@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.loader;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -12,6 +10,9 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
@@ -24,6 +25,7 @@ import pl.skidam.automodpack_core.utils.MiniToml;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public class FileInspection {
+	private static final Logger LOGGER = LogManager.getLogger(FileInspection.class);
 
 	private static final Gson GSON = new Gson();
 	private static final Set<String> LOADER_ARTIFACT_TYPES = Set.of("GAMELIBRARY", "LIBRARY", "LANGPROVIDER");

@@ -10,7 +10,6 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.TranslatableComponent;
 *//*?}*/
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.text.L10n;
 

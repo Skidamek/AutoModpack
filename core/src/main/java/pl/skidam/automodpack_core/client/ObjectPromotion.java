@@ -1,11 +1,12 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -18,6 +19,7 @@ import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
  * private file, hash it, and swap it into the object store. Nothing here knows where the bytes came from.
  */
 final class ObjectPromotion {
+	private static final Logger LOGGER = LogManager.getLogger(ObjectPromotion.class);
 
 	private final DataRootResolver.Layout dataLayout;
 	private final Path stagingDirectory;

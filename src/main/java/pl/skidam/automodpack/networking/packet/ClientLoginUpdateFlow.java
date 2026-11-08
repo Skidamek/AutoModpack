@@ -1,7 +1,5 @@
 package pl.skidam.automodpack.networking.packet;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
@@ -10,6 +8,9 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 
@@ -45,6 +46,8 @@ import pl.skidam.automodpack_core.utils.Throwables;
 
 /** Coordinates the client-side work that follows the login data query. */
 final class ClientLoginUpdateFlow {
+	private static final Logger LOGGER = LogManager.getLogger(ClientLoginUpdateFlow.class);
+
 	private ClientLoginUpdateFlow() {}
 
 	/**

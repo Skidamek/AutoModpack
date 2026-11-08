@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.text;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -12,6 +10,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -24,6 +25,8 @@ import com.google.gson.JsonParser;
  * parsed maps, and never fails: worst case a key comes back unresolved. Thread-safe (gui and server threads).
  */
 public final class L10n {
+	private static final Logger LOGGER = LogManager.getLogger(L10n.class);
+
 	private static final String LANG_PATH = "/assets/automodpack/lang/%s.json";
 	private static final String FALLBACK_LANGUAGE = "en_us";
 	/** A java-format specifier inside a lang value: '%s', '%2$s', '%.2f' - also the literal '%%'. */

@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.utils.HashUtils.isCanonicalSha1;
 
 import java.io.IOException;
@@ -13,6 +12,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -24,6 +26,8 @@ import pl.skidam.automodpack_core.utils.JsonLines;
  * live beside it; file bytes stay in shared CAS.
  */
 public final class ClientStateJournal {
+	private static final Logger LOGGER = LogManager.getLogger(ClientStateJournal.class);
+
 	public static final long NO_PARENT = 0;
 
 	public enum Kind {

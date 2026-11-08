@@ -1,5 +1,9 @@
 package pl.skidam.automodpack.client;
 
+import org.apache.logging.log4j.Logger;
+
+import org.apache.logging.log4j.LogManager;
+
 import java.io.InputStream;
 import java.util.List;
 
@@ -13,7 +17,6 @@ import net.minecraft.resources.Identifier;
 import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack_core.utils.Assets;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 /** Uploads our bundled gui sprites as in-memory dynamic textures under the exact ids the draw sites blit. The vanilla
  * TextureManager then answers every lookup from memory and never consults a resource pack, so a server-pushed pack
@@ -22,6 +25,8 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
  * in on the render thread, where the texture manager exists on every loader.
  */
 public final class ClientTextures {
+	private static final Logger LOGGER = LogManager.getLogger(ClientTextures.class);
+
 	/** Every bundled sprite that has a draw site; ids are file ids under textures/gui/sprites. */
 	private static final List<String> SPRITES = List.of("green_background", "green_progress", "checkbox", "folder", "music-note", "mute-music-note", "tooltip/background", "tooltip/frame");
 

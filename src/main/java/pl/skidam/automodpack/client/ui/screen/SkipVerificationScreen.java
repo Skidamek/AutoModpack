@@ -3,6 +3,9 @@ package pl.skidam.automodpack.client.ui.screen;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
@@ -18,11 +21,12 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
 import pl.skidam.automodpack.client.ui.widget.Countdown;
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 public class SkipVerificationScreen extends VersionedScreen implements LoginGate {
+	private static final Logger LOGGER = LogManager.getLogger(SkipVerificationScreen.class);
+
 	private static final int BODY = 420;
 	private final Screen verificationScreen;
 	private final Runnable validatedCallback;
@@ -92,7 +96,7 @@ public class SkipVerificationScreen extends VersionedScreen implements LoginGate
 			ScreenManager.waiting();
 			validatedCallback.run();
 		} else {
-			Constants.LOGGER.error("Skip verification text mismatch, try again");
+			LOGGER.error("Skip verification text mismatch, try again");
 			VersionedToasts.add(failedToast);
 		}
 	}

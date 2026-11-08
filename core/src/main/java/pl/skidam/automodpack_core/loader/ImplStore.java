@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.loader;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -11,6 +9,9 @@ import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import io.airlift.compress.zstd.ZstdDecompressor;
 
@@ -35,6 +36,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * becomes a stamp hit because the stamp travels inside the renamed tree.
  */
 public final class ImplStore {
+	private static final Logger LOGGER = LogManager.getLogger(ImplStore.class);
+
 	private static final String MANIFEST_ENTRY = "impl/manifest.json";
 	private static final String SOLID_ENTRY = "impl/all.zst";
 	private static final String STAMP_FILE = "stamp.json";

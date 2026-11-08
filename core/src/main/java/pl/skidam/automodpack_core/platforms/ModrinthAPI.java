@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.platforms;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -12,6 +10,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -21,6 +22,8 @@ import pl.skidam.automodpack_core.utils.Json;
 
 public record ModrinthAPI(String modrinthID, String requestUrl, String downloadUrl, String fileVersion, String fileName, long fileSize, String releaseType,
 		String SHA1Hash, String environment) {
+	private static final Logger LOGGER = LogManager.getLogger(ModrinthAPI.class);
+
 	public ModrinthAPI(String modrinthID, String requestUrl, String downloadUrl, String fileVersion, String fileName, long fileSize, String releaseType, String SHA1Hash) {
 		this(modrinthID, requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, SHA1Hash, null);
 	}

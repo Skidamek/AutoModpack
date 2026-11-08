@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.launchers;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -15,6 +13,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BiPredicate;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
@@ -27,6 +28,7 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
  * writes that converge it onto the target pack. Only fabric/forge/neoforge are switchable targets.
  */
 public class LauncherVersionSwapper {
+	private static final Logger LOGGER = LogManager.getLogger(LauncherVersionSwapper.class);
 
 	/** The version axes a launcher instance can switch. */
 	public enum Axis {

@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.utils;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -9,6 +7,9 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -18,6 +19,7 @@ import com.google.gson.JsonParser;
 
 @SuppressWarnings("deprecation")
 public class Json {
+	private static final Logger LOGGER = LogManager.getLogger(Json.class);
 
 	private static final Gson GSON = new Gson();
 

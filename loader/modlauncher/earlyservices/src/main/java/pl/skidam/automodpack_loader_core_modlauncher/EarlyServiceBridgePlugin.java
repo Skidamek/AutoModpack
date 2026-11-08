@@ -6,15 +6,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.objectweb.asm.Type;
 
 import cpw.mods.jarhandling.SecureJar;
 import cpw.mods.modlauncher.api.NamedPath;
 import cpw.mods.modlauncher.serviceapi.ILaunchPluginService;
 
-import pl.skidam.automodpack_core.Constants;
-
 public class EarlyServiceBridgePlugin implements ILaunchPluginService {
+	private static final Logger LOGGER = LogManager.getLogger(EarlyServiceBridgePlugin.class);
 
 	static final String NAME = "automodpack_early_service_bridge";
 
@@ -47,11 +48,11 @@ public class EarlyServiceBridgePlugin implements ILaunchPluginService {
 			PriorityPluginMap ordered = new PriorityPluginMap(NAME, plugins);
 			ordered.putIfAbsent(NAME, new EarlyServiceBridgePlugin());
 			ModuleClassLoaderAccess.writeField(pluginHandler, "plugins", ordered);
-			Constants.LOGGER.debug(
+			LOGGER.debug(
 					"[AutoModpack] Injected early-service bridge launch plugin '{}' (ModLauncher discovers launch plugins only from the BOOT layer, so SERVICE-layer service files would never be seen)",
 					NAME);
 		} catch (Throwable t) {
-			Constants.LOGGER.warn("[AutoModpack] Could not inject the early-service bridge launch plugin; in-place graphics-service mods may fail", t);
+			LOGGER.warn("[AutoModpack] Could not inject the early-service bridge launch plugin; in-place graphics-service mods may fail", t);
 		}
 	}
 
@@ -90,7 +91,7 @@ public class EarlyServiceBridgePlugin implements ILaunchPluginService {
 		} catch (Throwable t) {
 			// Both bridge implementations guard themselves, but an escape here would propagate into
 			// ModLauncher's plugin loop and abort the launch instead of degrading to a bridge miss.
-			Constants.LOGGER.error("[AutoModpack] GAME-layer bridge failed; in-place early-service mods may not resolve", t);
+			LOGGER.error("[AutoModpack] GAME-layer bridge failed; in-place early-service mods may not resolve", t);
 		}
 	}
 }

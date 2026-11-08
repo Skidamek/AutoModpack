@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.storage;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileVisitResult;
@@ -15,11 +13,15 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.utils.ByteFormat;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 
 /** Names the top-level entries of the automodpack folder that this layout does not own, so an updated install says what it left behind. */
 public final class StorageLeftovers {
+	private static final Logger LOGGER = LogManager.getLogger(StorageLeftovers.class);
 
 	// The v4 config predecessors and their migration .backup renames stay unowned on purpose: they are exactly what the warning is for.
 	private static final Set<String> OWNED_ENTRIES = Set.of(

@@ -1,16 +1,19 @@
 package pl.skidam.automodpack_core.config;
 
-import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_CONFIG_FILE;
 
 import java.io.IOException;
 import java.util.*;
 import java.util.regex.Pattern;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class ConfigUtils {
+	private static final Logger LOGGER = LogManager.getLogger(ConfigUtils.class);
 
 	/** One completed server-config reload: the config now installed as the global server config and whether hosting must restart. */
 	public record ReloadedServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config, boolean connectionSettingsChanged) {}

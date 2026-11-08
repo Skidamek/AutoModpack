@@ -1,9 +1,11 @@
 package pl.skidam.automodpack_core;
 
-import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_CONFIG_FILE;
 
 import java.io.IOException;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
@@ -21,6 +23,7 @@ import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.utils.FetchCache;
 
 public class Server {
+	private static final Logger LOGGER = LogManager.getLogger(Server.class);
 
 	// Standalone hosting uses the same instance layout as the modded server.
 	public static void main(String[] args) throws IOException {

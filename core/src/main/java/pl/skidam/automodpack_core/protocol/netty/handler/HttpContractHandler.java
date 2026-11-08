@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.protocol.netty.handler;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.STREAM_WRITE_BYTES;
 import static pl.skidam.automodpack_core.protocol.NetUtils.TRANSFER_WRITE_STALL_TIMEOUT;
 import static pl.skidam.automodpack_core.protocol.NetUtils.closeQuietly;
@@ -23,6 +22,9 @@ import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
@@ -53,6 +55,7 @@ import pl.skidam.automodpack_core.protocol.netty.NettyServer;
  * construction. Our own client pipelines every lane this deep.
  */
 public class HttpContractHandler extends ChannelInboundHandlerAdapter {
+	private static final Logger LOGGER = LogManager.getLogger(HttpContractHandler.class);
 
 	/**
 	 * Tripwire past any real request header block. Complete heads are parsed out on every read, so only the unterminated tail is bounded; our own client pipelines up to 2048 heads of ~250 bytes and stays far under it.

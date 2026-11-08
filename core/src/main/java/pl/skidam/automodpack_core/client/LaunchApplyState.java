@@ -1,8 +1,9 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
@@ -15,6 +16,8 @@ import pl.skidam.automodpack_core.update.ClientStorage;
  * connection record, keyed by modpack identity; this class is the only place that gives them meaning.
  */
 public final class LaunchApplyState {
+	private static final Logger LOGGER = LogManager.getLogger(LaunchApplyState.class);
+
 	private LaunchApplyState() {}
 
 	/** Stored absence reads as refused, and an unreadable record refuses too: an automatic apply never guesses a yes. */

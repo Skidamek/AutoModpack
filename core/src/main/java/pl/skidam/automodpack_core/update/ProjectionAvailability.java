@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.CLIENT_ACTIVE_DIR;
 import static pl.skidam.automodpack_core.storage.StoragePaths.CLIENT_ACTIVE_STATE_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.CLIENT_SELECTED_FILE;
@@ -13,6 +12,9 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -32,6 +34,8 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
  * {@link ClientStorage} with none of it.
  */
 public final class ProjectionAvailability {
+	private static final Logger LOGGER = LogManager.getLogger(ProjectionAvailability.class);
+
 	private static final Map<Path, ProjectionAvailability> BY_GAME_DIRECTORY = new HashMap<>();
 	private static final int SCAN_READ_ATTEMPTS = 5;
 	private static final long SCAN_READ_RETRY_MILLIS = 100;

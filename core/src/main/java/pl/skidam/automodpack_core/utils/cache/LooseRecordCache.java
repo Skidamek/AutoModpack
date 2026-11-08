@@ -1,12 +1,13 @@
 package pl.skidam.automodpack_core.utils.cache;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 
@@ -20,6 +21,8 @@ import pl.skidam.automodpack_core.config.ConfigTools;
  * record from before a field existed is a rebuildable cache miss that is quietly overwritten.
  */
 public abstract class LooseRecordCache<T> implements AutoCloseable {
+	private static final Logger LOGGER = LogManager.getLogger(LooseRecordCache.class);
+
 	protected static final String RECORD_SUFFIX = ".json";
 	protected final Path recordsDirectory;
 	private final String description;

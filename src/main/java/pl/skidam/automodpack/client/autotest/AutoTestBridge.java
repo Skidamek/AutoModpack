@@ -1,5 +1,9 @@
 package pl.skidam.automodpack.client.autotest;
 
+import org.apache.logging.log4j.Logger;
+
+import org.apache.logging.log4j.LogManager;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -61,11 +65,12 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import javax.imageio.ImageIO;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import pl.skidam.automodpack_core.utils.ScreenshotSettler;
 
 public final class AutoTestBridge {
+	private static final Logger LOGGER = LogManager.getLogger(AutoTestBridge.class);
+
 	private static final AtomicBoolean STARTED = new AtomicBoolean(false);
 	private static volatile Path bridgeDir;
 	private static final AtomicBoolean CLIENT_READY = new AtomicBoolean(false);

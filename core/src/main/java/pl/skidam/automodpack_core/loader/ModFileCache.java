@@ -1,13 +1,14 @@
 package pl.skidam.automodpack_core.loader;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
@@ -18,6 +19,7 @@ import pl.skidam.automodpack_core.utils.cache.SharedCacheRegistry;
 
 /** A shared content-keyed mod inspection cache backed by immutable loose records. */
 public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
+	private static final Logger LOGGER = LogManager.getLogger(ModFileCache.class);
 
 	private static final SharedCacheRegistry<ModFileCache> REGISTRY = new SharedCacheRegistry<>();
 

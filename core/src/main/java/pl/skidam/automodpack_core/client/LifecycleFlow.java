@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.screen.PreviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenManager;
@@ -16,6 +17,8 @@ import pl.skidam.automodpack_core.update.UpdatePreview;
  * and the restart machinery. {@link RemovalAttempt} stays the approve/commit seam under the flow.
  */
 final class LifecycleFlow {
+	private static final Logger LOGGER = LogManager.getLogger(LifecycleFlow.class);
+
 	private final ModpackUpdater updater;
 	private final ClientStorage storage;
 	private final ClientUpdatePlanBuilder planBuilder;

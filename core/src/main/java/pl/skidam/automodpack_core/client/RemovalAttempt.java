@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import java.io.IOException;
 import java.util.Objects;
 import java.util.Set;

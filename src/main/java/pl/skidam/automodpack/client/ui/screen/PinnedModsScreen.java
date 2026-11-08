@@ -1,7 +1,5 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -14,6 +12,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.EditBox;
@@ -43,6 +44,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Instance-wide list of live mods/ ids that stay loaded instead of the pack copy. */
 public final class PinnedModsScreen extends VersionedScreen {
+	private static final Logger LOGGER = LogManager.getLogger(PinnedModsScreen.class);
+
 	private static final int PANEL_WIDTH = 500;
 	private static final int FOOTER_WIDTH = ActionAreaLayout.FOOTER_RAIL;
 	private static final int ROW_HEIGHT = 22;

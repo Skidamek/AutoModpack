@@ -1,13 +1,14 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
@@ -29,6 +30,7 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 
 public class SelfUpdater {
+	private static final Logger LOGGER = LogManager.getLogger(SelfUpdater.class);
 
 	public static final String AUTOMODPACK_ID = "k68glP2e"; // AutoModpack modrinth id
 

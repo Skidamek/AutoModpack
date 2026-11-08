@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
@@ -15,6 +13,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -63,6 +64,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * retention and history; it is not an apply-time gate.
  */
 public final class UpdateCommit {
+	private static final Logger LOGGER = LogManager.getLogger(UpdateCommit.class);
+
 	private final ClientStorage storage;
 	private final UpdateTransactionValidator validator;
 	private final Probe probe;

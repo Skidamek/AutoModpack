@@ -1,14 +1,16 @@
 package pl.skidam.automodpack_core.launchers;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.util.Map;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.utils.HttpClientPool;
 
 // Prism and MultiMC forks resolve components from this meta server; a switched version missing here stalls or breaks the next launch.
 public class PrismMeta {
+	private static final Logger LOGGER = LogManager.getLogger(PrismMeta.class);
 
 	private static final String META_URL = "https://meta.prismlauncher.org/v1/";
 

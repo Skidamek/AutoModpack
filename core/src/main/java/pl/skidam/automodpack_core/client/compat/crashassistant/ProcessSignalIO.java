@@ -5,7 +5,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.Optional;
 
-import pl.skidam.automodpack_core.Constants;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 // Original source: https://github.com/KostromDan/Crash-Assistant/blob/1.19-1.20.1/common_config/src/main/java/dev/kostromdan/mods/crash_assistant/common_config/communication/ProcessSignalIO.java
 
@@ -33,6 +34,8 @@ import pl.skidam.automodpack_core.Constants;
  */
 @SuppressWarnings("unused")
 public final class ProcessSignalIO {
+	private static final Logger LOGGER = LogManager.getLogger(ProcessSignalIO.class);
+
 	private static final Path BASE_DIR = Paths.get("local", "crash_assistant");
 
 	public static long getCurrentProcessId() {
@@ -51,7 +54,7 @@ public final class ProcessSignalIO {
 		try {
 			Files.writeString(filePath, data, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
 		} catch (IOException e) {
-			Constants.LOGGER.error("Error while saving data to {}", fileName, e);
+			LOGGER.error("Error while saving data to {}", fileName, e);
 		}
 	}
 
@@ -79,7 +82,7 @@ public final class ProcessSignalIO {
 		try {
 			Files.writeString(filePath, data, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
 		} catch (IOException e) {
-			Constants.LOGGER.error("Error while saving data to {}", fileName, e);
+			LOGGER.error("Error while saving data to {}", fileName, e);
 		}
 	}
 
@@ -106,7 +109,7 @@ public final class ProcessSignalIO {
 			String content = new String(bytes, StandardCharsets.UTF_8);
 			return Optional.of(content);
 		} catch (IOException e) {
-			Constants.LOGGER.error("Error while reading data from {}", fileName, e);
+			LOGGER.error("Error while reading data from {}", fileName, e);
 			return Optional.empty();
 		}
 	}
@@ -139,7 +142,7 @@ public final class ProcessSignalIO {
 		try {
 			Files.writeString(filePath, data, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
 		} catch (IOException e) {
-			Constants.LOGGER.error("Error while saving info to {}", fileName, e);
+			LOGGER.error("Error while saving info to {}", fileName, e);
 		}
 	}
 
@@ -160,7 +163,7 @@ public final class ProcessSignalIO {
 			String content = new String(bytes, StandardCharsets.UTF_8);
 			return Optional.of(content);
 		} catch (IOException e) {
-			Constants.LOGGER.error("Error while reading info from {}", fileName, e);
+			LOGGER.error("Error while reading info from {}", fileName, e);
 			return Optional.empty();
 		}
 	}

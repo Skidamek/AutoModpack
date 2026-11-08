@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -15,6 +13,9 @@ import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.change.ChangeSet;
@@ -44,6 +45,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * engine; the session drives them through it and owns when the review is open at all.
  */
 final class ReviewSession {
+	private static final Logger LOGGER = LogManager.getLogger(ReviewSession.class);
+
 	/**
 	 * STARTED is never read as a value, but it is not dead: the PREVIEWING→STARTED CAS is the load-bearing guard that
 	 * rejects a second confirm click while an advance runs, and {@link #confirmationClosed} deliberately refuses to

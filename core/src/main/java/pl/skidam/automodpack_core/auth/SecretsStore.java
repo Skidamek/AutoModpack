@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.auth;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -14,6 +12,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.regex.Pattern;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.config.AuthJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ServerConfigStore;
@@ -22,6 +23,8 @@ import pl.skidam.automodpack_core.utils.FileLocks;
 import pl.skidam.automodpack_core.utils.TimedSet;
 
 public class SecretsStore {
+	private static final Logger LOGGER = LogManager.getLogger(SecretsStore.class);
+
 	static class SecretsCache {
 		private static final Pattern KEY_SHAPE = Pattern.compile("[0-9a-f]{64}");
 		private static final String DESCRIPTION = "Host secrets";

@@ -1,10 +1,12 @@
 package pl.skidam.automodpack_loader_core_fabric.mods;
 
-import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_loader_core_fabric.mods.FabricLoaderImplAccessor.*;
 
 import java.nio.file.Path;
 import java.util.*;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import net.fabricmc.loader.api.LanguageAdapter;
 import net.fabricmc.loader.api.ModContainer;
@@ -24,6 +26,8 @@ import pl.skidam.automodpack_core.loader.RequestedCandidates;
 
 @SuppressWarnings({"unchecked", "unused"})
 public class ModpackLoader implements ModpackLoaderService {
+	private static final Logger LOGGER = LogManager.getLogger(ModpackLoader.class);
+
 	private final Map<String, Set<ModCandidateImpl>> envDisabledMods = new HashMap<>();
 
 	@Override

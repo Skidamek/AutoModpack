@@ -1,12 +1,13 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -25,6 +26,8 @@ import pl.skidam.automodpack_core.utils.AddressHelpers;
  * first sync is not broken storage, so it is skipped quietly while a real read failure is reported once with the list.
  */
 public final class InstalledPacks {
+	private static final Logger LOGGER = LogManager.getLogger(InstalledPacks.class);
+
 	/** The vanilla server-list name for an origin, or blank; the one thing the catalogue needs from the game. */
 	@FunctionalInterface
 	public interface ServerNames {

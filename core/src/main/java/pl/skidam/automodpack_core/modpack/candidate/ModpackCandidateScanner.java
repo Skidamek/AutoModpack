@@ -1,12 +1,13 @@
 package pl.skidam.automodpack_core.modpack.candidate;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.*;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
@@ -22,6 +23,8 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public final class ModpackCandidateScanner {
+	private static final Logger LOGGER = LogManager.getLogger(ModpackCandidateScanner.class);
+
 	private final StableSourceSnapshotter sourceSnapshotter = new StableSourceSnapshotter();
 	private final PlatformSideVerdicts sideVerdicts;
 

@@ -1,13 +1,14 @@
 package pl.skidam.automodpack_core.launchers;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Set;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -16,6 +17,7 @@ import pl.skidam.automodpack_core.launchers.LauncherVersionSwapper.Axis;
 
 // Pandora launcher: the instance's info_v1.json is the full version record (crates/schema/src/instance.rs in Pandora's sources).
 final class PandoraMeta implements LauncherAdapter {
+	private static final Logger LOGGER = LogManager.getLogger(PandoraMeta.class);
 
 	/** Canonical serde forms are lowercase (loader.rs rename_all); the capitalized names remain read aliases. */
 	private static final Set<String> SWITCHABLE_LOADERS = Set.of("fabric", "forge", "neoforge");

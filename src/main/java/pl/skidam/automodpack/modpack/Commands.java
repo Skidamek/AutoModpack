@@ -1,5 +1,9 @@
 package pl.skidam.automodpack.modpack;
 
+import org.apache.logging.log4j.Logger;
+
+import org.apache.logging.log4j.LogManager;
+
 import pl.skidam.automodpack_core.Hosting;
 
 import pl.skidam.automodpack_core.config.ServerConfigStore;
@@ -58,9 +62,10 @@ import pl.skidam.automodpack_core.config.ConfigUtils;
 
 import static net.minecraft.commands.Commands.argument;
 import static net.minecraft.commands.Commands.literal;
-import static pl.skidam.automodpack_core.Constants.*;
 
 public class Commands {
+	private static final Logger LOGGER = LogManager.getLogger(Commands.class);
+
 
 	public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
 		var generateIfContentNode = literal("if-content")

@@ -1,10 +1,11 @@
 package pl.skidam.automodpack_core.config;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.google.gson.JsonObject;
 
@@ -20,6 +21,8 @@ import pl.skidam.reconf.Document;
  * store walk those groups without knowing what a modpack is.
  */
 public final class GroupSelectionMigration implements ConfMigration {
+	private static final Logger LOGGER = LogManager.getLogger(GroupSelectionMigration.class);
+
 	/** Every spelling the replaced flags answer to; a hand edit may use either, and both mean the same word. */
 	private static final List<String> LEGACY_DEFAULT_SELECTED = List.of("defaultSelected", "default-selected");
 	private static final List<String> LEGACY_KEYS = List.of("required", "defaultSelected", "default-selected");

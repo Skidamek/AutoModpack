@@ -1,8 +1,9 @@
 package pl.skidam.automodpack.networking.packet;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 
@@ -17,6 +18,8 @@ import pl.skidam.automodpack_core.update.ClientStorage;
 
 /** Join-time fallback for AutoModpack server queries a proxy swallowed: the client self-checks against its stored connection to this origin. */
 public final class LoginSelfCheck {
+	private static final Logger LOGGER = LogManager.getLogger(LoginSelfCheck.class);
+
 	private LoginSelfCheck() {}
 
 	public static void maybeRun(ClientHandshakePacketListenerImpl handler) {

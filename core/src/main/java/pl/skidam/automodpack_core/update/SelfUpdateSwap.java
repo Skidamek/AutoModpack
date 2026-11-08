@@ -1,12 +1,14 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SELF_UPDATE_FILE;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.StorageJsons;
@@ -32,6 +34,8 @@ import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
  * </p>
  */
 public final class SelfUpdateSwap {
+	private static final Logger LOGGER = LogManager.getLogger(SelfUpdateSwap.class);
+
 	private SelfUpdateSwap() {}
 
 	public static void commit(Path gameDirectory, DataRootResolver.Location dataLocation, String currentPath, String targetPath, String targetSha1, long targetSize, String currentSha1)

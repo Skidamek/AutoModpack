@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.protocol;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.DownloadClient.LANES;
 import static pl.skidam.automodpack_core.protocol.DownloadClient.LANE_OPEN_COOLDOWN_BASE_MILLIS;
 import static pl.skidam.automodpack_core.protocol.DownloadClient.LANE_OPEN_COOLDOWN_CAP_MILLIS;
@@ -17,6 +16,9 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.utils.Throwables;
 
 /**
@@ -26,6 +28,7 @@ import pl.skidam.automodpack_core.utils.Throwables;
  * and close(), and the armed flag keeps at most one cooldown re-pump pending on the retry clock.
  */
 final class LanePool {
+	private static final Logger LOGGER = LogManager.getLogger(LanePool.class);
 
 	private final TransportSession session;
 	private final LaneConnector connector;

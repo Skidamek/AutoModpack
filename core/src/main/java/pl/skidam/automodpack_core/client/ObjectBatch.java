@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -10,6 +8,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -28,6 +29,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * and is hashed again before it is used.
  */
 final class ObjectBatch {
+	private static final Logger LOGGER = LogManager.getLogger(ObjectBatch.class);
 
 	record Held(String sha1, long size, Path file, Path sliceDirectory, QueuedDownload task) {}
 

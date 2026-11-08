@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -15,6 +13,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -39,6 +40,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * {@link #rebuildActive} re-derives the record the active generation needs from what is installed.
  */
 public record GeneratedCopyState(String modpackId, String contentToken, String selectionDigest, List<Entry> entries) {
+	private static final Logger LOGGER = LogManager.getLogger(GeneratedCopyState.class);
+
 	private static final Comparator<Entry> ENTRY_ORDER = Comparator.comparing(Entry::logicalPath);
 	private static final Comparator<GeneratedCopyState> STATE_ORDER = Comparator.comparing(GeneratedCopyState::modpackId).thenComparing(GeneratedCopyState::contentToken);
 

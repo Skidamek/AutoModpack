@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.modpack;
 
-import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HOST_MODPACK_DIR;
 import static pl.skidam.automodpack_core.storage.StoragePaths.PATCH_NOTES_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_DIR;
@@ -19,6 +18,9 @@ import java.util.TreeMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.Supplier;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.Hosting;
@@ -53,6 +55,8 @@ import pl.skidam.automodpack_core.utils.Throwables;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public class ModpackExecutor {
+	private static final Logger LOGGER = LogManager.getLogger(ModpackExecutor.class);
+
 	private final ThreadPoolExecutor creationExecutor;
 	private final OperationLocks locks = new OperationLocks();
 	private final Path serverRoot;

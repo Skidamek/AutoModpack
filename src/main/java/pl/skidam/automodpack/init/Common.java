@@ -1,5 +1,9 @@
 package pl.skidam.automodpack.init;
 
+import org.apache.logging.log4j.Logger;
+
+import org.apache.logging.log4j.LogManager;
+
 import pl.skidam.automodpack_core.AutoModpack;
 
 import pl.skidam.automodpack_core.loader.LoaderServices;
@@ -30,9 +34,10 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-import static pl.skidam.automodpack_core.Constants.*;
 
 public class Common {
+	private static final Logger LOGGER = LogManager.getLogger(Common.class);
+
 
 	public static Map<String, Boolean> players = new HashMap<>();
 	public static MinecraftServer server = null;

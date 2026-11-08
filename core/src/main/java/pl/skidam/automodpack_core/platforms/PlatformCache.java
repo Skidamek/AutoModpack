@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.platforms;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,11 +9,15 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.utils.cache.LooseRecordCache;
 import pl.skidam.automodpack_core.utils.cache.SharedCacheRegistry;
 
 /** A shared sha1-keyed cache of resolved Modrinth and CurseForge lookups backed by immutable loose records. */
 public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
+	private static final Logger LOGGER = LogManager.getLogger(PlatformCache.class);
 
 	private static final SharedCacheRegistry<PlatformCache> REGISTRY = new SharedCacheRegistry<>();
 

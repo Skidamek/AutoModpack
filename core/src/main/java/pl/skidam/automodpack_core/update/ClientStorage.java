@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
 import java.io.IOException;
@@ -13,6 +12,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
@@ -44,6 +46,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * </p>
  */
 public final class ClientStorage {
+	private static final Logger LOGGER = LogManager.getLogger(ClientStorage.class);
+
 	private static final Map<Path, WeakReference<ClientStorage>> OPEN_STORAGE = new HashMap<>();
 	private final DataRootResolver.Location dataLocation;
 	private final DataRootResolver.Layout dataLayout;

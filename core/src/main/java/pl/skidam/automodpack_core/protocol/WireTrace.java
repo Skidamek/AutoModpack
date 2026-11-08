@@ -1,9 +1,12 @@
 package pl.skidam.automodpack_core.protocol;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /** One debug line per rare wire transition; the receipts a silent wedge investigation needs. */
 public final class WireTrace {
+	private static final Logger LOGGER = LogManager.getLogger(WireTrace.class);
+
 	private WireTrace() {}
 
 	public static void log(String event, Object... kv) {

@@ -1,11 +1,12 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.util.Objects;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
@@ -29,6 +30,8 @@ import pl.skidam.automodpack_core.utils.DurableFiles;
  * and then calls this.
  */
 public final class ClientLaunch {
+	private static final Logger LOGGER = LogManager.getLogger(ClientLaunch.class);
+
 	private final ClientStorage storage;
 	private final boolean trustedBootstrapApply;
 	private final boolean bootAsIs;

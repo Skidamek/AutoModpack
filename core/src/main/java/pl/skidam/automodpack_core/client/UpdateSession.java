@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -9,6 +7,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
@@ -45,6 +46,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * side effects, the review state, and the replan can never drift apart the way separate fields could.
  */
 final class UpdateSession implements UpdateAttempt {
+	private static final Logger LOGGER = LogManager.getLogger(UpdateSession.class);
+
 	private final ClientStorage storage;
 	private final ClientUpdatePlanBuilder planBuilder;
 	private final ModpackObjectAcquisition objectAcquisition;

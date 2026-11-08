@@ -1,10 +1,11 @@
 package pl.skidam.automodpack_core.config;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -18,6 +19,8 @@ import pl.skidam.reconf.Document;
  * has the pack-level key is translated on the way into the model and again into the document on the next save.
  */
 public final class ServerSideExclusionMigration implements ConfMigration {
+	private static final Logger LOGGER = LogManager.getLogger(ServerSideExclusionMigration.class);
+
 	static final String KEY = "auto-exclude-server-side-mods";
 	private static final String LEGACY_CAMEL = "autoExcludeServerSideMods";
 

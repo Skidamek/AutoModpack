@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import net.minecraft.client.gui.screens.Screen;
 
@@ -15,6 +16,8 @@ import pl.skidam.automodpack_core.update.ClientStorage;
  * receipt; this class only remembers whether it already asked and opens the history the player clicked.
  */
 public final class LaunchApplyNotice {
+	private static final Logger LOGGER = LogManager.getLogger(LaunchApplyNotice.class);
+
 	private static volatile String noticeModpackId;
 	private static volatile boolean read;
 

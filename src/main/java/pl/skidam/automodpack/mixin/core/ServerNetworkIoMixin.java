@@ -1,7 +1,5 @@
 package pl.skidam.automodpack.mixin.core;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import org.spongepowered.asm.mixin.Mixin;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;

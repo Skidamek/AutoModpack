@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.platforms;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -12,10 +10,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** One best-effort round per platform; any failure leaves the object unresolvable instead of delaying or failing the lookup. */
 public class ApiPlatformSourceLookup implements PlatformSourceLookup {
+	private static final Logger LOGGER = LogManager.getLogger(ApiPlatformSourceLookup.class);
 
 	@Override
 	public Map<String, Long> platformSizes(Collection<Query> queries) {

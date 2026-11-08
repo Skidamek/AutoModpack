@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.utils.cache;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -15,6 +13,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
@@ -38,6 +39,7 @@ import pl.skidam.automodpack_core.utils.PlatformUtils;
  * </p>
  */
 public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
+	private static final Logger LOGGER = LogManager.getLogger(FileCache.class);
 
 	private static final SharedCacheRegistry<FileCache> REGISTRY = new SharedCacheRegistry<>();
 	private static final long UNAVAILABLE_CHANGE_TIME_NANOS = Long.MIN_VALUE;

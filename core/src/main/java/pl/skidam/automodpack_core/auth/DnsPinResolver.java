@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.auth;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.normalizeFingerprint;
 
 import java.io.ByteArrayOutputStream;
@@ -21,6 +20,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.HttpClientPool;
@@ -30,6 +32,7 @@ import pl.skidam.automodpack_core.utils.HttpClientPool;
  * Minecraft hostname selected by the user.
  */
 public final class DnsPinResolver {
+	private static final Logger LOGGER = LogManager.getLogger(DnsPinResolver.class);
 
 	public static final String RECORD_PREFIX = "_automodpack.";
 	public static final String RECORD_VERSION = "amp1";

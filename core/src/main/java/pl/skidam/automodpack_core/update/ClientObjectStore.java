@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -17,6 +15,9 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Stream;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -37,6 +38,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Measures and explicitly maintains the client shared object store. */
 public final class ClientObjectStore {
+	private static final Logger LOGGER = LogManager.getLogger(ClientObjectStore.class);
 
 	private ClientObjectStore() {}
 

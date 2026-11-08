@@ -3,11 +3,13 @@ package pl.skidam.automodpack_loader_core_neoforge_4;
 import java.nio.file.Path;
 import java.util.List;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import net.neoforged.fml.loading.progress.ProgressMeter;
 import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.Preload;
 import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
@@ -32,6 +34,7 @@ import pl.skidam.automodpack_loader_core_neoforge_4.mods.ModpackLoader;
  * {@code if}-guard alone cannot protect that: linking happens before any body runs.
  */
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
+	private static final Logger LOGGER = LogManager.getLogger(EarlyServiceBootstrapper.class);
 
 	@Override
 	public String name() {
@@ -68,11 +71,11 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			List<Path> earlyServiceJars = ModpackLoader.modsToLoad.stream().filter(EarlyServiceLayer::eligibleForInPlace).toList();
 			if (earlyServiceJars.isEmpty()) return;
 
-			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
+			LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
 
 			ModuleLayer serviceLayer = getClass().getModule().getLayer();
 			if (serviceLayer == null) {
-				Constants.LOGGER.warn("[AutoModpack] Not running on a module layer, cannot bootstrap early services in place");
+				LOGGER.warn("[AutoModpack] Not running on a module layer, cannot bootstrap early services in place");
 				return;
 			}
 
@@ -81,7 +84,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			EarlyServiceLayer.instantiateTransformationServices();
 			EarlyServiceBridgePlugin.registerFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
 		} catch (Throwable t) {
-			Constants.LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
+			LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
 			throw new RuntimeException("AutoModpack early-service bootstrap failed", t);
 		}
 	}

@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.utils;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -19,8 +17,13 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Locale;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 /** Low-level digest primitives; path-keyed callers add caching through {@code FileCache}. */
 public final class HashUtils {
+	private static final Logger LOGGER = LogManager.getLogger(HashUtils.class);
+
 	public static final int SHA1_HEX_LENGTH = 40;
 	private static final String SHA_1 = "SHA-1";
 	private static final int STREAM_BUFFER = 32 * 1024;

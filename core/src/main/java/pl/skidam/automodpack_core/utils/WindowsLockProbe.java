@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.utils;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -9,12 +7,17 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 /**
  * What, and where Restart Manager can name who, is using a path. Windows only: a directory's entries are probed by a
  * DELETE-capable open; true means an existing share mode refused that open, not that a later ATOMIC_MOVE is guaranteed
  * to fail. Restart Manager then names applications and services it reports as using those paths. Any failure returns null.
  */
 public final class WindowsLockProbe {
+	private static final Logger LOGGER = LogManager.getLogger(WindowsLockProbe.class);
+
 	private static final int MAX_HELD_PATHS = 5;
 	private static final int MAX_PROBE_OPERATIONS = 512;
 	private static final char SEPARATOR = '\u001F';

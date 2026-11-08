@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.loader;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
@@ -11,6 +9,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.utils.JarUtils;
 
@@ -24,6 +25,8 @@ import pl.skidam.automodpack_core.utils.JarUtils;
  * hostable jar look unhostable.
  */
 public final class ServiceJarIndex {
+	private static final Logger LOGGER = LogManager.getLogger(ServiceJarIndex.class);
+
 	private ServiceJarIndex() {}
 
 	/**

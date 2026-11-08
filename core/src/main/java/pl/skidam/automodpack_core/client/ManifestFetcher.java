@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +15,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -44,6 +45,8 @@ import pl.skidam.automodpack_core.utils.Throwables;
 
 /** Fetches the server's head modpack document over one transfer session, conditionally on the locally installed hashes. */
 public final class ManifestFetcher {
+	private static final Logger LOGGER = LogManager.getLogger(ManifestFetcher.class);
+
 	private ManifestFetcher() {}
 
 	public enum ManifestFetchState {

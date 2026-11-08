@@ -1,5 +1,9 @@
 package pl.skidam.automodpack.client.audio;
 
+import org.apache.logging.log4j.Logger;
+
+import org.apache.logging.log4j.LogManager;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -26,7 +30,6 @@ import net.minecraft.client.sounds.JOrbisAudioStream;
 import net.minecraft.client.Minecraft;
 import net.minecraft.sounds.SoundSource;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.client.WaitingMusic;
 import pl.skidam.automodpack_core.utils.Assets;
 
@@ -41,6 +44,8 @@ import pl.skidam.automodpack_core.utils.Assets;
  * exist during preload.
  */
 public class AudioManager {
+	private static final Logger LOGGER = LogManager.getLogger(AudioManager.class);
+
 	private static final String MUSIC_PATH = "/assets/automodpack/sounds/music/waiting.ogg";
 	/** The old sound-engine instance played at a fixed 0.25 gain; the slider scaling keeps that ceiling. */
 	private static final float GAIN_SCALE = 0.25f;
@@ -116,7 +121,7 @@ public class AudioManager {
 			try {
 				playSession();
 			} catch (Exception e) {
-				Constants.LOGGER.error("The waiting music loop crashed", e);
+				LOGGER.error("The waiting music loop crashed", e);
 			} finally {
 				if (PLAYER == this) PLAYER = null;
 			}
@@ -144,10 +149,10 @@ public class AudioManager {
 					if (stopped) return;
 					custom = session.loopFile();
 					if (playedCustom && custom == null) {
-						Constants.LOGGER.error("The server's custom waiting music stream failed after playback started", e);
+						LOGGER.error("The server's custom waiting music stream failed after playback started", e);
 						return;
 					}
-					Constants.LOGGER.error("The server's custom waiting music stream failed; falling back to the stored track or the bundled track", e);
+					LOGGER.error("The server's custom waiting music stream failed; falling back to the stored track or the bundled track", e);
 				}
 				if (stopped) return;
 				if (custom == null) custom = session.loopFile();
@@ -303,7 +308,7 @@ public class AudioManager {
 		private int openAlFormat(AudioFormat format) {
 			if (format == null) return AL10.AL_NONE;
 			if (format.getSampleSizeInBits() != 16 || (format.getChannels() != 1 && format.getChannels() != 2)) {
-				Constants.LOGGER.error("Unsupported waiting music format ({} bits, {} channels); skipping it", format.getSampleSizeInBits(), format.getChannels());
+				LOGGER.error("Unsupported waiting music format ({} bits, {} channels); skipping it", format.getSampleSizeInBits(), format.getChannels());
 				return AL10.AL_NONE;
 			}
 			return format.getChannels() == 1 ? AL10.AL_FORMAT_MONO16 : AL10.AL_FORMAT_STEREO16;
@@ -316,13 +321,13 @@ public class AudioManager {
 					byte[] pcm = decodeStream(input, "the server's custom waiting music " + custom);
 					if (pcm != null) return pcm;
 				} catch (Exception e) {
-					Constants.LOGGER.error("Failed to decode the custom waiting music {}; falling back to the bundled track", custom, e);
+					LOGGER.error("Failed to decode the custom waiting music {}; falling back to the bundled track", custom, e);
 				}
 			}
 			try (InputStream input = Assets.stream(MUSIC_PATH)) {
 				return decodeStream(input, MUSIC_PATH);
 			} catch (Exception e) {
-				Constants.LOGGER.error("Failed to decode the bundled waiting music from {}", MUSIC_PATH, e);
+				LOGGER.error("Failed to decode the bundled waiting music from {}", MUSIC_PATH, e);
 				return null;
 			}
 		}
@@ -339,7 +344,7 @@ public class AudioManager {
 					pcm.write(bytes);
 				}
 				if (pcm.size() == 0) {
-					Constants.LOGGER.error("The waiting music decoded to no audio from {}", description);
+					LOGGER.error("The waiting music decoded to no audio from {}", description);
 					return null;
 				}
 				return pcm.toByteArray();
@@ -365,19 +370,19 @@ public class AudioManager {
 				try {
 					device = ALC10.alcOpenDevice((ByteBuffer) null);
 					if (device == 0) {
-						Constants.LOGGER.error("No OpenAL device for the waiting music; skipping it");
+						LOGGER.error("No OpenAL device for the waiting music; skipping it");
 						return null;
 					}
 					ALCCapabilities alc = ALC.createCapabilities(device);
 					if (!alc.ALC_EXT_thread_local_context) {
 						// Without the thread-local extension the only way to make a context current is the
 						// process-global slot, which would steal it from the game's own sound engine.
-						Constants.LOGGER.error("OpenAL on this machine lacks ALC_EXT_thread_local_context; skipping the waiting music");
+						LOGGER.error("OpenAL on this machine lacks ALC_EXT_thread_local_context; skipping the waiting music");
 						return null;
 					}
 					context = ALC10.alcCreateContext(device, (IntBuffer) null);
 					if (context == 0 || !threadLocalContext(alc, context)) {
-						Constants.LOGGER.error("No OpenAL context for the waiting music; skipping it");
+						LOGGER.error("No OpenAL context for the waiting music; skipping it");
 						return null;
 					}
 					int source = AL10.alGenSources();
@@ -388,7 +393,7 @@ public class AudioManager {
 						voiced &= buffers[i] != 0;
 					}
 					if (!voiced) {
-						Constants.LOGGER.error("OpenAL gave no voice for the waiting music (source {}, buffers {}); skipping it", source, buffers);
+						LOGGER.error("OpenAL gave no voice for the waiting music (source {}, buffers {}); skipping it", source, buffers);
 						AL10.alDeleteSources(source);
 						AL10.alDeleteBuffers(buffers);
 						return null;
@@ -397,7 +402,7 @@ public class AudioManager {
 					return new Output(device, context, source, buffers);
 				} catch (Exception e) {
 					// A machine with no audio output must not take the mod down with it; the music is optional by nature.
-					Constants.LOGGER.error("Failed to open OpenAL for the waiting music", e);
+					LOGGER.error("Failed to open OpenAL for the waiting music", e);
 					return null;
 				} finally {
 					// Whatever failed above, this thread owns device and context: release the parts already built.
@@ -453,7 +458,7 @@ public class AudioManager {
 					AL10.alDeleteSources(this.source);
 					AL10.alDeleteBuffers(this.buffers);
 				} catch (Exception e) {
-					Constants.LOGGER.warn("Failed to release the waiting music's OpenAL objects", e);
+					LOGGER.warn("Failed to release the waiting music's OpenAL objects", e);
 				}
 				// The context is current on this thread only through the thread-local slot; clear it or
 				// alcDestroyContext refuses, and the process-global context the game owns is never ours.

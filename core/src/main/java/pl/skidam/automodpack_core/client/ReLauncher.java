@@ -1,14 +1,16 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import java.awt.*;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.client.compat.crashassistant.ProcessSignalIO;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 
 public class ReLauncher {
+	private static final Logger LOGGER = LogManager.getLogger(ReLauncher.class);
 
 	private final String updateMessage;
 	private final UpdateType updateType;

@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.utils;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.AccessDeniedException;
@@ -23,12 +21,17 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 /**
  * Applies and verifies the filesystem's native read-only policy for immutable files. A filesystem that cannot enforce the
  * policy at all (Android FUSE ignores it silently) degrades to writable files with one loud log per filesystem instead of
  * failing every publication; hash verification stays the integrity authority either way.
  */
 public final class ImmutableFiles {
+	private static final Logger LOGGER = LogManager.getLogger(ImmutableFiles.class);
+
 	private static final Set<PosixFilePermission> WRITE_PERMISSIONS = EnumSet.of(PosixFilePermission.OWNER_WRITE, PosixFilePermission.GROUP_WRITE, PosixFilePermission.OTHERS_WRITE);
 	private static final Set<AclEntryPermission> ACL_WRITE_PERMISSIONS = EnumSet.of(AclEntryPermission.WRITE_DATA, AclEntryPermission.APPEND_DATA);
 	private static final ConcurrentHashMap<FileStore, Boolean> READ_ONLY_ENFORCEMENT = new ConcurrentHashMap<>();

@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_loader_core_neoforge.loader;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.fml.loading.LoadingModList;

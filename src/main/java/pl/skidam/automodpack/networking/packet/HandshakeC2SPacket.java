@@ -1,9 +1,10 @@
 package pl.skidam.automodpack.networking.packet;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import io.netty.buffer.Unpooled;
 import net.minecraft.client.Minecraft;
@@ -22,6 +23,7 @@ import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 
 public class HandshakeC2SPacket {
+	private static final Logger LOGGER = LogManager.getLogger(HandshakeC2SPacket.class);
 
 	public static CompletableFuture<FriendlyByteBuf> receive(Minecraft client, ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf) {
 		ModPackets.markLoginQueryArrived();

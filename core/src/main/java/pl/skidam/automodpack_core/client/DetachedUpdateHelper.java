@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.storage.StoragePaths.DATA_ROOT_PROPERTY;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LEASE_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LOG_FILE;
@@ -22,6 +21,7 @@ import java.util.List;
 import java.util.function.Function;
 
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
 
 import com.google.gson.Gson;
@@ -34,6 +34,8 @@ import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.WindowsLockProbe;
 
 public final class DetachedUpdateHelper {
+	private static final Logger LOGGER = LogManager.getLogger(DetachedUpdateHelper.class);
+
 	// Receipt: the work lease is held only while Recover retries. UpdateRecovery.retryBudgetMillis() of sleeps plus
 	// per-attempt IO fits well inside this wait. A helper still waiting on the parent does not hold this lease, so boot
 	// recovers immediately. Past this wait the applying helper is stuck, and hanging this boot behind it serves nobody.

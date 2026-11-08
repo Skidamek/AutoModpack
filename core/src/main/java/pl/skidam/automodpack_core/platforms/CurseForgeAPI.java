@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.platforms;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -16,6 +14,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -27,6 +28,7 @@ import pl.skidam.automodpack_core.utils.HttpClientPool;
 @SuppressWarnings("deprecation")
 public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, String fileSize, String releaseType, String murmurHash,
 		String sha1Hash, int modId, String projectPageUrl) {
+	private static final Logger LOGGER = LogManager.getLogger(CurseForgeAPI.class);
 
 	private static final Gson GSON = new Gson();
 

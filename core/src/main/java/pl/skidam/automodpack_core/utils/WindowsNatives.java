@@ -1,14 +1,17 @@
 package pl.skidam.automodpack_core.utils;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 /** Extracts and loads the bundled Windows JNI library once per process. Any failure leaves it unloaded and returns false. */
 public final class WindowsNatives {
+	private static final Logger LOGGER = LogManager.getLogger(WindowsNatives.class);
+
 	private static final String RESOURCE = "/natives/windows-x86_64/win_natives.dll";
 	private static final Object LOCK = new Object();
 	private static volatile boolean attempted;

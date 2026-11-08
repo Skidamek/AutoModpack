@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
@@ -21,6 +19,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.FileTrees;
 
@@ -36,6 +37,8 @@ import pl.skidam.automodpack_core.utils.FileTrees;
  * meets more unknown files than any pack ships, so it never fires on a normal instance.
  */
 public final class ProjectionRepairBackups {
+	private static final Logger LOGGER = LogManager.getLogger(ProjectionRepairBackups.class);
+
 	private ProjectionRepairBackups() {}
 
 	public static final String DIRECTORY = "projection-repair-backups";

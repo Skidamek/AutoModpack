@@ -1,10 +1,11 @@
 package pl.skidam.automodpack_core.modpack.candidate;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.Objects;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.loader.ModEnvironment;
@@ -21,6 +22,8 @@ import pl.skidam.automodpack_core.utils.OsPaths;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public final class StableSourceSnapshotter {
+	private static final Logger LOGGER = LogManager.getLogger(StableSourceSnapshotter.class);
+
 	private final CopyOperation copyOperation;
 
 	public StableSourceSnapshotter() {

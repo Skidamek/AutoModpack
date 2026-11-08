@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import net.minecraft.client.Minecraft;
 
@@ -18,6 +19,8 @@ import pl.skidam.automodpack_core.update.ClientStorage;
  * action and renders {@link MusicState}; it holds no async state of its own.
  */
 final class WaitingMusicPlayer {
+	private static final Logger LOGGER = LogManager.getLogger(WaitingMusicPlayer.class);
+
 	private final ClientStorage storage;
 	private WaitingMusicListen listen;
 	private int generation;

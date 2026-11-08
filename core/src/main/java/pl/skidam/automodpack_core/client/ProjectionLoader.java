@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -11,6 +9,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
@@ -30,6 +31,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Loads an installed modpack projection into the running game without contacting the server. */
 final class ProjectionLoader {
+	private static final Logger LOGGER = LogManager.getLogger(ProjectionLoader.class);
 
 	/**
 	 * The installed projection view of the owning updater; reading it may observe the pending transaction. It must be

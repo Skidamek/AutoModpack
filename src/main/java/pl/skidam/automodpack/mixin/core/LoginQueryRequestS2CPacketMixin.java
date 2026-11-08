@@ -15,7 +15,6 @@ import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import pl.skidam.automodpack.networking.PayloadHelper;
 import pl.skidam.automodpack.networking.server.LoginRequestPayload;
-import pl.skidam.automodpack_core.Constants;
 /*?}*/
 
 // ClientboundCustomQueryPacket exists on every version, so below 1.20.2 the body

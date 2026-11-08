@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.utils;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
@@ -12,6 +10,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import com.google.gson.JsonParseException;
 
 /**
@@ -20,6 +21,8 @@ import com.google.gson.JsonParseException;
  * prefix and restores a missing trailing newline; anything unparsable earlier is real corruption.
  */
 public final class JsonLines {
+	private static final Logger LOGGER = LogManager.getLogger(JsonLines.class);
+
 	/** Unusable *content*, not a locked or missing file: callers may aside the evidence. Physical IO stays a plain {@link IOException}. */
 	public static final class UnusableContentException extends IOException {
 		private final int lineNumber;

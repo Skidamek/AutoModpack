@@ -1,13 +1,14 @@
 package pl.skidam.automodpack_loader_core_neoforge_4;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Function;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import net.neoforged.neoforgespi.ILaunchContext;
 import net.neoforged.neoforgespi.locating.IDependencyLocator;
@@ -29,6 +30,7 @@ import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
  * with identical erasure on fml10/11, so both generations link this class safely.
  */
 public final class EarlyServiceReplay {
+	private static final Logger LOGGER = LogManager.getLogger(EarlyServiceReplay.class);
 
 	private EarlyServiceReplay() {}
 

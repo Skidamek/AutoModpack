@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.utils;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -25,8 +23,13 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 /** Filesystem publication primitives with defined power-loss contracts: durable writes force, volatile writes only promise atomic-while-running. */
 public final class DurableFiles {
+	private static final Logger LOGGER = LogManager.getLogger(DurableFiles.class);
+
 	/** Suffix of every not-yet-published temporary this codebase writes; leftover sweepers match it instead of a crash ever failing on one. */
 	public static final String TEMPORARY_SUFFIX = ".tmp";
 	/** Infix of {@link #setAside} evidence names; the sweepers that must recognize set-aside state match this spelling. */

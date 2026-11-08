@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.modpack;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
@@ -13,6 +11,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
@@ -27,6 +28,8 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * operator owns the directory. Orthogonal to hosting: works in every connection mode.
  */
 public final class HttpExporter {
+	private static final Logger LOGGER = LogManager.getLogger(HttpExporter.class);
+
 	private final Path serverRoot;
 	private final PlatformSourceLookup platformSourceLookup;
 

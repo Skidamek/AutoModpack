@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.config;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.CLIENT_DIR;
 import static pl.skidam.automodpack_core.storage.StoragePaths.CLIENT_SELECTED_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.V4_CLIENT_CONFIG_ALT_FILE;
@@ -23,6 +22,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -55,6 +57,8 @@ import pl.skidam.reconf.Value;
  * so the {@link ConfMigration} repairs write their own values into the document.
  */
 public final class ReconfConfigs {
+	private static final Logger LOGGER = LogManager.getLogger(ReconfConfigs.class);
+
 	private ReconfConfigs() {}
 
 	/** Marks a config field as documented: emitted on fresh generation, and materialized with a missing field. A comment removed from an existing member is never restored. */

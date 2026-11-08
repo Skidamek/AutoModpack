@@ -1,5 +1,9 @@
 package pl.skidam.automodpack.networking.client;
 
+import org.apache.logging.log4j.Logger;
+
+import org.apache.logging.log4j.LogManager;
+
 import io.netty.buffer.Unpooled;
 import org.jetbrains.annotations.Nullable;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
@@ -13,10 +17,11 @@ import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
 import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
 import net.minecraft.resources.Identifier;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 // credits to fabric api
 public class ClientLoginNetworkAddon {
+	private static final Logger LOGGER = LogManager.getLogger(ClientLoginNetworkAddon.class);
+
 	private final ClientHandshakePacketListenerImpl handler;
 	private final Minecraft client;
 

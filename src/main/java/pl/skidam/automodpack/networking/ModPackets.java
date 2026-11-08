@@ -1,7 +1,5 @@
 package pl.skidam.automodpack.networking;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import java.net.InetSocketAddress;
 import java.util.concurrent.atomic.AtomicBoolean;
 

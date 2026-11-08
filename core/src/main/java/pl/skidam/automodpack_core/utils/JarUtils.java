@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.utils;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -17,7 +15,12 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 public class JarUtils {
+	private static final Logger LOGGER = LogManager.getLogger(JarUtils.class);
+
 	private static final String JAR_SUFFIX = ".jar";
 
 	public static boolean hasJarExtension(Path path) {

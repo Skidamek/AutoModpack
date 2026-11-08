@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.protocol.netty;
 
-import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
 import java.io.IOException;
@@ -14,6 +13,9 @@ import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
@@ -44,6 +46,7 @@ import pl.skidam.automodpack_core.utils.FileLocks;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 public class NettyServer {
+	private static final Logger LOGGER = LogManager.getLogger(NettyServer.class);
 
 	public static final AttributeKey<SocketAddress> REAL_REMOTE_ADDR = AttributeKey.valueOf("REAL_REMOTE_ADDR");
 	private volatile TrafficShaper trafficShaper;

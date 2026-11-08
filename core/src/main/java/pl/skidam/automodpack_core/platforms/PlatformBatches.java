@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.platforms;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CancellationException;
@@ -9,10 +7,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Function;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 
 /** Asks one bulk platform endpoint about a whole set of hashes, in cap-sized partitions issued together on the shared network pool, a lone partition asked inline. */
 final class PlatformBatches {
+	private static final Logger LOGGER = LogManager.getLogger(PlatformBatches.class);
 
 	/**
 	 * Hashes per request. Neither bulk endpoint publishes a size cap: Modrinth's /version_files and CurseForge's

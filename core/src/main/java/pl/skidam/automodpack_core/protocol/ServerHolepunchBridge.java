@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.protocol;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 import java.io.IOException;
@@ -9,6 +8,9 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
@@ -30,6 +32,8 @@ import pl.skidam.mcholepunch.server.netty.NettyChannelRegistry;
  * own event loop and this bridge installs the TLS and contract stack, wrapped in the transport-era camouflage handlers.
  */
 public final class ServerHolepunchBridge {
+	private static final Logger LOGGER = LogManager.getLogger(ServerHolepunchBridge.class);
+
 	private static final Set<Channel> channels = ConcurrentHashMap.newKeySet();
 	private static NettyChannelRegistry.Registration registration;
 

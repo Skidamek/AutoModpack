@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.auth;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
@@ -11,6 +9,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
@@ -22,6 +23,8 @@ import pl.skidam.automodpack_core.utils.FileLocks;
 
 /** Shared per-user route and client-secret state keyed by modpack identity. */
 public final class ConnectionStore {
+	private static final Logger LOGGER = LogManager.getLogger(ConnectionStore.class);
+
 	private ConnectionStore() {}
 
 	public static ConnectionJsons.ConnectionRecordFields read(ClientStorage storage, String modpackId) throws IOException {

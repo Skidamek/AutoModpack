@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.platforms;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.util.*;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -11,10 +9,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 
 public class FetchManager {
+	private static final Logger LOGGER = LogManager.getLogger(FetchManager.class);
 
 	/** The third-party lookups, injectable so tests can serve the platform APIs locally; production calls the real APIs. */
 	record Lookups(Function<List<String>, List<ModrinthAPI>> modrinthBySha1s, Function<Collection<String>, Map<String, String>> slugsByProjectIds,

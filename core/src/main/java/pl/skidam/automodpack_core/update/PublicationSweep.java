@@ -1,13 +1,14 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -18,6 +19,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * load right now.
  */
 public final class PublicationSweep {
+	private static final Logger LOGGER = LogManager.getLogger(PublicationSweep.class);
+
 	private PublicationSweep() {}
 
 	/**

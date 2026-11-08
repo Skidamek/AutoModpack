@@ -7,6 +7,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import net.neoforged.fml.jarcontents.JarContents;
 import net.neoforged.neoforgespi.ILaunchContext;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
@@ -16,7 +19,6 @@ import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
 import net.neoforged.neoforgespi.locating.IncompatibleFileReporting;
 import net.neoforged.neoforgespi.locating.ModFileDiscoveryAttributes;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.ConnectorFallback;
 import pl.skidam.automodpack_core.loader.GenerationProbes;
 import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
@@ -36,6 +38,7 @@ import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
  * discovery, so {@code ModpackLoader.modsToLoad} is already populated by the time we get here.
  */
 public class EarlyModLocator implements IModFileCandidateLocator {
+	private static final Logger LOGGER = LogManager.getLogger(EarlyModLocator.class);
 
 	@Override
 	public void findCandidates(ILaunchContext context, IDiscoveryPipeline pipeline) {
@@ -45,7 +48,7 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 		try {
 			addCandidates(context, pipeline);
 		} catch (Throwable t) {
-			Constants.LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
+			LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
 			throw new RuntimeException("AutoModpack early-service bootstrap failed", t);
 		}
 	}
@@ -111,11 +114,11 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 				try {
 					GraphicsBootstrapper bootstrapper = (GraphicsBootstrapper) Class.forName(impl, true, childLoader).getDeclaredConstructor()
 							.newInstance();
-					Constants.LOGGER.debug("[AutoModpack] Invoking in-place GraphicsBootstrapper {} ({}) from {}", impl, bootstrapper.name(),
+					LOGGER.debug("[AutoModpack] Invoking in-place GraphicsBootstrapper {} ({}) from {}", impl, bootstrapper.name(),
 							jar.getFileName());
 					bootstrapper.bootstrap(arguments);
 				} catch (Throwable t) {
-					Constants.LOGGER.error("[AutoModpack] In-place GraphicsBootstrapper {} from {} failed", impl, jar.getFileName(), t);
+					LOGGER.error("[AutoModpack] In-place GraphicsBootstrapper {} from {} failed", impl, jar.getFileName(), t);
 				}
 			}
 		}
@@ -136,10 +139,10 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 			try {
 				Object bootstrapper = Class.forName(impl, true, childLoader).getDeclaredConstructor().newInstance();
 				Object args = Class.forName("net.neoforged.fml.loading.ProgramArgs").getMethod("from", String[].class).invoke(null, (Object) arguments);
-				Constants.LOGGER.debug("[AutoModpack] Invoking in-place EarlyBootstrapper {} from {}", impl, jar.getFileName());
+				LOGGER.debug("[AutoModpack] Invoking in-place EarlyBootstrapper {} from {}", impl, jar.getFileName());
 				type.getMethod("bootstrap", args.getClass()).invoke(bootstrapper, args);
 			} catch (Throwable t) {
-				Constants.LOGGER.error("[AutoModpack] In-place EarlyBootstrapper {} from {} failed", impl, jar.getFileName(), t);
+				LOGGER.error("[AutoModpack] In-place EarlyBootstrapper {} from {} failed", impl, jar.getFileName(), t);
 			}
 		}
 	}
@@ -188,7 +191,7 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 			Method getCurrentClassLoader = fmlLoaderClass.getMethod("getCurrentClassLoader");
 			return (ClassLoader) getCurrentClassLoader.invoke(current);
 		} catch (Throwable t) {
-			Constants.LOGGER.error("[AutoModpack] Could not append early-service jar(s) {} to FMLLoader's classloader chain",
+			LOGGER.error("[AutoModpack] Could not append early-service jar(s) {} to FMLLoader's classloader chain",
 					jars.stream().map(Path::getFileName).toList(), t);
 			return null;
 		}

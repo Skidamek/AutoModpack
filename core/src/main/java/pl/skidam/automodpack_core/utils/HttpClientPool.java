@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.utils;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,6 +22,9 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManager;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.Trust;
 import pl.skidam.automodpack_core.protocol.WireCodec;
@@ -38,6 +39,7 @@ import pl.skidam.automodpack_core.protocol.WireCodec;
  * callers never see zstd or gzip bytes; the original Content-Encoding header stays visible for diagnostics.
  */
 public final class HttpClientPool {
+	private static final Logger LOGGER = LogManager.getLogger(HttpClientPool.class);
 
 	/**
 	 * Receipt: the Kinto OneCRL JSON is 823_876 bytes uncompressed / 139_449 gzip; Modrinth, CurseForge, DoH, Prism meta, and

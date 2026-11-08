@@ -1,11 +1,12 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.loader.FileInspection;
 import pl.skidam.automodpack_core.platforms.FetchManager;
@@ -21,6 +22,7 @@ import pl.skidam.automodpack_core.utils.DownloadSource;
  * owns the retry budget stays in one place.
  */
 final class PlatformAttempt {
+	private static final Logger LOGGER = LogManager.getLogger(PlatformAttempt.class);
 
 	private static final int HTTP_UNAUTHORIZED = 401;
 	private static final int HTTP_NOT_FOUND = 404;

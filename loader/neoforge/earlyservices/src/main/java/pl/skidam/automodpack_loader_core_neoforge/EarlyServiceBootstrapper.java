@@ -8,6 +8,9 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -18,7 +21,6 @@ import net.neoforged.fml.loading.progress.ProgressMeter;
 import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.Preload;
 import pl.skidam.automodpack_core.loader.EarlyLaunchEnvironment;
@@ -49,6 +51,7 @@ import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
  * {@code version.json} - the same file GameLocator reads.
  */
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
+	private static final Logger LOGGER = LogManager.getLogger(EarlyServiceBootstrapper.class);
 
 	private static final AtomicBoolean RAN = new AtomicBoolean();
 
@@ -74,7 +77,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 		if (EarlyLaunchEnvironment.MC_VERSION == null) {
 			EarlyLaunchEnvironment.MC_VERSION = classpathMinecraftVersion();
 			// The version.json that supplied it is whichever jar's came first on the classpath, and a wrong id resolves to a different target silently.
-			Constants.LOGGER.warn("[AutoModpack] No --fml.mcVersion given; taking the Minecraft version from the classpath as {}", EarlyLaunchEnvironment.MC_VERSION);
+			LOGGER.warn("[AutoModpack] No --fml.mcVersion given; taking the Minecraft version from the classpath as {}", EarlyLaunchEnvironment.MC_VERSION);
 		}
 
 		TargetId.id("neoforge", EarlyLaunchEnvironment.MC_VERSION);
@@ -90,10 +93,10 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			if (!Environment.current().isClient()) return;
 			List<Path> earlyServiceJars = ModpackLoader.modsToLoad.stream().filter(EarlyServiceLayer::eligibleForInPlace).toList();
 			if (earlyServiceJars.isEmpty()) return;
-			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
+			LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
 			EarlyModLocator.hostInPlace(earlyServiceJars, arguments);
 		} catch (Throwable t) {
-			Constants.LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
+			LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
 			throw new RuntimeException("AutoModpack early-service bootstrap failed", t);
 		}
 	}

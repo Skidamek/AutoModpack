@@ -100,7 +100,7 @@ public final class RuntimeJar {
 		}
 	}
 
-	/** The game sets {@link pl.skidam.automodpack_core.Constants#THIS_MOD_JAR} during preload; a detached child finds its own jar. */
+	/** The game records its own jar on the environment during preload; a detached child finds its own jar. */
 	private static Path sourceJar() {
 		Path installedJar = Environment.installed() == null ? null : Environment.installed().thisModJar();
 		return (installedJar != null ? installedJar : JarUtils.getJarPath(RuntimeJar.class)).toAbsolutePath().normalize();

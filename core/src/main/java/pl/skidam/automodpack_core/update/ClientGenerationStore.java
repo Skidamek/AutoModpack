@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -16,6 +14,9 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -48,6 +49,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * policies, and the exact ledger comes from the active-state pointer, the pending transaction, or the head mirror.
  */
 public final class ClientGenerationStore {
+	private static final Logger LOGGER = LogManager.getLogger(ClientGenerationStore.class);
+
 	private final ClientStorage storage;
 
 	public ClientGenerationStore(ClientStorage storage) {

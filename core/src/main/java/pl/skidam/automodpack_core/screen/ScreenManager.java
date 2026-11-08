@@ -1,11 +1,12 @@
 package pl.skidam.automodpack_core.screen;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.awt.GraphicsEnvironment;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Future;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.client.UpdateType;
@@ -13,6 +14,7 @@ import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.utils.Throwables;
 
 public final class ScreenManager {
+	private static final Logger LOGGER = LogManager.getLogger(ScreenManager.class);
 
 	private static volatile ScreenService instance = new ScreenService() {
 	};

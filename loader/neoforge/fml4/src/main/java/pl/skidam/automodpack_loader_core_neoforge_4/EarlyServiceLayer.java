@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_loader_core_neoforge_4;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -10,6 +8,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
@@ -43,6 +44,7 @@ import pl.skidam.automodpack_loader_core_modlauncher.ModLauncherEarlyServiceBrid
  * {@link EarlyServiceReplay}; fml10/11 does not call it.
  */
 public final class EarlyServiceLayer {
+	private static final Logger LOGGER = LogManager.getLogger(EarlyServiceLayer.class);
 
 	private EarlyServiceLayer() {}
 

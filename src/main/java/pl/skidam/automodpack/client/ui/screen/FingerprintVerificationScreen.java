@@ -3,6 +3,9 @@ package pl.skidam.automodpack.client.ui.screen;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
@@ -17,12 +20,13 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 public class FingerprintVerificationScreen extends VersionedScreen implements LoginGate {
+	private static final Logger LOGGER = LogManager.getLogger(FingerprintVerificationScreen.class);
+
 	private static final int BODY = 420;
 	private final Screen parent;
 	private final String serverFingerprint;
@@ -112,7 +116,7 @@ public class FingerprintVerificationScreen extends VersionedScreen implements Lo
 		if (input.equals(serverFingerprint)) {
 			forceValidate();
 		} else {
-			Constants.LOGGER.error("Server fingerprint validation failed, try again");
+			LOGGER.error("Server fingerprint validation failed, try again");
 			VersionedToasts.add(failedToast);
 		}
 	}

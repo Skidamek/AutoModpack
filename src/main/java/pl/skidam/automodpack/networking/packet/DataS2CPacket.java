@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.networking.packet;
 
-import static pl.skidam.automodpack_core.Constants.*;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.mojang.authlib.GameProfile;
 
@@ -22,6 +23,7 @@ import pl.skidam.automodpack_core.Hosting;
 import pl.skidam.automodpack_core.config.ServerConfigStore;
 
 public class DataS2CPacket {
+	private static final Logger LOGGER = LogManager.getLogger(DataS2CPacket.class);
 
 	public static void receive(MinecraftServer server, ServerLoginPacketListenerImpl handler, boolean understood, FriendlyByteBuf buf,
 			ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {

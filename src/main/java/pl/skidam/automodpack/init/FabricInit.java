@@ -1,5 +1,9 @@
 package pl.skidam.automodpack.init;
 
+import org.apache.logging.log4j.Logger;
+
+import org.apache.logging.log4j.LogManager;
+
 import pl.skidam.automodpack_core.Environment;
 
 /*? if fabric {*/
@@ -9,9 +13,10 @@ import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 
-import static pl.skidam.automodpack_core.Constants.*;
 
 public class FabricInit {
+	private static final Logger LOGGER = LogManager.getLogger(FabricInit.class);
+
 
 	public static void onInitialize() {
 

@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.protocol;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -13,6 +11,9 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -28,6 +29,7 @@ import pl.skidam.automodpack_core.utils.FetchCache;
  * core/src/main/onecrl/update.py; the build compresses it to /onecrl.json.zst.
  */
 public final class OneCrl {
+	private static final Logger LOGGER = LogManager.getLogger(OneCrl.class);
 
 	private static final int FETCH_PAGE_LIMIT = 10_000;
 	static final String SOURCE_URL = "https://firefox.settings.services.mozilla.com/v1/buckets/security-state/collections/onecrl/records?_limit=" + FETCH_PAGE_LIMIT;

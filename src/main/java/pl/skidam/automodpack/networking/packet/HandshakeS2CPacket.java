@@ -1,11 +1,13 @@
 package pl.skidam.automodpack.networking.packet;
 
 import static pl.skidam.automodpack.networking.ModPackets.DATA;
-import static pl.skidam.automodpack_core.Constants.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.UUID;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.mojang.authlib.GameProfile;
 
@@ -38,6 +40,7 @@ import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 public class HandshakeS2CPacket {
+	private static final Logger LOGGER = LogManager.getLogger(HandshakeS2CPacket.class);
 
 	public static void receive(MinecraftServer server, ServerLoginPacketListenerImpl handler, boolean understood, FriendlyByteBuf buf,
 			ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {

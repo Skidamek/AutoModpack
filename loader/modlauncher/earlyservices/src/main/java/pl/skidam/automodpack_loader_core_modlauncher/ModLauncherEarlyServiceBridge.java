@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_loader_core_modlauncher;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.lang.module.Configuration;
 import java.lang.module.ModuleFinder;
@@ -24,6 +22,9 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import cpw.mods.cl.JarModuleFinder;
 import cpw.mods.cl.ModuleClassLoader;
@@ -49,6 +50,7 @@ import joptsimple.OptionSpecBuilder;
  * NeoForge fml4). The flat-classloader NeoForge generation never links this class.
  */
 public final class ModLauncherEarlyServiceBridge {
+	private static final Logger LOGGER = LogManager.getLogger(ModLauncherEarlyServiceBridge.class);
 
 	private ModLauncherEarlyServiceBridge() {}
 

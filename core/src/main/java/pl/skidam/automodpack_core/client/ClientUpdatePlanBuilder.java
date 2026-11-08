@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.client;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -15,6 +13,9 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
@@ -85,6 +86,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * </p>
  */
 final class ClientUpdatePlanBuilder {
+	private static final Logger LOGGER = LogManager.getLogger(ClientUpdatePlanBuilder.class);
+
 	private final ClientStorage storage;
 	private final ModpackLoaderService modpackLoader;
 	private final String loaderType;

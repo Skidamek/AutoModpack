@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.DirectoryNotEmptyException;
@@ -21,6 +19,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
@@ -67,6 +68,8 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * </ul>
  */
 final class ProjectionConvergence {
+	private static final Logger LOGGER = LogManager.getLogger(ProjectionConvergence.class);
+
 	/** A path another process held: the owed part of the run. */
 	record Held(Path path, IOException cause) {}
 

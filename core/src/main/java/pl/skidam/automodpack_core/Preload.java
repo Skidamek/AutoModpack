@@ -1,10 +1,11 @@
 package pl.skidam.automodpack_core;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.Locale;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.client.BootRecovery;
 import pl.skidam.automodpack_core.client.ClientLaunch;
@@ -32,6 +33,8 @@ import pl.skidam.automodpack_core.utils.*;
  * this and nothing else.
  */
 public class Preload {
+	private static final Logger LOGGER = LogManager.getLogger(Preload.class);
+
 	private ClientStorage storage;
 	private boolean trustedBootstrapApply;
 	private boolean bootAsIs;

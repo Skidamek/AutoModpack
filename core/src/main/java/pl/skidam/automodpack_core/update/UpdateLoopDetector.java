@@ -1,18 +1,21 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.function.LongSupplier;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 
 /** Counts repeated same-fingerprint events; after {@code maxAllowedRestarts} matches, further events are suppressed. */
 public final class UpdateLoopDetector {
+	private static final Logger LOGGER = LogManager.getLogger(UpdateLoopDetector.class);
+
 	private static final int STATE_VERSION = 1;
 	private static final int MAX_ALLOWED_RESTARTS = 2;
 	private static final Duration RESTART_WINDOW = Duration.ofMinutes(3);

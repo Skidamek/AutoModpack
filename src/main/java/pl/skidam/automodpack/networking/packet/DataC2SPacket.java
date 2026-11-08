@@ -1,9 +1,10 @@
 package pl.skidam.automodpack.networking.packet;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
 import java.net.InetSocketAddress;
 import java.util.concurrent.CompletableFuture;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import io.netty.buffer.Unpooled;
 import net.minecraft.client.Minecraft;
@@ -23,6 +24,8 @@ import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 public class DataC2SPacket {
+	private static final Logger LOGGER = LogManager.getLogger(DataC2SPacket.class);
+
 	public static CompletableFuture<FriendlyByteBuf> receive(Minecraft client, ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf) {
 		ModPackets.markLoginQueryArrived();
 		DataPacket dataPacket;
