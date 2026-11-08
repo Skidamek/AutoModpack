@@ -56,6 +56,8 @@ public final class VerifiedFileTransfer {
 			if (immutable) ImmutableFiles.protect(temporary);
 			DurableFiles.replace(temporary, targetFile);
 			FileTrees.forceDirectory(temporary.getParent());
+			// A normal rename keeps the sealed inode, but the non-atomic replace fallback may copy; re-protect so that
+			// path cannot publish a writable target. The fast path makes this a single attribute read for a sealed file.
 			if (immutable) ImmutableFiles.protect(targetFile);
 			record(cache, targetFile, expectedSha1);
 			return true;
@@ -189,8 +191,9 @@ public final class VerifiedFileTransfer {
 	 * {@link ImmutableFiles#protectAndForce}. The source remains exclusively owned until this call; repeating its
 	 * protection here would add filesystem probes and stats without changing it. A source that lost its sealing, or
 	 * was never sealed on a filesystem that can enforce it, is rejected rather than published without that barrier.
-	 * The target policy, including the cross-filesystem copy fallback, is still enforced before returning. The caller
-	 * forces the returned directory before seeding a cache record, exactly as for {@link #publishForced}.
+	 * A same-filesystem rename keeps the sealed inode's policy, and the cross-filesystem fallback seals its temporary
+	 * before replacing, so the target never needs a second protection pass. The caller forces the returned directory
+	 * before seeding a cache record, exactly as for {@link #publishForced}.
 	 */
 	public static Path publishSealed(Path temporary, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
 		if (!ImmutableFiles.isSealed(temporary)) throw new IOException("Source is not sealed before publication: " + temporary);
@@ -203,7 +206,6 @@ public final class VerifiedFileTransfer {
 			crossFileSystem = true;
 		}
 		if (crossFileSystem) ImmutableFiles.deleteIfExists(temporary);
-		ImmutableFiles.protect(targetFile);
 		return targetParent;
 	}
 

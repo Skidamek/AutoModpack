@@ -39,8 +39,9 @@ public final class ImmutableFiles {
 	private ImmutableFiles() {}
 
 	public static void protect(Path file) throws IOException {
-		Path normalized = file.toAbsolutePath().normalize();
-		if (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(normalized)) throw new IOException("Immutable path is not a regular file: " + normalized);
+		Path normalized = requireRegular(file);
+		// A sealed file needs no probe or FileStore lookup; this is the common case for an already-published object.
+		if (isProtected(normalized)) return;
 		if (!enforcementWorks(normalized)) return; // the probe already logged this filesystem's verdict once
 		enforceReadOnly(normalized);
 	}
@@ -55,11 +56,25 @@ public final class ImmutableFiles {
 	 * its old read-only policy never blocks the force.
 	 */
 	public static void protectAndForce(Path file) throws IOException {
+		Path normalized = requireRegular(file);
+		protectAndForceNormalized(normalized, enforcementWorks(normalized));
+	}
+
+	/** The batch variant of {@link #protectAndForce(Path)} with the store's verdict resolved once by the caller. */
+	public static void protectAndForce(Path file, boolean enforcementWorks) throws IOException {
+		protectAndForceNormalized(requireRegular(file), enforcementWorks);
+	}
+
+	private static void protectAndForceNormalized(Path normalized, boolean enforcementWorks) throws IOException {
+		try (FileChannel channel = openWritable(normalized)) {
+			if (!enforcementWorks || !enforceReadOnly(normalized)) channel.force(true);
+		}
+	}
+
+	private static Path requireRegular(Path file) throws IOException {
 		Path normalized = file.toAbsolutePath().normalize();
 		if (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(normalized)) throw new IOException("Immutable path is not a regular file: " + normalized);
-		try (FileChannel channel = openWritable(normalized)) {
-			if (!enforcementWorks(normalized) || !enforceReadOnly(normalized)) channel.force(true);
-		}
+		return normalized;
 	}
 
 	/**
@@ -77,14 +92,17 @@ public final class ImmutableFiles {
 
 	/** Whether {@code file} carries the read-only policy, or its filesystem cannot enforce one at all. */
 	static boolean isSealed(Path file) throws IOException {
-		return !enforcementWorks(file) || isProtected(file);
+		return isProtected(file) || !enforcementWorks(file);
 	}
 
 	/**
-	 * Probes the filesystem once per JVM on a throwaway file with the same enforcement path, so a filesystem that only
-	 * pretends to be read-only is told apart from a file that failed protection for its own reasons - those still throw.
+	 * Resolves the filesystem's read-only enforcement verdict once for a batch of files on the same store.
+	 *
+	 * <p>
+	 * Probes once per JVM on a throwaway file with the same enforcement path, so a filesystem that only pretends to
+	 * be read-only is told apart from a file that failed protection for its own reasons - those still throw.
 	 */
-	private static boolean enforcementWorks(Path file) throws IOException {
+	public static boolean enforcementWorks(Path file) {
 		FileStore store;
 		Path probe;
 		try {
