@@ -4,10 +4,22 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Small deterministic binary encoder used for public generation identities. */
 final class CanonicalEncoder {
-	private final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+	private static final class EncodedBytes extends ByteArrayOutputStream {
+		synchronized String sha1() {
+			MessageDigest digest = HashUtils.newSha1Digest();
+			digest.update(buf, 0, count);
+			return HexFormat.of().formatHex(digest.digest());
+		}
+	}
+
+	private final EncodedBytes bytes = new EncodedBytes();
 	private final DataOutputStream output = new DataOutputStream(bytes);
 
 	CanonicalEncoder string(String value) {
@@ -55,6 +67,11 @@ final class CanonicalEncoder {
 		} catch (IOException e) {
 			throw new IllegalStateException("Failed to encode canonical value", e);
 		}
+	}
+
+	/** Hashes exactly the written prefix, without copying the complete canonical document into another array. */
+	String sha1() {
+		return bytes.sha1();
 	}
 
 	byte[] bytes() {

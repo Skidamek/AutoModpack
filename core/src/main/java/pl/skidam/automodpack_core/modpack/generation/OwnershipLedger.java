@@ -228,7 +228,7 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 			/* Publication IDs are provenance metadata. Excluding them avoids a digest/identity cycle. */
 			encoder.string(entry.currentStatus().name());
 		}
-		return HashUtils.sha1(encoder.bytes());
+		return encoder.sha1();
 	}
 
 	private static NavigableMap<String, Entry> toNavigableMap(Map<String, Entry> entries) {

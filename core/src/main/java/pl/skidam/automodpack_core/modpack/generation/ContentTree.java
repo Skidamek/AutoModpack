@@ -28,7 +28,7 @@ public record ContentTree(NavigableMap<String, ContentFile> files) {
 		for (var entry : files.entrySet()) {
 			encoder.string(entry.getKey()).string(entry.getValue().sha1()).longValue(entry.getValue().size());
 		}
-		return HashUtils.sha1(encoder.bytes());
+		return encoder.sha1();
 	}
 
 	public static ContentTree fromManifest(GroupManifest manifest) {

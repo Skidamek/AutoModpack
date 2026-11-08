@@ -114,7 +114,7 @@ public final class GroupManifestValidator {
 			} catch (RuntimeException e) {
 				errors.add("Group '" + groupId + "' file '" + path + "' has invalid size");
 			}
-			if (!ModpackPathPolicy.isValidPublishedPath(path)) errors.add("Group '" + groupId + "' file '" + path + "' has an invalid path");
+			if (!ModpackPathPolicy.isValidCanonicalPublishedPath(path)) errors.add("Group '" + groupId + "' file '" + path + "' has an invalid path");
 			if (!HashUtils.isSha1(file.sha1)) errors.add("Group '" + groupId + "' file '" + path + "' has invalid SHA-1");
 			files.put(path, new GroupManifest.GroupFile(size, file.editable, value(file.sha1).toLowerCase(Locale.ROOT), file.murmur));
 		}
@@ -146,7 +146,7 @@ public final class GroupManifestValidator {
 				for (String path : group.files().keySet()) {
 					if (ClientPlatform.WINDOWS.equals(platform)) validateWindowsPath(groupId, path, errors);
 					aliases.computeIfAbsent(platformPathKey(path, platform, publishing), ignored -> new ArrayList<>()).add(new PathOwner(groupId, path));
-					if (ModpackPathPolicy.isActiveMod(path))
+					if (ModpackPathPolicy.isActiveCanonicalMod(path))
 						modBasenameAliases.computeIfAbsent(platformPathKey(path.substring(path.lastIndexOf('/') + 1), platform, publishing), ignored -> new ArrayList<>())
 								.add(new PathOwner(groupId, path));
 				}

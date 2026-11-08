@@ -5,7 +5,6 @@ import java.util.*;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Path-level changes used to materialize one cumulative ownership ledger. */
 public record OwnershipDelta(String modpackId, NavigableMap<String, Change> changes, String digest) {
@@ -100,7 +99,7 @@ public record OwnershipDelta(String modpackId, NavigableMap<String, Change> chan
 			encoder.integer(change.groupIds().size());
 			for (String groupId : change.groupIds()) encoder.string(groupId);
 		}
-		return HashUtils.sha1(encoder.bytes());
+		return encoder.sha1();
 	}
 
 	private record Current(NavigableSet<OwnershipLedger.Content> contents, NavigableSet<String> groups) {

@@ -69,7 +69,7 @@ public final class ModpackPathPolicy {
 
 	/** The game-directory path the client's generated dependency bundle lives at. */
 	public static String generatedBundlePath() {
-		return LogicalPath.normalize(MODS_PREFIX + GENERATED_BUNDLE_NAME);
+		return MODS_PREFIX + GENERATED_BUNDLE_NAME;
 	}
 
 	public static String typeForPath(String logicalPath) {
@@ -88,6 +88,11 @@ public final class ModpackPathPolicy {
 		} catch (RuntimeException e) {
 			return false;
 		}
+		return isValidCanonicalPublishedPath(normalized);
+	}
+
+	/** Package-private for callers that already validated this exact immutable path string. */
+	static boolean isValidCanonicalPublishedPath(String normalized) {
 		if (isReservedPath(normalized) || isAutoModpackFile(normalized)) return false;
 		return !isInvalidLiveRoot(normalized);
 	}
@@ -95,10 +100,15 @@ public final class ModpackPathPolicy {
 	public static boolean isActiveMod(String logicalPath) {
 		try {
 			String normalized = LogicalPath.requireCanonical(logicalPath);
-			return isModPath(normalized) && JarUtils.hasJarExtension(normalized);
+			return isActiveCanonicalMod(normalized);
 		} catch (RuntimeException e) {
 			return false;
 		}
+	}
+
+	/** Only validated manifest paths may skip the public raw-input guard. */
+	static boolean isActiveCanonicalMod(String normalized) {
+		return isModPath(normalized) && JarUtils.hasJarExtension(normalized);
 	}
 
 	public static boolean isModPath(String logicalPath) {
