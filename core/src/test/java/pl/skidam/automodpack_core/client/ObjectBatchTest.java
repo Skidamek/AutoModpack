@@ -144,7 +144,8 @@ class ObjectBatchTest {
 		List<QueuedDownload> failed = batch.flush();
 
 		assertEquals(List.of(lostTask), failed);
-		assertEquals(DownloadManager.FailureCategory.LOCAL_STORAGE, lostTask.lastFailureCategory);
+		// A removed staged file is lost work the next acquisition downloads again, not a condition of the disk.
+		assertEquals(DownloadManager.FailureCategory.UNKNOWN, lostTask.lastFailureCategory);
 		assertFalse(Files.exists(layout.objectFile(HashUtils.sha1(lost))));
 		assertEquals(List.of(), staged(layout));
 	}

@@ -3,6 +3,8 @@ package pl.skidam.automodpack_core.client;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -111,8 +113,14 @@ final class ObjectBatch {
 			LOGGER.debug("Verified CAS object {} was published by another download", object.sha1(), cause);
 			return;
 		}
-		LOGGER.warn("Failed to persist verified CAS object {}", object.task().file.getFileName(), cause);
-		object.task().lastFailureCategory = DownloadManager.FailureCategory.LOCAL_STORAGE;
+		if (!Files.exists(object.file(), LinkOption.NOFOLLOW_LINKS)) {
+			// The staged bytes were removed under the run: no storage condition failed and the next acquisition can fetch them again.
+			LOGGER.warn("The staged copy of {} was removed before it could be published; it is downloaded again", object.task().file.getFileName());
+			object.task().lastFailureCategory = DownloadManager.FailureCategory.UNKNOWN;
+		} else {
+			LOGGER.warn("Failed to persist verified CAS object {}", object.task().file.getFileName(), cause);
+			object.task().lastFailureCategory = DownloadManager.FailureCategory.LOCAL_STORAGE;
+		}
 		failed.add(object.task());
 	}
 
