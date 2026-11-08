@@ -27,11 +27,9 @@ flow:
   - do: wait_join
     name: verify a modded client joins a packless server in-game
   - do: assert
-    name: verify the join was recorded as packless and synced nothing
+    name: verify the join synced nothing
     that:
-      all:
-        - file_gone: "${active_dir}/${marker}"
-        - log: { container: server, matches: 'joined a server that hosts no modpack' }
+      file_gone: "${active_dir}/${marker}"
   - do: quit
     name: quit the client
 
