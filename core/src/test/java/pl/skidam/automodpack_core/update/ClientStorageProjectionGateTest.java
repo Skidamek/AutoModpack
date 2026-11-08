@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.update;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -85,6 +86,18 @@ class ClientStorageProjectionGateTest {
 		assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()));
 		assertNull(ProjectionAvailability.loadableModsDirectory(storage.gameDirectory()));
 		assertEquals(-1L, ProjectionAvailability.scan(storage.gameDirectory()).revision());
+	}
+
+	@Test
+	void theScanDecisionLivesForTheProcessUntilForget() throws Exception {
+		ClientStorage storage = storage();
+		Files.createDirectories(storage.activePath("mods"));
+		assertNotNull(ProjectionAvailability.loadableModsDirectory(storage.gameDirectory()));
+		ProjectionAvailability.Scan scan = ProjectionAvailability.scan(storage.gameDirectory());
+		assertNotNull(scan);
+		assertSame(scan, ProjectionAvailability.scan(storage.gameDirectory()));
+		ProjectionAvailability.forget(storage.gameDirectory());
+		assertNull(ProjectionAvailability.scan(storage.gameDirectory()));
 	}
 
 	private ClientStorage storage() throws Exception {

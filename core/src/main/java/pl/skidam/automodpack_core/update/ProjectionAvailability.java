@@ -6,7 +6,6 @@ import static pl.skidam.automodpack_core.storage.StoragePaths.CLIENT_ACTIVE_STAT
 import static pl.skidam.automodpack_core.storage.StoragePaths.CLIENT_SELECTED_FILE;
 
 import java.io.IOException;
-import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -33,7 +32,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
  * {@link ClientStorage} with none of it.
  */
 public final class ProjectionAvailability {
-	private static final Map<Path, WeakReference<ProjectionAvailability>> BY_GAME_DIRECTORY = new HashMap<>();
+	private static final Map<Path, ProjectionAvailability> BY_GAME_DIRECTORY = new HashMap<>();
 	private static final int SCAN_READ_ATTEMPTS = 5;
 	private static final long SCAN_READ_RETRY_MILLIS = 100;
 	static final long CONSECUTIVE_MILLIS = 5 * 60 * 1000L;
@@ -72,13 +71,7 @@ public final class ProjectionAvailability {
 	public static ProjectionAvailability of(Path gameDirectory) {
 		Path key = gameDirectory.toAbsolutePath().normalize();
 		synchronized (BY_GAME_DIRECTORY) {
-			WeakReference<ProjectionAvailability> held = BY_GAME_DIRECTORY.get(key);
-			ProjectionAvailability availability = held == null ? null : held.get();
-			if (availability == null) {
-				availability = new ProjectionAvailability(key);
-				BY_GAME_DIRECTORY.put(key, new WeakReference<>(availability));
-			}
-			return availability;
+			return BY_GAME_DIRECTORY.computeIfAbsent(key, ProjectionAvailability::new);
 		}
 	}
 
@@ -104,7 +97,10 @@ public final class ProjectionAvailability {
 
 	/** Test seam: one unit test stands in for several boots of the same game directory. */
 	static void forget(Path gameDirectory) {
-		of(gameDirectory).scan = null;
+		Path key = gameDirectory.toAbsolutePath().normalize();
+		synchronized (BY_GAME_DIRECTORY) {
+			BY_GAME_DIRECTORY.remove(key);
+		}
 	}
 
 	/** The projection state's own answer, for a load that has already checked the selection. */

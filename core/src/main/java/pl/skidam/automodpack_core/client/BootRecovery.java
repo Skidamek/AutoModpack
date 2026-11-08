@@ -84,7 +84,7 @@ public final class BootRecovery {
 	 * finished meanwhile - left a settled projection behind whose content is not what that gate handed out (it moved,
 	 * or the gate refused a projection that is loadable now), this boot relaunches into it, once: a persisted one-shot
 	 * guard bounds the relaunches whatever recovery keeps doing, and a boot that needs none clears it
-	 * ({@link ProjectionRelaunch}). A boot that cannot relaunch never half-loads: {@code ProjectionLoader} refuses the
+	 * ({@link ProjectionAvailability}). A boot that cannot relaunch never half-loads: {@code ProjectionLoader} refuses the
 	 * projection the gate refused.
 	 */
 	private void relaunchIfScannedProjectionMoved() {
