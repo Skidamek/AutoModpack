@@ -114,6 +114,36 @@ class VerifiedFileTransferTest {
 	}
 
 	@Test
+	void sealedPublicationRejectsAnUnsealedSourceAndConsumesASealedOne() throws IOException {
+		Path source = Files.writeString(tempDir.resolve("sealed-source"), "verified content", StandardCharsets.UTF_8);
+		Path target = tempDir.resolve("objects/sealed-target");
+		Path control = Files.writeString(tempDir.resolve("sealed-control"), "control", StandardCharsets.UTF_8);
+		ImmutableFiles.protect(control);
+		if (!ImmutableFiles.isProtected(control)) {
+			ImmutableFiles.unprotect(control);
+			Assumptions.assumeTrue(false, "filesystem cannot enforce read-only files");
+			return;
+		}
+		try {
+			String hash = HashUtils.getHash(source);
+			long size = Files.size(source);
+			assertThrows(IOException.class, () -> VerifiedFileTransfer.publishSealed(source, target, size, hash));
+			assertFalse(Files.exists(target));
+			assertTrue(Files.exists(source));
+
+			ImmutableFiles.protectAndForce(source);
+			assertTrue(ImmutableFiles.isSealed(source));
+			Path parent = VerifiedFileTransfer.publishSealed(source, target, size, hash);
+			assertEquals(target.toAbsolutePath().normalize().getParent(), parent);
+			assertFalse(Files.exists(source));
+			assertTrue(FileIntegrity.matches(target, size, hash));
+			assertTrue(ImmutableFiles.isProtected(target));
+		} finally {
+			ImmutableFiles.unprotect(control);
+		}
+	}
+
+	@Test
 	void hashedCrossFilesystemPromotionStillVerifiesTheCopy() throws IOException {
 		Path sourceDirectory = differentFileStoreDirectory(tempDir);
 		Assumptions.assumeTrue(sourceDirectory != null, "requires a writable second filesystem");

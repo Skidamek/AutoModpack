@@ -39,7 +39,7 @@ public final class ImmutableFiles {
 		Path normalized = file.toAbsolutePath().normalize();
 		if (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(normalized)) throw new IOException("Immutable path is not a regular file: " + normalized);
 		if (!enforcementWorks(normalized)) return; // the probe already logged this filesystem's verdict once
-		enforce(normalized);
+		enforceReadOnly(normalized);
 	}
 
 	/**
@@ -48,15 +48,33 @@ public final class ImmutableFiles {
 	 * supplies that barrier. No file is published, nor any hash record seeded, until this method returns.
 	 *
 	 * <p>
-	 * The file must still be writable. An owner that adopts a file sealed by an earlier run clears that policy
-	 * first, exactly as it would before editing any immutable file it owns.
+	 * A file sealed by an earlier run is reopened and resealed here: the caller still owns it until publication, so
+	 * its old read-only policy never blocks the force.
 	 */
 	public static void protectAndForce(Path file) throws IOException {
 		Path normalized = file.toAbsolutePath().normalize();
 		if (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(normalized)) throw new IOException("Immutable path is not a regular file: " + normalized);
-		try (FileChannel channel = FileChannel.open(normalized, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
-			if (!enforcementWorks(normalized) || !enforce(normalized)) channel.force(true);
+		try (FileChannel channel = openWritable(normalized)) {
+			if (!enforcementWorks(normalized) || !enforceReadOnly(normalized)) channel.force(true);
 		}
+	}
+
+	/**
+	 * Opens a private file for the force. A file sealed by an earlier run is still owned by this process: clear the
+	 * read-only policy it applied, then reopen it for the normal force-and-seal path.
+	 */
+	private static FileChannel openWritable(Path normalized) throws IOException {
+		try {
+			return FileChannel.open(normalized, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
+		} catch (AccessDeniedException denied) {
+			unprotect(normalized);
+			return FileChannel.open(normalized, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
+		}
+	}
+
+	/** Whether {@code file} carries the read-only policy, or its filesystem cannot enforce one at all. */
+	static boolean isSealed(Path file) throws IOException {
+		return !enforcementWorks(file) || isProtected(file);
 	}
 
 	/**
@@ -76,7 +94,7 @@ public final class ImmutableFiles {
 			return true;
 		}
 		try {
-			enforce(probe);
+			enforceReadOnly(probe);
 			READ_ONLY_ENFORCEMENT.put(store, true);
 			return true;
 		} catch (UnenforceableReadOnlyException e) {
@@ -101,7 +119,11 @@ public final class ImmutableFiles {
 		}
 	}
 
-	private static boolean enforce(Path normalized) throws IOException {
+	/**
+	 * Applies the read-only policy. Returns whether this call already forced the file, so a caller holding a writable
+	 * channel may skip its own force. Paths that set the policy without such a channel return false.
+	 */
+	private static boolean enforceReadOnly(Path normalized) throws IOException {
 		PosixFileAttributeView posix = Files.getFileAttributeView(normalized, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
 		if (posix != null) {
 			if (disjoint(posix.readAttributes().permissions(), WRITE_PERMISSIONS)) return false;

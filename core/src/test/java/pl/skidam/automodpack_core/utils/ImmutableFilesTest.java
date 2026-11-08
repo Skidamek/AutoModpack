@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
@@ -33,13 +34,60 @@ class ImmutableFilesTest {
 		try {
 			assertEquals("verified content", Files.readString(file));
 			assertEquals(expectedProtection, ImmutableFiles.isProtected(file), "the existing enforcement or degraded policy is unchanged");
-			long forces = RecordingFile.readAllEvents(recording).stream()
-					.filter(event -> event.getEventType().getName().equals("jdk.FileForce") && file.toString().equals(event.getString("path"))).count();
-			assertEquals(1, forces, "a content force is never skipped or followed by a redundant protection force");
+			assertEquals(1, forceEvents(recording, file), "a content force is never skipped or followed by a redundant protection force");
 		} finally {
 			ImmutableFiles.unprotect(file);
 			ImmutableFiles.unprotect(control);
 		}
+	}
+
+	@Test
+	void protectAndForceReopensAFileSealedByAnEarlierRun(@TempDir Path directory) throws Exception {
+		Path file = Files.writeString(directory.resolve("sealed.bin"), "verified content");
+		Path control = Files.writeString(directory.resolve("control.bin"), "control");
+		ImmutableFiles.protect(control);
+		boolean expectedProtection = ImmutableFiles.isProtected(control);
+		try {
+			ImmutableFiles.protectAndForce(file);
+			assertEquals(expectedProtection, ImmutableFiles.isProtected(file));
+			ImmutableFiles.protectAndForce(file);
+			assertEquals("verified content", Files.readString(file));
+			assertEquals(expectedProtection, ImmutableFiles.isProtected(file), "resealing leaves the same policy");
+		} finally {
+			ImmutableFiles.unprotect(file);
+			ImmutableFiles.unprotect(control);
+		}
+	}
+
+	@Test
+	void reopeningASealedFileStillForcesItOnce(@TempDir Path directory) throws Exception {
+		Path file = Files.writeString(directory.resolve("sealed.bin"), "verified content");
+		ImmutableFiles.protectAndForce(file);
+		Path recording = directory.resolve("reopen-forces.jfr");
+		try (Recording events = new Recording()) {
+			events.enable("jdk.FileForce").withThreshold(Duration.ZERO);
+			events.start();
+			ImmutableFiles.protectAndForce(file);
+			events.stop();
+			events.dump(recording);
+		}
+		try {
+			assertEquals("verified content", Files.readString(file));
+			assertEquals(1, forceEvents(recording, file), "reopening a sealed file still forces its content once");
+		} finally {
+			ImmutableFiles.unprotect(file);
+		}
+	}
+
+	private static long forceEvents(Path recording, Path file) throws IOException {
+		Path expected = file.toAbsolutePath().normalize();
+		return RecordingFile.readAllEvents(recording).stream()
+				.filter(event -> event.getEventType().getName().equals("jdk.FileForce"))
+				.map(event -> event.getString("path"))
+				.filter(Objects::nonNull)
+				.map(path -> Path.of(path).toAbsolutePath().normalize())
+				.filter(expected::equals)
+				.count();
 	}
 
 	@Test
