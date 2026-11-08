@@ -97,7 +97,7 @@ accept_certificate:
     timeout: 20s
     until:
       all:
-        - screen: [PreparingScreen, PackConfirmScreen, UpdatePreviewScreen, DownloadScreen, FetchScreen, RestartScreen]
+        - screen: [PackConfirmScreen, UpdatePreviewScreen, DownloadScreen, FetchScreen, RestartScreen]
         - screen_not: DisconnectedScreen
   - do: wait_for
     name: wait for the certificate to be accepted

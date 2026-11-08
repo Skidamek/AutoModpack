@@ -1,5 +1,8 @@
 package pl.skidam.automodpack.client.ui.screen;
 
+import java.util.List;
+import java.util.Locale;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -12,7 +15,6 @@ import net.minecraft.resources.Identifier;
 
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.TextColors;
-import pl.skidam.automodpack.client.ui.WaitingPresentation;
 import pl.skidam.automodpack.client.ui.versioned.VersionedIconButton;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
@@ -23,21 +25,24 @@ import pl.skidam.automodpack_core.screen.DownloadView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.utils.ByteFormat;
+import pl.skidam.automodpack_core.utils.WorkStatus;
 
 public class DownloadScreen extends VersionedScreen {
 	private static final Logger LOGGER = LogManager.getLogger(DownloadScreen.class);
 
-	private static final Identifier PROGRESS_BAR_EMPTY_TEXTURE = Common.id("textures/gui/sprites/green_background.png");
+	private static final Identifier PROGRESS_BAR_EMPTY_TEXTURE = Common.id("textures/gui/sprites/progress_background.png");
 	private static final Identifier PROGRESS_BAR_FULL_TEXTURE = Common.id("textures/gui/sprites/green_progress.png");
 	private static final int PROGRESS_BAR_WIDTH = 182;
 	private static final int PROGRESS_BAR_HEIGHT = 5;
 
-	private final DownloadView download;
-	private final String header;
-	private final Runnable onCancel;
+	private DownloadView download;
+	private String header;
+	private Runnable onCancel;
 
-	private final long startedAtNanos = System.nanoTime();
 	private boolean musicStarted = false;
+	private WorkStatus.Phase visiblePhase = WorkStatus.Phase.READING;
+	private long visibleSince = System.currentTimeMillis();
+	private long lastPhasePoll;
 	private AbstractWidget cancelButton;
 	private Button musicButton;
 
@@ -60,6 +65,14 @@ public class DownloadScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		initWidgets();
+	}
+
+	/** Hands the still-visible wait screen the live download, so the staged view and the waiting music never restart. */
+	public void attach(DownloadView download, String header, Runnable onCancel) {
+		this.download = download;
+		this.header = header;
+		this.onCancel = onCancel;
+		if (cancelButton != null) cancelButton.active = true;
 	}
 
 	private void initWidgets() {
@@ -106,22 +119,16 @@ public class DownloadScreen extends VersionedScreen {
 		return VersionedText.literal(cachedStage);
 	}
 
-	private Component getPercentage() {
-		return VersionedText.literal((int) cachedPercentage + "%");
-	}
-
 	private Component getTotalDownloadSpeed() {
 		return "-1".equals(cachedSpeed) ? VersionedText.text("automodpack.download.calculating") : VersionedText.literal(cachedSpeed);
 	}
 
 	private Component getTotalETA() {
-		return "-1".equals(cachedETA)
-				? VersionedText.text("automodpack.download.calculating")
-				: VersionedText.text("automodpack.download.eta", cachedETA);
+		return "-1".equals(cachedETA) ? null : VersionedText.text("automodpack.download.eta", cachedETA);
 	}
 
-	private Component getAcquisitionSummary() {
-		return VersionedText.text("automodpack.download.acquired", download.acquired(), download.failed());
+	private Component getFailedSummary() {
+		return download.failed() > 0 ? VersionedText.text("automodpack.download.failedCount", download.failed()) : null;
 	}
 
 	private float getDownloadScale() {
@@ -135,11 +142,17 @@ public class DownloadScreen extends VersionedScreen {
 	private void drawDownloadingFiles(VersionedMatrices matrices) {
 		int y = this.height / 2 - 94;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.download.downloading").withStyle(ChatFormatting.BOLD), this.width / 2, y, TextColors.WHITE);
+		List<String> names = download.downloadingFileNames();
+		int shown = Math.min(3, names.size());
 		int currentY = y + 14;
-		for (String fileName : download.downloadingFileNames()) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, fileName, Math.max(1, panelWidth(310) - 20))), this.width / 2, currentY, TextColors.GRAY);
+		for (int index = 0; index < shown; index++) {
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, names.get(index), Math.max(1, panelWidth(310) - 20))), this.width / 2, currentY,
+					TextColors.WHITE);
 			currentY += 10;
 		}
+		if (names.size() > shown)
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.download.moreFiles", names.size() - shown).withStyle(ChatFormatting.GRAY), this.width / 2, currentY,
+					TextColors.WHITE);
 	}
 
 	@Override
@@ -150,8 +163,16 @@ public class DownloadScreen extends VersionedScreen {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header, panelWidth(310))).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 110,
 					TextColors.WHITE);
 			if (downloadsInProgress()) drawDownloadingFiles(matrices);
-			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getStage(), this.width / 2, this.height / 2 - 20, TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalETA(), this.width / 2, this.height / 2 - 4, TextColors.WHITE);
+			boolean complete = cachedPercentage >= 99.9;
+			if (complete) {
+				drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.download.saving").withStyle(ChatFormatting.GRAY), this.width / 2, this.height / 2 - 20, TextColors.WHITE);
+				drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.download.savingDetail").withStyle(ChatFormatting.DARK_GRAY), this.width / 2, this.height / 2 - 4, TextColors.WHITE);
+			} else {
+				drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.download.files", getStage().getString()).append(" · " + (int) cachedPercentage + "%"), this.width / 2,
+						this.height / 2 - 20, TextColors.WHITE);
+				Component eta = getTotalETA();
+				if (eta != null) drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) eta, this.width / 2, this.height / 2 - 4, TextColors.WHITE);
+			}
 
 			float scaleBar = 1.35F;
 			int barFilledWidth = (int) (PROGRESS_BAR_WIDTH * getDownloadScale());
@@ -167,16 +188,71 @@ public class DownloadScreen extends VersionedScreen {
 					PROGRESS_BAR_HEIGHT);
 			matrices.popPose();
 
-			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalDownloadSpeed(), this.width / 2, this.height / 2 + 24, TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getAcquisitionSummary(), this.width / 2, this.height / 2 + 36, TextColors.GRAY);
+			if (!complete) drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalDownloadSpeed(), this.width / 2, this.height / 2 + 24, TextColors.WHITE);
+			Component failed = getFailedSummary();
+			if (failed != null) drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) failed, this.width / 2, this.height / 2 + 36, TextColors.GRAY);
 			cancelButton.active = true;
+			cancelButton.visible = !complete;
 		} else {
-			WaitingPresentation.render(matrices, this.font, this.width, this.height, System.nanoTime() - startedAtNanos);
+			drawWorkStatus(matrices);
 			cancelButton.active = download == null || !download.isCancelled();
+			cancelButton.visible = cancellablePhase();
 		}
 
 		checkAndStartMusic();
 		updateMusicButton();
+	}
+
+	private void drawWorkStatus(VersionedMatrices matrices) {
+		updateVisiblePhase();
+		int center = this.width / 2;
+		int titleY = this.height / 2 - 34;
+		if (!header.isBlank())
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header, panelWidth(310))).withStyle(ChatFormatting.BOLD), center, titleY - 14,
+					TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.progress.title").withStyle(ChatFormatting.BOLD), center, titleY, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, phaseLabel(visiblePhase).withStyle(ChatFormatting.GRAY), center, titleY + 16, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.progress.detail." + visiblePhase.name().toLowerCase(Locale.ROOT)).withStyle(ChatFormatting.GRAY), center, titleY + 27,
+				TextColors.WHITE);
+		long total = WorkStatus.total();
+		long completed = WorkStatus.completed();
+		int barX = center - PROGRESS_BAR_WIDTH / 2;
+		int barY = titleY + 54;
+		drawTexture(PROGRESS_BAR_EMPTY_TEXTURE, matrices, barX, barY, 0, 0, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
+		if (total > 0) {
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.text("automodpack.progress.count", Math.min(completed, total), total).withStyle(ChatFormatting.GRAY), center, titleY + 40,
+					TextColors.WHITE);
+			int filled = (int) Math.min(PROGRESS_BAR_WIDTH, Math.max(0, PROGRESS_BAR_WIDTH * completed / total));
+			drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, barX, barY, 0, 0, filled, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
+		} else {
+			// Indeterminate work gets a slow moving segment, never a made-up percentage.
+			int segment = 46;
+			int travel = Math.max(0, PROGRESS_BAR_WIDTH - segment);
+			long cycle = Math.max(1, travel * 2L);
+			long position = (System.currentTimeMillis() / 8) % cycle;
+			int segmentX = barX + (int) (position <= travel ? position : cycle - position);
+			drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, segmentX, barY, 0, 0, segment, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
+		}
+	}
+
+	private MutableComponent phaseLabel(WorkStatus.Phase phase) {
+		return VersionedText.text("automodpack.progress." + phase.name().toLowerCase(Locale.ROOT));
+	}
+
+	/** The engine's phase can change faster than a player reads it; hold each label long enough to be seen. */
+	private void updateVisiblePhase() {
+		long now = System.currentTimeMillis();
+		if (now - lastPhasePoll < 250) return;
+		lastPhasePoll = now;
+		WorkStatus.Phase next = WorkStatus.phase();
+		if (next == visiblePhase || now - visibleSince < 350) return;
+		visiblePhase = next;
+		visibleSince = now;
+	}
+
+	private boolean cancellablePhase() {
+		if (download != null && download.isRunning()) return true;
+		return visiblePhase != WorkStatus.Phase.APPLYING && visiblePhase != WorkStatus.Phase.FINISHING;
 	}
 
 	/** The icon shows the action, so a download that autoplayed music rests on the red X and one that did not rests on the note. */
@@ -190,7 +266,9 @@ public class DownloadScreen extends VersionedScreen {
 
 	private void checkAndStartMusic() {
 		musicButton.active = true;
-		if (musicStarted) return;
+		// The pre-transfer wait screen and the transfer screen are the same class; only the screen that owns a
+		// running download starts the track, so handing over between them never tears the audio device down.
+		if (musicStarted || download == null) return;
 		if (ClientStorage.current().clientConfig().current().playMusic) AudioManager.playMusic();
 		musicStarted = true;
 	}
@@ -204,12 +282,12 @@ public class DownloadScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		return cancelButton != null && cancelButton.active;
+		return cancelButton != null && cancelButton.active && cancelButton.visible;
 	}
 
 	@Override
 	public void onClose() {
-		if (cancelButton != null && cancelButton.active) {
+		if (cancelButton != null && cancelButton.active && cancelButton.visible) {
 			cancelButton.active = false;
 			cancelDownload();
 			AudioManager.stopMusic();

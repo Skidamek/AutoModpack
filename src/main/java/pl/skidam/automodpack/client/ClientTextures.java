@@ -23,7 +23,7 @@ public final class ClientTextures {
 	private static final Logger LOGGER = LogManager.getLogger(ClientTextures.class);
 
 	/** Every bundled sprite that has a draw site; ids are file ids under textures/gui/sprites. */
-	private static final List<String> SPRITES = List.of("green_background", "green_progress", "checkbox", "folder", "music-note", "mute-music-note", "tooltip/background", "tooltip/frame");
+	private static final List<String> SPRITES = List.of("progress_background", "green_progress", "checkbox", "folder", "music-note", "mute-music-note", "tooltip/background", "tooltip/frame");
 
 	private static volatile boolean registered = false;
 

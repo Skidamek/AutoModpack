@@ -290,10 +290,15 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void download(DownloadView download, String modpackName, Runnable onCancel) {
-			Screens.setScreen(new DownloadScreen(download, modpackName, () -> {
+			Runnable cancel = () -> {
 				if (onCancel != null) onCancel.run();
 				restoreIfWaiting();
-			}));
+			};
+			if (getScreen() instanceof DownloadScreen waiting) {
+				waiting.attach(download, modpackName, cancel);
+				return;
+			}
+			Screens.setScreen(new DownloadScreen(download, modpackName, cancel));
 		}
 
 		public static void changelog(Changelogs changelogs) {
@@ -318,7 +323,7 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		private static boolean isTransient(Screen screen) {
-			return screen instanceof PreparingScreen || screen instanceof DownloadScreen;
+			return screen instanceof DownloadScreen;
 		}
 
 		public static void history(HistoryViewRequest request) {
@@ -369,7 +374,7 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void waiting(Runnable onCancel) {
-			Screens.setScreen(new PreparingScreen(() -> {
+			Screens.setScreen(new DownloadScreen(null, "", () -> {
 				if (onCancel != null) onCancel.run();
 				restoreIfWaiting();
 			}));
