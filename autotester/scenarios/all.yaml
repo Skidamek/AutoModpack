@@ -1080,8 +1080,8 @@ flow:
     name: place another unowned mod in the fresh ordinary mods directory
     path: mods/local-unowned.jar
     fixture: { modId: amp_local_unowned, version: "9.9.9-local", marker: local-only }
-  - do: seed_bootstrap
-    name: re-bootstrap the fresh client from the live server generation
+  # The saved connection and secret survive the reset, so the fresh client
+  # re-acquires its objects at preload but must still review the first install.
   - do: write_file
     name: keep the fresh client on the mandatory review path
     path: automodpack/client/selected.json
