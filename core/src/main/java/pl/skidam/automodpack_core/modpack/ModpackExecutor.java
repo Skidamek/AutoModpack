@@ -226,6 +226,10 @@ public class ModpackExecutor {
 		return generationStore.history(limit);
 	}
 
+	public List<JournalEntry> journalEntries() throws IOException {
+		return generationStore.journalEntries();
+	}
+
 	public ReplaceNotesResult replaceNotes() {
 		return replaceNotes(null);
 	}

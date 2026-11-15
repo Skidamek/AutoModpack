@@ -689,7 +689,7 @@ public class Commands {
 	/** The shared resolve-and-report prologue of the revert handlers; feedback is sent and false returned when the target is missing or the journal unreadable. */
 	private static boolean resolveAndReportRevertTarget(CommandContext<CommandSourceStack> context, long targetSeq) {
 		try {
-			List<JournalEntry> history = Hosting.executor().technicalHistory(HISTORY_TAIL_LIMIT);
+			List<JournalEntry> history = Hosting.executor().journalEntries();
 			JournalEntry target = findRevertTarget(history, targetSeq);
 			if (target == null) {
 				send(context, "FAILED: journal target was not found", ChatFormatting.RED, true);

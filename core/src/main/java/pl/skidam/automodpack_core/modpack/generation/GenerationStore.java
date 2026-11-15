@@ -308,6 +308,14 @@ public final class GenerationStore {
 		});
 	}
 
+	/** The whole journal, for a revert that must name any seq, not only the listing tail. */
+	public List<JournalEntry> journalEntries() throws IOException {
+		return reading(() -> {
+			peek();
+			return journal.entries();
+		});
+	}
+
 	/**
 	 * The hosting map: the head document under the reserved head key, the journal file under the reserved journal
 	 * key, exactly the objects the head generation serves, and the waiting track when the head advertises one that
