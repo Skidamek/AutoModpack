@@ -137,7 +137,7 @@ public class FileInspection {
 			if (metadata != null) return new Inspection(true, metadata, services);
 			List<Mod> jarJarMods = scanJarJarMods(fs);
 			metadata = singleCompleteJarJarMod(jarJarMods, hash, file);
-			return new Inspection(metadata != null || !services.isEmpty() || isLoaderArtifact(fs) || !jarJarMods.isEmpty(), metadata, services);
+			return new Inspection(countsAsMod(metadata != null, !services.isEmpty(), isLoaderArtifact(fs), !jarJarMods.isEmpty()), metadata, services);
 		} catch (IOException e) {
 			LOGGER.debug("Failed to inspect mod file: {}", file);
 			return new Inspection(false, null, Set.of());
@@ -221,10 +221,14 @@ public class FileInspection {
 	public static boolean isMod(Path file) {
 		if (isJarInvalid(file)) return false;
 		try (FileSystem fs = JarUtils.openJar(file)) {
-			return getModMetadata(fs) != null || hasSpecificServices(fs) || isLoaderArtifact(fs) || hasJarJarMod(fs);
+			return countsAsMod(getModMetadata(fs) != null, hasSpecificServices(fs), isLoaderArtifact(fs), hasJarJarMod(fs));
 		} catch (IOException e) {
 			return false;
 		}
+	}
+
+	private static boolean countsAsMod(boolean metadata, boolean services, boolean loaderArtifact, boolean jarJar) {
+		return metadata || services || loaderArtifact || jarJar;
 	}
 
 	public static boolean isModCompatible(Path file) {

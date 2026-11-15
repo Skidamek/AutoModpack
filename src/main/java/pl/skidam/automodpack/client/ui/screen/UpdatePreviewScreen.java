@@ -27,7 +27,7 @@ import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.screen.HistoryViewRequest;
 import pl.skidam.automodpack_core.screen.PreviewPayload;
-import pl.skidam.automodpack_core.screen.ReviewActions;
+import pl.skidam.automodpack_core.screen.ReviewConsent;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
@@ -40,7 +40,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private final String modpackName;
 	private final String origin;
 	private final UpdatePreview.Mode mode;
-	private final ReviewActions actions;
+	private final ReviewConsent actions;
 	private final SelectedModpackTarget target;
 	private final Runnable continueAction;
 	private final Runnable cancelAction;

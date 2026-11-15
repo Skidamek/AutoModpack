@@ -28,7 +28,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.screen.DownloadView;
 import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.screen.PreviewPayload;
-import pl.skidam.automodpack_core.screen.ReviewActions;
+import pl.skidam.automodpack_core.screen.ReviewConsent;
 import pl.skidam.automodpack_core.screen.ReviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.screen.ScreenService;
@@ -178,7 +178,7 @@ class ReviewSessionTest {
 		assertFalse(LaunchApplyState.allowsUnverifiedLaunchWrites(harness.storage(), modpackId), "a cancelled preview's tick never reaches the next commit");
 	}
 
-	private record Harness(ModpackUpdater updater, ReviewSession review, ReviewActions actions, ClientStorage storage) {}
+	private record Harness(ModpackUpdater updater, ReviewSession review, ReviewConsent actions, ClientStorage storage) {}
 
 	/** Records the screen seam so a wait episode cannot silently outlive the engine in these tests. */
 	private static final class RecordingScreens implements ScreenService {
@@ -249,7 +249,7 @@ class ReviewSessionTest {
 		GroupManifest manifest = TestPacks.manifest("test pack", "config/a.txt", "hello");
 		SelectedModpackTarget target = SelectedModpackTarget.prepareDefault(TestPacks.head(manifest), ClientPlatform.LINUX);
 		ModpackUpdater updater = new ModpackUpdater(target, null, null, storage, TestEnvironment.noopLoader());
-		return new Harness(updater, updater.reviewSession(), updater.reviewActions(), storage);
+		return new Harness(updater, updater.reviewSession(), updater.reviewConsent(), storage);
 	}
 
 	private static void awaitTrue(BooleanSupplier condition) throws InterruptedException {

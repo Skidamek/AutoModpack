@@ -38,7 +38,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
-import pl.skidam.automodpack_core.screen.ReviewActions;
+import pl.skidam.automodpack_core.screen.ReviewConsent;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
@@ -70,7 +70,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 	private final SelectionIntent initialSelection;
 	private final Consumer<SelectionIntent> selectionAction;
 	private final Runnable cancelAction;
-	private final ReviewActions actions;
+	private final ReviewConsent actions;
 	private final PackDocument localRecord;
 	private final ClientPlatform detectedPlatform;
 	private ClientPlatform platformOverride;
@@ -93,7 +93,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 	private DropdownWidget platformDropdown;
 	private int listBottom;
 
-	public GroupSelectionScreen(Screen parent, SelectedModpackTarget target, ReviewActions actions, Consumer<SelectionIntent> selectionAction) {
+	public GroupSelectionScreen(Screen parent, SelectedModpackTarget target, ReviewConsent actions, Consumer<SelectionIntent> selectionAction) {
 		this(parent, target.manifest(), new Entry(target.selection().intent(), selectionAction, () -> {}, actions, null));
 	}
 
@@ -107,7 +107,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 
 	/** What an entry point varies; the screen settles everything else itself. */
 	private record Entry(SelectionIntent initialSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction,
-			ReviewActions actions, PackDocument localRecord) {}
+			ReviewConsent actions, PackDocument localRecord) {}
 
 	private GroupSelectionScreen(Screen parent, GroupManifest manifest, Entry entry) {
 		super(VersionedText.text("automodpack.selection.title"));

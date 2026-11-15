@@ -39,7 +39,7 @@ final class LifecycleFlow {
 		updater.executor().execute(() -> {
 			try {
 				UpdatePreview preview = preview(deactivation ? RemovalAttempt.Kind.DEACTIVATION : RemovalAttempt.Kind.REMOVAL);
-				boolean shown = ScreenManager.preview(PreviewPayload.storageRemoval(preview, modpackName, updater.joinOrigin(), updater.reviewActions(),
+				boolean shown = ScreenManager.preview(PreviewPayload.storageRemoval(preview, modpackName, updater.joinOrigin(), updater.reviewConsent(),
 						(Runnable) () -> ModpackUpdater.executor().execute(() -> execute(deactivation, released, removed)), released));
 				if (!shown) {
 					updater.close();

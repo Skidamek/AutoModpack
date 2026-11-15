@@ -28,7 +28,7 @@ import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
-import pl.skidam.automodpack_core.screen.ReviewActions;
+import pl.skidam.automodpack_core.screen.ReviewConsent;
 import pl.skidam.automodpack_core.screen.ReviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
@@ -133,8 +133,8 @@ final class ReviewSession {
 	}
 
 	/** The actions and live polls a review-backed screen may drive; the seam type, backed by this session. */
-	ReviewActions reviewActions() {
-		return new ReviewActions(this::setFirstInstallLocalModCleanup, this::setLocalModCleanup, this::localModArchive, this::startConfirmedUpdate, this::reselectAndPreview, this::setLaunchWritesUnverified,
+	ReviewConsent reviewConsent() {
+		return new ReviewConsent(this::setFirstInstallLocalModCleanup, this::setLocalModCleanup, this::localModArchive, this::startConfirmedUpdate, this::reselectAndPreview, this::setLaunchWritesUnverified,
 				this::cancelConfirmation, this::cancelFromPlayer, () -> confirmationState.get() == ConfirmationState.WAITING, () -> confirmationState.get() == ConfirmationState.CANCELLED,
 				this::isCancelledByPlayer, () -> confirmationState.get() == ConfirmationState.PREVIEWING, sourceCatalogue::sourceAvailability);
 	}
@@ -151,7 +151,7 @@ final class ReviewSession {
 		}
 		return new ReviewPayload(updater.getSelectedTarget(), reviewCatalogue(), getFirstInstallPatchNotes(), joinOrigin(), unverifiedSelectedJarPaths(),
 				sourceCatalogue.selectedJarSourceCounts(updater.getSelectedTarget()), firstInstallLocalModPaths(),
-				uncached < 0 ? OptionalLong.empty() : OptionalLong.of(uncached), updater.launchWritesUnverified(), reviewActions());
+				uncached < 0 ? OptionalLong.empty() : OptionalLong.of(uncached), updater.launchWritesUnverified(), reviewConsent());
 	}
 
 	public List<JournalEntry> getFirstInstallPatchNotes() {

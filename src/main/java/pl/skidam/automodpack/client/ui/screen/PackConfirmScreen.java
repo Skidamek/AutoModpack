@@ -28,7 +28,7 @@ import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.screen.HistoryViewRequest;
 import pl.skidam.automodpack_core.screen.PreviewPayload;
-import pl.skidam.automodpack_core.screen.ReviewActions;
+import pl.skidam.automodpack_core.screen.ReviewConsent;
 import pl.skidam.automodpack_core.screen.ReviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.UpdatePreview;
@@ -40,7 +40,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private static final int TIMER_SECONDS = 10;
 	private final ReviewPayload welcome;
 	private final PreviewPayload later;
-	private final ReviewActions actions;
+	private final ReviewConsent actions;
 	private final boolean firstInstall;
 	private final boolean unverified;
 	private final Screen parent;

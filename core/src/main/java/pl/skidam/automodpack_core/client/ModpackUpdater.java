@@ -33,7 +33,7 @@ import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.screen.PreviewPayload;
-import pl.skidam.automodpack_core.screen.ReviewActions;
+import pl.skidam.automodpack_core.screen.ReviewConsent;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.screen.SourceCounts;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
@@ -140,8 +140,8 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	/** The actions and live polls a review-backed screen may drive; the seam type, backed by this engine's review. */
-	ReviewActions reviewActions() {
-		return review.reviewActions();
+	ReviewConsent reviewConsent() {
+		return review.reviewConsent();
 	}
 
 	/** Selected jar paths of the selected target without a Modrinth/CurseForge hash hit. */
@@ -422,12 +422,12 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 		if (!review.firstConnection() && !launch.requiresReconciliation(storedTarget())) {
 			LOGGER.info("Launch apply reused the active projection");
-			if (applyFirstInstall) rememberLaunchConsent(true);
+			if (applyFirstInstall) rememberLaunchConsent();
 			return;
 		}
 		launch.approve();
 		ApplyResult applyResult = commitFlow(launch);
-		if (applyFirstInstall) rememberLaunchConsent(true);
+		if (applyFirstInstall) rememberLaunchConsent();
 		rememberLaunchApplyReceipt();
 		LOGGER.info("Launch apply completed; restart demand: {} Took: {}ms", RestartPolicy.atPreload(applyResult.restartReasons()), System.currentTimeMillis() - start);
 		finishLaunchApply(applyResult);
@@ -439,8 +439,8 @@ public class ModpackUpdater implements AutoCloseable {
 		return LaunchApplyState.allowsUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId());
 	}
 
-	private void rememberLaunchConsent(boolean allowed) {
-		LaunchApplyState.setAllowsUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId(), allowed);
+	private void rememberLaunchConsent() {
+		LaunchApplyState.setAllowsUnverifiedLaunchWrites(storage, selectedTarget.manifest().modpackId(), true);
 	}
 
 	private void rememberLaunchApplyReceipt() {
@@ -667,7 +667,7 @@ public class ModpackUpdater implements AutoCloseable {
 		boolean updateOrRollback = preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK;
 		boolean writesUnverifiedJar = updateOrRollback && review.planWritesUnverifiedJar(preview.plan());
 		return PreviewPayload.review(preview, getModpackName(), review.joinOrigin(), writesUnverifiedJar, getSelectedTarget(), review.unverifiedSelectedJarPaths(),
-				sourceCatalogue.selectedJarSourceCounts(getSelectedTarget()), launchWritesUnverified(), review.reviewActions(), continueAction, cancelAction);
+				sourceCatalogue.selectedJarSourceCounts(getSelectedTarget()), launchWritesUnverified(), review.reviewConsent(), continueAction, cancelAction);
 	}
 
 	boolean isCurrentAttempt(UpdateAttempt candidate) {

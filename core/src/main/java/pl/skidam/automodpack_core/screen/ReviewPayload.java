@@ -9,8 +9,8 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 
 /**
  * The first-install welcome snapshot: everything the confirm screen renders, settled before the screen opens, plus the
- * {@link ReviewActions} it may drive. An empty {@code uncachedTargetBytes} means the download cost could not be
+ * {@link ReviewConsent} it may drive. An empty {@code uncachedTargetBytes} means the download cost could not be
  * measured; the screen hides the stat instead of failing the review over it.
  */
 public record ReviewPayload(SelectedModpackTarget target, ChangeSet catalogue, List<JournalEntry> patchNotes, String origin, List<String> unverifiedJarPaths,
-		SourceCounts sourceCounts, List<String> firstInstallLocalModPaths, OptionalLong uncachedTargetBytes, boolean launchWritesUnverified, ReviewActions actions) {}
+		SourceCounts sourceCounts, List<String> firstInstallLocalModPaths, OptionalLong uncachedTargetBytes, boolean launchWritesUnverified, ReviewConsent actions) {}

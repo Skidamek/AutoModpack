@@ -39,6 +39,11 @@ public final class ProjectionAvailability {
 	private static final Map<Path, ProjectionAvailability> BY_GAME_DIRECTORY = new HashMap<>();
 	private static final int SCAN_READ_ATTEMPTS = 5;
 	private static final long SCAN_READ_RETRY_MILLIS = 100;
+	/**
+	 * Tripwire between two relaunch-and-settle cycles (seconds) and a later play session (hours). A second recovery
+	 * inside this window is the directory-scanning loader loop; a player who quit and came back later is a new session.
+	 * Receipt: crash-relaunch settle is seconds; this is sized past that cycle and below a new sitting.
+	 */
 	static final long CONSECUTIVE_MILLIS = 5 * 60 * 1000L;
 	private static final Gson GSON = ConfigTools.strictEnums(new GsonBuilder()).create();
 
