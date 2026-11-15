@@ -16,6 +16,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -103,6 +104,65 @@ class FileCacheTest {
 	}
 
 	@Test
+	void batchUsesSuppliedFingerprintInsteadOfRestattingThePublishedName() throws Exception {
+		Path file = temporaryDirectory.resolve("published.bin");
+		Files.writeString(file, "linked-bytes", StandardCharsets.UTF_8);
+		String hash = HashUtils.getHash(file);
+		FileCache.FileFingerprint supplied = new FileCache.FileFingerprint(1_700_000_123L, 1_700_000_456L, 1_700_000_789L, 12_345L, "supplied-inode");
+		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
+			cache.overwriteCacheBatch(Map.of(file, hash), Map.of(file, supplied), Set.of(file));
+			FileCache.CachedFile record = cache.readRecord(file.toAbsolutePath().normalize().toString(), FileCache.CachedFile.class);
+
+			assertNotNull(record);
+			assertEquals(hash, record.contentHash());
+			assertEquals(supplied.lastModifiedNanos(), record.lastModifiedNanos());
+			assertEquals(supplied.creationTimeNanos(), record.creationTimeNanos());
+			assertEquals(supplied.changeTimeNanos(), record.changeTimeNanos());
+			assertEquals(supplied.size(), record.size());
+			assertEquals(supplied.fileKey(), record.fileKey());
+		}
+	}
+
+	@Test
+	void batchSkipsThePreviousRecordOnlyWhenThePathHeldNothing() throws Exception {
+		Path file = temporaryDirectory.resolve("previous.bin");
+		Files.writeString(file, "preserved-murmur", StandardCharsets.UTF_8);
+		String hash = HashUtils.getHash(file);
+		FileCache.FileFingerprint fingerprint = FileCache.statSnapshot(file).fingerprint();
+		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
+			cache.overwriteCache(file, hash);
+			cache.publishMurmur(file, "987654321");
+			String key = file.toAbsolutePath().normalize().toString();
+
+			cache.overwriteCacheBatch(Map.of(file, hash), Map.of(file, fingerprint), Set.of(file));
+			assertNull(cache.readRecord(key, FileCache.CachedFile.class).murmur(), "a path that held nothing has no earlier record to carry");
+
+			cache.publishMurmur(file, "987654321");
+			cache.overwriteCacheBatch(Map.of(file, hash), Map.of(file, fingerprint), Set.of());
+			assertEquals("987654321", cache.readRecord(key, FileCache.CachedFile.class).murmur(), "a path that may have a record keeps its murmur");
+		}
+	}
+
+	@Test
+	void immutableHashAnswersACtimeOnlyDisturbanceWithoutRehashing() throws Exception {
+		Path file = temporaryDirectory.resolve("immutable.bin");
+		Files.writeString(file, "immutable-bytes", StandardCharsets.UTF_8);
+		String realHash = HashUtils.getHash(file);
+		FileCache.FileFingerprint real = FileCache.statSnapshot(file).fingerprint();
+		FileCache.FileFingerprint changedCtime = new FileCache.FileFingerprint(real.lastModifiedNanos(), real.creationTimeNanos(), real.changeTimeNanos() + 1, real.size(), real.fileKey());
+		String sentinel = "0123456789abcdef0123456789abcdef01234567";
+		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
+			cache.overwriteCacheBatch(Map.of(file, sentinel), Map.of(file, changedCtime), Set.of(file));
+
+			assertEquals(sentinel, cache.getOrComputeHashImmutable(file), "size, mtime and file key still name the record");
+			assertEquals(realHash, cache.getOrComputeHash(file), "worktree identity treats the ctime change as disturbed");
+		}
+	}
+
+	@Test
 	void windowsNativeStatIsAbsentOrComplete() throws Exception {
 		Path file = temporaryDirectory.resolve("file.bin");
 		Files.writeString(file, "native-stat", StandardCharsets.UTF_8);
@@ -126,6 +186,27 @@ class FileCacheTest {
 		assertNotEquals(Long.MIN_VALUE, snapshot.changeTimeNanos());
 		assertNotNull(snapshot.fileKey());
 		assertTrue(snapshot.fileKey().contains(":"));
+	}
+
+	@Test
+	void fusedStatSnapshotAgreesWithTheSplitReads() throws Exception {
+		assumeTrue(PlatformUtils.operatingSystem() != PlatformUtils.OperatingSystem.WINDOWS, "the fused unix stat is not the Windows path");
+		Path file = temporaryDirectory.resolve("fused.bin");
+		Files.writeString(file, "fused-stat", StandardCharsets.UTF_8);
+
+		FileCache.StatSnapshot fused = FileCache.statSnapshot(file);
+		FileCache.StatSnapshot split = FileCache.splitSnapshot(file);
+		assertEquals(split.fingerprint(), fused.fingerprint(), "the named-attribute fusion must read the same fingerprint as the split reads");
+		assertEquals(split.isTrackedRegularFile(), fused.isTrackedRegularFile());
+		assertNotNull(fused.fileKey());
+		assertNotEquals(Long.MIN_VALUE, fused.changeTimeNanos());
+
+		Path link = temporaryDirectory.resolve("fused-link.bin");
+		Files.createSymbolicLink(link, file.getFileName());
+		FileCache.StatSnapshot fusedLink = FileCache.statSnapshot(link);
+		assertEquals(FileCache.splitSnapshot(link).fingerprint(), fusedLink.fingerprint());
+		assertTrue(fusedLink.symbolicLink());
+		assertFalse(fusedLink.isTrackedRegularFile());
 	}
 
 	@Test
@@ -444,6 +525,19 @@ class FileCacheTest {
 
 		assertTrue(FileCache.statsMatch(record, racy));
 		assertFalse(FileCache.isCacheValid(record, racy));
+	}
+
+	@Test
+	void editableWorktreeDistrustsASameTickChangeTimeWhenMtimeIsOld() {
+		long validatedAt = 1_700_000_000L * 1_000_000_000L;
+		long oldModified = validatedAt - 10_000_000_000L;
+		// Windows can stamp a same-tick rewrite with the same change time while the writer restores the old mtime.
+		FileCache.FileFingerprint racy = new FileCache.FileFingerprint(oldModified, 1L, validatedAt, 4L, "key");
+		FileCache.CachedFile record = new FileCache.CachedFile("path", "hash", oldModified, 1L, validatedAt, 4L, "key", validatedAt, null);
+
+		assertTrue(FileCache.statsMatch(record, racy));
+		assertFalse(FileCache.isCacheValid(record, racy, true), "a same-tick rewrite that keeps mtime must be answered by ctime");
+		assertTrue(FileCache.isCacheValid(record, racy), "ordinary worktree identity stays Git's mtime rule");
 	}
 
 	@Test

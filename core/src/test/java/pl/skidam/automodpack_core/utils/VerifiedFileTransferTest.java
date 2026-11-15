@@ -9,6 +9,8 @@ import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -176,6 +178,104 @@ class VerifiedFileTransferTest {
 			assertTrue(Files.isSameFile(object, projection));
 			assertTrue(FileIntegrity.matchesNamed(object, size, hash, cache));
 			assertTrue(FileIntegrity.matchesObject(projection, object, size, hash, cache));
+			assertFalse(VerifiedFileTransfer.linkAtomic(object, projection, size, hash, cache), "an already matching projection is left alone");
+		}
+	}
+
+	@Test
+	void directLinkReportsTheValidatedSourceFingerprintForItsCacheRecord() throws Exception {
+		Path object = Files.writeString(tempDir.resolve("object"), "direct-fingerprint", StandardCharsets.UTF_8);
+		Path mods = Files.createDirectories(tempDir.resolve("mods"));
+		Path projection = mods.resolve("file.jar");
+		String hash = HashUtils.getHash(object);
+		long size = Files.size(object);
+		ImmutableFiles.protect(object);
+		try (FileCache cache = FileCache.open(tempDir.resolve("file-cache"))) {
+			ValidatedSources sources = new ValidatedSources(cache);
+			FileCache.FileFingerprint before = FileCache.statSnapshot(object).fingerprint();
+
+			VerifiedFileTransfer.Publication publication = VerifiedFileTransfer.linkAtomicResult(object, projection, size, hash, cache, sources, true);
+
+			assertTrue(publication.changed());
+			assertNotNull(publication.fingerprint());
+			assertEquals(before.size(), publication.fingerprint().size());
+			assertEquals(before.lastModifiedNanos(), publication.fingerprint().lastModifiedNanos());
+			assertEquals(before.fileKey(), publication.fingerprint().fileKey());
+			cache.overwriteCacheBatch(Map.of(projection, hash), Map.of(projection, publication.fingerprint()), Set.of(projection));
+			assertTrue(cache.matchesImmutable(projection, size, hash), "a record seeded from the link's source fingerprint answers the published name");
+		}
+	}
+
+	@Test
+	void aTargetTheCallerBelievedAbsentIsStillReplaced() throws Exception {
+		Path object = Files.writeString(tempDir.resolve("object"), "published-bytes", StandardCharsets.UTF_8);
+		Path mods = Files.createDirectories(tempDir.resolve("mods"));
+		Path projection = Files.writeString(mods.resolve("file.jar"), "appeared-anyway", StandardCharsets.UTF_8);
+		String hash = HashUtils.getHash(object);
+		long size = Files.size(object);
+		try (FileCache cache = FileCache.open(tempDir.resolve("file-cache"))) {
+			VerifiedFileTransfer.Publication publication = VerifiedFileTransfer.linkAtomicResult(object, projection, size, hash, cache, new ValidatedSources(cache), true);
+
+			assertTrue(publication.changed());
+			assertTrue(Files.isSameFile(object, projection), "the unobserved target converges to the verified object");
+			assertEquals(List.of("file.jar"), names(mods));
+		}
+	}
+
+	@Test
+	void projectionLinkPublishesDirectlyAndLeavesNoTemporary() throws Exception {
+		Path object = Files.writeString(tempDir.resolve("object"), "direct-bytes", StandardCharsets.UTF_8);
+		Path mods = Files.createDirectories(tempDir.resolve("mods"));
+		Path projection = mods.resolve("file.jar");
+		String hash = HashUtils.getHash(object);
+		long size = Files.size(object);
+		ImmutableFiles.protect(object);
+		try (FileCache cache = FileCache.open(tempDir.resolve("file-cache"))) {
+			cache.overwriteCache(object, hash);
+			assertTrue(VerifiedFileTransfer.linkAtomic(object, projection, size, hash, cache));
+			assertTrue(Files.isSameFile(object, projection));
+			assertTrue(ImmutableFiles.isProtected(projection), "the direct link keeps the sealed inode policy");
+			assertEquals(List.of("file.jar"), names(mods), "the direct publication creates no temporary to clean up");
+		}
+	}
+
+	@Test
+	void projectionLinkReplacesAStaleTargetWithoutLeavingATemporary() throws Exception {
+		Path object = Files.writeString(tempDir.resolve("object"), "replacement-bytes", StandardCharsets.UTF_8);
+		Path mods = Files.createDirectories(tempDir.resolve("mods"));
+		Path projection = Files.writeString(mods.resolve("file.jar"), "stale-bytes", StandardCharsets.UTF_8);
+		String hash = HashUtils.getHash(object);
+		long size = Files.size(object);
+		try (FileCache cache = FileCache.open(tempDir.resolve("file-cache"))) {
+			cache.overwriteCache(object, hash);
+			assertTrue(VerifiedFileTransfer.linkAtomic(object, projection, size, hash, cache));
+			assertTrue(Files.isSameFile(object, projection));
+			assertEquals(List.of("file.jar"), names(mods), "the replace path moves its temporary instead of probing it afterwards");
+		}
+	}
+
+	@Test
+	void projectionLinkAcrossFileStoresFallsBackToAVerifiedCopy() throws Exception {
+		Path objectDirectory = differentFileStoreDirectory(tempDir);
+		Assumptions.assumeTrue(objectDirectory != null, "requires a writable second filesystem");
+		Path object = objectDirectory.resolve("object");
+		try {
+			Files.writeString(object, "cross-filesystem-bytes", StandardCharsets.UTF_8);
+			Path projection = tempDir.resolve("mods/file.jar");
+			String hash = HashUtils.getHash(object);
+			long size = Files.size(object);
+
+			assertTrue(VerifiedFileTransfer.linkAtomic(object, projection, size, hash, null));
+			assertTrue(FileIntegrity.matches(projection, size, hash));
+			assertTrue(Files.exists(object), "the content-addressed object survives an install that had to copy");
+		} finally {
+			ImmutableFiles.deleteIfExists(object);
+		}
+	}
+
+	private static List<String> names(Path directory) throws IOException {
+		try (var entries = Files.list(directory)) {
+			return entries.map(path -> path.getFileName().toString()).sorted().toList();
 		}
 	}
 

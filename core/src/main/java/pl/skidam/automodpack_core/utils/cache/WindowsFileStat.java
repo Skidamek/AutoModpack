@@ -14,8 +14,9 @@ final class WindowsFileStat {
 	private static final int FILE_ATTRIBUTE_REPARSE_POINT = 0x400;
 	private static final long IO_REPARSE_TAG_SYMLINK = 0xA000000CL;
 	private static final long IO_REPARSE_TAG_DEDUP = 0x80000013L;
-	private static final long IO_REPARSE_TAG_CLOUD = 0x80000000L;
-	private static final long IO_REPARSE_TAG_CLOUD_MASK = 0x0F000000L;
+	private static final long IO_REPARSE_TAG_WOF = 0x80000017L;
+	private static final long IO_REPARSE_TAG_CLOUD = 0x9000001AL;
+	private static final long IO_REPARSE_TAG_CLOUD_MASK = 0x0000F000L;
 
 	record Snapshot(long changeTimeNanos, String fileKey) {}
 
@@ -32,7 +33,9 @@ final class WindowsFileStat {
 
 	/**
 	 * The whole {@link FileCache.StatSnapshot} from the one native stat, or null when the native is unavailable or the file cannot be answered. The classification mirrors
-	 * OpenJDK's {@code WindowsFileAttributes}: a reparse point is a symlink only when its tag says so, and dedup and cloud-placeholder files stay regular files.
+	 * OpenJDK's {@code WindowsFileAttributes}: a reparse point is a symlink only when its tag says so, and dedup, WOF-compressed and cloud-placeholder files stay regular files. A junction
+	 * (mount point) is a redirect that Java does not report as a symbolic link, so it is flagged separately; any other non-benign reparse point is treated the same way,
+	 * because following an unknown redirect is the unsafe default.
 	 */
 	static FileCache.StatSnapshot statSnapshot(Path path) {
 		long[] raw = stat(path);
@@ -44,8 +47,19 @@ final class WindowsFileStat {
 		boolean directory = (raw[6] & FILE_ATTRIBUTE_DIRECTORY) != 0;
 		boolean reparse = (raw[6] & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
 		boolean symbolicLink = reparse && raw[7] == IO_REPARSE_TAG_SYMLINK;
-		boolean regularFile = !symbolicLink && !directory && (raw[6] & FILE_ATTRIBUTE_DEVICE) == 0 && (!reparse || raw[7] == IO_REPARSE_TAG_DEDUP || (raw[7] & ~IO_REPARSE_TAG_CLOUD_MASK) == IO_REPARSE_TAG_CLOUD);
-		return new FileCache.StatSnapshot(lastModified, creation, changeTimeNanos, raw[3], raw[4] + ":" + raw[5], regularFile, symbolicLink);
+		boolean benignReparse = isBenignReparseTag(raw[7]);
+		boolean junction = reparse && !symbolicLink && !benignReparse;
+		boolean regularFile = !symbolicLink && !directory && (raw[6] & FILE_ATTRIBUTE_DEVICE) == 0 && (!reparse || benignReparse);
+		return new FileCache.StatSnapshot(lastModified, creation, changeTimeNanos, raw[3], raw[4] + ":" + raw[5], regularFile, symbolicLink, junction);
+	}
+
+	/**
+	 * Reparse tags that carry compression or placeholder metadata without redirecting the path: dedup, Windows Overlay
+	 * Filter (WOF, what {@code compact.exe} writes) and the cloud-family tags (OneDrive placeholders, identified by
+	 * their masked high bits). Any other tag is treated as a redirect because following an unknown one is unsafe.
+	 */
+	static boolean isBenignReparseTag(long tag) {
+		return tag == IO_REPARSE_TAG_DEDUP || tag == IO_REPARSE_TAG_WOF || (tag & ~IO_REPARSE_TAG_CLOUD_MASK) == IO_REPARSE_TAG_CLOUD;
 	}
 
 	private static long[] stat(Path path) {

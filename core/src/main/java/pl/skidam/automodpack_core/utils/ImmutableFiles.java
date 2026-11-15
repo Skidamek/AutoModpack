@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.utils;
 
 import java.io.IOException;
+import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.FileChannel;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.FileStore;
@@ -14,6 +15,7 @@ import java.nio.file.attribute.AclEntryType;
 import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.DosFileAttributeView;
 import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -38,12 +40,68 @@ public final class ImmutableFiles {
 
 	private ImmutableFiles() {}
 
+	/** A durability barrier reported failure; reopening and forcing again cannot prove those bytes durable. */
+	public static final class ForceFailedException extends IOException {
+		private ForceFailedException(Path file, IOException cause) {
+			super("Failed to force immutable file: " + file, cause);
+		}
+	}
+
+	/** Keep pre-call interruptions distinguishable from errors reported by the force invocation itself. */
+	static void force(FileChannel channel, Path file) throws IOException {
+		if (Thread.currentThread().isInterrupted()) throw new ClosedByInterruptException();
+		try {
+			channel.force(true);
+		} catch (IOException failure) {
+			throw new ForceFailedException(file, failure);
+		}
+	}
+
+	/** Close errors are also final, including when try-with-resources suppresses one behind a protection error. */
+	private static final class ForceChannel implements AutoCloseable {
+		private final Path file;
+		private final FileChannel channel;
+		ForceChannel(Path file) throws IOException {
+			this.file = file;
+			this.channel = openWritable(file);
+		}
+
+		void force() throws IOException {
+			ImmutableFiles.force(channel, file);
+		}
+
+		@Override
+		public void close() throws IOException {
+			try {
+				channel.close();
+			} catch (IOException failure) {
+				throw new ForceFailedException(file, failure);
+			}
+		}
+	}
+
 	public static void protect(Path file) throws IOException {
-		Path normalized = requireRegular(file);
-		// A sealed file needs no probe or FileStore lookup; this is the common case for an already-published object.
-		if (isProtected(normalized)) return;
+		Path normalized = file.toAbsolutePath().normalize();
+		// The common case is an object this process already sealed. One POSIX stat answers regular/symlink/read-only
+		// together; the slow path below re-validates and applies the policy only when it cannot answer.
+		if (isSealedByAttributes(normalized)) return;
+		requireRegular(normalized);
 		if (!enforcementWorks(normalized)) return; // the probe already logged this filesystem's verdict once
 		enforceReadOnly(normalized);
+	}
+
+	/** One-stat sealed check for a regular file; false whenever a slower path must decide or report the failure. */
+	private static boolean isSealedByAttributes(Path normalized) {
+		PosixFileAttributeView posix = Files.getFileAttributeView(normalized, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+		if (posix == null) return false;
+		try {
+			PosixFileAttributes attributes = posix.readAttributes();
+			return attributes.isRegularFile() && !attributes.isSymbolicLink() && disjoint(attributes.permissions(), WRITE_PERMISSIONS);
+		} catch (UnsupportedOperationException | IllegalArgumentException e) {
+			return false;
+		} catch (IOException e) {
+			return false; // let the slow path surface the real error (missing file, sharing violation)
+		}
 	}
 
 	/**
@@ -66,8 +124,8 @@ public final class ImmutableFiles {
 	}
 
 	private static void protectAndForceNormalized(Path normalized, boolean enforcementWorks) throws IOException {
-		try (FileChannel channel = openWritable(normalized)) {
-			if (!enforcementWorks || !enforceReadOnly(normalized)) channel.force(true);
+		try (ForceChannel channel = new ForceChannel(normalized)) {
+			if (!enforcementWorks || !enforceReadOnly(normalized)) channel.force();
 		}
 	}
 
@@ -148,13 +206,13 @@ public final class ImmutableFiles {
 		PosixFileAttributeView posix = Files.getFileAttributeView(normalized, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
 		if (posix != null) {
 			if (disjoint(posix.readAttributes().permissions(), WRITE_PERMISSIONS)) return false;
-			try (FileChannel channel = FileChannel.open(normalized, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+			try (ForceChannel channel = new ForceChannel(normalized)) {
 				Set<PosixFilePermission> permissions = EnumSet.noneOf(PosixFilePermission.class);
 				permissions.addAll(posix.readAttributes().permissions());
 				permissions.removeAll(WRITE_PERMISSIONS);
 				posix.setPermissions(permissions);
 				if (!disjoint(posix.readAttributes().permissions(), WRITE_PERMISSIONS)) throw new UnenforceableReadOnlyException("Filesystem did not make immutable file read-only: " + normalized);
-				channel.force(true);
+				channel.force();
 			}
 			return true;
 		}
@@ -163,7 +221,7 @@ public final class ImmutableFiles {
 		if (acl != null) {
 			if (dos != null && dos.readAttributes().isReadOnly()) dos.setReadOnly(false);
 			if (isAclProtected(normalized, acl)) return false;
-			try (FileChannel channel = FileChannel.open(normalized, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+			try (ForceChannel channel = new ForceChannel(normalized)) {
 				AclEntry protection = protectionEntry(normalized);
 				List<AclEntry> entries = new ArrayList<>(acl.getAcl());
 				if (!entries.contains(protection)) {
@@ -171,16 +229,16 @@ public final class ImmutableFiles {
 					acl.setAcl(entries);
 				}
 				if (!isAclProtected(normalized, acl)) throw new UnenforceableReadOnlyException("Filesystem did not protect immutable file ACL: " + normalized);
-				channel.force(true);
+				channel.force();
 			}
 			return true;
 		}
 		if (dos != null) {
 			if (dos.readAttributes().isReadOnly()) return false;
-			try (FileChannel channel = FileChannel.open(normalized, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+			try (ForceChannel channel = new ForceChannel(normalized)) {
 				dos.setReadOnly(true);
 				if (!dos.readAttributes().isReadOnly()) throw new UnenforceableReadOnlyException("Filesystem did not make immutable file read-only: " + normalized);
-				channel.force(true);
+				channel.force();
 			}
 			return true;
 		}

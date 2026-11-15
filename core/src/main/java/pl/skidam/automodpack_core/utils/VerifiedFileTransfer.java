@@ -100,25 +100,78 @@ public final class VerifiedFileTransfer {
 	}
 
 	public static boolean linkAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
-		if (FileIntegrity.matchesObject(targetFile, sourceFile, expectedSize, expectedSha1, cache)) return false;
-		requireValidSource(sourceFile, expectedSize, expectedSha1, cache);
-		ImmutableFiles.protect(sourceFile);
-		Path parent = OsPaths.requirePublishableParent(targetFile, "Target path");
+		return linkAtomic(sourceFile, targetFile, expectedSize, expectedSha1, cache, null);
+	}
+
+	/**
+	 * {@link #linkAtomic} with the calling transaction's already-validated source record. The record is answered from one
+	 * stat while its fingerprint agrees, so the validator, the destination check and the link itself prove the same CAS
+	 * object once instead of three times; a changed fingerprint re-validates and re-protects before any link.
+	 */
+	public static boolean linkAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileCache cache, ValidatedSources sources) throws IOException {
+		return linkAtomicResult(sourceFile, targetFile, expectedSize, expectedSha1, cache, sources, false).changed();
+	}
+
+	/**
+	 * What one {@link #linkAtomicResult} publication did. {@code fingerprint} is the published name's immutable identity
+	 * when the publication was a hard link to the validated source: {@code link()} changes only ctime on the shared inode,
+	 * and the immutable cache tripwire compares size, mtime and file key by design. It is null when the path already
+	 * matched or a copy fallback produced a distinct inode, so the caller measures that name itself.
+	 */
+	public record Publication(boolean changed, FileCache.FileFingerprint fingerprint) {}
+
+	/**
+	 * {@link #linkAtomic} that also reports the published name's fingerprint, and lets a caller that observed the target
+	 * absent skip the destination read. Skipping it never weakens the publication: an existing name still makes the direct
+	 * link fail and takes the replace path, so the target ends at the same verified inode either way.
+	 */
+	public static Publication linkAtomicResult(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileCache cache, ValidatedSources sources,
+			boolean targetKnownAbsent) throws IOException {
+		if (!targetKnownAbsent && FileIntegrity.matchesObject(targetFile, sourceFile, expectedSize, expectedSha1, cache)) return new Publication(false, null);
+		FileCache.FileFingerprint proven = null;
+		if (sources != null) {
+			proven = sources.require(sourceFile, expectedSize, expectedSha1).fingerprint();
+		} else {
+			requireValidSource(sourceFile, expectedSize, expectedSha1, cache);
+			ImmutableFiles.protect(sourceFile);
+		}
+		Path parent = targetFile.toAbsolutePath().normalize().getParent();
+		if (parent == null) throw new IOException("Target path has no parent: " + targetFile);
+		OsPaths.requirePublishableFile(targetFile);
+		// The projection-install case leaves the target absent, and linking straight to its final name is the whole
+		// publication: one link syscall with no temporary, no post-link size stat and no rename. The name is still
+		// published atomically (it either points at the verified, sealed inode or does not exist) and a concurrent
+		// writer that wins the race is converged through the replace path below.
+		if (tryLink(targetFile, sourceFile)) return new Publication(true, proven);
+		Files.createDirectories(parent);
 		Path temporary = parent.resolve("." + targetFile.getFileName() + DurableFiles.TEMPORARY_SUFFIX);
 		Files.deleteIfExists(temporary);
+		boolean published = false;
 		try {
-			try {
-				Files.createLink(temporary, sourceFile);
-			} catch (UnsupportedOperationException | FileSystemException unsupportedLink) {
+			boolean linked = tryLink(temporary, sourceFile);
+			if (!linked) {
 				copyNamedOrHashed(sourceFile, temporary, expectedSize, expectedSha1, cache);
 				FileTrees.forceFile(temporary);
 				ImmutableFiles.protect(temporary);
 			}
-			if (Files.size(temporary) != expectedSize) throw new IOException("Linked file failed size verification: " + temporary);
+			// A hard link is the verified source inode, whose size the caller's source check already proved; a
+			// post-link size stat would only tell the same inode about itself.
 			DurableFiles.replace(temporary, targetFile);
-			return true;
+			published = true;
+			return new Publication(true, linked ? proven : null);
 		} finally {
-			Files.deleteIfExists(temporary);
+			// The rename already moved the temporary on success; probing for it would be one wasted unlink syscall.
+			if (!published) Files.deleteIfExists(temporary);
+		}
+	}
+
+	/** One hard-link attempt; any filesystem refusal, including an existing target, takes the caller's fallback. */
+	private static boolean tryLink(Path link, Path source) throws IOException {
+		try {
+			Files.createLink(link, source);
+			return true;
+		} catch (UnsupportedOperationException | FileSystemException unsupportedLink) {
+			return false;
 		}
 	}
 

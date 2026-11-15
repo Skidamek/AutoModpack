@@ -8,10 +8,12 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
+import java.nio.file.attribute.PosixFilePermission;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
 
@@ -26,11 +28,14 @@ import pl.skidam.automodpack_core.utils.PlatformUtils;
  *
  * <p>
  * Mutable worktree reuse follows Git: {@code ce_match_stat} (size, mtime, ctime, inode) plus
- * {@code is_racy_timestamp} (mtime not older than the record → rehash). Named immutable objects
- * (CAS store) use a narrower tripwire of only size, mtime, and inode, because {@code link()} and
- * {@code chmod()} bump inode ctime on every publication and ctime-only disturb would force full
- * rehashes of multi-gigabyte objects. Both are racy-guarded against a record's {@code validatedAtNanos},
- * a stamp from the filesystem's own clock, so a same-size rewrite within one timestamp tick is rehashed.
+ * {@code is_racy_timestamp} (mtime not older than the record → rehash). Rows the player may edit in
+ * place (a detached pack's projection) add ctime to that racy rule, because on a coarse Windows clock
+ * a same-size rewrite can restore the mtime and keep the change time at the same value. Named
+ * immutable objects (CAS store) use a narrower tripwire of only size, mtime, and inode, because
+ * {@code link()} and {@code chmod()} bump inode ctime on every publication and ctime-only disturb
+ * would force full rehashes of multi-gigabyte objects. Both are racy-guarded against a record's
+ * {@code validatedAtNanos}, a stamp from the filesystem's own clock, so a same-size rewrite within
+ * one timestamp tick is rehashed.
  * </p>
  *
  * <p>
@@ -44,6 +49,14 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 
 	private static final SharedCacheRegistry<FileCache> REGISTRY = new SharedCacheRegistry<>();
 	private static final long UNAVAILABLE_CHANGE_TIME_NANOS = Long.MIN_VALUE;
+	/**
+	 * The exact fields {@link #fusedSnapshot(Map)} consumes. The bare {@code unix:*} view also resolves the owner
+	 * and group names through NSS, which on a machine with a slow user database costs hundreds of microseconds per
+	 * stat; naming the fields keeps it one stat without that lookup.
+	 */
+	private static final String FUSED_ATTRIBUTES = "unix:size,lastModifiedTime,creationTime,ctime,fileKey,isRegularFile,isSymbolicLink";
+	/** The same fused read plus the permissions that answer the read-only policy, for callers that need both from one stat. */
+	private static final String FUSED_ATTRIBUTES_WITH_PERMISSIONS = FUSED_ATTRIBUTES + ",permissions";
 	/** Rewritten by every clock reading; its mtime is the records filesystem's current time. */
 	static final String CLOCK_FILE = ".clock";
 	private volatile long clockStamp = Long.MIN_VALUE;
@@ -113,15 +126,21 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	public record FileFingerprint(long lastModifiedNanos, long creationTimeNanos, long changeTimeNanos, long size, String fileKey) {}
 
 	/**
-	 * One stat for an identity question: every field {@link FileFingerprint} needs plus the regular-file and
-	 * symlink flags the callers reject on. OpenJDK Unix filesystems (macOS included) answer it from a single
-	 * fused {@code "unix:*"} read; filesystems without that view fall back to the split reads, producing
-	 * identical values for an unchanged file.
+	 * One stat for an identity question: every field {@link FileFingerprint} needs plus the regular-file, symlink
+	 * and Windows-junction flags the callers reject on. The junction flag exists because Java reports
+	 * {@code Files.isSymbolicLink} as false for a junction while opening the path still follows its target.
+	 * OpenJDK Unix filesystems (macOS included) answer the rest from a single fused {@code "unix:*"} read;
+	 * filesystems without that view fall back to the split reads, producing identical values for an unchanged file.
 	 */
-	public record StatSnapshot(FileTime lastModifiedTime, FileTime creationTime, long changeTimeNanos, long size, String fileKey, boolean regularFile, boolean symbolicLink) {
+	public record StatSnapshot(FileTime lastModifiedTime, FileTime creationTime, long changeTimeNanos, long size, String fileKey, boolean regularFile, boolean symbolicLink, boolean junction) {
 		/** Whether this is the only kind the cache tracks: a regular file that is not a symbolic link. */
 		public boolean isTrackedRegularFile() {
 			return regularFile && !symbolicLink;
+		}
+
+		/** Whether the path itself is a link-like redirect: a symbolic link everywhere, or a Windows junction/reparse redirect. */
+		public boolean isRedirectingLink() {
+			return symbolicLink || junction;
 		}
 
 		public FileFingerprint fingerprint() {
@@ -141,7 +160,18 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 
 	/** Git worktree identity. Named CAS objects use {@link #matchesImmutable}. */
 	public String getOrComputeHash(Path file) throws IOException {
-		return getOrComputeHashWithFingerprint(file.toAbsolutePath().normalize(), statSnapshot(file).fingerprint());
+		return getOrComputeHashWithFingerprint(file.toAbsolutePath().normalize(), statSnapshot(file).fingerprint(), false);
+	}
+
+	/**
+	 * Identity of a worktree row the player may edit in place, such as a detached pack's projection. It uses the same
+	 * stat tripwire as {@link #getOrComputeHash(Path)} but also treats the change time as racy: on a coarse Windows
+	 * clock a same-size rewrite that restores the mtime can keep the whole fingerprint, and only ctime can tell that the
+	 * proof predates the write. This is deliberately not the default: {@code link()}/{@code chmod()} move ctime on files
+	 * whose bytes cannot change, and charging every such row a rehash would undo the named tripwire.
+	 */
+	public String getOrComputeHashEditable(Path file) throws IOException {
+		return getOrComputeHashWithFingerprint(file.toAbsolutePath().normalize(), statSnapshot(file).fingerprint(), true);
 	}
 
 	/** Full-read identity for explicit fsck. Hot paths use {@link #getOrComputeHash(Path)}. */
@@ -157,17 +187,38 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		}
 	}
 
-	private String getOrComputeHashWithFingerprint(Path file, FileFingerprint fingerprint) {
+	/**
+	 * Identity of a managed pack row: the hash of this path while its size, mtime and file key still name the record.
+	 * Unlike {@link #getOrComputeHash(Path)} a ctime-only disturbance does not force a rehash or a record rewrite:
+	 * {@code link()} and {@code chmod()} bump ctime on every publication of an immutable file, which is exactly what the
+	 * named tripwire exists to ignore. A content write changes size or mtime (and usually the inode), and still rehashes.
+	 */
+	public String getOrComputeHashImmutable(Path file) throws IOException {
+		Path absPath = file.toAbsolutePath().normalize();
+		StatSnapshot snapshot = statSnapshot(absPath);
+		if (!snapshot.isTrackedRegularFile()) throw new IOException("Cannot hash a non-regular file without following links: " + absPath);
+		String pathKey = absPath.toString();
+		synchronized (lock(pathKey)) {
+			FileFingerprint fingerprint = snapshot.fingerprint();
+			CachedFile cached = readRecord(pathKey, CachedFile.class);
+			if (immutableStatsMatch(cached, fingerprint) && !isRacyTimestamp(cached, fingerprint)) return cached.contentHash();
+			ComputedHash computed = computeStableHash(absPath, fingerprint);
+			if (computed == null) throw new IOException("Cannot obtain a stable hash for file: " + absPath);
+			return publishComputed(pathKey, computed, FileCache::immutableStatsMatch, false);
+		}
+	}
+
+	private String getOrComputeHashWithFingerprint(Path file, FileFingerprint fingerprint, boolean editable) {
 		Path absPath = file.toAbsolutePath().normalize();
 		String pathKey = absPath.toString();
 		synchronized (lock(pathKey)) {
 			CachedFile cached = readRecord(pathKey, CachedFile.class);
-			if (isCacheValid(cached, fingerprint)) return cached.contentHash();
+			if (isCacheValid(cached, fingerprint, editable)) return cached.contentHash();
 
 			ComputedHash computed = computeStableHash(absPath, fingerprint);
 			if (computed == null) return null;
 
-			return publishComputed(pathKey, computed, FileCache::statsMatch);
+			return publishComputed(pathKey, computed, FileCache::statsMatch, editable);
 		}
 	}
 
@@ -175,16 +226,22 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	 * Records a stable hash. A re-proof that leaves the hash and everything {@code tripwire} compares unchanged only
 	 * refreshes the warm record's stamp, unless the re-proof settles a record that was racy against its own stat: that one
 	 * is persisted again, so bytes proven in the same tick they were written are not fully rehashed after every restart,
-	 * while a proof that is still racy (an mtime ahead of the records clock) never rewrites the record on every ask.
+	 * while a proof that is still racy (a timestamp ahead of the records clock) never rewrites the record on every ask.
+	 * A proof of an editable worktree row is racy against the newest of mtime and ctime; an immutable object is racy
+	 * against mtime only, because publication itself (link/chmod) moves ctime without changing bytes.
 	 */
-	private String publishComputed(String pathKey, ComputedHash computed, BiPredicate<CachedFile, FileFingerprint> tripwire) {
+	private String publishComputed(String pathKey, ComputedHash computed, BiPredicate<CachedFile, FileFingerprint> tripwire, boolean editable) {
 		FileFingerprint stableFingerprint = computed.fingerprint();
 		CachedFile previous = hotRecords.get(pathKey);
 		boolean sameHash = previous != null && Objects.equals(previous.contentHash(), computed.hash());
+		long racyReference = editable ? newestTimestampNanos(stableFingerprint) : stableFingerprint.lastModifiedNanos();
 		CachedFile record = new CachedFile(pathKey, computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.changeTimeNanos(), stableFingerprint.size(),
-				stableFingerprint.fileKey(), validatedAt(stableFingerprint.lastModifiedNanos()), sameHash ? previous.murmur() : null);
-		if (sameHash && tripwire.test(previous, stableFingerprint) && (!isRacyTimestamp(previous, stableFingerprint) || isRacyTimestamp(record, stableFingerprint))) hotRecords.put(pathKey, record);
-		else writeRecord(pathKey, record);
+				stableFingerprint.fileKey(), validatedAt(racyReference), sameHash ? previous.murmur() : null);
+		if (sameHash && tripwire.test(previous, stableFingerprint)
+				&& (!isRacy(previous, stableFingerprint, editable) || isRacy(record, stableFingerprint, editable)))
+			hotRecords.put(pathKey, record);
+		else
+			writeRecord(pathKey, record);
 		return computed.hash();
 	}
 
@@ -212,7 +269,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 			FileFingerprint fingerprint = statSnapshot(absPath).fingerprint();
 			CachedFile cached = readRecord(pathKey, CachedFile.class);
 			if (!statsMatch(cached, fingerprint)) {
-				getOrComputeHashWithFingerprint(absPath, fingerprint);
+				getOrComputeHashWithFingerprint(absPath, fingerprint, false);
 				cached = readRecord(pathKey, CachedFile.class);
 				if (!statsMatch(cached, statSnapshot(absPath).fingerprint()))
 					throw new IOException("Cannot obtain a stable hash record for murmur: " + absPath);
@@ -253,7 +310,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 			FileFingerprint fingerprint = snapshot.fingerprint();
 			if (immutableStatsMatch(cached, fingerprint) && !isRacyTimestamp(cached, fingerprint)) return sha1.equalsIgnoreCase(cached.contentHash());
 			ComputedHash computed = computeStableHash(absPath, fingerprint);
-			return computed != null && sha1.equalsIgnoreCase(publishComputed(pathKey, computed, FileCache::immutableStatsMatch));
+			return computed != null && sha1.equalsIgnoreCase(publishComputed(pathKey, computed, FileCache::immutableStatsMatch, false));
 		}
 	}
 
@@ -273,7 +330,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 
 	private static StatSnapshot snapshot(Path path, BasicFileAttributes attributes, WindowsFileStat.Snapshot nativeStat) {
 		return new StatSnapshot(attributes.lastModifiedTime(), attributes.creationTime(), nativeStat != null ? nativeStat.changeTimeNanos() : unixChangeTimeNanos(path), attributes.size(),
-				nativeStat != null ? nativeStat.fileKey() : keyString(attributes), attributes.isRegularFile(), attributes.isSymbolicLink());
+				nativeStat != null ? nativeStat.fileKey() : keyString(attributes), attributes.isRegularFile(), attributes.isSymbolicLink(), false);
 	}
 
 	/**
@@ -289,7 +346,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 			return splitSnapshot(path);
 		}
 		try {
-			StatSnapshot fused = fusedSnapshot(Files.readAttributes(path, "unix:*", LinkOption.NOFOLLOW_LINKS));
+			StatSnapshot fused = fusedSnapshot(Files.readAttributes(path, FUSED_ATTRIBUTES, LinkOption.NOFOLLOW_LINKS));
 			if (fused != null) return fused;
 		} catch (UnsupportedOperationException | IllegalArgumentException e) {
 			// No fused unix view on this filesystem (foreign providers, odd mounts): the split reads answer identically.
@@ -297,8 +354,33 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		return splitSnapshot(path);
 	}
 
-	private static StatSnapshot splitSnapshot(Path path) throws IOException {
+	static StatSnapshot splitSnapshot(Path path) throws IOException {
 		return snapshot(path, Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS), WindowsFileStat.read(path));
+	}
+
+	/** A fingerprint and its read-only verdict from one stat. */
+	public record SealedSnapshot(StatSnapshot snapshot, boolean sealed) {}
+
+	/**
+	 * One stat answering both the cache fingerprint and whether the file carries the per-inode read-only policy, for a
+	 * caller that would otherwise pay a second stat to decide whether protection is still owed. Unix filesystems answer
+	 * the fused view including permissions; everywhere else this returns null and the caller uses the two separate reads.
+	 */
+	public static SealedSnapshot statSnapshotAndSealed(Path path) {
+		if (PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS) return null;
+		try {
+			Map<String, Object> attributes = Files.readAttributes(path, FUSED_ATTRIBUTES_WITH_PERMISSIONS, LinkOption.NOFOLLOW_LINKS);
+			StatSnapshot snapshot = fusedSnapshot(attributes);
+			if (snapshot == null || !(attributes.get("permissions") instanceof Set<?> permissions)) return null;
+			boolean writable = permissions.contains(PosixFilePermission.OWNER_WRITE) || permissions.contains(PosixFilePermission.GROUP_WRITE)
+					|| permissions.contains(PosixFilePermission.OTHERS_WRITE);
+			return new SealedSnapshot(snapshot, !writable);
+		} catch (UnsupportedOperationException | IllegalArgumentException e) {
+			// No fused unix view carrying permissions on this provider: the caller falls back to snapshot + isProtected.
+			return null;
+		} catch (IOException e) {
+			return null;
+		}
 	}
 
 	/** Parses the fused read; null whenever a field is missing or mistyped, so the caller falls back to the split reads. */
@@ -310,7 +392,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 				|| !(attributes.get("isSymbolicLink") instanceof Boolean symbolicLink))
 			return null;
 		Object key = attributes.get("fileKey");
-		return new StatSnapshot(lastModifiedTime, creationTime, toNanos(changeTime), size, key == null ? null : key.toString(), regularFile, symbolicLink);
+		return new StatSnapshot(lastModifiedTime, creationTime, toNanos(changeTime), size, key == null ? null : key.toString(), regularFile, symbolicLink, false);
 	}
 
 	private static FileTime fileTime(Map<String, Object> attributes, String name) {
@@ -387,7 +469,11 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	}
 
 	static boolean isCacheValid(CachedFile cached, FileFingerprint fingerprint) {
-		return statsMatch(cached, fingerprint) && !isRacyTimestamp(cached, fingerprint);
+		return isCacheValid(cached, fingerprint, false);
+	}
+
+	static boolean isCacheValid(CachedFile cached, FileFingerprint fingerprint, boolean editable) {
+		return statsMatch(cached, fingerprint) && !isRacy(cached, fingerprint, editable);
 	}
 
 	/** Git {@code ce_match_stat}: size, mtime, ctime, creation time, and inode/file key. An unknown key (null) matches only another unknown. */
@@ -408,12 +494,31 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	}
 
 	/**
-	 * Git {@code is_racy_timestamp}: the file's mtime is not strictly older than the filesystem-clock stamp of its proof,
-	 * so a same-size rewrite in the same tick could share every stat field. Both tripwires then rehash; a racily-clean
-	 * stat is not tamper.
+	 * Git {@code is_racy_timestamp} for the named-object tripwire: the file's mtime is not strictly older than the
+	 * filesystem-clock stamp of its proof, so a same-size rewrite in the same tick could share every stat field.
+	 * A racily-clean stat is not tamper; it just pays one rehash. This tripwire ignores ctime by design.
 	 */
 	private static boolean isRacyTimestamp(CachedFile cached, FileFingerprint fingerprint) {
 		return fingerprint.lastModifiedNanos() >= cached.validatedAtNanos();
+	}
+
+	/**
+	 * Git {@code is_racy_timestamp} for a worktree file, where the writer may restore the mtime: a same-tick rewrite can
+	 * share the whole fingerprint only if both timestamps are unchanged, so the newest of mtime and ctime is compared
+	 * with the proof's clock stamp. On coarse Windows clocks this is what closes the same-tick, same-size rewrite. A
+	 * filesystem that cannot report a change time cannot disprove that rewrite, so it rehashes instead of trusting.
+	 */
+	private static boolean isRacyWorktree(CachedFile cached, FileFingerprint fingerprint) {
+		if (fingerprint.changeTimeNanos() == UNAVAILABLE_CHANGE_TIME_NANOS) return true;
+		return newestTimestampNanos(fingerprint) >= cached.validatedAtNanos();
+	}
+
+	private static long newestTimestampNanos(FileFingerprint fingerprint) {
+		return Math.max(fingerprint.lastModifiedNanos(), fingerprint.changeTimeNanos());
+	}
+
+	private static boolean isRacy(CachedFile cached, FileFingerprint fingerprint, boolean worktree) {
+		return worktree ? isRacyWorktree(cached, fingerprint) : isRacyTimestamp(cached, fingerprint);
 	}
 
 	public String getHashOrNull(Path path) {
@@ -427,7 +532,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 
 	/** Snapshot-carrying twin of {@link #getHashOrNull(Path)}: the identity question is answered from the snapshot's single stat. */
 	public String getHashOrNull(Path path, StatSnapshot snapshot) {
-		return getOrComputeHashWithFingerprint(path.toAbsolutePath().normalize(), snapshot.fingerprint());
+		return getOrComputeHashWithFingerprint(path.toAbsolutePath().normalize(), snapshot.fingerprint(), false);
 	}
 
 	// Use only if you are SURE of the file state!
@@ -448,16 +553,28 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		}
 	}
 
-	/** Seeds many known hashes in one batch file instead of one atomic rename per path. */
+	/**
+	 * Publishes one batch of hash records. {@code knownFingerprints} carries the names whose immutable identity the
+	 * caller has already proved: a hard link shares size, mtime and file key with its validated source, and {@code link()}
+	 * moves only ctime, which the immutable tripwire ignores by design. Those names are not statted again.
+	 * {@code noPreviousRecord} names paths that held nothing when the caller observed the tree; there is no earlier record
+	 * whose murmur could be preserved, so the lookup that would only miss is skipped. Both are facts of the same run under
+	 * the mutation lock, not durable assumptions; any path not named falls back to the stat and previous-record lookup.
+	 */
 	public void overwriteCacheBatch(Map<Path, String> files) throws IOException {
+		overwriteCacheBatch(files, Map.of(), Set.of());
+	}
+
+	public void overwriteCacheBatch(Map<Path, String> files, Map<Path, FileFingerprint> knownFingerprints, Set<Path> noPreviousRecord) throws IOException {
 		if (files.isEmpty()) return;
 		Map<String, CachedFile> records = new LinkedHashMap<>(files.size());
 		for (Map.Entry<Path, String> entry : files.entrySet()) {
 			Path absPath = entry.getKey().toAbsolutePath().normalize();
-			FileFingerprint fingerprint = statSnapshot(absPath).fingerprint();
+			FileFingerprint known = knownFingerprints.get(absPath);
+			FileFingerprint fingerprint = known != null ? known : statSnapshot(absPath).fingerprint();
 			String pathKey = absPath.toString();
 			synchronized (lock(pathKey)) {
-				CachedFile previous = readRecord(pathKey, CachedFile.class);
+				CachedFile previous = noPreviousRecord.contains(absPath) ? null : readRecord(pathKey, CachedFile.class);
 				String storedMurmur = previous != null && Objects.equals(previous.contentHash(), entry.getValue()) ? previous.murmur() : null;
 				records.put(pathKey, new CachedFile(pathKey, entry.getValue(), fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(),
 						fingerprint.fileKey(), validatedAt(fingerprint.lastModifiedNanos()), storedMurmur));

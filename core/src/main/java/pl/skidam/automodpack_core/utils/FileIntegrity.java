@@ -43,7 +43,7 @@ public final class FileIntegrity {
 		}
 	}
 
-	private static boolean matches(Path file, long expectedSize, String expectedSha1, FileCache cache, FileCache.StatSnapshot snapshot) {
+	static boolean matches(Path file, long expectedSize, String expectedSha1, FileCache cache, FileCache.StatSnapshot snapshot) {
 		if (!snapshot.isTrackedRegularFile() || snapshot.size() != expectedSize) return false;
 		String hash = identityHash(file, cache, snapshot);
 		return hash != null && expectedSha1.equalsIgnoreCase(hash);
@@ -122,7 +122,7 @@ public final class FileIntegrity {
 		}
 	}
 
-	private static boolean matchesNamed(Path file, long expectedSize, String expectedSha1, FileCache cache, FileCache.StatSnapshot snapshot) {
+	static boolean matchesNamed(Path file, long expectedSize, String expectedSha1, FileCache cache, FileCache.StatSnapshot snapshot) {
 		if (!HashUtils.isSha1(expectedSha1)) return false;
 		if (!snapshot.isTrackedRegularFile() || snapshot.size() != expectedSize) return false;
 		if (cache == null) return true;
