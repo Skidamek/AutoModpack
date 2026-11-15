@@ -8,7 +8,8 @@ import pl.skidam.automodpack_core.AutoModpack;
 import pl.skidam.automodpack_core.Environment;
 
 /*? if forge {*/
-/*import pl.skidam.automodpack.client.ScreenImpl;
+/*import pl.skidam.automodpack.client.ForgeClientConfig;
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.modpack.Commands;
 import pl.skidam.automodpack.networking.ModPackets;
@@ -38,6 +39,7 @@ public class ForgeInit {
 			ScreenManager.install(new ScreenImpl());
 			ModPackets.registerC2SPackets();
 			new AudioManager();
+			ForgeClientConfig.register();
 		}
 
 

@@ -18,6 +18,9 @@
   "entrypoints": {
     "main": [
       "pl.skidam.automodpack.init.FabricInit::onInitialize"
+    ],
+    "modmenu": [
+      "pl.skidam.automodpack.client.ModMenuIntegration"
     ]
   },
   "mixins": [
@@ -27,5 +30,8 @@
   "depends": {
     "fabricloader": ">=0.16.1",
     "minecraft": "${minecraft}"
+  },
+  "suggests": {
+    "modmenu": "*"
   }
 }

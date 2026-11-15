@@ -11,6 +11,7 @@ import pl.skidam.automodpack_core.Environment;
 /*/^? if >1.20.5 {^/
 import net.neoforged.fml.common.EventBusSubscriber;
 /^?}^/
+import pl.skidam.automodpack.client.NeoForgeClientConfig;
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.modpack.Commands;
@@ -40,6 +41,7 @@ public class NeoForgeInit {
 			ScreenManager.install(new ScreenImpl());
 			ModPackets.registerC2SPackets();
 			new AudioManager();
+			NeoForgeClientConfig.register();
 		}
 
 

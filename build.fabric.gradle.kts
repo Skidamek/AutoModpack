@@ -31,6 +31,7 @@ repositories {
 		name = "mcholepunchLibs"
 		dirs(rootProject.file("libs"))
 	}
+	maven("https://maven.terraformersmc.com/releases/") { name = "Terraformers" }
 }
 
 dependencies {
@@ -45,6 +46,7 @@ dependencies {
 	}
 
 	modImplementation("net.fabricmc:fabric-loader:$fabricLoaderVersion")
+	modCompileOnly("com.terraformersmc:modmenu:${property("deps.modmenu")}") { isTransitive = false }
 }
 
 java {
