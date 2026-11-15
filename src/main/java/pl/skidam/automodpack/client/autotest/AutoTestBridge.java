@@ -295,27 +295,48 @@ public final class AutoTestBridge {
 		try {
 			return captured.get(SCREENSHOT_SETTLE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 		} catch (TimeoutException e) {
-			PendingScreenshot pending = PENDING_SCREENSHOT.get();
-			if (pending != null && pending.captured() == captured && PENDING_SCREENSHOT.compareAndSet(pending, null)) pending.logTimeout();
+			abandonScreenshot(captured, path);
 			throw new IOException("screenshot did not settle within " + SCREENSHOT_SETTLE_TIMEOUT_SECONDS + " seconds", e);
 		}
 	}
 
+	private static void abandonScreenshot(CompletableFuture<String> captured, Path path) {
+		captured.completeExceptionally(new IOException("screenshot did not settle within " + SCREENSHOT_SETTLE_TIMEOUT_SECONDS + " seconds"));
+		PendingScreenshot pending = PENDING_SCREENSHOT.get();
+		if (pending != null && pending.captured() == captured && PENDING_SCREENSHOT.compareAndSet(pending, null)) pending.logTimeout();
+		else LOGGER.error("AutoModpack autotest screenshot {} did not settle: capture was not pending on the render thread", path.getFileName());
+	}
+
 	private static void queueScreenshot(CompletableFuture<String> captured, Path path) {
+		if (captured.isDone()) return;
 		Screen targetScreen = currentScreen();
 		if (targetScreen == null) {
 			LOGGER.error("AutoModpack autotest screenshot {} rejected: there is no active screen", path.getFileName());
 			captured.completeExceptionally(new IOException("cannot capture a screenshot without an active screen"));
 			return;
 		}
-		if (!PENDING_SCREENSHOT.compareAndSet(null, new PendingScreenshot(captured, path, targetScreen))) {
-			captured.completeExceptionally(new IOException("another screenshot is already pending"));
+		if (!claimPendingSlot(new PendingScreenshot(captured, path, targetScreen))) captured.completeExceptionally(new IOException("another screenshot is already pending"));
+	}
+
+	private static boolean claimPendingSlot(PendingScreenshot next) {
+		CompletableFuture<String> captured = next.captured();
+		while (!captured.isDone()) {
+			PendingScreenshot existing = PENDING_SCREENSHOT.get();
+			if (existing != null && !existing.captured().isDone()) return false;
+			if (!PENDING_SCREENSHOT.compareAndSet(existing, next)) continue;
+			if (captured.isDone()) PENDING_SCREENSHOT.compareAndSet(next, null);
+			return true;
 		}
+		return true;
 	}
 
 	public static void onFrameRendered() {
 		PendingScreenshot pending = PENDING_SCREENSHOT.get();
 		if (pending == null) return;
+		if (pending.captured().isDone()) {
+			PENDING_SCREENSHOT.compareAndSet(pending, null);
+			return;
+		}
 		ScreenshotSettler.Frame frame = captureFrame();
 		ScreenshotSettler.Observation observation = pending.observe(frame);
 		if (observation == ScreenshotSettler.Observation.WAIT) return;
@@ -401,6 +422,7 @@ public final class AutoTestBridge {
 
 	private static void completeScreenshot(CompletableFuture<String> captured, Path path, NativeImage source) {
 		try (source) {
+			if (captured.isDone()) return;
 			BufferedImage image = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
 			image.setRGB(0, 0, source.getWidth(), source.getHeight(), source.makePixelArray(), 0, source.getWidth());
 			if (!ImageIO.write(image, "png", path.toFile())) throw new IOException("Java PNG encoder is unavailable");
