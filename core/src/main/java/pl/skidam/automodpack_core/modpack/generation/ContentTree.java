@@ -3,12 +3,14 @@ package pl.skidam.automodpack_core.modpack.generation;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.WeakHashMap;
 import java.util.function.BiConsumer;
 
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -18,6 +20,12 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 public record ContentTree(NavigableMap<String, NavigableSet<ContentFile>> files) {
 	private static final String TOKEN_DOMAIN = "automodpack-content-v1";
 	private static final NavigableSet<ContentFile> NO_FILES = Collections.unmodifiableNavigableSet(new TreeSet<>());
+	/**
+	 * Built once per immutable manifest instance. A parsed manifest is validated once and then asked for its tree at
+	 * the pointer gate, at document construction, and at every resolution; the record is immutable, so the same
+	 * answer is the only possible one. Keyed weakly so discarded revisions do not stay resident.
+	 */
+	private static final Map<GroupManifest, ContentTree> TREES = Collections.synchronizedMap(new WeakHashMap<>());
 
 	public ContentTree {
 		TreeMap<String, NavigableSet<ContentFile>> copy = new TreeMap<>();
@@ -97,6 +105,15 @@ public record ContentTree(NavigableMap<String, NavigableSet<ContentFile>> files)
 
 	public static ContentTree fromManifest(GroupManifest manifest) {
 		Objects.requireNonNull(manifest, "manifest");
+		ContentTree hit = TREES.get(manifest);
+		if (hit != null) return hit;
+		ContentTree tree = build(manifest);
+		if (TREES.size() >= 64) TREES.clear();
+		TREES.put(manifest, tree);
+		return tree;
+	}
+
+	private static ContentTree build(GroupManifest manifest) {
 		Builder builder = builder();
 		for (var group : manifest.groups().entrySet()) {
 			for (var file : group.getValue().files().entrySet()) builder.add(file.getKey(), new ContentFile(file.getValue().sha1(), file.getValue().size()));

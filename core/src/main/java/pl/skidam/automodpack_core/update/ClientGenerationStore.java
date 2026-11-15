@@ -1,11 +1,15 @@
 package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -169,14 +173,31 @@ public final class ClientGenerationStore {
 
 	/** The active pack's document: active-state identity and ledger, its mirror entry, and its policy document from the CAS. */
 	public Optional<PackDocument> activeDocument() throws IOException {
-		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-		return state == null ? Optional.empty() : Optional.of(document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger)));
+		ActivePackPointer.Snapshot snapshot = storage.readActiveStateSnapshot();
+		return snapshot.state() == null ? Optional.empty() : Optional.of(activeDocument(snapshot));
 	}
 
 	/** The active pack's document, refused when the active pack is not {@code modpackId}, as {@link #hosting(String)} refuses. */
 	public PackDocument activeDocument(String modpackId) throws IOException {
-		ClientStorageJsons.ClientGenerationStateFields state = requireActive(modpackId);
-		return document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger));
+		ActivePackPointer.Snapshot snapshot = storage.readActiveStateSnapshot();
+		ClientStorageJsons.ClientGenerationStateFields state = snapshot.state();
+		if (state == null || state.modpackId == null || state.modpackId.isBlank()) throw new IOException("No active modpack is selected");
+		if (!state.modpackId.equals(ModpackId.requireValid(modpackId)))
+			throw new IOException("The active modpack is " + state.modpackId + ", not the shared " + modpackId);
+		return activeDocument(snapshot);
+	}
+
+	/** One build per pointer revision: a commit asks for the active document at its validation gate and again while resolving the target. */
+	private PackDocument activeDocument(ActivePackPointer.Snapshot snapshot) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = Objects.requireNonNull(snapshot.state(), "active state");
+		Path memoKey = storage.clientDirectory().toAbsolutePath().normalize();
+		if (snapshot.fingerprint() != null) {
+			ActiveDocumentMemo memo = ACTIVE_DOCUMENT_MEMOS.get(memoKey);
+			if (memo != null && memo.revision() == snapshot.revision() && memo.fingerprint().equals(snapshot.fingerprint())) return memo.document();
+		}
+		PackDocument document = document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger), state.manifest, state.manifestSha1);
+		if (snapshot.fingerprint() != null) ACTIVE_DOCUMENT_MEMOS.put(memoKey, new ActiveDocumentMemo(snapshot.fingerprint(), snapshot.revision(), document));
+		return document;
 	}
 
 	/** Whether an active pack pointer exists; {@link #hosting(String)} resolves the rest. */
@@ -220,17 +241,44 @@ public final class ClientGenerationStore {
 	/** Reconstructs the active target from the active document and the persisted selection intent, without server access. */
 	public Optional<SelectedModpackTarget> readActiveTarget(ClientPlatform platform) throws IOException {
 		Objects.requireNonNull(platform, "platform");
-		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-		if (state == null) return Optional.empty();
-		return Optional.of(resolveActive(state, platform));
+		return activeTarget(storage.readActiveStateSnapshot(), platform);
 	}
 
 	/** Same, resolving under the applied selection's own platform: the exact platform the selection last committed under. */
 	public Optional<SelectedModpackTarget> readActiveTarget() throws IOException {
-		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+		ActivePackPointer.Snapshot snapshot = storage.readActiveStateSnapshot();
+		ClientStorageJsons.ClientGenerationStateFields state = snapshot.state();
 		if (state == null) return Optional.empty();
-		ClientPlatform platform = ClientPlatform.effective(appliedSelection(state.modpackId).orElse(null));
-		return Optional.of(resolveActive(state, platform));
+		ClientPlatform platform = ClientPlatform.effective(appliedSelection(state, state.modpackId).orElse(null));
+		return activeTarget(snapshot, platform);
+	}
+
+	private Optional<SelectedModpackTarget> activeTarget(ActivePackPointer.Snapshot snapshot, ClientPlatform platform) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = snapshot.state();
+		if (state == null) return Optional.empty();
+		// A pointer that does not record its own selection falls back to the selection store, which may move without
+		// rewriting the pointer; only self-contained pointers are safe to memoize by file identity.
+		boolean memoizable = snapshot.fingerprint() != null && state.selectedGroups != null;
+		Path memoKey = storage.clientDirectory().toAbsolutePath().normalize();
+		if (memoizable) {
+			ActiveTargetMemo memo = ACTIVE_TARGET_MEMOS.get(memoKey);
+			if (memo != null && memo.revision() == snapshot.revision() && memo.fingerprint().equals(snapshot.fingerprint())) {
+				SelectedModpackTarget hit = memo.byPlatform().get(platform.id());
+				if (hit != null) return Optional.of(hit);
+			}
+		}
+		SelectedModpackTarget target = resolveActive(snapshot, platform);
+		if (memoizable) {
+			ACTIVE_TARGET_MEMOS.compute(memoKey, (ignored, memo) -> {
+				Map<String, SelectedModpackTarget> byPlatform = memo != null && memo.revision() == snapshot.revision() && memo.fingerprint().equals(snapshot.fingerprint())
+						? memo.byPlatform()
+						: Map.of();
+				HashMap<String, SelectedModpackTarget> updated = new HashMap<>(byPlatform);
+				updated.put(platform.id(), target);
+				return new ActiveTargetMemo(snapshot.fingerprint(), snapshot.revision(), Map.copyOf(updated));
+			});
+		}
+		return Optional.of(target);
 	}
 
 	/**
@@ -239,18 +287,22 @@ public final class ClientGenerationStore {
 	 * store, which was the applied record before the two meanings split.
 	 */
 	public Optional<SelectionIntent> appliedSelection(String modpackId) throws IOException {
+		return appliedSelection(storage.readActiveState(), modpackId);
+	}
+
+	private Optional<SelectionIntent> appliedSelection(ClientStorageJsons.ClientGenerationStateFields state, String modpackId) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
-		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null || !normalizedModpackId.equals(state.modpackId)) return Optional.empty();
 		if (state.selectedGroups == null) return new ClientSelectionStore(storage.selectionFile()).get(normalizedModpackId);
 		return Optional.of(new SelectionIntent(state.selectedGroups, state.selectedCategories, state.excludedGroups,
 				state.selectedPlatform == null ? null : ClientPlatform.parse(state.selectedPlatform)));
 	}
 
-	private SelectedModpackTarget resolveActive(ClientStorageJsons.ClientGenerationStateFields state, ClientPlatform platform) throws IOException {
+	private SelectedModpackTarget resolveActive(ActivePackPointer.Snapshot snapshot, ClientPlatform platform) throws IOException {
 		Objects.requireNonNull(platform, "platform");
-		PackDocument document = document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger), state.manifest, state.manifestSha1);
-		Optional<SelectionIntent> applied = appliedSelection(state.modpackId);
+		ClientStorageJsons.ClientGenerationStateFields state = snapshot.state();
+		PackDocument document = activeDocument(snapshot);
+		Optional<SelectionIntent> applied = appliedSelection(state, state.modpackId);
 		return applied.isPresent()
 				? SelectedModpackTarget.prepare(document, null, applied.get(), platform)
 				: SelectedModpackTarget.prepareDefault(document, platform);
@@ -333,6 +385,16 @@ public final class ClientGenerationStore {
 	 */
 	private static final int POLICY_MEMO_CAP = 64;
 	private static final Map<Path, Map<String, GroupManifest>> POLICY_MEMOS = new ConcurrentHashMap<>();
+	/**
+	 * The active target resolved from one pointer revision, per platform. Rebuilding it validates the carried
+	 * manifest, rehashes its file tree, and recomputes the ledger digest; a commit asks for it a dozen times and the
+	 * answer only changes when the pointer does. Keyed by the pointer file identity, so a write by any process misses.
+	 */
+	private static final Map<Path, ActiveTargetMemo> ACTIVE_TARGET_MEMOS = new ConcurrentHashMap<>();
+	private static final Map<Path, ActiveDocumentMemo> ACTIVE_DOCUMENT_MEMOS = new ConcurrentHashMap<>();
+
+	private record ActiveTargetMemo(FileCache.FileFingerprint fingerprint, long revision, Map<String, SelectedModpackTarget> byPlatform) {}
+	private record ActiveDocumentMemo(FileCache.FileFingerprint fingerprint, long revision, PackDocument document) {}
 
 	private void requirePolicyObject(String hash) throws IOException {
 		Path object = storage.objectFile(hash);
@@ -374,6 +436,8 @@ public final class ClientGenerationStore {
 
 	private void forgetModpackLocked(String modpackId) throws IOException {
 		POLICY_MEMOS.remove(storage.clientDirectory().toAbsolutePath().normalize());
+		ACTIVE_TARGET_MEMOS.remove(storage.clientDirectory().toAbsolutePath().normalize());
+		ACTIVE_DOCUMENT_MEMOS.remove(storage.clientDirectory().toAbsolutePath().normalize());
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Cannot forget a modpack while an update transaction is active");
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
@@ -601,11 +665,34 @@ public final class ClientGenerationStore {
 	private void unprotectProjection() throws IOException {
 		Path active = storage.activeDirectory();
 		if (!Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) return;
-		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); var paths = Files.walk(active)) {
-			for (Path file : paths.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).toList()) {
-				breakSharedObjectLink(file, cache);
-				ImmutableFiles.unprotect(file);
-			}
+		if (FileTrees.isRedirectingLink(active)) {
+			LOGGER.warn("Leaving the active projection protected: the managed root is a symbolic link: {}", active);
+			return;
+		}
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			Files.walkFileTree(active, new SimpleFileVisitor<>() {
+				@Override
+				public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
+					// A junction is a directory to Java but opens its target; skipping it keeps every external file out
+					// of the detach, which only ever speaks for files this projection actually owns.
+					if (!directory.equals(active) && FileTrees.isRedirectingLink(directory)) return FileVisitResult.SKIP_SUBTREE;
+					return FileVisitResult.CONTINUE;
+				}
+
+				@Override
+				public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+					if (attributes.isRegularFile()) {
+						breakSharedObjectLink(file, cache);
+						ImmutableFiles.unprotect(file);
+					}
+					return FileVisitResult.CONTINUE;
+				}
+
+				@Override
+				public FileVisitResult visitFileFailed(Path file, IOException failure) {
+					return FileVisitResult.CONTINUE;
+				}
+			});
 		}
 	}
 

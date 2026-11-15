@@ -23,6 +23,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -46,6 +47,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
+import pl.skidam.automodpack_core.utils.PlatformUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 class ClientGenerationStoreTest {
@@ -153,6 +155,23 @@ class ClientGenerationStoreTest {
 		assertEquals(document, target.document());
 		assertNull(target.expectedPriorIntent());
 		assertEquals(Set.of("main"), target.selection().selectedGroups());
+	}
+
+	/** W3: detaching speaks only for the projection's own files, never for a target reached through a junction. */
+	@Test
+	void declaringDetachmentDoesNotUnprotectAFileBehindAJunction() throws Exception {
+		Assumptions.assumeTrue(PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS, "junctions are a Windows reparse-point feature");
+		ClientStorage storage = storage();
+		Path outside = Files.createDirectories(temporaryDirectory.resolve("outside"));
+		Path kept = Files.writeString(outside.resolve("kept.txt"), "outside", StandardCharsets.UTF_8);
+		ImmutableFiles.protect(kept);
+		assertTrue(ImmutableFiles.isProtected(kept));
+		Files.createDirectories(storage.activeDirectory());
+		assertEquals(0, mklinkJunction(storage.activeDirectory().resolve("escape"), outside), "mklink /J should succeed without elevation");
+
+		new ClientGenerationStore(storage).declareDetached(FIRST_PACK);
+
+		assertTrue(ImmutableFiles.isProtected(kept), "a file outside the projection keeps its protection");
 	}
 
 	@Test
@@ -916,5 +935,11 @@ class ClientGenerationStoreTest {
 		Files.createDirectories(destination.getParent());
 		Files.move(temporary, destination, StandardCopyOption.REPLACE_EXISTING);
 		return hash;
+	}
+
+	private static int mklinkJunction(Path link, Path target) throws Exception {
+		Process process = new ProcessBuilder("cmd", "/c", "mklink", "/J", link.toString(), target.toString()).redirectErrorStream(true).start();
+		process.getInputStream().readAllBytes();
+		return process.waitFor();
 	}
 }

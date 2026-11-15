@@ -1,10 +1,15 @@
 package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -16,6 +21,7 @@ import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * The active pack pointer: the one durable answer to what this client runs, and the detach flag that rides on it.
@@ -27,10 +33,24 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * pointer naming one thing while running another.
  */
 final class ActivePackPointer {
+	/** A one-byte sibling used only as a reading of the pointer filesystem's own clock; never durable state. */
+	private static final String CLOCK_SUFFIX = ".clock";
 	private final Path stateFile;
+	private final Path clockFile;
+	private volatile Cached cached;
+	/** Last reading of the pointer filesystem's clock; a parsed state narrower than this cannot be racy against it. */
+	private volatile long clockStamp = Long.MIN_VALUE;
+	/** Bumped on every publication and every successful disk read, so a derived memo never outlives the observation it was built from. */
+	private volatile long revision;
+
+	private record Cached(FileCache.FileFingerprint fingerprint, long validatedAtNanos, ClientStorageJsons.ClientGenerationStateFields state) {}
+
+	/** One coherent read: the parse, the file identity, and the local write generation that produced it. */
+	record Snapshot(FileCache.FileFingerprint fingerprint, long revision, ClientStorageJsons.ClientGenerationStateFields state) {}
 
 	ActivePackPointer(Path stateFile) {
 		this.stateFile = Objects.requireNonNull(stateFile, "state file");
+		this.clockFile = stateFile.resolveSibling("." + stateFile.getFileName() + CLOCK_SUFFIX);
 	}
 
 	/** Why selected and the pointer disagree, or null when the selection may follow the pointer (matching, or no pointer). */
@@ -47,8 +67,75 @@ final class ActivePackPointer {
 		return null;
 	}
 
-	/** The pointer, or null when none was persisted yet. */
+	/**
+	 * The pointer, or null when none was persisted yet. A commit reads it a dozen times, and every read used to
+	 * parse and validate the whole carried manifest and ledger; one stat now answers whether the last parse still
+	 * describes the file. Every publication replaces the file by atomic rename, so a changed inode always fails the
+	 * fingerprint even on a filesystem with a coarse clock.
+	 */
 	ClientStorageJsons.ClientGenerationStateFields read() throws IOException {
+		return snapshot().state();
+	}
+
+	Snapshot snapshot() throws IOException {
+		FileCache.FileFingerprint fingerprint;
+		try {
+			FileCache.StatSnapshot stats = FileCache.statSnapshot(stateFile);
+			if (!stats.isTrackedRegularFile()) return new Snapshot(null, revision, readFromDisk());
+			fingerprint = stats.fingerprint();
+		} catch (NoSuchFileException e) {
+			cached = null;
+			return new Snapshot(null, revision, null);
+		}
+		Cached hit = cached;
+		if (hit != null && hit.fingerprint().equals(fingerprint) && !isRacy(hit, fingerprint)) return new Snapshot(fingerprint, revision, hit.state());
+		long validatedAtNanos = validatedAt(newestTimestampNanos(fingerprint));
+		ClientStorageJsons.ClientGenerationStateFields state = readFromDisk();
+		// A parse is a new observation even when a coarse clock made the fingerprint collide: derived memos must not
+		// answer from the previous observation under the same revision.
+		revision++;
+		cached = state == null ? null : new Cached(fingerprint, validatedAtNanos, state);
+		return new Snapshot(fingerprint, revision, state);
+	}
+
+	/**
+	 * The newest stat clock the fingerprint carries. ctime, not only mtime, is the one that catches an in-place write
+	 * whose author put the mtime back; an unknown clock is -1 and never wins, which keeps a fingerprint without a usable
+	 * change time on the safe side of {@link #validatedAt(long)}.
+	 */
+	private static long newestTimestampNanos(FileCache.FileFingerprint fingerprint) {
+		return Math.max(fingerprint.lastModifiedNanos(), fingerprint.changeTimeNanos());
+	}
+
+	/** Git's racily-clean rule: a state stamped at or after the clock reading of its proof could share every stat field with a rewrite in the same tick. */
+	private static boolean isRacy(Cached cached, FileCache.FileFingerprint fingerprint) {
+		return newestTimestampNanos(fingerprint) >= cached.validatedAtNanos();
+	}
+
+	/**
+	 * A reading of the pointer filesystem's clock taken no later than now, from a one-byte sibling rewritten in place.
+	 * Filesystems stamp ctime/mtime from a coarse clock (NTFS ticks, FAT's two seconds); a recent pointer is re-parsed
+	 * once until the clock moves past its stamp, and only then is a fingerprint hit trusted. A filesystem that refuses
+	 * the clock write fails closed: every hit is re-parsed rather than risking a stale generation.
+	 */
+	private long validatedAt(long newestNanos) {
+		long stamp = clockStamp;
+		if (newestNanos < stamp) return stamp;
+		try {
+			Files.createDirectories(stateFile.getParent());
+			try (OutputStream out = Files.newOutputStream(clockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+				out.write('0');
+			}
+			stamp = Files.getLastModifiedTime(clockFile, LinkOption.NOFOLLOW_LINKS).to(TimeUnit.NANOSECONDS);
+		} catch (IOException | UnsupportedOperationException unavailableClock) {
+			// An earlier reading stays valid. With none, MIN makes every hit racy, which re-parses instead of trusting.
+			return stamp;
+		}
+		clockStamp = stamp;
+		return stamp;
+	}
+
+	private ClientStorageJsons.ClientGenerationStateFields readFromDisk() throws IOException {
 		return ConfigTools.readUnique(stateFile, ClientStorageJsons.ClientGenerationStateFields.class, "Client active state", ActivePackPointer::validated).orElse(null);
 	}
 
@@ -82,6 +169,8 @@ final class ActivePackPointer {
 
 	/** Clears the pointer: the client runs no active pack. */
 	void clear() throws IOException {
+		cached = null;
+		revision++;
 		Files.deleteIfExists(stateFile);
 	}
 
@@ -96,9 +185,12 @@ final class ActivePackPointer {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		ClientStorageJsons.ClientGenerationStateFields state = read();
 		if (state == null || !state.modpackId.equals(normalizedModpackId) || state.detached == detached) return;
+		state = mutableCopy(state);
 		state.detached = detached;
 		Files.createDirectories(stateFile.getParent());
 		ConfigTools.writeAtomic(stateFile, state);
+		cached = null;
+		revision++;
 	}
 
 	private void write(SelectionIntent applied, ClientStorageJsons.ClientGenerationStateFields state) throws IOException {
@@ -123,8 +215,27 @@ final class ActivePackPointer {
 	}
 
 	private void publish(ClientStorageJsons.ClientGenerationStateFields state) throws IOException {
+		cached = null;
 		Files.createDirectories(stateFile.getParent());
 		ConfigTools.writeAtomic(stateFile, state);
+		revision++;
+	}
+
+	/** A pointer read may hand out the cached document, so its one in-place writer takes a top-level copy first. */
+	private static ClientStorageJsons.ClientGenerationStateFields mutableCopy(ClientStorageJsons.ClientGenerationStateFields state) {
+		ClientStorageJsons.ClientGenerationStateFields copy = new ClientStorageJsons.ClientGenerationStateFields();
+		copy.modpackId = state.modpackId;
+		copy.contentToken = state.contentToken;
+		copy.status = state.status;
+		copy.ownershipLedger = state.ownershipLedger;
+		copy.manifest = state.manifest;
+		copy.manifestSha1 = state.manifestSha1;
+		copy.selectedGroups = state.selectedGroups;
+		copy.selectedCategories = state.selectedCategories;
+		copy.excludedGroups = state.excludedGroups;
+		copy.selectedPlatform = state.selectedPlatform;
+		copy.detached = state.detached;
+		return copy;
 	}
 
 	/**

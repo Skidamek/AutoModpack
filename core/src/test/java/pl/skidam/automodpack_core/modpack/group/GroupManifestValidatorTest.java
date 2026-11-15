@@ -456,6 +456,16 @@ class GroupManifestValidatorTest {
 				&& failure.getMessage().contains("case-insensitive filesystems would make them one file"), failure.getMessage());
 	}
 
+	@Test
+	void oneParsedPolicyRevisionIsPlatformValidatedOnce() {
+		var fields = catalogue();
+		fields.categories = oneCategory("main", group(file("a")));
+
+		GroupManifest first = GroupManifestValidator.validate(fields);
+
+		assertSame(first, GroupManifestValidator.validate(fields));
+	}
+
 	private static ModpackJsons.CompleteModpackContentFields catalogue() {
 		var fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";

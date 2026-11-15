@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.WeakHashMap;
 
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -23,7 +24,19 @@ import pl.skidam.automodpack_core.utils.PathFold;
 
 /** Immutable cumulative ownership projection for one modpack lineage. */
 public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entries, String digest) {
+	// Only the computing constructor passes this identity token with its fresh, natural-order TreeMap.
+	// It is replaced before publication; an equal-content external/wire string is not this token.
+	private static final String COMPUTE_DIGEST = new String();
 	private static final Comparator<Content> CONTENT_ORDER = Comparator.comparing(Content::sha1).thenComparingLong(Content::size);
+	/**
+	 * One validation per parsed ledger revision. The same fields object is handed to the digest check, the target
+	 * identity, the manifest and the transaction gates; they all ask about the same bytes. The memo is keyed by that
+	 * object and guarded by a structural fingerprint, so a mutated document still takes the full validation path.
+	 */
+	private static final int MEMO_CAP = 64;
+	private static final Map<GenerationJsons.OwnershipLedgerFields, Validated> MEMO = Collections.synchronizedMap(new WeakHashMap<>());
+
+	private record Validated(long fingerprint, OwnershipLedger ledger) {}
 
 	public enum Status {
 		PRESENT, TOMBSTONE
@@ -61,18 +74,20 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 
 	public OwnershipLedger {
 		ModpackId.requireValid(modpackId);
-		TreeMap<String, Entry> sorted = new TreeMap<>();
-		if (entries != null) sorted.putAll(entries);
+		boolean computing = digest == COMPUTE_DIGEST;
+		TreeMap<String, Entry> sorted = computing ? (TreeMap<String, Entry>) entries : new TreeMap<>();
+		if (!computing && entries != null) sorted.putAll(entries);
 		for (var entry : sorted.entrySet()) {
 			if (!entry.getKey().equals(entry.getValue().logicalPath())) throw new IllegalArgumentException("Ledger entry key does not match logical path");
 		}
 		entries = Collections.unmodifiableNavigableMap(sorted);
-		String expected = digest(modpackId, entries);
+		String expected = digestSorted(modpackId, sorted);
+		if (computing) digest = expected;
 		if (digest == null || !digest.equals(expected)) throw new IllegalArgumentException("Ledger digest does not match content");
 	}
 
 	public OwnershipLedger(String modpackId, Map<String, Entry> entries) {
-		this(modpackId, toNavigableMap(entries), digest(modpackId, entries));
+		this(modpackId, toNavigableMap(entries), COMPUTE_DIGEST);
 	}
 
 	public GenerationJsons.OwnershipLedgerFields toFields() {
@@ -94,7 +109,10 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 
 	public static OwnershipLedger fromFields(GenerationJsons.OwnershipLedgerFields fields) {
 		if (fields == null || fields.entries == null) throw new IllegalArgumentException("Ownership ledger is missing");
-		Map<String, Entry> entries = new TreeMap<>();
+		long fingerprint = fieldsFingerprint(fields);
+		Validated memo = MEMO.get(fields);
+		if (memo != null && memo.fingerprint() == fingerprint) return memo.ledger();
+		NavigableMap<String, Entry> entries = new TreeMap<>();
 		for (GenerationJsons.OwnershipLedgerFields.EntryFields serialized : fields.entries) {
 			if (serialized == null || serialized.historicalHashes == null) throw new IllegalArgumentException("Ownership ledger entry is incomplete");
 			NavigableSet<Content> hashes = new TreeSet<>(CONTENT_ORDER);
@@ -105,7 +123,52 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 			Entry entry = new Entry(serialized.logicalPath, hashes, new TreeSet<>(serialized.historicalGroupIds), parseStatus(serialized.currentStatus));
 			if (entries.put(entry.logicalPath(), entry) != null) throw new IllegalArgumentException("Duplicate ledger path: " + entry.logicalPath());
 		}
-		return new OwnershipLedger(fields.modpackId, new TreeMap<>(entries), fields.digest);
+		OwnershipLedger ledger = new OwnershipLedger(fields.modpackId, entries, fields.digest);
+		if (MEMO.size() >= MEMO_CAP) MEMO.clear();
+		MEMO.put(fields, new Validated(fingerprint, ledger));
+		return ledger;
+	}
+
+	/**
+	 * A cheap fingerprint of every field the digest covers, used only to prove that the object a memo was built from
+	 * still holds those bytes. String hash codes are cached, so a hit costs one pass of primitive reads instead of a
+	 * full canonical digest, and any mutation at all takes the full validation path.
+	 */
+	private static long fieldsFingerprint(GenerationJsons.OwnershipLedgerFields fields) {
+		long hash = 0xcbf29ce484222325L;
+		hash = mix(hash, fields.modpackId);
+		hash = mix(hash, fields.digest);
+		hash = mix(hash, fields.entries.size());
+		for (GenerationJsons.OwnershipLedgerFields.EntryFields entry : fields.entries) {
+			if (entry == null) {
+				hash = mix(hash, 0);
+				continue;
+			}
+			hash = mix(hash, entry.logicalPath);
+			hash = mix(hash, entry.currentStatus);
+			hash = mix(hash, entry.historicalHashes == null ? -1 : entry.historicalHashes.size());
+			if (entry.historicalHashes != null) for (GenerationJsons.OwnershipLedgerFields.ContentFields content : entry.historicalHashes) {
+				if (content == null) {
+					hash = mix(hash, 0);
+					continue;
+				}
+				hash = mix(hash, content.sha1);
+				hash = mix(hash, content.size);
+			}
+			hash = mix(hash, entry.historicalGroupIds == null ? -1 : entry.historicalGroupIds.size());
+			if (entry.historicalGroupIds != null) for (String group : entry.historicalGroupIds) hash = mix(hash, group);
+		}
+		return hash;
+	}
+
+	private static long mix(long hash, String value) {
+		return mix(hash, value == null ? 0 : value.hashCode());
+	}
+
+	private static long mix(long hash, long value) {
+		hash ^= value;
+		hash *= 0x100000001b3L;
+		return Long.rotateLeft(hash, 27);
 	}
 
 	public static OwnershipLedger empty(String modpackId) {
@@ -216,9 +279,13 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 	}
 
 	public static String digest(String modpackId, Map<String, Entry> entries) {
-		CanonicalEncoder encoder = new CanonicalEncoder().string("automodpack-ownership-ledger-v1").string(modpackId);
 		TreeMap<String, Entry> sorted = new TreeMap<>();
 		if (entries != null) sorted.putAll(entries);
+		return digestSorted(modpackId, sorted);
+	}
+
+	private static String digestSorted(String modpackId, NavigableMap<String, Entry> sorted) {
+		CanonicalEncoder encoder = new CanonicalEncoder().string("automodpack-ownership-ledger-v1").string(modpackId);
 		encoder.integer(sorted.size());
 		for (Entry entry : sorted.values()) {
 			encoder.string(entry.logicalPath()).integer(entry.historicalHashes().size());
