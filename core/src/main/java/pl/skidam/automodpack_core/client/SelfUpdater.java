@@ -199,15 +199,18 @@ public class SelfUpdater {
 
 			try (PlatformCache platformCache = PlatformCache.open(dataLocation.layout().platformCacheDirectory())) {
 				DownloadManager downloadManager = new DownloadManager(0, dataLocation.layout(), dataLocation.stagingDirectory(), platformCache);
-				// No transport owns a self-update download: end any session a previous in-process pack download
-				// left behind, or the audio layer replays the previous server's track over this screen.
-				WaitingMusic.endRun();
-				ScreenManager.download(downloadManager, "AutoModpack " + automodpack.fileVersion());
-				downloadManager.download(targetJar.getFileName().toString(), automodpack.SHA1Hash(), null, ModpackContentType.MOD,
-						List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
-						() -> LOGGER.debug("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));
-				downloadManager.joinAll();
-				downloadManager.finish();
+				try {
+					// No transport owns a self-update download: end any session a previous in-process pack download
+					// left behind, or the audio layer replays the previous server's track over this screen.
+					WaitingMusic.endRun();
+					ScreenManager.download(downloadManager, "AutoModpack " + automodpack.fileVersion());
+					downloadManager.download(targetJar.getFileName().toString(), automodpack.SHA1Hash(), null, ModpackContentType.MOD,
+							List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
+							() -> LOGGER.debug("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));
+					downloadManager.joinAll();
+				} finally {
+					downloadManager.finish();
+				}
 			}
 
 			Path storeObject = dataLocation.layout().objectFile(automodpack.SHA1Hash());

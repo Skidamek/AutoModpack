@@ -14,10 +14,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
- * What one filesystem's force costs, measured once per {@link FileStore} and shared by every caller that has to decide
- * between overlapping IO and keeping it in order. A 64 KiB fsync is ~1 ms on NVMe and tens of milliseconds on a
- * spinning disk, so eight milliseconds separates a store that can absorb interleaved syncs from one where doing so
- * would make the user wait longer than the join-time batch would.
+ * What one filesystem's force costs. Every caller that has to choose between overlapping IO and keeping it in order gets
+ * the measurement and compares it with the bar its own trade-off uses; the probe runs once per {@link FileStore} and every
+ * later caller pays a map lookup.
  */
 public final class ForceProfile {
 	private static final Logger LOGGER = LogManager.getLogger(ForceProfile.class);
@@ -25,8 +24,13 @@ public final class ForceProfile {
 	// Measured on the benchmark host: a 64 KiB force is ~18 ms warm, ~55 ms cold on the spinning disk, and ~1 ms on
 	// NVMe; 1 MiB is ~31 ms vs ~1.5 ms. Eight milliseconds separates the two without treating a loaded SSD as rotational.
 	private static final int PROBE_BYTES = 64 * 1024;
+	// ProjectionConvergence's bar; a caller that owns its own trade-off compares forceNanos with its own. Bounded by the
+	// number of stores because FileStore overrides equals per device/volume.
 	private static final long SLOW_FORCE_NANOS = TimeUnit.MILLISECONDS.toNanos(8);
-	private static final ConcurrentHashMap<FileStore, Boolean> OVERLAPPED_FORCE_ALLOWED = new ConcurrentHashMap<>();
+	private static final ConcurrentHashMap<FileStore, Long> FORCE_NANOS = new ConcurrentHashMap<>();
+
+	/** No measurement: the store could not be inspected or probed, so none of its forces is proven cheap. */
+	public static final long UNMEASURED = Long.MAX_VALUE;
 
 	private ForceProfile() {}
 
@@ -39,19 +43,20 @@ public final class ForceProfile {
 	}
 
 	/**
-	 * Whether forces on this path's store are cheap enough to overlap with other work. One real force decides it; the
-	 * verdict is cached per store, so a download pass and an install pass pay it once.
+	 * What one 64 KiB force costs on this path's store, in nanoseconds, or {@link #UNMEASURED} when the store cannot be
+	 * inspected or the probe fails. One real force decides it and the answer is cached per store, so a download pass and
+	 * an install pass share one probe.
 	 */
-	public static boolean allowsOverlappedForce(Path directory) {
+	public static long forceNanos(Path directory) {
 		FileStore store;
 		try {
 			Files.createDirectories(directory);
 			store = storeOf(directory);
-			Boolean known = OVERLAPPED_FORCE_ALLOWED.get(store);
+			Long known = FORCE_NANOS.get(store);
 			if (known != null) return known;
 		} catch (IOException | RuntimeException e) {
-			LOGGER.debug("Could not inspect the store of {}; work stays in its ordered path", directory, e);
-			return false;
+			LOGGER.debug("Could not inspect the store of {}; its force cost stays unknown", directory, e);
+			return UNMEASURED;
 		}
 		Path probe = null;
 		try {
@@ -63,19 +68,25 @@ public final class ForceProfile {
 				long start = System.nanoTime();
 				channel.force(true);
 				long elapsed = System.nanoTime() - start;
-				boolean allowed = elapsed <= SLOW_FORCE_NANOS;
-				OVERLAPPED_FORCE_ALLOWED.put(store, allowed);
-				if (!allowed) LOGGER.info("Force probe took {} ms; this store keeps IO in its ordered path", TimeUnit.NANOSECONDS.toMillis(elapsed));
-				return allowed;
+				FORCE_NANOS.put(store, elapsed);
+				return elapsed;
 			}
 		} catch (IOException | RuntimeException e) {
-			LOGGER.debug("Could not measure force latency; work stays in its ordered path", e);
-			return false;
+			LOGGER.debug("Could not measure force latency on {}", directory, e);
+			return UNMEASURED;
 		} finally {
 			if (probe != null) try {
 				Files.deleteIfExists(probe);
 			} catch (IOException ignored) {
 			}
 		}
+	}
+
+	/** Whether this path's store is cheap enough to overlap forces with other work; {@link #forceNanos} carries the measurement. */
+	public static boolean allowsOverlappedForce(Path directory) {
+		long nanos = forceNanos(directory);
+		if (nanos <= SLOW_FORCE_NANOS) return true;
+		if (nanos != UNMEASURED) LOGGER.info("Force probe took {} ms; this store keeps IO in its ordered path", TimeUnit.NANOSECONDS.toMillis(nanos));
+		return false;
 	}
 }

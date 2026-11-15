@@ -17,6 +17,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -76,7 +77,7 @@ public class DownloadManager implements DownloadView {
 	private final HostProbe probe;
 	private final DownloadQueue queue = new DownloadQueue();
 	private final ObjectPromotion promotion;
-	/** Verified objects of this run waiting for one sync; {@link #joinAll} publishes them before anyone reads the store. */
+	/** Verified objects pre-forced by one daemon; {@link #joinAll} publishes them before anyone reads the store. */
 	private final ObjectBatch batch;
 	private final PlatformAttempt platform;
 	private final DataRootResolver.Layout dataLayout;
@@ -107,24 +108,33 @@ public class DownloadManager implements DownloadView {
 	private final Semaphore semaphore = new Semaphore(0);
 	private final Speedometer speedometer = new Speedometer();
 	private FileCache fileCache;
+	// Cache initialization must not park new workers behind the monitor that is still dispatching them.
+	private final Object fileCacheLock = new Object();
 
 	/** An in-flight platform attempt the rescue wants moved off its domain. */
 	private record Rerouted(String task, String domain, HttpFileDownloader.AttemptControl control) {}
 
 	public DownloadManager(long bytesToDownload, DataRootResolver.Layout dataLayout, Path stagingDirectory, PlatformCache platformCache) {
+		this(bytesToDownload, dataLayout, stagingDirectory, platformCache, ObjectBatch::asynchronous);
+	}
+
+	DownloadManager(long bytesToDownload, DataRootResolver.Layout dataLayout, Path stagingDirectory, PlatformCache platformCache, Function<DataRootResolver.Layout, ObjectBatch> batches) {
 		totalBytesToDownload.set(bytesToDownload);
 		speedometer.setExpectedBytes(bytesToDownload);
 		this.dataLayout = Objects.requireNonNull(dataLayout, "dataLayout");
 		this.stagingDirectory = Objects.requireNonNull(stagingDirectory, "stagingDirectory");
+		Objects.requireNonNull(platformCache, "platformCache");
+		Objects.requireNonNull(batches, "batches");
 		// The dispatch discipline caps platform-routed tasks at PLATFORM_WORKERS, so the pool itself stays unbounded: a
 		// host-routed task holds its thread only until the take is submitted, and a platform download parked on a slow
 		// body can never starve a host dispatch of its thread.
 		this.downloadExecutor = Executors.newCachedThreadPool(new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
-		this.batch = new ObjectBatch(this.dataLayout);
-		this.promotion = new ObjectPromotion(this.dataLayout, this.stagingDirectory, batch);
 		// Owns the batched platform-metadata refetch of this run: concurrent dead links share the bulk API calls.
-		this.platform = new PlatformAttempt(httpDownloader, new FetchManager(List.of(), Objects.requireNonNull(platformCache, "platformCache")));
+		this.platform = new PlatformAttempt(httpDownloader, new FetchManager(List.of(), platformCache));
 		this.probe = new HostProbe(scheduler, rescue);
+		// Build the batch only after validating arguments and constructing the other run components.
+		this.batch = Objects.requireNonNull(batches.apply(this.dataLayout), "batch");
+		this.promotion = new ObjectPromotion(this.dataLayout, this.stagingDirectory, batch);
 	}
 
 	public void attachTransport(PackTransport transport) {
@@ -479,18 +489,23 @@ public class DownloadManager implements DownloadView {
 	}
 
 	/**
-	 * Waits for every queued file, then makes the run's verified objects durable in the store with one batched sync. A
+	 * Waits for every queued file and its daemon forces, then publishes the run's durable verified objects. A
 	 * cancelled run publishes what it verified too; an object that cannot be made durable fails its task like any local
-	 * storage failure.
+	 * storage failure. Interrupting the download wait closes async admission without publication; once that wait
+	 * completes, flushing drains uninterruptibly and restores the caller’s interrupt flag.
 	 */
 	public void joinAll() throws InterruptedException {
-		semaphore.acquire(totalFilesAdded);
 		try {
-			flushVerifiedObjects();
+			semaphore.acquire(totalFilesAdded);
+			try {
+				flushVerifiedObjects();
+			} finally {
+				semaphore.release(totalFilesAdded);
+			}
+			if (downloadExecutor.isShutdown()) throw new InterruptedException();
 		} finally {
-			semaphore.release(totalFilesAdded);
+			batch.close();
 		}
-		if (downloadExecutor.isShutdown()) throw new InterruptedException();
 	}
 
 	private void flushVerifiedObjects() {
@@ -528,25 +543,31 @@ public class DownloadManager implements DownloadView {
 		return !downloadExecutor.isShutdown();
 	}
 
-	/** Stops the pool after every queued file has finished. Does not mark the run cancelled. */
+	/** Closes admission and the pool after files finish; the daemon drains without interruption. joinAll publishes. */
 	public void finish() {
+		batch.close();
 		downloadExecutor.shutdown();
 		closeFileCache();
 	}
 
-	private synchronized FileCache fileCache() throws IOException {
-		if (fileCache == null) fileCache = FileCache.open(dataLayout.fileCacheDirectory());
-		return fileCache;
+	private FileCache fileCache() throws IOException {
+		synchronized (fileCacheLock) {
+			if (fileCache == null) fileCache = FileCache.open(dataLayout.fileCacheDirectory());
+			return fileCache;
+		}
 	}
 
-	private synchronized void closeFileCache() {
-		if (fileCache == null) return;
-		fileCache.close();
-		fileCache = null;
+	private void closeFileCache() {
+		synchronized (fileCacheLock) {
+			if (fileCache == null) return;
+			fileCache.close();
+			fileCache = null;
+		}
 	}
 
 	public void cancelAllAndShutdown() {
 		cancelled = true;
+		batch.close();
 		if (transport != null) transport.abortTransfers();
 		synchronized (this) {
 			LOGGER.info("Cancelling the download run: {} queued, {} in-flight", queue.queuedCount(), queue.inFlightCount());

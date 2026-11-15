@@ -128,7 +128,7 @@ final class ModpackObjectAcquisition {
 		try {
 			if (!downloadModpack(missing, start, totalBytes, fetchManager, playerFacing))
 				throw new IOException("One or more selected modpack objects could not be acquired");
-		} catch (Exception e) {
+		} catch (Exception | Error e) {
 			if (downloadManager != null) {
 				if (downloadManager.isCancelled()) playerCancelled.compareAndSet(false, true);
 				else downloadManager.cancelAllAndShutdown();
@@ -164,33 +164,36 @@ final class ModpackObjectAcquisition {
 		}
 
 		downloadManager = new DownloadManager(totalBytes, storage.dataLocation().layout(), storage.stagingDirectory(), platformCache);
-		WorkStatus.phase(WorkStatus.Phase.DOWNLOADING);
-		if (playerFacing) ScreenManager.download(downloadManager, modpackName.get(), onPlayerCancel);
-		downloadManager.attachTransport(transport);
-		for (var serverItem : files) {
-			List<DownloadSource> sources = fetchManager == null ? List.of() : fetchManager.sourcesFor(serverItem.sha1);
-			Consumer<DownloadManager.FailureCategory> failureCallback = category -> {
-				if (category == DownloadManager.FailureCategory.CANCELLED) return;
-				failedDownloads.put(serverItem, sources.stream().map(DownloadSource::url).toList());
-				failedDownloadCategories.put(serverItem, category);
-			};
-			downloadManager.download(serverItem.file, serverItem.sha1, serverItem.murmur, ModpackContentType.platformProjectKind(serverItem.file), sources, serverItem.size, () -> {}, failureCallback);
-		}
+		try {
+			WorkStatus.phase(WorkStatus.Phase.DOWNLOADING);
+			if (playerFacing) ScreenManager.download(downloadManager, modpackName.get(), onPlayerCancel);
+			downloadManager.attachTransport(transport);
+			for (var serverItem : files) {
+				List<DownloadSource> sources = fetchManager == null ? List.of() : fetchManager.sourcesFor(serverItem.sha1);
+				Consumer<DownloadManager.FailureCategory> failureCallback = category -> {
+					if (category == DownloadManager.FailureCategory.CANCELLED) return;
+					failedDownloads.put(serverItem, sources.stream().map(DownloadSource::url).toList());
+					failedDownloadCategories.put(serverItem, category);
+				};
+				downloadManager.download(serverItem.file, serverItem.sha1, serverItem.murmur, ModpackContentType.platformProjectKind(serverItem.file), sources, serverItem.size, () -> {}, failureCallback);
+			}
 
-		downloadManager.joinAll();
-		LOGGER.info("Finished downloading files in {}ms", System.currentTimeMillis() - startFetching);
-		if (downloadManager.isCancelled()) {
-			LOGGER.info("Download canceled");
+			downloadManager.joinAll();
+			LOGGER.info("Finished downloading files in {}ms", System.currentTimeMillis() - startFetching);
+			if (downloadManager.isCancelled()) {
+				LOGGER.info("Download canceled");
+				return false;
+			}
+			if (failedDownloads.isEmpty()) return true;
+			if (failedDownloadCategories.values().stream().anyMatch(category -> category != DownloadManager.FailureCategory.REMOTE_SOURCE)) {
+				LOGGER.error("Object acquisition failed locally; regeneration is not allowed: {}", failedDownloadCategories);
+				return false;
+			}
+			LOGGER.error("Remote object acquisition failed for {}; the advertised generation remains unchanged", failedDownloads.keySet());
 			return false;
+		} finally {
+			downloadManager.finish();
 		}
-		downloadManager.finish();
-		if (failedDownloads.isEmpty()) return true;
-		if (failedDownloadCategories.values().stream().anyMatch(category -> category != DownloadManager.FailureCategory.REMOTE_SOURCE)) {
-			LOGGER.error("Object acquisition failed locally; regeneration is not allowed: {}", failedDownloadCategories);
-			return false;
-		}
-		LOGGER.error("Remote object acquisition failed for {}; the advertised generation remains unchanged", failedDownloads.keySet());
-		return false;
 	}
 
 	private static Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uniqueObjects(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items) {
