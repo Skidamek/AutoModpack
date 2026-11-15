@@ -11,7 +11,6 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -232,13 +231,13 @@ public final class GenerationStore {
 		writePolicyObject(policySha1, policyBytes);
 
 		OwnershipLedger ledger = OwnershipLedger.materialize(current == null ? OwnershipLedger.empty(manifest.modpackId()) : current.ledger(), manifest);
-		List<JournalEntry.Change> changes = diffTrees(current == null ? ContentTree.empty() : current.tree(), tree);
+		List<JournalEntry.Change> changes = (current == null ? ContentTree.empty() : current.tree()).diff(tree);
 
 		// Promotion runs before the no-change check: a corrupted object the fresh snapshot repaired
 		// must be replaced even when the candidate ends up matching the current generation.
 		TreeSet<String> pinned = reachable(current);
 		pinned.add(policySha1);
-		for (ContentTree.ContentFile file : tree.files().values()) pinned.add(file.sha1());
+		pinned.addAll(tree.objectHashes());
 		if (waitingMusicSource != null && Files.isRegularFile(waitingMusicSource))
 			pinned.add(HashUtils.normalizeSha1(fileCache == null ? HashUtils.getHash(waitingMusicSource) : fileCache.getOrComputeHash(waitingMusicSource)));
 		publishReceipt(pinned);
@@ -286,10 +285,10 @@ public final class GenerationStore {
 		GroupManifest manifest = verifiedPolicy(target);
 		OwnershipLedger ledger = OwnershipLedger.materialize(current.ledger(), manifest);
 
-		List<JournalEntry.Change> changes = diffTrees(current.tree(), targetTree);
+		List<JournalEntry.Change> changes = current.tree().diff(targetTree);
 		JournalEntry entry = new JournalEntry(current.seq() + 1, target.contentToken(), target.policySha1(), Instant.now(), notes, targetSeq, changes);
 		TreeSet<String> pinned = reachable(current);
-		for (ContentTree.ContentFile file : targetTree.files().values()) pinned.add(file.sha1());
+		pinned.addAll(targetTree.objectHashes());
 		publishReceipt(pinned);
 		journal.append(entry);
 
@@ -390,7 +389,7 @@ public final class GenerationStore {
 		TreeSet<String> reachable = new TreeSet<>();
 		if (journal != null) for (JournalEntry entry : journal.entries()) reachable.add(entry.policySha1());
 		if (head != null) {
-			for (ContentTree.ContentFile file : head.tree().files().values()) reachable.add(file.sha1());
+			reachable.addAll(head.tree().objectHashes());
 			if (HashUtils.isSha1(head.waitingMusicSha1())) reachable.add(HashUtils.normalizeSha1(head.waitingMusicSha1()));
 		}
 		return reachable;
@@ -436,10 +435,10 @@ public final class GenerationStore {
 
 	/** Fails loudly before a restore commits when the target generation's bytes were already collected from disk. */
 	private void requireStoredObjects(ContentTree tree) throws IOException {
-		for (ContentTree.ContentFile file : tree.files().values()) {
-			Path object = DataRootResolver.objectFile(objectsDirectory, file.sha1());
+		for (String sha1 : tree.objectHashes()) {
+			Path object = DataRootResolver.objectFile(objectsDirectory, sha1);
 			if (!Files.isRegularFile(object))
-				throw new IOException("Generation object " + file.sha1() + " is no longer stored; a collect removed it, so this generation cannot be restored");
+				throw new IOException("Generation object " + sha1 + " is no longer stored; a collect removed it, so this generation cannot be restored");
 		}
 	}
 
@@ -515,24 +514,6 @@ public final class GenerationStore {
 		long size = Files.size(waitingMusicSource);
 		if (!FileIntegrity.matchesNamed(DataRootResolver.objectFile(objectsDirectory, sha1), size, sha1, fileCache)) objectStore.promoteCopy(waitingMusicSource, sha1);
 		return sha1;
-	}
-
-	private static List<JournalEntry.Change> diffTrees(ContentTree before, ContentTree after) {
-		List<JournalEntry.Change> changes = new ArrayList<>();
-		TreeSet<String> paths = new TreeSet<>();
-		paths.addAll(before.files().keySet());
-		paths.addAll(after.files().keySet());
-		for (String path : paths) {
-			ContentTree.ContentFile oldFile = before.files().get(path);
-			ContentTree.ContentFile newFile = after.files().get(path);
-			if (oldFile == null && newFile == null) continue;
-			if (oldFile == null) changes.add(JournalEntry.Change.added(path, newFile.sha1(), newFile.size()));
-			else if (newFile == null) changes.add(JournalEntry.Change.removed(path, oldFile.sha1(), oldFile.size()));
-			else
-				if (!oldFile.sha1().equalsIgnoreCase(newFile.sha1()) || oldFile.size() != newFile.size())
-					changes.add(new JournalEntry.Change(path, oldFile.sha1(), oldFile.size(), newFile.sha1(), newFile.size()));
-		}
-		return changes;
 	}
 
 	public record Current(long seq, String contentToken, String policySha1, Instant createdAt, GroupManifest manifest, OwnershipLedger ledger, ContentTree tree,

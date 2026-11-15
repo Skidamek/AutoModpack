@@ -31,8 +31,12 @@ import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
+import pl.skidam.automodpack_core.modpack.group.SelectedTreeComposer;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
@@ -85,6 +89,41 @@ class GenerationStoreTest {
 		assertEquals(Set.of(GenerationHosting.HEAD_DOCUMENT_KEY, GenerationHosting.JOURNAL_KEY, sha1("content-one"), current.policySha1()), hosted.keySet());
 		for (Path hostedFile : hosted.values()) assertTrue(Files.isRegularFile(hostedFile));
 		assertEquals(3, Journal.open(tempDir.resolve("state").resolve("journal.jsonl")).length());
+	}
+
+	@Test
+	void publishesMutuallyExclusiveVariantsAtTheSamePath() throws Exception {
+		Path objects = tempDir.resolve("objects");
+		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects);
+		String performanceText = "performance-rrls";
+		String fantasyText = "fantasy-rrls";
+		GenerationStore.Publication publication = store.publish(exclusiveCandidate(performanceText, fantasyText), "Exclusive variants", null);
+		String performanceHash = sha1(performanceText);
+		String fantasyHash = sha1(fantasyText);
+		assertTrue(publication.hostingPaths().containsKey(performanceHash));
+		assertTrue(publication.hostingPaths().containsKey(fantasyHash));
+		ContentTree tree = ContentTree.fromManifest(publication.manifest());
+		assertEquals(2, tree.size());
+		assertEquals(Set.of(performanceHash, fantasyHash), tree.objectHashes());
+		var performance = SelectedTreeComposer.compose(publication.manifest(), GroupSelectionResolver.resolve(publication.manifest(), new SelectionIntent(Set.of("performance")), ClientPlatform.LINUX));
+		var fantasy = SelectedTreeComposer.compose(publication.manifest(), GroupSelectionResolver.resolve(publication.manifest(), new SelectionIntent(Set.of("fantasy")), ClientPlatform.LINUX));
+		assertEquals(performanceHash, performance.list.iterator().next().sha1);
+		assertEquals(fantasyHash, fantasy.list.iterator().next().sha1);
+		assertNotEquals(ContentTree.tokenOf(TestPacks.manifest("only", "config/example.txt", performanceText)), publication.entry().contentToken());
+		ContentTree replayed = Journal.open(tempDir.resolve("state").resolve("journal.jsonl")).treeAt(publication.entry().seq());
+		assertEquals(publication.entry().contentToken(), replayed.token());
+		assertEquals(2, replayed.size());
+	}
+
+	@Test
+	void addingAnExclusiveVariantAtAnExistingPathIsAddedNotChanged() throws Exception {
+		Path objects = tempDir.resolve("objects");
+		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects);
+		store.publish(candidate("one", "content-one"), "First", null);
+		GenerationStore.Publication second = store.publish(exclusiveCandidate("content-one", "content-two"), "Add fantasy", null);
+		assertEquals(1, second.entry().summary().added());
+		assertEquals(0, second.entry().summary().changed());
+		assertTrue(second.entry().changes().stream().anyMatch(change -> change.kind() == JournalEntry.Change.Kind.ADDED && sha1("content-two").equals(change.toSha1())));
 	}
 
 	@Test
@@ -160,8 +199,8 @@ class GenerationStoreTest {
 					for (ModpackCandidate candidate : batch) {
 						GenerationStore.Publication publication = store.publish(candidate, "", null);
 						String receipt = receipt(objects);
-						for (ContentTree.ContentFile file : ContentTree.fromManifest(publication.manifest()).files().values())
-							assertTrue(receipt.contains(file.sha1()), "the receipt pins the head a publish just promoted");
+						for (String sha1 : ContentTree.fromManifest(publication.manifest()).objectHashes())
+							assertTrue(receipt.contains(sha1), "the receipt pins the head a publish just promoted");
 					}
 				} finally {
 					done.set(true);
@@ -512,6 +551,33 @@ class GenerationStoreTest {
 		group.description = "multi";
 		group.files = entries;
 		fields.categories = Map.of("General", Map.of("main", group));
+		return new ModpackCandidate(GroupManifestValidator.validate(fields), staged, new TreeMap<>(), List.of());
+	}
+
+	private ModpackCandidate exclusiveCandidate(String performanceContent, String fantasyContent) throws IOException {
+		Path staging = Files.createDirectories(tempDir.resolve("state").resolve("staging"));
+		Path performanceFile = Files.createTempFile(staging, "performance-", ".staged");
+		Path fantasyFile = Files.createTempFile(staging, "fantasy-", ".staged");
+		Files.writeString(performanceFile, performanceContent, StandardCharsets.UTF_8);
+		Files.writeString(fantasyFile, fantasyContent, StandardCharsets.UTF_8);
+		String performanceHash = sha1(performanceContent);
+		String fantasyHash = sha1(fantasyContent);
+		var performance = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		performance.required = false;
+		performance.defaultSelected = false;
+		performance.breaksWith = Set.of("fantasy");
+		performance.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(performanceContent.length()), false, performanceHash, null));
+		var fantasy = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		fantasy.required = false;
+		fantasy.defaultSelected = false;
+		fantasy.breaksWith = Set.of("performance");
+		fantasy.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(fantasyContent.length()), false, fantasyHash, null));
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
+		fields.modpackId = "abc1234";
+		fields.categories = Map.of("General", Map.of("performance", performance, "fantasy", fantasy));
+		TreeMap<String, StagedObject> staged = new TreeMap<>();
+		staged.put(performanceHash, stagedObject(performanceFile, performanceHash, performanceContent.length()));
+		staged.put(fantasyHash, stagedObject(fantasyFile, fantasyHash, fantasyContent.length()));
 		return new ModpackCandidate(GroupManifestValidator.validate(fields), staged, new TreeMap<>(), List.of());
 	}
 

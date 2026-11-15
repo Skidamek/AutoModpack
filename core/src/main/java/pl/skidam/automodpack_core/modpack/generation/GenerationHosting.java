@@ -37,7 +37,7 @@ public final class GenerationHosting {
 		paths.put(HEAD_DOCUMENT_KEY, headDocument);
 		paths.put(JOURNAL_KEY, journal);
 		paths.put(policySha1, objectFile.apply(policySha1));
-		for (var file : tree.files().values()) paths.put(file.sha1(), objectFile.apply(file.sha1()));
+		for (String sha1 : tree.objectHashes()) paths.put(sha1, objectFile.apply(sha1));
 		if (HashUtils.isSha1(waitingMusicSha1)) {
 			String sha1 = HashUtils.normalizeSha1(waitingMusicSha1);
 			Path object = objectFile.apply(sha1);

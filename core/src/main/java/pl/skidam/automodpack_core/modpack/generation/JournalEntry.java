@@ -55,7 +55,7 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 		Map<String, Change> newest = new LinkedHashMap<>();
 		for (JournalEntry entry : history) {
 			if (entry.seq() <= target.seq()) continue;
-			for (Change change : entry.changes()) newest.put(change.path(), change);
+			for (Change change : entry.changes()) newest.put(change.path() + '\0' + (change.fromSha1() == null ? "" : change.fromSha1()) + '\0' + (change.toSha1() == null ? "" : change.toSha1()), change);
 		}
 		int added = 0;
 		int changed = 0;

@@ -5,9 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.NavigableMap;
 import java.util.Objects;
-import java.util.TreeMap;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
@@ -119,15 +117,18 @@ public final class Journal {
 	/** Rebuilds the served file set as of the given entry by folding the changes of every entry up to it. */
 	public ContentTree treeAt(long seq) throws IOException {
 		JournalEntry target = entryAt(seq);
-		NavigableMap<String, ContentTree.ContentFile> files = new TreeMap<>();
+		ContentTree.Builder builder = ContentTree.builder();
 		for (JournalEntry entry : entries) {
 			for (JournalEntry.Change change : entry.changes()) {
-				if (change.toSha1() == null) files.remove(change.path());
-				else files.put(change.path(), new ContentTree.ContentFile(change.toSha1(), change.toSize()));
+				try {
+					builder.apply(change);
+				} catch (IllegalArgumentException e) {
+					throw new UnusableContentException("Journal replay at " + seq + " cannot apply a change for '" + change.path() + "'", e);
+				}
 			}
 			if (entry.seq() == seq) break;
 		}
-		ContentTree tree = new ContentTree(files);
+		ContentTree tree = builder.build();
 		String token = tree.token();
 		if (!token.equals(target.contentToken()))
 			throw new UnusableContentException("Journal replay at " + seq + " produced token " + token + " but the entry recorded " + target.contentToken());

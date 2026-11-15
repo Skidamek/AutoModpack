@@ -312,11 +312,12 @@ public final class ClientGenerationStore {
 			return false;
 		}
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-			for (var file : ContentTree.fromManifest(manifest).files().entrySet()) {
-				if (FileIntegrity.matchesNamed(storage.objectFile(file.getValue().sha1()), file.getValue().size(), file.getValue().sha1(), cache)) continue;
-				if (FileIntegrity.matchesObject(storage.gamePath(file.getKey()), storage.objectFile(file.getValue().sha1()), file.getValue().size(), file.getValue().sha1(), cache))
-					continue;
-				return false;
+			for (var pathEntry : ContentTree.fromManifest(manifest).files().entrySet()) {
+				for (ContentTree.ContentFile file : pathEntry.getValue()) {
+					if (FileIntegrity.matchesNamed(storage.objectFile(file.sha1()), file.size(), file.sha1(), cache)) continue;
+					if (FileIntegrity.matchesObject(storage.gamePath(pathEntry.getKey()), storage.objectFile(file.sha1()), file.size(), file.sha1(), cache)) continue;
+					return false;
+				}
 			}
 		}
 		return true;
@@ -460,8 +461,8 @@ public final class ClientGenerationStore {
 
 	/** The content objects of one kept generation: every file of its folded policy tree. */
 	private void retainGenerationContent(JournalEntry entry, ExpectedSizes kept) throws IOException {
-		for (var file : ContentTree.fromManifest(policyDocument(entry.policySha1())).files().entrySet())
-			kept.optional(file.getValue().sha1(), file.getValue().size(), "kept generation content");
+		for (var pathEntry : ContentTree.fromManifest(policyDocument(entry.policySha1())).files().entrySet())
+			for (ContentTree.ContentFile file : pathEntry.getValue()) kept.optional(file.sha1(), file.size(), "kept generation content");
 	}
 
 	/** Deletes the generated-copy state of trimmed generations; it pins objects and only serves generations the compaction no longer keeps. */

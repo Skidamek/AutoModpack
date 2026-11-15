@@ -4,9 +4,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -73,19 +70,6 @@ public final class TestPacks {
 		ContentTree previous = journal.isEmpty() ? ContentTree.empty() : journal.treeAt(journal.head().seq());
 		ContentTree next = ContentTree.fromManifest(document.manifest());
 		journal.append(new JournalEntry(journal.isEmpty() ? 1 : journal.head().seq() + 1, document.contentToken(), document.policySha1(), document.createdAt(), "", JournalEntry.NO_RESTORE,
-				diff(previous, next)));
-	}
-
-	private static List<JournalEntry.Change> diff(ContentTree previous, ContentTree next) {
-		List<JournalEntry.Change> changes = new ArrayList<>();
-		for (var entry : next.files().entrySet()) {
-			ContentTree.ContentFile old = previous.files().get(entry.getKey());
-			if (old == null) changes.add(JournalEntry.Change.added(entry.getKey(), entry.getValue().sha1(), entry.getValue().size()));
-			else changes.add(new JournalEntry.Change(entry.getKey(), old.sha1(), old.size(), entry.getValue().sha1(), entry.getValue().size()));
-		}
-		for (var entry : previous.files().entrySet())
-			if (!next.files().containsKey(entry.getKey())) changes.add(JournalEntry.Change.removed(entry.getKey(), entry.getValue().sha1(), entry.getValue().size()));
-		changes.sort(Comparator.comparing(JournalEntry.Change::path));
-		return changes;
+				previous.diff(next)));
 	}
 }

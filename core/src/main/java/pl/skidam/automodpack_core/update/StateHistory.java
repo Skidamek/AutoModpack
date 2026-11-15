@@ -129,9 +129,8 @@ public final class StateHistory {
 		for (String modpackId : generations.installedPackIds()) {
 			for (JournalEntry entry : new JournalMirror(storage).entries(modpackId)) {
 				try {
-					for (var file : ContentTree.fromManifest(generations.policyDocument(entry.policySha1())).files().entrySet())
-						versions.computeIfAbsent(LogicalPath.normalize(file.getKey()), ignored -> new HashSet<>())
-								.add(HashUtils.normalizeSha1(file.getValue().sha1()));
+					ContentTree.fromManifest(generations.policyDocument(entry.policySha1()))
+							.forEach((path, file) -> versions.computeIfAbsent(LogicalPath.normalize(path), ignored -> new HashSet<>()).add(HashUtils.normalizeSha1(file.sha1())));
 				} catch (IOException unavailable) {
 					// A generation whose policy is unavailable contributes no labels; the timeline itself does not depend on it.
 				}
