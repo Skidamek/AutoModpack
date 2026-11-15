@@ -238,9 +238,10 @@ final class ClientUpdatePlanBuilder {
 	 * commit will require: anything else refuses the plan before a single byte moves.
 	 */
 	private void requireFileSlots(UpdatePlan plan) throws IOException {
+		FileTrees.Confinement confinement = FileTrees.Confinement.under(storage.gameDirectory(), FileTrees.RootTrust.PLAYER_CONFIGURED, storage.playerRedirects());
 		for (UpdatePlan.ProjectedFile file : plan.projectedFinalState()) {
 			if (file.root() != UpdatePlan.Root.GAME_DIR) continue;
-			Path path = FileTrees.resolveConfined(storage.gameDirectory(), file.relativePath(), "Pack path");
+			Path path = confinement.resolve(file.relativePath(), "Pack path");
 			if (Files.exists(path, LinkOption.NOFOLLOW_LINKS) && !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
 				throw new IOException("Pack path is taken by a directory or another non-file, move it away to sync: " + path);
 		}

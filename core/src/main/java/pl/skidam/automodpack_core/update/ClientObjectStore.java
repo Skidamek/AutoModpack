@@ -1,10 +1,14 @@
 package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -25,6 +29,7 @@ import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.protocol.PartialResume;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.ExpectedSizes;
 import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
@@ -277,13 +282,14 @@ public final class ClientObjectStore {
 	static Map<String, Long> collectMirrorClaims(ClientStorage storage, Set<String> modpackIds) throws IOException {
 		TreeMap<String, Long> claims = new TreeMap<>();
 		Set<String> distrusted = new HashSet<>();
+		ObjectPresence presence = new ObjectPresence(storage);
 		for (String modpackId : modpackIds) {
 			for (JournalEntry entry : new JournalMirror(storage).entries(modpackId)) {
-				claim(storage, claims, distrusted, entry.policySha1(), -1);
+				claim(presence, claims, distrusted, entry.policySha1(), -1);
 				for (JournalEntry.Change change : entry.changes()) {
-					claim(storage, claims, distrusted, change.toSha1(), change.toSize());
+					claim(presence, claims, distrusted, change.toSha1(), change.toSize());
 					// Mirrors fetched from older servers carry no source size; only a positive size is a receipt, anything else stays unknown.
-					claim(storage, claims, distrusted, change.fromSha1(), change.fromSize() > 0 ? change.fromSize() : -1);
+					claim(presence, claims, distrusted, change.fromSha1(), change.fromSize() > 0 ? change.fromSize() : -1);
 				}
 			}
 		}
@@ -292,10 +298,10 @@ public final class ClientObjectStore {
 	}
 
 	/** Records one server-authored claim for an object this CAS holds: first claim wins, an unknown grows into a known size, a contradiction demotes the size to unknown for good. */
-	private static void claim(ClientStorage storage, TreeMap<String, Long> claims, Set<String> distrusted, String hash, long size) {
+	private static void claim(ObjectPresence presence, TreeMap<String, Long> claims, Set<String> distrusted, String hash, long size) throws IOException {
 		if (hash == null) return;
 		String normalized = HashUtils.normalizeSha1(hash);
-		if (distrusted.contains(normalized) || !holdsObject(storage, normalized)) return;
+		if (distrusted.contains(normalized) || !presence.holds(normalized)) return;
 		Long known = claims.get(normalized);
 		if (known == null) claims.put(normalized, size);
 		else if (known >= 0 && size >= 0 && known.longValue() != size) {
@@ -307,6 +313,67 @@ public final class ClientObjectStore {
 	/** Whether this CAS holds the named object as a regular file. */
 	static boolean holdsObject(ClientStorage storage, String hash) {
 		return Files.isRegularFile(storage.objectFile(hash), LinkOption.NOFOLLOW_LINKS);
+	}
+
+	/**
+	 * Presence of many claimed objects: a short sweep stats each name, a long one lists the store once and answers
+	 * from that. One stat per historical name is the random-read shape a spinning disk hates, and a long mirror
+	 * history is exactly where it hurts; a small store keeps the direct check so it never pays for a whole walk.
+	 */
+	private static final class ObjectPresence {
+		private static final int LISTING_THRESHOLD = 128;
+		private final ClientStorage storage;
+		private final Set<String> missing = new HashSet<>();
+		private Set<String> listed;
+		private int probes;
+
+		private ObjectPresence(ClientStorage storage) {
+			this.storage = storage;
+		}
+
+		private boolean holds(String hash) throws IOException {
+			if (listed != null) return listed.contains(hash);
+			if (missing.contains(hash)) return false;
+			if (++probes <= LISTING_THRESHOLD) {
+				boolean held = holdsObject(storage, hash);
+				if (!held) missing.add(hash);
+				return held;
+			}
+			listed = listObjects(storage.objectsDirectory());
+			return listed.contains(hash);
+		}
+	}
+
+	/** One walk of the Git-style object store; visits regular files only and ignores anything off the object layout. */
+	private static Set<String> listObjects(Path objectsDirectory) throws IOException {
+		Set<String> held = new HashSet<>();
+		if (FileTrees.isRedirectingLink(objectsDirectory)) throw new IOException("Immutable object store is a symbolic link: " + objectsDirectory);
+		if (!Files.isDirectory(objectsDirectory, LinkOption.NOFOLLOW_LINKS)) return held;
+		boolean[] complete = {true};
+		Files.walkFileTree(objectsDirectory, new SimpleFileVisitor<Path>() {
+			@Override
+			public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
+				if (!directory.equals(objectsDirectory) && FileTrees.isRedirectingLink(directory)) return FileVisitResult.SKIP_SUBTREE;
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+				if (attributes.isRegularFile() && !attributes.isSymbolicLink() && !FileTrees.isRedirectingLink(file)) {
+					String hash = DataRootResolver.objectHash(objectsDirectory, file);
+					if (hash != null) held.add(hash);
+				}
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult visitFileFailed(Path file, IOException failure) {
+				complete[0] = false;
+				return FileVisitResult.CONTINUE;
+			}
+		});
+		if (!complete[0]) throw new IOException("Immutable object store listing is incomplete: " + objectsDirectory);
+		return held;
 	}
 
 	/** Folds history claims under the owned receipts: claims fill hashes local state does not know and never override a local receipt, so merging cannot throw. */
@@ -363,12 +430,23 @@ public final class ClientObjectStore {
 			for (Path modpack : childDirectories(storage.overlaysDirectory(), "client overlays")) {
 				String modpackId = modpack.getFileName().toString();
 				requireModpackId(modpackId, "client overlay directory");
-				try (Stream<Path> files = Files.walk(modpack)) {
-					for (Path file : files.filter(path -> !path.equals(modpack)).toList()) {
-						FileTrees.requireNoSymbolicLink(file, "client overlay");
-						if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) retained.optional(metadata.getOrComputeHash(file), Files.size(file), "client overlay");
+				List<Path> ordered = new ArrayList<>();
+				Files.walkFileTree(modpack, new SimpleFileVisitor<>() {
+					@Override
+					public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) throws IOException {
+						if (!directory.equals(modpack) && FileTrees.isRedirectingLink(directory)) throw new IOException("client overlay contains a symbolic link: " + directory);
+						return FileVisitResult.CONTINUE;
 					}
-				}
+
+					@Override
+					public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+						FileTrees.requireNoSymbolicLink(file, "client overlay");
+						if (attributes.isRegularFile()) ordered.add(file);
+						return FileVisitResult.CONTINUE;
+					}
+				});
+				ordered.sort(Comparator.naturalOrder());
+				for (Path file : ordered) retained.optional(metadata.getOrComputeHash(file), Files.size(file), "client overlay");
 			}
 		}
 	}

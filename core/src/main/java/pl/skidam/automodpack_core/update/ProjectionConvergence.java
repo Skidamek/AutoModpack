@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.update;
 import java.io.IOException;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.DirectoryNotEmptyException;
+import java.nio.file.FileStore;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -10,6 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -19,6 +21,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -28,8 +36,10 @@ import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
+import pl.skidam.automodpack_core.utils.ForceProfile;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
+import pl.skidam.automodpack_core.utils.ValidatedSources;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -87,6 +97,10 @@ final class ProjectionConvergence {
 	/** Seam for the commit's probe: a crash before or a hold at every individual write. */
 	interface Writes {
 		Writes NONE = new Writes() {
+			@Override
+			public boolean parallelSafe() {
+				return true;
+			}
 		};
 
 		default void beforeWrite(Path target) throws IOException {}
@@ -98,18 +112,35 @@ final class ProjectionConvergence {
 
 		/** V5: a directory's entries were forced. */
 		default void forced(Path directory) {}
+
+		/**
+		 * Whether these hooks may be called from the bounded install pool. A hook that crashes or records a global order
+		 * keeps the sequential path, so every existing crash seam still names one write at a time; production's no-op
+		 * hooks and {@link #NONE} allow the pool.
+		 */
+		default boolean parallelSafe() {
+			return false;
+		}
 	}
 
 	private final ClientStorage storage;
 	private final FileCache cache;
 	private final Writes writes;
+	private final ValidatedSources sources;
 	private final Map<String, Object> objectKeys = new HashMap<>();
-	private final Set<Path> ensuredDirectories = new HashSet<>();
+	private final Set<Path> ensuredDirectories = ConcurrentHashMap.newKeySet();
+	/** One file link per task, kept small: links are metadata-bound, and more crews only contend on the same directories. */
+	private static final int MAX_INSTALL_WORKERS = 4;
 
 	ProjectionConvergence(ClientStorage storage, FileCache cache, Writes writes) {
+		this(storage, cache, writes, null);
+	}
+
+	ProjectionConvergence(ClientStorage storage, FileCache cache, Writes writes, ValidatedSources sources) {
 		this.storage = Objects.requireNonNull(storage, "storage");
 		this.cache = Objects.requireNonNull(cache, "cache");
 		this.writes = Objects.requireNonNull(writes, "writes");
+		this.sources = sources;
 	}
 
 	/** The complete projection a plan converges to: its present projection rows. */
@@ -221,7 +252,7 @@ final class ProjectionConvergence {
 		List<ProjectionState.Row> missing = new ArrayList<>();
 		for (ProjectionState.Row row : work.installs())
 			(FileIntegrity.matchesNamed(storage.objectFile(row.sha1()), row.size(), row.sha1(), cache) ? installs : missing).add(row);
-		Result result = execute(new Work(work.removals(), work.junk(), work.prunes(), work.junkPrunes(), installs), true);
+		Result result = execute(new Work(work.removals(), work.junk(), work.prunes(), work.junkPrunes(), installs, work.absentInstalls()), true);
 		if (!result.converged()) {
 			LOGGER.error("The detached projection could not be restored: {} paths are held open, first {}", result.held().size(), result.held().get(0).path(), result.held().get(0).cause());
 			return false;
@@ -292,10 +323,16 @@ final class ProjectionConvergence {
 		Map<String, Path> directories = new LinkedHashMap<>();
 		if (!Files.exists(active, LinkOption.NOFOLLOW_LINKS)) return new Observation(files, others, directories);
 		if (!Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Active client projection is not a directory: " + active);
+		if (FileTrees.isRedirectingLink(active)) throw new IOException("Active client projection is a symbolic link: " + active);
 		Files.walkFileTree(active, new SimpleFileVisitor<>() {
 			@Override
-			public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
-				if (!directory.equals(active)) directories.put(relative(active, directory), directory);
+			public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) throws IOException {
+				if (!directory.equals(active)) {
+					// A junction is a directory to Java and the walk would descend into its target; refuse before that,
+					// so no external file can enter the observation and be planned as a removal.
+					if (FileTrees.isRedirectingLink(directory)) throw new IOException("Active client projection contains a symbolic link: " + directory);
+					directories.put(relative(active, directory), directory);
+				}
 				return FileVisitResult.CONTINUE;
 			}
 
@@ -323,8 +360,10 @@ final class ProjectionConvergence {
 	/**
 	 * Removals and prunes are the walked paths themselves, never re-resolved from a name, so a link is removed as itself.
 	 * Junk ({@link ProjectionJunk}) the target does not ship goes best effort and alone never makes work.
+	 * {@code absentInstalls} names the install paths that held nothing at observation: their direct link may skip the
+	 * destination read, and their cache record has no previous one to preserve.
 	 */
-	private record Work(List<Path> removals, List<Path> junk, List<Path> prunes, List<Path> junkPrunes, List<ProjectionState.Row> installs) {
+	private record Work(List<Path> removals, List<Path> junk, List<Path> prunes, List<Path> junkPrunes, List<ProjectionState.Row> installs, Set<String> absentInstalls) {
 		boolean isEmpty() {
 			return removals.isEmpty() && prunes.isEmpty() && installs.isEmpty();
 		}
@@ -363,9 +402,13 @@ final class ProjectionConvergence {
 				.sorted(Comparator.comparing((Map.Entry<String, Path> directory) -> directory.getKey().length()).reversed())
 				.forEach(directory -> (substantive.contains(directory.getKey()) ? prunes : junkPrunes).add(directory.getValue()));
 		List<ProjectionState.Row> installs = new ArrayList<>();
+		Set<String> absentInstalls = new HashSet<>();
 		for (ProjectionState.Row row : wanted.values()) {
 			Observed current = observed.files().get(row.path());
-			if (current == null || !isObject(current, row)) installs.add(row);
+			if (current == null || !isObject(current, row)) {
+				installs.add(row);
+				if (current == null) absentInstalls.add(row.path());
+			}
 		}
 		// A junk-only directory standing where the target needs a file is in the way, so it is real work.
 		for (ProjectionState.Row row : installs)
@@ -374,7 +417,7 @@ final class ProjectionConvergence {
 				junkPrunes.remove(directory);
 				if (!prunes.contains(directory)) prunes.add(directory);
 			}
-		return new Work(removals, junk, prunes, junkPrunes, installs);
+		return new Work(removals, junk, prunes, junkPrunes, installs, absentInstalls);
 	}
 
 	private static void markAncestors(String path, Set<String> directories) {
@@ -469,6 +512,8 @@ final class ProjectionConvergence {
 		List<Held> held = new ArrayList<>();
 		List<Held> stuck = new ArrayList<>();
 		Map<Path, String> installed = new LinkedHashMap<>();
+		Map<Path, FileCache.FileFingerprint> fingerprints = new LinkedHashMap<>();
+		Set<Path> absentTargets = new LinkedHashSet<>();
 		List<Path> kept = new ArrayList<>();
 		for (Path path : work.removals()) {
 			try {
@@ -508,27 +553,10 @@ final class ProjectionConvergence {
 				stuck.add(new Held(directory, e));
 			}
 		}
-		for (ProjectionState.Row row : work.installs()) {
-			Path target = resolve(active, row.path());
-			Held blocker = blocker(held, stuck, target);
-			if (blocker != null) {
-				held.add(new Held(target, blocker.cause()));
-				continue;
-			}
-			try {
-				writes.beforeWrite(target);
-				if (keepUnknown) keep(target, kept);
-				install(target, row, touched);
-				touched.add(target.getParent());
-				installed.put(target, row.sha1());
-			} catch (IOException e) {
-				if (!StorageConditions.isLockFailure(e, row.size())) throw StorageConditions.classified(e, row.size());
-				held.add(new Held(target, e));
-			}
-		}
+		executeInstalls(work.installs(), active, touched, held, stuck, installed, fingerprints, absentTargets, kept, keepUnknown, work.absentInstalls());
 		// V3: the records go in one batch file after the links, so the cache writes one journal instead of one rename per file.
 		try {
-			cache.overwriteCacheBatch(installed);
+			cache.overwriteCacheBatch(installed, fingerprints, absentTargets);
 		} catch (IOException batchFailure) {
 			for (Map.Entry<Path, String> entry : installed.entrySet()) cache.overwriteCache(entry.getKey(), entry.getValue());
 		}
@@ -544,6 +572,167 @@ final class ProjectionConvergence {
 					ProjectionRepairBackups.INDEX);
 		}
 		return new Result(!touched.isEmpty(), List.copyOf(held), List.copyOf(kept));
+	}
+
+	/**
+	 * Lands every install. The result order is the plan order whatever the width: the cache batch is written in that
+	 * order, the first failure is the earliest failed path in that order, and a held path stays owed exactly as the
+	 * sequential loop reports it. The pool is small and only used when the hooks are parallel-safe and the store's own
+	 * force probe says its IO is cheap; a slow store keeps the ordered loop because interleaving metadata work there
+	 * makes the user wait longer.
+	 */
+	private void executeInstalls(List<ProjectionState.Row> installs, Path active, Set<Path> touched, List<Held> held, List<Held> stuck,
+			Map<Path, String> installed, Map<Path, FileCache.FileFingerprint> fingerprints, Set<Path> absentTargets, List<Path> kept, boolean keepUnknown,
+			Set<String> absentInstalls) throws IOException {
+		if (!parallelInstalls(keepUnknown) || installs.size() < 2) {
+			for (ProjectionState.Row row : installs) {
+				Path target = resolve(active, row.path());
+				Held blocker = blocker(held, stuck, target);
+				if (blocker != null) {
+					held.add(new Held(target, blocker.cause()));
+					continue;
+				}
+				boolean absent = absentInstalls.contains(row.path());
+				List<Path> taskTouched = new ArrayList<>(2);
+				try {
+					writes.beforeWrite(target);
+					if (keepUnknown) keep(target, kept);
+					FileCache.FileFingerprint fingerprint = install(target, row, taskTouched, absent);
+					taskTouched.add(target.getParent());
+					touched.addAll(taskTouched);
+					installed.put(target, row.sha1());
+					if (fingerprint != null) fingerprints.put(target, fingerprint);
+					if (absent) absentTargets.add(target);
+				} catch (IOException e) {
+					// A directory this attempt created still needs its parent forced even when the file itself was held.
+					touched.addAll(taskTouched);
+					if (!StorageConditions.isLockFailure(e, row.size())) throw StorageConditions.classified(e, row.size());
+					held.add(new Held(target, e));
+				}
+			}
+			return;
+		}
+		installParallel(installs, active, touched, held, stuck, installed, fingerprints, absentTargets, absentInstalls);
+	}
+
+	private void installParallel(List<ProjectionState.Row> installs, Path active, Set<Path> touched, List<Held> held, List<Held> stuck,
+			Map<Path, String> installed, Map<Path, FileCache.FileFingerprint> fingerprints, Set<Path> absentTargets, Set<String> absentInstalls)
+			throws IOException {
+		// The removal and prune passes have finished, so what blocks an install is fixed before the pool starts; a held
+		// install is a file path, and a target beneath it cannot exist.
+		List<Held> fixedHeld = List.copyOf(held);
+		List<Held> fixedStuck = List.copyOf(stuck);
+		// V5: create every install's parent on this thread before a worker can race it. ensuredDirectories names a
+		// directory before creating it, so a worker that lost that race would skip creation and let linkAtomicResult
+		// build the chain, outside this run's forced set. A blocked target creates nothing: its held path may be a file
+		// standing where a directory would go.
+		for (ProjectionState.Row row : installs) {
+			Path target = resolveUnchecked(active, row.path());
+			if (target == null || blocker(fixedHeld, fixedStuck, target) != null) continue;
+			Path parent = target.getParent();
+			if (parent != null && ensuredDirectories.add(parent)) createDirectories(parent, touched);
+		}
+		int workers = Math.min(MAX_INSTALL_WORKERS, Runtime.getRuntime().availableProcessors());
+		AtomicBoolean abort = new AtomicBoolean();
+		ExecutorService pool = Executors.newFixedThreadPool(workers, task -> {
+			Thread thread = new Thread(task, "AutoModpackProjectionInstall");
+			thread.setDaemon(true);
+			return thread;
+		});
+		List<Future<InstallOutcome>> futures = new ArrayList<>(installs.size());
+		try {
+			for (int index = 0; index < installs.size(); index++) {
+				ProjectionState.Row row = installs.get(index);
+				boolean absent = absentInstalls.contains(row.path());
+				futures.add(pool.submit(() -> {
+					if (abort.get()) return null;
+					InstallOutcome outcome = installOne(row, active, fixedHeld, fixedStuck, absent);
+					if (outcome.failure() != null) abort.set(true);
+					return outcome;
+				}));
+			}
+		} finally {
+			pool.shutdown();
+		}
+		Throwable firstFailure = null;
+		List<InstallOutcome> outcomes = new ArrayList<>(futures.size());
+		try {
+			for (Future<InstallOutcome> future : futures) {
+				try {
+					InstallOutcome outcome = future.get();
+					outcomes.add(outcome);
+					if (outcome != null && outcome.failure() != null && firstFailure == null) firstFailure = outcome.failure();
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					throw new IOException("Interrupted while converging the projection", e);
+				} catch (ExecutionException e) {
+					if (firstFailure == null) firstFailure = e.getCause();
+				}
+			}
+		} finally {
+			pool.shutdownNow();
+		}
+		if (firstFailure != null) {
+			if (firstFailure instanceof IOException failure) throw failure;
+			if (firstFailure instanceof RuntimeException runtime) throw runtime;
+			if (firstFailure instanceof Error error) throw error;
+			throw new IOException("Projection install failed", firstFailure);
+		}
+		for (InstallOutcome outcome : outcomes) {
+			if (outcome == null) continue;
+			if (outcome.held() != null) {
+				held.add(outcome.held());
+				continue;
+			}
+			touched.addAll(outcome.touched());
+			installed.put(outcome.target(), outcome.sha1());
+			if (outcome.fingerprint() != null) fingerprints.put(outcome.target(), outcome.fingerprint());
+			if (outcome.absent()) absentTargets.add(outcome.target());
+		}
+	}
+
+	private InstallOutcome installOne(ProjectionState.Row row, Path active, List<Held> held, List<Held> stuck, boolean absent) {
+		Path target = resolveUnchecked(active, row.path());
+		if (target == null)
+			return new InstallOutcome(active, row.sha1(), null, new IOException("Projection path escapes the active directory: " + row.path()), List.of(), null, absent);
+		Held blocker = blocker(held, stuck, target);
+		if (blocker != null) return new InstallOutcome(target, row.sha1(), new Held(target, blocker.cause()), null, List.of(), null, absent);
+		List<Path> taskTouched = new ArrayList<>(2);
+		try {
+			writes.beforeWrite(target);
+			FileCache.FileFingerprint fingerprint = install(target, row, taskTouched, absent);
+			taskTouched.add(target.getParent());
+			return new InstallOutcome(target, row.sha1(), null, null, taskTouched, fingerprint, absent);
+		} catch (IOException e) {
+			if (!StorageConditions.isLockFailure(e, row.size()))
+				return new InstallOutcome(target, row.sha1(), null, StorageConditions.classified(e, row.size()), taskTouched, null, absent);
+			return new InstallOutcome(target, row.sha1(), new Held(target, e), null, taskTouched, null, absent);
+		}
+	}
+
+	private static Path resolveUnchecked(Path active, String relative) {
+		try {
+			return resolve(active, relative);
+		} catch (IOException e) {
+			return null;
+		}
+	}
+
+	private record InstallOutcome(Path target, String sha1, Held held, IOException failure, List<Path> touched, FileCache.FileFingerprint fingerprint, boolean absent) {}
+
+	/** The pool only runs when nothing about the store or the hooks punishes concurrency. */
+	private boolean parallelInstalls(boolean keepUnknown) {
+		if (keepUnknown || !writes.parallelSafe()) return false;
+		if (Runtime.getRuntime().availableProcessors() < 2) return false;
+		try {
+			FileStore data = ForceProfile.storeOf(storage.stagingDirectory());
+			FileStore projection = ForceProfile.storeOf(storage.gameDirectory());
+			// A link across stores falls back to a copy, and copying in parallel is exactly the slow-store trap.
+			if (!data.equals(projection)) return false;
+			return ForceProfile.allowsOverlappedForce(storage.stagingDirectory());
+		} catch (IOException | RuntimeException e) {
+			return false;
+		}
 	}
 
 	/** What keeps an install from landing: a held path beneath or above it, or a directory at it only junk keeps. */
@@ -574,19 +763,20 @@ final class ProjectionConvergence {
 	/**
 	 * Installs the object at {@code target} as its hard link or verified copy; the caller seeds the record (V3). A target the
 	 * filesystem refuses to replace because it is read-only (FAT's DOS attribute) is unprotected and retried once, and the
-	 * object it shared an inode with is protected again.
+	 * object it shared an inode with is protected again. {@code knownAbsent} is the observation's word that the path held
+	 * nothing: the publication then skips the destination read and reports the source's fingerprint for the batch.
 	 */
-	private void install(Path target, ProjectionState.Row row, Set<Path> touched) throws IOException {
+	private FileCache.FileFingerprint install(Path target, ProjectionState.Row row, Collection<Path> touched, boolean knownAbsent) throws IOException {
 		Path object = storage.objectFile(row.sha1());
 		Path parent = target.getParent();
 		if (parent != null && ensuredDirectories.add(parent)) createDirectories(parent, touched);
 		try {
-			VerifiedFileTransfer.linkAtomic(object, target, row.size(), row.sha1(), cache);
+			return VerifiedFileTransfer.linkAtomicResult(object, target, row.size(), row.sha1(), cache, sources, knownAbsent).fingerprint();
 		} catch (AccessDeniedException denied) {
 			if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) throw denied;
 			Path shared = unprotect(target);
 			try {
-				VerifiedFileTransfer.linkAtomic(object, target, row.size(), row.sha1(), cache);
+				return VerifiedFileTransfer.linkAtomicResult(object, target, row.size(), row.sha1(), cache, sources, false).fingerprint();
 			} finally {
 				reprotect(shared);
 			}
@@ -598,7 +788,7 @@ final class ProjectionConvergence {
 	 * directory's parent is forced with the rest before the run returns, and a crash never loses a directory whose
 	 * files were forced.
 	 */
-	private static void createDirectories(Path directory, Set<Path> touched) throws IOException {
+	private static void createDirectories(Path directory, Collection<Path> touched) throws IOException {
 		List<Path> missing = new ArrayList<>();
 		for (Path current = directory; current != null && !Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS); current = current.getParent()) missing.add(current);
 		Files.createDirectories(directory);

@@ -7,11 +7,13 @@ import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.logging.log4j.LogManager;
@@ -29,6 +31,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
+import pl.skidam.automodpack_core.utils.ValidatedSources;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.WindowsLockProbe;
 import pl.skidam.automodpack_core.utils.WorkStatus;
@@ -71,6 +74,8 @@ public final class UpdateCommit {
 	private final UpdateTransactionValidator validator;
 	private final Probe probe;
 	private FileCache fileCache;
+	/** The sources this apply has already proved, valid for the one transaction its cache lifetime covers. */
+	private ValidatedSources validatedSources;
 	/** The loader-scanned paths this committer changed, in order: a boot that does not relaunch after them names them. */
 	private final List<String> scannedChanges = new ArrayList<>();
 	/** The scanned change of a projection a directory-scanning loader took before preload. */
@@ -183,6 +188,17 @@ public final class UpdateCommit {
 		default void reached(Step step) throws IOException {}
 
 		default void beforeWrite(Path target) throws IOException {}
+
+		/** Called after a live delete and its empty-directory pruning landed; a test uses it to swap a proven prefix. */
+		default void afterRemoval(Path target) throws IOException {}
+
+		/**
+		 * Whether these hooks may be called from the projection's bounded install pool. A hook that crashes or records a
+		 * global order keeps the sequential path; production's no-op probe allows the pool.
+		 */
+		default boolean parallelSafe() {
+			return false;
+		}
 	}
 
 	/** A path some process held open, and the operation that owes it; a null operation is a path of the projection convergence. */
@@ -261,7 +277,7 @@ public final class UpdateCommit {
 	private Outcome apply(Built built) throws IOException {
 		UpdateTransaction transaction = built.transaction();
 		return ClientStorageMutation.run(storage, () -> withFileCache(cache -> {
-			validator.validate(transaction, built.unpublishedTarget(), true, cache);
+			validator.validate(transaction, built.unpublishedTarget(), true, cache, validatedSources);
 			verifySelectionUnchanged(transaction);
 			replacePending();
 			ConfigTools.writeAtomicCompact(storage.transactionFile(), transaction);
@@ -269,7 +285,9 @@ public final class UpdateCommit {
 			// its ownership receipt, so the journaled plan's objects must be pinned by name before apply runs.
 			ClientObjectStore.publishOwnership(storage);
 			probe.reached(Step.JOURNALED);
-			return executeTransaction(transaction);
+			// The fresh target is already resolved and validated; the apply gates reuse it instead of rebuilding the
+			// generation document from the journal it just wrote.
+			return executeTransaction(transaction, built.unpublishedTarget());
 		}));
 	}
 
@@ -277,9 +295,9 @@ public final class UpdateCommit {
 	private Outcome executeRecovered(UpdateTransaction current, boolean started) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
 			if (!started && replanRequired(current)) return new ReplanRequired(current, null, null, "Pending update input changed after planning");
-			validator.validateUnchecked(current, null, !started, fileCache);
+			validator.validateUnchecked(current, null, !started, fileCache, validatedSources);
 			if (!started) verifySelectionUnchanged(current);
-			return executeTransaction(current);
+			return executeTransaction(current, null);
 		});
 	}
 
@@ -291,31 +309,32 @@ public final class UpdateCommit {
 		if (Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("An offline repair must finish before an update can start");
 		UpdateTransaction pending = UpdateTransaction.read(storage.transactionFile());
 		if (pending != null && pending.phase == UpdateTransaction.Phase.COMMITTED) {
-			// A crash can land after the COMMITTED marker but before its state-history checkpoint; replaying the tail here
+			// A crash can land after the COMMITTED phase persisted but before its state-history checkpoint; replaying the tail here
 			// records the entry (idempotent by transaction id) before the record that produced it retires.
 			recordStateHistory(pending);
-			Files.deleteIfExists(storage.transactionFile());
+			retireJournal();
 		}
 		PublicationSweep.sweepUnpinnedDirectories(storage);
 	}
 
-	private Outcome executeTransaction(UpdateTransaction transaction) throws IOException {
+	private Outcome executeTransaction(UpdateTransaction transaction, SelectedModpackTarget knownTarget) throws IOException {
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
 			// The copies' ownership record is rewritten before every apply run, recovery replays included, so a crash
 			// mid-apply never leaves installed copies unowned; a doc of a run that never applied is inert until it does.
 			GeneratedCopyState.fromCopies(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken(), transaction.selectionDigest(), transaction.plan().generatedCopies()).write(storage);
-		if (transaction.phase == UpdateTransaction.Phase.COMMITTED) return finalizeCommitted(transaction);
+		if (transaction.phase == UpdateTransaction.Phase.COMMITTED) return finalizeCommitted(transaction, knownTarget);
 		AtomicReference<Operation> current = new AtomicReference<>();
 		boolean started = mutationStarted(transaction);
 		boolean preserveNewerSelection = started && validator.mutableInputDrift(transaction, fileCache).selection();
 		UpdatePlan reviewed = transaction.plan();
 		List<Lock> locks;
+		ExecutionProofs proofs = new ExecutionProofs(storage.playerRedirects());
 		try {
 			transaction.resultStatus = null;
 			transaction.resultOperation = null;
 			transaction.resultPath = null;
 			transaction.resultMessage = null;
-			locks = applyModpackTransaction(transaction, current, started, preserveNewerSelection);
+			locks = applyModpackTransaction(transaction, current, started, preserveNewerSelection, knownTarget, proofs);
 			if (locks.isEmpty()) {
 				// Only an owed journal is trimmed; the one that lands whole keeps the plan this run was handed.
 				transaction.plan = reviewed;
@@ -347,7 +366,7 @@ public final class UpdateCommit {
 		if (!locks.isEmpty()) return defer(transaction, locks);
 		// The tail retires the journal, so it sits outside the catch: a failure here would journal a FAILED receipt for a
 		// transaction whose journal is already gone, and the next boot would replay a retired apply.
-		return finalizeCommitted(transaction);
+		return finalizeCommitted(transaction, knownTarget);
 	}
 
 	/** The defer receipt: the journal keeps what is still owed and names the first held path, so every later boot re-announces who held the update. */
@@ -375,12 +394,12 @@ public final class UpdateCommit {
 	 * the lock, every collection republishes it before deleting anything, so a failed one only makes the next collection
 	 * refuse, while failing a committed apply here would report a failure over bytes that already landed.
 	 */
-	private Outcome finalizeCommitted(UpdateTransaction transaction) throws IOException {
+	private Outcome finalizeCommitted(UpdateTransaction transaction, SelectedModpackTarget knownTarget) throws IOException {
 		// P2: the converged tree is loadable from the moment the transaction it belongs to committed; a replayed tail settles it again.
 		if (ProjectionState.owed(storage)) ProjectionState.settled(storage, transaction.transactionId);
 		PublicationSweep.settleLegacyDirectories(storage);
 		recordStateHistory(transaction);
-		Files.deleteIfExists(storage.transactionFile());
+		retireJournal();
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
 			try {
 				new ClientGenerationStore(storage).forgetModpack(transaction.plan().modpackId());
@@ -428,16 +447,17 @@ public final class UpdateCommit {
 
 	/**
 	 * The modpack apply sequence: the pre-mutation gates and pins, the live operations still owed, the tombstone step,
-	 * the durable PROJECTED marker, the projection convergence, and durable finalization. PROJECTED is persisted only
+	 * the durable PROJECTED phase, the projection convergence, and durable finalization. PROJECTED is persisted only
 	 * once every live operation landed and before the first projection write, so a replay of a published journal never
 	 * writes a live file again (#580: a landed editable file is the player's). Returns the held paths that keep the
 	 * transaction owed.
 	 */
-	private List<Lock> applyModpackTransaction(UpdateTransaction transaction, AtomicReference<Operation> current, boolean started, boolean preserveNewerSelection) throws IOException {
+	private List<Lock> applyModpackTransaction(UpdateTransaction transaction, AtomicReference<Operation> current, boolean started, boolean preserveNewerSelection,
+			SelectedModpackTarget knownTarget, ExecutionProofs proofs) throws IOException {
 		if (!started) {
 			if (validator.mutableInputDrift(transaction, fileCache).configuration()) throw new UpdateReplanRequiredException(null, "Client configuration changed after planning the update");
-			requireLauncherWritable(transaction);
-			capturePinnedBytes(transaction);
+			requireLauncherWritable(transaction, knownTarget);
+			capturePinnedBytes(transaction, proofs);
 		}
 		boolean published = publicationStarted(transaction);
 		snapshotBefore(transaction);
@@ -445,13 +465,13 @@ public final class UpdateCommit {
 		else if (!published) setPhase(transaction, UpdateTransaction.Phase.PREPARING);
 		if (!published) {
 			WorkStatus.phase(WorkStatus.Phase.APPLYING);
-			List<Lock> owed = applyOperations(transaction, current);
+			List<Lock> owed = applyOperations(transaction, current, proofs);
 			current.set(null);
-			applyOverlayTombstones(transaction);
+			applyOverlayTombstones(transaction, knownTarget);
 			probe.reached(Step.LIVE_APPLIED);
 			if (!owed.isEmpty()) return owed;
 		} else {
-			applyOverlayTombstones(transaction);
+			applyOverlayTombstones(transaction, knownTarget);
 		}
 		if (transaction.phase != UpdateTransaction.Phase.PROJECTED) persistPhase(transaction, UpdateTransaction.Phase.PROJECTED);
 		// A journal of an older version proved its publication only by these directories; PROJECTED is durable now.
@@ -459,7 +479,7 @@ public final class UpdateCommit {
 		WorkStatus.phase(WorkStatus.Phase.FINISHING);
 		List<Lock> held = convergeProjection(transaction);
 		if (!held.isEmpty()) return held;
-		finalizeModpackState(transaction, preserveNewerSelection);
+		finalizeModpackState(transaction, preserveNewerSelection, knownTarget);
 		probe.reached(Step.FINALIZED);
 		return List.of();
 	}
@@ -473,10 +493,10 @@ public final class UpdateCommit {
 	}
 
 	/** Pin remaining before-bytes of every live operation so a later mutation of this attempt still has them in CAS; a drift here still replans. */
-	private void capturePinnedBytes(UpdateTransaction transaction) throws IOException {
+	private void capturePinnedBytes(UpdateTransaction transaction, ExecutionProofs proofs) throws IOException {
 		for (Operation operation : transaction.plan().operations()) {
 			if (operation.root() == Root.PROJECTION) continue;
-			Path live = resolve(operation, transaction);
+			Path live = resolve(operation, transaction, proofs);
 			InFlight state = inFlight(live, operation);
 			if (state == InFlight.DRIFT) throw new UpdateReplanRequiredException(live, driftStory(operation, live));
 			if (state == InFlight.DESTINATION || operation.expectedExistingHash() == null) continue;
@@ -524,7 +544,7 @@ public final class UpdateCommit {
 	 * drifted path is written over - this run's history snapshot holds its bytes - and a held one stays owed while the
 	 * rest go on. The plan keeps exactly the owed operations, so the journal a deferral persists is the remaining work.
 	 */
-	private List<Lock> applyOperations(UpdateTransaction transaction, AtomicReference<Operation> current) throws IOException {
+	private List<Lock> applyOperations(UpdateTransaction transaction, AtomicReference<Operation> current, ExecutionProofs proofs) throws IOException {
 		List<Operation> owed = new ArrayList<>();
 		List<Lock> locks = new ArrayList<>();
 		List<Operation> operations = transaction.plan().operations();
@@ -536,13 +556,16 @@ public final class UpdateCommit {
 				continue;
 			}
 			current.set(operation);
-			Path target = resolve(operation, transaction);
+			Path target = resolve(operation, transaction, proofs);
 			try {
 				if (inFlight(target, operation) == InFlight.DESTINATION) continue;
 				probe.beforeWrite(target);
 				if (operation.operation() == OperationType.DELETE) {
 					Files.delete(target);
 					FileTrees.pruneEmptyAncestors(target, storage.root(operation.root(), transaction.plan().modpackId()));
+					// An empty parent may be gone, and a later writer may recreate it as a link: prove it again.
+					proofs.removed(operation.root(), target);
+					probe.afterRemoval(target);
 				} else {
 					VerifiedFileTransfer.copyAtomic(storage.objectFile(operation.expectedObjectHash()), target, operation.expectedSize(), operation.expectedObjectHash(), fileCache);
 				}
@@ -577,7 +600,12 @@ public final class UpdateCommit {
 			public void marked() throws IOException {
 				probe.reached(Step.PROJECTION_MARKED);
 			}
-		}).converge(transaction.transactionId, target, projectionHints(transaction, target));
+
+			@Override
+			public boolean parallelSafe() {
+				return probe == Probe.NONE || probe.parallelSafe();
+			}
+		}, validatedSources).converge(transaction.transactionId, target, projectionHints(transaction, target));
 		if (result.changed()) noteProjectionChange();
 		if (!result.converged()) return result.held().stream().map(held -> new Lock(null, held.path(), held.cause())).toList();
 		probe.reached(Step.PROJECTION_CONVERGED);
@@ -610,8 +638,8 @@ public final class UpdateCommit {
 	 * The durable finalization: planned config, selection, launcher switch, and pack state with its active-state pointer. The
 	 * planned config is rebased on the stored one, so a setting the player changed since planning keeps their value.
 	 */
-	private void finalizeModpackState(UpdateTransaction transaction, boolean preserveNewerSelection) throws IOException {
-		SelectedModpackTarget resolved = validator.resolvedTarget(transaction, validator.targetDocument(transaction));
+	private void finalizeModpackState(UpdateTransaction transaction, boolean preserveNewerSelection, SelectedModpackTarget knownTarget) throws IOException {
+		SelectedModpackTarget resolved = knownTarget != null ? knownTarget : validator.resolvedTarget(transaction, validator.targetDocument(transaction));
 		if (transaction.plan().plannedClientConfig() != null && !preserveNewerSelection)
 			try {
 				ClientConfigJsons.ClientConfigFieldsV3 stored = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
@@ -644,8 +672,9 @@ public final class UpdateCommit {
 	}
 
 	/** The gate before the first write: a switch whose launcher metadata is gone or unreadable replans instead of landing files the launcher cannot follow. */
-	private void requireLauncherWritable(UpdateTransaction transaction) throws IOException {
-		LauncherVersionSwapper.Switch launcherSwitch = transaction.plan().launcherSwitch(validator.resolvedTarget(transaction, validator.targetDocument(transaction)).flatTarget());
+	private void requireLauncherWritable(UpdateTransaction transaction, SelectedModpackTarget knownTarget) throws IOException {
+		SelectedModpackTarget resolved = knownTarget != null ? knownTarget : validator.resolvedTarget(transaction, validator.targetDocument(transaction));
+		LauncherVersionSwapper.Switch launcherSwitch = transaction.plan().launcherSwitch(resolved.flatTarget());
 		if (launcherSwitch == null) return;
 		try {
 			LauncherVersionSwapper.requireWritable(launcherSwitch, storage.gameDirectory());
@@ -665,18 +694,27 @@ public final class UpdateCommit {
 			ConfigTools.writeAtomicCompact(storage.transactionFile(), transaction);
 		} catch (IOException journalFailure) {
 			cause.addSuppressed(journalFailure);
+			return;
 		}
 	}
 
-	/** Marks an in-memory phase transition. The phase is only durable at the boundaries: the PLANNED intent, the PREPARING first-write marker, the COMMITTED marker, and the result receipt. */
+	/** Marks an in-memory phase transition. The phase is durable only where it is persisted. */
 	private void setPhase(UpdateTransaction transaction, UpdateTransaction.Phase phase) {
 		transaction.phase = phase;
 	}
 
-	/** Persists the journal at a durable phase boundary, rewriting the whole record exactly where recovery depends on the phase. */
+	/**
+	 * Persists a phase boundary as one append-only record in the journal. The plan itself is not rewritten: recovery
+	 * reads one file, its document plus the last complete record, so the phase never has a second source of truth.
+	 */
 	private void persistPhase(UpdateTransaction transaction, UpdateTransaction.Phase phase) throws IOException {
 		setPhase(transaction, phase);
-		ConfigTools.writeAtomicCompact(storage.transactionFile(), transaction);
+		UpdateTransaction.appendPhase(storage.transactionFile(), transaction.transactionId, phase);
+	}
+
+	/** Retires the journal. */
+	private void retireJournal() throws IOException {
+		Files.deleteIfExists(storage.transactionFile());
 	}
 
 	private boolean publicationStarted(UpdateTransaction transaction) {
@@ -701,19 +739,65 @@ public final class UpdateCommit {
 	 * The tombstone step: a modpack update leaves behind only the tombstones its target still ships as editable,
 	 * written the same way by the live apply and every replay, rc journals included.
 	 */
-	private void applyOverlayTombstones(UpdateTransaction transaction) throws IOException {
+	private void applyOverlayTombstones(UpdateTransaction transaction, SelectedModpackTarget knownTarget) throws IOException {
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE) return;
 		String modpackId = transaction.plan().modpackId();
-		ModpackJsons.ModpackContentFields target = validator.resolvedTarget(transaction, validator.targetDocument(transaction)).flatTarget();
+		SelectedModpackTarget resolved = knownTarget != null ? knownTarget : validator.resolvedTarget(transaction, validator.targetDocument(transaction));
+		ModpackJsons.ModpackContentFields target = resolved.flatTarget();
 		storage.writeOverlayState(modpackId, UpdatePlanner.retainedTombstones(storage.readOverlayState(modpackId).deletedPaths, target));
 	}
 
 	private Path resolve(Operation operation, UpdateTransaction transaction) throws IOException {
-		return resolve(operation.root(), operation.relativePath(), transaction);
+		return FileTrees.resolveConfined(storage.root(operation.root(), transaction.plan().modpackId()), UpdateTransactionValidator.normalizeOperationPath(operation.relativePath()), "Operation target",
+				rootTrust(operation.root()), playerRedirects(operation.root()));
 	}
 
-	private Path resolve(Root root, String relativePath, UpdateTransaction transaction) throws IOException {
-		return FileTrees.resolveConfined(storage.root(root, transaction.plan().modpackId()), UpdateTransactionValidator.normalizeOperationPath(relativePath), "Operation target");
+	private Set<Path> playerRedirects(Root root) {
+		return root == Root.GAME_DIR ? storage.playerRedirects() : Set.of();
+	}
+
+	private Path resolve(Operation operation, UpdateTransaction transaction, ExecutionProofs proofs) throws IOException {
+		return resolve(operation.root(), operation.relativePath(), transaction, proofs);
+	}
+
+	private Path resolve(Root root, String relativePath, UpdateTransaction transaction, ExecutionProofs proofs) throws IOException {
+		Path rootPath = storage.root(root, transaction.plan().modpackId());
+		return proofs.under(root, rootPath).resolve(UpdateTransactionValidator.normalizeOperationPath(relativePath), "Operation target");
+	}
+
+	/** The game directory is the player's own and may be relocated; the app-owned roots must never redirect. */
+	private static FileTrees.RootTrust rootTrust(Root root) {
+		return root == Root.GAME_DIR ? FileTrees.RootTrust.PLAYER_CONFIGURED : FileTrees.RootTrust.MANAGED;
+	}
+
+	/**
+	 * One commit execution's directory-prefix proofs, one per managed root of the transaction's modpack. The root path a
+	 * transaction resolves is fixed, so a proof is valid across every live-operation pass; a removal that may delete or
+	 * replace a proven directory drops that root's proof, and the next resolution walks the chain again. This stays a
+	 * per-execution object: a later commit, or a replay after a crash, must observe the tree as it is then.
+	 */
+	private static final class ExecutionProofs {
+		private final Map<Root, FileTrees.Confinement> byRoot = new EnumMap<>(Root.class);
+		private final Set<Path> playerRedirects;
+
+		private ExecutionProofs(Set<Path> playerRedirects) {
+			this.playerRedirects = Set.copyOf(playerRedirects);
+		}
+
+		private FileTrees.Confinement under(Root root, Path rootPath) {
+			Path normalized = rootPath.toAbsolutePath().normalize();
+			FileTrees.Confinement confinement = byRoot.get(root);
+			if (confinement == null || !confinement.root().equals(normalized)) {
+				confinement = FileTrees.Confinement.under(normalized, rootTrust(root), root == Root.GAME_DIR ? playerRedirects : Set.of());
+				byRoot.put(root, confinement);
+			}
+			return confinement;
+		}
+
+		private void removed(Root root, Path target) {
+			FileTrees.Confinement confinement = byRoot.get(root);
+			if (confinement != null) confinement.invalidate(target);
+		}
 	}
 
 	private interface FileCacheWork<T> {
@@ -724,10 +808,12 @@ public final class UpdateCommit {
 		if (fileCache != null) return work.run(fileCache);
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			fileCache = cache;
+			validatedSources = new ValidatedSources(cache);
 			try {
 				return work.run(cache);
 			} finally {
 				fileCache = null;
+				validatedSources = null;
 			}
 		}
 	}

@@ -18,7 +18,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -27,6 +29,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.client.BootRecovery;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.PlatformUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** V1-V5 of {@link ProjectionConvergence}: one whole-tree convergence from CAS, re-runnable from any crash, in either direction. */
@@ -132,6 +135,54 @@ class ProjectionConvergenceTest {
 			int lastRemoval = 0;
 			for (int i = 0; i < order.size(); i++) if (order.get(i).startsWith("-")) lastRemoval = i;
 			for (int i = 0; i < lastRemoval; i++) assertTrue(order.get(i).startsWith("-"), "an install before a removal: " + order);
+		}
+	}
+
+	/** V4 under the bounded install pool: one held path stays owed while every other target still lands. */
+	@Test
+	void aHeldPathStaysOwedInTheParallelInstallPool() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, OLD);
+			Path held = storage.activePath("config/alpha.toml");
+			ProjectionConvergence.Result result = converge(storage, cache, NEW, holdingInParallel(held::equals));
+			assertFalse(result.converged());
+			assertEquals(List.of(held), result.held().stream().map(ProjectionConvergence.Held::path).toList());
+			Map<String, String> mixed = tree(storage);
+			assertEquals("a = 1", mixed.get("config/alpha.toml"), "the held path keeps its old bytes");
+			assertEquals("alpha two", mixed.get("mods/alpha-1.1.jar"), "the rest of the target still lands");
+			assertEquals("now a zip", mixed.get("resourcepacks/pack"));
+			assertTrue(ProjectionState.read(storage).converging(), "a held path keeps the projection unloadable");
+
+			assertTrue(converge(storage, cache, NEW, ProjectionConvergence.Writes.NONE).converged());
+			assertEquals(NEW, tree(storage));
+		}
+	}
+
+	/** C6 under the bounded pool: a crash during a parallel install leaves a refused tree the next run finishes. */
+	@Test
+	void aCrashInTheParallelInstallPoolStillConvergesOnTheNextRun() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, OLD);
+			AtomicInteger seen = new AtomicInteger();
+			assertThrows(Crash.class, () -> converge(storage, cache, NEW, new ProjectionConvergence.Writes() {
+				@Override
+				public void beforeWrite(Path target) {
+					if (seen.incrementAndGet() == 2) throw new Crash();
+				}
+
+				@Override
+				public boolean parallelSafe() {
+					return true;
+				}
+			}));
+			assertTrue(ProjectionState.read(storage).converging(), "marked before the first write");
+			assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()), "no gate loads a mixed tree");
+			ProjectionAvailability.forget(storage.gameDirectory());
+
+			assertTrue(converge(storage, cache, NEW, ProjectionConvergence.Writes.NONE).converged());
+			assertEquals(NEW, tree(storage));
 		}
 	}
 
@@ -330,6 +381,25 @@ class ProjectionConvergenceTest {
 		}
 	}
 
+	/** W3: a junction inside the managed projection is never descended, so its target cannot enter the removal plan. */
+	@Test
+	void aJunctionInsideTheActiveProjectionIsRefusedAndItsTargetUntouched() throws Exception {
+		Assumptions.assumeTrue(PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS, "junctions are a Windows reparse-point feature");
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		Path outside = Files.createDirectories(temporaryDirectory.resolve("outside"));
+		Path kept = Files.writeString(outside.resolve("keep.txt"), "keep", StandardCharsets.UTF_8);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, OLD);
+			assertEquals(0, mklinkJunction(storage.activeDirectory().resolve("escape"), outside), "mklink /J should succeed without elevation");
+
+			assertThrows(IOException.class, () -> converge(storage, cache, NEW, ProjectionConvergence.Writes.NONE));
+
+			assertEquals("keep", Files.readString(kept, StandardCharsets.UTF_8), "the junction target must not be modified");
+			assertEquals("alpha one", Files.readString(storage.activePath("mods/alpha-1.0.jar")), "the projection stays intact");
+			assertFalse(Files.exists(storage.activePath("mods/alpha-1.1.jar")), "no write happened after the refusal");
+		}
+	}
+
 	/** Downgrade: an older version committed a generation while the state was converging; the restore keeps that generation, not the older fallback. */
 	@Test
 	void aGenerationCommittedSinceTheMarkIsWhatARestoreKeeps() throws Exception {
@@ -374,6 +444,12 @@ class ProjectionConvergenceTest {
 
 	private static List<ProjectionState.Row> sorted(List<ProjectionState.Row> rows) {
 		return rows.stream().sorted(Comparator.comparing(ProjectionState.Row::path)).toList();
+	}
+
+	private static int mklinkJunction(Path link, Path target) throws Exception {
+		Process process = new ProcessBuilder("cmd", "/c", "mklink", "/J", link.toString(), target.toString()).redirectErrorStream(true).start();
+		process.getInputStream().readAllBytes();
+		return process.waitFor();
 	}
 
 }

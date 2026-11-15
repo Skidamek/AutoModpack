@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.update;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -40,20 +41,49 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ValidatedSources;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Every structural and precondition check a persisted transaction must pass before its plan may mutate live state. */
 final class UpdateTransactionValidator {
 	private final ClientStorage storage;
+	/**
+	 * One commit validates its transaction once and then asks for the same target document again at every gate.
+	 * Rebuilding it validates the carried manifest, rehashes the tree, and recomputes the ledger digest, so the
+	 * answer is kept for the one transaction this validator is executing.
+	 */
+	private UpdateTransaction memoTransaction;
+	private PackDocument memoDocument;
+	private SelectedModpackTarget memoResolved;
+	/**
+	 * Directory prefixes proved free of symbolic links by the current validation pass, one entry per root.
+	 * Cleared at the start of every pass so a swap between passes is always seen again; within one pass the
+	 * leaf of every entry is still checked.
+	 */
+	private final Map<Root, FileTrees.Confinement> pathPass = new EnumMap<>(Root.class);
+	private final Path passGameDirectory;
+	private final Path passAutomodpackDirectory;
 
 	UpdateTransactionValidator(ClientStorage storage) {
 		this.storage = Objects.requireNonNull(storage, "storage");
+		this.passGameDirectory = storage.gameDirectory();
+		this.passAutomodpackDirectory = storage.automodpackDirectory();
+	}
+
+	/** Starts a fresh confinement proof; directory facts from an earlier pass may be stale. */
+	private void beginPathPass() {
+		pathPass.clear();
 	}
 
 	/** Throws when the transaction is not structurally valid; wraps undiagnosed failures with a common message. */
 	void validate(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs, FileCache fileCache) throws IOException {
+		validate(transaction, selectedTarget, verifyMutableInputs, fileCache, null);
+	}
+
+	/** {@link #validate} with the transaction's source records, so the same CAS object is proved once for validation and its links. */
+	void validate(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs, FileCache fileCache, ValidatedSources sources) throws IOException {
 		try {
-			validateUnchecked(transaction, selectedTarget, verifyMutableInputs, fileCache);
+			validateUnchecked(transaction, selectedTarget, verifyMutableInputs, fileCache, sources);
 			requireDeleteBaselines(transaction);
 		} catch (IOException e) {
 			throw e;
@@ -63,6 +93,11 @@ final class UpdateTransactionValidator {
 	}
 
 	void validateUnchecked(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs, FileCache fileCache) throws IOException {
+		validateUnchecked(transaction, selectedTarget, verifyMutableInputs, fileCache, null);
+	}
+
+	void validateUnchecked(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs, FileCache fileCache, ValidatedSources sources) throws IOException {
+		beginPathPass();
 		if (transaction == null) throw new IOException("Transaction is missing");
 		if (transaction.schemaVersion != UpdateTransaction.CURRENT_SCHEMA_VERSION) throw new IOException("Unsupported transaction schema");
 		try {
@@ -110,7 +145,7 @@ final class UpdateTransactionValidator {
 			ProjectedFile projected = finalState.get(key);
 			if (projected == null && operation.root() != Root.PROJECTION) throw new IOException("Operation target is missing from projected final state");
 			switch (operation.operation()) {
-				case INSTALL_OBJECT -> validateInstall(operation, projected, fileCache);
+				case INSTALL_OBJECT -> validateInstall(operation, projected, fileCache, sources);
 				case DELETE -> validateDelete(operation, projected);
 			}
 		}
@@ -191,8 +226,15 @@ final class UpdateTransactionValidator {
 	}
 
 	PackDocument targetDocument(UpdateTransaction transaction) throws IOException {
+		if (transaction != memoTransaction) {
+			memoTransaction = transaction;
+			memoDocument = null;
+			memoResolved = null;
+		}
+		if (memoDocument != null) return memoDocument;
 		try {
-			return new ClientGenerationStore(storage).document(transaction);
+			memoDocument = new ClientGenerationStore(storage).document(transaction);
+			return memoDocument;
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
@@ -201,10 +243,14 @@ final class UpdateTransactionValidator {
 	}
 
 	SelectedModpackTarget resolvedTarget(UpdateTransaction transaction, PackDocument record) throws IOException {
+		if (transaction == memoTransaction && memoResolved != null && memoResolved.document() == record) return memoResolved;
 		try {
 			SelectionIntent expected = transaction.expectedPriorIntent();
-			if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && expected == null) return SelectedModpackTarget.prepareDefault(record, transaction.platform());
-			return SelectedModpackTarget.prepare(record, expected, transaction.targetIntent(), transaction.platform());
+			SelectedModpackTarget target = transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && expected == null
+					? SelectedModpackTarget.prepareDefault(record, transaction.platform())
+					: SelectedModpackTarget.prepare(record, expected, transaction.targetIntent(), transaction.platform());
+			if (transaction == memoTransaction && record == memoDocument) memoResolved = target;
+			return target;
 		} catch (RuntimeException e) {
 			throw new IOException("Client generation selection is invalid", e);
 		}
@@ -484,14 +530,17 @@ final class UpdateTransactionValidator {
 		}
 	}
 
-	private void validateInstall(Operation operation, ProjectedFile projected, FileCache fileCache) throws IOException {
+	private void validateInstall(Operation operation, ProjectedFile projected, FileCache fileCache, ValidatedSources sources) throws IOException {
 		validateHash(operation.expectedObjectHash(), "install SHA-1");
 		if (operation.expectedExistingHash() != null) validateHash(operation.expectedExistingHash(), "install expected SHA-1");
 		if (operation.expectedSize() < 0 || (projected != null && (!projected.present() || operation.expectedSize() != projected.expectedSize()
 				|| !operation.expectedObjectHash().equalsIgnoreCase(projected.expectedHash()))))
 			throw new IOException("Install operation does not match projected final state");
 		Path source = storage.objectFile(operation.expectedObjectHash()).normalize();
-		if (!source.startsWith(storage.objectsDirectory()) || !FileIntegrity.matchesNamed(source, operation.expectedSize(), operation.expectedObjectHash(), fileCache))
+		boolean valid = sources != null
+				? sources.matches(source, operation.expectedSize(), operation.expectedObjectHash())
+				: FileIntegrity.matchesNamed(source, operation.expectedSize(), operation.expectedObjectHash(), fileCache);
+		if (!source.startsWith(storage.objectsDirectory()) || !valid)
 			throw new IOException("Required CAS object is missing or corrupt: " + operation.expectedObjectHash());
 	}
 
@@ -522,13 +571,20 @@ final class UpdateTransactionValidator {
 		}
 	}
 
+	/** The game directory is the player's own and may be relocated; the app-owned roots must never redirect. */
+	private static FileTrees.RootTrust rootTrust(Root root) {
+		return root == Root.GAME_DIR ? FileTrees.RootTrust.PLAYER_CONFIGURED : FileTrees.RootTrust.MANAGED;
+	}
+
 	Path validateRootAndPath(Root root, String relativePath, String currentModpackId) throws IOException {
-		Path constrainedRoot = storage.root(root, currentModpackId);
-		Path resolved = FileTrees.resolveConfined(constrainedRoot, relativePath, "Transaction target");
-		Path game = storage.gameDirectory();
-		Path automodpack = storage.automodpackDirectory();
-		if (root == Root.GAME_DIR && resolved.startsWith(automodpack)) throw new IOException("GAME_DIR operation uses a narrower root");
-		if (!resolved.startsWith(game)) throw new IOException("Transaction target escaped the game directory");
+		FileTrees.Confinement confinement = pathPass.get(root);
+		if (confinement == null) {
+			confinement = FileTrees.Confinement.under(storage.root(root, currentModpackId), rootTrust(root), root == Root.GAME_DIR ? storage.playerRedirects() : Set.of());
+			pathPass.put(root, confinement);
+		}
+		Path resolved = confinement.resolve(relativePath, "Transaction target");
+		if (root == Root.GAME_DIR && resolved.startsWith(passAutomodpackDirectory)) throw new IOException("GAME_DIR operation uses a narrower root");
+		if (!resolved.startsWith(passGameDirectory)) throw new IOException("Transaction target escaped the game directory");
 		return resolved;
 	}
 
@@ -541,8 +597,9 @@ final class UpdateTransactionValidator {
 	}
 
 	static String normalizeOperationPath(String relativePath) throws IOException {
-		if (relativePath == null || relativePath.startsWith("/") || relativePath.startsWith("\\") || relativePath.matches("^[A-Za-z]:[\\\\/].*"))
+		if (relativePath == null || relativePath.startsWith("/") || relativePath.startsWith("\\") || startsWithWindowsDrive(relativePath))
 			throw new IOException("Operation path must be relative");
+		if (isCanonicalOperationPath(relativePath)) return relativePath;
 		try {
 			String normalized = LogicalPath.normalize(relativePath);
 			if (!normalized.equals(relativePath.replace('\\', '/'))) throw new IOException("Path is not normalized: " + relativePath);
@@ -550,6 +607,47 @@ final class UpdateTransactionValidator {
 		} catch (IllegalArgumentException e) {
 			throw new IOException("Unsafe operation path", e);
 		}
+	}
+
+	/** The old {@code ^[A-Za-z]:[\\/].*} regex, without compiling it on every call. */
+	private static boolean startsWithWindowsDrive(String path) {
+		if (path.length() < 3) return false;
+		char drive = path.charAt(0);
+		char colon = path.charAt(1);
+		char separator = path.charAt(2);
+		return ((drive >= 'a' && drive <= 'z') || (drive >= 'A' && drive <= 'Z')) && colon == ':' && (separator == '/' || separator == '\\');
+	}
+
+	/**
+	 * A path {@link LogicalPath#normalize} would return unchanged: relative, forward slashes, and no blank,
+	 * {@code .} or {@code ..} segment. Restricted to ASCII file-name characters so no platform-specific path
+	 * syntax can make {@code Path.normalize} disagree; anything else takes the logical-path fallback.
+	 */
+	private static boolean isCanonicalOperationPath(String path) {
+		if (path.isEmpty()) return false;
+		int segmentStart = 0;
+		for (int i = 0; i <= path.length(); i++) {
+			if (i < path.length()) {
+				char c = path.charAt(i);
+				if (c == '/') {
+					int length = i - segmentStart;
+					if (length == 0 || isDotSegment(path, segmentStart, length)) return false;
+					segmentStart = i + 1;
+					continue;
+				}
+				boolean safe = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.';
+				if (!safe) return false;
+			} else {
+				int length = i - segmentStart;
+				return length > 0 && !isDotSegment(path, segmentStart, length);
+			}
+		}
+		return false;
+	}
+
+	private static boolean isDotSegment(String path, int start, int length) {
+		if (length == 1) return path.charAt(start) == '.';
+		return length == 2 && path.charAt(start) == '.' && path.charAt(start + 1) == '.';
 	}
 
 	static void validateHash(String hash, String description) throws IOException {

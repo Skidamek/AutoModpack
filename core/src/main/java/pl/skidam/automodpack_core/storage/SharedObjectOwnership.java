@@ -73,7 +73,7 @@ public final class SharedObjectOwnership {
 	private static Set<String> readAllOwners(DataRootResolver.Layout layout) throws IOException {
 		Path owners = layout.objectOwnersDirectory();
 		if (!Files.exists(owners, LinkOption.NOFOLLOW_LINKS)) return Set.of();
-		if (Files.isSymbolicLink(owners) || !Files.isDirectory(owners, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Shared object ownership root is not a directory: " + owners);
+		if (FileTrees.isRedirectingLink(owners) || !Files.isDirectory(owners, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Shared object ownership root is not a directory: " + owners);
 		TreeSet<String> result = new TreeSet<>();
 		try (Stream<Path> paths = Files.list(owners)) {
 			List<Path> entries = paths.toList();

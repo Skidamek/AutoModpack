@@ -55,6 +55,21 @@ final class ProjectionTestFixtures {
 		};
 	}
 
+	/** The same hold, declared safe for the bounded install pool so the parallel path's V4 is exercised. */
+	static ProjectionConvergence.Writes holdingInParallel(Predicate<Path> held) {
+		return new ProjectionConvergence.Writes() {
+			@Override
+			public void beforeWrite(Path target) throws IOException {
+				if (held.test(target)) throw new FileSystemException(target.toString(), null, "The process cannot access the file because it is being used by another process");
+			}
+
+			@Override
+			public boolean parallelSafe() {
+				return true;
+			}
+		};
+	}
+
 	/** Every regular file under {@code root} by its slash-joined relative path. */
 	static Map<String, String> files(Path root) throws IOException {
 		Map<String, String> files = new TreeMap<>();
