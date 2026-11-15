@@ -145,10 +145,18 @@ class OverlayTombstoneCommitTest {
 		return rows;
 	}
 
+	/**
+	 * Loads a shipped rc.4/rc.5 journal fixture. Those files predate the append-only format, so their document is
+	 * promoted to the current schema the way a current build writes it: same plan, no phase records. A real schema-1
+	 * file on disk is refused and re-planned instead (see UpdateTransactionPhaseJournalTest); these fixtures exercise
+	 * the recovery engine on the plan those releases left behind.
+	 */
 	static void installFixture(ClientStorage storage, String name) throws Exception {
 		try (InputStream fixture = OverlayTombstoneCommitTest.class.getResourceAsStream("journals/" + name)) {
+			String document = new String(fixture.readAllBytes(), StandardCharsets.UTF_8)
+					.replaceFirst("\"schemaVersion\"\\s*:\\s*1", "\"schemaVersion\": " + UpdateTransaction.CURRENT_SCHEMA_VERSION);
 			Files.createDirectories(storage.transactionFile().getParent());
-			Files.write(storage.transactionFile(), fixture.readAllBytes());
+			Files.writeString(storage.transactionFile(), document, StandardCharsets.UTF_8);
 		}
 	}
 

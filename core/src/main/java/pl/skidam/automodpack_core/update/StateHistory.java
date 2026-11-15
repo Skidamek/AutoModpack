@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -287,7 +288,7 @@ public final class StateHistory {
 				Set<Key> extra = Set.of(file.key());
 				String transactionId = "file-restore-" + seq;
 				snapshotIfDirty(storage, extra, Kind.LIVE, snapshot.modpackId(), transactionId);
-				copyWithoutOverwrite(storage.gameDirectory(), storage.objectFile(file.sha1()), destination, file.size(), file.sha1(), cache);
+				copyWithoutOverwrite(storage.gameDirectory(), storage.objectFile(file.sha1()), destination, file.size(), file.sha1(), cache, storage.playerRedirects());
 				snapshotIfDirty(storage, extra, Kind.FILE_RESTORE, snapshot.modpackId(), transactionId);
 				return destination;
 			}
@@ -300,7 +301,7 @@ public final class StateHistory {
 				InstanceTree tree = InstanceTree.read(storage, ClientStateJournal.open(storage).require(seq).treeSha1());
 				TrackedFile file = requireFile(tree, root, overlayPackId, path);
 				Path destination = RecoveredFiles.destination(storage, path, file.sha1());
-				copyWithoutOverwrite(storage.gameDirectory(), storage.objectFile(file.sha1()), destination, file.size(), file.sha1(), cache);
+				copyWithoutOverwrite(storage.gameDirectory(), storage.objectFile(file.sha1()), destination, file.size(), file.sha1(), cache, storage.playerRedirects());
 				return destination;
 			}
 		});
@@ -365,8 +366,10 @@ public final class StateHistory {
 		return new Key(root, root == Root.OVERLAY ? plan.modpackId() : "", relativePath);
 	}
 
-	static void copyWithoutOverwrite(Path constrainedRoot, Path source, Path destination, long size, String hash, FileCache cache) throws IOException {
-		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
+	/** {@code constrainedRoot} is the game directory: the player may have relocated it, every path inside stays checked. */
+	static void copyWithoutOverwrite(Path constrainedRoot, Path source, Path destination, long size, String hash, FileCache cache,
+			Collection<Path> trustedRedirects) throws IOException {
+		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination", FileTrees.RootTrust.PLAYER_CONFIGURED, trustedRedirects);
 		if (!FileIntegrity.matchesNamed(source, size, hash, cache)) throw new IOException("Instance tree object is missing or corrupt: " + hash);
 		if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
 			if (!Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matchesNamed(destination, size, hash, cache))
@@ -374,7 +377,7 @@ public final class StateHistory {
 			return;
 		}
 		VerifiedFileTransfer.copyCreateOnly(source, destination, size, hash, cache);
-		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
+		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination", FileTrees.RootTrust.PLAYER_CONFIGURED, trustedRedirects);
 		if (!FileIntegrity.matchesNamed(destination, size, hash, cache)) throw new IOException("Restored file failed verification: " + destination);
 	}
 
@@ -386,7 +389,9 @@ public final class StateHistory {
 			wanted.add(file.key());
 			Path object = storage.objectFile(file.sha1());
 			if (FileIntegrity.matchesNamed(destination, file.size(), file.sha1(), cache)) continue;
-			FileTrees.requireNoSymbolicLinkDescendants(storage.root(file.root(), file.overlayPackId().isEmpty() ? "_" : file.overlayPackId()), destination, "instance restore");
+			FileTrees.RootTrust trust = file.root() == Root.GAME_DIR ? FileTrees.RootTrust.PLAYER_CONFIGURED : FileTrees.RootTrust.MANAGED;
+			FileTrees.requireNoSymbolicLinkDescendants(storage.root(file.root(), file.overlayPackId().isEmpty() ? "_" : file.overlayPackId()), destination, "instance restore", trust,
+					file.root() == Root.GAME_DIR ? storage.playerRedirects() : Set.of());
 			VerifiedFileTransfer.copyAtomic(object, destination, file.size(), file.sha1(), cache);
 		}
 		for (TrackedFile file : live.files()) {

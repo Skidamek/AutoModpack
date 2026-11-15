@@ -36,6 +36,7 @@ import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.JournalMirror;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.Throwables;
 import pl.skidam.automodpack_core.utils.WorkStatus;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -218,8 +219,7 @@ final class ReviewSession {
 	private Map<String, UpdatePlan.FileState> scanFirstInstallLocalMods() throws IOException {
 		Path modsDirectory = storage.modsDirectory();
 		if (Files.notExists(modsDirectory, LinkOption.NOFOLLOW_LINKS)) return Map.of();
-		if (Files.isSymbolicLink(modsDirectory) || !Files.isDirectory(modsDirectory, LinkOption.NOFOLLOW_LINKS))
-			throw new IOException("Loader-visible mods directory is not a real directory: " + modsDirectory);
+		FileTrees.requirePlayerDirectory(modsDirectory, "Loader-visible mods directory");
 		Environment environment = Environment.installed();
 		Path thisModJar = environment == null ? null : environment.thisModJar();
 		Path loadedMod = thisModJar == null ? null : thisModJar.toAbsolutePath().normalize();
@@ -228,7 +228,7 @@ final class ReviewSession {
 		Set<String> listedPins = PinnedMods.index(currentConfig == null ? List.of() : currentConfig.pinnedModIds);
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {
 			for (Path path : stream.toList()) {
-				if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
+				if (FileTrees.isRedirectingLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 				Path normalized = path.toAbsolutePath().normalize();
 				if (loadedMod != null && normalized.equals(loadedMod)) continue;
 				if (!listedPins.isEmpty()) {

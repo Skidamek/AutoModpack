@@ -414,6 +414,14 @@ public final class ClientStorage {
 		return gamePath(ModpackPathPolicy.MODS_ROOT);
 	}
 
+	/**
+	 * The directories the player configures that may themselves be a junction or symbolic link because they were
+	 * relocated. Only the directory itself is trusted; every entry inside it is still checked on its own.
+	 */
+	public Set<Path> playerRedirects() {
+		return Set.of(modsDirectory());
+	}
+
 	public Path connectionFile(String modpackId) {
 		return packsDirectory.resolve(ModpackId.requireValid(modpackId)).resolve("connection.json").normalize();
 	}
@@ -529,6 +537,11 @@ public final class ClientStorage {
 	/** The active pack pointer, or null when none was persisted yet. */
 	public ClientStorageJsons.ClientGenerationStateFields readActiveState() throws IOException {
 		return pointer.read();
+	}
+
+	/** The pointer together with the file identity it was parsed from; derived snapshots cache against it. */
+	ActivePackPointer.Snapshot readActiveStateSnapshot() throws IOException {
+		return pointer.snapshot();
 	}
 
 	/** Publishes the pointer for what the client now runs. */

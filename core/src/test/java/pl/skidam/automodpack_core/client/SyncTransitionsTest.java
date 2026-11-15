@@ -40,6 +40,7 @@ import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdateCommit;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.PlatformUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
@@ -777,6 +778,48 @@ class SyncTransitionsTest {
 	}
 
 	private record GroupSpec(boolean required, Set<String> platforms, Map<String, Spec> files) {}
+
+	/** A relocated mods directory is the player's own root: a junction there must install like a real directory. */
+	@Test
+	void aJunctionedModsDirectoryIsATrustedPlayerRoot() throws Exception {
+		Assumptions.assumeTrue(PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS, "junctions are a Windows reparse-point feature");
+		Path game = Files.createDirectories(temporaryDirectory.resolve("game"));
+		Path relocated = Files.createDirectories(temporaryDirectory.resolve("relocated-mods"));
+		assertEquals(0, mklinkJunction(game.resolve("mods"), relocated), "mklink /J should succeed without elevation");
+
+		Client client = client();
+		SelectedModpackTarget first = pack(client, "packmo1", Map.of("mods/alpha.jar", editable("alpha")));
+		client.apply(first);
+		assertEquals("alpha", Files.readString(relocated.resolve("alpha.jar")));
+
+		client.apply(pack(client, first, Map.of("mods/alpha.jar", editable("alpha two"))));
+		assertEquals("alpha two", Files.readString(relocated.resolve("alpha.jar")), "an update through the relocated directory keeps working");
+	}
+
+	/** Trusting the mods root must not trust what is inside it: an inner junction is still refused. */
+	@Test
+	void anInnerJunctionInsideTheModsDirectoryIsRefused() throws Exception {
+		Assumptions.assumeTrue(PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS, "junctions are a Windows reparse-point feature");
+		Path game = Files.createDirectories(temporaryDirectory.resolve("game"));
+		Path relocated = Files.createDirectories(temporaryDirectory.resolve("relocated-mods"));
+		assertEquals(0, mklinkJunction(game.resolve("mods"), relocated), "mklink /J should succeed without elevation");
+		Path outside = Files.createDirectories(temporaryDirectory.resolve("outside"));
+		Files.writeString(outside.resolve("nested.jar"), "outside");
+		assertEquals(0, mklinkJunction(relocated.resolve("nested"), outside), "mklink /J should succeed without elevation");
+
+		Client client = client();
+		IOException refused = assertThrows(IOException.class,
+				() -> client.apply(pack(client, "packmo2", Map.of("mods/nested/nested.jar", editable("nested")))));
+
+		assertTrue(refused.getMessage().contains("symbolic link"), refused.getMessage());
+		assertEquals("outside", Files.readString(outside.resolve("nested.jar")), "the refused plan never writes through the inner junction");
+	}
+
+	private static int mklinkJunction(Path link, Path target) throws Exception {
+		Process process = new ProcessBuilder("cmd", "/c", "mklink", "/J", link.toString(), target.toString()).redirectErrorStream(true).start();
+		process.getInputStream().readAllBytes();
+		return process.waitFor();
+	}
 
 	private static GroupSpec group(boolean required, Set<String> platforms, Map<String, Spec> files) {
 		return new GroupSpec(required, platforms, files);

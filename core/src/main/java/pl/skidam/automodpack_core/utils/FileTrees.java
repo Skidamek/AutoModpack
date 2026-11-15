@@ -142,23 +142,10 @@ public final class FileTrees {
 	}
 
 	/**
-	 * Resolves {@code relativePath} beneath {@code root} and requires the whole walk from the root
-	 * down to the resolved target to stay confined and free of symbolic links. This is the canonical
-	 * rooted resolve for every managed root; do not re-implement it locally.
+	 * Resolves {@code relativePath} beneath {@code root} and requires the whole walk from the root down to the resolved
+	 * target to stay confined and free of redirects. Named player-owned directories may redirect; everything below them
+	 * stays strict. This is the canonical rooted resolve for every managed root; do not re-implement it locally.
 	 */
-	public static Path resolveConfined(Path root, String relativePath, String description) throws IOException {
-		return Confinement.under(root).resolve(relativePath, description);
-	}
-
-	/**
-	 * Resolves beneath a player-configured root. The configured root itself may be a junction or symbolic link (for
-	 * example a relocated game directory); every component below it still has to be a real directory or file.
-	 */
-	public static Path resolveConfined(Path root, String relativePath, String description, RootTrust trust) throws IOException {
-		return Confinement.under(root, trust).resolve(relativePath, description);
-	}
-
-	/** The same resolution under a root with player-owned directories that may redirect. */
 	public static Path resolveConfined(Path root, String relativePath, String description, RootTrust trust, Collection<Path> trustedRedirects) throws IOException {
 		return Confinement.under(root, trust, trustedRedirects).resolve(relativePath, description);
 	}
@@ -172,12 +159,11 @@ public final class FileTrees {
 		Confinement.under(root).require(target, description);
 	}
 
-	/** The same whole-path check under a root whose own location the player may have redirected. */
-	public static void requireNoSymbolicLinkDescendants(Path root, Path target, String description, RootTrust trust) throws IOException {
-		requireNoSymbolicLinkDescendants(root, target, description, trust, Set.of());
-	}
-
-	/** The same whole-path check where named player-owned directories may redirect while everything below stays strict. */
+	/**
+	 * Requires every component from {@code root} down to and including {@code target} to be real directories or a real
+	 * file. Named player-owned directories may redirect; everything below them stays strict. This is the canonical
+	 * confinement check for every managed root; do not re-implement it locally.
+	 */
 	public static void requireNoSymbolicLinkDescendants(Path root, Path target, String description, RootTrust trust, Collection<Path> trustedRedirects) throws IOException {
 		Confinement.under(root, trust, trustedRedirects).require(target, description);
 	}
@@ -291,17 +277,7 @@ public final class FileTrees {
 		}
 	}
 
-	/** Reports whether every component from {@code root} down to {@code target} avoids symbolic links. */
-	public static boolean hasNoSymbolicLinkDescendants(Path root, Path target) {
-		return hasNoSymbolicLinkDescendants(root, target, RootTrust.MANAGED);
-	}
-
-	/** The same report under a root whose own location the player may have redirected. */
-	public static boolean hasNoSymbolicLinkDescendants(Path root, Path target, RootTrust trust) {
-		return hasNoSymbolicLinkDescendants(root, target, trust, Set.of());
-	}
-
-	/** The same report where named player-owned directories may redirect while everything below stays strict. */
+	/** Reports whether every component from {@code root} to {@code target} stays real, where named player-owned files may redirect. */
 	public static boolean hasNoSymbolicLinkDescendants(Path root, Path target, RootTrust trust, Collection<Path> trustedRedirects) {
 		try {
 			requireNoSymbolicLinkDescendants(root, target, "Path", trust, trustedRedirects);

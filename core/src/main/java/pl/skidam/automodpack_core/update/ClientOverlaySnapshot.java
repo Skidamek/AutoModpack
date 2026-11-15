@@ -2,20 +2,24 @@ package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -33,18 +37,31 @@ public record ClientOverlaySnapshot(Map<String, UpdatePlan.FileState> files, Str
 		Map<String, UpdatePlan.FileState> files = new HashMap<>();
 		List<OverlayFile> physicalFiles = new ArrayList<>();
 		if (Files.exists(root, LinkOption.NOFOLLOW_LINKS)) {
-			if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client overlay root is not a directory: " + root);
-			try (Stream<Path> paths = Files.walk(root)) {
-				for (Path path : paths.filter(candidate -> !candidate.equals(root)).sorted().toList()) {
-					if (Files.isSymbolicLink(path)) throw new IOException("Client overlay contains a symbolic link: " + path);
-					if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
-					String relative = LogicalPath.normalize(root.relativize(path).toString());
-					String hash = FileIntegrity.identityHash(path, cache);
-					if (hash == null) throw new IOException("Cannot hash client overlay file: " + path);
-					long size = Files.size(path);
-					files.put(relative, new UpdatePlan.FileState(hash, size, true));
-					physicalFiles.add(new OverlayFile(relative, hash, size));
+			if (FileTrees.isRedirectingLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client overlay root is not a directory: " + root);
+			List<Path> ordered = new ArrayList<>();
+			Files.walkFileTree(root, new SimpleFileVisitor<>() {
+				@Override
+				public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) throws IOException {
+					// A junction is a directory to Java and the walk would descend into its target; refuse before that.
+					if (!directory.equals(root) && FileTrees.isRedirectingLink(directory)) throw new IOException("Client overlay contains a symbolic link: " + directory);
+					return FileVisitResult.CONTINUE;
 				}
+
+				@Override
+				public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+					if (FileTrees.isRedirectingLink(file)) throw new IOException("Client overlay contains a symbolic link: " + file);
+					if (attributes.isRegularFile()) ordered.add(file);
+					return FileVisitResult.CONTINUE;
+				}
+			});
+			ordered.sort(Comparator.naturalOrder());
+			for (Path path : ordered) {
+				String relative = LogicalPath.normalize(root.relativize(path).toString());
+				String hash = FileIntegrity.identityHash(path, cache);
+				if (hash == null) throw new IOException("Cannot hash client overlay file: " + path);
+				long size = Files.size(path);
+				files.put(relative, new UpdatePlan.FileState(hash, size, true));
+				physicalFiles.add(new OverlayFile(relative, hash, size));
 			}
 		}
 		MessageDigest digest = HashUtils.newSha1Digest();

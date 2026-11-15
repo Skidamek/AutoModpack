@@ -1,9 +1,11 @@
 package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -231,7 +233,9 @@ public final class OfflineRepair {
 			Observation objectObservation = withRepairedCas.observations().get(object);
 			if (!matches(objectObservation, expected.content())) continue;
 			assertPinned(request, pinned);
-			FileTrees.requireNoSymbolicLinkDescendants(expected.root(), expected.path(), "Repair path");
+			FileTrees.RootTrust trust = expected.place() == Place.LIVE || expected.place() == Place.GENERATED_COPY ? FileTrees.RootTrust.PLAYER_CONFIGURED : FileTrees.RootTrust.MANAGED;
+			FileTrees.requireNoSymbolicLinkDescendants(expected.root(), expected.path(), "Repair path", trust,
+					trust == FileTrees.RootTrust.PLAYER_CONFIGURED ? storage.playerRedirects() : Set.of());
 			boolean repaired = expected.place() == Place.PROJECTION
 					? VerifiedFileTransfer.linkAtomic(object, expected.path(), expected.content().size(), expected.content().hash(), fileCache)
 					: VerifiedFileTransfer.copyAtomic(object, expected.path(), expected.content().size(), expected.content().hash(), fileCache);
@@ -336,7 +340,7 @@ public final class OfflineRepair {
 					Path drifted = storage.objectFile(fields.currentHash).normalize();
 					if (!FileIntegrity.matchesNamed(drifted, fields.currentSize, fields.currentHash, fileCache))
 						VerifiedFileTransfer.copyAtomicImmutable(live, drifted, fields.currentSize, fields.currentHash, fileCache);
-					FileTrees.requireNoSymbolicLinkDescendants(storage.gameDirectory(), live, "Repair path");
+					FileTrees.requireNoSymbolicLinkDescendants(storage.gameDirectory(), live, "Repair path", FileTrees.RootTrust.PLAYER_CONFIGURED, storage.playerRedirects());
 					VerifiedFileTransfer.copyAtomic(object, live, fields.defaultSize, fields.defaultHash, fileCache);
 					applied++;
 				}
@@ -359,7 +363,7 @@ public final class OfflineRepair {
 					throw new IOException("Journaled unowned mod disappeared before its bytes were captured: " + fields.logicalPath);
 				continue;
 			}
-			FileTrees.requireNoSymbolicLinkDescendants(storage.gameDirectory(), source, "Repair path");
+			FileTrees.requireNoSymbolicLinkDescendants(storage.gameDirectory(), source, "Repair path", FileTrees.RootTrust.PLAYER_CONFIGURED, storage.playerRedirects());
 			if (!FileIntegrity.matches(source, fields.size, fields.objectHash, fileCache)) throw new IOException("Unowned mod changed after repair was journaled: " + fields.logicalPath);
 			assertPinned(request, pinned);
 			Path object = storage.objectFile(fields.objectHash).normalize();
@@ -464,16 +468,29 @@ public final class OfflineRepair {
 	private Map<String, Observation> inspectOverlay(String modpackId, FileCache fileCache, Map<Path, Observation> observations, Map<Object, Observation> observationsByFileKey) throws IOException {
 		Path root = storage.overlayDirectory(modpackId);
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return Map.of();
-		if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client editable overlay root is not a directory: " + root);
+		if (FileTrees.isRedirectingLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client editable overlay root is not a directory: " + root);
 		Map<String, Observation> result = new TreeMap<>();
-		try (Stream<Path> paths = Files.walk(root)) {
-			for (Path path : paths.filter(candidate -> !candidate.equals(root)).sorted().toList()) {
-				if (Files.isSymbolicLink(path)) throw new IOException("Client editable overlay contains a symbolic link: " + path);
-				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
-				String relative = LogicalPath.normalize(root.relativize(path).toString());
-				Observation observation = observe(path, root, fileCache, observations, observationsByFileKey);
-				if (observation != null) result.put(relative, observation);
+		List<Path> ordered = new ArrayList<>();
+		Files.walkFileTree(root, new SimpleFileVisitor<>() {
+			@Override
+			public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) throws IOException {
+				// A junction is a directory to Java and the walk would descend into its target; refuse before that.
+				if (!directory.equals(root) && FileTrees.isRedirectingLink(directory)) throw new IOException("Client editable overlay contains a symbolic link: " + directory);
+				return FileVisitResult.CONTINUE;
 			}
+
+			@Override
+			public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+				if (FileTrees.isRedirectingLink(file)) throw new IOException("Client editable overlay contains a symbolic link: " + file);
+				if (attributes.isRegularFile()) ordered.add(file);
+				return FileVisitResult.CONTINUE;
+			}
+		});
+		ordered.sort(Comparator.naturalOrder());
+		for (Path path : ordered) {
+			String relative = LogicalPath.normalize(root.relativize(path).toString());
+			Observation observation = observe(path, root, fileCache, observations, observationsByFileKey);
+			if (observation != null) result.put(relative, observation);
 		}
 		return Map.copyOf(result);
 	}
@@ -501,11 +518,11 @@ public final class OfflineRepair {
 	private List<String> inspectMods(Path protectedModPath, Set<String> ownedLiveMods, FileCache fileCache, Map<Path, Observation> observations, Map<Object, Observation> observationsByFileKey) throws IOException {
 		Path root = storage.modsDirectory();
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
-		if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Mods path is not a directory: " + root);
+		FileTrees.requirePlayerDirectory(root, "Mods path");
 		List<String> unowned = new ArrayList<>();
 		try (Stream<Path> paths = Files.list(root)) {
 			for (Path path : paths.sorted().toList()) {
-				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(path)) continue;
+				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || FileTrees.isRedirectingLink(path)) continue;
 				Path normalized = path.toAbsolutePath().normalize();
 				String logicalPath = LogicalPath.normalize(storage.gameDirectory().relativize(normalized).toString());
 				observe(normalized, storage.gameDirectory(), fileCache, observations, observationsByFileKey);
@@ -518,7 +535,9 @@ public final class OfflineRepair {
 	private Observation observe(Path path, Path root, FileCache fileCache, Map<Path, Observation> observations, Map<Object, Observation> observationsByFileKey) throws IOException {
 		Path normalized = path.toAbsolutePath().normalize();
 		if (observations.containsKey(normalized)) return observations.get(normalized);
-		if (!FileTrees.hasNoSymbolicLinkDescendants(root, normalized)) {
+		boolean playerRoot = root.toAbsolutePath().normalize().equals(storage.gameDirectory());
+		if (!FileTrees.hasNoSymbolicLinkDescendants(root, normalized, playerRoot ? FileTrees.RootTrust.PLAYER_CONFIGURED : FileTrees.RootTrust.MANAGED,
+				playerRoot ? storage.playerRedirects() : Set.of())) {
 			Observation unsupported = new Observation(normalized, null, -1, true);
 			observations.put(normalized, unsupported);
 			return unsupported;

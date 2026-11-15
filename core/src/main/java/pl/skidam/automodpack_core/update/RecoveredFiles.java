@@ -41,7 +41,7 @@ public final class RecoveredFiles {
 	/** {@link #path} after the publishable-path tripwire. Occupied destinations are the caller's problem. */
 	public static Path destination(ClientStorage storage, String originalPath, String claimId) throws IOException {
 		Path destination = path(storage, originalPath, claimId);
-		FileTrees.requireNoSymbolicLinkDescendants(storage.gameDirectory(), destination, "recovered copy");
+		FileTrees.requireNoSymbolicLinkDescendants(storage.gameDirectory(), destination, "recovered copy", FileTrees.RootTrust.PLAYER_CONFIGURED, storage.playerRedirects());
 		OsPaths.requirePublishableFile(destination);
 		return destination;
 	}
