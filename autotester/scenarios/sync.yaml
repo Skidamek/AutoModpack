@@ -4,6 +4,7 @@ description: |
   restart the client, rejoin, restart the server with unchanged content to prove the
   modpack stays hosted, rejoin again, and confirm the player reaches the game.
 renderClient: true
+platforms: [linux, windows]
 
 flow:
   - use: boot

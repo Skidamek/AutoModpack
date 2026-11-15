@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 import time
 from dataclasses import dataclass
@@ -28,12 +29,31 @@ class BridgeClient:
         tmp.write_text(
             json.dumps({"token": self.token, "op": op, **payload}), encoding="utf-8"
         )
-        tmp.rename(cmd)
         deadline = time.monotonic() + timeout
+        # Windows refuses rename/replace over a file the client still has open.
+        # The bridge reads the command promptly, so a short retry is enough.
+        while True:
+            try:
+                os.replace(tmp, cmd)
+                break
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"Bridge command file stayed locked for '{op}' after {timeout}s") from None
+                time.sleep(0.05)
         while time.monotonic() < deadline:
             if rsp.exists():
-                data = json.loads(rsp.read_text(encoding="utf-8"))
-                rsp.unlink(missing_ok=True)
+                try:
+                    data = json.loads(rsp.read_text(encoding="utf-8"))
+                except PermissionError:
+                    time.sleep(0.05)
+                    continue
+                except json.JSONDecodeError:
+                    time.sleep(0.05)
+                    continue
+                try:
+                    rsp.unlink(missing_ok=True)
+                except PermissionError:
+                    pass
                 if not data.get("ok"):
                     raise BridgeError(op, data.get("code"), str(data.get("error", data)))
                 return data

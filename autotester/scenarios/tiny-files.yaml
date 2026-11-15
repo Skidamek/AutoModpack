@@ -2,6 +2,7 @@ id: tiny-files
 description: 'Pipeline-depth benchmark: host a ~800-file pack of 16 KiB deterministic files (~12.5 MiB) so the download is one small take per file, and time the client''s first full download. Timings are
   read from the client log; the flow itself only requires the pack to land.'
 renderClient: true
+platforms: [linux, windows]
 connectionPaths:
 - mode: HTTP
   bindPort: 25567

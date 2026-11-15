@@ -8,6 +8,14 @@ from pathlib import Path
 from typing import Any
 
 from ..bridge import BridgeClient
+from ..runtime.base import (
+    Capabilities,
+    ClientRuntime,
+    HostingRuntime,
+    Platform,
+    ServerRuntime,
+    ServerWorkspace,
+)
 from .util import ClientExited
 
 _VAR = re.compile(r"\$\{([^}]+)\}")
@@ -43,6 +51,18 @@ class Context:
     # the server container name; on host networking it's localhost.
     server_host: str | None = None
     resource_scope: str = ""
+    # The preparation run's container/process name; empty means derive it.
+    prep_name: str = ""
+    # Selected runtime platform and its per-case services. Steps call these,
+    # never docker_harness, so the same flow can run a native client.
+    platform: Platform | None = None
+    capabilities: Capabilities = field(default_factory=Capabilities)
+    client: ClientRuntime | None = None
+    server: ServerRuntime | None = None
+    hosting: HostingRuntime | None = None
+    # The server's durable files, addressed without a platform path. Steps read
+    # and write live server state here, never through ``server_dir``.
+    server_workspace: ServerWorkspace | None = None
     # --netem tc netem argv tokens (empty when the knob is off), applied to the
     # client container's eth0 after launch.
     netem: list[str] = field(default_factory=list)
@@ -106,11 +126,19 @@ class Context:
     def assert_client_running(self) -> None:
         if self.running_provider is not None:
             self.running_provider()
+            return
+        if self.client is None:
+            raise RuntimeError("no client runtime is attached to this case")
+        self.client.running()
 
     def container_logs(self, which: str = "client", tail: int | None = None) -> str:
-        if self.logs_provider is None:
-            return ""
-        return self.logs_provider(which, tail)
+        if self.logs_provider is not None:
+            return self.logs_provider(which, tail)
+        if which == "server" and self.server is not None:
+            return self.server.logs(tail)
+        if which == "client" and self.client is not None:
+            return self.client.logs(tail)
+        return ""
 
     def path(self, rel: str) -> Path:
         return self.game_dir / self.resolve(str(rel))

@@ -308,7 +308,7 @@ def _v_stage_modpack(ctx: Context, step):
         if isinstance(item, dict) and item.get("editable") is True
     }
     (root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
-    (root / ctx.marker_rel).write_text(json.dumps({"marker": modpack_name}) + "\n", encoding="utf-8")
+    (root / ctx.marker_rel).write_text(json.dumps({"marker": modpack_name}) + "\n", encoding="utf-8", newline="")
     for item in declared_files:
         if not isinstance(item, dict) or "path" not in item:
             raise ValueError("stage_modpack files entries need path/content")
@@ -323,7 +323,7 @@ def _v_stage_modpack(ctx: Context, step):
             write_valid_mod_fixture(f, fixture, ctx.target.minecraft)
         else:
             f.parent.mkdir(parents=True, exist_ok=True)
-            f.write_text(content, encoding="utf-8")
+            f.write_text(content, encoding="utf-8", newline="")
 
     mods = step.get("mods") or []
     if mods:
@@ -363,7 +363,7 @@ def _v_stage_modpack(ctx: Context, step):
         if selection_store.exists():
             selections = json.loads(selection_store.read_text(encoding="utf-8")).get("selections", {})
         selections[modpack_id] = {"requestedGroups": [], "excludedGroups": []}
-        selection_store.write_text(json.dumps({"DO_NOT_CHANGE_IT": 1, "selections": selections}, indent=2) + "\n", encoding="utf-8")
+        selection_store.write_text(json.dumps({"DO_NOT_CHANGE_IT": 1, "selections": selections}, indent=2) + "\n", encoding="utf-8", newline="")
         ctx.vars["staged_pack_id"] = modpack_id
         return
     state = {
@@ -372,13 +372,13 @@ def _v_stage_modpack(ctx: Context, step):
         "status": "ACTIVE",
         "ownershipLedger": generation["ledger"],
     }
-    (client_root / "active-state.json").write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    (client_root / "active-state.json").write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8", newline="")
 
     selection_store = client_root / "selections.json"
     selection_store.write_text(json.dumps({
         "DO_NOT_CHANGE_IT": 1,
         "selections": {modpack_id: {"requestedGroups": [], "excludedGroups": []}},
-    }, indent=2) + "\n", encoding="utf-8")
+    }, indent=2) + "\n", encoding="utf-8", newline="")
 
     # A client config that selects the staged pack and disables the launch update,
     # so Preload loads it locally (no server contact, no file reconciliation).
@@ -392,11 +392,12 @@ def _v_stage_modpack(ctx: Context, step):
     cfg.pop("DO_NOT_CHANGE_IT", None)
     automodpack.mkdir(parents=True, exist_ok=True)
     client_root.mkdir(parents=True, exist_ok=True)
-    (client_root / "selected.json").write_text(json.dumps({"modpackId": follow_id}) + "\n", encoding="utf-8")
+    (client_root / "selected.json").write_text(json.dumps({"modpackId": follow_id}) + "\n", encoding="utf-8", newline="")
     launch_update = cfg.pop("updateSelectedModpackOnLaunch", False)
     (automodpack / "client.conf").write_text(
         f"update-selected-modpack-on-launch: {'true' if launch_update else 'false'}\n",
         encoding="utf-8",
+        newline="",
     )
 
     # The offline fallback that explicitly enables launch updates still needs the
@@ -419,4 +420,5 @@ def _v_stage_modpack(ctx: Context, step):
             )
             + "\n",
             encoding="utf-8",
+            newline="",
         )

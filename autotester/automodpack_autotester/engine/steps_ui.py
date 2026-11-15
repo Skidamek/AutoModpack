@@ -1,6 +1,7 @@
 """UI verbs: click, type/paste, screenshot, wait_for, assert, sleep."""
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 
@@ -8,6 +9,8 @@ from ..bridge import BridgeError
 from . import conditions, selectors
 from .registry import verb
 from .util import ClientExited, await_condition, parse_duration
+
+logger = logging.getLogger(__name__)
 
 _SKIP_CLICK = object()
 
@@ -105,6 +108,12 @@ def screenshot(ctx, step):
     if skip_if and conditions.evaluate(ctx, skip_if):
         # The declared skip condition already holds (the screen moved past the moment
         # the shot was for); the step is moot and moves on instead of capturing.
+        return
+    if not ctx.capabilities.rendered_ui:
+        # A screenshot is an artifact, not an assertion. A platform that declares
+        # no rendered UI (the Windows native client runs -lwjgl) records the step
+        # as done without pretending it captured pixels.
+        logger.info("[%s] screenshot %s skipped: platform %s has no rendered UI", ctx.target.id, step.get("file"), ctx.platform.name if ctx.platform else "?")
         return
     ctx.assert_client_running()
     if ctx.bridge is None:

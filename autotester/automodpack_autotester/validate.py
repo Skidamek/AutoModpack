@@ -9,6 +9,7 @@ from .config import expand_generated, scenario_matches_target
 from .engine import conditions
 from .engine.registry import get as get_verb
 from .engine.util import parse_duration
+from .runtime.base import CAPABILITY_REQUIREMENTS, KNOWN_PLATFORMS
 
 _VALID_MODES = {"full", "client-only"}
 _VALID_NETWORKS = {"bridge", "host"}
@@ -102,6 +103,7 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
     if net is not None and str(net).lower() not in _VALID_NETWORKS:
         problems.append(f"unknown network {net!r} (expected one of {sorted(_VALID_NETWORKS)})")
 
+    _check_platform_declarations(scenario, problems)
     _check_connection_paths(scenario.get("connectionPaths"), problems)
 
     for name, value in (scenario.get("timeouts") or {}).items():
@@ -131,6 +133,30 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
 
     _walk(flow, known_macros, problems, stack=(), scoped_targets=scoped_targets)
     return problems
+
+
+def _check_platform_declarations(scenario: dict, problems: list[str]) -> None:
+    """Reject typos that would otherwise skip the scenario everywhere and look green."""
+    _check_declaration(scenario, "platforms", "platform", KNOWN_PLATFORMS, problems)
+    _check_declaration(scenario, "requires", "capability", CAPABILITY_REQUIREMENTS, problems)
+
+
+def _check_declaration(scenario: dict, key: str, label: str, known: frozenset[str], problems: list[str]) -> None:
+    raw = scenario.get(key)
+    if raw is None:
+        return
+    values = [raw] if isinstance(raw, str) else raw
+    if not isinstance(values, list) or not values:
+        problems.append(f"{key}: expected a non-empty string or list, got {raw!r}")
+        return
+    seen = set()
+    for value in values:
+        name = str(value).lower()
+        if name not in known:
+            problems.append(f"{key}: unknown {label} {value!r} (known: {', '.join(sorted(known))})")
+        if name in seen:
+            problems.append(f"{key}: duplicate {label} {value!r}")
+        seen.add(name)
 
 
 def _check_connection_paths(paths, problems):

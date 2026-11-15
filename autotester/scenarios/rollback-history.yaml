@@ -6,6 +6,7 @@ description: |
   offline, the pack declares itself detached, and the next join still warns
   before any sync.
 renderClient: true
+platforms: [linux, windows]
 
 flow:
   - use: boot

@@ -10,6 +10,12 @@ def read_config(path):
         return json.loads(path.read_text(encoding="utf-8"))
     return read_reconf(path)
 
+def read_config_text(text, *, json_format=False):
+    """Reads config text from a runtime workspace instead of a controller path."""
+    if json_format:
+        return json.loads(text)
+    return read_reconf_text(text)
+
 def _strip_comment(line):
     out = []
     in_quotes = False
@@ -101,9 +107,13 @@ def _value(text):
 
 def read_reconf(path):
     """Reads one canonical reconf file into nested dicts/lists of scalars."""
+    return read_reconf_text(path.read_text(encoding="utf-8"))
+
+def read_reconf_text(text):
+    """Reads canonical reconf text into nested dicts/lists of scalars."""
     members = {}
     stack = [members]
-    for raw in path.read_text(encoding="utf-8").splitlines():
+    for raw in text.splitlines():
         line = _strip_comment(raw).strip()
         if not line or line == "{":
             continue

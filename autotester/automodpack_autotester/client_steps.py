@@ -4,21 +4,23 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import fnmatch
+import random
 import re
 import shutil
-import subprocess
 import time
 from pathlib import Path
-
-import docker as docker_py
 
 from .bridge import BridgeClient
 from .config import CLIENT_GENERATION_STATE_PATHS, Target
 from .mods import resolve_mod
-from .supervisor import resource_labels
-from .docker_harness import shaped_tcp_sysctls, _assert_running, _container, _container_logs, _docker, _exec_output, _exit_code, _inspect_container, _jitter_sleep, _remove_container, _run_container, _uid, _gid, _wait_exited
+from .runtime.hmc import (
+    cache_paths as _client_cache_paths,
+    hmc_build as _hmc_build,
+    launcher_meta_dir as _launcher_meta_dir,
+    load_version as _load_ver,
+    profile_receipt as _client_profile_receipt,
+)
 from .engine import Context
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
@@ -56,31 +58,6 @@ def _is_connection_failure_screen(screen: str) -> bool:
     return "DisconnectedScreen" in screen or "class_419" in screen
 
 
-def _load_ver(t):
-    if t.loader == "fabric":
-        return getattr(t, "fabric_loader", None) or ""
-    if t.loader == "forge":
-        return getattr(t, "forge_version", None) or ""
-    if t.loader == "neoforge":
-        return getattr(t, "neoforge_version", None) or ""
-    return ""
-
-
-def _hmc_build(t):
-    # HeadlessMC 3 IDs are platform/minecraft/build. Fabric's loader version is already that
-    # build; Forge is stripped at Target load; NeoForge Maven versions still carry the MC
-    # prefix that HMC's NeoForgeVersionService peels (21.1.259 → 259, 26.2.0.90 → 0.90).
-    version = _load_ver(t)
-    if t.loader != "neoforge" or not version:
-        return version
-    mc = t.minecraft
-    if version.startswith(mc):
-        return version[len(mc) + 1 :]
-    if f"1.{version}".startswith(mc):
-        return version[len(mc) - 1 :]
-    return version
-
-
 def _seed_client_options(game_dir: Path) -> None:
     """Keep the client's options and suppress the one-time vanilla warning."""
     options_path = game_dir / "options.txt"
@@ -105,7 +82,7 @@ def _seed_client_options(game_dir: Path) -> None:
         if updated and not updated[-1].endswith(("\n", "\r")):
             updated[-1] += "\n"
         updated.append("skipMultiplayerWarning:true\n")
-    options_path.write_text("".join(updated), encoding="utf-8")
+    options_path.write_text("".join(updated), encoding="utf-8", newline="")
 
 
 def _prepare_client_files(ctx: Context) -> None:
@@ -132,67 +109,19 @@ def _defer_first_sync_to_login(ctx: Context, game_dir: Path) -> None:
     if config_path.exists() or (game_dir / "automodpack" / "client-config.json").exists() or (game_dir / "automodpack" / "automodpack-client.json").exists():
         return
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text("update-selected-modpack-on-launch: false\n", encoding="utf-8")
+    config_path.write_text("update-selected-modpack-on-launch: false\n", encoding="utf-8", newline="")
 
 
-def _client_cache_paths(ctx: Context) -> tuple[Path, Path]:
-    # Per-target HMC cache (isolated to prevent concurrent NeoForge installer corruption)
-    tid = ctx.target.id.replace(".", "_")
-    hmc_cache_root = (ctx.out_dir.parent / ".hmc-cache" / tid).resolve()
-    hmc_cache_root.mkdir(parents=True, exist_ok=True)
-    # The client image symlinks <cache>/versions -> /work/hmc-shared-versions. Mount
-    # a persistent host dir there so downloaded version jars survive between runs
-    # instead of being re-fetched every time (the symlink target was unmounted, so
-    # versions landed in ephemeral container storage). Kept per-target - sharing one
-    # dir across parallel targets would reintroduce the installer-corruption race.
-    shared_versions = (ctx.out_dir.parent / ".hmc-cache" / "shared-versions" / tid).resolve()
-    shared_versions.mkdir(parents=True, exist_ok=True)
-    return hmc_cache_root, shared_versions
+def _client_profile_is_prepared(ctx: Context, _hmc_cache_root: Path | None = None, _shared_versions: Path | None = None) -> bool:
+    """Whether the runtime's loader profile receipt matches this case."""
+    if ctx.client is None:
+        return False
+    return ctx.client.profile_prepared(ctx)
 
 
-def _start_client_container(ctx: Context, name: str, *, prepare_only: bool = False) -> None:
-    hmc_cache_root, shared_versions = _client_cache_paths(ctx)
-    prepared = _client_profile_is_prepared(ctx, hmc_cache_root, shared_versions)
-
-    _run_container(
-        name=name,
-        image=ctx.client_image,
-        network=ctx.net_name,
-        sysctls=shaped_tcp_sysctls(ctx.netem, ctx.server_netem),
-        env={
-            "AM_AUTOTEST_BRIDGE_TOKEN": ctx.token,
-            "AM_AUTOTEST_GAME_DIR": "/work/inst/game",
-            "AM_AUTOTEST_HMC_CACHE_DIR": "/work/hmc-cache",
-            "AM_AUTOTEST_HMC_PREPARED": str(prepared).lower(),
-            "AM_AUTOTEST_PREPARE_ONLY": str(prepare_only).lower(),
-            "AM_AUTOTEST_DISPLAY_START_SECONDS": str(ctx.settings.get("timeouts", {}).get("displayStartSeconds", 5)),
-            "AM_AUTOTEST_RENDER_CLIENT": str(bool(ctx.scenario.get("renderClient", False)) and not prepare_only).lower(),
-            "AUTOMODPACK_DATA_ROOT": str(_CLIENT_DATA_ROOT),
-            "HOME": "/work",
-            "XDG_CONFIG_HOME": "/work/.config",
-            "JAVA_TOOL_OPTIONS": "-Xmx2G",
-        },
-        mounts=[
-            (_launcher_meta_dir(ctx), "/work/inst", False),
-            (ctx.game_dir, "/work/inst/game", False),
-            (hmc_cache_root, "/work/hmc-cache", False),
-            (shared_versions, "/work/hmc-shared-versions", False),
-        ],
-        command=[
-            "/opt/automodpack/run-headlessmc-client",
-            ctx.target.loader,
-            ctx.target.minecraft,
-            "localhost",
-            "25565",
-            str(ctx.target.java),
-            _hmc_build(ctx.target),
-        ],
-        user=f"{_uid()}:{_gid()}",
-        entrypoint=["/usr/bin/tini", "--"],
-        labels=resource_labels(ctx.resource_scope),
-        # NET_ADMIN is only needed so the --netem qdisc can be applied from inside; never granted otherwise.
-        cap_add=["NET_ADMIN"] if ctx.netem else None,
-    )
+def _record_prepared_client_profile(ctx: Context) -> None:
+    if ctx.client is not None:
+        ctx.client.record_profile(ctx)
 
 
 _NETEM_VALUE = {
@@ -235,9 +164,9 @@ def _apply_loss(ctx: Context) -> None:
     """Drops {@code --loss} percent of the SERVER's outgoing segments: the server's egress is the
     download's data direction, where segment loss actually stalls transfers, and the client keeps its
     own --netem knob for delay/rate. Same teardown story as --netem: the container is ephemeral."""
-    if not ctx.loss:
+    if not ctx.loss or ctx.server is None:
         return
-    _shape_egress(ctx.srv_name, ["loss", ctx.loss], "loss")
+    ctx.server.apply_netem(ctx, ["loss", ctx.loss], "loss")
 
 
 def _apply_server_netem(ctx: Context) -> None:
@@ -245,73 +174,34 @@ def _apply_server_netem(ctx: Context) -> None:
     download's data direction, so delay/rate belong here, not on the client's egress where
     only the tiny request heads travel. Shares the one root qdisc slot with --loss, which
     the runner rejects combining. Same teardown story as every netem knob: ephemeral container."""
-    if not ctx.server_netem:
+    if not ctx.server_netem or ctx.server is None:
         return
-    _shape_egress(ctx.srv_name, ctx.server_netem, "server netem")
+    ctx.server.apply_netem(ctx, ctx.server_netem, "server netem")
 
 
 def _apply_netem(ctx: Context) -> None:
-    """Shape the running client container's eth0 with the --netem qdisc.
+    """Shape the running client's egress with the --netem qdisc.
 
     Known limit: delay shapes exactly, but netem's rate can still run several-fold
     high on a docker bridge even with veth offloads off on both ends - treat the
     rate as an order-of-magnitude constraint, the delay as the precise knob.
     """
-    if not ctx.netem:
+    if ctx.client is None:
         return
-    _shape_egress(ctx.cli_name, ctx.netem, "netem")
+    ctx.client.apply_netem(ctx)
 
 
-def _shape_egress(container_name: str, qdisc: list[str], label: str) -> None:
-    """One root netem qdisc on a container's eth0; runs as root because the game user holds no
-    effective capabilities.
-
-    TSO/GSO let the stack emit super-packets the qdisc counts as one, inflating any rate
-    limit several-fold. Offloads must go off on BOTH ends of the veth pair: the container
-    side so the qdisc sees segmented packets, the host peer so segmenting survives the hop.
-    The qdisc's limit is raised from netem's 1000-packet default (~1.5 MB): a pure delay
-    shape at loopback fill rates holds several bandwidth-delay products in the queue, and
-    the default tail-drops them, so TCP spends the run recovering from self-inflicted
-    losses instead of filling the window the shape exists to exercise.
-    No teardown counterpart exists on purpose: the container is ephemeral and is removed
-    with the case, and every (re)launch re-applies the qdisc on the fresh container.
-    """
-    _disable_iface_offloads(container_name)
-    _disable_peer_offloads_of(container_name)
-    result = _container(container_name).exec_run(["tc", "qdisc", "add", "dev", "eth0", "root", "netem", "limit", "50000", *qdisc], user="root")
-    output = _exec_output(result)
-    if result.exit_code != 0:
-        raise RuntimeError(f"{container_name} container could not apply the {label} qdisc ({result.exit_code}): {output}")
-    logger.info("Applied %s qdisc to %s eth0: %s", label, container_name, " ".join(qdisc))
-
-
-def _disable_iface_offloads(container_name: str) -> None:
-    """Turns offloads off on a container's eth0 so the qdisc sees segmented packets; best effort by design."""
-    _container(container_name).exec_run(["ethtool", "-K", "eth0", "tso", "off", "gso", "off", "gro", "off"], user="root")
-
-
-def _disable_peer_offloads_of(container_name: str) -> None:
-    result = _container(container_name).exec_run(["cat", "/sys/class/net/eth0/iflink"], user="root")
-    peer_index = _exec_output(result).strip()
-    if not peer_index.isdigit():
-        logger.warning("Cannot resolve the %s eth0 host peer (iflink %r); the shaped rate may run high", container_name, peer_index)
-        return
-    for device in Path("/sys/class/net").glob("*"):
-        try:
-            if (device / "ifindex").read_text().strip() == peer_index:
-                subprocess.run(["ethtool", "-K", device.name, "tso", "off", "gso", "off", "gro", "off"],
-                               check=False, capture_output=True)
-                return
-        except OSError:
-            continue
-    logger.warning("No host interface carries ifindex %s; the shaped rate may run high", peer_index)
+def _jitter_sleep(base, fraction=0.2):
+    time.sleep(random.uniform(base * (1 - fraction), base * (1 + fraction)))
 
 
 def _launch_client(ctx: Context):
     _prepare_client_files(ctx)
-    _start_client_container(ctx, ctx.cli_name)
+    if ctx.client is None:
+        raise RuntimeError("no client runtime is attached to this case")
+    ctx.client.start(ctx)
     _jitter_sleep(1)
-    _assert_running(ctx.cli_name)
+    ctx.client.running()
     _apply_netem(ctx)
     _apply_loss(ctx)
     _apply_server_netem(ctx)
@@ -335,66 +225,6 @@ def _detach_client_runtime_mods(ctx: Context) -> None:
         path.unlink(missing_ok=True)
 
 
-def _client_profile_name(target: Target) -> str:
-    loader_version = _load_ver(target)
-    if target.loader == "fabric" and loader_version:
-        return f"fabric-loader-{loader_version}-{target.minecraft}"
-    if target.loader == "forge" and loader_version:
-        return f"{target.minecraft}-forge-{loader_version}"
-    if target.loader == "neoforge" and loader_version:
-        return f"neoforge-{loader_version}"
-    return f"{target.loader}:{target.minecraft}"
-
-
-def _client_profile_identity(ctx: Context) -> dict:
-    try:
-        image_id = _docker.images.get(ctx.client_image).id
-    except docker_py.errors.ImageNotFound:
-        image_id = ctx.client_image
-    return {
-        "minecraft": ctx.target.minecraft,
-        "loader": ctx.target.loader,
-        "loaderVersion": _load_ver(ctx.target),
-        "java": ctx.target.java,
-        "clientImage": image_id,
-        "profile": _client_profile_name(ctx.target),
-    }
-
-
-def _client_profile_receipt(hmc_cache_root: Path) -> Path:
-    return hmc_cache_root / "prepared-profile.json"
-
-
-def _client_profile_is_prepared(ctx: Context, hmc_cache_root: Path, shared_versions: Path) -> bool:
-    profile = _client_profile_name(ctx.target)
-    profile_json = shared_versions / profile / f"{profile}.json"
-    try:
-        return profile_json.is_file() and json.loads(_client_profile_receipt(hmc_cache_root).read_text(encoding="utf-8")) == _client_profile_identity(ctx)
-    except (OSError, TypeError, ValueError, json.JSONDecodeError):
-        return False
-
-
-def _record_prepared_client_profile(ctx: Context) -> None:
-    hmc_cache_root, _shared_versions = _client_cache_paths(ctx)
-    receipt = _client_profile_receipt(hmc_cache_root)
-    temporary = receipt.with_suffix(".tmp")
-    temporary.write_text(json.dumps(_client_profile_identity(ctx), sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(temporary, receipt)
-
-
-def _client_preparation_name(ctx: Context) -> str:
-    return ctx.cli_name.replace("-c-", "-p-", 1)
-
-
-def _launcher_meta_dir(ctx: Context) -> Path:
-    """Host dir of instance-parent files (mmc-pack.json) bind-mounted one file
-    at a time onto /work/<name>, which is the game directory's parent inside
-    the client. Plant writes here; the switch rewrites the same host file."""
-    directory = ctx.game_dir.parent / "launcher-meta"
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory
-
-
 @verb("plant_launcher_metadata")
 def _v_plant_launcher_metadata(ctx: Context, step):
     """Plant launcher metadata files (e.g. mmc-pack.json) beside the client game directory."""
@@ -403,34 +233,37 @@ def _v_plant_launcher_metadata(ctx: Context, step):
         raise ValueError("plant_launcher_metadata requires a non-empty files mapping")
     directory = _launcher_meta_dir(ctx)
     for name, content in files.items():
-        (directory / name).write_text(str(ctx.resolve(content)), encoding="utf-8")
+        (directory / name).write_text(str(ctx.resolve(content)), encoding="utf-8", newline="")
 
 
 @verb("prepare_client")
 def _v_prepare_client(ctx: Context, _step):
     """Materialise the HMC loader profile while an independent server starts."""
-    hmc_cache_root, shared_versions = _client_cache_paths(ctx)
-    if _client_profile_is_prepared(ctx, hmc_cache_root, shared_versions):
+    if ctx.client is None:
+        raise RuntimeError("no client runtime is attached to this case")
+    if _client_profile_is_prepared(ctx):
         return
     _prepare_client_files(ctx)
     ctx.vars["client_preparation"] = _launch_preparation_container(ctx)
     ctx.vars["client_preparation_attempts"] = 1
 
 
-def _launch_preparation_container(ctx: Context) -> str:
-    name = _client_preparation_name(ctx)
-    _remove_container(name)
-    _start_client_container(ctx, name, prepare_only=True)
-    return name
+def _launch_preparation_container(ctx: Context):
+    if ctx.client is None:
+        raise RuntimeError("no client runtime is attached to this case")
+    ctx.client.start_prepare(ctx)
+    return True
 
 
 _PREPARE_ATTEMPTS = 3
 
 
 def _await_client_preparation(ctx: Context) -> None:
-    name = ctx.vars.pop("client_preparation", None)
-    if not name:
+    started = ctx.vars.pop("client_preparation", None)
+    if not started:
         return
+    if ctx.client is None:
+        raise RuntimeError("no client runtime is attached to this case")
     attempts = int(ctx.vars.pop("client_preparation_attempts", 1) or 1)
     deadline = time.monotonic() + float(ctx.settings.get("timeouts", {}).get("clientStartSeconds", 600))
     try:
@@ -438,29 +271,30 @@ def _await_client_preparation(ctx: Context) -> None:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise TimeoutError(f"Client profile preparation did not complete within the startup budget (attempt {attempts})")
-            _wait_exited(name, remaining)
-            state = _inspect_container(name).get("State", {})
-            if state.get("ExitCode") == 0:
-                _record_prepared_client_profile(ctx)
-                hmc_cache_root, shared_versions = _client_cache_paths(ctx)
-                if _client_profile_is_prepared(ctx, hmc_cache_root, shared_versions):
+            ctx.client.wait_prepare_exited(remaining)
+            state = ctx.client.prepare_state()
+            if state.exit_code == 0:
+                ctx.client.record_profile(ctx)
+                if ctx.client.profile_prepared(ctx):
                     return
                 raise RuntimeError("Client profile preparation exited successfully without a valid profile receipt")
-            tail = "\n".join(_container_logs(name).splitlines()[-80:])
+            tail = "\n".join(ctx.client.prepare_logs().splitlines()[-80:])
             if attempts >= _PREPARE_ATTEMPTS:
-                raise RuntimeError(f"Client profile preparation failed after {attempts} attempts (code={state.get('ExitCode', -1)})\n--- logs ---\n{tail}")
-            logger.warning("Client profile preparation failed for %s (code=%s, attempt %d); reinstalling\n--- logs ---\n%s", ctx.target.id, state.get("ExitCode", -1), attempts, tail)
+                raise RuntimeError(f"Client profile preparation failed after {attempts} attempts (code={state.exit_code if state.exit_code is not None else -1})\n--- logs ---\n{tail}")
+            logger.warning("Client profile preparation failed for %s (code=%s, attempt %d); reinstalling\n--- logs ---\n%s", ctx.target.id, state.exit_code if state.exit_code is not None else -1, attempts, tail)
             attempts += 1
-            _remove_container(name)
-            name = _launch_preparation_container(ctx)
+            ctx.client.stop_prepare()
+            _launch_preparation_container(ctx)
     finally:
-        _remove_container(name)
+        ctx.client.stop_prepare()
 
 
 @verb("launch_client")
 def _v_launch_client(ctx: Context, step):
     _await_client_preparation(ctx)
-    _remove_container(ctx.cli_name)
+    if ctx.client is None:
+        raise RuntimeError("no client runtime is attached to this case")
+    ctx.client.stop()
     ctx.bridge = None
     _launch_client(ctx)
 
@@ -500,9 +334,12 @@ def _v_assert_client_objects_absent(ctx: Context, _step):
 
 
 def _published_objects(ctx: Context, only_groups: list[str] | None = None) -> dict[str, int]:
-    projection_path = ctx.server_dir / "automodpack" / "server" / "current-projection.json"
+    if ctx.server_workspace is None:
+        raise AssertionError("no server workspace is attached to this case")
     try:
-        projection = json.loads(projection_path.read_text(encoding="utf-8"))
+        projection = json.loads(
+            ctx.server_workspace.read_text("automodpack/server/current-projection.json")
+        )
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"published projection is not readable: {error}") from error
     policy = projection.get("policy", {}) or {}
@@ -633,9 +470,9 @@ def _v_wait_bridge(ctx: Context, step):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            _assert_running(ctx.cli_name)
+            ctx.assert_client_running()
         except RuntimeError as e:
-            logs = _container_logs(ctx.cli_name)
+            logs = ctx.container_logs("client")
             missing = _missing_cache_jar_paths(logs)
             if missing is not None and not ctx.vars.get("client_cache_recovered") and time.monotonic() < deadline:
                 # The installer exited 0 but left installer-produced jars (old Forge's *-srg/*-extra outputs)
@@ -644,14 +481,14 @@ def _v_wait_bridge(ctx: Context, step):
                 ctx.vars["client_cache_recovered"] = True
                 logger.warning("Client launch crashed on missing cache jars for %s; reinstalling the loader profile once: %s", ctx.target.id, missing or "unparsed")
                 _recover_client_cache(ctx, missing or [])
-                _remove_container(ctx.cli_name)
+                ctx.client.stop()
                 _launch_client(ctx)
                 continue
             if _transient_dependency_download_failure(logs) and time.monotonic() < deadline:
                 # Successful downloads survive in the target cache. Continue cold-cache discovery within the existing startup
                 # budget; unrelated crashes still fail immediately and an unavailable dependency host still reaches the deadline.
                 logger.warning("Client dependency download failed transiently for %s; continuing within the startup deadline", ctx.target.id)
-                _remove_container(ctx.cli_name)
+                ctx.client.stop()
                 _launch_client(ctx)
                 continue
             # Keep whole trailing lines (not a mid-line byte slice) so the crash
@@ -725,7 +562,7 @@ def _v_connect(ctx: Context, step):
         deadline = time.monotonic() + timeout
         last_screen = "<not observed>"
         while time.monotonic() < deadline:
-            _assert_running(ctx.cli_name)
+            ctx.assert_client_running()
             screen = str(ctx.bridge.gui().get("screenClass") or "")
             last_screen = screen or "<none>"
             if _is_connection_failure_screen(screen):
@@ -736,7 +573,7 @@ def _v_connect(ctx: Context, step):
     _TITLE = ("TitleScreen", "class_442")
     last_screen = "<not observed>"
     while time.monotonic() < deadline:
-        _assert_running(ctx.cli_name)
+        ctx.assert_client_running()
         ctx.bridge.connect(host)
         poll_dl = time.monotonic() + min(deadline - time.monotonic(), 45)
         while time.monotonic() < poll_dl:
@@ -767,8 +604,7 @@ def _v_disconnect(ctx: Context, step):
 @verb("quit")
 def _v_quit(ctx: Context, step):
     try:
-        state = _inspect_container(ctx.cli_name).get("State", {})
-        if state.get("Running", False) and ctx.bridge is not None:
+        if ctx.client is not None and ctx.client.state().running and ctx.bridge is not None:
             ctx.bridge.request("quit")
     except (RuntimeError, TimeoutError):
         pass
@@ -792,8 +628,10 @@ def _v_wait_client_exit(ctx: Context, step):
     """
     timeout = parse_duration(step.get("timeout"), default=90)
     or_alive = bool(step.get("or_alive") or step.get("tolerate_alive"))
+    if ctx.client is None:
+        raise RuntimeError("no client runtime is attached to this case")
     try:
-        _wait_exited(ctx.cli_name, timeout=timeout)
+        ctx.client.wait_exited(timeout=timeout)
     except TimeoutError:
         if or_alive:
             return  # still loaded and running after the grace period - acceptable
@@ -801,7 +639,7 @@ def _v_wait_client_exit(ctx: Context, step):
     expect = str(step.get("expect", "any")).lower()
     if expect == "any":
         return
-    code = _exit_code(ctx.cli_name)
+    code = ctx.client.exit_code()
     if expect == "clean" and code not in (0, None):
         raise AssertionError(f"expected clean client exit, got exit code {code}")
     if expect == "crash" and code in (0, None):

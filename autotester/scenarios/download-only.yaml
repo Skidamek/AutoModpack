@@ -3,6 +3,7 @@ description: |
   Boot server + client, trust the certificate, sync the modpack, and verify every
   hosted file landed on the client. Does not restart or rejoin.
 renderClient: true
+platforms: [linux, windows]
 
 flow:
   - use: boot

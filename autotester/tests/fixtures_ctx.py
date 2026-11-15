@@ -7,6 +7,9 @@ from pathlib import Path
 import pytest
 
 from automodpack_autotester.engine import Context
+from automodpack_autotester.runtime import Capabilities
+from automodpack_autotester.runtime.workspace import HostPathServerWorkspace
+from tests.fake_runtime import FakeClientRuntime, FakeHostingRuntime, FakeServerRuntime
 
 
 @pytest.fixture
@@ -42,6 +45,12 @@ def make_ctx(tmp_path):
         )
         defaults.update(overrides)
         ctx = Context(**defaults)
+        ctx.prep_name = ctx.prep_name or "prep-container"
+        ctx.capabilities = Capabilities()
+        ctx.client = FakeClientRuntime(ctx.cli_name, ctx.prep_name)
+        ctx.server = FakeServerRuntime(ctx.srv_name)
+        ctx.hosting = FakeHostingRuntime()
+        ctx.server_workspace = HostPathServerWorkspace(ctx.server_dir)
         ctx.running_provider = lambda: None  # client is always "running" in tests
         return ctx
 

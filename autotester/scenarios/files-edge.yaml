@@ -6,6 +6,7 @@ description: |
   nesting, an editable file, and an unowned local mod. Joins over the HTTP
   connection path and verifies every byte landed exactly as hosted.
 renderClient: true
+platforms: [linux, windows]
 connectionPaths:
   - mode: HTTP
     bindPort: 25567

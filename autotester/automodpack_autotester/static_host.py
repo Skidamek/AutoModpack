@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import re
 
-from .docker_harness import _container_logs, _remove_container, _run_container, _wait_for_log
 from .engine import Context
 from .engine.registry import verb
 from .supervisor import resource_labels
@@ -30,26 +29,27 @@ def _v_start_static_host(ctx: Context, step):
     rel = str(step.get("dir", "")).strip()
     if not rel:
         raise ValueError("start_static_host needs the exported tree's dir relative to the server game dir")
-    host_dir = ctx.server_dir / rel
-    missing = [name for name in ("head", "journal") if not (host_dir / name).is_file()]
+    if ctx.server_workspace is None:
+        raise RuntimeError("no server workspace is attached to this case")
+    missing = [name for name in ("head", "journal") if not ctx.server_workspace.exists(f"{rel}/{name}")]
     if missing:
-        raise RuntimeError(f"exported tree {host_dir} is missing {missing}; wait for the server's export receipt first")
+        raise RuntimeError(f"exported tree {rel} is missing {missing}; wait for the server's export receipt first")
     port = int(step.get("port", 8443))
 
-    _remove_container(ctx.static_name)
-    _run_container(
+    ctx.hosting.remove(ctx.static_name)
+    ctx.hosting.run(
         name=ctx.static_name,
         image=ctx.static_host_image,
         network=ctx.net_name,
         env={},
-        mounts=[(host_dir, "/srv/export", True)],
+        mounts=[(ctx.server_workspace.host_path(rel), "/srv/export", True)],
         command=["/srv/export", str(port)],
         aliases=[STATIC_HOST_ALIAS],
         labels=resource_labels(ctx.resource_scope),
     )
-    _wait_for_log(ctx.static_name, "certificate fingerprint:", timeout=60)
-    match = re.search(r"certificate fingerprint:\s*([0-9A-Fa-f:]+)", _container_logs(ctx.static_name))
+    ctx.hosting.wait_for_log(ctx.static_name, "certificate fingerprint:", timeout=60)
+    match = re.search(r"certificate fingerprint:\s*([0-9A-Fa-f:]+)", ctx.hosting.logs(ctx.static_name))
     if match is None:
-        raise RuntimeError(f"static host did not report a certificate fingerprint: {_container_logs(ctx.static_name)[-500:]}")
+        raise RuntimeError(f"static host did not report a certificate fingerprint: {ctx.hosting.logs(ctx.static_name)[-500:]}")
     ctx.vars["fingerprint"] = match.group(1)
     ctx.vars["static_host_endpoint"] = f"{STATIC_HOST_ALIAS}:{port}"

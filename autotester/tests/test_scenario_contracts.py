@@ -125,6 +125,31 @@ def test_validation_requires_write_file_content_string():
     )
 
 
+def test_validation_rejects_unknown_platform_and_requirement():
+    scenario = {
+        "id": "declaration-typos",
+        "platforms": ["windwos"],
+        "requires": ["junction_prob"],
+        "flow": [{"do": "quit"}],
+    }
+
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+
+    assert any("platforms: unknown platform 'windwos'" in problem for problem in problems)
+    assert any("requires: unknown capability 'junction_prob'" in problem for problem in problems)
+
+
+def test_validation_accepts_known_platform_and_capability_names():
+    scenario = {
+        "id": "declaration-ok",
+        "platforms": ["linux", "windows"],
+        "requires": ["junction_probe", "netem"],
+        "flow": [{"do": "quit"}],
+    }
+
+    assert validate_scenario(scenario, load_macros(), load_targets()) == []
+
+
 def test_validation_rejects_invalid_runtime_mutation():
     scenario = {
         "id": "bad-runtime-mutation",

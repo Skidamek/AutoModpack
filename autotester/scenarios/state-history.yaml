@@ -4,6 +4,7 @@ description: |
   update snapshots appear, Files shows the parent diff, and Restore this state
   unlocks for a past snapshot. Restore is an offline checkout, not pack-history revert.
 renderClient: true
+platforms: [linux, windows]
 
 flow:
   - use: boot

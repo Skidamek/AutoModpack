@@ -29,6 +29,7 @@ from .config import (
     server_cache_volume,
 )
 from .runner import run_case
+from .runtime.detect import case_skip_reason, host_default, select_platform
 from .supervisor import RunSupervisor, reap_orphaned_scopes, server_cache_lock
 from .validate import CONNECTION_MODES, validate_scenario
 
@@ -75,7 +76,18 @@ def _cleanup_run_resources(resource_scope: str) -> None:
             pass
 
 
-def _matrix_payload(selected: list, results: dict, interrupted: bool) -> dict:
+def _leaf_results(result: dict) -> list[dict]:
+    """One target result can carry one entry per connection path; count the paths."""
+    paths = result.get("connectionPaths")
+    return paths if isinstance(paths, list) and paths else [result]
+
+
+def _matrix_payload(
+    selected: list,
+    results: dict,
+    interrupted: bool,
+    explicit_platform: str | None = None,
+) -> dict:
     expected = [target.id for target in selected]
     terminal = dict(results)
     for target_id in expected:
@@ -89,7 +101,36 @@ def _matrix_payload(selected: list, results: dict, interrupted: bool) -> dict:
                 "steps": [],
             }
     complete = set(terminal) == set(expected) and len(terminal) == len(expected)
-    return {"ok": not interrupted and complete and all(result.get("ok", False) for result in terminal.values()), "results": [terminal[target_id] for target_id in expected]}
+    leaves = [leaf for result in terminal.values() for leaf in _leaf_results(result)]
+    ran = sum(1 for leaf in leaves if not leaf.get("skipped"))
+    skipped = sum(1 for leaf in leaves if leaf.get("skipped"))
+    failed = sum(1 for leaf in leaves if not leaf.get("skipped") and not leaf.get("ok", False))
+    ok = not interrupted and complete and all(result.get("ok", False) for result in terminal.values())
+    error = None
+    # A platform the caller named explicitly must actually exercise something:
+    # every case skipping is a capability mismatch, not a green run.
+    if explicit_platform and ran == 0:
+        ok = False
+        error = (
+            f"no cases ran on explicitly requested platform {explicit_platform!r}: "
+            f"{skipped} skipped"
+        )
+    payload = {
+        "ok": ok,
+        "results": [terminal[target_id] for target_id in expected],
+        "summary": {"ran": ran, "skipped": skipped, "failed": failed, "total": len(leaves)},
+    }
+    if error:
+        payload["error"] = error
+    return payload
+
+
+def _summary_line(payload: dict) -> str:
+    summary = payload.get("summary", {})
+    line = f"Summary: {summary.get('ran', 0)} ran / {summary.get('skipped', 0)} skipped"
+    if summary.get("failed"):
+        line += f" / {summary['failed']} failed"
+    return line
 
 
 def _write_results(path: Path, payload: dict) -> None:
@@ -113,8 +154,12 @@ def _server_cache_guard(target, variants, settings):
             print(f"[wait] {target.id}: server cache is in use by another run; waiting", flush=True)
 
 
-def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, settings, resource_scope, netem=None, loss="", server_netem=None):
-    lock = _server_cache_guard(target, variants, settings)
+def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, settings, resource_scope, platform=None, netem=None, loss="", server_netem=None):
+    effective_platform = platform or select_platform(settings)
+    # A target whose every variant skips never touches the server cache, so it
+    # must not block a real run (or wait behind one) on the shared volume lock.
+    all_skip = bool(variants) and all(case_skip_reason(variant, effective_platform) for variant in variants)
+    lock = None if all_skip else _server_cache_guard(target, variants, settings)
     try:
         case_results = [
             run_case(
@@ -128,6 +173,7 @@ def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, 
                 netem=netem,
                 loss=loss,
                 server_netem=server_netem,
+                platform=platform,
             )
             for variant in variants
         ]
@@ -145,7 +191,13 @@ def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, 
         "target": target.id,
         "scenario": variants[0].get("id", "?"),
         "ok": all(result.get("ok", False) for result in case_results),
+        "skipped": all(result.get("skipped", False) for result in case_results),
+        "skipReason": "; ".join(str(result.get("skipReason")) for result in case_results if result.get("skipped")) or None,
         "duration": sum(float(result.get("duration", 0)) for result in case_results),
+        "phases": {
+            phase: round(sum(float(result.get("phases", {}).get(phase, 0)) for result in case_results), 3)
+            for phase in sorted({name for result in case_results for name in (result.get("phases") or {})})
+        },
         "connectionPaths": case_results,
         "error": "; ".join(failures) if failures else None,
     }
@@ -228,6 +280,87 @@ def _cmd_targets(scenario_name: str | None, target_name: str | None) -> int:
     return 0
 
 
+def _plan_platform(settings: dict, requested: str | None):
+    """Resolve a platform for planning without requiring its host (Windows plans on Linux)."""
+    name = str(requested or settings.get("platform") or host_default()).lower()
+    if name == "linux":
+        from .runtime.docker_linux import DockerLinuxPlatform
+
+        return DockerLinuxPlatform(settings)
+    if name == "windows":
+        raise ValueError("the Windows runtime is not implemented; the Linux provider is the only one")
+    raise ValueError(f"unknown platform {name!r}")
+
+
+def _cmd_plan(args) -> int:
+    settings = load_settings()
+    scenario_name = args.scenario or _selection_defaults(settings)[0]
+    target_name = args.target or _selection_defaults(settings)[1]
+    scenarios = load_scenarios()
+    scenario = scenarios.get(scenario_name)
+    if scenario is None:
+        print(f"No such scenario: {scenario_name}", file=sys.stderr)
+        return 1
+    targets = load_targets()
+    problems = validate_scenario(scenario, load_macros(), targets)
+    if problems:
+        print(f"Scenario {scenario_name!r} is invalid:", file=sys.stderr)
+        for problem in problems:
+            print(f"  - {problem}", file=sys.stderr)
+        return 1
+    try:
+        platform = _plan_platform(settings, args.platform)
+    except ValueError as error:
+        print(f"Cannot plan: {error}", file=sys.stderr)
+        return 1
+    _requested, selected = _select_targets(targets, target_name, scenario)
+    variants = connection_path_variants(scenario)
+    if args.connection_path:
+        variants = [variant for variant in variants if str((variant.get("connectionPath") or {}).get("mode", "")).upper() == args.connection_path]
+    ran = skipped = 0
+    for target in selected:
+        for variant in variants:
+            reason = case_skip_reason(variant, platform)
+            if reason:
+                skipped += 1
+                print(f"SKIP {target.id} {variant.get('id', '?')} ({reason})")
+            else:
+                ran += 1
+                print(f"RUN  {target.id} {variant.get('id', '?')}")
+    print(f"Plan: {ran} run / {skipped} skip on {platform.name}")
+    explicit = str(args.platform or settings.get("platform") or "").lower() or None
+    return 1 if explicit and ran == 0 else 0
+
+
+def _cmd_doctor(args) -> int:
+    settings = load_settings()
+    try:
+        platform = select_platform(settings, requested=args.platform)
+    except Exception as error:
+        print(f"FAIL platform: {error}", file=sys.stderr)
+        return 1
+    failures = 0
+
+    def check(name: str, ok: bool, detail: str) -> None:
+        nonlocal failures
+        if not ok:
+            failures += 1
+        print(f"{'OK  ' if ok else 'FAIL'} {name}: {detail}")
+
+    check("platform", True, platform.name)
+    check("python", sys.version_info >= (3, 11), f"{sys.version.split()[0]} ({sys.executable})")
+    try:
+        version = docker_py.from_env(timeout=10).version()
+        check("docker", True, f"{version.get('Os', '?')}/{version.get('Arch', '?')} {version.get('Version', '?')}")
+    except Exception as error:
+        check("docker", False, str(error))
+    artifact_dir = _resolve_settings_path(settings, "artifactDir", "merged")
+    jars = sorted(artifact_dir.glob("*.jar")) if artifact_dir.is_dir() else []
+    check("artifactDir", bool(jars), f"{artifact_dir} ({len(jars)} jar(s))")
+
+    return 0 if failures == 0 else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
@@ -257,6 +390,7 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument("--artifact-dir", type=Path)
     run_p.add_argument("--out-dir", type=Path)
     run_p.add_argument("--client-image")
+    run_p.add_argument("--platform", help="Run on linux or windows (default: settings platform or the host platform)")
 
     clean = sub.add_parser("clean")
     clean.add_argument("--out-dir", type=Path)
@@ -273,6 +407,15 @@ def main(argv: list[str] | None = None) -> int:
     target_p.add_argument("--scenario")
     target_p.add_argument("--target")
 
+    plan_p = sub.add_parser("plan", help="Print resolved cases and skip reasons without starting anything")
+    plan_p.add_argument("--scenario")
+    plan_p.add_argument("--target")
+    plan_p.add_argument("--platform", help="Plan for linux or windows")
+    plan_p.add_argument("--connection-path", choices=sorted(CONNECTION_MODES), type=str.upper)
+
+    doctor_p = sub.add_parser("doctor", help="Check the selected platform's runtime prerequisites")
+    doctor_p.add_argument("--platform", help="Check linux or windows requirements")
+
     args = p.parse_args(argv)
 
     if args.command == "verbs":
@@ -283,6 +426,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "targets":
         return _cmd_targets(args.scenario, args.target)
+
+    if args.command == "plan":
+        return _cmd_plan(args)
+
+    if args.command == "doctor":
+        return _cmd_doctor(args)
 
     if args.command == "build-images":
         s = load_settings()
@@ -329,6 +478,12 @@ def main(argv: list[str] | None = None) -> int:
     # --- run ---
     s = load_settings()
     rc = s.get("run", {})
+    requested_platform = str(args.platform or s.get("platform") or "").lower() or None
+    try:
+        platform = select_platform(s, requested=args.platform)
+    except Exception as error:
+        print(f"Cannot select a test platform: {error}", file=sys.stderr)
+        return 1
 
     if args.docker_uid is not None:
         os.environ["AUTOTEST_DOCKER_UID"] = str(args.docker_uid)
@@ -420,6 +575,7 @@ def main(argv: list[str] | None = None) -> int:
                     client_image=client_image,
                     settings=s,
                     resource_scope=resource_scope,
+                    platform=platform,
                     netem=args.netem,
                     loss=args.loss,
                     server_netem=args.server_netem,
@@ -429,14 +585,20 @@ def main(argv: list[str] | None = None) -> int:
             for f in as_completed(task_map):
                 r = f.result()
                 results[r["target"]] = r
-                print(
-                    f"{'PASS' if r['ok'] else 'FAIL'} {r['target']} {r.get('duration', 0):.1f}s"
-                )
-                for path_result in r.get("connectionPaths", [r] if r.get("connectionMode") else []):
+                if r.get("skipped"):
+                    print(f"SKIP {r['target']} ({r.get('skipReason')})")
+                else:
                     print(
-                        f"  {'PASS' if path_result['ok'] else 'FAIL'} {path_result.get('connectionMode', path_result.get('scenario', '?'))} "
-                        f"{path_result.get('duration', 0):.1f}s"
+                        f"{'PASS' if r['ok'] else 'FAIL'} {r['target']} {r.get('duration', 0):.1f}s"
                     )
+                for path_result in r.get("connectionPaths", [r] if r.get("connectionMode") else []):
+                    if path_result.get("skipped"):
+                        print(f"  SKIP {path_result.get('connectionMode', path_result.get('scenario', '?'))} ({path_result.get('skipReason')})")
+                    else:
+                        print(
+                            f"  {'PASS' if path_result['ok'] else 'FAIL'} {path_result.get('connectionMode', path_result.get('scenario', '?'))} "
+                            f"{path_result.get('duration', 0):.1f}s"
+                        )
                 if r.get("error"):
                     print(f"  {r['error']}", file=sys.stderr)
 
@@ -455,9 +617,12 @@ def main(argv: list[str] | None = None) -> int:
         finally:
             signal.signal(signal.SIGTERM, previous_sigterm_handler)
             executor.shutdown(wait=False)
-            payload = _matrix_payload(selected, results, interrupted)
+            payload = _matrix_payload(selected, results, interrupted, explicit_platform=requested_platform)
             ok = payload["ok"]
             _write_results(out_dir / "results.json", payload)
+            print(_summary_line(payload))
+            if payload.get("error"):
+                print(payload["error"], file=sys.stderr)
             if interrupted:
                 supervisor.close()
                 os._exit(1)

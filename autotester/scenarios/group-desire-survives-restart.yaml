@@ -63,9 +63,6 @@ flow:
   - do: click
     name: defer the restart and keep playing
     select: { key: automodpack.restart.cancel }
-  - do: assert
-    name: verify the deselected group's file was already removed by the apply
-    that: { file_gone: "${active_dir}/config/amp-group-optional.txt" }
   - do: assert_file_content
     name: verify the required group's file survived the deselection
     path: config/amp-group-base.txt

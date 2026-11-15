@@ -229,7 +229,7 @@ def write_file(ctx, step):
     if raw_path.is_absolute() or not path.resolve().is_relative_to(ctx.game_dir.resolve()):
         raise ValueError(f"local file path escapes the client game directory: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(str(ctx.resolve(step.get("content", ""))), encoding="utf-8")
+    path.write_text(str(ctx.resolve(step.get("content", ""))), encoding="utf-8", newline="")
 
 
 @verb("mutate_client_file")
@@ -351,9 +351,12 @@ def assert_authenticated_secret(ctx, _step):
     client_secret = (connection.get("secrets", {}) or {}).get(origin)
     if not isinstance(client_secret, dict):
         raise AssertionError("authenticated login did not persist a client secret for the bootstrap origin")
-    server_secrets_path = ctx.server_dir / "automodpack" / "credentials" / "secrets.json"
+    if ctx.server_workspace is None:
+        raise AssertionError("no server workspace is attached to this case")
     try:
-        server_secrets = json.loads(server_secrets_path.read_text(encoding="utf-8"))
+        server_secrets = json.loads(
+            ctx.server_workspace.read_text("automodpack/credentials/secrets.json")
+        )
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"authenticated secret state is not readable: {error}") from error
     value = client_secret.get("secret")
@@ -386,7 +389,7 @@ def seed_unowned_local_file(ctx, step):
     if path.suffix.lower() == ".jar":
         raise ValueError("unowned local .jar files require a valid mod fixture mapping")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(str(ctx.resolve(step.get("content", ""))), encoding="utf-8")
+    path.write_text(str(ctx.resolve(step.get("content", ""))), encoding="utf-8", newline="")
 
 
 @verb("seed_same_path_conflict")

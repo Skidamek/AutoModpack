@@ -6,27 +6,30 @@ from automodpack_autotester import reconf_min
 import hashlib
 import json
 import re
-import shutil
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-from .mod_fixtures import write_valid_mod_fixture
+from .mod_fixtures import valid_mod_jar_bytes
 from .supervisor import resource_labels
-from .client_steps import cas_object
-from .config import expand_generated, server_cache_volume, write_generated
-from .docker_harness import shaped_tcp_sysctls, _container, _container_logs, _ensure_volume, _exec_output, _remove_volume, _run_container, _uid, _gid, _wait_for_log
+from .config import expand_generated, server_cache_volume
 from .engine import Context
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
+from .runtime.base import ServerSpec, ServerWorkspace, StageTree, StagedFile
 
 
-_SERVER_DATA_ROOT = Path("automodpack/data")
+_SERVER_DATA_ROOT = PurePosixPath("automodpack/data")
+
+
+def _workspace(ctx: Context) -> ServerWorkspace:
+    if ctx.server_workspace is None:
+        raise RuntimeError("no server workspace is attached to this case")
+    return ctx.server_workspace
 
 
 def _prepare_server(ctx: Context):
-    srv_dir = ctx.server_dir
-    (srv_dir / "mods").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(ctx.artifact, srv_dir / "mods" / "automodpack.jar")
+    workspace = _workspace(ctx)
+    workspace.copy_in("mods/automodpack.jar", ctx.artifact)
     cfg = dict(ctx.settings.get("automodpack", {}).get("config", {}))
     topology_config = (ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}) or {}).get("config", {})
     cfg.update(topology_config)
@@ -41,9 +44,8 @@ def _prepare_server(ctx: Context):
             cfg["advertisedEndpointPort"] = connection_path["endpointPort"]
     cfg["modpackName"] = ctx.modpack_name
     cfg["acceptedLoaders"] = [ctx.target.loader]
-    (srv_dir / "automodpack").mkdir(parents=True, exist_ok=True)
-    (srv_dir / "automodpack" / "server-config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-    (srv_dir / _SERVER_DATA_ROOT).mkdir(parents=True, exist_ok=True)
+    workspace.write_text("automodpack/server-config.json", json.dumps(cfg, indent=2))
+    workspace.ensure_dir(_SERVER_DATA_ROOT.as_posix())
     _write_server_generation(ctx, 0)
 
 
@@ -85,14 +87,12 @@ def _write_server_generation(ctx: Context, index: int) -> None:
                 *({"path": str(hosted.path), "sizeBytes": hosted.size_bytes, "group": "main"} for hosted in bulk),
             ],
         }
-    srv_dir = ctx.server_dir
-    host_root = srv_dir / "automodpack" / "host-modpack"
-    if host_root.exists():
-        shutil.rmtree(host_root)
-    host_root.mkdir(parents=True, exist_ok=True)
-    main_root = host_root / "main"
-    (main_root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
-    (main_root / ctx.marker_rel).write_text(json.dumps({"marker": ctx.modpack_name}) + "\n", encoding="utf-8")
+    entries = [
+        StagedFile(
+            path=(Path("main") / ctx.marker_rel).as_posix(),
+            content=(json.dumps({"marker": ctx.modpack_name}) + "\n").encode("utf-8"),
+        )
+    ]
     config = ((ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}) or {}).get("config", {}) or {})
     configured_groups = {
         str(group_id)
@@ -110,33 +110,34 @@ def _write_server_generation(ctx: Context, index: int) -> None:
             raise ValueError(f"server generation file {rel} refers to undeclared group {group_id!r}")
         if Path(group_id).is_absolute() or ".." in Path(group_id).parts or len(Path(group_id).parts) != 1:
             raise ValueError(f"server generation group is not a single safe identifier: {group_id!r}")
-        f = host_root / group_id / rel
-        f.parent.mkdir(parents=True, exist_ok=True)
+        logical = rel.as_posix()
+        target = f"{group_id}/{logical}"
         fixture = item.get("fixture")
         if fixture is not None:
             if not isinstance(fixture, dict):
                 raise ValueError(f"server generation fixture for {rel} must be a mapping")
-            write_valid_mod_fixture(f, fixture, ctx.target.minecraft)
+            entries.append(StagedFile(path=target, content=valid_mod_jar_bytes(fixture, ctx.target.minecraft)))
         elif "sizeBytes" in item:
             size_bytes = item["sizeBytes"]
             if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or size_bytes < 0:
                 raise ValueError(f"server generation sizeBytes for {rel} must be a non-negative integer")
-            write_generated(f, str(rel), size_bytes)
+            # The fill is seeded by the logical path inside the group, so moving a
+            # file between groups must not change its bytes.
+            entries.append(StagedFile(path=target, size_bytes=size_bytes, fill_name=logical))
         else:
-            f.write_text(str(item.get("content", "")), encoding="utf-8")
+            entries.append(StagedFile(path=target, content=str(item.get("content", "")).encode("utf-8")))
+    patch_notes = generation.get("patchNotes", "")
+    entries.append(StagedFile(path="patch-notes.md", content=str(patch_notes).encode("utf-8")))
+    _workspace(ctx).stage_tree(
+        StageTree(root="automodpack/host-modpack", files=tuple(entries), replace=True)
+    )
     music = generation.get("waitingMusic")
     if music == "client-jar":
         # Re-host the mod's own bundled track: no binary lands in the repo, and the
         # custom track always matches what a client without one would hear by default.
         with zipfile.ZipFile(ctx.artifact) as jar:
             name = next(n for n in jar.namelist() if n.endswith("sounds/music/waiting.ogg"))
-            (srv_dir / "automodpack").mkdir(parents=True, exist_ok=True)
-            with jar.open(name) as src, open(srv_dir / "automodpack" / "waiting-music.ogg", "wb") as dst:
-                shutil.copyfileobj(src, dst)
-    patch_notes = generation.get("patchNotes", "")
-    patch_path = host_root / "patch-notes.md"
-    patch_path.parent.mkdir(parents=True, exist_ok=True)
-    patch_path.write_text(str(patch_notes), encoding="utf-8")
+            _workspace(ctx).write_bytes("automodpack/waiting-music.ogg", jar.read(name))
 
 
 def _launch_server(ctx: Context):
@@ -166,13 +167,7 @@ def _launch_server(ctx: Context):
     if scenario.get("serverFiles", {}).get("generations"):
         env.setdefault("ENABLE_RCON", "true")
         env.setdefault("RCON_PASSWORD", "amp-autotest")
-    # Run the itzg server as the same user the runner uses, so it can write to the
-    # bind-mounted mods/automodpack dirs (which the runner created). Without this the
-    # server runs as itzg's default UID 1000 and fails on hosts with a different UID
-    # (e.g. the GitHub runner's 1001): AccessDenied writing /data/mods/*.download.
-    env.setdefault("UID", str(_uid()))
-    env.setdefault("GID", str(_gid()))
-    env["AUTOMODPACK_DATA_ROOT"] = str(_SERVER_DATA_ROOT)
+    env["AUTOMODPACK_DATA_ROOT"] = _SERVER_DATA_ROOT.as_posix()
     mr = topo.get("modrinth", {})
     if mr:
         projs = list(
@@ -192,25 +187,29 @@ def _launch_server(ctx: Context):
         if mr.get("versionType"):
             env["MODRINTH_PROJECTS_DEFAULT_VERSION_TYPE"] = str(mr["versionType"])
     sc = topo.get("serverCache", {}) or settings.get("serverCache", {})
+    cache_volume = None
     if sc.get("enabled", True):
-        vol = server_cache_volume(target.id, sc.get("volumePrefix", "amp-server-cache"))
-        if sc.get("clean", False):
-            _remove_volume(vol)
-        _ensure_volume(vol)
-        mounts = [(vol, "/data", False)]
-        for sub in ("mods", "automodpack"):
-            (ctx.server_dir / sub).mkdir(parents=True, exist_ok=True)
-            mounts.append((ctx.server_dir / sub, f"/data/{sub}", False))
-    else:
-        mounts = [(ctx.server_dir, "/data", False)]
+        cache_volume = server_cache_volume(target.id, sc.get("volumePrefix", "amp-server-cache"))
+    mounts = _workspace(ctx).data_mounts(cache_volume)
     img = str(topo.get("image") or settings.get("images", {}).get("server", "itzg/minecraft-server"))
     if ":" not in img:
         tag = str(settings.get("images", {}).get("serverTagTemplate", "java{java}")).format(java=target.java)
         img = f"{img}:{tag}"
-    # NET_ADMIN is only needed so the --loss / --server-netem qdiscs can be applied from inside; never granted otherwise.
-    _run_container(name=ctx.srv_name, image=img, network=ctx.net_name, env=env, mounts=mounts, labels=resource_labels(ctx.resource_scope),
-                   cap_add=["NET_ADMIN"] if ctx.loss or ctx.server_netem else None,
-                   sysctls=shaped_tcp_sysctls(ctx.netem, ctx.server_netem))
+    if ctx.server is None:
+        raise RuntimeError("no server runtime is attached to this case")
+    ctx.server.start(
+        ctx,
+        ServerSpec(
+            image=img,
+            env=env,
+            mounts=tuple(mounts),
+            # NET_ADMIN is only needed so the --loss / --server-netem qdiscs can be applied from inside; never granted otherwise.
+            cap_add=("NET_ADMIN",) if ctx.loss or ctx.server_netem else (),
+            cache_volume=cache_volume,
+            clean_cache=bool(sc.get("clean", False)),
+            labels=resource_labels(ctx.resource_scope),
+        ),
+    )
 
 
 @verb("launch_server")
@@ -221,20 +220,18 @@ def _v_launch_server(ctx: Context, step):
 @verb("write_server_conf")
 def _v_write_server_conf(ctx: Context, step):
     """Stage an explicit server.conf before boot; its presence makes the staged JSON predecessor inert."""
-    conf_dir = ctx.server_dir / "automodpack"
-    conf_dir.mkdir(parents=True, exist_ok=True)
-    (conf_dir / "server.conf").write_text(str(step.get("content", "")), encoding="utf-8")
+    _workspace(ctx).write_text("automodpack/server.conf", str(step.get("content", "")))
 
 
 @verb("assert_server_conf")
 def _v_assert_server_conf(ctx: Context, step):
     """Assert the live server.conf: dotted-path expectations, absent paths, and raw substrings."""
-    path = ctx.server_dir / "automodpack" / "server.conf"
+    rel = "automodpack/server.conf"
     try:
-        config = reconf_min.read_config(path)
-        text = path.read_text(encoding="utf-8")
+        text = _workspace(ctx).read_text(rel)
+        config = reconf_min.read_config_text(text)
     except (OSError, ValueError) as error:
-        raise RuntimeError(f"server.conf is not readable at {path}: {error}") from error
+        raise RuntimeError(f"server.conf is not readable at {rel}: {error}") from error
 
     def walk(dotted):
         node = config
@@ -263,7 +260,7 @@ def _v_assert_server_conf(ctx: Context, step):
 def _v_wait_server(ctx: Context, step):
     to = ctx.scenario.get("timeouts", {}) or ctx.settings.get("timeouts", {})
     timeout = parse_duration(step.get("timeout"), default=float(to.get("serverStartSeconds", 180)))
-    _wait_for_log(ctx.srv_name, "Done (", timeout=timeout)
+    ctx.server.wait_for_log("Done (", timeout=timeout)
 
 
 @verb("restart_server")
@@ -272,9 +269,9 @@ def _v_restart_server(ctx: Context, step):
     to = ctx.scenario.get("timeouts", {}) or ctx.settings.get("timeouts", {})
     timeout = parse_duration(step.get("timeout"), default=float(to.get("serverStartSeconds", 180)))
     # Container stdout survives a restart, so readiness is a *new* "Done (" line, not any old one.
-    booted = _container_logs(ctx.srv_name).count("Done (")
-    _container(ctx.srv_name).restart(timeout=60)
-    await_condition(lambda: _container_logs(ctx.srv_name).count("Done (") > booted or None, timeout, msg="server did not finish loading after restart")
+    booted = ctx.server.logs().count("Done (")
+    ctx.server.restart(timeout=60)
+    await_condition(lambda: ctx.server.logs().count("Done (") > booted or None, timeout, msg="server did not finish loading after restart")
 
 
 @verb("publish_server_generation")
@@ -287,8 +284,8 @@ def _v_publish_server_generation(ctx: Context, step):
     command = ["rcon-cli", "automodpack", "generate"]
     if notes:
         command.extend(["notes", notes.replace("\n", " ")])
-    result = _container(ctx.srv_name).exec_run(command)
-    output = result.output.decode("utf-8", errors="replace") if result.output else ""
+    result = ctx.server.exec(command)
+    output = result.output
     if result.exit_code != 0:
         raise RuntimeError(f"server generation command failed ({result.exit_code}): {output}")
 
@@ -316,13 +313,13 @@ def _v_publish_server_generation(ctx: Context, step):
 
 
 def _read_server_json(ctx: Context, relative: str, description: str) -> dict:
-    path = ctx.server_dir / "automodpack" / "server" / relative
+    rel = f"automodpack/server/{relative}"
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(_workspace(ctx).read_text(rel))
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
-        raise AssertionError(f"{description} is not readable: {path}: {error}") from error
+        raise AssertionError(f"{description} is not readable: {rel}: {error}") from error
     if not isinstance(value, dict):
-        raise AssertionError(f"{description} must be a JSON object: {path}")
+        raise AssertionError(f"{description} must be a JSON object: {rel}")
     return value
 
 
@@ -336,11 +333,11 @@ def _server_projection_state(ctx: Context) -> tuple[str, int]:
 
 
 def _server_journal(ctx: Context) -> list[dict]:
-    path = ctx.server_dir / "automodpack" / "server" / "journal.jsonl"
+    rel = "automodpack/server/journal.jsonl"
     try:
-        raw = path.read_text(encoding="utf-8")
+        raw = _workspace(ctx).read_text(rel)
     except (OSError, UnicodeDecodeError) as error:
-        raise AssertionError(f"server journal is not readable: {path}: {error}") from error
+        raise AssertionError(f"server journal is not readable: {rel}: {error}") from error
     entries = []
     for line in raw.splitlines():
         if not line.strip():
@@ -348,49 +345,37 @@ def _server_journal(ctx: Context) -> list[dict]:
         try:
             entry = json.loads(line)
         except ValueError as error:
-            raise AssertionError(f"server journal has an unreadable entry: {path}: {error}") from error
+            raise AssertionError(f"server journal has an unreadable entry: {rel}: {error}") from error
         if not isinstance(entry, dict):
-            raise AssertionError(f"server journal entries must be JSON objects: {path}")
+            raise AssertionError(f"server journal entries must be JSON objects: {rel}")
         entries.append(entry)
     return entries
 
 
-def _server_data_root_container(ctx: Context) -> Path:
-    return Path("/data") / _SERVER_DATA_ROOT
+_ORPHAN_PAYLOAD = b"autotester-orphan-object\n"
 
 
-def _server_object_measurement(ctx: Context, object_root: Path) -> tuple[int, int]:
-    result = _container(ctx.srv_name).exec_run([
-        "sh",
-        "-c",
-        'set -eu; count=0; bytes=0; for shard in "$1"/*; do [ -d "$shard" ] || continue; for path in "$shard"/*; do [ -f "$path" ] || continue; count=$((count + 1)); size=$(wc -c < "$path"); bytes=$((bytes + size)); done; done; printf "%s %s\\n" "$count" "$bytes"',
-        "autotester",
-        str(object_root),
-    ])
-    output = _exec_output(result)
-    if result.exit_code != 0:
-        raise RuntimeError(f"could not measure mounted server object store {object_root}: {output}")
-    match = re.fullmatch(r"\s*(\d+)\s+(\d+)\s*", output)
-    if match is None:
-        raise AssertionError(f"mounted server object store returned an invalid measurement: {output!r}")
-    return int(match.group(1)), int(match.group(2))
+def _server_object_root() -> str:
+    return (_SERVER_DATA_ROOT / "objects").as_posix()
 
 
-def _write_server_orphan_object(ctx: Context, object_root: Path) -> str:
-    payload = b"autotester-orphan-object\n"
-    object_hash = hashlib.sha1(payload).hexdigest()
-    result = _container(ctx.srv_name).exec_run([
-        "sh",
-        "-c",
-        'set -eu; shard="$1/$(printf %s "$3" | cut -c1-2)"; rest=$(printf %s "$3" | cut -c3-); mkdir -p "$shard"; chmod 777 "$shard"; dest="$shard/$rest"; if [ -e "$dest" ]; then test -f "$dest"; else printf "%s" "$2" > "$dest"; chmod 666 "$dest"; fi; test "$(sha1sum "$dest" | cut -d " " -f 1)" = "$3"',
-        "autotester",
-        str(object_root),
-        payload.decode("utf-8"),
-        object_hash,
-    ])
-    output = _exec_output(result)
-    if result.exit_code != 0:
-        raise RuntimeError(f"could not create the valid server object fixture {object_hash}: {output}")
+def _server_object_rel(object_root: str, object_hash: str) -> str:
+    return f"{object_root}/{object_hash[:2]}/{object_hash[2:]}"
+
+
+def _write_server_orphan_object(ctx: Context, object_root: str) -> str:
+    object_hash = hashlib.sha1(_ORPHAN_PAYLOAD).hexdigest()
+    rel = _server_object_rel(object_root, object_hash)
+    workspace = _workspace(ctx)
+    if workspace.exists(rel):
+        try:
+            matches = workspace.read_text(rel) == _ORPHAN_PAYLOAD.decode("utf-8")
+        except (OSError, UnicodeDecodeError):
+            matches = False
+        if not matches:
+            raise RuntimeError(f"existing server object {object_hash} does not match its address")
+    else:
+        workspace.write_bytes(rel, _ORPHAN_PAYLOAD)
     return object_hash
 
 
@@ -411,8 +396,8 @@ def _v_rollback_server_generation(ctx: Context, step):
     if not notes:
         raise AssertionError("server rollback notes must not be empty")
     command = ["rcon-cli", "automodpack", "generate", "revert", str(target_seq), "confirm", "notes", notes]
-    result = _container(ctx.srv_name).exec_run(command)
-    output = _exec_output(result)
+    result = ctx.server.exec(command)
+    output = result.output
     if result.exit_code != 0 or "unknown command" in output.lower() or "incorrect argument" in output.lower():
         raise RuntimeError(f"server generation rollback command was rejected: {output}")
 
@@ -452,12 +437,13 @@ def _v_rollback_server_generation(ctx: Context, step):
 
 @verb("collect_server_objects")
 def _v_collect_server_objects(ctx: Context, step):
-    """Create a valid mounted orphan, run real RCON collection, and verify its receipt."""
-    object_root = _server_data_root_container(ctx) / "objects"
+    """Create a valid workspace orphan, run real RCON collection, and verify its receipt."""
+    object_root = _server_object_root()
     orphan_hash = _write_server_orphan_object(ctx, object_root)
-    before_count, before_bytes = _server_object_measurement(ctx, object_root)
-    result = _container(ctx.srv_name).exec_run(["rcon-cli", "automodpack", "generate", "storage", "collect", "confirm"])
-    output = _exec_output(result)
+    orphan_rel = _server_object_rel(object_root, orphan_hash)
+    before = _workspace(ctx).measure_tree(object_root)
+    result = ctx.server.exec(["rcon-cli", "automodpack", "generate", "storage", "collect", "confirm"])
+    output = result.output
     if result.exit_code != 0 or "unknown command" in output.lower() or "incorrect argument" in output.lower():
         raise RuntimeError(f"server object collection command was rejected: {output}")
     objects_match = re.search(r"Objects\s*-\s*(\d+)\s*->\s*(\d+)", output)
@@ -477,28 +463,29 @@ def _v_collect_server_objects(ctx: Context, step):
         raise AssertionError(f"server object collection reported no deletion for orphan {orphan_hash}: {output}")
 
     def completed_state():
-        after_count, after_bytes = _server_object_measurement(ctx, object_root)
-        orphan_exists = _container(ctx.srv_name).exec_run(["test", "-e", str(cas_object(object_root, orphan_hash))]).exit_code == 0
-        if orphan_exists or (after_count, after_bytes) != (receipt["afterCount"], receipt["afterBytes"]):
+        workspace = _workspace(ctx)
+        after = workspace.measure_tree(object_root)
+        orphan_exists = workspace.exists(orphan_rel)
+        if orphan_exists or (after.count, after.bytes) != (receipt["afterCount"], receipt["afterBytes"]):
             return None
-        return after_count, after_bytes
+        return after
 
-    after_count, after_bytes = await_condition(
+    after = await_condition(
         completed_state,
         parse_duration(step.get("timeout"), default=120),
         step.get("poll"),
         "server object collection did not durably remove the valid orphan object",
     )
-    if (before_count, before_bytes) != (receipt["beforeCount"], receipt["beforeBytes"]):
-        raise AssertionError(f"server object collection receipt disagrees with mounted-store measurement: {output}")
+    if (before.count, before.bytes) != (receipt["beforeCount"], receipt["beforeBytes"]):
+        raise AssertionError(f"server object collection receipt disagrees with workspace measurement: {output}")
     if receipt["beforeCount"] - receipt["afterCount"] != receipt["deletedCount"] or receipt["beforeBytes"] - receipt["afterBytes"] != receipt["deletedBytes"]:
         raise AssertionError(f"server object collection receipt has inconsistent object transition: {output}")
     ctx.vars["server_object_collection"] = {
         **receipt,
-        "mountedObjectRoot": str(object_root),
+        "objectRoot": object_root,
         "orphanHash": orphan_hash,
-        "measuredAfterCount": after_count,
-        "measuredAfterBytes": after_bytes,
+        "measuredAfterCount": after.count,
+        "measuredAfterBytes": after.bytes,
         "command": ["rcon-cli", "automodpack", "generate", "storage", "collect", "confirm"],
     }
 
@@ -509,18 +496,21 @@ def _v_seed_bootstrap(ctx: Context, step):
     fingerprint = str(ctx.vars.get("fingerprint", "")).strip()
     if not fingerprint:
         raise RuntimeError("seed_bootstrap requires read_server_fingerprint first")
-    projection_path = ctx.server_dir / "automodpack" / "server" / "current-projection.json"
-    config_path = ctx.server_dir / "automodpack" / "server.conf"
-    if not config_path.exists():
-        config_path = ctx.server_dir / "automodpack" / "server-config.json"
+    workspace = _workspace(ctx)
+    projection_rel = "automodpack/server/current-projection.json"
+    config_rel = "automodpack/server.conf"
+    if not workspace.exists(config_rel):
+        config_rel = "automodpack/server-config.json"
     try:
-        projection = json.loads(projection_path.read_text(encoding="utf-8"))
-        server_config = reconf_min.read_config(config_path)
+        projection = json.loads(workspace.read_text(projection_rel))
+        server_config = reconf_min.read_config_text(
+            workspace.read_text(config_rel), json_format=config_rel.endswith(".json")
+        )
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise RuntimeError(f"live server bootstrap state is not readable: {error}") from error
     modpack_id = str((projection.get("policy", {}) or {}).get("modpackId", "")).strip()
     if not modpack_id:
-        raise RuntimeError(f"live server projection has no modpackId: {projection_path}")
+        raise RuntimeError(f"live server projection has no modpackId: {projection_rel}")
     origin = str(ctx.resolve(step.get("origin", "${server.host}"))).strip()
     endpoint = str(ctx.resolve(step.get("endpoint", "${server.endpoint}"))).strip()
     connection_mode = str(step.get("connectionMode") or server_config.get("connection-mode") or server_config.get("connectionMode") or "").strip().upper()
@@ -535,7 +525,7 @@ def _v_seed_bootstrap(ctx: Context, step):
     }
     bootstrap_path = ctx.game_dir / "automodpack" / "automodpack-bootstrap.json"
     bootstrap_path.parent.mkdir(parents=True, exist_ok=True)
-    bootstrap_path.write_text(json.dumps(fields, indent=2) + "\n", encoding="utf-8")
+    bootstrap_path.write_text(json.dumps(fields, indent=2) + "\n", encoding="utf-8", newline="")
     ctx.vars.update({
         "bootstrap_origin": origin,
         "bootstrap_endpoint": endpoint,

@@ -752,9 +752,6 @@ flow:
     name: verify the new file contents
     path: "${active_dir}/config/amp-autotest-delta.txt"
     content: "delta-v2\n"
-  - do: assert
-    name: verify removed file is gone
-    that: { file_gone: "${active_dir}/config/amp-autotest-gamma.cfg" }
   - do: wait_generation
     name: wait for the committed changed generation
     patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
@@ -783,6 +780,9 @@ flow:
   - do: wait_client_exit
     name: wait for final restart
   - use: rejoin
+  - do: assert
+    name: verify removed file is gone
+    that: { file_gone: "${active_dir}/config/amp-autotest-gamma.cfg" }
   - do: disconnect
     name: return to multiplayer before reviewing recovered
   - use: open_multiplayer

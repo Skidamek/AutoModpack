@@ -12,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import subprocess
 
-from .docker_harness import _container, _container_logs, _remove_container, _run_container, _wait_exited, _wait_for_log
 from .engine import Context
 from .engine.registry import verb
 from .supervisor import resource_labels
@@ -38,10 +37,11 @@ def _v_start_s3_host(ctx: Context, step):
     rel = str(step.get("dir", "")).strip()
     if not rel:
         raise ValueError("start_s3_host needs the exported tree's dir relative to the server game dir")
-    host_dir = ctx.server_dir / rel
-    missing = [name for name in ("head", "journal") if not (host_dir / name).is_file()]
+    if ctx.server_workspace is None:
+        raise RuntimeError("no server workspace is attached to this case")
+    missing = [name for name in ("head", "journal") if not ctx.server_workspace.exists(f"{rel}/{name}")]
     if missing:
-        raise RuntimeError(f"exported tree {host_dir} is missing {missing}; wait for the server's export receipt first")
+        raise RuntimeError(f"exported tree {rel} is missing {missing}; wait for the server's export receipt first")
 
     # The certificate is generated at case setup, host-side (openssl is a harness
     # dependency the same way docker is); MinIO mounts it read-only.
@@ -56,10 +56,10 @@ def _v_start_s3_host(ctx: Context, step):
     der = subprocess.run(["openssl", "x509", "-in", str(cert), "-outform", "DER"], check=True, capture_output=True).stdout
     ctx.vars["fingerprint"] = hashlib.sha256(der).hexdigest()
 
-    _remove_container(ctx.s3_name)
+    ctx.hosting.remove(ctx.s3_name)
     mc_name = ctx.s3_name + "-mc"
-    _remove_container(mc_name)
-    _run_container(
+    ctx.hosting.remove(mc_name)
+    ctx.hosting.run(
         name=ctx.s3_name,
         image=ctx.minio_image,
         network=ctx.net_name,
@@ -69,17 +69,17 @@ def _v_start_s3_host(ctx: Context, step):
         aliases=[HOST_ALIAS],
         labels=resource_labels(ctx.resource_scope),
     )
-    _wait_for_log(ctx.s3_name, "MinIO Object Storage Server", timeout=120)
+    ctx.hosting.wait_for_log(ctx.s3_name, "MinIO Object Storage Server", timeout=120)
 
     # Publish through the MinIO client: create the bucket, mirror the exported
     # tree, then open it for anonymous download - the same recipe the hosting
     # docs give operators, where aws s3 sync / rclone stand in for mc.
-    _run_container(
+    ctx.hosting.run(
         name=mc_name,
         image=ctx.minio_client_image,
         network=ctx.net_name,
         env={},
-        mounts=[(host_dir, "/srv/export", True)],
+        mounts=[(ctx.server_workspace.host_path(rel), "/srv/export", True)],
         entrypoint=["/bin/sh", "-c"],
         # --insecure is a per-command global flag: the self-signed cert is the
         # operator's own, exactly like the production recipe with a private CA.
@@ -91,8 +91,8 @@ def _v_start_s3_host(ctx: Context, step):
                  f"&& mc --insecure anonymous set download local/{BUCKET}"],
         labels=resource_labels(ctx.resource_scope),
     )
-    _wait_exited(mc_name, timeout=300)
-    exit_code = _container(mc_name).attrs.get("State", {}).get("ExitCode", -1)
+    ctx.hosting.wait_exited(mc_name, timeout=300)
+    exit_code = ctx.hosting.exit_code(mc_name)
     if exit_code != 0:
-        raise RuntimeError(f"the mc upload failed (exit {exit_code}): {_container_logs(mc_name)[-800:]}")
+        raise RuntimeError(f"the mc upload failed (exit {exit_code}): {ctx.hosting.logs(mc_name)[-800:]}")
     ctx.vars["static_host_endpoint"] = f"{HOST_ALIAS}:{ENDPOINT_PORT}"

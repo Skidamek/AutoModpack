@@ -21,7 +21,6 @@ paths leak into the scenarios this way.
 """
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import re
 import shutil
@@ -29,6 +28,8 @@ import tempfile
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+from filelock import FileLock
 
 from .config import REPO_ROOT
 
@@ -76,8 +77,7 @@ def _fetch(url: str, sha512: str, name: str | None, timeout: float) -> Path:
     dest = bucket / filename
     lock_path = bucket / ".download.lock"
 
-    with lock_path.open("a+b") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with FileLock(str(lock_path)):
         if dest.is_file() and _sha512(dest) == sha512:
             return dest
 

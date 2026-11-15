@@ -504,3 +504,18 @@ def test_release_gate_flow(make_ctx, flow_verbs):
     assert (ctx.game_dir / "config/amp-autotest-baseline.json").read_text(
         encoding="utf-8"
     ) == "local-baseline\n"
+
+
+def test_deleted_file_is_absent_after_restart(make_ctx, flow_verbs):
+    """Correctness is post-restart absence on every OS. Immediate unlink is not asserted."""
+    ctx = make_ctx()
+    gone = ctx.game_dir / "automodpack/client/active/config/amp-autotest-gamma.cfg"
+    gone.parent.mkdir(parents=True, exist_ok=True)
+    gone.write_text("gamma\n", encoding="utf-8")
+    ctx.bridge = FakeBridge(ctx)
+    ctx.bridge.selected_pack = "A"
+    ctx.bridge.update_available = True
+    ctx.bridge._write_modpack()
+    ctx.bridge.request("quit")
+    _launch_client(ctx, {})
+    assert not gone.exists()
