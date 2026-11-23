@@ -124,7 +124,7 @@ class ProjectionRepairTest {
 				Assumptions.assumeFalse(Files.isReadable(state), "this filesystem ignores permissions");
 				IOException physical = assertThrows(IOException.class, () -> ProjectionState.owed(storage));
 				assertFalse(physical instanceof ProjectionState.UnreadableException);
-				assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()));
+				assertNotNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason());
 				assertNull(ProjectionAvailability.loadableModsDirectory(storage.gameDirectory()));
 				assertTrue(ProjectionAvailability.scan(storage.gameDirectory()).refusedByState());
 				IOException writer = assertThrows(IOException.class, () -> new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).restoreFallback());
@@ -151,7 +151,7 @@ class ProjectionRepairTest {
 			Files.move(state, temporary);
 
 			assertThrows(ProjectionState.UnreadableException.class, () -> ProjectionState.read(storage));
-			assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()));
+			assertNotNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason());
 			assertTrue(ProjectionState.owed(storage));
 
 			assertTrue(PublicationSweep.restoreFallback(storage));
@@ -173,7 +173,7 @@ class ProjectionRepairTest {
 		Files.writeString(storage.activePath("mods/players.jar"), "player added", StandardCharsets.UTF_8);
 		Files.writeString(storage.projectionStateFile(), "{torn", StandardCharsets.UTF_8);
 		assertTrue(ProjectionState.owed(storage));
-		assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()));
+		assertNotNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason());
 
 		PublicationSweep.sweepUnpinnedDirectories(storage);
 
@@ -317,6 +317,28 @@ class ProjectionRepairTest {
 		}
 	}
 
+	/** Detach breaks the shared inode by design; an attach puts it back, so the store and the projection own one inode again. */
+	@Test
+	void attachingRestoresTheSharedInodeDetachBroke() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		commit(storage);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, Map.of("mods/committed.jar", "committed"));
+		}
+		Path file = storage.activePath("mods/committed.jar");
+		Path object = storage.objectFile(HashUtils.getHash(file));
+		assertTrue(FileIntegrity.sameInode(file, object), "an installed row is the object's inode");
+		String modpackId = storage.readActiveState().modpackId;
+
+		new ClientGenerationStore(storage).declareDetached(modpackId);
+		assertFalse(FileIntegrity.sameInode(file, object), "detach gives the player a private copy");
+
+		storage.setDetached(modpackId, false);
+		new ClientGenerationStore(storage).reconcileProjectionOwnership();
+		assertTrue(FileIntegrity.sameInode(file, object), "attaching restores the hard link");
+		assertEquals("committed", Files.readString(file, StandardCharsets.UTF_8));
+	}
+
 	/** F6: the parent of every directory a run creates is forced before the run returns. */
 	@Test
 	void everyCreatedDirectoryIsForcedInItsParent() throws Exception {
@@ -408,7 +430,7 @@ class ProjectionRepairTest {
 						}
 					});
 				} catch (IllegalStateException crashed) {
-					assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()));
+					assertNotNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason());
 					assertTrue(new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).restoreFallback());
 					assertEquals(before, tree(storage), "restore at crash " + at);
 					assertTrue(names(storage.activePath("mods")).contains("Sodium.jar"), "exact case restored at " + at + ": " + names(storage.activePath("mods")));
@@ -438,7 +460,7 @@ class ProjectionRepairTest {
 		Assumptions.assumeFalse(Files.isReadable(state), "this filesystem ignores permissions");
 
 		new BootRecovery(storage, TestEnvironment.noopLoader()).recover();
-		assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()), "the first boot that meets it refuses");
+		assertNotNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason(), "the first boot that meets it refuses");
 		assertTrue(Files.exists(state.resolveSibling(ProjectionState.READ_FAILURE_FILE)), "and records it");
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			IOException update = assertThrows(IOException.class, () -> converge(storage, cache, NEW, Map.of(), ProjectionConvergence.Writes.NONE));
@@ -450,7 +472,7 @@ class ProjectionRepairTest {
 
 		ProjectionState.assumeNextBoot();
 		new BootRecovery(storage, TestEnvironment.noopLoader()).recover();
-		assertNull(ProjectionState.loadRefusal(storage.gameDirectory()), "the next boot repaired it");
+		assertNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason(), "the next boot repaired it");
 		assertEquals(OLD, tree(storage), "without touching the projection");
 		assertFalse(Files.exists(state.resolveSibling(ProjectionState.READ_FAILURE_FILE)));
 		assertEquals(1, asides(storage).size(), "the unreadable document is kept aside");
@@ -506,6 +528,28 @@ class ProjectionRepairTest {
 		assertFalse(Files.exists(storage.projectionRelaunchFile()), "a clean scan clears it");
 	}
 
+	/** R2-3: the guard remembers the trees it already relaunched into, so a repair that alternates between two cannot loop. */
+	@Test
+	void theRelaunchGuardRefusesAnAlternatingPair() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			settle(storage, cache, OLD);
+			ProjectionAvailability.Scan scannedOld = new ProjectionAvailability.Scan(ProjectionState.read(storage), false, true, null);
+			settle(storage, cache, NEW);
+			assertTrue(ProjectionAvailability.mustRelaunch(storage, scannedOld), "recovery settled a tree the loader did not take");
+
+			ProjectionAvailability.Scan scannedNew = new ProjectionAvailability.Scan(ProjectionState.read(storage), false, true, null);
+			settle(storage, cache, OLD);
+			assertTrue(ProjectionAvailability.mustRelaunch(storage, scannedNew), "and then the other tree, which is new to the guard");
+
+			// A repair that keeps flipping between the same two trees must not spend another relaunch on either of them.
+			settle(storage, cache, NEW);
+			assertFalse(ProjectionAvailability.mustRelaunch(storage, scannedOld), "the alternating pair does not relaunch again");
+			settle(storage, cache, OLD);
+			assertFalse(ProjectionAvailability.mustRelaunch(storage, scannedNew), "in either order");
+		}
+	}
+
 	/** R2-3: a transient read failure at scan time is retried, so it neither refuses Kilt nor spends a relaunch. */
 	@Test
 	void aTransientReadFailureAtScanTimeIsRetried() throws Exception {
@@ -559,14 +603,14 @@ class ProjectionRepairTest {
 			dropObject(storage, committed);
 
 			assertFalse(new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).restoreFallback());
-			assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()), "refused, not vouched for");
+			assertNotNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason(), "refused, not vouched for");
 			assertFalse(tree(storage).containsKey("mods/old-1.1.jar"), "what the store holds is put back: " + tree(storage));
 			assertTrue(tree(storage).containsKey("mods/old-1.0.jar"));
 
 			rows(storage, Map.of("mods/committed.jar", "committed"));
 			assertTrue(new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).restoreFallback());
 			assertEquals(before, tree(storage));
-			assertNull(ProjectionState.loadRefusal(storage.gameDirectory()));
+			assertNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason());
 		}
 	}
 

@@ -314,8 +314,14 @@ public class ModpackUpdater implements AutoCloseable {
 	 */
 	public void finishAttachWithoutChanges() throws IOException {
 		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
-		storage.setDetached(selectedTarget.manifest().modpackId(), false);
-		LOGGER.info("Modpack {} is attached again: syncing to the server's current generation", selectedTarget.manifest().modpackId());
+		String modpackId = selectedTarget.manifest().modpackId();
+		storage.setDetached(modpackId, false);
+		try {
+			new ClientGenerationStore(storage).reconcileProjectionOwnership();
+		} catch (IOException e) {
+			LOGGER.warn("Modpack {} is attached, but its projection files keep their private copies until the next sync re-links them", modpackId, e);
+		}
+		LOGGER.info("Modpack {} is attached again: syncing to the server's current generation", modpackId);
 	}
 
 	/** How an update attempt ended: a player-facing review took over the screen, the update applied inline, or nothing was applied. */

@@ -30,6 +30,7 @@ import org.junit.jupiter.api.io.TempDir;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
@@ -56,6 +57,29 @@ class ClientGenerationStoreTest {
 
 	@TempDir
 	Path temporaryDirectory;
+
+	@Test
+	void aMutatedReadCannotCorruptTheNextRead() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "projection-object");
+		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
+		TestPacks.stageGeneration(storage, document);
+		storage.writeActiveState(document, new SelectionIntent(Set.of("main")));
+
+		ClientStorageJsons.ClientGenerationStateFields read = storage.readActiveState();
+		read.contentToken = "0".repeat(40);
+		read.detached = true;
+		read.selectedGroups = List.of("tampered");
+		read.manifest = null;
+		read.ownershipLedger = null;
+
+		ClientStorageJsons.ClientGenerationStateFields next = storage.readActiveState();
+		assertEquals(document.contentToken(), next.contentToken, "the parse is cached, the document it hands out is not");
+		assertFalse(next.detached);
+		assertNotNull(next.manifest);
+		assertEquals(List.of("main"), next.selectedGroups);
+		assertEquals(document.contentToken(), new ClientGenerationStore(storage).activeDocument().orElseThrow().contentToken());
+	}
 
 	@Test
 	void reconstructsTheActiveTargetFromMirrorCasAndActiveState() throws Exception {

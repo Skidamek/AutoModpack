@@ -240,10 +240,12 @@ final class UpdateSession implements UpdateAttempt {
 		// One of the two attach exits: an explicitly requested sync ends attached at its commit.
 		if (attaching) {
 			try {
-				storage.setDetached(target.manifest().modpackId(), false);
-				LOGGER.info("Modpack {} is attached again: the applied sync ends detachment", target.manifest().modpackId());
+				String modpackId = target.manifest().modpackId();
+				storage.setDetached(modpackId, false);
+				new ClientGenerationStore(storage).reconcileProjectionOwnership();
+				LOGGER.info("Modpack {} is attached again: the applied sync ends detachment", modpackId);
 			} catch (IOException e) {
-				LOGGER.warn("Modpack generation committed, but detachment could not be cleared; the pack still reads as detached until the next sync", e);
+				LOGGER.warn("Modpack generation committed, but the pack could not be attached again; it still reads as detached until the next sync", e);
 			}
 		}
 		return RestartDecision.applyResult(plan);

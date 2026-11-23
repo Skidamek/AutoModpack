@@ -9,14 +9,11 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 import org.apache.logging.log4j.LogManager;
@@ -41,6 +38,7 @@ import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.ExpectedSizes;
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -173,31 +171,22 @@ public final class ClientGenerationStore {
 
 	/** The active pack's document: active-state identity and ledger, its mirror entry, and its policy document from the CAS. */
 	public Optional<PackDocument> activeDocument() throws IOException {
-		ActivePackPointer.Snapshot snapshot = storage.readActiveStateSnapshot();
-		return snapshot.state() == null ? Optional.empty() : Optional.of(activeDocument(snapshot));
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+		return state == null ? Optional.empty() : Optional.of(activeDocument(state));
 	}
 
 	/** The active pack's document, refused when the active pack is not {@code modpackId}, as {@link #hosting(String)} refuses. */
 	public PackDocument activeDocument(String modpackId) throws IOException {
-		ActivePackPointer.Snapshot snapshot = storage.readActiveStateSnapshot();
-		ClientStorageJsons.ClientGenerationStateFields state = snapshot.state();
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null || state.modpackId == null || state.modpackId.isBlank()) throw new IOException("No active modpack is selected");
 		if (!state.modpackId.equals(ModpackId.requireValid(modpackId)))
 			throw new IOException("The active modpack is " + state.modpackId + ", not the shared " + modpackId);
-		return activeDocument(snapshot);
+		return activeDocument(state);
 	}
 
-	/** One build per pointer revision: a commit asks for the active document at its validation gate and again while resolving the target. */
-	private PackDocument activeDocument(ActivePackPointer.Snapshot snapshot) throws IOException {
-		ClientStorageJsons.ClientGenerationStateFields state = Objects.requireNonNull(snapshot.state(), "active state");
-		Path memoKey = storage.clientDirectory().toAbsolutePath().normalize();
-		if (snapshot.fingerprint() != null) {
-			ActiveDocumentMemo memo = ACTIVE_DOCUMENT_MEMOS.get(memoKey);
-			if (memo != null && memo.revision() == snapshot.revision() && memo.fingerprint().equals(snapshot.fingerprint())) return memo.document();
-		}
-		PackDocument document = document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger), state.manifest, state.manifestSha1);
-		if (snapshot.fingerprint() != null) ACTIVE_DOCUMENT_MEMOS.put(memoKey, new ActiveDocumentMemo(snapshot.fingerprint(), snapshot.revision(), document));
-		return document;
+	/** One build per caller: the pointer's own parse and validation are what the cache answers, and the derived document is cheap enough to rebuild. */
+	private PackDocument activeDocument(ClientStorageJsons.ClientGenerationStateFields state) throws IOException {
+		return document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger), state.manifest, state.manifestSha1);
 	}
 
 	/** Whether an active pack pointer exists; {@link #hosting(String)} resolves the rest. */
@@ -241,44 +230,20 @@ public final class ClientGenerationStore {
 	/** Reconstructs the active target from the active document and the persisted selection intent, without server access. */
 	public Optional<SelectedModpackTarget> readActiveTarget(ClientPlatform platform) throws IOException {
 		Objects.requireNonNull(platform, "platform");
-		return activeTarget(storage.readActiveStateSnapshot(), platform);
+		return activeTarget(storage.readActiveState(), platform);
 	}
 
 	/** Same, resolving under the applied selection's own platform: the exact platform the selection last committed under. */
 	public Optional<SelectedModpackTarget> readActiveTarget() throws IOException {
-		ActivePackPointer.Snapshot snapshot = storage.readActiveStateSnapshot();
-		ClientStorageJsons.ClientGenerationStateFields state = snapshot.state();
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null) return Optional.empty();
 		ClientPlatform platform = ClientPlatform.effective(appliedSelection(state, state.modpackId).orElse(null));
-		return activeTarget(snapshot, platform);
+		return activeTarget(state, platform);
 	}
 
-	private Optional<SelectedModpackTarget> activeTarget(ActivePackPointer.Snapshot snapshot, ClientPlatform platform) throws IOException {
-		ClientStorageJsons.ClientGenerationStateFields state = snapshot.state();
+	private Optional<SelectedModpackTarget> activeTarget(ClientStorageJsons.ClientGenerationStateFields state, ClientPlatform platform) throws IOException {
 		if (state == null) return Optional.empty();
-		// A pointer that does not record its own selection falls back to the selection store, which may move without
-		// rewriting the pointer; only self-contained pointers are safe to memoize by file identity.
-		boolean memoizable = snapshot.fingerprint() != null && state.selectedGroups != null;
-		Path memoKey = storage.clientDirectory().toAbsolutePath().normalize();
-		if (memoizable) {
-			ActiveTargetMemo memo = ACTIVE_TARGET_MEMOS.get(memoKey);
-			if (memo != null && memo.revision() == snapshot.revision() && memo.fingerprint().equals(snapshot.fingerprint())) {
-				SelectedModpackTarget hit = memo.byPlatform().get(platform.id());
-				if (hit != null) return Optional.of(hit);
-			}
-		}
-		SelectedModpackTarget target = resolveActive(snapshot, platform);
-		if (memoizable) {
-			ACTIVE_TARGET_MEMOS.compute(memoKey, (ignored, memo) -> {
-				Map<String, SelectedModpackTarget> byPlatform = memo != null && memo.revision() == snapshot.revision() && memo.fingerprint().equals(snapshot.fingerprint())
-						? memo.byPlatform()
-						: Map.of();
-				HashMap<String, SelectedModpackTarget> updated = new HashMap<>(byPlatform);
-				updated.put(platform.id(), target);
-				return new ActiveTargetMemo(snapshot.fingerprint(), snapshot.revision(), Map.copyOf(updated));
-			});
-		}
-		return Optional.of(target);
+		return Optional.of(resolveActive(state, platform));
 	}
 
 	/**
@@ -298,10 +263,9 @@ public final class ClientGenerationStore {
 				state.selectedPlatform == null ? null : ClientPlatform.parse(state.selectedPlatform)));
 	}
 
-	private SelectedModpackTarget resolveActive(ActivePackPointer.Snapshot snapshot, ClientPlatform platform) throws IOException {
+	private SelectedModpackTarget resolveActive(ClientStorageJsons.ClientGenerationStateFields state, ClientPlatform platform) throws IOException {
 		Objects.requireNonNull(platform, "platform");
-		ClientStorageJsons.ClientGenerationStateFields state = snapshot.state();
-		PackDocument document = activeDocument(snapshot);
+		PackDocument document = activeDocument(state);
 		Optional<SelectionIntent> applied = appliedSelection(state, state.modpackId);
 		return applied.isPresent()
 				? SelectedModpackTarget.prepare(document, null, applied.get(), platform)
@@ -375,52 +339,21 @@ public final class ClientGenerationStore {
 		return true;
 	}
 
-	/*
-	 * Witnessed policies are immutable content-addressed objects - their file name is their hash and the store never
-	 * rewrites them - so one parse serves every join, fold, and history screen. The outer key is the client directory:
-	 * two storages can witness the same hash while one of them has deleted its copy, and a hit must never stand in for
-	 * a missing object. A wholesale clear past the cap keeps each storage's map bounded against a server that never
-	 * stops publishing; forgetting a pack clears the storage's map because that is the one path that may collect a
-	 * policy object.
-	 */
-	private static final int POLICY_MEMO_CAP = 64;
-	private static final Map<Path, Map<String, GroupManifest>> POLICY_MEMOS = new ConcurrentHashMap<>();
-	/**
-	 * The active target resolved from one pointer revision, per platform. Rebuilding it validates the carried
-	 * manifest, rehashes its file tree, and recomputes the ledger digest; a commit asks for it a dozen times and the
-	 * answer only changes when the pointer does. Keyed by the pointer file identity, so a write by any process misses.
-	 */
-	private static final Map<Path, ActiveTargetMemo> ACTIVE_TARGET_MEMOS = new ConcurrentHashMap<>();
-	private static final Map<Path, ActiveDocumentMemo> ACTIVE_DOCUMENT_MEMOS = new ConcurrentHashMap<>();
-
-	private record ActiveTargetMemo(FileCache.FileFingerprint fingerprint, long revision, Map<String, SelectedModpackTarget> byPlatform) {}
-	private record ActiveDocumentMemo(FileCache.FileFingerprint fingerprint, long revision, PackDocument document) {}
-
 	private void requirePolicyObject(String hash) throws IOException {
 		Path object = storage.objectFile(hash);
 		if (!Files.exists(object, LinkOption.NOFOLLOW_LINKS)) throw new MissingGenerationContentException("Client policy document is missing: " + hash);
 		if (Files.isSymbolicLink(object) || !Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client policy document is not a regular file: " + object);
 	}
 
-	/** One cached policy document from the client CAS; policy objects are never collected, so witnessed generations stay foldable. */
+	/** One policy document from the client CAS; policy objects are never collected, so witnessed generations stay foldable. */
 	public GroupManifest policyDocument(String policySha1) throws IOException {
 		String hash = ClientObjectStore.normalizeHash(policySha1);
-		Map<String, GroupManifest> memo = POLICY_MEMOS.computeIfAbsent(storage.clientDirectory().toAbsolutePath().normalize(), ignored -> new ConcurrentHashMap<>());
-		GroupManifest witnessed = memo.get(hash);
-		if (witnessed != null) {
-			// A hit still proves presence: a collected or deleted object must read as missing, never as a remembered parse.
-			requirePolicyObject(hash);
-			return witnessed;
-		}
 		requirePolicyObject(hash);
 		Path object = storage.objectFile(hash);
 		try {
 			ModpackJsons.CompleteModpackContentFields fields = ConfigTools.read(object, ModpackJsons.CompleteModpackContentFields.class)
 					.orElseThrow(() -> new IOException("Client policy document is empty: " + object));
-			GroupManifest manifest = GroupManifestValidator.validate(fields);
-			if (memo.size() >= POLICY_MEMO_CAP) memo.clear();
-			memo.put(hash, manifest);
-			return manifest;
+			return GroupManifestValidator.validate(fields);
 		} catch (RuntimeException e) {
 			throw new IOException("Client policy document is invalid: " + object, e);
 		}
@@ -435,9 +368,6 @@ public final class ClientGenerationStore {
 	}
 
 	private void forgetModpackLocked(String modpackId) throws IOException {
-		POLICY_MEMOS.remove(storage.clientDirectory().toAbsolutePath().normalize());
-		ACTIVE_TARGET_MEMOS.remove(storage.clientDirectory().toAbsolutePath().normalize());
-		ACTIVE_DOCUMENT_MEMOS.remove(storage.clientDirectory().toAbsolutePath().normalize());
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Cannot forget a modpack while an update transaction is active");
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
@@ -644,12 +574,14 @@ public final class ClientGenerationStore {
 
 	/**
 	 * Declares local sovereignty over the active pack: no sync until an explicit attach, and the active projection
-	 * loses its immutability so the owner can edit, delete, and rearrange every file of the kept state.
+	 * loses its immutability so the owner can edit, delete, and rearrange every file of the kept state. The files are
+	 * made private first: a crash between the two leaves an attached pack whose rows are already copies, which the
+	 * next convergence re-links, where the other order would leave a detached pack that silently stays sealed.
 	 */
 	public void declareDetached(String modpackId) throws IOException {
 		boolean wasDetached = storage.isDetached(modpackId);
-		storage.setDetached(modpackId, true);
 		unprotectProjection();
+		storage.setDetached(modpackId, true);
 		if (!wasDetached) LOGGER.info("Modpack {} is detached: every file stays as it is and server updates stop until you resume syncing", modpackId);
 	}
 
@@ -662,6 +594,30 @@ public final class ClientGenerationStore {
 		unprotectProjection();
 	}
 
+	/**
+	 * One pass that puts projection ownership back where the durable flag says it belongs, and does nothing when it
+	 * already is. Attaching re-seals what a detach left private; detaching frees what an attach left sealed. Every
+	 * attach exit and every convergence calls it, so a crash in either direction is repaired by the next run instead
+	 * of leaving a half-owned projection behind.
+	 */
+	public void reconcileProjectionOwnership() throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
+		if (active == null) return;
+		Path activeDirectory = storage.activeDirectory();
+		if (!Files.isDirectory(activeDirectory, LinkOption.NOFOLLOW_LINKS)) return;
+		if (FileTrees.isRedirectingLink(activeDirectory)) {
+			LOGGER.warn("Leaving the active projection as it is: the managed root is a symbolic link: {}", activeDirectory);
+			return;
+		}
+		if (active.detached) unprotectProjection();
+		else resealProjection();
+	}
+
+	/**
+	 * Detach: every projection file that still shares an inode with a CAS object becomes a private copy, and every
+	 * file loses the read-only policy. A file that cannot be taken fails loudly - a half-detached pack would keep
+	 * sealing files the player was promised, and the object behind a shared inode would stay editable.
+	 */
 	private void unprotectProjection() throws IOException {
 		Path active = storage.activeDirectory();
 		if (!Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) return;
@@ -680,19 +636,111 @@ public final class ClientGenerationStore {
 				}
 
 				@Override
-				public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
-					if (attributes.isRegularFile()) {
+				public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+					if (!attributes.isRegularFile()) return FileVisitResult.CONTINUE;
+					try {
 						breakSharedObjectLink(file, cache);
 						ImmutableFiles.unprotect(file);
+					} catch (IOException e) {
+						LOGGER.warn("Cannot make {} private: put it back by hand or resume syncing", file, e);
 					}
 					return FileVisitResult.CONTINUE;
 				}
 
 				@Override
 				public FileVisitResult visitFileFailed(Path file, IOException failure) {
+					LOGGER.warn("Cannot even read {} while detaching: it stays as it is", file, failure);
 					return FileVisitResult.CONTINUE;
 				}
 			});
+		}
+	}
+
+	/**
+	 * Attach: every projection file whose bytes are a CAS object again becomes that object's hard link, so the store
+	 * and the projection share one inode and one sealed policy again. A row the store holds no copy of is the player's
+	 * own file or a generation this client never fetched; it is left alone and the next convergence decides it.
+	 */
+	private void resealProjection() throws IOException {
+		Path active = storage.activeDirectory();
+		int relinked = 0;
+		int keptCopies = 0;
+		IOException firstLinkFailure = null;
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			for (Path file : projectionFiles(active)) {
+				try {
+					// A sealed file cannot be rewritten in place, so the immutable tripwire answers it from one stat; an
+					// unsealed copy is the player's until this pass re-links it, so it needs the one that also proves a
+					// same-tick rewrite before its bytes are allowed to become an object's.
+					String hash = ImmutableFiles.isProtected(file) ? cache.getOrComputeHashImmutable(file) : cache.getOrComputeHashEditable(file);
+					Path object = HashUtils.isSha1(hash) ? storage.objectFile(HashUtils.normalizeSha1(hash)) : null;
+					if (object == null || !Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)) continue;
+					if (FileIntegrity.sameInode(file, object)) {
+						ImmutableFiles.protect(file);
+						continue;
+					}
+					IOException failure = relink(file, object);
+					if (failure == null) {
+						relinked++;
+						continue;
+					}
+					keptCopies++;
+					if (firstLinkFailure == null) firstLinkFailure = failure;
+					ImmutableFiles.protect(file);
+				} catch (IOException e) {
+					LOGGER.warn("Cannot re-seal {}: it stays the file it is until the next sync", file, e);
+				}
+			}
+		}
+		if (relinked > 0) LOGGER.info("Re-linked {} projection files to the shared store after the pack was attached again", relinked);
+		if (keptCopies > 0)
+			LOGGER.warn("{} projection files stay verified copies: the store and the projection cannot share a hard link ({})", keptCopies, firstLinkFailure);
+	}
+
+	/** The regular files of the active projection, with every unreadable entry named rather than skipped silently. */
+	private List<Path> projectionFiles(Path active) throws IOException {
+		List<Path> files = new ArrayList<>();
+		Files.walkFileTree(active, new SimpleFileVisitor<>() {
+			@Override
+			public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
+				if (!directory.equals(active) && FileTrees.isRedirectingLink(directory)) return FileVisitResult.SKIP_SUBTREE;
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+				if (attributes.isRegularFile()) files.add(file);
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult visitFileFailed(Path file, IOException failure) {
+				LOGGER.warn("Cannot read {} while re-sealing the projection: it stays as it is", file, failure);
+				return FileVisitResult.CONTINUE;
+			}
+		});
+		return files;
+	}
+
+	/** Publishes {@code object} as a hard link over {@code file}, or returns why this store pair cannot link. */
+	private static IOException relink(Path file, Path object) {
+		Path temporary = file.resolveSibling("." + file.getFileName() + DurableFiles.TEMPORARY_SUFFIX);
+		try {
+			Files.deleteIfExists(temporary);
+			Files.createLink(temporary, object);
+		} catch (IOException | UnsupportedOperationException unsupported) {
+			return unsupported instanceof IOException failure ? failure : new IOException("This filesystem cannot create hard links", unsupported);
+		}
+		try {
+			DurableFiles.replace(temporary, file);
+			return null;
+		} catch (IOException failed) {
+			try {
+				Files.deleteIfExists(temporary);
+			} catch (IOException ignored) {
+				// The temporary of a failed replace stays as evidence; the file itself is untouched.
+			}
+			return failed;
 		}
 	}
 

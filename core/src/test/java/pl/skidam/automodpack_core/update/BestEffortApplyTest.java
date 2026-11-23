@@ -167,8 +167,8 @@ class BestEffortApplyTest {
 		}
 		if (!reached[0]) return;
 		boolean projectionTouched = !Files.exists(fixture.storage.activePath("mods/old.jar")) || Files.exists(fixture.storage.activePath(CONFIG));
-		if (projectionTouched) assertNotNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()), "a touched projection is refused");
-		if (ProjectionState.loadRefusal(fixture.storage.gameDirectory()) == null) {
+		if (projectionTouched) assertNotNull(ProjectionAvailability.stateStanding(fixture.storage.gameDirectory()).reason(), "a touched projection is refused");
+		if (ProjectionAvailability.stateStanding(fixture.storage.gameDirectory()).reason() == null) {
 			assertTrue(FileIntegrity.matches(fixture.storage.activePath("mods/old.jar"), OLD_JAR.length, fixture.oldHash), "a loadable projection is the old one");
 			assertFalse(Files.exists(fixture.storage.activePath(CONFIG)));
 		}
@@ -178,7 +178,7 @@ class BestEffortApplyTest {
 		assertInstanceOf(UpdateCommit.Applied.class, UpdateTestFixtures.commits(fixture.storage).run(new UpdateCommit.Recover(null)));
 		assertArrayEquals(LF, Files.readAllBytes(fixture.storage.activePath(CONFIG)));
 		assertFalse(Files.exists(fixture.storage.activePath("mods/old.jar")));
-		assertNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()));
+		assertNull(ProjectionAvailability.stateStanding(fixture.storage.gameDirectory()).reason());
 	}
 
 	/** R2-2: the same in any language: the store decides, not the message. */
@@ -232,7 +232,7 @@ class BestEffortApplyTest {
 
 		assertInstanceOf(UpdateCommit.Deferred.class, inGame.run(new UpdateCommit.Fresh(() -> built(fixture.storage, fixture.plan, fixture.target), null)));
 		assertTrue(ProjectionState.read(fixture.storage).converging());
-		assertNotNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()));
+		assertNotNull(ProjectionAvailability.stateStanding(fixture.storage.gameDirectory()).reason());
 		assertNull(ProjectionAvailability.loadableModsDirectory(fixture.storage.gameDirectory()));
 		ProjectionAvailability.forget(fixture.storage.gameDirectory());
 		assertTrue(Files.exists(fixture.storage.activePath(CONFIG)) && Files.exists(fixture.storage.activePath("mods/old.jar")), "the rest landed around the held jar");
@@ -240,7 +240,7 @@ class BestEffortApplyTest {
 
 		// A boot that must run as is, the journal still owed: the projection it loads is the complete old one.
 		assertTrue(PublicationSweep.restoreFallback(fixture.storage));
-		assertNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()));
+		assertNull(ProjectionAvailability.stateStanding(fixture.storage.gameDirectory()).reason());
 		assertTrue(FileIntegrity.matches(fixture.storage.activePath("mods/old.jar"), OLD_JAR.length, fixture.oldHash));
 		assertFalse(Files.exists(fixture.storage.activePath(CONFIG)));
 		assertEquals(fixture.oldTarget.packTarget().contentToken(), fixture.storage.readActiveState().contentToken);
@@ -253,7 +253,7 @@ class BestEffortApplyTest {
 		assertFalse(Files.exists(fixture.storage.activePath("mods/old.jar")));
 		assertArrayEquals(CRLF, Files.readAllBytes(fixture.storage.gamePath(CONFIG)), "the landed live write is the player's");
 		assertEquals(fixture.target.packTarget().contentToken(), fixture.storage.readActiveState().contentToken);
-		assertNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()));
+		assertNull(ProjectionAvailability.stateStanding(fixture.storage.gameDirectory()).reason());
 	}
 
 	/** A journal retired while its projection converges leaves no owner: the sweep restores the projection it started from. */
@@ -266,7 +266,7 @@ class BestEffortApplyTest {
 
 		assertNotNull(PublicationSweep.retireJournal(fixture.storage));
 
-		assertNull(ProjectionState.loadRefusal(fixture.storage.gameDirectory()));
+		assertNull(ProjectionAvailability.stateStanding(fixture.storage.gameDirectory()).reason());
 		assertTrue(FileIntegrity.matches(fixture.storage.activePath("mods/old.jar"), OLD_JAR.length, fixture.oldHash));
 		assertFalse(Files.exists(fixture.storage.activePath(CONFIG)));
 	}
@@ -365,7 +365,7 @@ class BestEffortApplyTest {
 		assertArrayEquals(bytes(MANAGED, 2), Files.readAllBytes(storage.activePath(MANAGED)));
 		assertArrayEquals(bytes(MANAGED, 2), Files.readAllBytes(storage.gamePath(MANAGED)));
 		assertEquals(second.target.packTarget().contentToken(), storage.readActiveState().contentToken);
-		assertNull(ProjectionState.loadRefusal(storage.gameDirectory()));
+		assertNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason());
 	}
 
 	/** No markers: the journals this engine writes carry only the fields rc.5 already reads, so a downgrade replays them. */

@@ -90,6 +90,32 @@ class DetachedProjectionObservationTest {
 				"the pre-apply checkpoint must record the edited projection row before the next apply overwrites it");
 	}
 
+	/** The supported editing mode is detach, but an attached pack can still hold a writable private copy; it is the player's. */
+	@Test
+	void anAttachedPacksUnsealedPrivateCopyIsStillPlayerContent() throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+		byte[] bytes = "pack bytes".getBytes(UTF_8);
+		String hash = UpdateTestFixtures.store(storage, bytes);
+		var target = UpdateTestFixtures.target(storage, "mods/pack.jar", "mod", false, hash, bytes.length);
+		storage.writeActiveState(target.document(), target.selection().intent());
+		Path file = storage.activePath("config/pack.toml");
+		Files.createDirectories(file.getParent());
+		Files.writeString(file, "one", UTF_8);
+		Files.setLastModifiedTime(file, ORIGINAL);
+		String originalHash = HashUtils.getHash(file);
+
+		InstanceTree.Key key = new InstanceTree.Key(Root.PROJECTION, "", LogicalPath.normalize("config/pack.toml"));
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			assertEquals(originalHash, InstanceTree.observe(storage, Set.of(key), cache).file(Root.PROJECTION, "", "config/pack.toml").sha1());
+
+			Files.writeString(file, "two", UTF_8);
+			Files.setLastModifiedTime(file, ORIGINAL);
+
+			assertEquals(HashUtils.getHash(file), InstanceTree.observe(storage, Set.of(key), cache).file(Root.PROJECTION, "", "config/pack.toml").sha1(),
+					"an attached pack's writable copy is not the sealed CAS inode, so a restored mtime must not answer for it");
+		}
+	}
+
 	@Test
 	void aSameSizeGameFileEditWithRestoredMtimeIsRehashed() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);

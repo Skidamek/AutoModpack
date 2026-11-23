@@ -10,7 +10,9 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.logging.log4j.LogManager;
@@ -59,9 +61,19 @@ public final class ProjectionAvailability {
 		}
 	}
 
+	/** The trees this boot's relaunch already visited, newest first; a boot that finds its target among them does not loop. */
 	static final class GuardFields {
-		String content;
+		List<String> relaunched;
 	}
+
+	/**
+	 * How many trees the guard remembers. A recovery that alternates between two trees would otherwise relaunch on
+	 * every boot forever; four covers the pairs and short cycles a repair can produce while keeping the file one
+	 * small list.
+	 */
+	private static final int RELAUNCHED_TREES_REMEMBERED = 4;
+	/** The guard's key for a settled tree whose document carries no content digest: one relaunch, never a second. */
+	private static final String UNNAMED_TREE = "unknown";
 
 	private final Path gameDirectory;
 	private volatile Scan scan;
@@ -131,8 +143,8 @@ public final class ProjectionAvailability {
 	/**
 	 * Directory-scanning loaders already took {@code active/mods} this boot. If recovery then settled a different
 	 * tree, this process cannot load those mods: they are only discovered at preload. Restart into the settled tree.
-	 * The guard remembers the tree we already relaunched into, so the next boot of that same tree does not loop.
-	 * A later boot whose recovery settled yet another tree relaunches again.
+	 * The guard remembers the trees this boot already relaunched into, so a repair that alternates between two of them
+	 * cannot relaunch on every boot; only a tree none of them names is new.
 	 */
 	public static boolean mustRelaunch(ClientStorage storage) {
 		return mustRelaunch(storage, of(storage.gameDirectory()).scan);
@@ -152,23 +164,44 @@ public final class ProjectionAvailability {
 			}
 			ProjectionState now = inspection.state();
 			boolean refusedNowLoadable = !now.converging() && scan.refusedByState() && Files.isDirectory(storage.activePath("mods"), LinkOption.NOFOLLOW_LINKS);
-			boolean moved = !now.converging() && scan.exposed() && (scan.state() == null || !now.sameContentAs(scan.state()));
+			// Content is the only honest comparison: a revision moves on a re-proof of the same tree. A state that carries
+			// no digest cannot prove it moved, so it never counts as movement.
+			String digest = now.contentDigest() == null ? null : "digest:" + now.contentDigest();
+			String scanned = scan.state() == null || scan.state().contentDigest() == null ? null : "digest:" + scan.state().contentDigest();
+			boolean moved = !now.converging() && scan.exposed() && digest != null && scanned != null && !digest.equals(scanned);
 			if (!refusedNowLoadable && !moved) {
 				Files.deleteIfExists(guard);
 				return false;
 			}
-			String content = now.contentDigest() != null ? "digest:" + now.contentDigest() : "revision:" + now.revision();
+			String tree = digest == null ? UNNAMED_TREE : digest;
 			GuardFields last = readGuard(guard);
-			if (last != null && content.equals(last.content)) return false;
-			GuardFields fields = new GuardFields();
-			fields.content = content;
-			ConfigTools.writeAtomicCompact(guard, fields);
+			List<String> relaunched = last == null || last.relaunched == null ? List.of() : last.relaunched;
+			if (relaunched.contains(tree)) {
+				LOGGER.info("Recovery settled a projection this boot has already relaunched into; keeping what the loader took instead of looping");
+				return false;
+			}
+			remember(guard, tree);
 		} catch (IOException e) {
 			LOGGER.error("The projection relaunch guard cannot be updated; not relaunching, so no relaunch can repeat", e);
 			return false;
 		}
 		LOGGER.info("Recovery changed the projection a directory-scanning loader decided on; restarting into it");
 		return true;
+	}
+
+	/** Makes {@code tree} the newest remembered tree, keeping the last few so no short cycle can relaunch forever. */
+	private static void remember(Path guard, String tree) throws IOException {
+		GuardFields last = readGuard(guard);
+		List<String> relaunched = new ArrayList<>();
+		relaunched.add(tree);
+		if (last != null && last.relaunched != null)
+			for (String previous : last.relaunched) {
+				if (relaunched.size() >= RELAUNCHED_TREES_REMEMBERED) break;
+				if (!relaunched.contains(previous)) relaunched.add(previous);
+			}
+		GuardFields fields = new GuardFields();
+		fields.relaunched = List.copyOf(relaunched);
+		ConfigTools.writeAtomicCompact(guard, fields);
 	}
 
 	private Path expose() {
@@ -210,7 +243,7 @@ public final class ProjectionAvailability {
 	private static GuardFields readGuard(Path guard) {
 		try {
 			GuardFields fields = GSON.fromJson(Files.readString(guard, StandardCharsets.UTF_8), GuardFields.class);
-			if (fields != null && fields.content != null) return fields;
+			if (fields != null && fields.relaunched != null) return fields;
 		} catch (NoSuchFileException missing) {
 			return null;
 		} catch (IOException | RuntimeException unusable) {

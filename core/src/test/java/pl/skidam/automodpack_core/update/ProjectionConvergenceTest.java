@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 import static pl.skidam.automodpack_core.update.ProjectionTestFixtures.*;
 
 import java.io.IOException;
@@ -19,12 +20,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.io.TempDir;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.client.BootRecovery;
@@ -78,15 +81,26 @@ class ProjectionConvergenceTest {
 		}
 	}
 
-	/** C6: a crash before every single write leaves a tree every gate refuses, and both directions finish from there. */
-	@ParameterizedTest
-	@ValueSource(ints = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15})
-	void aCrashBeforeAnyWriteIsRefusedThenEitherRestoredOrFinished(int crashAt) throws Exception {
-		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
+	/**
+	 * C6: a crash before every single write leaves a tree every gate refuses, and both directions finish from there.
+	 * The crash points are the measured write count itself, so a drifted plan cannot silently shrink this test.
+	 */
+	@TestFactory
+	Stream<DynamicTest> aCrashBeforeAnyWriteIsRefusedThenEitherRestoredOrFinished() throws Exception {
+		int writes;
+		ClientStorage probe = UpdateTestFixtures.storage(temporaryDirectory.resolve("count"));
+		try (FileCache cache = FileCache.open(probe.fileCacheDirectory())) {
+			settle(probe, cache, OLD);
+			writes = countWrites(probe, cache);
+		}
+		return IntStream.range(0, writes).mapToObj(crashAt -> dynamicTest("crash at write " + crashAt, () -> crashBeforeWriteAndFinish(crashAt, writes)));
+	}
+
+	private void crashBeforeWriteAndFinish(int crashAt, int writes) throws Exception {
+		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory.resolve("crash-" + crashAt));
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			settle(storage, cache, OLD);
-			int writes = countWrites(storage, cache);
-			if (crashAt >= writes) return;
+			assertEquals(writes, countWrites(storage, cache), "the write plan drifted between two identical instances");
 			int[] seen = {0};
 			assertThrows(Crash.class, () -> converge(storage, cache, NEW, new ProjectionConvergence.Writes() {
 				@Override
@@ -95,14 +109,14 @@ class ProjectionConvergenceTest {
 				}
 			}));
 			assertTrue(ProjectionState.read(storage).converging(), "marked before the first write");
-			assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()), "no gate loads a mixed tree");
+			assertNotNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason(), "no gate loads a mixed tree");
 			assertNull(ProjectionAvailability.loadableModsDirectory(storage.gameDirectory()));
 			ProjectionAvailability.forget(storage.gameDirectory());
 
 			// Backward: the fallback is the complete old tree, put back from CAS.
 			assertTrue(new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).restoreFallback());
 			assertEquals(OLD, tree(storage));
-			assertNull(ProjectionState.loadRefusal(storage.gameDirectory()));
+			assertNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason());
 
 			// Forward from a second crash at the same write: the fallback the first run recorded survives the rerun.
 			seen[0] = 0;
@@ -178,7 +192,7 @@ class ProjectionConvergenceTest {
 				}
 			}));
 			assertTrue(ProjectionState.read(storage).converging(), "marked before the first write");
-			assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()), "no gate loads a mixed tree");
+			assertNotNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason(), "no gate loads a mixed tree");
 			ProjectionAvailability.forget(storage.gameDirectory());
 
 			assertTrue(converge(storage, cache, NEW, ProjectionConvergence.Writes.NONE).converged());
@@ -212,7 +226,7 @@ class ProjectionConvergenceTest {
 			assertEquals(List.of(held), result.held().stream().map(ProjectionConvergence.Held::path).toList());
 			assertTrue(Files.exists(held));
 			assertEquals("alpha two", Files.readString(storage.activePath("mods/alpha-1.1.jar")), "the rest landed");
-			assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()));
+			assertNotNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason());
 
 			assertTrue(new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).restoreFallback());
 			assertEquals(OLD, tree(storage));
@@ -263,11 +277,11 @@ class ProjectionConvergenceTest {
 				}
 			}));
 			assertTrue(Files.isDirectory(storage.activeDirectory()));
-			assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()), "a half first install is refused too");
+			assertNotNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason(), "a half first install is refused too");
 
 			assertTrue(new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).restoreFallback());
 			assertFalse(Files.exists(storage.activeDirectory()));
-			assertNull(ProjectionState.loadRefusal(storage.gameDirectory()));
+			assertNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason());
 		}
 	}
 
@@ -322,7 +336,7 @@ class ProjectionConvergenceTest {
 
 		new BootRecovery(storage, TestEnvironment.noopLoader()).recover();
 
-		assertNull(ProjectionState.loadRefusal(storage.gameDirectory()));
+		assertNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason());
 		assertEquals(OLD, tree(storage));
 	}
 
@@ -426,19 +440,31 @@ class ProjectionConvergenceTest {
 		assertFalse(ProjectionState.owed(storage));
 	}
 
+	/** The number of writes one OLD -> NEW convergence performs, measured on this storage and then rolled back to OLD. */
 	private int countWrites(ClientStorage storage, FileCache cache) throws Exception {
-		Path probe = temporaryDirectory.resolve("count");
-		ClientStorage scratch = UpdateTestFixtures.storage(probe);
-		try (FileCache scratchCache = FileCache.open(scratch.fileCacheDirectory())) {
-			settle(scratch, scratchCache, OLD);
-			int[] seen = {0};
-			converge(scratch, scratchCache, NEW, new ProjectionConvergence.Writes() {
-				@Override
-				public void beforeWrite(Path target) {
-					seen[0]++;
-				}
-			});
-			return seen[0];
+		int[] seen = {0};
+		ProjectionConvergence.Result result = converge(storage, cache, NEW, new ProjectionConvergence.Writes() {
+			@Override
+			public void beforeWrite(Path target) {
+				seen[0]++;
+			}
+		});
+		assertTrue(result.converged(), "the counting run converges, so its fallback is the old tree");
+		assertEquals(NEW, tree(storage));
+		assertTrue(new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).restoreFallback(), "the counting run is rolled back");
+		assertEquals(OLD, tree(storage));
+		return seen[0];
+	}
+
+	/** The write plan is a property of the trees, so two identical instances must perform exactly the same writes. */
+	@Test
+	void twoIdenticalInstancesPerformTheSameWrites() throws Exception {
+		ClientStorage first = UpdateTestFixtures.storage(temporaryDirectory.resolve("first"));
+		ClientStorage second = UpdateTestFixtures.storage(temporaryDirectory.resolve("second"));
+		try (FileCache firstCache = FileCache.open(first.fileCacheDirectory()); FileCache secondCache = FileCache.open(second.fileCacheDirectory())) {
+			settle(first, firstCache, OLD);
+			settle(second, secondCache, OLD);
+			assertEquals(countWrites(first, firstCache), countWrites(second, secondCache), "the write plan drifted between two identical instances");
 		}
 	}
 

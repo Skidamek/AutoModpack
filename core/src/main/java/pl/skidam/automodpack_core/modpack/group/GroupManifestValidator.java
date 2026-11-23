@@ -18,19 +18,11 @@ public final class GroupManifestValidator {
 	private static final Pattern CONTROL_CHARACTER = Pattern.compile("\\p{Cntrl}");
 	// Deliberately matches the group ID cap: both name things a player browses in the same UI rows.
 	private static final int CATEGORY_NAME_MAX = 64;
-	/**
-	 * One validation per parsed policy document revision. The active pointer validates its carried manifest once and
-	 * then asks for that same document again while resolving what it runs; both calls hold the identical fields
-	 * object, which no caller mutates after parsing. Keyed weakly by that object, so a revision costs nothing once
-	 * its pointer is gone and a different revision always validates from scratch.
-	 */
-	private static final Map<ModpackJsons.CompleteModpackContentFields, GroupManifest> VALIDATED = Collections.synchronizedMap(new WeakHashMap<>());
-	private static final Map<ModpackJsons.CompleteModpackContentFields, GroupManifest> VALIDATED_FOR_PUBLISH = Collections.synchronizedMap(new WeakHashMap<>());
 
 	private GroupManifestValidator() {}
 
 	public static GroupManifest validate(ModpackJsons.CompleteModpackContentFields fields) {
-		return memoized(fields, false);
+		return validate(fields, false);
 	}
 
 	/**
@@ -38,18 +30,7 @@ public final class GroupManifestValidator {
 	 * already published keeps loading under the narrower rule it was published under.
 	 */
 	public static GroupManifest validateForPublish(ModpackJsons.CompleteModpackContentFields fields) {
-		return memoized(fields, true);
-	}
-
-	private static GroupManifest memoized(ModpackJsons.CompleteModpackContentFields fields, boolean publishing) {
-		if (fields == null) return validate(fields, publishing);
-		Map<ModpackJsons.CompleteModpackContentFields, GroupManifest> memo = publishing ? VALIDATED_FOR_PUBLISH : VALIDATED;
-		GroupManifest hit = memo.get(fields);
-		if (hit != null) return hit;
-		GroupManifest manifest = validate(fields, publishing);
-		if (memo.size() >= 64) memo.clear();
-		memo.put(fields, manifest);
-		return manifest;
+		return validate(fields, true);
 	}
 
 	private static GroupManifest validate(ModpackJsons.CompleteModpackContentFields fields, boolean publishing) {

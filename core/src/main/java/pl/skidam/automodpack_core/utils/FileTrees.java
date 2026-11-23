@@ -13,8 +13,10 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -267,13 +269,23 @@ public final class FileTrees {
 			if (isRedirectingLink(resolved) && !mayRedirect(resolved)) throw new IOException(description + " contains a symbolic link: " + resolved);
 		}
 
-		/** Proves the chain from the root down to {@code directory}, stopping at an already-proven prefix. */
+		/**
+		 * Proves the chain from the root down to {@code directory}, stopping at an already-proven prefix. Iterative:
+		 * the path comes from a server-authored logical path, so a deeply nested one must fail as an IOException from the
+		 * checks, never as a StackOverflowError that no caller can classify.
+		 */
 		private void proveDirectory(Path directory, String description) throws IOException {
-			if (directory == null || directory.equals(root) || provenDirectories != null && provenDirectories.contains(directory)) return;
-			proveDirectory(directory.getParent(), description);
-			if (isRedirectingLink(directory) && !mayRedirect(directory)) throw new IOException(description + " contains a symbolic link: " + directory);
-			if (provenDirectories == null) provenDirectories = new HashSet<>();
-			provenDirectories.add(directory);
+			List<Path> chain = new ArrayList<>();
+			for (Path current = directory; current != null && !current.equals(root); current = current.getParent()) {
+				if (provenDirectories != null && provenDirectories.contains(current)) break;
+				chain.add(current);
+			}
+			for (int index = chain.size() - 1; index >= 0; index--) {
+				Path current = chain.get(index);
+				if (isRedirectingLink(current) && !mayRedirect(current)) throw new IOException(description + " contains a symbolic link: " + current);
+				if (provenDirectories == null) provenDirectories = new HashSet<>();
+				provenDirectories.add(current);
+			}
 		}
 	}
 

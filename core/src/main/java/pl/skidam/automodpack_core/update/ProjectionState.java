@@ -44,7 +44,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * returns to {@link Phase#SETTLED} only after its transaction's COMMITTED marker, or after the fallback was restored.</li>
  * <li><b>P3 (gates consult it).</b> Every loader gate refuses {@code active/} while the phase is not settled or the
  * document cannot be read, for any reason: {@link ProjectionAvailability#loadableModsDirectory},
- * {@code ClientLaunch.hasActiveProjection} and {@code ProjectionLoader}, through {@link #loadRefusal}.</li>
+ * {@code ClientLaunch.hasActiveProjection} and {@code ProjectionLoader}, through {@link ProjectionAvailability}.</li>
  * <li><b>P4 (a boot never runs on owed projection work).</b> Boot recovery and the publication sweep restore the
  * fallback from CAS whenever they leave a converging projection behind ({@code BootRecovery.settleProjection},
  * {@code PublicationSweep}).</li>
@@ -216,11 +216,10 @@ public final class ProjectionState {
 		return fallback;
 	}
 
-	/** Whether two observations vouch for the same loadable content: equal digests when both know one, else the same revision. */
+	/** Whether two observations vouch for the same loadable content: only two known, equal digests say so, never a revision a repair restarted from the clock. */
 	public boolean sameContentAs(ProjectionState other) {
 		if (converging() || other.converging()) return false;
-		if (contentDigest != null && other.contentDigest != null) return contentDigest.equals(other.contentDigest);
-		return revision == other.revision;
+		return contentDigest != null && contentDigest.equals(other.contentDigest);
 	}
 
 	public static Path file(Path gameDirectory) {
@@ -345,11 +344,6 @@ public final class ProjectionState {
 		} catch (IOException unavailable) {
 			return new Inspection(Standing.UNAVAILABLE, null, unavailable);
 		}
-	}
-
-	/** Why a loader must not take {@code active/} as it stands right now, or null when it may (P3). */
-	public static String loadRefusal(Path gameDirectory) {
-		return inspect(file(gameDirectory)).refusal();
 	}
 
 	/** Whether a boot must settle the projection before any loader takes it: converging, or unreadable contents (P4, P6). A physical read failure propagates. */

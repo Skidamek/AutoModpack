@@ -28,8 +28,10 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
@@ -195,11 +197,6 @@ public final class InstanceTree {
 		if (published != null)
 			for (UpdatePlan.ProjectedFile projected : published.projectedFinalState())
 				if (projected != null && projected.root() == Root.PROJECTION) publishedProjection.put(LogicalPath.normalize(projected.relativePath()), projected);
-		// Only a pack the player cannot edit is immutable content. A detached pack's projection is the player's own
-		// tree (detach breaks the CAS links and drops the read-only policy), so its rows take the worktree tripwire,
-		// including ctime, and a same-size rewrite with a preserved mtime is re-hashed instead of served stale.
-		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
-		boolean projectionIsPackOwned = activeState != null && !activeState.detached;
 		List<TrackedFile> files = new ArrayList<>();
 		for (Key key : paths) {
 			UpdatePlan.ProjectedFile projected = key.root() == Root.PROJECTION ? publishedProjection.get(key.path()) : null;
@@ -211,14 +208,28 @@ public final class InstanceTree {
 			Path disk = storage.rootedPath(key.root(), key.overlayPackId(), key.path());
 			if (!Files.isRegularFile(disk, LinkOption.NOFOLLOW_LINKS) || isRunningModJar(disk)) continue;
 			long size = Files.size(disk);
-			// Projection rows of an attached pack are immutable pack content (hard links of CAS objects, or verified
-			// copies): our own link()/chmod() bumps their ctime, so identity answers from size, mtime and file key. Every
-			// other row is player-editable, so it takes the editable tripwire, which also treats a same-tick ctime as racy
-			// (Windows can keep every stat field across a rewrite that restores the mtime).
-			String hash = key.root() == Root.PROJECTION && projectionIsPackOwned ? cache.getOrComputeHashImmutable(disk) : cache.getOrComputeHashEditable(disk);
+			// What makes a row immutable content is the file itself: the sealed CAS inode. Our own link()/chmod() bumps
+			// the ctime of such a row, so identity answers from size, mtime and file key. Every other row - a player's
+			// file, and the private copy an edit left behind when a detached pack was attached again - is editable, so it
+			// takes the editable tripwire, which also treats a same-tick ctime as racy (Windows can keep every stat field
+			// across a rewrite that restores the mtime).
+			String hash = key.root() == Root.PROJECTION ? projectionHash(storage, cache, disk) : cache.getOrComputeHashEditable(disk);
 			files.add(new TrackedFile(key.root(), key.overlayPackId(), key.path(), HashUtils.normalizeSha1(hash), size));
 		}
 		return of(observeIdentity(storage), files);
+	}
+
+	/**
+	 * The identity of one projection row, and with it which tripwire may answer it next time. Only a row that is the
+	 * sealed CAS inode can skip the ctime half of the tripwire: it cannot be rewritten in place, because its bytes are
+	 * the object's and detach took the link away deliberately. A verified copy the store holds at the same bytes is
+	 * sealed by policy too, so it answers immutable; a writable copy is the player's file and is hashed as one.
+	 */
+	private static String projectionHash(ClientStorage storage, FileCache cache, Path disk) throws IOException {
+		if (!ImmutableFiles.isProtected(disk)) return cache.getOrComputeHashEditable(disk);
+		String hash = cache.getOrComputeHashImmutable(disk);
+		if (HashUtils.isSha1(hash) && FileIntegrity.sameInode(disk, storage.objectFile(HashUtils.normalizeSha1(hash)))) return hash;
+		return cache.getOrComputeHashEditable(disk);
 	}
 
 	/** The running AutoModpack jar is the updater itself: it is never tracked, never restored over, and never deleted by a checkout. */

@@ -539,11 +539,6 @@ public final class ClientStorage {
 		return pointer.read();
 	}
 
-	/** The pointer together with the file identity it was parsed from; derived snapshots cache against it. */
-	ActivePackPointer.Snapshot readActiveStateSnapshot() throws IOException {
-		return pointer.snapshot();
-	}
-
 	/** Publishes the pointer for what the client now runs. */
 	public void writeActiveState(PackDocument document, SelectionIntent applied) throws IOException {
 		pointer.write(document, applied);

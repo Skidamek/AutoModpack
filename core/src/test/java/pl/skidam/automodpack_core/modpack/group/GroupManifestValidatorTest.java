@@ -457,13 +457,14 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
-	void oneParsedPolicyRevisionIsPlatformValidatedOnce() {
+	void theSamePolicyDocumentAlwaysValidatesToTheSameManifest() {
 		var fields = catalogue();
 		fields.categories = oneCategory("main", group(file("a")));
 
 		GroupManifest first = GroupManifestValidator.validate(fields);
 
-		assertSame(first, GroupManifestValidator.validate(fields));
+		assertEquals(first, GroupManifestValidator.validate(fields));
+		assertEquals(first.groups(), GroupManifestValidator.validateForPublish(fields).groups(), "publishing validates the same document under the wider rule");
 	}
 
 	private static ModpackJsons.CompleteModpackContentFields catalogue() {

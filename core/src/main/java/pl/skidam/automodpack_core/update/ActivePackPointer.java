@@ -40,13 +40,7 @@ final class ActivePackPointer {
 	private volatile Cached cached;
 	/** Last reading of the pointer filesystem's clock; a parsed state narrower than this cannot be racy against it. */
 	private volatile long clockStamp = Long.MIN_VALUE;
-	/** Bumped on every publication and every successful disk read, so a derived memo never outlives the observation it was built from. */
-	private volatile long revision;
-
 	private record Cached(FileCache.FileFingerprint fingerprint, long validatedAtNanos, ClientStorageJsons.ClientGenerationStateFields state) {}
-
-	/** One coherent read: the parse, the file identity, and the local write generation that produced it. */
-	record Snapshot(FileCache.FileFingerprint fingerprint, long revision, ClientStorageJsons.ClientGenerationStateFields state) {}
 
 	ActivePackPointer(Path stateFile) {
 		this.stateFile = Objects.requireNonNull(stateFile, "state file");
@@ -71,31 +65,30 @@ final class ActivePackPointer {
 	 * The pointer, or null when none was persisted yet. A commit reads it a dozen times, and every read used to
 	 * parse and validate the whole carried manifest and ledger; one stat now answers whether the last parse still
 	 * describes the file. Every publication replaces the file by atomic rename, so a changed inode always fails the
-	 * fingerprint even on a filesystem with a coarse clock.
+	 * fingerprint even on a filesystem with a coarse clock. Parsing and validation stay in the cache; the document
+	 * leaves as a copy, so a caller that edits what it read cannot edit what the next reader gets.
 	 */
 	ClientStorageJsons.ClientGenerationStateFields read() throws IOException {
-		return snapshot().state();
+		return copy(state());
 	}
 
-	Snapshot snapshot() throws IOException {
+	/** The parsed, validated instance, read-only to every caller; the document leaves {@link #read()} as a copy. */
+	private ClientStorageJsons.ClientGenerationStateFields state() throws IOException {
 		FileCache.FileFingerprint fingerprint;
 		try {
 			FileCache.StatSnapshot stats = FileCache.statSnapshot(stateFile);
-			if (!stats.isTrackedRegularFile()) return new Snapshot(null, revision, readFromDisk());
+			if (!stats.isTrackedRegularFile()) return readFromDisk();
 			fingerprint = stats.fingerprint();
 		} catch (NoSuchFileException e) {
 			cached = null;
-			return new Snapshot(null, revision, null);
+			return null;
 		}
 		Cached hit = cached;
-		if (hit != null && hit.fingerprint().equals(fingerprint) && !isRacy(hit, fingerprint)) return new Snapshot(fingerprint, revision, hit.state());
+		if (hit != null && hit.fingerprint().equals(fingerprint) && !isRacy(hit, fingerprint)) return hit.state();
 		long validatedAtNanos = validatedAt(newestTimestampNanos(fingerprint));
 		ClientStorageJsons.ClientGenerationStateFields state = readFromDisk();
-		// A parse is a new observation even when a coarse clock made the fingerprint collide: derived memos must not
-		// answer from the previous observation under the same revision.
-		revision++;
 		cached = state == null ? null : new Cached(fingerprint, validatedAtNanos, state);
-		return new Snapshot(fingerprint, revision, state);
+		return state;
 	}
 
 	/**
@@ -170,7 +163,6 @@ final class ActivePackPointer {
 	/** Clears the pointer: the client runs no active pack. */
 	void clear() throws IOException {
 		cached = null;
-		revision++;
 		Files.deleteIfExists(stateFile);
 	}
 
@@ -185,12 +177,10 @@ final class ActivePackPointer {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		ClientStorageJsons.ClientGenerationStateFields state = read();
 		if (state == null || !state.modpackId.equals(normalizedModpackId) || state.detached == detached) return;
-		state = mutableCopy(state);
 		state.detached = detached;
 		Files.createDirectories(stateFile.getParent());
 		ConfigTools.writeAtomic(stateFile, state);
 		cached = null;
-		revision++;
 	}
 
 	private void write(SelectionIntent applied, ClientStorageJsons.ClientGenerationStateFields state) throws IOException {
@@ -218,11 +208,12 @@ final class ActivePackPointer {
 		cached = null;
 		Files.createDirectories(stateFile.getParent());
 		ConfigTools.writeAtomic(stateFile, state);
-		revision++;
+		cached = null;
 	}
 
-	/** A pointer read may hand out the cached document, so its one in-place writer takes a top-level copy first. */
-	private static ClientStorageJsons.ClientGenerationStateFields mutableCopy(ClientStorageJsons.ClientGenerationStateFields state) {
+	/** What one read hands out: a top-level copy of the cached document, so no reader can edit another's answer. */
+	private static ClientStorageJsons.ClientGenerationStateFields copy(ClientStorageJsons.ClientGenerationStateFields state) {
+		if (state == null) return null;
 		ClientStorageJsons.ClientGenerationStateFields copy = new ClientStorageJsons.ClientGenerationStateFields();
 		copy.modpackId = state.modpackId;
 		copy.contentToken = state.contentToken;

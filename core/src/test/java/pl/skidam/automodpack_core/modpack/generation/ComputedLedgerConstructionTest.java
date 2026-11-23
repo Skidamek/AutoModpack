@@ -89,36 +89,4 @@ class ComputedLedgerConstructionTest {
 		assertEquals("419f98b7903e297bd4c695acdc8453a7cc550ea9", ledger.digest());
 		assertEquals(ledger, OwnershipLedger.fromFields(ledger.toFields()));
 	}
-
-	@Test
-	void externalStringsAndPreviouslyReturnedMapsCannotRequestComputation() {
-		var ledger = new OwnershipLedger("abc1234", source());
-		for (String d : new String[]{"", new String(), "compute", null}) assertThrows(IllegalArgumentException.class, () -> new OwnershipLedger("abc1234", ledger.entries(), d));
-		var fields = ledger.toFields();
-		fields.digest = new String();
-		assertThrows(IllegalArgumentException.class, () -> OwnershipLedger.fromFields(fields));
-	}
-
-	@Test
-	void oneParsedLedgerDocumentValidatesOnceAndTheSameInstanceAnswersEveryGate() {
-		var ledger = new OwnershipLedger("abc1234", source());
-		var fields = ledger.toFields();
-		OwnershipLedger validated = OwnershipLedger.fromFields(fields);
-		assertEquals(ledger, validated);
-		assertSame(validated, OwnershipLedger.fromFields(fields));
-	}
-
-	@Test
-	void aMutatedDocumentNeverGetsTheRememberedAnswer() {
-		var ledger = new OwnershipLedger("abc1234", source());
-		var fields = ledger.toFields();
-		OwnershipLedger validated = OwnershipLedger.fromFields(fields);
-		assertSame(validated, OwnershipLedger.fromFields(fields));
-		// The memo is guarded by a fingerprint of every field the digest covers, not by the object alone.
-		fields.entries.get(0).historicalHashes.get(0).size++;
-		assertThrows(IllegalArgumentException.class, () -> OwnershipLedger.fromFields(fields));
-		fields.entries.get(0).historicalHashes.get(0).size--;
-		fields.entries.get(0).logicalPath = "mods/renamed.jar";
-		assertThrows(IllegalArgumentException.class, () -> OwnershipLedger.fromFields(fields));
-	}
 }

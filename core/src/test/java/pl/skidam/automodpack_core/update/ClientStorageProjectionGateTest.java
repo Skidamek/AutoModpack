@@ -69,10 +69,10 @@ class ClientStorageProjectionGateTest {
 
 		assertNull(ProjectionAvailability.loadableModsDirectory(storage.gameDirectory()));
 		assertEquals(1L, ProjectionAvailability.scan(storage.gameDirectory()).revision());
-		assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()));
+		assertNotNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason());
 
 		ProjectionState.settled(storage, "tx");
-		assertNull(ProjectionState.loadRefusal(storage.gameDirectory()));
+		assertNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason());
 		assertNotNull(ProjectionAvailability.loadableModsDirectory(storage.gameDirectory()));
 		assertEquals(2L, ProjectionAvailability.scan(storage.gameDirectory()).revision());
 	}
@@ -83,7 +83,7 @@ class ClientStorageProjectionGateTest {
 		Files.createDirectories(storage.activePath("mods"));
 		Files.writeString(storage.projectionStateFile(), "{not json", StandardCharsets.UTF_8);
 
-		assertNotNull(ProjectionState.loadRefusal(storage.gameDirectory()));
+		assertNotNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason());
 		assertNull(ProjectionAvailability.loadableModsDirectory(storage.gameDirectory()));
 		assertEquals(-1L, ProjectionAvailability.scan(storage.gameDirectory()).revision());
 	}
