@@ -28,26 +28,34 @@ def _workspace(ctx: Context) -> ServerWorkspace:
 
 
 def _prepare_server(ctx: Context):
+    """Stage the case's server tree: the mod jar, the config this case runs with, and generation 0.
+
+    A connection path declares who serves the endpoint. A positive ``bindPort`` means the mod owns a
+    dedicated listener: the slot's allocated endpoint port replaces the declared number, because the
+    host never publishes a fixed port. ``bindPort: -1`` with MAGIC/HOLEPUNCH rides the joined game
+    connection, so the advertised port is ``-1`` and the client reuses the port it connected to.
+    ``bindPort: -1`` with HTTP is served outside this process, and only that case declares the port
+    it is served on.
+    """
     workspace = _workspace(ctx)
     workspace.copy_in("mods/automodpack.jar", ctx.artifact)
     cfg = dict(ctx.settings.get("automodpack", {}).get("config", {}))
     topology_config = (ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}) or {}).get("config", {})
     cfg.update(topology_config)
     connection_path = ctx.scenario.get("connectionPath") or {}
-    endpoint_port = int(ctx.vars.get("server_endpoint_port") or 0)
     if connection_path:
-        cfg["connectionMode"] = str(connection_path["mode"]).upper()
+        mode = str(connection_path["mode"]).upper()
         bind = int(connection_path.get("bindPort", -1) or -1)
-        if bind > 0 and endpoint_port:
-            cfg["bindPort"] = endpoint_port
-        elif "bindPort" in connection_path:
-            cfg["bindPort"] = connection_path["bindPort"]
+        cfg["connectionMode"] = mode
         if "advertisedEndpointHost" in connection_path:
             cfg["advertisedEndpointHost"] = connection_path["advertisedEndpointHost"]
-        if endpoint_port:
-            cfg["advertisedEndpointPort"] = endpoint_port
-        elif "endpointPort" in connection_path:
-            cfg["advertisedEndpointPort"] = connection_path["endpointPort"]
+        if bind > 0:
+            port = int(ctx.vars.get("server_endpoint_port") or bind)
+            cfg["bindPort"] = port
+            cfg["advertisedEndpointPort"] = port
+        else:
+            cfg["bindPort"] = -1
+            cfg["advertisedEndpointPort"] = connection_path.get("endpointPort", -1) if mode == "HTTP" else -1
     cfg["modpackName"] = ctx.modpack_name
     cfg["acceptedLoaders"] = [ctx.target.loader]
     workspace.write_text("automodpack/server-config.json", json.dumps(cfg, indent=2))
@@ -157,7 +165,6 @@ def _launch_server(ctx: Context):
     env.update({
         "TYPE": str(srv_type),
         "VERSION": target.minecraft,
-        "MEMORY": str(topo.get("memory", settings.get("server", {}).get("memory", "2G"))),
     })
     for k, v in [
         ("fabric_loader", "FABRIC_LOADER_VERSION"),
@@ -168,11 +175,11 @@ def _launch_server(ctx: Context):
         if val:
             env[v] = val
     env.update({str(k): str(v) for k, v in (topo.get("env", {}) or {}).items()})
-    # Keep holepunch transport tracing on so any mid-login close leaves a receipt.
-    env.setdefault("JVM_OPTS", "-Dmcholepunch.debug=true")
     if scenario.get("serverFiles", {}).get("generations"):
         env.setdefault("ENABLE_RCON", "true")
         env.setdefault("RCON_PASSWORD", "amp-autotest")
+    # The mod reads its data root from the environment on both spawn strategies, so the tree the
+    # harness inspects is the tree the server uses.
     env["AUTOMODPACK_DATA_ROOT"] = _SERVER_DATA_ROOT.as_posix()
     mr = topo.get("modrinth", {})
     if mr:
@@ -208,6 +215,9 @@ def _launch_server(ctx: Context):
         ServerSpec(
             image=img,
             env=env,
+            memory=str(topo.get("memory", settings.get("server", {}).get("memory", "2G"))),
+            # Keep holepunch transport tracing on so any mid-login close leaves a receipt.
+            jvm_args=("-Dmcholepunch.debug=true",),
             mounts=tuple(mounts),
             # NET_ADMIN is only needed so the --loss / --server-netem qdiscs can be applied from inside; never granted otherwise.
             cap_add=("NET_ADMIN",) if ctx.loss or ctx.server_netem else (),

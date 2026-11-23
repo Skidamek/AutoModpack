@@ -7,6 +7,7 @@ description: |
   container), so the client must complete a full first sync against the exact
   tree an operator would upload.
 renderClient: true
+requires: [container_network]
 connectionPaths:
 - mode: HTTP
   bindPort: -1

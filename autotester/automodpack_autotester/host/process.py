@@ -1,11 +1,11 @@
 """One child process tree: spawn, logs, wait, kill."""
 from __future__ import annotations
 
-import os
-import signal
 import subprocess
 import sys
 from pathlib import Path
+
+from ..supervisor import kill_tree, register_child, unregister_child
 
 
 class Process:
@@ -28,6 +28,7 @@ class Process:
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
             start_new_session = False
         self._proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=self._log_file, stderr=subprocess.STDOUT, start_new_session=start_new_session, creationflags=creationflags)
+        register_child(self._proc.pid)
 
     def alive(self) -> bool:
         return self._proc is not None and self._proc.poll() is None
@@ -42,22 +43,23 @@ class Process:
         if self._proc is None:
             raise RuntimeError("process was never started")
         code = self._proc.wait(timeout=timeout)
+        unregister_child(self._proc.pid)
         self._close_log()
         return int(code)
 
     def kill(self) -> None:
         if self._proc is None or self._proc.poll() is not None:
+            if self._proc is not None:
+                unregister_child(self._proc.pid)
             self._close_log()
             return
-        if sys.platform.startswith("win"):
-            subprocess.run(["taskkill", "/PID", str(self._proc.pid), "/T", "/F"], capture_output=True, check=False)
-        else:
-            os.killpg(self._proc.pid, signal.SIGKILL)
+        kill_tree(self._proc.pid)
         try:
             self._proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             self._proc.kill()
             self._proc.wait(timeout=10)
+        unregister_child(self._proc.pid)
         self._close_log()
 
     def logs(self, tail: int | None = None) -> str:

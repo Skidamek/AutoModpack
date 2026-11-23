@@ -31,11 +31,14 @@ class FarmBackend:
         self._docker = DockerLinuxPlatform() if config.provide == "docker" else None
         windows = sys.platform.startswith("win")
         if config.provide == "docker":
-            self.capabilities = Capabilities(container_client=True, container_server=True, native_client=False, native_server=False, netem=True, rendered_ui=True, junction_probe=False)
+            self.capabilities = Capabilities(container_client=True, container_server=True, container_network=True, native_client=False, native_server=False, netem=True, rendered_ui=True, junction_probe=False)
         else:
             self.capabilities = Capabilities(
                 container_client=not windows,
                 container_server=False,
+                # Native cases run on the host namespace: no user-defined network, so a container
+                # alias another container can resolve does not exist.
+                container_network=False,
                 native_client=windows,
                 native_server=True,
                 netem=False,

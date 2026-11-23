@@ -10,6 +10,7 @@ description: |
   names the bucket, so the container alias doubles as the bucket name and the
   client's fixed routes land inside the bucket untouched.
 renderClient: true
+requires: [container_network]
 connectionPaths:
 - mode: HTTP
   bindPort: -1

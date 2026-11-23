@@ -22,6 +22,7 @@ CAPABILITY_REQUIREMENTS = frozenset({
     "junction_probe",
     "native_client",
     "native_server",
+    "container_network",
 })
 
 
@@ -31,6 +32,7 @@ class Capabilities:
 
     container_client: bool = True
     container_server: bool = True
+    container_network: bool = True
     native_client: bool = False
     native_server: bool = False
     netem: bool = True
@@ -87,14 +89,18 @@ class TreeMeasurement:
 
 @dataclass(frozen=True)
 class ServerSpec:
-    """Everything the container-backed server needs for one launch.
+    """Everything the server needs for one launch, in the dialect each strategy speaks.
 
-    Scenario/config assembly stays in ``server_steps``; the runtime owns only
-    container/volume mechanics.
+    ``env`` is the container dialect plus the mod's own environment contract; the native
+    server passes the same environment to its child so both strategies read one truth.
+    ``memory`` and ``jvm_args`` are launch parameters: itzg takes them as ``MEMORY`` and
+    ``JVM_OPTS``, a native ``java -jar`` takes them as ``-Xmx`` and plain JVM arguments.
     """
 
     image: str
     env: dict[str, str]
+    memory: str = "2G"
+    jvm_args: tuple[str, ...] = ()
     mounts: tuple[tuple[object, str, bool], ...] = ()
     cap_add: tuple[str, ...] = ()
     sysctls: dict[str, str] | None = None

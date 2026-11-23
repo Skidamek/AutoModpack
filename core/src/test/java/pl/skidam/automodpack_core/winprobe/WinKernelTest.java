@@ -60,8 +60,7 @@ class WinKernelTest {
 			assertFalse(WindowsLockProbe.held(file), "the hold must clear when ReplayClient closes");
 			return;
 		} catch (WinProbeFailed failed) {
-			assertTrue(failed.getMessage().startsWith("not Windows") || failed.getMessage().startsWith("unsupported architecture") || failed.getMessage().startsWith("native not loaded")
-					|| failed.getMessage().startsWith("volume is not"), failed.getMessage());
+			assertTrue(failed.getMessage().startsWith("not Windows") || failed.getMessage().startsWith("unsupported architecture"), failed.getMessage());
 		}
 	}
 }

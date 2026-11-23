@@ -6,6 +6,7 @@ import types
 import pytest
 
 from automodpack_autotester import client_steps, runner, server_steps
+from automodpack_autotester.config import load_scenarios
 from automodpack_autotester.docker_harness import Docker
 from automodpack_autotester.runtime import (
     Capabilities,
@@ -118,8 +119,9 @@ def test_server_launch_builds_a_platform_neutral_spec(make_ctx):
     assert spec.image == "itzg/minecraft-server:java21"
     assert spec.env["TYPE"] == "FABRIC"
     assert spec.env["VERSION"] == "1.21.1"
-    assert spec.env["MEMORY"] == "2G"
     assert spec.env["AUTOMODPACK_DATA_ROOT"] == "automodpack/data"
+    assert spec.memory == "2G"
+    assert spec.jvm_args == ("-Dmcholepunch.debug=true",)
     assert spec.cache_volume is None
     assert spec.mounts == ((ctx.server_dir, "/data", False),)
     assert spec.cap_add == ("NET_ADMIN",)
@@ -219,7 +221,7 @@ def test_docker_server_launch_keeps_the_exact_legacy_container(make_ctx, monkeyp
     assert seen["name"] == ctx.srv_name
     assert seen["image"] == "itzg/minecraft-server:java21"
     assert seen["network"] == "net"
-    assert seen["env"] == {"TYPE": "FABRIC", "VERSION": "1.21", "UID": "1000", "GID": "1001", "SERVER_PORT": "25565", "RCON_PORT": "25575"}
+    assert seen["env"] == {"TYPE": "FABRIC", "VERSION": "1.21", "MEMORY": "2G", "UID": "1000", "GID": "1001", "SERVER_PORT": "25565", "RCON_PORT": "25575"}
     assert seen["mounts"] == mounts
     assert seen["labels"] == {SCOPE_LABEL: "scope123"}
     assert seen.get("cap_add") is None
@@ -237,6 +239,34 @@ def test_capability_gate_names_the_missing_requirement():
     linux = types.SimpleNamespace(name="linux", capabilities=Capabilities())
     assert case_skip_reason({"requires": ["netem"]}, linux) is None
     assert missing_capabilities({"requires": ["netem"]}, linux.capabilities) == []
+
+
+def test_native_farm_lacks_the_container_network_and_the_docker_farm_has_it():
+    native = machine({"farm": {"provide": "native"}}).capabilities
+    docker = machine({"farm": {"provide": "docker"}}).capabilities
+
+    assert not native.container_network
+    assert docker.container_network
+    for scenario in load_scenarios().values():
+        if "container_network" in (scenario.get("requires") or []):
+            assert case_skip_reason(scenario, types.SimpleNamespace(name="native", capabilities=native)) is not None, scenario["id"]
+            assert case_skip_reason(scenario, types.SimpleNamespace(name="docker", capabilities=docker)) is None, scenario["id"]
+
+
+def test_a_host_network_case_cannot_offer_the_container_network():
+    platform = types.SimpleNamespace(name="docker", capabilities=Capabilities(container_network=True))
+    scenario = {"requires": ["container_network"]}
+
+    assert case_skip_reason(scenario, platform) is None
+    assert case_skip_reason(scenario, platform, network="host") is not None
+    assert case_skip_reason(scenario, platform, network="bridge") is None
+
+
+def test_external_host_scenarios_require_a_container_network():
+    scenarios = load_scenarios()
+
+    for name in ("static-host", "s3-host"):
+        assert scenarios[name]["requires"] == ["container_network"], name
 
 
 def test_unknown_requirement_is_treated_as_missing():

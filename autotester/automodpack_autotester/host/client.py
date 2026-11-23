@@ -43,13 +43,22 @@ def _forward_slashes(path: Path) -> str:
     return str(path).replace("\\", "/")
 
 
-def _write_hmc_config(ctx, cache_dir: Path, java: Path) -> None:
-    appdata = Path(os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming"))
-    config_dir = Path(str((ctx.settings.get("windows") or {}).get("appData") or appdata)) / "headlessmc"
+def _hmc_appdata(ctx) -> Path:
+    """This case's ``%APPDATA%``.
+
+    HeadlessMC reads one ``headlessmc/config.properties`` under APPDATA, and the file names the
+    case's game dir. Two concurrent cases sharing the machine's APPDATA would overwrite each
+    other's game dir between a relaunch's config write and the launcher reading it.
+    """
+    return ctx.game_dir.parent / "appdata"
+
+
+def _write_hmc_config(appdata: Path, cache_dir: Path, game_dir: Path, java: Path) -> None:
+    config_dir = appdata / "headlessmc"
     config_dir.mkdir(parents=True, exist_ok=True)
     properties = {
         "hmc.files.mc": _forward_slashes(cache_dir),
-        "hmc.files.game": _forward_slashes(ctx.game_dir),
+        "hmc.files.game": _forward_slashes(game_dir),
         "hmc.files.game-for-each-version": "false",
         "hmc.java.download": "false",
         "hmc.java.versions": _forward_slashes(java),
@@ -117,9 +126,10 @@ def _game_args(ctx) -> str:
     return f"--width {_CLIENT_WIDTH} --height {_CLIENT_HEIGHT}"
 
 
-def _child_env(ctx, cache_dir: Path, home: Path) -> dict[str, str]:
+def _child_env(ctx, cache_dir: Path, home: Path, appdata: Path) -> dict[str, str]:
     env = dict(os.environ)
     env.pop("JAVA_TOOL_OPTIONS", None)
+    env["APPDATA"] = str(appdata)
     env["HMC_HOME"] = str(cache_dir)
     env["JAVA_HOME"] = str(home)
     env["PATH"] = f"{home / 'bin'};{env.get('PATH', '')}"
@@ -206,8 +216,9 @@ class WindowsNativeClientRuntime:
     def _spawn(self, ctx, argv: list[str], log: Path, name: str) -> Process:
         hmc_cache_root, _shared_versions = cache_paths(ctx)
         home = java_home(ctx.settings, ctx.target.java)
-        _write_hmc_config(ctx, hmc_cache_root, home)
-        env = _child_env(ctx, hmc_cache_root, home)
+        appdata = _hmc_appdata(ctx)
+        _write_hmc_config(appdata, hmc_cache_root, ctx.game_dir, home)
+        env = _child_env(ctx, hmc_cache_root, home, appdata)
         if ctx.slot is not None:
             return ctx.slot.spawn(name, [str(part) for part in argv], cwd=ctx.game_dir, env=env, log=log)
         child = Process()

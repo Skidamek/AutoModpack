@@ -39,7 +39,7 @@ class WindowsLockProbeTest {
 			return;
 		} catch (WinProbeFailed failed) {
 			assertNull(WindowsLockProbe.describeHeld(file));
-			assertTrue(failed.getMessage().startsWith("not Windows") || failed.getMessage().startsWith("unsupported architecture") || failed.getMessage().startsWith("native not loaded"), failed.getMessage());
+			assertTrue(failed.getMessage().startsWith("not Windows") || failed.getMessage().startsWith("unsupported architecture"), failed.getMessage());
 		}
 	}
 }

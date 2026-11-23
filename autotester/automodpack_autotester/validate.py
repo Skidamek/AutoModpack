@@ -178,13 +178,22 @@ def _check_connection_paths(paths, problems):
             problems.append(f"{where}.mode: duplicate connection mode {mode!r}")
         modes.add(mode)
         for field in ("bindPort", "endpointPort"):
+            if field not in path:
+                continue
             value = path.get(field)
             if not isinstance(value, int) or isinstance(value, bool) or value < -1 or value > 65535 or value == 0:
                 problems.append(f"{where}.{field}: expected an integer port or -1, got {value!r}")
         if not isinstance(path.get("deferFirstSyncToLogin", False), bool):
             problems.append(f"{where}.deferFirstSyncToLogin: expected a boolean, got {path.get('deferFirstSyncToLogin')!r}")
-        if mode == "HTTP" and path.get("bindPort", -1) == -1 and not str(path.get("advertisedEndpointHost", "")).strip():
+        dedicated = path.get("bindPort", -1) != -1
+        if dedicated and "endpointPort" in path:
+            problems.append(f"{where}.endpointPort: a dedicated listener serves its own port, so drop it; the case allocates the port")
+        if mode == "HTTP" and not dedicated and not str(path.get("advertisedEndpointHost", "")).strip():
             problems.append(f"{where}.bindPort: {mode} needs the dedicated listener or an advertisedEndpointHost served externally")
+        if mode == "HTTP" and not dedicated and path.get("endpointPort", -1) == -1:
+            problems.append(f"{where}.endpointPort: an externally served {mode} endpoint must declare the port it is served on")
+        if mode != "HTTP" and not dedicated and "endpointPort" in path:
+            problems.append(f"{where}.endpointPort: {mode} rides the joined game connection; the client reuses that port")
 
 
 def _target_pattern_matches(pattern: str, target_id: str) -> bool:

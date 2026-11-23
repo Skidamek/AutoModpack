@@ -540,3 +540,29 @@ def test_seed_bootstrap_writes_live_fields(make_ctx):
         "connectionMode": "HOLEPUNCH",
     }
     assert ctx.vars["bootstrap_modpack_id"] == "packaaa"
+
+
+# ── connection-path endpoint ownership ──────────────────────────────────────
+
+
+def test_prepare_server_maps_endpoint_ownership_to_the_config(make_ctx):
+    def config_for(connection_path, vars_=None):
+        ctx = make_ctx(
+            scenario={"connectionPath": connection_path},
+            vars={"server_game_port": 31000, "server_endpoint_port": 31100, **(vars_ or {})},
+        )
+        ctx.artifact.write_bytes(b"autotest-artifact")
+        server_steps._prepare_server(ctx)
+        return json.loads((ctx.server_dir / "automodpack" / "server-config.json").read_text(encoding="utf-8"))
+
+    dedicated = config_for({"mode": "HTTP", "bindPort": 25567})
+    assert (dedicated["bindPort"], dedicated["advertisedEndpointPort"]) == (31100, 31100), "a dedicated listener serves the slot's own port"
+
+    for mode in ("MAGIC", "HOLEPUNCH"):
+        shared = config_for({"mode": mode, "bindPort": -1})
+        assert shared["bindPort"] == -1
+        assert shared["advertisedEndpointPort"] == -1, f"{mode} rides the joined game connection, so the client reuses its port"
+
+    external = config_for({"mode": "HTTP", "bindPort": -1, "endpointPort": 8443, "advertisedEndpointHost": "automodpack-static-host"})
+    assert external["advertisedEndpointHost"] == "automodpack-static-host"
+    assert external["advertisedEndpointPort"] == 8443, "an externally served endpoint keeps the port it is served on"

@@ -1,6 +1,7 @@
 """Minecraft server as a local Java child. itzg may seed the cache; it does not run the case."""
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 
@@ -8,7 +9,7 @@ from ..runtime.base import ExecResult, RuntimeState, ServerSpec
 from . import rcon
 from .java import java_bin
 from .process import Process
-from .seed import materialize
+from .seed import launch_argv, materialize
 
 
 def write_server_properties(root: Path, *, game_port: int, rcon_port: int, rcon_password: str = "amp-autotest") -> None:
@@ -40,7 +41,6 @@ class JavaServer:
         self._process: Process | None = None
         self._ctx = ctx
         self._spec: ServerSpec | None = None
-        self._jar: Path | None = None
 
     def start(self, ctx, spec: ServerSpec) -> None:
         self._ctx = ctx
@@ -49,16 +49,20 @@ class JavaServer:
         rcon_port = int(ctx.vars.get("server_rcon_port") or 0)
         if port <= 0 or rcon_port <= 0:
             raise RuntimeError("native server needs allocated server_game_port and server_rcon_port")
-        self._jar = materialize(ctx.server_dir, spec, target_id=ctx.target.id, settings=ctx.settings)
+        materialize(ctx.server_dir, spec, target_id=ctx.target.id, settings=ctx.settings)
         write_server_properties(ctx.server_dir, game_port=port, rcon_port=rcon_port)
-        memory = str(spec.env.get("MEMORY") or "2G")
-        argv = [java_bin(ctx.settings, ctx.target.java), f"-Xmx{memory}", "-jar", str(self._jar), "nogui"]
+        argv = [java_bin(ctx.settings, ctx.target.java), f"-Xmx{spec.memory}", *spec.jvm_args, *launch_argv(ctx.server_dir, spec)]
+        # The same environment the container would get: the mod reads its data root from it, so a
+        # native server must resolve the tree the harness inspects, not its own dedicated-server default.
+        env = {**os.environ, **spec.env}
         log = ctx.server_dir.parent / f"{self.name}.log"
         if ctx.slot is not None:
-            self._process = ctx.slot.spawn("server", argv, cwd=ctx.server_dir, log=log)
+            # The slot held the loopback ports until now, so no concurrent case was handed them.
+            ctx.slot.release_ports()
+            self._process = ctx.slot.spawn("server", argv, cwd=ctx.server_dir, env=env, log=log)
         else:
             self._process = Process()
-            self._process.spawn(argv, cwd=ctx.server_dir, log=log)
+            self._process.spawn(argv, cwd=ctx.server_dir, env=env, log=log)
 
     def stop(self) -> None:
         if self._process is not None:

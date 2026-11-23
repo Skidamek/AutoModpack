@@ -1,13 +1,19 @@
 """Loopback Minecraft RCON. Native java servers have no docker exec."""
 from __future__ import annotations
 
-import struct
+import select
 import socket
+import struct
 
 from ..runtime.base import ExecResult
 
 _LOGIN = 3
 _COMMAND = 2
+# Vanilla splits a response into 4096-byte packets, sends them back to back and never sends a
+# terminator (measured against a live 26.2 server: `help` arrived as 4096 + 1609). The gap is a
+# tripwire: a follow-up packet of the same response is local and immediate, so this only fires
+# once the response is complete.
+_RESPONSE_GAP_SECONDS = 0.25
 
 
 def _packet(request_id: int, kind: int, body: str) -> bytes:
@@ -41,5 +47,11 @@ def run(host: str, port: int, password: str, command: str, timeout: float = 15) 
         if request_id == -1:
             return ExecResult(1, "rcon auth failed")
         sock.sendall(_packet(2, _COMMAND, command))
-        _request_id, _kind, payload = _read_packet(sock)
-        return ExecResult(0, payload)
+        pieces = []
+        while True:
+            pieces.append(_read_packet(sock)[2])
+            readable, _, _ = select.select([sock], [], [], _RESPONSE_GAP_SECONDS)
+            if not readable or sock.recv(1, socket.MSG_PEEK) == b"":
+                # Nothing follows: either the response is complete or the server closed right
+                # after replying, which is still a complete response.
+                return ExecResult(0, "".join(pieces))

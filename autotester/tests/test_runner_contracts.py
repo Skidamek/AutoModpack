@@ -12,7 +12,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from automodpack_autotester import cli, client_steps, runner, server_steps, staging_steps
+from automodpack_autotester import cli, client_steps, runner, server_steps, staging_steps, supervisor
 from automodpack_autotester.config import generated_content, load_macros, write_generated
 from automodpack_autotester.engine.steps_io import wait_file, wait_file_content, wait_generation
 from automodpack_autotester.engine.util import ClientExited
@@ -229,26 +229,30 @@ def test_connection_path_matrix_runs_every_path(monkeypatch, tmp_path):
     assert [path["connectionMode"] for path in result["connectionPaths"]] == seen
 
 
-def test_interrupted_run_cleans_only_its_docker_resources(monkeypatch):
+def test_cleanup_scope_reaps_only_its_own_scope():
     class Resource:
-        def __init__(self, name):
+        def __init__(self, name, labels):
             self.name = name
+            self.labels = labels
             self.removed = False
 
         def remove(self, **_kwargs):
             self.removed = True
 
-    owned_container = Resource("amp-owned123-c-abcd")
-    other_container = Resource("amp-other456-c-abcd")
-    owned_network = Resource("amp-owned123-n-abcd")
-    other_network = Resource("amp-other456-n-abcd")
-    docker = types.SimpleNamespace(
-        containers=types.SimpleNamespace(list=lambda **_kwargs: [owned_container, other_container]),
-        networks=types.SimpleNamespace(list=lambda **_kwargs: [owned_network, other_network]),
-    )
-    monkeypatch.setattr(cli.docker_py, "from_env", lambda: docker)
+    def listed(resources, **kwargs):
+        key, _, value = kwargs.get("filters", {}).get("label", "").partition("=")
+        return [resource for resource in resources if resource.labels.get(key) == value]
 
-    cli._cleanup_run_resources("owned123")
+    owned_container = Resource("amp-owned123-c-abcd", {supervisor.SCOPE_LABEL: "owned123"})
+    other_container = Resource("amp-other456-c-abcd", {supervisor.SCOPE_LABEL: "other456"})
+    owned_network = Resource("amp-owned123-n-abcd", {supervisor.SCOPE_LABEL: "owned123"})
+    other_network = Resource("amp-other456-n-abcd", {supervisor.SCOPE_LABEL: "other456"})
+    docker = types.SimpleNamespace(
+        containers=types.SimpleNamespace(list=lambda **kwargs: listed([owned_container, other_container], **kwargs)),
+        networks=types.SimpleNamespace(list=lambda **kwargs: listed([owned_network, other_network], **kwargs)),
+    )
+
+    supervisor.cleanup_scope("owned123", docker)
 
     assert owned_container.removed
     assert owned_network.removed

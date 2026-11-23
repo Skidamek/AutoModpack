@@ -13,7 +13,6 @@ renderClient: true
 connectionPaths:
   - mode: HOLEPUNCH
     bindPort: -1
-    endpointPort: 25565
 
 flow:
   - do: plant_launcher_metadata

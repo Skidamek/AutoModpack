@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 
 from .base import CAPABILITY_REQUIREMENTS, Capabilities
 from ..host.backend import FarmBackend, machine
@@ -69,13 +70,20 @@ def missing_capabilities(scenario: dict, capabilities: Capabilities) -> list[str
     return missing
 
 
-def case_skip_reason(scenario: dict, platform) -> str | None:
-    """Why this scenario must not run on this machine, or ``None`` when it can."""
+def case_skip_reason(scenario: dict, platform, *, network: str | None = None) -> str | None:
+    """Why this scenario must not run on this machine, or ``None`` when it can.
+
+    ``network`` is the case's transport: a host-network case has no user-defined bridge, so it
+    cannot offer the container-network capability even on a farm that has it.
+    """
     kernel = kernel_name()
     declared = scenario_platforms(scenario)
     if declared is not None and kernel not in declared:
         return f"scenario declares platforms {declared}, kernel is {kernel}"
-    missing = missing_capabilities(scenario, platform.capabilities)
+    capabilities = platform.capabilities
+    if network == "host" and capabilities.container_network:
+        capabilities = replace(capabilities, container_network=False)
+    missing = missing_capabilities(scenario, capabilities)
     if missing:
         return f"machine lacks {', '.join(missing)}"
     return None

@@ -29,7 +29,7 @@ from .config import (
     scenario_matches_target,
     server_cache_volume,
 )
-from .runner import run_case
+from .runner import case_network, run_case
 from .runtime.detect import case_skip_reason, select_platform
 from .supervisor import RunSupervisor, reap_orphaned_scopes, server_cache_lock
 from .validate import CONNECTION_MODES, validate_scenario
@@ -52,25 +52,6 @@ def _stop_gradle_daemons() -> None:
         subprocess.run([str(gradlew), "--stop"], cwd=REPO_ROOT, check=False, capture_output=True, timeout=60)
     except (OSError, subprocess.TimeoutExpired):
         pass
-
-
-def _cleanup_run_resources(resource_scope: str) -> None:
-    prefix = f"amp-{resource_scope}-"
-    client = docker_py.from_env()
-    for c in client.containers.list(all=True):
-        if not c.name.startswith(prefix):
-            continue
-        try:
-            c.remove(force=True)
-        except Exception:
-            pass
-    for n in client.networks.list():
-        if not n.name.startswith(prefix):
-            continue
-        try:
-            n.remove()
-        except Exception:
-            pass
 
 
 def _leaf_results(result: dict) -> list[dict]:
@@ -177,7 +158,7 @@ def _server_cache_guard(target, variants, settings):
 def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, settings, resource_scope, platform, netem=None, loss="", server_netem=None):
     # A target whose every variant skips never touches the server cache, so it
     # must not block a real run (or wait behind one) on the shared volume lock.
-    all_skip = bool(variants) and all(case_skip_reason(variant, platform) for variant in variants)
+    all_skip = bool(variants) and all(case_skip_reason(variant, platform, network=case_network(variant, settings, platform)) for variant in variants)
     lock = None if all_skip else _server_cache_guard(target, variants, settings)
     try:
         case_results = [
@@ -337,7 +318,7 @@ def _cmd_plan(args) -> int:
     ran = skipped = 0
     for target in selected:
         for variant in variants:
-            reason = case_skip_reason(variant, platform)
+            reason = case_skip_reason(variant, platform, network=case_network(variant, settings, platform))
             if reason:
                 skipped += 1
                 print(f"SKIP {target.id} {variant.get('id', '?')} ({reason})")
@@ -622,15 +603,9 @@ def main(argv: list[str] | None = None) -> int:
 
         except KeyboardInterrupt:
             interrupted = True
-            print("\nInterrupted, cleaning up containers...", file=sys.stderr)
+            print("\nInterrupted; the run watcher is reaping this run's containers and case children...", file=sys.stderr)
             for ff in task_map:
                 ff.cancel()
-            try:
-                _cleanup_run_resources(resource_scope)
-            except KeyboardInterrupt:
-                print("Force exit.", file=sys.stderr)
-                os._exit(1)
-            print("Cleanup complete.", file=sys.stderr)
 
         finally:
             signal.signal(signal.SIGTERM, previous_sigterm_handler)
@@ -642,12 +617,12 @@ def main(argv: list[str] | None = None) -> int:
             if payload.get("error"):
                 print(payload["error"], file=sys.stderr)
             if interrupted:
-                supervisor.close()
+                supervisor.abandon()
                 os._exit(1)
 
         supervisor.close()
         return 0 if ok else 1
 
     except KeyboardInterrupt:
-        supervisor.close()
+        supervisor.abandon()
         os._exit(1)

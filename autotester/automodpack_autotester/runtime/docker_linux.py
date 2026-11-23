@@ -191,6 +191,9 @@ class DockerLinuxServerRuntime:
                 self.docker.remove_volume(spec.cache_volume)
             self.docker.ensure_volume(spec.cache_volume)
         env = dict(spec.env)
+        env.setdefault("MEMORY", spec.memory)
+        if spec.jvm_args:
+            env.setdefault("JVM_OPTS", " ".join(spec.jvm_args))
         # Run the itzg server as the same user the runner uses, so it can write to the
         # bind-mounted mods/automodpack dirs (which the runner created). Without this the
         # server runs as itzg's default UID 1000 and fails on hosts with a different UID
@@ -203,6 +206,11 @@ class DockerLinuxServerRuntime:
         rcon_port = int(ctx.vars.get("server_rcon_port") or 0)
         if rcon_port:
             env["RCON_PORT"] = str(rcon_port)
+        slot = getattr(ctx, "slot", None)
+        if slot is not None:
+            # The slot holds the loopback ports so no concurrent case is handed the same numbers;
+            # the server is about to bind them, so they are handed over here.
+            slot.release_ports()
         self.docker.run(
             name=self.name,
             image=spec.image,

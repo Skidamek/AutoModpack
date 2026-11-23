@@ -28,7 +28,6 @@ def _windows_settings(tmp_path: Path, *, launcher: Path | None = None, jdk: Path
         "windows": {
             "headlessmc": {"path": str(launcher), "version": "3.0.0-RC8"},
             "javaHomes": {"21": str(jdk)},
-            "appData": str(tmp_path / "appdata"),
         },
     }
 
@@ -82,11 +81,12 @@ def test_windows_client_writes_hmc_config_and_spawns_with_java_home(make_ctx, tm
     runtime = WindowsNativeClientRuntime(ctx)
     runtime.start(ctx)
 
-    config = Path(settings["windows"]["appData"]) / "headlessmc" / "config.properties"
+    config = ctx.game_dir.parent / "appdata" / "headlessmc" / "config.properties"
     text = config.read_text(encoding="utf-8")
-    assert "hmc.files.game=" in text
+    assert f"hmc.files.game={ctx.game_dir}".replace("\\", "/") in text
     assert "hmc.java.versions=" in text
     assert "hmc.files.game-for-each-version=false" in text
+    assert seen["env"]["APPDATA"] == str(ctx.game_dir.parent / "appdata")
     assert seen["env"]["HMC_HOME"]
     assert seen["env"]["JAVA_HOME"] == settings["windows"]["javaHomes"]["21"]
     assert seen["env"]["AUTOMODPACK_DATA_ROOT"] == "automodpack/client/data"
@@ -124,4 +124,4 @@ def test_sync_lane_declares_windows_explicitly():
     scenarios = load_scenarios()
     for name in ("download-only", "sync", "files-edge", "tiny-files", "state-history", "rollback-history", "restart-deletion"):
         assert "windows" in scenarios[name]["platforms"], name
-    assert "windows" not in scenarios["static-host"].get("platforms", ["linux"])
+    assert scenarios["static-host"]["requires"] == ["container_network"]

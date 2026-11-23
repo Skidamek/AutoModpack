@@ -53,6 +53,14 @@ def server_host_for(net_mode: str, platform: FarmBackend, srv_name: str) -> str:
     return srv_name
 
 
+def case_network(scenario: dict, settings: dict, platform: FarmBackend) -> str:
+    """How this case's containers talk. A native farm runs everything on the host namespace."""
+    config = getattr(platform, "config", None)
+    if config is not None and config.provide == "native":
+        return "host"
+    return transport(scenario, settings)
+
+
 def _resolve_artifact(target: Target, artifact_dir: Path) -> Path:
     pattern = target.artifact_pattern.format(
         id=target.id,
@@ -179,7 +187,8 @@ def run_case(
     phases: dict[str, float] = {}
     scenario_id = scenario.get("id", "?")
     connection_mode = str((scenario.get("connectionPath") or {}).get("mode", "")).upper() or None
-    skip_reason = case_skip_reason(scenario, platform)
+    net_mode = case_network(scenario, settings, platform)
+    skip_reason = case_skip_reason(scenario, platform, network=net_mode)
     if skip_reason:
         logger.info("[%s] skip: %s", target.id, skip_reason)
         return {
@@ -193,7 +202,6 @@ def run_case(
             "phases": {"skip": time.monotonic() - started},
             "steps": [],
         }
-    net_mode = transport(scenario, settings)
     # On host networking the client container shares the host's interfaces, so a
     # qdisc on its eth0 would shape the host's own traffic instead of the test's.
     if netem and net_mode == "host":
@@ -207,9 +215,6 @@ def run_case(
     if (netem or loss or server_netem) and not platform.capabilities.netem:
         raise ValueError(f"network shaping is not available on the {platform.name} platform")
     mode = scenario_mode(scenario)
-    config = getattr(platform, "config", None)
-    if config is not None and config.provide == "native":
-        net_mode = "host"
     case_dir = out_dir / f"{target.id}-{int(time.time())}-{secrets.token_hex(3)}"
     slot = open_slot(case_dir, secrets.token_hex(4))
     server_dir = slot.server_dir

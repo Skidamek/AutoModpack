@@ -39,9 +39,9 @@ def test_connection_path_variants_keep_modes_independent():
     scenario = {
         "id": "paths",
         "connectionPaths": [
-            {"mode": "MAGIC", "bindPort": -1, "endpointPort": 25565},
-            {"mode": "HOLEPUNCH", "bindPort": -1, "endpointPort": 25565},
-            {"mode": "HTTP", "bindPort": 25567, "endpointPort": 25567},
+            {"mode": "MAGIC", "bindPort": -1},
+            {"mode": "HOLEPUNCH", "bindPort": -1},
+            {"mode": "HTTP", "bindPort": 25567},
         ],
     }
 
@@ -74,6 +74,17 @@ def test_validation_allows_only_advertised_http_endpoints_without_a_listener():
         "needs the dedicated listener" in problem
         for problem in validate_scenario(listener_less, load_macros(), load_targets())
     )
+
+
+def test_validation_rejects_endpoint_shapes_the_harness_cannot_serve():
+    macros, targets = load_macros(), load_targets()
+
+    def problems(path):
+        return validate_scenario({"id": "shape", "connectionPaths": [path]}, macros, targets)
+
+    assert any("drop it" in problem for problem in problems({"mode": "HTTP", "bindPort": 25567, "endpointPort": 25567}))
+    assert any("rides the joined game connection" in problem for problem in problems({"mode": "HOLEPUNCH", "bindPort": -1, "endpointPort": 25565}))
+    assert any("must declare the port" in problem for problem in problems({"mode": "HTTP", "bindPort": -1, "advertisedEndpointHost": "static"}))
 
 
 def test_validation_rejects_generation_fixture_on_non_jar_path():
