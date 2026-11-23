@@ -5,10 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ModpackLoadRequestTest {
 	@Test
@@ -41,6 +45,36 @@ class ModpackLoadRequestTest {
 
 		assertTrue(request.allowsProjectionJar(requested));
 		assertFalse(request.allowsProjectionJar(skipped));
+		assertTrue(request.allowsProjectionJar(live));
+		assertTrue(request.isProjectionJar(skipped));
+		assertFalse(request.isProjectionJar(live));
+	}
+
+	/**
+	 * A loader discovers jars through the real path of the projection, so a game directory reached through a link or a
+	 * junction (relocated instances) must still read as the same projection - otherwise every projection jar reads as a
+	 * live jar and the pin, live-path, hash, and editable exclusions all silently stop applying.
+	 */
+	@Test
+	void readsAProjectionReachedThroughALinkAsTheSameProjection(@TempDir Path temp) throws IOException {
+		Path real = Files.createDirectories(temp.resolve("real").resolve("active").resolve("mods"));
+		Path requested = Files.writeString(real.resolve("requested.jar"), "requested");
+		Path skipped = Files.writeString(real.resolve("skipped.jar"), "skipped");
+		Path link;
+		try {
+			link = Files.createSymbolicLink(temp.resolve("instance"), real.getParent().getParent());
+		} catch (IOException | UnsupportedOperationException unavailable) {
+			Assumptions.assumeTrue(false, "Symbolic links are unavailable: " + unavailable);
+			return;
+		}
+
+		ModpackLoadRequest request = new ModpackLoadRequest(link.resolve("active").resolve("mods"), List.of(link.resolve("active").resolve("mods").resolve("requested.jar")));
+
+		assertTrue(request.allowsProjectionJar(requested));
+		assertFalse(request.allowsProjectionJar(skipped));
+		assertTrue(request.isProjectionJar(skipped));
+		Path live = Files.createDirectories(real.resolveSibling("live")).resolve("live.jar");
+		assertFalse(request.isProjectionJar(live));
 		assertTrue(request.allowsProjectionJar(live));
 	}
 }

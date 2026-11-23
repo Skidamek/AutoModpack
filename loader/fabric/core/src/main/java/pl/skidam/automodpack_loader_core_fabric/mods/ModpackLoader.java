@@ -38,10 +38,11 @@ public class ModpackLoader implements ModpackLoaderService {
 		try {
 			LOGGER.info("Discovering mods from {}", activeModsDirectory.getParent().getFileName() + "/" + activeModsDirectory.getFileName());
 
-			List<ModCandidateImpl> candidates;
-			candidates = (List<ModCandidateImpl>) discoverMods(activeModsDirectory);
-			candidates = RequestedCandidates.keep(candidates, ACCESSOR, request::allowsProjectionJar);
-			candidates = (List<ModCandidateImpl>) resolveMods(candidates);
+			List<ModCandidateImpl> discovered = (List<ModCandidateImpl>) discoverMods(activeModsDirectory);
+			Set<String> loadedIds = loadedModIds();
+			List<ModCandidateImpl> candidates = RequestedCandidates.keep(discovered, ACCESSOR, request, loadedIds);
+			logLiveCopiesThatWon(discovered, candidates, loadedIds);
+			candidates = (List<ModCandidateImpl>) resolveMods(candidates, loadedIds);
 
 			METHOD_DUMP_MOD_LIST.invoke(FabricLoaderImpl.INSTANCE, candidates);
 
@@ -72,6 +73,13 @@ public class ModpackLoader implements ModpackLoaderService {
 		public Collection<ModCandidateImpl> nestedMods(ModCandidateImpl candidate) {
 			return candidate.getNestedMods();
 		}
+
+		@Override
+		public Set<String> ids(ModCandidateImpl candidate) {
+			Set<String> ids = new HashSet<>(candidate.getProvides());
+			ids.add(candidate.getId());
+			return ids;
+		}
 	};
 
 	private Collection<ModCandidateImpl> discoverMods(Path modsDirectory) throws ModResolutionException, IllegalAccessException {
@@ -85,18 +93,40 @@ public class ModpackLoader implements ModpackLoaderService {
 		return discoverer.discoverMods(FabricLoaderImpl.INSTANCE, envDisabledMods);
 	}
 
-	private Collection<ModCandidateImpl> resolveMods(Collection<ModCandidateImpl> modCandidates) throws ModResolutionException {
-		Set<String> modIds = new HashSet<>();
-		for (var mod : FabricLoaderMods.getAllMods().stream().toList()) {
-			ModContainerImpl container = (ModContainerImpl) mod;
-			modIds.add(container.getMetadata().getId());
-		}
-
+	private Collection<ModCandidateImpl> resolveMods(Collection<ModCandidateImpl> modCandidates, Set<String> loadedIds) throws ModResolutionException {
 		var candidates = ModResolver.resolve(modCandidates, FabricLoaderImpl.INSTANCE.getEnvironmentType(), envDisabledMods);
-		candidates.removeIf(it -> modIds.contains(it.getId()));
+		candidates.removeIf(it -> loadedIds.contains(it.getId()));
 		candidates.forEach(it -> applyPaths(it, true));
 
 		return candidates;
+	}
+
+	/** The ids the game already has: every resolved live mod, nested ones included, plus the ids they provide. */
+	private static Set<String> loadedModIds() {
+		Set<String> ids = new HashSet<>();
+		for (ModContainer mod : FabricLoaderMods.getAllMods()) {
+			ids.add(mod.getMetadata().getId());
+			ids.addAll(mod.getMetadata().getProvides());
+		}
+		return ids;
+	}
+
+	/**
+	 * The receipt for every pack copy the selection left behind: the resolver never sees a candidate claiming an id the
+	 * instance already provides, so without this line a jar that the player's own copy displaced would look like it was
+	 * simply absent from the pack.
+	 */
+	private static void logLiveCopiesThatWon(Collection<ModCandidateImpl> discovered, Collection<ModCandidateImpl> kept, Set<String> loadedIds) {
+		Set<ModCandidateImpl> candidates = Collections.newSetFromMap(new IdentityHashMap<>());
+		candidates.addAll(kept);
+		for (ModCandidateImpl candidate : discovered) {
+			if (candidates.contains(candidate)) continue;
+			Set<String> colliding = new TreeSet<>(ACCESSOR.ids(candidate));
+			colliding.retainAll(loadedIds);
+			if (colliding.isEmpty()) continue;
+			LOGGER.warn("Not loading {} ({}) from the active projection because the instance's own mods folder already provides {}; the live copy stays", candidate.getId(),
+					candidate.getLocalPath(), colliding);
+		}
 	}
 
 	private void addMods(Collection<ModCandidateImpl> candidates) {

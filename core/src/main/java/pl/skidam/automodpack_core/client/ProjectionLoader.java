@@ -21,7 +21,6 @@ import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoadSelection;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
-import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -142,17 +141,16 @@ final class ProjectionLoader {
 			}
 		}
 
-		List<Path> modpackMods = ModpackLoadSelection.select(projectionJars, liveModPaths, liveHashes, liveJarIds, pinnedModIds);
-		long editableMods = projectionJars.stream().filter(ModpackLoadSelection.Jar::editable).count();
+		ModpackLoadSelection.Selection selection = ModpackLoadSelection.select(projectionJars, liveModPaths, liveHashes, liveJarIds, pinnedModIds);
+		long editableMods = selection.excludedBy(ModpackLoadSelection.Reason.EDITABLE);
 		if (editableMods > 0) LOGGER.info("{} editable mod(s) of this modpack load from the standard mods folder", editableMods);
-		Set<String> protectedIds = PinnedMods.protectedIds(pinnedModIds, liveJarIds);
-		for (ModpackLoadSelection.Jar jar : projectionJars) {
-			if (modpackMods.contains(jar.path())) continue;
-			if (PinnedMods.protects(protectedIds, jar.ids()))
-				LOGGER.warn("Skipping load of projection mod {} because pinned client mod ids {} are present in the default mods folder", jar.path().getFileName(), jar.ids());
+		for (ModpackLoadSelection.Excluded excluded : selection.excluded()) {
+			if (excluded.reason() != ModpackLoadSelection.Reason.PINNED) continue;
+			LOGGER.warn("Skipping load of projection mod {} ({}) because a pinned mod in the instance's mods folder already provides one of its ids", excluded.jar().path().getFileName(),
+					excluded.jar().ids());
 		}
 
-		modpackLoader.loadModpack(new ModpackLoadRequest(activeModsDirectory, modpackMods));
+		modpackLoader.loadModpack(new ModpackLoadRequest(activeModsDirectory, selection.paths()));
 	}
 
 	private static String activeModLogicalPath(Path activeModsDirectory, Path path) {
