@@ -39,12 +39,6 @@ public final class ProjectionAvailability {
 	private static final Map<Path, ProjectionAvailability> BY_GAME_DIRECTORY = new HashMap<>();
 	private static final int SCAN_READ_ATTEMPTS = 5;
 	private static final long SCAN_READ_RETRY_MILLIS = 100;
-	/**
-	 * Tripwire between two relaunch-and-settle cycles (seconds) and a later play session (hours). A second recovery
-	 * inside this window is the directory-scanning loader loop; a player who quit and came back later is a new session.
-	 * Receipt: crash-relaunch settle is seconds; this is sized past that cycle and below a new sitting.
-	 */
-	static final long CONSECUTIVE_MILLIS = 5 * 60 * 1000L;
 	private static final Gson GSON = ConfigTools.strictEnums(new GsonBuilder()).create();
 
 	/**
@@ -67,7 +61,6 @@ public final class ProjectionAvailability {
 
 	static final class GuardFields {
 		String content;
-		long at;
 	}
 
 	private final Path gameDirectory;
@@ -135,7 +128,12 @@ public final class ProjectionAvailability {
 		return new Refusal(null, null);
 	}
 
-	/** Whether this boot must relaunch into the settled projection; the guard is recorded before the caller relaunches. */
+	/**
+	 * Directory-scanning loaders already took {@code active/mods} this boot. If recovery then settled a different
+	 * tree, this process cannot load those mods: they are only discovered at preload. Restart into the settled tree.
+	 * The guard remembers the tree we already relaunched into, so the next boot of that same tree does not loop.
+	 * A later boot whose recovery settled yet another tree relaunches again.
+	 */
 	public static boolean mustRelaunch(ClientStorage storage) {
 		return mustRelaunch(storage, of(storage.gameDirectory()).scan);
 	}
@@ -149,7 +147,6 @@ public final class ProjectionAvailability {
 			}
 			ProjectionState.Inspection inspection = ProjectionState.inspect(storage);
 			if (inspection.state() == null) {
-				// Nothing loads this boot (every gate refuses), so a relaunch would load nothing more; the guard stays as it was.
 				LOGGER.error("The projection state cannot be read after recovery; the projection does not load this boot", inspection.failure());
 				return false;
 			}
@@ -161,16 +158,10 @@ public final class ProjectionAvailability {
 				return false;
 			}
 			String content = now.contentDigest() != null ? "digest:" + now.contentDigest() : "revision:" + now.revision();
-			long time = System.currentTimeMillis();
 			GuardFields last = readGuard(guard);
-			if (last != null && (content.equals(last.content) || last.at <= time && time - last.at < CONSECUTIVE_MILLIS)) {
-				LOGGER.warn("Recovery changed the projection a directory-scanning loader decided on (revision {} -> {}) right after a relaunch for it; this session runs without what it missed",
-						scan.revision(), now.revision());
-				return false;
-			}
+			if (last != null && content.equals(last.content)) return false;
 			GuardFields fields = new GuardFields();
 			fields.content = content;
-			fields.at = time;
 			ConfigTools.writeAtomicCompact(guard, fields);
 		} catch (IOException e) {
 			LOGGER.error("The projection relaunch guard cannot be updated; not relaunching, so no relaunch can repeat", e);
@@ -223,11 +214,8 @@ public final class ProjectionAvailability {
 		} catch (NoSuchFileException missing) {
 			return null;
 		} catch (IOException | RuntimeException unusable) {
-			// An unreadable guard still marks a relaunch that happened; treat it as a recent one.
+			LOGGER.error("The projection relaunch guard cannot be read; treating it as absent", unusable);
 		}
-		GuardFields recent = new GuardFields();
-		recent.content = "";
-		recent.at = System.currentTimeMillis();
-		return recent;
+		return null;
 	}
 }

@@ -83,13 +83,10 @@ public final class BootRecovery {
 	}
 
 	/**
-	 * A directory-scanning loader (Kilt) takes {@code active/mods} before preload, so it got what the scan-time gate
-	 * decided from its one read of the projection state. When recovery - this boot's, or a detached helper's that
-	 * finished meanwhile - left a settled projection behind whose content is not what that gate handed out (it moved,
-	 * or the gate refused a projection that is loadable now), this boot relaunches into it, once: a persisted one-shot
-	 * guard bounds the relaunches whatever recovery keeps doing, and a boot that needs none clears it
-	 * ({@link ProjectionAvailability}). A boot that cannot relaunch never half-loads: {@code ProjectionLoader} refuses the
-	 * projection the gate refused.
+	 * A directory-scanning loader takes {@code active/mods} before preload. When recovery then settles a different
+	 * tree, those mods cannot load in this process: loaders only discover jars at preload. Relaunch into the settled
+	 * tree. The guard is the tree already relaunched into, so the same tree does not loop; a later different tree
+	 * relaunches again ({@link ProjectionAvailability#mustRelaunch}).
 	 */
 	private void relaunchIfScannedProjectionMoved() {
 		if (ProjectionAvailability.mustRelaunch(storage)) new ReLauncher(UpdateType.UPDATE).restart(true);

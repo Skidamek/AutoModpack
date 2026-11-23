@@ -266,8 +266,8 @@ class ProjectionRepairTest {
 	}
 
 	/**
-	 * F5: the scan-time gate decides from one read; a boot whose recovery settled what the gate refused relaunches once,
-	 * a persisted guard bounds it, and a boot that matches what its gate decided clears the guard.
+	 * F5: the scan-time gate decides from one read; a boot whose recovery settled what the gate refused relaunches
+	 * into that tree, and a later boot whose gate already saw that tree does not loop.
 	 */
 	@Test
 	void aRefusedScanRelaunchesOnceWhenRecoverySettlesIt() throws Exception {
@@ -286,7 +286,7 @@ class ProjectionRepairTest {
 			assertTrue(PublicationSweep.restoreFallback(storage));
 			assertTrue(ProjectionAvailability.mustRelaunch(storage, refused));
 			assertTrue(Files.exists(storage.projectionRelaunchFile()));
-			assertFalse(ProjectionAvailability.mustRelaunch(storage, refused), "the guard allows one relaunch in a row");
+			assertFalse(ProjectionAvailability.mustRelaunch(storage, refused), "the same settled tree does not relaunch again");
 
 			assertNotNull(ProjectionAvailability.loadableModsDirectory(storage.gameDirectory()));
 			ProjectionAvailability.Scan exposed = ProjectionAvailability.scan(storage.gameDirectory());
@@ -482,7 +482,7 @@ class ProjectionRepairTest {
 		}
 	}
 
-	/** R2-3: the guard is keyed to what it relaunched for, cleared by every boot that needs no relaunch, and never stale. */
+	/** R2-3: the guard is the tree already relaunched into; a different tree relaunches, a clean scan clears it. */
 	@Test
 	void theRelaunchGuardIsKeyedToItsRelaunchAndClearedByAnyBootThatNeedsNone() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
@@ -492,18 +492,16 @@ class ProjectionRepairTest {
 		ProjectionState state = ProjectionState.read(storage);
 		ProjectionAvailability.Scan refused = new ProjectionAvailability.Scan(state, true, false, null);
 		assertTrue(ProjectionAvailability.mustRelaunch(storage, refused));
-		assertFalse(ProjectionAvailability.mustRelaunch(storage, refused), "the same need right after its relaunch does not relaunch again");
+		assertFalse(ProjectionAvailability.mustRelaunch(storage, refused), "the same settled tree does not relaunch again");
 		assertTrue(Files.exists(storage.projectionRelaunchFile()));
 
 		assertFalse(ProjectionAvailability.mustRelaunch(storage, null), "a boot without a directory scan needs none");
 		assertFalse(Files.exists(storage.projectionRelaunchFile()), "and clears the guard");
 		assertTrue(ProjectionAvailability.mustRelaunch(storage, refused), "so a later need relaunches");
 
-		// A guard for other content from long ago never suppresses; one from a moment ago does (one relaunch in a row).
-		Files.writeString(storage.projectionRelaunchFile(), "{\"content\":\"digest:other\",\"at\":" + (System.currentTimeMillis() - 2 * ProjectionAvailability.CONSECUTIVE_MILLIS) + "}");
-		assertTrue(ProjectionAvailability.mustRelaunch(storage, refused));
-		Files.writeString(storage.projectionRelaunchFile(), "{\"content\":\"digest:other\",\"at\":" + System.currentTimeMillis() + "}");
-		assertFalse(ProjectionAvailability.mustRelaunch(storage, refused));
+		Files.writeString(storage.projectionRelaunchFile(), "{\"content\":\"digest:other\"}");
+		assertTrue(ProjectionAvailability.mustRelaunch(storage, refused), "a different tree always relaunches");
+		assertFalse(ProjectionAvailability.mustRelaunch(storage, refused), "that tree is now the one already relaunched into");
 		assertFalse(ProjectionAvailability.mustRelaunch(storage, new ProjectionAvailability.Scan(state, false, true, null)));
 		assertFalse(Files.exists(storage.projectionRelaunchFile()), "a clean scan clears it");
 	}
