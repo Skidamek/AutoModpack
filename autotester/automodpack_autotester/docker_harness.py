@@ -5,8 +5,11 @@ works without Docker and a platform can supply its own client.
 """
 from __future__ import annotations
 
+import json
 import os
 import random
+import sys
+import tempfile
 import time
 from functools import cache
 from pathlib import Path
@@ -58,8 +61,27 @@ def shared() -> "Docker":
     return Docker()
 
 
+def prepare_client_environment() -> None:
+    """Keep anonymous pulls off Docker Desktop's credential helper on Windows.
+
+    The helper needs an interactive logon session, which an SSH-driven controller does not have,
+    so a public pull fails with ``A specified logon session does not exist``. A private config with
+    an empty ``auths`` map keeps the pull on the daemon's own path. The same environment reaches the
+    ``docker`` CLI a seed shells out to.
+    """
+    if not sys.platform.startswith("win"):
+        return
+    config_dir = Path(tempfile.gettempdir()) / "automodpack-autotest-docker"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config = config_dir / "config.json"
+    if not config.is_file():
+        config.write_text(json.dumps({"auths": {}}), encoding="utf-8")
+    os.environ["DOCKER_CONFIG"] = str(config_dir)
+
+
 def daemon_prerequisite() -> tuple[str, bool, str]:
     """The prerequisite every platform shares: a reachable daemon, with the engine it reports."""
+    prepare_client_environment()
     try:
         version = docker_py.from_env(timeout=10).version()
         return "docker", True, f"{version.get('Os', '?')}/{version.get('Arch', '?')} {version.get('Version', '?')}"
@@ -76,6 +98,7 @@ class Docker:
     @property
     def client(self) -> docker_py.DockerClient:
         if self._client is None:
+            prepare_client_environment()
             self._client = docker_py.from_env()
         return self._client
 

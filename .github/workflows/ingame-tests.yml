@@ -121,7 +121,7 @@ jobs:
         env:
           SCENARIO: ${{ inputs.scenario }}
           TARGET: ${{ matrix.target }}
-        run: uv --project autotester run autotester run --target "$TARGET" --scenario "$SCENARIO"
+        run: uv --project autotester run autotester run --target "$TARGET" --scenario "$SCENARIO" --provide docker
       - name: Upload target results
         uses: actions/upload-artifact@v7
         if: always()

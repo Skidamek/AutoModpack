@@ -17,6 +17,11 @@ run:
   scenario: all
   jobs: 2
 
+farm:
+  mode: farm
+  slots: 2
+  provide: native
+
 server:
   memory: 2G
   env:

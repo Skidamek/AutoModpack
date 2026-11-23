@@ -99,6 +99,12 @@ public final class WindowsLockProbe {
 		}
 	}
 
+	/** True when a DELETE-capable open of ``path`` hits a sharing violation. Off Windows this is false. */
+	public static boolean held(Path path) {
+		if (path == null || PlatformUtils.operatingSystem() != PlatformUtils.OperatingSystem.WINDOWS) return false;
+		return heldAgainstRename(path);
+	}
+
 	/** Whether an existing share mode currently refuses a DELETE-capable open of the entry. */
 	private static boolean heldAgainstRename(Path child) {
 		return WindowsNatives.ensureLoaded() && held0(child.toAbsolutePath().normalize().toString());

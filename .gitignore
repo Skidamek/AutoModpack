@@ -46,6 +46,7 @@ __pycache__/
 autotester/out/
 autotester/out-*/
 autotester/.hmc-cache/
+autotester/.server-cache/
 
 bench/raw/
 

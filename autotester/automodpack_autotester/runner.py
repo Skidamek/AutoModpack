@@ -17,7 +17,8 @@ from pathlib import Path
 from . import client_steps, server_steps, s3_host, staging_steps, static_host  # noqa: F401  -- import for verb registration
 from .config import Target, load_macros, parse_server_files
 from .engine import ClientExited, Context, run_flow
-from .runtime.base import Platform
+from .host.backend import FarmBackend
+from .host.slot import open_slot
 from .runtime.detect import case_skip_reason
 from .supervisor import resource_labels
 
@@ -45,9 +46,9 @@ def scenario_mode(scenario: dict) -> str:
     return str(scenario.get("mode", "full")).lower()
 
 
-def server_host_for(net_mode: str, platform: Platform, srv_name: str) -> str:
+def server_host_for(net_mode: str, platform: FarmBackend, srv_name: str) -> str:
     """Where the client reaches the server: loopback for host networking or a native client."""
-    if net_mode == "host" or platform.capabilities.native_client:
+    if net_mode == "host" or platform.capabilities.native_client or platform.capabilities.native_server:
         return "127.0.0.1"
     return srv_name
 
@@ -169,7 +170,7 @@ def run_case(
     client_image: str,
     settings: dict,
     resource_scope: str,
-    platform: Platform,
+    platform: FarmBackend,
     netem: list[str] | None = None,
     loss: str = "",
     server_netem: list[str] | None = None,
@@ -206,11 +207,13 @@ def run_case(
     if (netem or loss or server_netem) and not platform.capabilities.netem:
         raise ValueError(f"network shaping is not available on the {platform.name} platform")
     mode = scenario_mode(scenario)
+    config = getattr(platform, "config", None)
+    if config is not None and config.provide == "native":
+        net_mode = "host"
     case_dir = out_dir / f"{target.id}-{int(time.time())}-{secrets.token_hex(3)}"
-    server_dir = case_dir / "server"
-    game_dir = case_dir / "client" / "game"
-    # On host networking the two containers share the host namespace, so there is
-    # no user-defined network to create and the client reaches the server locally.
+    slot = open_slot(case_dir, secrets.token_hex(4))
+    server_dir = slot.server_dir
+    game_dir = slot.game_dir
     resource_prefix = f"amp-{resource_scope}"
     net_name = "host" if net_mode == "host" else f"{resource_prefix}-n-{secrets.token_hex(4)}"[:63]
     srv_name = f"{resource_prefix}-s-{secrets.token_hex(4)}"[:63]
@@ -219,6 +222,9 @@ def run_case(
     static_name = f"{resource_prefix}-h-{secrets.token_hex(4)}"[:63]
     s3_name = f"{resource_prefix}-o-{secrets.token_hex(4)}"[:63]
     server_host = server_host_for(net_mode, platform, srv_name)
+    game_port = slot.game_port
+    endpoint_port = slot.endpoint_port
+    rcon_port = slot.rcon_port
     token = secrets.token_hex(16)
     case_seconds = float(settings.get("timeouts", {}).get("caseSeconds", 1800))
     if case_seconds <= 0:
@@ -271,9 +277,12 @@ def run_case(
             capabilities=platform.capabilities,
             vars={
                 **dict(scenario.get("vars", {}) or {}),
-                "server_endpoint_port": int((scenario.get("connectionPath") or {}).get("endpointPort", 25565)),
+                "server_game_port": game_port,
+                "server_endpoint_port": endpoint_port,
+                "server_rcon_port": rcon_port,
             },
         )
+        ctx.slot = slot
         ctx.client = platform.client(ctx)
         ctx.server = platform.server(ctx)
         ctx.hosting = platform.hosting(ctx)
@@ -377,4 +386,6 @@ def run_case(
                     ctx.hosting.remove_network(net_name)
                 except Exception:
                     logger.warning("Failed to remove network %s", net_name)
+            if ctx.slot is not None:
+                ctx.slot.kill_all()
         phases["cleanup"] = time.monotonic() - phase_started

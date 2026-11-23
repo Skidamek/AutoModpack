@@ -28,6 +28,9 @@ from automodpack_autotester.runtime.docker_linux import (
     DockerLinuxPlatform,
     DockerLinuxServerRuntime,
 )
+from automodpack_autotester.host.backend import machine
+from automodpack_autotester.host.client import WindowsNativeClientRuntime
+from automodpack_autotester.host.server import JavaServer
 from automodpack_autotester.supervisor import SCOPE_LABEL
 from tests.fake_runtime import FakeClientRuntime, FakeHostingRuntime, FakeServerRuntime
 
@@ -73,6 +76,10 @@ def test_every_runtime_satisfies_its_protocol(tmp_path):
     assert isinstance(DockerLinuxServerRuntime(ctx), ServerRuntime)
     assert isinstance(DockerLinuxHostingRuntime(), HostingRuntime)
     assert isinstance(DockerLinuxPlatform(), Platform)
+    assert isinstance(WindowsNativeClientRuntime(ctx), ClientRuntime)
+    assert isinstance(JavaServer(ctx), ServerRuntime)
+    assert isinstance(machine({"farm": {"provide": "native"}}), Platform)
+    assert isinstance(machine({"farm": {"provide": "docker"}}), Platform)
 
 
 def test_launch_client_drives_the_attached_runtime(make_ctx, monkeypatch):
@@ -212,7 +219,7 @@ def test_docker_server_launch_keeps_the_exact_legacy_container(make_ctx, monkeyp
     assert seen["name"] == ctx.srv_name
     assert seen["image"] == "itzg/minecraft-server:java21"
     assert seen["network"] == "net"
-    assert seen["env"] == {"TYPE": "FABRIC", "VERSION": "1.21", "UID": "1000", "GID": "1001"}
+    assert seen["env"] == {"TYPE": "FABRIC", "VERSION": "1.21", "UID": "1000", "GID": "1001", "SERVER_PORT": "25565", "RCON_PORT": "25575"}
     assert seen["mounts"] == mounts
     assert seen["labels"] == {SCOPE_LABEL: "scope123"}
     assert seen.get("cap_add") is None
@@ -259,21 +266,21 @@ def test_single_string_requirement_is_one_capability_not_characters():
     assert missing_capabilities({"requires": "netem"}, Capabilities()) == []
 
 
-def test_scenario_defaults_to_linux_only():
-    platform = FakePlatform(Capabilities())
-    platform.name = "windows"
-    assert case_skip_reason({}, platform) is not None
+def test_scenario_defaults_to_linux_only(monkeypatch):
+    monkeypatch.setattr("automodpack_autotester.runtime.detect.sys.platform", "win32")
+    assert case_skip_reason({}, FakePlatform()) is not None
+    monkeypatch.setattr("automodpack_autotester.runtime.detect.sys.platform", "linux")
+    assert case_skip_reason({}, FakePlatform()) is None
 
 
-def test_platform_selection_defaults_to_linux_and_windows_is_explicit():
-    assert select_platform({}).name == "linux"
-    with pytest.raises(PlatformUnavailable, match="Windows runtime is not implemented"):
+def test_platform_selection_defaults_to_native_and_windows_is_this_kernel():
+    assert select_platform({}).name == "native"
+    assert select_platform({}, requested="docker").name == "docker"
+    with pytest.raises(PlatformUnavailable, match="must run on Windows"):
         select_platform({}, requested="windows")
-    with pytest.raises(PlatformUnavailable, match="unknown platform"):
+    with pytest.raises(PlatformUnavailable, match="unknown farm"):
         select_platform({}, requested="plan9")
-    # No provider exists yet, so a Windows lane cannot be planned either.
-    with pytest.raises(PlatformUnavailable, match="Windows runtime is not implemented"):
-        select_platform({}, requested="windows")
+    assert select_platform({}, requested="windows", require_host=False).name == "native"
 
 
 def test_run_case_refuses_shaping_on_a_platform_without_netem(tmp_path):
@@ -298,7 +305,7 @@ def test_step_modules_do_not_import_docker_harness():
     import ast
 
     root = Path(__file__).parents[1] / "automodpack_autotester"
-    allow = {"runtime/docker_linux.py", "docker_harness.py"}
+    allow = {"runtime/docker_linux.py", "docker_harness.py", "host/backend.py"}
     offenders = []
     for path in root.rglob("*.py"):
         relative = path.relative_to(root).as_posix()

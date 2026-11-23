@@ -34,13 +34,19 @@ def _prepare_server(ctx: Context):
     topology_config = (ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}) or {}).get("config", {})
     cfg.update(topology_config)
     connection_path = ctx.scenario.get("connectionPath") or {}
+    endpoint_port = int(ctx.vars.get("server_endpoint_port") or 0)
     if connection_path:
         cfg["connectionMode"] = str(connection_path["mode"]).upper()
-        if "bindPort" in connection_path:
+        bind = int(connection_path.get("bindPort", -1) or -1)
+        if bind > 0 and endpoint_port:
+            cfg["bindPort"] = endpoint_port
+        elif "bindPort" in connection_path:
             cfg["bindPort"] = connection_path["bindPort"]
         if "advertisedEndpointHost" in connection_path:
             cfg["advertisedEndpointHost"] = connection_path["advertisedEndpointHost"]
-        if "endpointPort" in connection_path:
+        if endpoint_port:
+            cfg["advertisedEndpointPort"] = endpoint_port
+        elif "endpointPort" in connection_path:
             cfg["advertisedEndpointPort"] = connection_path["endpointPort"]
     cfg["modpackName"] = ctx.modpack_name
     cfg["acceptedLoaders"] = [ctx.target.loader]

@@ -92,9 +92,9 @@ def _empty_selection_error(selector: str | None, ran: int, skipped: int) -> str 
 
 def _explicit_selection(args, settings: dict) -> str | None:
     """What the caller named explicitly, phrased for :func:`_empty_selection_error`."""
-    requested_platform = str(args.platform or settings.get("platform") or "").lower()
+    requested_platform = str(getattr(args, "platform", None) or getattr(args, "provide", None) or settings.get("platform") or "").lower()
     selectors = [f"platform {requested_platform!r}"] if requested_platform else []
-    if args.connection_path:
+    if getattr(args, "connection_path", None):
         selectors.append(f"connection path {args.connection_path!r}")
     return " and ".join(selectors) or None
 
@@ -323,10 +323,13 @@ def _cmd_plan(args) -> int:
             print(f"  - {problem}", file=sys.stderr)
         return 1
     try:
-        platform = select_platform(settings, requested=args.platform)
+        platform = select_platform(settings, requested=args.provide or args.platform, require_host=False)
     except Exception as error:
         print(f"Cannot plan: {error}", file=sys.stderr)
         return 1
+    farm = getattr(platform, "config", None)
+    if farm is not None:
+        print(f"Farm: {farm.describe()}")
     variants = _selected_variants(scenario, scenario_name, args.connection_path)
     if variants is None:
         return 1
@@ -352,13 +355,15 @@ def _cmd_plan(args) -> int:
 def _cmd_doctor(args) -> int:
     settings = load_settings()
     try:
-        platform = select_platform(settings, requested=args.platform)
+        platform = select_platform(settings, requested=args.provide or args.platform)
     except Exception as error:
         print(f"FAIL platform: {error}", file=sys.stderr)
         return 1
     artifact_dir = resolve_settings_path(settings, "artifactDir", "merged")
     jars = sorted(artifact_dir.glob("*.jar")) if artifact_dir.is_dir() else []
+    farm = getattr(platform, "config", None)
     checks = [
+        ("farm", True, farm.describe() if farm is not None else platform.name),
         ("platform", True, platform.name),
         ("python", sys.version_info >= (3, 11), f"{sys.version.split()[0]} ({sys.executable})"),
         *platform.prerequisites(settings),
@@ -401,7 +406,8 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument("--artifact-dir", type=Path)
     run_p.add_argument("--out-dir", type=Path)
     run_p.add_argument("--client-image")
-    run_p.add_argument("--platform", help="Run on linux or windows (default: settings platform or the host platform)")
+    run_p.add_argument("--provide", choices=("native", "docker"), help="Spawn strategy: native Java children on this kernel, or Docker containers")
+    run_p.add_argument("--platform", help="Deprecated alias of --provide (linux=docker, windows=native)")
 
     clean = sub.add_parser("clean")
     clean.add_argument("--out-dir", type=Path)
@@ -421,11 +427,13 @@ def main(argv: list[str] | None = None) -> int:
     plan_p = sub.add_parser("plan", help="Print resolved cases and skip reasons without starting anything")
     plan_p.add_argument("--scenario")
     plan_p.add_argument("--target", action="append", help=_TARGET_HELP)
-    plan_p.add_argument("--platform", help="Plan for linux or windows")
+    plan_p.add_argument("--provide", choices=("native", "docker"))
+    plan_p.add_argument("--platform", help="Deprecated alias of --provide (linux=docker, windows=native)")
     plan_p.add_argument("--connection-path", choices=sorted(CONNECTION_MODES), type=str.upper)
 
     doctor_p = sub.add_parser("doctor", help="Check the selected platform's runtime prerequisites")
-    doctor_p.add_argument("--platform", help="Check linux or windows requirements")
+    doctor_p.add_argument("--provide", choices=("native", "docker"))
+    doctor_p.add_argument("--platform", help="Deprecated alias of --provide (linux=docker, windows=native)")
 
     args = p.parse_args(argv)
 
@@ -490,7 +498,7 @@ def main(argv: list[str] | None = None) -> int:
     s = load_settings()
     rc = s.get("run", {})
     try:
-        platform = select_platform(s, requested=args.platform)
+        platform = select_platform(s, requested=args.provide or args.platform)
     except Exception as error:
         print(f"Cannot select a test platform: {error}", file=sys.stderr)
         return 1
@@ -566,9 +574,12 @@ def main(argv: list[str] | None = None) -> int:
     resource_scope = secrets.token_hex(4)
     supervisor = RunSupervisor(resource_scope)
     try:
-        executor = ThreadPoolExecutor(
-            max_workers=max(1, args.jobs or rc.get("jobs", 1))
-        )
+        jobs = max(1, int(args.jobs or rc.get("jobs", 1)))
+        # A native farm runs case children on this kernel, so its slots are the real concurrency bound;
+        # container cases are isolated and answer only to --jobs.
+        if getattr(platform, "name", "") == "native":
+            jobs = min(jobs, getattr(getattr(platform, "config", None), "slots", jobs))
+        executor = ThreadPoolExecutor(max_workers=jobs)
         previous_sigterm_handler = signal.signal(signal.SIGTERM, _interrupt_on_termination)
         task_map = {}
         try:

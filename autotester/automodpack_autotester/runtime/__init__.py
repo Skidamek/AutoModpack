@@ -1,9 +1,8 @@
 """Runtime contracts for the autotester.
 
-A scenario runs against one platform. The contracts are dependency-free; the
-providers live in ``runtime.docker_linux`` and are
-resolved by ``runtime.detect``, so the engine and its tests never need a Docker
-daemon at import time.
+A scenario talks to client/server/hosting objects. Spawn strategy lives in
+``host.backend`` (native Java children or Docker). The engine and its tests
+never need a Docker daemon at import time.
 """
 from .base import (
     Capabilities,

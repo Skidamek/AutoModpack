@@ -384,7 +384,7 @@ def _v_stage_modpack(ctx: Context, step):
     # A client config that selects the staged pack and disables the launch update,
     # so Preload loads it locally (no server contact, no file reconciliation).
     host = ctx.server_host or "127.0.0.1"
-    addr = host if ":" in host else f"{host}:25565"
+    addr = host if ":" in host else f"{host}:{int(ctx.vars.get('server_game_port') or 25565)}"
     cfg = {
         "updateSelectedModpackOnLaunch": False,
     }

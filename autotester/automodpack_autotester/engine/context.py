@@ -63,6 +63,7 @@ class Context:
     # The server's durable files, addressed without a platform path. Steps read
     # and write live server state here, never through ``server_dir``.
     server_workspace: ServerWorkspace | None = None
+    slot: Any = None
     # --netem tc netem argv tokens (empty when the knob is off), applied to the
     # client container's eth0 after launch.
     netem: list[str] = field(default_factory=list)
@@ -83,12 +84,14 @@ class Context:
     # --- variables / templating -------------------------------------------
 
     def namespace(self) -> dict:
-        endpoint_port = self.vars.get("server_endpoint_port", 25565)
+        game_port = int(self.vars.get("server_game_port") or 25565)
+        endpoint_port = int(self.vars.get("server_endpoint_port") or game_port)
+        host = self.server_host or self.srv_name
         return {
             "target": self.target,
             "server": {
-                "host": f"{self.server_host or self.srv_name}:25565",
-                "endpoint": f"{self.server_host or self.srv_name}:{endpoint_port}",
+                "host": f"{host}:{game_port}",
+                "endpoint": f"{host}:{endpoint_port}",
             },
             "client": {"game_dir": str(self.game_dir)},
             "modpack": self.modpack_name,

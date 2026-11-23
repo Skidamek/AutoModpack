@@ -24,6 +24,8 @@ def make_ctx(tmp_path):
         # see the same baseline a real run would.
         (game_dir / "mods").mkdir(parents=True, exist_ok=True)
         (game_dir / "mods" / "automodpack.jar").write_bytes(b"")
+        vars_values = {"server_game_port": 25565, "server_endpoint_port": 25565, "server_rcon_port": 25575}
+        vars_values.update(overrides.pop("vars", {}) or {})
         defaults = dict(
             target=types.SimpleNamespace(
                 id="1.21-fabric", minecraft="1.21", loader="fabric", java=21
@@ -42,6 +44,7 @@ def make_ctx(tmp_path):
             modpack_name="amp-autotest",
             marker_rel=Path("config/amp-autotest-marker.json"),
             scenario_files=[],
+            vars=vars_values,
         )
         defaults.update(overrides)
         ctx = Context(**defaults)

@@ -141,8 +141,8 @@ class DockerLinuxClientRuntime:
                 "/opt/automodpack/run-headlessmc-client",
                 ctx.target.loader,
                 ctx.target.minecraft,
-                "localhost",
-                "25565",
+                ctx.server_host or "localhost",
+                str(int(ctx.vars.get("server_game_port") or 25565)),
                 str(ctx.target.java),
                 hmc_build(ctx.target),
             ],
@@ -197,6 +197,12 @@ class DockerLinuxServerRuntime:
         # (e.g. the GitHub runner's 1001): AccessDenied writing /data/mods/*.download.
         env.setdefault("UID", str(uid()))
         env.setdefault("GID", str(gid()))
+        game_port = int(ctx.vars.get("server_game_port") or 0)
+        if game_port:
+            env["SERVER_PORT"] = str(game_port)
+        rcon_port = int(ctx.vars.get("server_rcon_port") or 0)
+        if rcon_port:
+            env["RCON_PORT"] = str(rcon_port)
         self.docker.run(
             name=self.name,
             image=spec.image,
