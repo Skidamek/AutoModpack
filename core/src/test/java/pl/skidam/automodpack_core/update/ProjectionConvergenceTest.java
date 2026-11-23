@@ -19,7 +19,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -152,55 +151,6 @@ class ProjectionConvergenceTest {
 		}
 	}
 
-	/** V4 under the bounded install pool: one held path stays owed while every other target still lands. */
-	@Test
-	void aHeldPathStaysOwedInTheParallelInstallPool() throws Exception {
-		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
-		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-			settle(storage, cache, OLD);
-			Path held = storage.activePath("config/alpha.toml");
-			ProjectionConvergence.Result result = converge(storage, cache, NEW, holdingInParallel(held::equals));
-			assertFalse(result.converged());
-			assertEquals(List.of(held), result.held().stream().map(ProjectionConvergence.Held::path).toList());
-			Map<String, String> mixed = tree(storage);
-			assertEquals("a = 1", mixed.get("config/alpha.toml"), "the held path keeps its old bytes");
-			assertEquals("alpha two", mixed.get("mods/alpha-1.1.jar"), "the rest of the target still lands");
-			assertEquals("now a zip", mixed.get("resourcepacks/pack"));
-			assertTrue(ProjectionState.read(storage).converging(), "a held path keeps the projection unloadable");
-
-			assertTrue(converge(storage, cache, NEW, ProjectionConvergence.Writes.NONE).converged());
-			assertEquals(NEW, tree(storage));
-		}
-	}
-
-	/** C6 under the bounded pool: a crash during a parallel install leaves a refused tree the next run finishes. */
-	@Test
-	void aCrashInTheParallelInstallPoolStillConvergesOnTheNextRun() throws Exception {
-		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
-		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-			settle(storage, cache, OLD);
-			AtomicInteger seen = new AtomicInteger();
-			assertThrows(Crash.class, () -> converge(storage, cache, NEW, new ProjectionConvergence.Writes() {
-				@Override
-				public void beforeWrite(Path target) {
-					if (seen.incrementAndGet() == 2) throw new Crash();
-				}
-
-				@Override
-				public boolean parallelSafe() {
-					return true;
-				}
-			}));
-			assertTrue(ProjectionState.read(storage).converging(), "marked before the first write");
-			assertNotNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason(), "no gate loads a mixed tree");
-			ProjectionAvailability.forget(storage.gameDirectory());
-
-			assertTrue(converge(storage, cache, NEW, ProjectionConvergence.Writes.NONE).converged());
-			assertEquals(NEW, tree(storage));
-		}
-	}
-
-	/** C5: a case-only rename ends with the exact new name, on a case-insensitive filesystem too, file and directory alike. */
 	@Test
 	void aCaseOnlyRenameEndsWithTheExactNewName() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);

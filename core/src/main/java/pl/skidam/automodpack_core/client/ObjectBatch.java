@@ -71,21 +71,8 @@ final class ObjectBatch {
 	private boolean closed;
 
 	static ObjectBatch asynchronous(DataRootResolver.Layout layout) {
-		return asynchronous(layout, (step, path) -> {});
-	}
-
-	static ObjectBatch asynchronous(DataRootResolver.Layout layout, Probe probe) {
 		Objects.requireNonNull(layout, "layout");
-		Objects.requireNonNull(probe, "probe");
-		return new ObjectBatch(layout, probe, true);
-	}
-
-	/** An overlapping batch whose force a test can fail without a real media fault. */
-	static ObjectBatch asynchronous(DataRootResolver.Layout layout, Probe probe, OverlappedForcer.Forcer forcer) {
-		Objects.requireNonNull(layout, "layout");
-		Objects.requireNonNull(probe, "probe");
-		Objects.requireNonNull(forcer, "forcer");
-		return new ObjectBatch(layout, probe, forcer);
+		return new ObjectBatch(layout, (step, path) -> {}, true);
 	}
 
 	ObjectBatch(DataRootResolver.Layout layout) {
@@ -106,13 +93,6 @@ final class ObjectBatch {
 		this.probe = probe;
 		this.asynchronous = asynchronous;
 		this.forcer = new OverlappedForcer(this::forceHeld);
-	}
-
-	private ObjectBatch(DataRootResolver.Layout layout, Probe probe, OverlappedForcer.Forcer forcer) {
-		this.dataLayout = layout;
-		this.probe = probe;
-		this.asynchronous = true;
-		this.forcer = new OverlappedForcer(forcer);
 	}
 
 	/** No producer waits for force IO or queue capacity; the ledger and pump submission share one admission lock. */
